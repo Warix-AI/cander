@@ -14,7 +14,7 @@ const ThemeContext = createContext<{
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
 }>({
-  theme: "light",
+  theme: "dark",
   setTheme: () => {},
   toggleTheme: () => {},
 });

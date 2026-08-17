@@ -88,7 +88,7 @@ export function getThemeSnapshot(): Theme {
 }
 
 export function getThemeServerSnapshot(): Theme {
-  return "light";
+  return "dark";
 }
 
 export function persistTheme(next: Theme) {
