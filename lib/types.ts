@@ -1,5 +1,6 @@
 export type ProductId = "courier" | "platform";
 export type HostingMode = "cloud" | "local" | "on-device";
+export type BillingPlan = "personal" | "business";
 export type Theme = "light" | "dark";
 export type SpaceId =
   | "build"

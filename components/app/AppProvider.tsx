@@ -15,16 +15,20 @@ import {
   getApiSnapshot,
   getHostingServerSnapshot,
   getHostingSnapshot,
+  getPlanServerSnapshot,
+  getPlanSnapshot,
   getProductServerSnapshot,
   getProductSnapshot,
   getWorkspaceServerSnapshot,
   getWorkspaceSnapshot,
   persistApi,
   persistHosting,
+  persistPlan,
   persistProduct,
   persistWorkspace,
   subscribeApi,
   subscribeHosting,
+  subscribePlan,
   subscribeProduct,
   subscribeWorkspace,
 } from "@/lib/session";
@@ -37,6 +41,7 @@ import { isChatSpace } from "@/lib/spaces";
 import type {
   BuildTool,
   CourierView,
+  BillingPlan,
   HostingMode,
   OverlayId,
   PanelIntent,
@@ -89,6 +94,8 @@ type AppContextValue = {
   setProduct: (id: ProductId) => void;
   hostingMode: HostingMode;
   setHostingMode: (id: HostingMode) => void;
+  billingPlan: BillingPlan;
+  setBillingPlan: (plan: BillingPlan) => void;
   apiEnabled: boolean;
   setApiEnabled: (on: boolean) => void;
   workspacePolicies: Record<string, WorkspacePolicy>;
@@ -170,6 +177,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     subscribeHosting,
     getHostingSnapshot,
     getHostingServerSnapshot,
+  );
+  const billingPlan = useSyncExternalStore(
+    subscribePlan,
+    getPlanSnapshot,
+    getPlanServerSnapshot,
   );
   const apiEnabled = useSyncExternalStore(
     subscribeApi,
@@ -304,6 +316,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const setHostingMode = useCallback((id: HostingMode) => {
     persistHosting(id);
+  }, []);
+
+  const setBillingPlan = useCallback((plan: BillingPlan) => {
+    persistPlan(plan);
   }, []);
 
   const setApiEnabled = useCallback((on: boolean) => {
@@ -718,6 +734,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setProduct,
       hostingMode,
       setHostingMode,
+      billingPlan,
+      setBillingPlan,
       apiEnabled,
       setApiEnabled,
       workspacePolicies,
@@ -788,6 +806,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setProduct,
       hostingMode,
       setHostingMode,
+      billingPlan,
+      setBillingPlan,
       apiEnabled,
       setApiEnabled,
       workspacePolicies,

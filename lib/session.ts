@@ -1,4 +1,4 @@
-import type { HostingMode, ProductId, Theme } from "@/lib/types";
+import type { BillingPlan, HostingMode, ProductId, Theme } from "@/lib/types";
 
 type Listener = () => void;
 
@@ -161,4 +161,38 @@ export function persistApi(next: boolean) {
   apiEnabled = next;
   window.localStorage.setItem("courier-api", next ? "on" : "off");
   emitApi();
+}
+
+const planListeners = new Set<Listener>();
+let billingPlan: BillingPlan = "business";
+
+function emitPlan() {
+  planListeners.forEach((listener) => listener());
+}
+
+export function subscribePlan(listener: Listener) {
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage.getItem("courier-plan");
+    if (stored === "personal" || stored === "business") {
+      billingPlan = stored;
+    }
+  }
+  planListeners.add(listener);
+  return () => {
+    planListeners.delete(listener);
+  };
+}
+
+export function getPlanSnapshot() {
+  return billingPlan;
+}
+
+export function getPlanServerSnapshot(): BillingPlan {
+  return "business";
+}
+
+export function persistPlan(next: BillingPlan) {
+  billingPlan = next;
+  window.localStorage.setItem("courier-plan", next);
+  emitPlan();
 }

@@ -293,8 +293,8 @@ function Line({ k, v }: { k: string; v: string }) {
 }
 
 function OrganizationBilling() {
-  const { hostingMode, apiEnabled, setApiEnabled } = useApp();
-  const bill = billingFor(hostingMode, { apiEnabled });
+  const { hostingMode, apiEnabled, setApiEnabled, billingPlan } = useApp();
+  const bill = billingFor(hostingMode, { apiEnabled, plan: billingPlan });
 
   return (
     <>
@@ -324,6 +324,7 @@ function OrganizationBilling() {
               {hostingLabel(hostingMode)}
             </p>
             <p className="mt-1 text-[13px] text-muted-foreground">
+              {billingPlan === "personal" ? "Personal" : "Business"} plan.
               Hosting model sets both seat and API license prices.
             </p>
           </div>

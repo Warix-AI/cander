@@ -1,12 +1,19 @@
 import { account } from "./data";
-import type { HostingMode } from "./types";
+import type { BillingPlan, HostingMode } from "./types";
 
 export type ProductSlice = "courier" | "apis" | "both";
 
-export const courierSeat: Record<HostingMode, number> = {
-  cloud: 30,
-  local: 20,
-  "on-device": 10,
+export const courierSeat: Record<BillingPlan, Record<HostingMode, number>> = {
+  business: {
+    cloud: 30,
+    local: 20,
+    "on-device": 10,
+  },
+  personal: {
+    cloud: 20,
+    local: 15,
+    "on-device": 10,
+  },
 };
 
 export const apiLicense: Record<HostingMode, number> = {
@@ -87,12 +94,18 @@ export function licensedHint(mode: HostingMode, users: number) {
 
 export function billingFor(
   mode: HostingMode,
-  opts?: { users?: number; courierEnabled?: boolean; apiEnabled?: boolean },
+  opts?: {
+    users?: number;
+    courierEnabled?: boolean;
+    apiEnabled?: boolean;
+    plan?: BillingPlan;
+  },
 ) {
   const users = opts?.users ?? account.seats;
   const courierEnabled = opts?.courierEnabled ?? true;
   const apiEnabled = opts?.apiEnabled ?? true;
-  const seat = courierSeat[mode];
+  const plan = opts?.plan ?? "business";
+  const seat = courierSeat[plan][mode];
   const license = apiLicense[mode];
   const courier = courierEnabled ? users * seat : 0;
   const api = apiEnabled ? license : 0;
@@ -105,13 +118,18 @@ export function billingFor(
     total: courier + api,
     courierEnabled,
     apiEnabled,
+    plan,
     deployments: licensedHint(mode, users),
     apis: hostedApis,
   };
 }
 
-export function estimateFor(mode: HostingMode, users: number) {
-  const seat = courierSeat[mode];
+export function estimateFor(
+  mode: HostingMode,
+  users: number,
+  plan: BillingPlan = "business",
+) {
+  const seat = courierSeat[plan][mode];
   const license = apiLicense[mode];
   return {
     seat,

@@ -22,8 +22,8 @@ import { cn } from "@/lib/utils";
 const requestSeries = [42, 48, 45, 61, 70, 68, 82, 90, 86, 98, 112, 108];
 
 export function PlatformMain() {
-  const { platformNav, hostingMode, apiEnabled } = useApp();
-  const bill = billingFor(hostingMode, { apiEnabled });
+  const { platformNav, hostingMode, apiEnabled, billingPlan } = useApp();
+  const bill = billingFor(hostingMode, { apiEnabled, plan: billingPlan });
 
   if (platformNav === "overview") {
     return (
@@ -249,7 +249,7 @@ Authorization: Bearer crr_live_••••`}
 }
 
 function HostingPage() {
-  const { hostingMode, setHostingMode } = useApp();
+  const { hostingMode, setHostingMode, billingPlan, setBillingPlan } = useApp();
   const [slice, setSlice] = useState<ProductSlice>("both");
   const users = account.seats;
 
@@ -258,38 +258,35 @@ function HostingPage() {
       title="Hosting"
       kicker="Capacity"
       actions={
-        <div className="inline-flex h-10 items-center rounded-[10px] border border-foreground/12 p-0.5">
-          {(
-            [
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Segmented
+            value={billingPlan}
+            onChange={setBillingPlan}
+            options={[
+              { id: "personal", label: "Personal" },
+              { id: "business", label: "Business" },
+            ]}
+          />
+          <Segmented
+            value={slice}
+            onChange={setSlice}
+            options={[
               { id: "courier", label: "Courier" },
               { id: "apis", label: "APIs" },
               { id: "both", label: "Both" },
-            ] as const
-          ).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setSlice(item.id)}
-              className={cn(
-                "h-9 rounded-[10px] px-3 text-[12.5px] font-medium tracking-[-0.01em] transition-colors duration-200",
-                slice === item.id
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
+            ]}
+          />
         </div>
       }
     >
       <p className="mb-5 max-w-2xl text-[13.5px] leading-relaxed text-muted-foreground">
-        One hosting model for the organization. Courier is billed per user. APIs
-        are a fixed monthly license. The model you choose sets both prices.
+        {billingPlan === "personal"
+          ? "Personal Courier seats are $20 Cloud, $15 Local, and $10 On-Device. API licenses stay the same as Business."
+          : "One hosting model for the organization. Courier is billed per user. APIs are a fixed monthly license. The model you choose sets both prices."}
       </p>
       <div className="grid items-stretch gap-4 lg:grid-cols-3">
         {hostingModes.map((mode) => {
-          const estimate = estimateFor(mode.id, users);
+          const estimate = estimateFor(mode.id, users, billingPlan);
           const active = hostingMode === mode.id;
           return (
             <article
@@ -420,6 +417,36 @@ function HostingPage() {
         })}
       </div>
     </Page>
+  );
+}
+
+function Segmented<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T;
+  onChange: (id: T) => void;
+  options: { id: T; label: string }[];
+}) {
+  return (
+    <div className="inline-flex h-10 items-center rounded-[10px] border border-foreground/12 p-0.5">
+      {options.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={() => onChange(item.id)}
+          className={cn(
+            "h-9 rounded-[10px] px-3 text-[12.5px] font-medium tracking-[-0.01em] transition-colors duration-200",
+            value === item.id
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
