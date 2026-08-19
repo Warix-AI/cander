@@ -9,12 +9,14 @@ export function Modal({
   labelledBy,
   className,
   children,
+  lockScroll = true,
 }: {
   open: boolean;
   onClose: () => void;
   labelledBy?: string;
   className?: string;
   children: ReactNode;
+  lockScroll?: boolean;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -23,12 +25,16 @@ export function Modal({
     };
     window.addEventListener("keydown", onKey);
     const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    if (lockScroll) {
+      document.body.style.overflow = "hidden";
+    }
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previous;
+      if (lockScroll) {
+        document.body.style.overflow = previous;
+      }
     };
-  }, [open, onClose]);
+  }, [open, onClose, lockScroll]);
 
   if (!open) return null;
 

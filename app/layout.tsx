@@ -40,7 +40,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="bg-background font-sans text-foreground">
+      <body className="min-h-svh overflow-x-hidden overflow-y-auto bg-background font-sans text-foreground">
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

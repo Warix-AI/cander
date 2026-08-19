@@ -1,21 +1,19 @@
 import Link from "next/link";
 import { CourierMark } from "@/components/brand/CourierMark";
-import { RecursionMark } from "@/components/brand/RecursionMark";
 import { Cta } from "@/components/marketing/Cta";
 import { APP_HREF, footerGroups } from "@/lib/marketing";
 
 export function MarketingFooter() {
   return (
-    <footer className="border-t border-border bg-footer text-footer-foreground">
-      <div className="mx-auto max-w-[1120px] px-5 py-10 md:px-8 md:py-12">
-        <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+    <footer className="border-t border-border bg-background">
+      <div className="mx-auto max-w-[1080px] px-5 py-12 md:px-6">
+        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="heading-section text-xl tracking-[-0.04em] md:text-2xl">
-              Open Courier at the root domain.
-            </p>
-            <p className="mt-2 max-w-md text-[14px] leading-relaxed text-muted-foreground">
-              The website explains what Courier can do. getcourier.ai is the
-              product.
+            <h2 className="text-xl font-medium tracking-[-0.03em]">
+              Try Courier today
+            </h2>
+            <p className="mt-1 text-[14px] text-muted-foreground">
+              Open the product at the root domain.
             </p>
           </div>
           <Cta href={APP_HREF}>Open Courier</Cta>
@@ -24,7 +22,7 @@ export function MarketingFooter() {
         <div className="mt-10 grid gap-8 sm:grid-cols-3">
           {footerGroups.map((group) => (
             <div key={group.label}>
-              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+              <p className="text-[12px] font-medium text-muted-foreground">
                 {group.label}
               </p>
               <ul className="mt-3 space-y-2">
@@ -33,7 +31,7 @@ export function MarketingFooter() {
                     {link.external ? (
                       <a
                         href={link.href}
-                        className="text-[13.5px] text-foreground/80 hover:text-foreground"
+                        className="text-[13px] text-foreground/75 hover:text-foreground"
                         {...(link.href.startsWith("http")
                           ? { rel: "noreferrer", target: "_blank" }
                           : {})}
@@ -43,7 +41,7 @@ export function MarketingFooter() {
                     ) : (
                       <Link
                         href={link.href}
-                        className="text-[13.5px] text-foreground/80 hover:text-foreground"
+                        className="text-[13px] text-foreground/75 hover:text-foreground"
                       >
                         {link.title}
                       </Link>
@@ -55,22 +53,9 @@ export function MarketingFooter() {
           ))}
         </div>
 
-        <div className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5">
-          <Link href="/home" className="flex items-center gap-2">
-            <CourierMark className="h-5 w-5" />
-            <span className="text-[13px] font-medium tracking-[-0.02em]">
-              Courier
-            </span>
-          </Link>
-          <a
-            href="https://thinkrecursion.ai"
-            className="flex items-center gap-2 text-[12.5px] text-muted-foreground hover:text-foreground"
-            rel="noreferrer"
-            target="_blank"
-          >
-            <RecursionMark className="h-4 w-4" />
-            Recursion AI
-          </a>
+        <div className="mt-10 flex items-center gap-2 border-t border-border pt-6">
+          <CourierMark className="h-5 w-5" />
+          <span className="text-[13px] text-muted-foreground">Courier</span>
         </div>
       </div>
     </footer>

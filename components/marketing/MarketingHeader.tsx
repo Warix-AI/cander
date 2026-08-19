@@ -19,16 +19,16 @@ export function MarketingHeader() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/85 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-[1120px] items-center gap-2 px-5 md:px-8">
-        <Link href="/home" className="flex items-center gap-2 pr-2">
+    <header className="sticky top-0 z-40 border-b border-border/50 bg-background/90 backdrop-blur-lg">
+      <div className="mx-auto flex h-[52px] max-w-[1080px] items-center gap-4 px-5 md:px-6">
+        <Link href="/home" className="flex items-center gap-2">
           <CourierMark />
-          <span className="text-[15px] font-semibold tracking-[-0.03em]">
+          <span className="text-[14px] font-semibold tracking-[-0.02em]">
             Courier
           </span>
         </Link>
 
-        <nav className="ml-3 hidden items-center gap-0.5 lg:flex">
+        <nav className="ml-2 hidden flex-1 items-center gap-1 lg:flex">
           <NavDropdown label="Spaces" items={spacesNav} />
           <NavDropdown label="Development" items={developmentNav} />
           {headerLinks.map((link) => (
@@ -38,19 +38,19 @@ export function MarketingHeader() {
           ))}
         </nav>
 
-        <div className="ml-auto hidden items-center gap-1.5 lg:flex">
+        <div className="ml-auto hidden items-center gap-2 lg:flex">
           <MarketingThemeToggle />
-          <Cta href={APP_HREF} variant="ghost">
-            Sign in
+          <Cta href={APP_HREF} variant="secondary">
+            Log in
           </Cta>
-          <Cta href={APP_HREF}>Start free</Cta>
+          <Cta href={APP_HREF}>Sign up for free</Cta>
         </div>
 
-        <div className="ml-auto flex items-center gap-1.5 lg:hidden">
+        <div className="ml-auto flex items-center gap-2 lg:hidden">
           <MarketingThemeToggle />
           <button
             type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] border border-foreground/12"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-border"
             aria-expanded={open}
             aria-label={open ? "Close menu" : "Open menu"}
             onClick={() => setOpen((value) => !value)}
@@ -67,22 +67,12 @@ export function MarketingHeader() {
       {open ? (
         <div className="border-t border-border bg-background px-5 py-4 lg:hidden">
           <div className="flex flex-col gap-1">
-            <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              Spaces
-            </p>
-            {spacesNav.map((item) => (
-              <MobileLink key={item.href} href={item.href} onClick={() => setOpen(false)}>
-                {item.title}
-              </MobileLink>
-            ))}
-            <p className="mt-3 px-2 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              Development
-            </p>
-            {developmentNav.map((item) => (
-              <MobileLink key={item.href} href={item.href} onClick={() => setOpen(false)}>
-                {item.title}
-              </MobileLink>
-            ))}
+            <MobileGroup label="Spaces" items={spacesNav} onNavigate={() => setOpen(false)} />
+            <MobileGroup
+              label="Development"
+              items={developmentNav}
+              onNavigate={() => setOpen(false)}
+            />
             {headerLinks.map((link) => (
               <MobileLink key={link.href} href={link.href} onClick={() => setOpen(false)}>
                 {link.title}
@@ -91,10 +81,10 @@ export function MarketingHeader() {
           </div>
           <div className="mt-4 flex gap-2">
             <Cta href={APP_HREF} variant="secondary" className="flex-1">
-              Sign in
+              Log in
             </Cta>
             <Cta href={APP_HREF} className="flex-1">
-              Start free
+              Sign up
             </Cta>
           </div>
         </div>
@@ -103,17 +93,11 @@ export function MarketingHeader() {
   );
 }
 
-function NavLink({
-  href,
-  children,
-}: {
-  href: string;
-  children: React.ReactNode;
-}) {
+function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <Link
       href={href}
-      className="rounded-full px-3 py-2 text-[13.5px] font-medium tracking-[-0.01em] text-foreground/80 hover:bg-muted hover:text-foreground"
+      className="rounded-full px-3 py-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
     >
       {children}
     </Link>
@@ -130,18 +114,18 @@ function NavDropdown({
   return (
     <Dropdown
       matchTrigger={false}
-      menuClassName="w-[240px]"
+      menuClassName="w-[220px]"
       trigger={({ open, toggle }) => (
         <button
           type="button"
           onClick={toggle}
           className={cn(
-            "inline-flex items-center gap-1 rounded-full px-3 py-2 text-[13.5px] font-medium tracking-[-0.01em] text-foreground/80 hover:bg-muted hover:text-foreground",
-            open && "bg-muted text-foreground",
+            "inline-flex items-center gap-0.5 rounded-full px-3 py-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground",
+            open && "text-foreground",
           )}
         >
           {label}
-          <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.8} />
+          <ChevronDown className="h-3 w-3" strokeWidth={2} />
         </button>
       )}
     >
@@ -153,12 +137,10 @@ function NavDropdown({
               href={item.href}
               role="menuitem"
               onClick={close}
-              className="flex w-full flex-col rounded-[10px] px-3 py-2.5 text-left hover:bg-muted"
+              className="block rounded-[10px] px-3 py-2 hover:bg-muted"
             >
-              <span className="text-[13.5px] font-medium tracking-[-0.01em]">
-                {item.title}
-              </span>
-              <span className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+              <span className="text-[13px] font-medium">{item.title}</span>
+              <span className="mt-0.5 block text-[12px] text-muted-foreground">
                 {item.body}
               </span>
             </Link>
@@ -166,6 +148,29 @@ function NavDropdown({
         </>
       )}
     </Dropdown>
+  );
+}
+
+function MobileGroup({
+  label,
+  items,
+  onNavigate,
+}: {
+  label: string;
+  items: readonly { href: string; title: string }[];
+  onNavigate: () => void;
+}) {
+  return (
+    <>
+      <p className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+        {label}
+      </p>
+      {items.map((item) => (
+        <MobileLink key={item.href} href={item.href} onClick={onNavigate}>
+          {item.title}
+        </MobileLink>
+      ))}
+    </>
   );
 }
 
@@ -182,7 +187,7 @@ function MobileLink({
     <Link
       href={href}
       onClick={onClick}
-      className="rounded-[10px] px-3 py-2.5 text-[14px] font-medium tracking-[-0.01em] hover:bg-muted"
+      className="rounded-[10px] px-3 py-2 text-[14px] font-medium hover:bg-muted"
     >
       {children}
     </Link>

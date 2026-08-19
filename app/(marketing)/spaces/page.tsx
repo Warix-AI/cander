@@ -1,7 +1,7 @@
 import { FinalCta } from "@/components/marketing/FinalCta";
-import { ProductMockup } from "@/components/marketing/ProductMockup";
+import { ProductShowcase } from "@/components/marketing/ProductShowcase";
 import { PageWidth, Section, SectionHeader } from "@/components/marketing/Section";
-import { SpaceCardRow } from "@/components/marketing/SpaceCard";
+import { SpaceLinks } from "@/components/marketing/SpaceLinks";
 import { marketingMetadata } from "@/lib/marketing";
 
 export const metadata = marketingMetadata("/spaces");
@@ -9,25 +9,22 @@ export const metadata = marketingMetadata("/spaces");
 export default function SpacesPage() {
   return (
     <>
-      <Section className="pt-10 md:pt-16">
+      <Section className="pt-10 md:pt-14">
         <PageWidth>
           <SectionHeader
             as="h1"
-            kicker="Spaces"
-            title="Your work has different shapes. Courier does too."
-            body="Work, Build, Studio, Research, and Personal. Enter them directly, or let Courier hand work in from chat."
+            kicker="Courier"
+            title="Spaces"
+            body="Work, Build, Studio, Research, and Personal — one product, different shapes."
           />
-          <div className="mt-12">
-            <SpaceCardRow />
+          <div className="mt-8">
+            <SpaceLinks />
           </div>
         </PageWidth>
       </Section>
-      <Section>
+      <Section className="border-t border-border/60 bg-muted/20">
         <PageWidth>
-          <SectionHeader title="From chat into the right space." />
-          <div className="mt-10 hidden sm:block">
-            <ProductMockup variant="hero" />
-          </div>
+          <ProductShowcase />
         </PageWidth>
       </Section>
       <FinalCta />

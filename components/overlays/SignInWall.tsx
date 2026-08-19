@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { CourierMark } from "@/components/brand/CourierMark";
 import { useApp } from "@/components/app/AppProvider";
 import { Modal } from "@/components/ui/Modal";
@@ -36,6 +36,13 @@ function SignInDialog() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, []);
+
   const signIn = (presetId?: AccountPresetId) => {
     if (presetId) {
       setPreview(presetId);
@@ -64,6 +71,7 @@ function SignInDialog() {
     <Modal
       open
       onClose={() => {}}
+      lockScroll={false}
       labelledBy="sign-in-title"
       className="w-full max-w-[26rem]"
     >

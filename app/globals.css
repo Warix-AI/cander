@@ -347,62 +347,9 @@ select:focus-visible {
   }
 }
 
-/* Marketing site follows global theme (default dark). */
+/* Marketing pages — normal document scroll; no nested overflow containers. */
 .marketing {
-  min-height: 100svh;
-}
-
-.marketing-mesh {
   position: relative;
-  isolation: isolate;
-}
-
-.marketing-mesh::before {
-  content: "";
-  position: absolute;
-  inset: -20% -10% auto;
-  height: min(520px, 70vh);
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.45;
-  background:
-    radial-gradient(
-      80% 70% at 12% 100%,
-      oklch(0.55 0.18 263 / 0.35),
-      transparent 58%
-    ),
-    radial-gradient(
-      60% 50% at 88% 8%,
-      oklch(0.62 0.19 260 / 0.28),
-      transparent 52%
-    );
-}
-
-.dark .marketing-mesh::before {
-  opacity: 0.55;
-}
-
-.marketing-band {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--radius);
-}
-
-.marketing-band::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.12;
-  background: linear-gradient(
-    135deg,
-    oklch(0.55 0.18 263),
-    oklch(0.42 0.16 266)
-  );
-}
-
-.dark .marketing-band::before {
-  opacity: 0.22;
 }
 
 @media (prefers-reduced-motion: reduce) {

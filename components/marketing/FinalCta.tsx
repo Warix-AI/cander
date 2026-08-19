@@ -3,24 +3,24 @@ import { PageWidth, Section } from "@/components/marketing/Section";
 import { APP_HREF } from "@/lib/marketing";
 
 export function FinalCta({
-  title = "Open Courier.",
-  body = "Start free. Chat, Spaces, and Cloud are ready. Development opens on Pro.",
+  title = "Try Courier today",
+  body = "Start free at the root domain — the product, not a separate site.",
 }: {
   title?: string;
   body?: string;
 }) {
   return (
-    <Section className="pb-16 pt-6">
+    <Section className="border-t border-border/60 pb-16 pt-10">
       <PageWidth>
-        <div className="max-w-xl">
-          <h2 className="heading-display text-3xl md:text-5xl">{title}</h2>
-          <p className="mt-4 text-[16px] leading-relaxed text-muted-foreground">
+        <div className="mx-auto max-w-lg text-center">
+          <h2 className="heading-display text-3xl md:text-4xl">{title}</h2>
+          <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">
             {body}
           </p>
-          <div className="mt-8 flex flex-wrap gap-2">
-            <Cta href={APP_HREF}>Start free</Cta>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            <Cta href={APP_HREF}>Sign up for free</Cta>
             <Cta href={APP_HREF} variant="secondary">
-              Sign in
+              Log in
             </Cta>
           </div>
         </div>
