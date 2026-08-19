@@ -9,12 +9,16 @@ export function Dropdown({
   className,
   menuClassName,
   placement = "bottom",
+  align = "start",
+  matchTrigger = true,
 }: {
   trigger: (props: { open: boolean; toggle: () => void }) => ReactNode;
   children: (close: () => void) => ReactNode;
   className?: string;
   menuClassName?: string;
-  placement?: "bottom" | "top";
+  placement?: "bottom" | "top" | "right";
+  align?: "start" | "end";
+  matchTrigger?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -42,10 +46,19 @@ export function Dropdown({
         <div
           role="menu"
           className={cn(
-            "absolute left-0 z-50 min-w-full rounded-lg border border-border bg-background p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.08)]",
+            "absolute z-50 rounded-[10px] border border-border bg-background p-1.5 shadow-[0_16px_48px_rgba(0,0,0,0.18)]",
+            placement === "right"
+              ? "bottom-0 left-[calc(100%+6px)]"
+              : matchTrigger
+                ? "inset-x-0 w-auto"
+                : align === "end"
+                  ? "right-0"
+                  : "left-0",
             placement === "top"
               ? "bottom-[calc(100%+6px)]"
-              : "top-[calc(100%+6px)]",
+              : placement === "bottom"
+                ? "top-[calc(100%+6px)]"
+                : null,
             menuClassName,
           )}
         >

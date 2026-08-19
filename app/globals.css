@@ -32,7 +32,7 @@
   --shadow-spread: 0px;
   --letter-spacing: 0.008em;
   --shadow-opacity: 0.1;
-  --sidebar-accent: oklch(0.94 0 0);
+  --sidebar-accent: oklch(0.90 0 0);
   --sidebar-border: oklch(0.90 0 0);
   --card-foreground: oklch(0.145 0 0);
   --shadow-offset-x: 0;
@@ -82,7 +82,7 @@
   --letter-spacing: 0.008em;
   --shadow-opacity: 0.1;
   --sidebar-accent: oklch(0.22 0 0);
-  --sidebar-border: oklch(0.26 0 0);
+  --sidebar-border: oklch(0.22 0 0);
   --card-foreground: oklch(0.985 0 0);
   --shadow-offset-x: 0;
   --shadow-offset-y: 1px;
@@ -166,6 +166,12 @@ body {
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
 }
 
 .heading-display {
@@ -283,6 +289,11 @@ body {
   animation: voice-pulse 0.9s ease-in-out infinite;
 }
 
+.voice-orb {
+  overflow: hidden;
+  border-radius: 9999px;
+}
+
 @keyframes voice-pulse {
   0%,
   100% {
@@ -290,6 +301,49 @@ body {
   }
   50% {
     transform: scaleY(1);
+  }
+}
+
+.composer-dock {
+  view-transition-name: composer-dock;
+}
+
+.landing-mark {
+  view-transition-name: landing-mark;
+}
+
+.landing-suggestions {
+  view-transition-name: landing-suggestions;
+}
+
+::view-transition-group(composer-dock) {
+  animation-duration: 520ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+::view-transition-old(landing-mark),
+::view-transition-old(landing-headline),
+::view-transition-old(landing-suggestions) {
+  animation: landing-exit 280ms ease-out both;
+}
+
+::view-transition-new(landing-mark),
+::view-transition-new(landing-headline),
+::view-transition-new(landing-suggestions) {
+  animation: landing-enter 320ms ease-out both;
+}
+
+@keyframes landing-exit {
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes landing-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
 }
 

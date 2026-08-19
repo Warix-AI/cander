@@ -3,16 +3,22 @@
 import { useEffect } from "react";
 import { AppProvider, useApp } from "@/components/app/AppProvider";
 import { ChatColumn } from "@/components/shell/ChatColumn";
-import { ContextPanel, ResizeHandle } from "@/components/shell/ContextPanel";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { SpaceDashboard } from "@/components/shell/SpaceDashboard";
 import { RecentsView } from "@/components/shell/RecentsView";
-import { TopRail } from "@/components/shell/TopRail";
+import { SplitMainLayout } from "@/components/shell/SplitMainLayout";
 import { SettingsModal } from "@/components/settings/SettingsView";
 import { SharedPanel } from "@/components/panels/SharedPanel";
+import { PublishSheet } from "@/components/preview/PublishSheet";
+import { PlatformChatDock } from "@/components/platform/PlatformChatDock";
 import { PlatformMain } from "@/components/platform/PlatformShell";
+import { SearchModal } from "@/components/overlays/SearchModal";
+import { ConfigureModal } from "@/components/overlays/ConfigureModal";
+import { SpaceSettingsModal } from "@/components/overlays/SpaceSettingsModal";
 import { WorkspaceModal } from "@/components/overlays/WorkspaceModal";
-import { cn } from "@/lib/utils";
+import { InviteBanner, InviteWall } from "@/components/overlays/InviteWall";
+import { BrowserLayout } from "@/components/browser/BrowserLayout";
+import { FloatingVoiceDock } from "@/components/shell/VoiceControl";
 
 export function AppShell() {
   return (
@@ -23,7 +29,7 @@ export function AppShell() {
 }
 
 function Root() {
-  const { mobileNav, setMobileNav, overlay, openSettings, closeOverlay } =
+  const { mobileNav, setMobileNav, overlay, openSettings, openOverlay, closeOverlay } =
     useApp();
 
   useEffect(() => {
@@ -33,10 +39,15 @@ function Root() {
         if (overlay === "settings") closeOverlay();
         else openSettings();
       }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        if (overlay === "search") closeOverlay();
+        else openOverlay("search");
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [overlay, openSettings, closeOverlay]);
+  }, [overlay, openSettings, openOverlay, closeOverlay]);
 
   return (
     <div className="relative flex h-svh overflow-hidden bg-background text-foreground">
@@ -49,67 +60,84 @@ function Root() {
         />
       ) : null}
       <Sidebar />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <TopRail />
-        <CourierMain />
-      </div>
+      <CourierMain />
       <SettingsModal />
+      <SearchModal />
+      <ConfigureModal />
+      <SpaceSettingsModal />
       <WorkspaceModal />
+      <InviteWall />
+      <PublishSheet />
+      <FloatingVoiceDock />
     </div>
   );
 }
 
 function CourierMain() {
-  const { product, view, panelMode, panelRatio } = useApp();
+  const { product, view, platformNav, platformDockOpen } = useApp();
 
   if (product === "platform") {
     return (
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-8">
-        <PlatformMain />
+      <div
+        id="courier-main"
+        className="flex min-h-0 min-w-0 flex-1 overflow-hidden"
+      >
+        {platformDockOpen ? <PlatformChatDock /> : null}
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          {platformNav === "recents" ? (
+            <RecentsView />
+          ) : (
+            <PlatformMain />
+          )}
+        </div>
       </div>
     );
   }
 
-  if (view === "space") return <SpaceDashboard />;
-  if (view === "recents") return <RecentsView />;
+  if (view === "browser") {
+    return <BrowserLayout />;
+  }
+
+  if (view === "space") {
+    return (
+      <SplitMainLayout>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <InviteBanner />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <SpaceDashboard />
+          </div>
+        </div>
+      </SplitMainLayout>
+    );
+  }
+
+  if (view === "recents") {
+    return (
+      <SplitMainLayout>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <InviteBanner />
+          <RecentsView />
+        </div>
+      </SplitMainLayout>
+    );
+  }
+
   if (view === "shared") {
     return (
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <SharedPanel />
-      </div>
+      <SplitMainLayout>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <SharedPanel />
+        </div>
+      </SplitMainLayout>
     );
   }
 
-  const panelOn = panelMode !== "collapsed";
-  const immersive = panelMode === "immersive";
-  const wide = panelMode === "wide";
-  const panelPct = immersive
-    ? 100
-    : wide
-      ? Math.max(panelRatio, 0.58) * 100
-      : panelRatio * 100;
-
   return (
-    <div id="courier-main" className="flex min-h-0 min-w-0 flex-1">
-      <div
-        className={cn(
-          "flex min-h-0 min-w-[20rem] flex-col",
-          immersive ? "w-[22.5rem] shrink-0" : "min-w-0 flex-1",
-        )}
-      >
+    <SplitMainLayout>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <InviteBanner />
         <ChatColumn />
       </div>
-      {panelOn ? (
-        <>
-          <ResizeHandle />
-          <div
-            className={cn(immersive ? "min-w-0 flex-1" : "shrink-0")}
-            style={immersive ? undefined : { width: `${panelPct}%` }}
-          >
-            <ContextPanel />
-          </div>
-        </>
-      ) : null}
-    </div>
+    </SplitMainLayout>
   );
 }

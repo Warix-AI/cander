@@ -1,40 +1,103 @@
 import {
+  BarChart3,
   Blocks,
+  BookOpen,
+  Briefcase,
   CalendarClock,
   Clapperboard,
+  Cpu,
+  Files,
+  Globe,
   Hammer,
+  HeartPulse,
+  History,
+  KeyRound,
+  LayoutGrid,
+  Rocket,
+  ScrollText,
   Search,
+  Server,
   Sparkles,
+  UserRound,
+  Wallet,
+  Waypoints,
 } from "lucide-react";
-import type { SpaceId } from "./types";
+import { isExtraNavId, type SidebarNavId } from "./spaces";
+import type { PlatformNav, SpaceId } from "./types";
 
 export const spaceIcons: Record<SpaceId, typeof Hammer> = {
+  work: Briefcase,
   build: Hammer,
   studio: Clapperboard,
   research: Search,
+  personal: UserRound,
+  files: Files,
   skills: Sparkles,
+  finances: Wallet,
+  health: HeartPulse,
   connectors: Blocks,
   scheduled: CalendarClock,
 };
 
-export const chatSpaceCopy: Record<
-  "build" | "studio" | "research" | "skills",
-  { heading: string; body: string }
+export const extraNavIcons: Record<
+  "browser" | "recents",
+  typeof Hammer
 > = {
-  build: {
-    heading: "What should we build?",
-    body: "Sites, apps, and previews stay on the right. Chat stays the command layer.",
-  },
-  studio: {
-    heading: "What are we making?",
-    body: "Still, retouch, background remove, and text-to-video live on the canvas.",
-  },
-  research: {
-    heading: "What should we look into?",
-    body: "Sources, notes, and the live page stay attached to this chat.",
-  },
-  skills: {
-    heading: "What should this skill do?",
-    body: "Describe it in chat, or edit name, timing, and instructions on the right.",
-  },
+  browser: Globe,
+  recents: History,
+};
+
+export function navIcon(id: SidebarNavId) {
+  return isExtraNavId(id) ? extraNavIcons[id] : spaceIcons[id];
+}
+
+export const extraNavLabels: Record<"browser" | "recents", string> = {
+  browser: "Browser",
+  recents: "Recents",
+};
+
+export const platformNavIcons: Record<PlatformNav, typeof Hammer> = {
+  overview: LayoutGrid,
+  hosting: Server,
+  models: Cpu,
+  api: Waypoints,
+  keys: KeyRound,
+  deployments: Rocket,
+  logs: ScrollText,
+  usage: BarChart3,
+  docs: BookOpen,
+  recents: History,
+};
+
+export const spaceIconColor: Partial<Record<SpaceId, string>> = {
+  work: "text-rose-400",
+  build: "text-sky-400",
+  studio: "text-violet-400",
+  research: "text-orange-400",
+  personal: "text-emerald-400",
+};
+
+export function spaceIconTint(id: SpaceId | null | undefined) {
+  return (id && spaceIconColor[id]) || "text-muted-foreground";
+}
+
+export const chatSpaceCopy: Record<
+  | "work"
+  | "build"
+  | "studio"
+  | "research"
+  | "personal"
+  | "skills"
+  | "finances"
+  | "health",
+  string
+> = {
+  work: "What should we take care of?",
+  build: "What should we make?",
+  studio: "What should we create?",
+  research: "What should we understand?",
+  personal: "What's going on?",
+  skills: "What should this task do?",
+  finances: "What should we look at in the books?",
+  health: "What should we track?",
 };

@@ -1,9 +1,11 @@
 "use client";
 
 import { useApp } from "@/components/app/AppProvider";
+import { PanelChrome } from "@/components/panels/PanelChrome";
+import { SpaceLibraryPanel } from "@/components/panels/SpaceLibraryPanel";
 import { Row, SectionLabel } from "@/components/panels/Bits";
 import { SegTabs } from "@/components/ui/Controls";
-import { projects, researchSources } from "@/lib/data";
+import { researchSources } from "@/lib/data";
 import type { ResearchTool } from "@/lib/types";
 
 const tools: { id: ResearchTool; label: string }[] = [
@@ -16,45 +18,30 @@ const tools: { id: ResearchTool; label: string }[] = [
 
 export function ResearchPanel() {
   const {
-    workspaceId,
     project,
     researchTool,
     setResearchTool,
-    openProject,
     panelIntent,
   } = useApp();
-  const list = projects.filter(
-    (item) => item.space === "research" && item.workspaceId === workspaceId,
-  );
   const execute = panelIntent === "execute";
 
   if ((!project || project.space !== "research") && !execute) {
-    return (
-      <div className="p-3 pt-4">
-        <SectionLabel>Projects</SectionLabel>
-        {list.map((item) => (
-          <Row
-            key={item.id}
-            title={item.name}
-            meta={item.updatedAt}
-            onClick={() => openProject(item.id)}
-          />
-        ))}
-      </div>
-    );
+    return <SpaceLibraryPanel />;
   }
 
-  const tool = execute && researchTool === "overview" ? "browser" : researchTool;
+  const tool = execute && (researchTool === "overview" || !researchTool) ? "browser" : researchTool;
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-border px-3 py-2">
+    <div className="flex h-full min-h-0 flex-col bg-sidebar">
+      <PanelChrome kicker="Research" title={project?.name ?? "New brief"} />
+      <div className="border-b border-sidebar-border bg-sidebar px-2 py-1.5">
         <SegTabs
           items={tools}
           value={tool}
           onChange={(id) => setResearchTool(id as ResearchTool)}
         />
       </div>
+      <div className="min-h-0 flex-1 overflow-y-auto bg-background">
       {tool === "overview" || tool === "sources" ? (
         <div className="py-2">
           {researchSources.map((source) => (
@@ -103,6 +90,7 @@ export function ResearchPanel() {
           </p>
         </div>
       ) : null}
+      </div>
     </div>
   );
 }

@@ -1,13 +1,30 @@
 "use client";
 
-import { Building2, LogOut, Settings } from "lucide-react";
+import { Building2, Blocks, CreditCard, LogOut, Settings } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { Dropdown } from "@/components/ui/Controls";
-import { currentUser } from "@/lib/data";
+import { PreviewAccount } from "@/components/settings/PreviewAccount";
+import { account } from "@/lib/data";
+import { planLabel } from "@/lib/billing";
 import { cn } from "@/lib/utils";
 
 export function AccountMenu() {
-  const { workspace, overlay, openOverlay, openSettings } = useApp();
+  const {
+    product,
+    overlay,
+    openOverlay,
+    openSettings,
+    openSpace,
+    spaceId,
+    actor,
+    entitlements,
+  } = useApp();
+
+  const subtitle = entitlements.orgActive
+    ? `${account.name} · ${entitlements.role}`
+    : entitlements.showInviteWall
+      ? `${planLabel(entitlements.plan)} · invite pending`
+      : planLabel(entitlements.plan);
 
   return (
     <Dropdown
@@ -19,19 +36,19 @@ export function AccountMenu() {
           aria-expanded={open}
           onClick={toggle}
           className={cn(
-            "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-200 hover:bg-muted",
-            open && "bg-muted",
+            "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-200 hover:bg-sidebar-accent",
+            open && "bg-sidebar-accent",
           )}
         >
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-[11px] font-semibold">
-            {currentUser.initials}
+            {actor.initials}
           </span>
           <span className="min-w-0">
             <span className="block truncate text-[12.5px] font-medium">
-              {currentUser.name}
+              {actor.name}
             </span>
             <span className="block truncate text-[11px] text-muted-foreground">
-              {workspace.name} · Acme Inc.
+              {subtitle}
             </span>
           </span>
         </button>
@@ -39,13 +56,44 @@ export function AccountMenu() {
     >
       {(close) => (
         <>
+          {product === "courier" ? (
+            <MenuItem
+              icon={Blocks}
+              label="Connectors"
+              active={spaceId === "connectors"}
+              onClick={() => {
+                close();
+                openSpace("connectors");
+              }}
+            />
+          ) : null}
+          {entitlements.hasWorkspaces && !entitlements.showInviteWall ? (
+            <MenuItem
+              icon={Building2}
+              label="Workspace"
+              active={overlay === "workspace"}
+              onClick={() => {
+                close();
+                openOverlay("workspace");
+              }}
+            />
+          ) : null}
+          {entitlements.showInviteWall ? (
+            <MenuItem
+              icon={Building2}
+              label={`Join ${account.name}`}
+              onClick={() => {
+                close();
+                openOverlay("invite-wall");
+              }}
+            />
+          ) : null}
           <MenuItem
-            icon={Building2}
-            label="Workspace"
-            active={overlay === "workspace"}
+            icon={CreditCard}
+            label="Plans"
             onClick={() => {
               close();
-              openOverlay("workspace");
+              openSettings("plans");
             }}
           />
           <MenuItem
@@ -57,6 +105,9 @@ export function AccountMenu() {
               openSettings();
             }}
           />
+          <div className="mt-2 border-t border-border px-2 pt-2 pb-1">
+            <PreviewAccount compact onSelect={close} />
+          </div>
           <MenuItem icon={LogOut} label="Log out" onClick={close} />
         </>
       )}

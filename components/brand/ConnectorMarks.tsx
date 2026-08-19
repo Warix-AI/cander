@@ -1,15 +1,24 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+type MarkSize = "xs" | "sm" | "md";
+
 type MarkProps = {
   id: string;
   className?: string;
-  size?: "sm" | "md";
+  size?: MarkSize;
 };
 
 export function ConnectorMark({ id, className, size = "md" }: MarkProps) {
-  const Mark = marks[id] ?? FallbackMark;
-  return <Mark className={className} size={size} />;
+  const Mark = marks[id];
+  if (Mark) return <Mark className={className} size={size} />;
+  return (
+    <LetterMark
+      letter={id.slice(0, 1).toUpperCase()}
+      className={className}
+      size={size}
+    />
+  );
 }
 
 function Tile({
@@ -18,14 +27,14 @@ function Tile({
   children,
 }: {
   className?: string;
-  size?: "sm" | "md";
+  size?: MarkSize;
   children: ReactNode;
 }) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-[10px] bg-white/14",
-        size === "sm" ? "h-7 w-7" : "h-10 w-10",
+        "inline-flex shrink-0 items-center justify-center rounded-[10px] bg-muted",
+        size === "xs" ? "h-6 w-6" : size === "sm" ? "h-8 w-8" : "h-10 w-10",
         className,
       )}
     >
@@ -55,7 +64,7 @@ function Svg({
   );
 }
 
-function GmailMark({ className, size }: { className?: string; size?: "sm" | "md" }) {
+function GmailMark({ className, size }: { className?: string; size?: MarkSize }) {
   return (
     <Tile size={size} className={cn("bg-[#EA4335]/12", className)}>
       <Svg label="Gmail">
@@ -68,7 +77,7 @@ function GmailMark({ className, size }: { className?: string; size?: "sm" | "md"
   );
 }
 
-function StripeMark({ className, size }: { className?: string; size?: "sm" | "md" }) {
+function StripeMark({ className, size }: { className?: string; size?: MarkSize }) {
   return (
     <Tile size={size} className={cn("bg-[#635BFF]/12", className)}>
       <Svg label="Stripe" className="h-[18px] w-[18px]">
@@ -81,7 +90,7 @@ function StripeMark({ className, size }: { className?: string; size?: "sm" | "md
   );
 }
 
-function GithubMark({ className, size }: { className?: string; size?: "sm" | "md" }) {
+function GithubMark({ className, size }: { className?: string; size?: MarkSize }) {
   return (
     <Tile size={size} className={className}>
       <Svg label="GitHub">
@@ -94,7 +103,7 @@ function GithubMark({ className, size }: { className?: string; size?: "sm" | "md
   );
 }
 
-function GcalMark({ className, size }: { className?: string; size?: "sm" | "md" }) {
+function GcalMark({ className, size }: { className?: string; size?: MarkSize }) {
   return (
     <Tile size={size} className={cn("bg-[#1A73E8]/10", className)}>
       <Svg label="Google Calendar">
@@ -106,7 +115,7 @@ function GcalMark({ className, size }: { className?: string; size?: "sm" | "md" 
   );
 }
 
-function SlackMark({ className, size }: { className?: string; size?: "sm" | "md" }) {
+function SlackMark({ className, size }: { className?: string; size?: MarkSize }) {
   return (
     <Tile size={size} className={className}>
       <Svg label="Slack">
@@ -119,7 +128,7 @@ function SlackMark({ className, size }: { className?: string; size?: "sm" | "md"
   );
 }
 
-function NotionMark({ className, size }: { className?: string; size?: "sm" | "md" }) {
+function NotionMark({ className, size }: { className?: string; size?: MarkSize }) {
   return (
     <Tile size={size} className={className}>
       <Svg label="Notion">
@@ -132,7 +141,7 @@ function NotionMark({ className, size }: { className?: string; size?: "sm" | "md
   );
 }
 
-function FigmaMark({ className, size }: { className?: string; size?: "sm" | "md" }) {
+function FigmaMark({ className, size }: { className?: string; size?: MarkSize }) {
   return (
     <Tile size={size} className={className}>
       <Svg label="Figma">
@@ -146,7 +155,7 @@ function FigmaMark({ className, size }: { className?: string; size?: "sm" | "md"
   );
 }
 
-function LinearMark({ className, size }: { className?: string; size?: "sm" | "md" }) {
+function LinearMark({ className, size }: { className?: string; size?: MarkSize }) {
   return (
     <Tile size={size} className={cn("bg-[#5E6AD2]/12", className)}>
       <Svg label="Linear">
@@ -159,7 +168,7 @@ function LinearMark({ className, size }: { className?: string; size?: "sm" | "md
   );
 }
 
-function HubspotMark({ className, size }: { className?: string; size?: "sm" | "md" }) {
+function HubspotMark({ className, size }: { className?: string; size?: MarkSize }) {
   return (
     <Tile size={size} className={cn("bg-[#FF7A59]/12", className)}>
       <Svg label="HubSpot">
@@ -179,7 +188,7 @@ function HubspotMark({ className, size }: { className?: string; size?: "sm" | "m
   );
 }
 
-function DiscordMark({ className, size }: { className?: string; size?: "sm" | "md" }) {
+function DiscordMark({ className, size }: { className?: string; size?: MarkSize }) {
   return (
     <Tile size={size} className={cn("bg-[#5865F2]/12", className)}>
       <Svg label="Discord">
@@ -192,7 +201,7 @@ function DiscordMark({ className, size }: { className?: string; size?: "sm" | "m
   );
 }
 
-function DropboxMark({ className, size }: { className?: string; size?: "sm" | "md" }) {
+function DropboxMark({ className, size }: { className?: string; size?: MarkSize }) {
   return (
     <Tile size={size} className={cn("bg-[#0061FF]/10", className)}>
       <Svg label="Dropbox">
@@ -205,7 +214,7 @@ function DropboxMark({ className, size }: { className?: string; size?: "sm" | "m
   );
 }
 
-function JiraMark({ className, size }: { className?: string; size?: "sm" | "md" }) {
+function JiraMark({ className, size }: { className?: string; size?: MarkSize }) {
   return (
     <Tile size={size} className={cn("bg-[#2684FF]/12", className)}>
       <Svg label="Jira">
@@ -218,19 +227,32 @@ function JiraMark({ className, size }: { className?: string; size?: "sm" | "md" 
   );
 }
 
-function FallbackMark({ className, size }: { className?: string; size?: "sm" | "md" }) {
+function LetterMark({
+  letter,
+  className,
+  size,
+}: {
+  letter: string;
+  className?: string;
+  size?: MarkSize;
+}) {
   return (
-    <Tile size={size} className={className}>
-      <Svg label="Connector">
-        <rect x="4" y="4" width="16" height="16" rx="3" fill="currentColor" opacity="0.22" />
-      </Svg>
+    <Tile size={size} className={cn("bg-muted text-foreground/80", className)}>
+      <span
+        className={cn(
+          "font-medium tracking-[-0.04em]",
+          size === "xs" ? "text-[10px]" : size === "sm" ? "text-[12px]" : "text-[13px]",
+        )}
+      >
+        {letter}
+      </span>
     </Tile>
   );
 }
 
 const marks: Record<
   string,
-  (props: { className?: string; size?: "sm" | "md" }) => ReactNode
+  (props: { className?: string; size?: MarkSize }) => ReactNode
 > = {
   gmail: GmailMark,
   stripe: StripeMark,

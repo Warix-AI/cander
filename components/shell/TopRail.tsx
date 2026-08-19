@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize2, Minimize2, PanelRight, Share } from "lucide-react";
+import { PanelRight, Pin } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { isChatSpace } from "@/lib/spaces";
@@ -11,12 +11,15 @@ export function TopRail() {
     product,
     view,
     thread,
+    projectId,
     spaceId,
     drafting,
-    sidebarOpen,
-    mobileNav,
     panelMode,
     setPanelMode,
+    sidebarOpen,
+    mobileNav,
+    isPinned,
+    togglePin,
   } = useApp();
 
   const panelOpen = panelMode !== "collapsed" && view === "chat";
@@ -24,9 +27,21 @@ export function TopRail() {
     product === "courier" &&
     view === "chat" &&
     (Boolean(thread) || drafting || isChatSpace(spaceId));
+  const showPanelBtn = canPanel && !panelOpen;
+  const pinTarget = thread
+    ? ({ kind: "thread" as const, id: thread.id })
+    : projectId
+      ? ({ kind: "project" as const, id: projectId })
+      : null;
+  const pinned = pinTarget ? isPinned(pinTarget.kind, pinTarget.id) : false;
 
   return (
-    <header className="flex h-11 shrink-0 items-center justify-end gap-1 bg-background px-2">
+    <header
+      className={cn(
+        "flex h-11 shrink-0 items-center justify-end gap-1 bg-background px-2",
+        !showPanelBtn && !pinTarget && sidebarOpen && "lg:hidden",
+      )}
+    >
       <NavToggle
         className={cn(
           "mr-auto",
@@ -34,50 +49,31 @@ export function TopRail() {
           mobileNav && "max-lg:hidden",
         )}
       />
-
-      {product === "courier" && view === "chat" && (thread || drafting) ? (
+      {pinTarget ? (
         <button
           type="button"
-          className="hidden h-8 items-center rounded-lg px-2.5 text-[12px] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground sm:inline-flex"
-        >
-          <Share className="mr-1.5 h-3.5 w-3.5" strokeWidth={1.6} />
-          Share
-        </button>
-      ) : null}
-
-      {product === "courier" && view === "chat" && (thread || drafting) ? (
-        <button
-          type="button"
-          aria-label={
-            panelMode === "immersive" ? "Exit full surface" : "Widen panel"
-          }
-          onClick={() =>
-            setPanelMode(panelMode === "immersive" ? "split" : "immersive")
-          }
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-        >
-          {panelMode === "immersive" ? (
-            <Minimize2 className="h-4 w-4" strokeWidth={1.6} />
-          ) : (
-            <Maximize2 className="h-4 w-4" strokeWidth={1.6} />
-          )}
-        </button>
-      ) : null}
-
-      {product === "courier" ? (
-        <button
-          type="button"
-          aria-label={panelOpen ? "Close right panel" : "Open right panel"}
-          disabled={!canPanel}
-          onClick={() => setPanelMode(panelOpen ? "collapsed" : "split")}
+          aria-label={pinned ? "Unpin" : "Pin"}
+          aria-pressed={pinned}
+          onClick={() => togglePin(pinTarget.kind, pinTarget.id)}
           className={cn(
-            "inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-200",
-            !canPanel
-              ? "text-muted-foreground/40"
-              : panelOpen
-                ? "bg-muted text-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            "inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-muted",
+            pinned
+              ? "text-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
+        >
+          <Pin
+            className={cn("h-4 w-4", pinned && "fill-current")}
+            strokeWidth={1.6}
+          />
+        </button>
+      ) : null}
+      {showPanelBtn ? (
+        <button
+          type="button"
+          aria-label="Open right panel"
+          onClick={() => setPanelMode("split")}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
         >
           <PanelRight className="h-4 w-4" strokeWidth={1.6} />
         </button>

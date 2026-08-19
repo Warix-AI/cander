@@ -6,7 +6,9 @@ import { spaces } from "@/lib/data";
 
 export function SharedPanel() {
   const { threads, openThread } = useApp();
-  const shared = threads.filter((thread) => thread.shared);
+  const shared = threads.filter(
+    (thread) => thread.shared && thread.product !== "platform",
+  );
 
   return (
     <div className="p-3 pt-4">

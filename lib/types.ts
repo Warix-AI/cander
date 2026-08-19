@@ -1,20 +1,52 @@
 export type ProductId = "courier" | "platform";
 export type HostingMode = "cloud" | "local" | "on-device";
-export type BillingPlan = "personal" | "business";
+export type BillingPlan = "free" | "plus" | "pro";
 export type Theme = "light" | "dark";
 export type SpaceId =
+  | "work"
   | "build"
   | "studio"
   | "research"
+  | "personal"
+  | "files"
   | "skills"
   | "scheduled"
-  | "connectors";
+  | "connectors"
+  | "finances"
+  | "health";
 
-export type CourierView = "chat" | "space" | "settings" | "shared" | "recents";
-export type OverlayId = "settings" | "workspace" | null;
+export type CourierView =
+  | "chat"
+  | "space"
+  | "settings"
+  | "shared"
+  | "recents"
+  | "browser";
+
+export type PinKind = "thread" | "project";
+
+export type Pin = {
+  kind: PinKind;
+  id: string;
+};
+
+export type OverlayId =
+  | "settings"
+  | "workspace"
+  | "publish"
+  | "search"
+  | "configure"
+  | "space-settings"
+  | "invite-wall"
+  | null;
 export type SpaceLayout = "cards" | "list";
 export type PanelMode = "collapsed" | "split" | "wide" | "immersive";
 export type PanelIntent = "browse" | "execute";
+
+export type PageReference = {
+  url: string;
+  title: string;
+};
 
 export type BuildTool =
   | "overview"
@@ -22,6 +54,7 @@ export type BuildTool =
   | "files"
   | "editor"
   | "preview"
+  | "more"
   | "terminal"
   | "git"
   | "deployments"
@@ -29,7 +62,8 @@ export type BuildTool =
   | "logs"
   | "env"
   | "activity"
-  | "design";
+  | "design"
+  | "dependencies";
 
 export type StudioTool =
   | "overview"
@@ -59,12 +93,10 @@ export type ScheduledStatus =
   | "failed";
 
 export type SettingsTab =
-  | "account"
-  | "users"
-  | "workspaces"
   | "organization"
-  | "access"
-  | "billing"
+  | "workspaces"
+  | "plans"
+  | "general"
   | "appearance";
 
 export type PlatformNav =
@@ -76,28 +108,100 @@ export type PlatformNav =
   | "deployments"
   | "logs"
   | "usage"
-  | "docs";
+  | "docs"
+  | "recents";
 
 export type Role = "Owner" | "Admin" | "Member";
+export type SeatStatus = "active" | "pending";
+export type MemberKind = "org" | "personal";
+export type UltraScope = "org" | "personal";
+
+export type UltraLicense = {
+  id: string;
+  userId: string | null;
+  scope: UltraScope;
+};
+
+export type AccountPresetId =
+  | "pro-owner"
+  | "pro-admin"
+  | "pro-member"
+  | "pro-member-ultra"
+  | "plus"
+  | "plus-ultra"
+  | "free";
 
 export type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
   at: string;
+  blocks?: ChatBlock[];
+};
+
+export type BuildStepStatus = "done" | "active" | "pending";
+
+export type ChatBlock =
+  | { type: "text"; text: string }
+  | { type: "plan"; title: string; steps: string[]; details?: string }
+  | {
+      type: "build";
+      title: string;
+      items: { id: string; label: string; status: BuildStepStatus }[];
+      details?: string;
+      complete?: boolean;
+    }
+  | { type: "suggestions"; prompt: string; actions: { id: string; label: string }[] }
+  | { type: "secret"; service: string; keyName: string; filled?: boolean }
+  | { type: "connect"; service: string; status: "pending" | "connected" }
+  | { type: "error"; title: string; body: string; details?: string }
+  | { type: "deploy"; url: string; status: "ready" | "live" };
+
+export type Checkpoint = {
+  id: string;
+  title: string;
+  at: string;
+  day: string;
+  summary: string;
+  files: string[];
+  diff?: string;
+};
+
+export type ViewportId = "desktop" | "tablet" | "mobile";
+
+export type PreviewNodeId = "nav" | "kicker" | "heading" | "body" | "cta";
+
+export type ProjectMemory = {
+  purpose: string;
+  stack: string;
+  integrations: string[];
+  features: string[];
+  rejected: string[];
 };
 
 export type Thread = {
   id: string;
   title: string;
   workspaceId: string;
+  product?: ProductId;
   projectId?: string;
   spaceId?: SpaceId;
+  platformNav?: PlatformNav;
   updatedAt: string;
   snippet: string;
   messages: Message[];
   shared?: boolean;
 };
+
+export type VoiceAnchor =
+  | "top-left"
+  | "top-center"
+  | "top-right"
+  | "center-left"
+  | "center-right"
+  | "bottom-left"
+  | "bottom-center"
+  | "bottom-right";
 
 export type Project = {
   id: string;
@@ -105,6 +209,23 @@ export type Project = {
   space: SpaceId;
   workspaceId: string;
   summary: string;
+  updatedAt: string;
+  domains?: string[];
+  cover?: string;
+  threadId?: string;
+};
+
+export type AssetKind = "image" | "document" | "code" | "media" | "data" | "folder";
+
+export type AssetFile = {
+  id: string;
+  name: string;
+  kind: AssetKind;
+  ext: string;
+  size: string;
+  source: SpaceId;
+  projectId?: string;
+  workspaceId: string;
   updatedAt: string;
 };
 
@@ -115,10 +236,15 @@ export type Workspace = {
   members: number;
   budget: string;
   spend: string;
+  personal?: boolean;
 };
 
-export type KnowledgeAccess = "manage" | "use" | "none";
-export type WorkspaceSeatRole = "admin" | "member" | "viewer";
+export type KnowledgeFile = {
+  id: string;
+  name: string;
+  size: string;
+  uploadedAt: string;
+};
 
 export type KnowledgeBase = {
   id: string;
@@ -126,12 +252,12 @@ export type KnowledgeBase = {
   summary: string;
   sources: number;
   updatedAt: string;
+  files: KnowledgeFile[];
 };
 
 export type WorkspaceMemberPolicy = {
   memberId: string;
-  role: WorkspaceSeatRole;
-  knowledge: KnowledgeAccess;
+  spaces: SpaceId[];
 };
 
 export type WorkspacePolicy = {
@@ -161,12 +287,17 @@ export type ConnectorAccount = {
   status: "connected" | "needs-reauth" | "error";
 };
 
+export type ConnectorScope = "public" | "personal";
+
 export type Connector = {
   id: string;
   name: string;
   category: string;
+  description: string;
   icon: string;
   installed: boolean;
+  featured?: boolean;
+  scope: ConnectorScope;
   accounts: ConnectorAccount[];
   actions: string[];
 };
@@ -185,6 +316,11 @@ export type Member = {
   id: string;
   name: string;
   email: string;
+  short: string;
+  initials: string;
   role: Role;
   workspaceIds: string[];
+  plan: BillingPlan;
+  seatStatus: SeatStatus;
+  kind: MemberKind;
 };

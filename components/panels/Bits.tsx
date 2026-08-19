@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export function Row({
@@ -5,20 +6,27 @@ export function Row({
   meta,
   onClick,
   active,
+  leading,
 }: {
   title: string;
   meta?: string;
   onClick?: () => void;
   active?: boolean;
+  leading?: ReactNode;
 }) {
   const className = cn(
-    "flex w-full items-baseline justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-colors duration-200",
+    "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-200",
     onClick && "hover:bg-muted",
     active && "bg-muted",
   );
   const body = (
     <>
-      <span className="truncate text-[13.5px] tracking-[-0.015em]">{title}</span>
+      <span className="flex min-w-0 items-center gap-2.5">
+        {leading}
+        <span className="truncate text-[13.5px] tracking-[-0.015em]">
+          {title}
+        </span>
+      </span>
       {meta ? (
         <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
           {meta}

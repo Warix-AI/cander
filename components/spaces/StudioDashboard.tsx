@@ -1,128 +1,158 @@
 "use client";
 
-import { AreaChart, ChartCard, Kpi } from "@/components/platform/Charts";
+import { useMemo, useState } from "react";
+import { Plus, Upload } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { DashFrame, ItemSet, LayoutToggle, Pill } from "@/components/spaces/ItemSet";
-import { projects, spaceStats } from "@/lib/data";
+import {
+  DashFrame,
+  LayoutToggle,
+  Pill,
+  ScopeToggle,
+  SpaceSettingsButton,
+} from "@/components/spaces/ItemSet";
+import { PreviewGrid } from "@/components/spaces/PreviewCard";
+import { assetFiles as seedFiles, projects, spaceStats } from "@/lib/data";
+import type { AssetFile } from "@/lib/types";
 
-const exportSeries = [2, 3, 2, 5, 8, 6, 9, 7, 11, 10, 12, 14];
-const mesh = ["media-a", "media-b", "media-c", "media-d"] as const;
+type StudioScope = "all" | "projects" | "assets";
 
 export function StudioDashboard() {
   const {
     workspaceId,
-    projectId,
     openProject,
-    openThread,
+    openFile,
     newChat,
-    threads,
     spaceLayout,
     setSpaceLayout,
   } = useApp();
+  const [scope, setScope] = useState<StudioScope>("all");
+  const [localFiles, setLocalFiles] = useState<AssetFile[]>([]);
+  const meta = spaceStats.studio;
 
   const spaceProjects = projects.filter(
     (item) => item.space === "studio" && item.workspaceId === workspaceId,
   );
-  const activity = threads.filter(
-    (item) => item.spaceId === "studio" && item.workspaceId === workspaceId,
+  const files = useMemo(
+    () => [
+      ...localFiles,
+      ...seedFiles.filter((item) => item.workspaceId === workspaceId),
+    ],
+    [localFiles, workspaceId],
   );
-  const meta = spaceStats.studio;
-  const tools = [
-    { id: "retouch", label: "Retouch", hint: "Color, crop, cleanup" },
-    { id: "bg", label: "Background", hint: "Remove or replace" },
-    { id: "video", label: "Text to video", hint: "8s clips from a prompt" },
-    { id: "still", label: "Generate", hint: "Stills on the canvas" },
-  ];
+
+  const upload = () => {
+    const id = `af-${Math.random().toString(36).slice(2, 7)}`;
+    const next: AssetFile = {
+      id,
+      name: "Untitled.png",
+      kind: "image",
+      ext: "PNG",
+      size: "12 KB",
+      source: "studio",
+      workspaceId,
+      updatedAt: "Just now",
+    };
+    setLocalFiles((current) => [next, ...current]);
+    setScope("assets");
+    openFile(id);
+  };
 
   return (
     <DashFrame
+      space="studio"
       kicker={meta.kicker}
       title="Studio"
+      subtitle="Stills, video, decks, and the assets that come with them."
       actions={
         <>
-          <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
-          <Pill primary onClick={() => newChat("studio")}>
-            New Studio chat
-          </Pill>
+          <SpaceSettingsButton space="studio" />
+          {scope === "assets" ? (
+            <Pill primary onClick={upload}>
+              <span className="inline-flex items-center gap-1.5">
+                <Upload className="h-3.5 w-3.5" strokeWidth={1.6} />
+                Upload
+              </span>
+            </Pill>
+          ) : (
+            <Pill primary onClick={() => newChat("studio")}>
+              <span className="inline-flex items-center gap-1.5">
+                <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
+                New project
+              </span>
+            </Pill>
+          )}
         </>
       }
     >
-      <div className="mt-6 flex flex-wrap gap-px overflow-hidden rounded-[10px] border border-border bg-border">
-        <Kpi label="Assets" value="48" delta="+6 this week" />
-        <Kpi label="Videos queued" value="1" />
-        <Kpi label="Exports" value="6" delta="+2" />
-        <Kpi label="Retouches" value="14" />
-      </div>
-
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {tools.map((tool, index) => (
-          <button
-            key={tool.id}
-            type="button"
-            onClick={() => newChat("studio")}
-            className={`relative min-h-[8.5rem] overflow-hidden rounded-[10px] p-4 text-left text-white ${mesh[index]}`}
-          >
-            <p className="relative font-mono text-[10.5px] tracking-[0.08em] text-white/70 uppercase">
-              Tool
-            </p>
-            <p className="relative mt-8 text-[16px] font-medium tracking-[-0.03em]">
-              {tool.label}
-            </p>
-            <p className="relative mt-1 text-[12.5px] text-white/75">{tool.hint}</p>
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Exports" hint="Last 12 weeks">
-          <AreaChart values={exportSeries} />
-        </ChartCard>
-        <ChartCard title="Library">
-          <div className="grid grid-cols-4 gap-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div
-                key={i}
-                className={`aspect-square overflow-hidden rounded-[10px] ${mesh[i % 4]}`}
-              />
-            ))}
-          </div>
-        </ChartCard>
-      </div>
-
-      <div className="mt-8">
-        <p className="mb-3 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-          Projects
-        </p>
-        <ItemSet
-          layout={spaceLayout}
-          items={spaceProjects.map((item) => ({
-            id: item.id,
-            title: item.name,
-            meta: item.updatedAt,
-            snippet: item.summary,
-            active: projectId === item.id,
-            onClick: () => openProject(item.id),
-          }))}
-          empty="No Studio projects yet."
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ScopeToggle
+          value={scope}
+          onChange={(value) => setScope(value as StudioScope)}
+          options={[
+            { id: "all", label: "All" },
+            { id: "projects", label: "Projects" },
+            { id: "assets", label: "Assets" },
+          ]}
         />
+        <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
       </div>
 
-      <div className="mt-8">
-        <p className="mb-3 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-          Chats
-        </p>
-        <ItemSet
-          layout={spaceLayout}
-          items={activity.map((item) => ({
-            id: item.id,
-            title: item.title,
-            meta: item.updatedAt,
-            snippet: item.snippet,
-            onClick: () => openThread(item.id),
-          }))}
-          empty="Studio chats land here."
-        />
+      <div className="mt-5">
+        {scope === "projects" ? (
+          <PreviewGrid
+            layout={spaceLayout}
+            items={spaceProjects.map(projectEntry)}
+            onOpen={openProject}
+            empty="No Studio projects yet."
+          />
+        ) : scope === "assets" ? (
+          <PreviewGrid
+            layout={spaceLayout}
+            kind="file"
+            items={files.map(fileEntry)}
+            onOpen={openFile}
+            empty="No assets yet."
+          />
+        ) : (
+          <PreviewGrid
+            layout={spaceLayout}
+            items={[
+              ...spaceProjects.map((item) => ({
+                ...projectEntry(item),
+                meta: `Project · edited ${item.updatedAt}`,
+              })),
+              ...files.map(fileEntry),
+            ]}
+            onOpen={(id) => {
+              if (spaceProjects.some((item) => item.id === id)) openProject(id);
+              else openFile(id);
+            }}
+            empty="Nothing in Studio yet."
+          />
+        )}
       </div>
     </DashFrame>
   );
+}
+
+function projectEntry(item: (typeof projects)[number]) {
+  return {
+    id: item.id,
+    name: item.name,
+    projectId: item.id,
+    meta: `Edited ${item.updatedAt}`,
+    image: item.cover,
+    kind: "product" as const,
+  };
+}
+
+function fileEntry(item: AssetFile) {
+  return {
+    id: item.id,
+    name: item.name,
+    projectId: item.id,
+    meta: `${item.size} · ${item.source}`,
+    detail: item.ext,
+    kind: "file" as const,
+  };
 }

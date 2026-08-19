@@ -1,6 +1,30 @@
-import type { BillingPlan, HostingMode, ProductId, Theme } from "@/lib/types";
+import type {
+  AccountPresetId,
+  BillingPlan,
+  HostingMode,
+  Pin,
+  PinKind,
+  ProductId,
+  SpaceId,
+  Theme,
+  UltraLicense,
+} from "@/lib/types";
+import { accountPresets, members, seedUltraLicenses } from "@/lib/data";
+import {
+  ALL_SPACE_IDS,
+  defaultSidebarLayout,
+  isSidebarNavId,
+  migrateSidebarId,
+  NAV_SPACES,
+  resolveSidebarNav,
+  type SidebarLayout,
+  type SidebarNavId,
+  type SidebarNavOpts,
+} from "@/lib/spaces";
 
 type Listener = () => void;
+
+const SIDEBAR_STORAGE_VERSION = 9;
 
 const workspaceListeners = new Set<Listener>();
 let workspaceId = "marketing";
@@ -12,9 +36,7 @@ function emitWorkspace() {
 export function subscribeWorkspace(listener: Listener) {
   if (typeof window !== "undefined") {
     const stored = window.localStorage.getItem("courier-workspace");
-    if (stored === "marketing" || stored === "engineering" || stored === "operations") {
-      workspaceId = stored;
-    }
+    if (stored) workspaceId = stored;
   }
   workspaceListeners.add(listener);
   return () => {
@@ -130,41 +152,143 @@ export function persistHosting(next: HostingMode) {
   emitHosting();
 }
 
-const apiListeners = new Set<Listener>();
-let apiEnabled = true;
+const actorListeners = new Set<Listener>();
+let actorId = "m1";
 
-function emitApi() {
-  apiListeners.forEach((listener) => listener());
+function emitActor() {
+  actorListeners.forEach((listener) => listener());
 }
 
-export function subscribeApi(listener: Listener) {
+export function subscribeActor(listener: Listener) {
   if (typeof window !== "undefined") {
-    const stored = window.localStorage.getItem("courier-api");
-    if (stored === "on") apiEnabled = true;
-    if (stored === "off") apiEnabled = false;
+    const stored = window.localStorage.getItem("courier-actor");
+    if (stored && members.some((item) => item.id === stored)) {
+      actorId = stored;
+    }
   }
-  apiListeners.add(listener);
+  actorListeners.add(listener);
   return () => {
-    apiListeners.delete(listener);
+    actorListeners.delete(listener);
   };
 }
 
-export function getApiSnapshot() {
-  return apiEnabled;
+export function getActorSnapshot() {
+  return actorId;
 }
 
-export function getApiServerSnapshot() {
-  return true;
+export function getActorServerSnapshot() {
+  return "m1";
 }
 
-export function persistApi(next: boolean) {
-  apiEnabled = next;
-  window.localStorage.setItem("courier-api", next ? "on" : "off");
-  emitApi();
+export function persistActor(next: string) {
+  if (!members.some((item) => item.id === next)) return;
+  actorId = next;
+  window.localStorage.setItem("courier-actor", next);
+  emitActor();
+}
+
+export function presetIdForActor(id: string): AccountPresetId {
+  return (
+    accountPresets.find((item) => item.actorId === id)?.id ?? "pro-owner"
+  );
+}
+
+const ultraLicenseListeners = new Set<Listener>();
+let ultraLicenses: UltraLicense[] = seedUltraLicenses;
+const ULTRA_LICENSE_VERSION = "3";
+
+function emitUltraLicenses() {
+  ultraLicenseListeners.forEach((listener) => listener());
+}
+
+function hydrateUltraLicenses() {
+  if (typeof window === "undefined") return;
+  const version = window.localStorage.getItem("courier-ultra-licenses-v");
+  if (version !== ULTRA_LICENSE_VERSION) {
+    ultraLicenses = structuredClone(seedUltraLicenses);
+    window.localStorage.setItem("courier-ultra-licenses-v", ULTRA_LICENSE_VERSION);
+    window.localStorage.setItem(
+      "courier-ultra-licenses",
+      JSON.stringify(ultraLicenses),
+    );
+    return;
+  }
+  const stored = window.localStorage.getItem("courier-ultra-licenses");
+  if (!stored) return;
+  try {
+    const parsed = JSON.parse(stored) as unknown;
+    if (!Array.isArray(parsed)) return;
+    const next = parsed.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const row = item as Partial<UltraLicense>;
+      if (!row.id) return [];
+      return [
+        {
+          id: String(row.id),
+          userId: row.userId ? String(row.userId) : null,
+          scope: row.scope === "personal" ? "personal" : "org",
+        } satisfies UltraLicense,
+      ];
+    });
+    if (next.length) ultraLicenses = next;
+  } catch {
+    ultraLicenses = structuredClone(seedUltraLicenses);
+  }
+}
+
+export function subscribeUltraLicenses(listener: Listener) {
+  hydrateUltraLicenses();
+  ultraLicenseListeners.add(listener);
+  return () => {
+    ultraLicenseListeners.delete(listener);
+  };
+}
+
+export function getUltraLicensesSnapshot() {
+  return ultraLicenses;
+}
+
+export function getUltraLicensesServerSnapshot() {
+  return seedUltraLicenses;
+}
+
+function persistUltraLicenses(next: UltraLicense[]) {
+  ultraLicenses = next;
+  window.localStorage.setItem("courier-ultra-licenses", JSON.stringify(next));
+  emitUltraLicenses();
+}
+
+export function addUltraLicense(scope: UltraLicense["scope"] = "org") {
+  persistUltraLicenses([
+    ...ultraLicenses,
+    {
+      id: `u-${scope}-${Date.now()}`,
+      userId: null,
+      scope,
+    },
+  ]);
+}
+
+export function removeUltraLicense(id: string) {
+  persistUltraLicenses(ultraLicenses.filter((item) => item.id !== id));
+}
+
+export function assignUltraLicense(id: string, userId: string | null) {
+  persistUltraLicenses(
+    ultraLicenses.map((item) => {
+      if (item.id === id) return { ...item, userId };
+      if (userId && item.userId === userId) return { ...item, userId: null };
+      return item;
+    }),
+  );
+}
+
+export function ultraAssignedTo(userId: string, licenses = ultraLicenses) {
+  return licenses.some((item) => item.userId === userId);
 }
 
 const planListeners = new Set<Listener>();
-let billingPlan: BillingPlan = "business";
+let billingPlan: BillingPlan = "pro";
 
 function emitPlan() {
   planListeners.forEach((listener) => listener());
@@ -173,8 +297,12 @@ function emitPlan() {
 export function subscribePlan(listener: Listener) {
   if (typeof window !== "undefined") {
     const stored = window.localStorage.getItem("courier-plan");
-    if (stored === "personal" || stored === "business") {
+    if (stored === "free" || stored === "plus" || stored === "pro") {
       billingPlan = stored;
+    } else if (stored === "personal") {
+      billingPlan = "plus";
+    } else if (stored === "business") {
+      billingPlan = "pro";
     }
   }
   planListeners.add(listener);
@@ -188,11 +316,309 @@ export function getPlanSnapshot() {
 }
 
 export function getPlanServerSnapshot(): BillingPlan {
-  return "business";
+  return "pro";
 }
 
 export function persistPlan(next: BillingPlan) {
   billingPlan = next;
   window.localStorage.setItem("courier-plan", next);
   emitPlan();
+}
+
+const personalSpaceListeners = new Set<Listener>();
+let personalSpaceEnabled = true;
+
+function emitPersonalSpace() {
+  personalSpaceListeners.forEach((listener) => listener());
+}
+
+export function subscribePersonalSpace(listener: Listener) {
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage.getItem("courier-personal-space");
+    if (stored === "on") personalSpaceEnabled = true;
+    if (stored === "off") personalSpaceEnabled = false;
+  }
+  personalSpaceListeners.add(listener);
+  return () => {
+    personalSpaceListeners.delete(listener);
+  };
+}
+
+export function getPersonalSpaceSnapshot() {
+  return personalSpaceEnabled;
+}
+
+export function getPersonalSpaceServerSnapshot() {
+  return true;
+}
+
+export function persistPersonalSpace(next: boolean) {
+  personalSpaceEnabled = next;
+  window.localStorage.setItem("courier-personal-space", next ? "on" : "off");
+  emitPersonalSpace();
+}
+
+const pinListeners = new Set<Listener>();
+const emptyPins: Pin[] = [];
+let pins: Pin[] = emptyPins;
+let pinsHydrated = false;
+
+function parsePins(raw: string | null): Pin[] {
+  if (!raw) return emptyPins;
+  try {
+    const data = JSON.parse(raw) as unknown;
+    if (!Array.isArray(data)) return emptyPins;
+    const next = data.filter(
+      (item): item is Pin =>
+        Boolean(item) &&
+        typeof item === "object" &&
+        (item.kind === "thread" || item.kind === "project") &&
+        typeof item.id === "string",
+    );
+    return next.length ? next : emptyPins;
+  } catch {
+    return emptyPins;
+  }
+}
+
+function emitPins() {
+  pinListeners.forEach((listener) => listener());
+}
+
+function hydratePins() {
+  if (pinsHydrated || typeof window === "undefined") return;
+  pinsHydrated = true;
+  pins = parsePins(window.localStorage.getItem("courier-pins"));
+}
+
+export function subscribePins(listener: Listener) {
+  hydratePins();
+  pinListeners.add(listener);
+  return () => {
+    pinListeners.delete(listener);
+  };
+}
+
+export function getPinsSnapshot() {
+  return pins;
+}
+
+export function getPinsServerSnapshot(): Pin[] {
+  return emptyPins;
+}
+
+export function persistPins(next: Pin[]) {
+  pins = next.length ? next : emptyPins;
+  window.localStorage.setItem("courier-pins", JSON.stringify(pins));
+  emitPins();
+}
+
+export function toggleStoredPin(kind: PinKind, id: string) {
+  hydratePins();
+  const exists = pins.some((item) => item.kind === kind && item.id === id);
+  persistPins(
+    exists
+      ? pins.filter((item) => !(item.kind === kind && item.id === id))
+      : [{ kind, id }, ...pins],
+  );
+}
+
+const sidebarListeners = new Set<Listener>();
+let sidebarLayout: SidebarLayout = defaultSidebarLayout;
+let sidebarHydrated = false;
+
+function parseNavList(value: unknown): SidebarNavId[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(
+      (id): id is SidebarNavId =>
+        typeof id === "string" && isSidebarNavId(id),
+    )
+    .map((id) => migrateSidebarId(id))
+    .filter((id): id is SidebarNavId => id !== null);
+}
+
+function migrateSidebarLayout(
+  rawMain: SidebarNavId[],
+  rawMore: SidebarNavId[],
+): SidebarLayout {
+  return resolveSidebarNav(ALL_SPACE_IDS, { main: rawMain, more: rawMore });
+}
+
+function migrateSidebarLayoutV8(
+  rawMain: SidebarNavId[],
+  rawMore: SidebarNavId[],
+): SidebarLayout {
+  const dropped = new Set(["files", "connectors", "browser"]);
+  const keep = (list: SidebarNavId[]) =>
+    list.filter((id) => !dropped.has(id) && id !== "work" && id !== "recents");
+  return resolveSidebarNav(ALL_SPACE_IDS, {
+    main: ["work", ...keep(rawMain), "recents"],
+    more: keep(rawMore),
+  });
+}
+
+function parseSidebar(raw: string | null): SidebarLayout {
+  if (!raw) return migrateSidebarLayout([], []);
+  try {
+    const data = JSON.parse(raw) as Record<string, unknown>;
+    const version = typeof data.v === "number" ? data.v : 1;
+
+    if (Array.isArray(data.main) || Array.isArray(data.more)) {
+      const main = parseNavList(data.main);
+      const more = parseNavList(data.more);
+
+      if (!main.length && !more.length) {
+        return migrateSidebarLayout([], []);
+      }
+
+      if (version < 9) {
+        return migrateSidebarLayoutV8(main, more);
+      }
+
+      return migrateSidebarLayout(main, more);
+    }
+
+    const order = parseNavList(data.order).filter((id) =>
+      NAV_SPACES.includes(id as SpaceId),
+    ) as SpaceId[];
+    const hidden = parseNavList(data.hidden).filter((id) =>
+      NAV_SPACES.includes(id as SpaceId),
+    ) as SpaceId[];
+    const ranked = [
+      ...order.filter((id) => NAV_SPACES.includes(id)),
+      ...NAV_SPACES.filter((id) => !order.includes(id)),
+    ];
+    const recentsHidden = data.recents === false;
+    const tucked = hidden;
+    return migrateSidebarLayoutV8(
+      ranked.filter((id) => !tucked.includes(id)),
+      [
+        ...tucked.filter((id) => ranked.includes(id)),
+        ...(recentsHidden ? [] : (["recents"] as SidebarNavId[])),
+      ],
+    );
+  } catch {
+    return migrateSidebarLayout([], []);
+  }
+}
+
+function emitSidebar() {
+  sidebarListeners.forEach((listener) => listener());
+}
+
+function layoutNeedsPersist(
+  raw: string | null,
+  storedVersion: number,
+): boolean {
+  if (!raw || storedVersion < SIDEBAR_STORAGE_VERSION) return true;
+  try {
+    const data = JSON.parse(raw) as { main?: unknown; more?: unknown; v?: number };
+    const main = parseNavList(data.main);
+    const more = parseNavList(data.more);
+    if (!main.length && !more.length) return true;
+    if (main.includes("browser") || more.includes("browser")) return true;
+    if (main.includes("files") || more.includes("files")) return true;
+    if (main.includes("connectors") || more.includes("connectors")) return true;
+    const personalAt = main.indexOf("personal");
+    const recentsAt = main.indexOf("recents");
+    if (personalAt >= 0 && recentsAt >= 0 && recentsAt < personalAt) return true;
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+function hydrateSidebar() {
+  if (sidebarHydrated || typeof window === "undefined") return;
+  sidebarHydrated = true;
+  const raw = window.localStorage.getItem("courier-sidebar");
+  const parsed = parseSidebar(raw);
+  sidebarLayout = parsed;
+
+  let storedVersion = 0;
+  if (raw) {
+    try {
+      const data = JSON.parse(raw) as { v?: number };
+      storedVersion = typeof data.v === "number" ? data.v : 1;
+    } catch {
+      storedVersion = 0;
+    }
+  }
+
+  if (layoutNeedsPersist(raw, storedVersion)) {
+    persistSidebar(parsed);
+  }
+}
+
+export function subscribeSidebar(listener: Listener) {
+  hydrateSidebar();
+  sidebarListeners.add(listener);
+  return () => {
+    sidebarListeners.delete(listener);
+  };
+}
+
+export function getSidebarSnapshot() {
+  return sidebarLayout;
+}
+
+export function getSidebarServerSnapshot(): SidebarLayout {
+  return defaultSidebarLayout;
+}
+
+export function persistSidebar(next: SidebarLayout) {
+  sidebarLayout = next;
+  window.localStorage.setItem(
+    "courier-sidebar",
+    JSON.stringify({
+      v: SIDEBAR_STORAGE_VERSION,
+      main: next.main,
+      more: next.more,
+    }),
+  );
+  emitSidebar();
+}
+
+export function moveSidebarNav(
+  id: SidebarNavId,
+  allowed: SpaceId[],
+  dir: -1 | 1,
+  opts?: SidebarNavOpts,
+) {
+  hydrateSidebar();
+  const { main, more } = resolveSidebarNav(allowed, sidebarLayout, opts);
+  const combined = [...main, ...more];
+  const split = main.length;
+  const at = combined.indexOf(id);
+  if (at < 0) return;
+
+  if (dir === 1 && at === split - 1) {
+    persistSidebar({
+      main: combined.slice(0, split - 1),
+      more: combined.slice(split - 1),
+    });
+    return;
+  }
+
+  if (dir === -1 && at === split) {
+    persistSidebar({
+      main: combined.slice(0, split + 1),
+      more: combined.slice(split + 1),
+    });
+    return;
+  }
+
+  const next = at + dir;
+  if (next < 0 || next >= combined.length) return;
+  const swapped = [...combined];
+  const current = swapped[at];
+  const other = swapped[next];
+  if (!current || !other) return;
+  swapped[at] = other;
+  swapped[next] = current;
+  persistSidebar({
+    main: swapped.slice(0, split),
+    more: swapped.slice(split),
+  });
 }

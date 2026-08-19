@@ -1,4 +1,5 @@
-import { connectors, projects, scheduledJobs, spaces } from "./data";
+import { connectors, projects, scheduledJobs } from "./data";
+import { isChatSpace } from "./spaces";
 import type { BuildTool, SpaceId } from "./types";
 
 export type Intent = {
@@ -14,21 +15,74 @@ function includesAny(text: string, words: string[]) {
   return words.some((word) => text.includes(word));
 }
 
-export function inferIntent(raw: string, workspaceId: string): Intent {
+const spaceNames: Record<string, string> = {
+  work: "Work",
+  build: "Build",
+  studio: "Studio",
+  research: "Research",
+  personal: "Personal",
+};
+
+const handoffLead: Partial<Record<SpaceId, string>> = {
+  work: "I’ll use Work for this.",
+  build: "I’ll use Build to make this.",
+  studio: "I’ll use Studio to turn this into a presentation.",
+  research: "I’ll use Research to look into this.",
+  personal: "I’ll use Personal for this.",
+};
+
+function withHandoff(
+  intent: Intent,
+  current: SpaceId | null | undefined,
+): Intent {
+  if (
+    !current ||
+    !isChatSpace(current) ||
+    current === intent.space ||
+    !isChatSpace(intent.space)
+  ) {
+    return intent;
+  }
+  const lead =
+    intent.space === "studio" && includesAny(intent.reply.toLowerCase(), ["presentation", "deck"])
+      ? handoffLead.studio
+      : intent.space === "studio"
+        ? "I’ll use Studio for this."
+        : handoffLead[intent.space];
+  if (!lead) return intent;
+  return { ...intent, reply: `${lead} ${intent.reply}` };
+}
+
+export function inferIntent(
+  raw: string,
+  workspaceId: string,
+  currentSpace?: SpaceId | null,
+): Intent {
   const text = raw.toLowerCase();
   const mentioned = projects.find((project) =>
     text.includes(project.name.toLowerCase()),
   );
+  const connecting = includesAny(text, [
+    "connect",
+    "connector",
+    "connectors",
+    "install",
+  ]);
+
+  const finish = (intent: Intent) => withHandoff(intent, currentSpace);
 
   if (
+    connecting &&
     includesAny(text, [
       "stripe",
       "gmail",
       "github",
       "slack",
       "calendar",
-      "connect",
-      "connector",
+      "hubspot",
+      "notion",
+      "linear",
+      "figma",
     ])
   ) {
     const connector =
@@ -39,41 +93,198 @@ export function inferIntent(raw: string, workspaceId: string): Intent {
       space: "connectors",
       connectorId: connector.id,
       projectId: mentioned?.id,
-      reply: `Opened Connectors on ${connector.name}. Accounts, permissions, and available actions are on the right.`,
+      reply: `Connectors is on the right — ${connector.name} accounts, permissions, and actions.`,
     };
+  }
+
+  if (includesAny(text, ["connector", "connectors"]) && connecting) {
+    const connector =
+      connectors.find((item) => text.includes(item.name.toLowerCase())) ??
+      connectors[0];
+    return {
+      space: "connectors",
+      connectorId: connector.id,
+      reply: `Connectors is on the right${connector ? ` — ${connector.name}` : ""}.`,
+    };
+  }
+
+  if (
+    includesAny(text, [
+      "file library",
+      "files library",
+      "open files",
+      "my files",
+    ]) ||
+    (includesAny(text, ["files"]) &&
+      includesAny(text, ["library", "upload", "uploads"]) &&
+      !includesAny(text, ["image", "photo", "video", "studio"]))
+  ) {
+    return {
+      space: "studio",
+      reply:
+        "Those files live in Studio → Assets — stills, briefs, exports, and uploads in one library.",
+    };
+  }
+
+  const workAsk =
+    includesAny(text, [
+      "email",
+      "meeting",
+      "follow up",
+      "follow-up",
+      "inbox",
+      "proposal",
+      "slack",
+      "respond to",
+    ]) ||
+    (includesAny(text, ["customer", "customers", "crm"]) &&
+      !includesAny(text, [
+        "build",
+        "app",
+        "website",
+        "portal",
+        "make me",
+        "make a",
+      ]));
+
+  if (workAsk && !connecting) {
+    const project =
+      mentioned?.space === "work"
+        ? mentioned
+        : projects.find(
+            (item) => item.space === "work" && item.workspaceId === workspaceId,
+          );
+    return finish({
+      space: "work",
+      projectId: project?.id ?? mentioned?.id,
+      reply: `Work is the right place for this${project ? ` — ${project.name}` : ""}. I’ll keep the open items with this chat.`,
+    });
+  }
+
+  if (
+    includesAny(text, ["calendar"]) &&
+    !connecting &&
+    includesAny(text, ["meeting", "prep", "prepare", "today", "tomorrow", "schedule"])
+  ) {
+    const project =
+      mentioned?.space === "work"
+        ? mentioned
+        : projects.find((item) => item.id === "launch-sync") ??
+          projects.find(
+            (item) => item.space === "work" && item.workspaceId === workspaceId,
+          );
+    return finish({
+      space: "work",
+      projectId: project?.id ?? mentioned?.id,
+      reply: "I’ll use Work to get you ready — calendar and follow-ups stay with this chat.",
+    });
+  }
+
+  if (
+    includesAny(text, [
+      "vacation",
+      "subscription",
+      "subscriptions",
+      "reservation",
+      "birthday",
+      "bills",
+      "this weekend",
+      "weekend",
+    ])
+  ) {
+    const project =
+      mentioned?.space === "personal"
+        ? mentioned
+        : projects.find(
+            (item) =>
+              item.space === "personal" && item.workspaceId === workspaceId,
+          );
+    return finish({
+      space: "personal",
+      projectId: project?.id ?? mentioned?.id,
+      reply: `Personal is for life admin${project ? ` — ${project.name}` : ""}. I’ll keep it separate from product work.`,
+    });
   }
 
   if (
     includesAny(text, [
       "every monday",
       "every week",
-      "schedule",
+      "schedule this",
       "scheduled",
       "recurring",
       "remind",
       "weekly",
       "daily",
       "monitor",
-    ])
+    ]) &&
+    !includesAny(text, ["meeting", "calendar", "inbox"])
   ) {
     const job =
       scheduledJobs.find((item) =>
         mentioned ? item.projectId === mentioned.id : false,
       ) ?? scheduledJobs[0];
-    return {
-      space: "scheduled",
+    return finish({
+      space: "build",
       projectId: mentioned?.id ?? job.projectId,
       jobId: job.id,
-      reply: `This will run from Scheduled. I attached it${mentioned ? ` to ${mentioned.name}` : ""} so it also shows on that project.`,
-    };
+      reply: `This will run on a schedule in Build. I attached it${mentioned ? ` to ${mentioned.name}` : ""} so it also shows on that project.`,
+    });
   }
 
   if (includesAny(text, ["skill", "skills", "tone of voice"])) {
-    return {
-      space: "skills",
+    return finish({
+      space: "build",
       reply:
-        "Skills is on the right. Name it, say when it should run, and I’ll keep the instructions with this chat.",
-    };
+        "Tasks live in Build. Name it, say when it should run, and I’ll keep the instructions with this chat.",
+    });
+  }
+
+  if (
+    includesAny(text, [
+      "invoice",
+      "invoices",
+      "runway",
+      "budget",
+      "spend",
+      "finance",
+      "finances",
+      "cash",
+    ])
+  ) {
+    const project =
+      mentioned?.space === "finances"
+        ? mentioned
+        : projects.find(
+            (item) => item.space === "finances" && item.workspaceId === workspaceId,
+          );
+    return finish({
+      space: "personal",
+      projectId: project?.id ?? mentioned?.id,
+      reply: `Opened Personal → Money${project ? ` on ${project.name}` : ""}. Invoices, spend, and runway stay with this chat.`,
+    });
+  }
+
+  if (
+    includesAny(text, [
+      "health",
+      "benefits",
+      "care plan",
+      "wellness",
+      "lab results",
+    ])
+  ) {
+    const project =
+      mentioned?.space === "health"
+        ? mentioned
+        : projects.find(
+            (item) => item.space === "health" && item.workspaceId === workspaceId,
+          );
+    return finish({
+      space: "personal",
+      projectId: project?.id ?? mentioned?.id,
+      reply: `Opened Personal → Health${project ? ` on ${project.name}` : ""}. Care plans and benefits stay with this chat.`,
+    });
   }
 
   if (
@@ -81,6 +292,11 @@ export function inferIntent(raw: string, workspaceId: string): Intent {
       "image",
       "photo",
       "video",
+      "logo",
+      "presentation",
+      "deck",
+      "ad",
+      "ads",
       "background",
       "canvas",
       "studio",
@@ -96,21 +312,27 @@ export function inferIntent(raw: string, workspaceId: string): Intent {
         (item) => item.space === "studio" && item.workspaceId === workspaceId,
       ) ??
       projects.find((item) => item.space === "studio");
-    return {
+    const presentation = includesAny(text, ["presentation", "deck"]);
+    return finish({
       space: "studio",
       projectId: project?.id,
-      reply: `Studio is on the right${project ? ` — ${project.name}` : ""}. Canvas, layers, and export stay with this project.`,
-    };
+      reply: presentation
+        ? `Studio can turn this into a presentation${project ? ` — ${project.name}` : ""}. Canvas and export stay with this chat.`
+        : `Studio is on the right${project ? ` — ${project.name}` : ""}. Canvas, layers, and export stay with this project.`,
+    });
   }
 
   if (
     includesAny(text, [
       "research",
       "competitor",
+      "competitors",
       "pricing",
       "sources",
       "cite",
       "compare",
+      "teach me",
+      "sourced report",
     ]) &&
     !includesAny(text, ["landing", "website", "page.tsx"])
   ) {
@@ -119,42 +341,54 @@ export function inferIntent(raw: string, workspaceId: string): Intent {
         ? mentioned
         : (projects.find((item) => item.id === "competitor-research") ??
           mentioned);
-    return {
+    return finish({
       space: "research",
       projectId: project?.id ?? mentioned?.id,
       reply:
         mentioned && mentioned.space === "build"
           ? `Research is attached to ${mentioned.name}. Sources are on the right; Build stays in the same project history.`
           : `Opened Research. Sources and notes are on the right.`,
-    };
+    });
   }
 
   if (
     includesAny(text, [
-      "research",
-      "pricing",
-    ]) && mentioned?.id === "cander"
+      "website",
+      "app",
+      "apps",
+      "automation",
+      "api",
+      "deploy",
+      "debug",
+      "preview",
+      "browser",
+      "landing",
+    ])
   ) {
-    return {
+    const buildProject =
+      mentioned ??
+      projects.find(
+        (item) => item.space === "build" && item.workspaceId === workspaceId,
+      ) ??
+      projects.find((item) => item.space === "build");
+    return finish({
       space: "build",
-      projectId: "cander",
-      buildTool: "editor",
-      reply:
-        "This belongs to Cander. I filed the competitor notes under Research and opened the pricing page in Build. One project, both surfaces.",
+      projectId: buildProject?.id,
+      buildTool: includesAny(text, ["terminal", "log", "debug"])
+        ? "terminal"
+        : "preview",
+      reply: `Opened Build${buildProject ? ` on ${buildProject.name}` : ""}. The working surface is on the right — chat stays the command layer.`,
+    });
+  }
+
+  if (isChatSpace(currentSpace)) {
+    return {
+      space: currentSpace,
+      projectId: mentioned?.id,
+      reply: `I’ll stay in ${spaceNames[currentSpace] ?? "this Space"} and take it from here.`,
     };
   }
 
-  if (includesAny(text, ["preview", "browser"])) {
-    return {
-      space: "build",
-      projectId: mentioned?.id ?? "cander",
-      buildTool: "preview",
-      reply: "Preview is live on the right. Chat stays open if you want another pass.",
-    };
-  }
-
-  const spaceLabel =
-    spaces.find((item) => text.includes(item.id))?.id ?? "build";
   const buildProject =
     mentioned ??
     projects.find(
@@ -163,7 +397,7 @@ export function inferIntent(raw: string, workspaceId: string): Intent {
     projects.find((item) => item.space === "build");
 
   return {
-    space: spaceLabel === "build" ? "build" : spaceLabel,
+    space: "build",
     projectId: buildProject?.id,
     buildTool: includesAny(text, ["terminal", "log"]) ? "terminal" : "preview",
     reply: `Opened Build${buildProject ? ` on ${buildProject.name}` : ""}. The working surface is on the right — chat stays the command layer.`,

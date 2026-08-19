@@ -13,31 +13,33 @@ const products = [
   {
     id: "platform" as const,
     label: "Courier Platform",
-    description: "APIs, models, and hosting",
+    description: "APIs, keys, and hosting",
   },
 ];
 
 export function ProductSwitcher() {
-  const { product, setProduct } = useApp();
+  const { product, setProduct, entitlements } = useApp();
   const current = products.find((item) => item.id === product) ?? products[0];
+  const options = products.filter(
+    (item) => item.id === "courier" || entitlements.hasLimitedPlatform,
+  );
 
   return (
     <Dropdown
       className="w-full"
-      menuClassName="w-full min-w-0"
       trigger={({ open, toggle }) => (
         <button
           type="button"
           aria-expanded={open}
           onClick={toggle}
-          className="flex max-w-full items-center rounded-lg px-2 py-2 text-left transition-colors duration-200 hover:bg-sidebar-accent"
+          className="flex w-full items-center rounded-lg px-2 py-2.5 text-left transition-colors duration-200 hover:bg-sidebar-accent"
         >
-          <span className="flex min-w-0 items-center gap-1">
-            <span className="truncate text-[14px] font-semibold tracking-[-0.03em]">
+          <span className="inline-flex min-w-0 items-center gap-0.5">
+            <span className="truncate text-[15.4px] font-semibold tracking-[-0.03em]">
               {current.label}
             </span>
             <ChevronDown
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              className="h-4 w-4 shrink-0 text-muted-foreground"
               strokeWidth={1.6}
             />
           </span>
@@ -46,7 +48,7 @@ export function ProductSwitcher() {
     >
       {(close) => (
         <>
-          {products.map((item) => (
+          {options.map((item) => (
             <div key={item.id} className="relative">
               <MenuRow
                 active={item.id === product}

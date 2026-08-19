@@ -1,22 +1,38 @@
 "use client";
 
+import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
+import { PanelChrome } from "@/components/panels/PanelChrome";
+import { ProjectsBrowser } from "@/components/panels/ProjectsBrowser";
 import { Row, SectionLabel } from "@/components/panels/Bits";
 import { connectors } from "@/lib/data";
 import { cn } from "@/lib/utils";
-import { policyFor } from "@/lib/workspace-policy";
+import { blockedConnectorIds } from "@/lib/workspace-policy";
 
 export function ConnectorsPanel() {
-  const { connectorId, openConnector, workspaceId, workspacePolicies } = useApp();
-  const blockedIds = policyFor(workspaceId, workspacePolicies).disabledConnectors;
+  const { connectorId, openConnector, workspaceId, workspacePolicies, panelIntent, billingPlan } =
+    useApp();
+  const blockedIds = blockedConnectorIds(
+    workspaceId,
+    workspacePolicies,
+    billingPlan,
+  );
   const allowed = connectors.filter((item) => !blockedIds.includes(item.id));
   const blocked = connectors.filter((item) => blockedIds.includes(item.id));
   const selected =
     allowed.find((item) => item.id === connectorId) ??
     allowed[0] ??
     connectors[0];
+  const execute = panelIntent === "execute" || Boolean(connectorId);
+
+  if (!execute) {
+    return <ProjectsBrowser />;
+  }
 
   return (
+    <div className="flex h-full min-h-0 flex-col bg-sidebar">
+      <PanelChrome kicker="Connector" title={selected.name} />
+      <div className="min-h-0 flex-1 overflow-hidden bg-background">
     <div className="flex h-full">
       <div className="w-[42%] min-w-[10rem] border-r border-border py-3">
         <SectionLabel>Apps</SectionLabel>
@@ -27,6 +43,7 @@ export function ConnectorsPanel() {
             meta={`${item.accounts.length}`}
             active={selected.id === item.id}
             onClick={() => openConnector(item.id)}
+            leading={<ConnectorMark id={item.icon} size="xs" />}
           />
         ))}
         {blocked.length ? (
@@ -37,6 +54,7 @@ export function ConnectorsPanel() {
                 key={item.id}
                 title={item.name}
                 meta="Blocked"
+                leading={<ConnectorMark id={item.icon} size="xs" />}
               />
             ))}
           </>
@@ -45,20 +63,23 @@ export function ConnectorsPanel() {
       <div className="min-w-0 flex-1 py-3">
         <SectionLabel>{selected.name}</SectionLabel>
         {selected.accounts.map((account) => (
-          <div key={account.id} className="px-3 py-2">
-            <p className="text-[13px]">{account.label}</p>
-            <p
-              className={cn(
-                "font-mono text-[11px]",
-                account.status === "connected"
-                  ? "text-muted-foreground"
-                  : "text-chart-3",
-              )}
-            >
-              {account.status === "needs-reauth"
-                ? "Needs reauthentication"
-                : account.status}
-            </p>
+          <div key={account.id} className="flex items-center gap-2.5 px-3 py-2">
+            <ConnectorMark id={selected.icon} size="xs" />
+            <div className="min-w-0">
+              <p className="text-[13px]">{account.label}</p>
+              <p
+                className={cn(
+                  "font-mono text-[11px]",
+                  account.status === "connected"
+                    ? "text-muted-foreground"
+                    : "text-chart-3",
+                )}
+              >
+                {account.status === "needs-reauth"
+                  ? "Needs reauthentication"
+                  : account.status}
+              </p>
+            </div>
           </div>
         ))}
         <div className="mt-3">
@@ -75,6 +96,8 @@ export function ConnectorsPanel() {
             Add connection
           </button>
         </div>
+      </div>
+    </div>
       </div>
     </div>
   );

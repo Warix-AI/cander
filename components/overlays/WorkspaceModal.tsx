@@ -3,15 +3,20 @@
 import { Check, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { Modal } from "@/components/ui/Modal";
-import { currentUserId, members, workspaces } from "@/lib/data";
+import { workspacesFor } from "@/lib/entitlements";
 import { cn } from "@/lib/utils";
 
 export function WorkspaceModal() {
-  const { overlay, closeOverlay, workspace, setWorkspace } = useApp();
-  const me = members.find((member) => member.id === currentUserId);
-  const assigned = workspaces.filter((item) =>
-    me?.workspaceIds.includes(item.id),
-  );
+  const {
+    overlay,
+    closeOverlay,
+    workspace,
+    setWorkspace,
+    orgMembers,
+    actor,
+    entitlements,
+  } = useApp();
+  const allowed = workspacesFor(actor, entitlements);
 
   return (
     <Modal
@@ -29,7 +34,11 @@ export function WorkspaceModal() {
             Workspaces
           </h2>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            Switch to a workspace you are assigned to.
+            {entitlements.canManageWorkspaces
+              ? "Every workspace in this organization."
+              : entitlements.canUseSharedWorkspaces
+                ? "Workspaces you are assigned to."
+                : "Your personal workspaces."}
           </p>
         </div>
         <button
@@ -43,8 +52,11 @@ export function WorkspaceModal() {
       </div>
 
       <div className="px-3 pb-4">
-        {assigned.map((item) => {
+        {allowed.map((item) => {
           const active = item.id === workspace.id;
+          const people = orgMembers.filter((member) =>
+            member.workspaceIds.includes(item.id),
+          ).length;
           return (
             <button
               key={item.id}
@@ -63,7 +75,9 @@ export function WorkspaceModal() {
                   {item.name}
                 </span>
                 <span className="mt-0.5 block text-[12px] text-muted-foreground">
-                  {item.members} members · {item.spend} of {item.budget}
+                  {entitlements.canUseSharedWorkspaces
+                    ? `${people} people · ${item.spend} of ${item.budget}`
+                    : `${item.spend} of ${item.budget}`}
                 </span>
               </span>
               {active ? (
@@ -75,6 +89,11 @@ export function WorkspaceModal() {
             </button>
           );
         })}
+        {!allowed.length ? (
+          <p className="px-3 py-4 text-[13px] text-muted-foreground">
+            No workspaces on this account.
+          </p>
+        ) : null}
       </div>
     </Modal>
   );
