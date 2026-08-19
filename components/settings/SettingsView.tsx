@@ -17,6 +17,7 @@ import {
 import { orgSeatMix, planLabel, seatMixLabel } from "@/lib/billing";
 import type { Role, SettingsTab } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { persistSignedOut } from "@/lib/session";
 import {
   activateMaxSeat,
   setMemberRole,
@@ -140,7 +141,12 @@ export function SettingsModal() {
         {settingsTab === "plans" ? <PlansSettings /> : null}
 
         {settingsTab === "general" ? (
-          <GeneralSettings onLogout={closeOverlay} />
+          <GeneralSettings
+            onLogout={() => {
+              persistSignedOut();
+              closeOverlay();
+            }}
+          />
         ) : null}
 
         {settingsTab === "appearance" ? (

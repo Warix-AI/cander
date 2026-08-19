@@ -17,6 +17,13 @@ import { ConfigureModal } from "@/components/overlays/ConfigureModal";
 import { SpaceSettingsModal } from "@/components/overlays/SpaceSettingsModal";
 import { WorkspaceModal } from "@/components/overlays/WorkspaceModal";
 import { InviteBanner, InviteWall } from "@/components/overlays/InviteWall";
+import { SignInWall } from "@/components/overlays/SignInWall";
+import {
+  getAuthServerSnapshot,
+  getAuthSnapshot,
+  subscribeAuth,
+} from "@/lib/session";
+import { useSyncExternalStore } from "react";
 import { BrowserLayout } from "@/components/browser/BrowserLayout";
 import { FloatingVoiceDock } from "@/components/shell/VoiceControl";
 
@@ -31,6 +38,11 @@ export function AppShell() {
 function Root() {
   const { mobileNav, setMobileNav, overlay, openSettings, openOverlay, closeOverlay } =
     useApp();
+  const signedIn = useSyncExternalStore(
+    subscribeAuth,
+    getAuthSnapshot,
+    getAuthServerSnapshot,
+  );
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -50,26 +62,31 @@ function Root() {
   }, [overlay, openSettings, openOverlay, closeOverlay]);
 
   return (
-    <div className="relative flex h-svh overflow-hidden bg-background text-foreground">
-      {mobileNav ? (
-        <button
-          type="button"
-          aria-label="Close navigation"
-          className="absolute inset-0 z-30 bg-foreground/20 lg:hidden"
-          onClick={() => setMobileNav(false)}
-        />
-      ) : null}
-      <Sidebar />
-      <CourierMain />
-      <SettingsModal />
-      <SearchModal />
-      <ConfigureModal />
-      <SpaceSettingsModal />
-      <WorkspaceModal />
-      <InviteWall />
-      <PublishSheet />
-      <FloatingVoiceDock />
-    </div>
+    <>
+      <div
+        className={`relative flex h-svh overflow-hidden bg-background text-foreground ${signedIn ? "" : "pointer-events-none select-none blur-[2px] opacity-90"}`}
+      >
+        {mobileNav ? (
+          <button
+            type="button"
+            aria-label="Close navigation"
+            className="absolute inset-0 z-30 bg-foreground/20 lg:hidden"
+            onClick={() => setMobileNav(false)}
+          />
+        ) : null}
+        <Sidebar />
+        <CourierMain />
+        <SettingsModal />
+        <SearchModal />
+        <ConfigureModal />
+        <SpaceSettingsModal />
+        <WorkspaceModal />
+        <InviteWall />
+        <PublishSheet />
+        <FloatingVoiceDock />
+      </div>
+      <SignInWall />
+    </>
   );
 }
 

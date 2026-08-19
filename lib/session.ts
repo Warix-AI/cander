@@ -117,6 +117,43 @@ export function persistTheme(next: Theme) {
   window.localStorage.setItem("theme", next);
 }
 
+const authListeners = new Set<Listener>();
+let signedIn = false;
+
+function emitAuth() {
+  authListeners.forEach((listener) => listener());
+}
+
+export function subscribeAuth(listener: Listener) {
+  if (typeof window !== "undefined") {
+    signedIn = window.localStorage.getItem("courier-signed-in") === "1";
+  }
+  authListeners.add(listener);
+  return () => {
+    authListeners.delete(listener);
+  };
+}
+
+export function getAuthSnapshot() {
+  return signedIn;
+}
+
+export function getAuthServerSnapshot() {
+  return false;
+}
+
+export function persistSignedIn() {
+  signedIn = true;
+  window.localStorage.setItem("courier-signed-in", "1");
+  emitAuth();
+}
+
+export function persistSignedOut() {
+  signedIn = false;
+  window.localStorage.removeItem("courier-signed-in");
+  emitAuth();
+}
+
 const hostingListeners = new Set<Listener>();
 let hostingMode: HostingMode = "cloud";
 

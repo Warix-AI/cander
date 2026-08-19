@@ -12,7 +12,7 @@ export function CourierMark({
       aria-hidden="true"
       width={40}
       height={38}
-      className={cn("h-[39.6px] w-[41.3px] object-contain", className)}
+      className={cn("h-[29.7px] w-[31px] object-contain", className)}
     />
   );
 }

@@ -353,7 +353,7 @@ export const hostingModes: {
     label: "Cloud",
     title: "Cloud Hosting",
     body: "Recursion AI operates the models. You call them; we run the metal.",
-    why: "Included metered compute on every plan. Fair-use overages if you need more.",
+    why: "Included metered compute on every plan — subject to fair-use limits and overages.",
     traits: [
       "Hosted regions, we operate the runtime",
       "Same OpenAI-compatible surface",
@@ -366,7 +366,7 @@ export const hostingModes: {
     label: "Local",
     title: "Local Hosting",
     body: "Your network, your machines. Other devices on the LAN can tie in.",
-    why: "Effectively unlimited inference — your hardware provides the compute.",
+    why: "Unlimited AI on your hardware — inference is only limited by what the machine can run.",
     traits: [
       "Servers on this network",
       "Team devices share the same runtime",
@@ -379,7 +379,7 @@ export const hostingModes: {
     label: "On-Device",
     title: "On-Device Hosting",
     body: "Inference runs on each person’s machine. Private, offline-capable.",
-    why: "Effectively unlimited inference on the end-user device.",
+    why: "Unlimited AI on the device — private, offline-capable, bounded only by hardware.",
     traits: [
       "Runs per device",
       "Nothing leaves the machine",

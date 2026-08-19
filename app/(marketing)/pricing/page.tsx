@@ -12,15 +12,15 @@ export const metadata = marketingMetadata("/pricing");
 export default function PricingPage() {
   return (
     <>
-      <Section className="pt-10 md:pt-16">
+      <Section className="pt-8 md:pt-12">
         <PageWidth>
           <SectionHeader
             as="h1"
             kicker="Pricing"
             title="Free, Pro, Max & Ultra."
-            body="Per user, per month. Cloud on every plan. Development starts on Pro. Ultra is a full plan — not an add-on."
+            body="Per user, per month. Cloud on every plan with usage limits. Local and On-device are unlimited on your hardware from Pro."
           />
-          <div className="mt-12">
+          <div className="mt-8">
             <PricingCards />
           </div>
         </PageWidth>
@@ -28,13 +28,14 @@ export default function PricingPage() {
 
       <EnterpriseCTA />
 
-      <Section>
+      <Section band>
         <PageWidth>
           <SectionHeader
             title="Compare plans"
-            body="Checkmarks only. Pro is included in Max. Max is included in Ultra."
+            body="Pro ⊂ Max ⊂ Ultra. Checkmarks only."
+            compact
           />
-          <div className="mt-10">
+          <div className="mt-6">
             <PricingComparison />
           </div>
         </PageWidth>
@@ -48,8 +49,8 @@ export default function PricingPage() {
 
       <Section>
         <PageWidth>
-          <SectionHeader title="FAQ" />
-          <div className="mt-8">
+          <SectionHeader title="FAQ" compact />
+          <div className="mt-5">
             <FaqList />
           </div>
         </PageWidth>

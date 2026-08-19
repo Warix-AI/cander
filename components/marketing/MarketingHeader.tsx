@@ -6,11 +6,12 @@ import { ChevronDown, Menu, X } from "lucide-react";
 import { CourierMark } from "@/components/brand/CourierMark";
 import { Dropdown } from "@/components/ui/Controls";
 import { Cta } from "@/components/marketing/Cta";
+import { MarketingThemeToggle } from "@/components/marketing/MarketingThemeToggle";
 import {
   APP_HREF,
   developmentNav,
   headerLinks,
-  productNav,
+  spacesNav,
 } from "@/lib/marketing";
 import { cn } from "@/lib/utils";
 
@@ -18,57 +19,58 @@ export function MarketingHeader() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-transparent bg-background/80 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-[1120px] items-center gap-3 px-5 md:px-8">
-        <Link href="/home" className="flex items-center gap-2.5 pr-2">
-          <CourierMark className="h-8 w-8" />
+    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/85 backdrop-blur-md">
+      <div className="mx-auto flex h-14 max-w-[1120px] items-center gap-2 px-5 md:px-8">
+        <Link href="/home" className="flex items-center gap-2 pr-2">
+          <CourierMark />
           <span className="text-[15px] font-semibold tracking-[-0.03em]">
             Courier
           </span>
         </Link>
 
-        <nav className="ml-4 hidden items-center gap-0.5 lg:flex">
-          <NavDropdown label="Product" items={productNav} />
-          <NavLink href="/spaces">Spaces</NavLink>
+        <nav className="ml-3 hidden items-center gap-0.5 lg:flex">
+          <NavDropdown label="Spaces" items={spacesNav} />
           <NavDropdown label="Development" items={developmentNav} />
-          {headerLinks
-            .filter((link) => link.href !== "/spaces")
-            .map((link) => (
-              <NavLink key={link.href} href={link.href}>
-                {link.title}
-              </NavLink>
-            ))}
+          {headerLinks.map((link) => (
+            <NavLink key={link.href} href={link.href}>
+              {link.title}
+            </NavLink>
+          ))}
         </nav>
 
-        <div className="ml-auto hidden items-center gap-1 lg:flex">
+        <div className="ml-auto hidden items-center gap-1.5 lg:flex">
+          <MarketingThemeToggle />
           <Cta href={APP_HREF} variant="ghost">
             Sign in
           </Cta>
           <Cta href={APP_HREF}>Start free</Cta>
         </div>
 
-        <button
-          type="button"
-          className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-[10px] border border-foreground/12 lg:hidden"
-          aria-expanded={open}
-          aria-label={open ? "Close menu" : "Open menu"}
-          onClick={() => setOpen((value) => !value)}
-        >
-          {open ? (
-            <X className="h-4 w-4" strokeWidth={1.8} />
-          ) : (
-            <Menu className="h-4 w-4" strokeWidth={1.8} />
-          )}
-        </button>
+        <div className="ml-auto flex items-center gap-1.5 lg:hidden">
+          <MarketingThemeToggle />
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] border border-foreground/12"
+            aria-expanded={open}
+            aria-label={open ? "Close menu" : "Open menu"}
+            onClick={() => setOpen((value) => !value)}
+          >
+            {open ? (
+              <X className="h-4 w-4" strokeWidth={1.8} />
+            ) : (
+              <Menu className="h-4 w-4" strokeWidth={1.8} />
+            )}
+          </button>
+        </div>
       </div>
 
       {open ? (
         <div className="border-t border-border bg-background px-5 py-4 lg:hidden">
           <div className="flex flex-col gap-1">
             <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              Product
+              Spaces
             </p>
-            {productNav.map((item) => (
+            {spacesNav.map((item) => (
               <MobileLink key={item.href} href={item.href} onClick={() => setOpen(false)}>
                 {item.title}
               </MobileLink>
@@ -81,16 +83,11 @@ export function MarketingHeader() {
                 {item.title}
               </MobileLink>
             ))}
-            <MobileLink href="/spaces" onClick={() => setOpen(false)}>
-              Spaces
-            </MobileLink>
-            {headerLinks
-              .filter((link) => link.href === "/pricing" || link.href === "/enterprise")
-              .map((link) => (
-                <MobileLink key={link.href} href={link.href} onClick={() => setOpen(false)}>
-                  {link.title}
-                </MobileLink>
-              ))}
+            {headerLinks.map((link) => (
+              <MobileLink key={link.href} href={link.href} onClick={() => setOpen(false)}>
+                {link.title}
+              </MobileLink>
+            ))}
           </div>
           <div className="mt-4 flex gap-2">
             <Cta href={APP_HREF} variant="secondary" className="flex-1">

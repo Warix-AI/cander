@@ -290,23 +290,49 @@ function PersonalPane() {
 }
 
 function DevelopmentPane() {
+  const rows = [
+    { name: "Cloud · us-east-1", status: "Active", hint: "Metered" },
+    { name: "Local · office LAN", status: "Ready", hint: "Unlimited" },
+    { name: "On-device · this Mac", status: "Ready", hint: "Unlimited" },
+  ];
   return (
-    <div className="flex flex-1">
-      <div className="hidden w-[160px] border-r border-border p-3 md:block">
-        {["Hosting", "Models", "APIs", "Keys", "Deployments", "Docs"].map((item, i) => (
-          <NavRow key={item} active={i === 0}>
-            {item}
-          </NavRow>
-        ))}
+    <div className="flex flex-1 text-[12px]">
+      <div className="hidden w-[148px] shrink-0 border-r border-border bg-sidebar/50 p-2.5 md:block">
+        {["Overview", "Hosting", "Models", "APIs", "Keys", "Deployments", "Logs", "Docs"].map(
+          (item, i) => (
+            <NavRow key={item} active={i === 1}>
+              {item}
+            </NavRow>
+          ),
+        )}
       </div>
-      <div className="flex-1 p-4">
-        <p className="text-[12px] font-medium">Hosting</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          {["Cloud", "Local", "On-device"].map((label) => (
-            <div key={label} className="rounded-[10px] border border-border p-3 text-[12.5px]">
-              {label}
+      <div className="min-w-0 flex-1 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-medium">Hosting</p>
+          <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+            Development
+          </span>
+        </div>
+        <div className="mt-3 space-y-1.5">
+          {rows.map((row) => (
+            <div
+              key={row.name}
+              className="flex items-center justify-between gap-2 rounded-[10px] border border-border px-3 py-2"
+            >
+              <div className="min-w-0">
+                <p className="truncate font-medium">{row.name}</p>
+                <p className="text-[10.5px] text-muted-foreground">{row.hint}</p>
+              </div>
+              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px]">
+                {row.status}
+              </span>
             </div>
           ))}
+        </div>
+        <div className="mt-3 rounded-[10px] border border-border bg-muted/30 p-2.5 font-mono text-[10.5px] leading-relaxed text-muted-foreground">
+          GET /v1/models · 200 · 12 ms
+          <br />
+          POST /v1/chat/completions · 200 · 840 ms
         </div>
       </div>
     </div>

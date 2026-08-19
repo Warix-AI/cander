@@ -347,36 +347,62 @@ select:focus-visible {
   }
 }
 
-/* Marketing site stays Graphite light even when the app is in dark mode. */
+/* Marketing site follows global theme (default dark). */
 .marketing {
-  color-scheme: light;
-  --card: oklch(0.995 0 0);
-  --ring: oklch(0.708 0 0);
-  --input: oklch(0.97 0 0);
-  --muted: oklch(0.95 0 0);
-  --accent: oklch(0.95 0 0);
-  --border: oklch(0.95 0 0);
-  --popover: oklch(1 0 0);
-  --primary: oklch(0.205 0 0);
-  --sidebar: oklch(0.955 0 0);
-  --secondary: oklch(0.87 0 0);
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-  --sidebar-accent: oklch(0.9 0 0);
-  --sidebar-border: oklch(0.9 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --secondary-foreground: oklch(0.145 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --footer: oklch(1 0 0);
-  --footer-foreground: oklch(0.145 0 0);
+  min-height: 100svh;
+}
+
+.marketing-mesh {
+  position: relative;
+  isolation: isolate;
+}
+
+.marketing-mesh::before {
+  content: "";
+  position: absolute;
+  inset: -20% -10% auto;
+  height: min(520px, 70vh);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.45;
+  background:
+    radial-gradient(
+      80% 70% at 12% 100%,
+      oklch(0.55 0.18 263 / 0.35),
+      transparent 58%
+    ),
+    radial-gradient(
+      60% 50% at 88% 8%,
+      oklch(0.62 0.19 260 / 0.28),
+      transparent 52%
+    );
+}
+
+.dark .marketing-mesh::before {
+  opacity: 0.55;
+}
+
+.marketing-band {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+
+.marketing-band::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  background: linear-gradient(
+    135deg,
+    oklch(0.55 0.18 263),
+    oklch(0.42 0.16 266)
+  );
+}
+
+.dark .marketing-band::before {
+  opacity: 0.22;
 }
 
 @media (prefers-reduced-motion: reduce) {

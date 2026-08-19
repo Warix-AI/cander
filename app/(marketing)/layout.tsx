@@ -7,9 +7,9 @@ export default function MarketingLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="marketing min-h-svh overflow-y-auto bg-background text-foreground">
+    <div className="marketing bg-background text-foreground">
       <MarketingHeader />
-      <main>{children}</main>
+      <main className="marketing-mesh relative">{children}</main>
       <MarketingFooter />
     </div>
   );

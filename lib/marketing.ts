@@ -126,14 +126,17 @@ export function marketingMetadata(path: keyof typeof marketingPages): Metadata {
   };
 }
 
-export const productNav = [
-  { href: "/home", title: "Overview", body: "One product. Every kind of work." },
+export const spacesNav = [
+  { href: "/spaces", title: "Overview", body: "Five spaces, one product." },
   { href: "/build", title: "Build", body: "Software, sites, and agents." },
   { href: "/studio", title: "Studio", body: "Images and video." },
   { href: "/research", title: "Research", body: "Browser, sources, reports." },
   { href: "/work", title: "Work", body: "Inbox, calendar, customers." },
   { href: "/personal", title: "Personal", body: "Today, money, health, goals." },
 ] as const;
+
+/** @deprecated use spacesNav */
+export const productNav = spacesNav;
 
 export const developmentNav = [
   { href: "/development", title: "Overview", body: "Build through production." },
@@ -142,7 +145,6 @@ export const developmentNav = [
 ] as const;
 
 export const headerLinks = [
-  { href: "/spaces", title: "Spaces" },
   { href: "/hosting", title: "Hosting" },
   { href: "/pricing", title: "Pricing" },
   { href: "/enterprise", title: "Enterprise" },
@@ -153,7 +155,7 @@ export const footerGroups: {
   links: { href: string; title: string; external?: boolean }[];
 }[] = [
   {
-    label: "Product",
+    label: "Courier",
     links: [
       { href: "/home", title: "Home" },
       { href: "/spaces", title: "Spaces" },

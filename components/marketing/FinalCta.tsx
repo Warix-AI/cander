@@ -10,7 +10,7 @@ export function FinalCta({
   body?: string;
 }) {
   return (
-    <Section className="pb-24">
+    <Section className="pb-16 pt-6">
       <PageWidth>
         <div className="max-w-xl">
           <h2 className="heading-display text-3xl md:text-5xl">{title}</h2>
