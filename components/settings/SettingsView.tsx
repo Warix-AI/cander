@@ -7,13 +7,18 @@ import { useApp } from "@/components/app/AppProvider";
 import { PlansSettings } from "@/components/settings/PlansSettings";
 import { WorkspacesSettings } from "@/components/settings/WorkspaceSettings";
 import { Modal } from "@/components/ui/Modal";
-import { workspaces } from "@/lib/data";
-import { orgMembersOf, orgProSeats } from "@/lib/entitlements";
-import { planLabel } from "@/lib/billing";
+import { workspaces, workspaceResources } from "@/lib/data";
+import {
+  memberName,
+  orgMembersOf,
+  orgMaxSeats,
+  orgUltraSeats,
+} from "@/lib/entitlements";
+import { orgSeatMix, planLabel, seatMixLabel } from "@/lib/billing";
 import type { Role, SettingsTab } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
-  activateProSeat,
+  activateMaxSeat,
   setMemberRole,
   setMemberSeat,
   toggleMemberWorkspace,
@@ -186,12 +191,15 @@ function OrganizationSettings() {
     setSettingsTab,
     actor,
     entitlements,
-    ultraLicenses,
   } = useApp();
   const roster = orgMembersOf(orgMembers);
   const orgWorkspaces = workspaces.filter((item) => !item.personal);
-  const proSeats = orgProSeats(orgMembers);
-  const ultraCount = ultraLicenses.filter((item) => item.scope === "org").length;
+  const maxSeats = orgMaxSeats(orgMembers);
+  const ultraSeats = orgUltraSeats(orgMembers);
+  const mixLabel = seatMixLabel(orgSeatMix(orgMembers)).join(" · ");
+  const managedResources = workspaceResources.filter(
+    (item) => item.status === "active",
+  );
 
   return (
     <>
@@ -202,22 +210,17 @@ function OrganizationSettings() {
         Organization
       </h2>
       <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted-foreground">
-        People and roles live here. Assign each person to workspaces. Pending
-        Plus and Free invites need a Pro seat before they can join.
+        People and roles live here. Assign each person to workspaces and a plan
+        seat. Pending invites need a Max or Ultra seat before shared workspaces
+        unlock.
       </p>
 
       <div className="mt-6 max-w-2xl rounded-[10px] border border-border p-5">
         <Line k="Legal name" v="Acme Incorporated" />
         <Line k="Domain" v="acme.com" />
-        <Line k="Pro seats" v={`${proSeats}`} />
-        <Line
-          k="Ultra"
-          v={
-            ultraCount
-              ? `${ultraCount} license${ultraCount === 1 ? "" : "s"}`
-              : "None"
-          }
-        />
+        <Line k="Seat mix" v={mixLabel || "None"} />
+        <Line k="Max seats" v={`${maxSeats}`} />
+        <Line k="Ultra seats" v={`${ultraSeats}`} />
       </div>
       <button
         type="button"
@@ -226,6 +229,38 @@ function OrganizationSettings() {
       >
         View plans
       </button>
+
+      {entitlements.canManageInfrastructure && managedResources.length ? (
+        <>
+          <h3 className="mt-10 text-[15px] font-medium">Shared infrastructure</h3>
+          <p className="mt-1 max-w-2xl text-[13px] text-muted-foreground">
+            Ultra-managed resources this organization can use. Owners assign who
+            may consume each resource.
+          </p>
+          <div className="mt-4 max-w-2xl space-y-3">
+            {managedResources.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-[10px] border border-border p-4"
+              >
+                <p className="text-[14px] font-medium tracking-[-0.01em]">
+                  {item.name}
+                </p>
+                <p className="mt-1 text-[12.5px] text-muted-foreground">
+                  {item.kind} · {item.environment} · managed by{" "}
+                  {memberName(item.ownerId, orgMembers)}
+                </p>
+                <p className="mt-2 text-[12px] text-muted-foreground">
+                  Authorized:{" "}
+                  {item.authorizedMemberIds
+                    .map((id) => memberName(id, orgMembers))
+                    .join(", ") || "None"}
+                </p>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
 
       <h3 className="mt-10 text-[15px] font-medium">Spaces</h3>
       <p className="mt-1 max-w-2xl text-[13px] text-muted-foreground">
@@ -253,7 +288,7 @@ function OrganizationSettings() {
 
       <h3 className="mt-10 text-[15px] font-medium">Users</h3>
       <p className="mt-1 max-w-2xl text-[13px] text-muted-foreground">
-        Role is organization-wide. Only Pro seats can use shared workspaces.
+        Role is organization-wide. Only Max seats can use shared workspaces.
       </p>
       <div className="mt-4 max-w-2xl space-y-3">
         {roster.map((member) => {
@@ -278,17 +313,17 @@ function OrganizationSettings() {
                   </p>
                   <p className="mt-1 text-[12px] text-muted-foreground">
                     {planLabel(member.plan)}
-                    {pending ? " · Needs Pro seat" : ""}
+                    {pending ? " · Needs Max seat" : ""}
                     {member.id === actor.id ? " · You" : ""}
                   </p>
                 </div>
                 {pending ? (
                   <button
                     type="button"
-                    onClick={() => activateProSeat(member.id)}
+                    onClick={() => activateMaxSeat(member.id)}
                     className="inline-flex h-8 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
                   >
-                    Add Pro seat
+                    Add Max seat
                   </button>
                 ) : canEditRole ? (
                   <select
@@ -316,7 +351,7 @@ function OrganizationSettings() {
               </div>
               {!pending && entitlements.isOwner ? (
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {(["pro", "plus", "free"] as const).map((plan) => (
+                  {(["max", "ultra", "pro", "free"] as const).map((plan) => (
                     <button
                       key={plan}
                       type="button"

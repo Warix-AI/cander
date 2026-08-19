@@ -25,8 +25,6 @@ import {
   suggestionsFor,
 } from "@/lib/build-loop";
 import {
-  addUltraLicense,
-  assignUltraLicense,
   getActorServerSnapshot,
   getActorSnapshot,
   getHostingServerSnapshot,
@@ -35,8 +33,6 @@ import {
   getPersonalSpaceSnapshot,
   getProductServerSnapshot,
   getProductSnapshot,
-  getUltraLicensesServerSnapshot,
-  getUltraLicensesSnapshot,
   getWorkspaceServerSnapshot,
   getWorkspaceSnapshot,
   persistActor,
@@ -44,7 +40,6 @@ import {
   persistPersonalSpace,
   persistProduct,
   persistWorkspace,
-  removeUltraLicense,
   getPinsServerSnapshot,
   getPinsSnapshot,
   getSidebarServerSnapshot,
@@ -55,7 +50,6 @@ import {
   subscribePins,
   subscribePersonalSpace,
   subscribeProduct,
-  subscribeUltraLicenses,
   subscribeSidebar,
   subscribeWorkspace,
   toggleStoredPin,
@@ -101,7 +95,6 @@ import type {
   SpaceLayout,
   StudioTool,
   Thread,
-  UltraLicense,
   ViewportId,
   VoiceAnchor,
   WorkspacePolicy,
@@ -152,11 +145,6 @@ type AppContextValue = {
   setBillingPlan: (plan: BillingPlan) => void;
   personalSpaceEnabled: boolean;
   setPersonalSpaceEnabled: (on: boolean) => void;
-  apiEnabled: boolean;
-  ultraLicenses: UltraLicense[];
-  addOrgUltra: () => void;
-  assignUltra: (licenseId: string, userId: string | null) => void;
-  removeOrgUltra: (licenseId: string) => void;
   workspacePolicies: Record<string, WorkspacePolicy>;
   orgMembers: Member[];
   workspaceId: string;
@@ -296,11 +284,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     getActorSnapshot,
     getActorServerSnapshot,
   );
-  const ultraLicenses = useSyncExternalStore(
-    subscribeUltraLicenses,
-    getUltraLicensesSnapshot,
-    getUltraLicensesServerSnapshot,
-  );
   const personalSpaceEnabled = useSyncExternalStore(
     subscribePersonalSpace,
     getPersonalSpaceSnapshot,
@@ -320,12 +303,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     () => orgMembers.find((item) => item.id === actorId) ?? orgMembers[0],
     [orgMembers, actorId],
   );
-  const entitlements = useMemo(
-    () => entitlementsFor(actor, ultraLicenses),
-    [actor, ultraLicenses],
-  );
+  const entitlements = useMemo(() => entitlementsFor(actor), [actor]);
   const billingPlan = entitlements.plan;
-  const apiEnabled = entitlements.ultraAssigned;
   const workspaceId = useSyncExternalStore(
     subscribeWorkspace,
     getWorkspaceSnapshot,
@@ -461,7 +440,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const platformMessages = platformThread?.messages ?? [];
 
   const setProduct = useCallback((id: ProductId) => {
-    if (id === "platform" && !entitlements.hasLimitedPlatform) return;
+    if (id === "platform" && !entitlements.canAccessDevelopment) return;
     persistProduct(id);
     setMobileNav(false);
     setOverlay(null);
@@ -490,7 +469,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     connectorId,
     jobId,
     skillId,
-    entitlements.hasLimitedPlatform,
+    entitlements.canAccessDevelopment,
   ]);
 
   const setHostingMode = useCallback((id: HostingMode) => {
@@ -510,26 +489,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setBillingPlan = useCallback((plan: BillingPlan) => {
-    const preset =
-      plan === "free" ? "free" : plan === "plus" ? "plus" : "pro-owner";
+    const preset: AccountPresetId =
+      plan === "free"
+        ? "free"
+        : plan === "pro"
+          ? "pro"
+          : plan === "ultra"
+            ? "ultra"
+            : "max-owner";
     const match = accountPresets.find((item) => item.id === preset);
     if (match) persistActor(match.actorId);
   }, []);
 
   const setPersonalSpaceEnabled = useCallback((on: boolean) => {
     persistPersonalSpace(on);
-  }, []);
-
-  const addOrgUltra = useCallback(() => {
-    addUltraLicense("org");
-  }, []);
-
-  const assignUltra = useCallback((licenseId: string, userId: string | null) => {
-    assignUltraLicense(licenseId, userId);
-  }, []);
-
-  const removeOrgUltra = useCallback((licenseId: string) => {
-    removeUltraLicense(licenseId);
   }, []);
 
   const setPlatformNav = useCallback(
@@ -1041,7 +1014,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           : undefined;
       const reply =
         intent.nav && !nav
-          ? "Models, Logs, and Usage need Pro or Ultra. Limited Platform includes APIs, Keys, Deployments, and Docs."
+          ? "Models, docs, logs, and usage start on Max. Pro includes APIs, keys, and hosting on one model."
           : intent.reply;
       if (nav) setPlatformNav(nav);
 
@@ -1248,10 +1221,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [entitlements.hasVoice]);
 
   useEffect(() => {
-    if (entitlements.hasLimitedPlatform) return;
+    if (entitlements.canAccessDevelopment) return;
     if (product === "platform") persistProduct("courier");
-    if (hostingMode !== "cloud") persistHosting("cloud");
-  }, [entitlements.hasLimitedPlatform, product, hostingMode]);
+  }, [entitlements.canAccessDevelopment, product]);
+
+  useEffect(() => {
+    if (entitlements.hostingAllowed(hostingMode)) return;
+    persistHosting("cloud");
+  }, [entitlements, hostingMode]);
 
   useEffect(() => {
     if (product !== "platform") return;
@@ -1363,7 +1340,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         persistWorkspace(found.workspaceId);
       }
       if (found.product === "platform") {
-        if (!entitlements.hasLimitedPlatform) return;
+        if (!entitlements.canAccessDevelopment) return;
         persistProduct("platform");
         setPlatformThreadId(found.id);
         setPlatformDockOpen(true);
@@ -1673,11 +1650,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setBillingPlan,
       personalSpaceEnabled,
       setPersonalSpaceEnabled,
-      apiEnabled,
-      ultraLicenses,
-      addOrgUltra,
-      assignUltra,
-      removeOrgUltra,
       workspacePolicies,
       orgMembers,
       workspaceId,
@@ -1809,11 +1781,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setBillingPlan,
       personalSpaceEnabled,
       setPersonalSpaceEnabled,
-      apiEnabled,
-      ultraLicenses,
-      addOrgUltra,
-      assignUltra,
-      removeOrgUltra,
       workspacePolicies,
       orgMembers,
       workspaceId,

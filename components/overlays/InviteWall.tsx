@@ -2,6 +2,7 @@
 
 import { useApp } from "@/components/app/AppProvider";
 import { Modal } from "@/components/ui/Modal";
+import { planLabel } from "@/lib/billing";
 import { account } from "@/lib/data";
 
 export function InviteWall() {
@@ -22,11 +23,11 @@ export function InviteWall() {
           id="invite-wall-title"
           className="mt-2 text-[18px] font-medium tracking-[-0.02em]"
         >
-          A Pro seat is required
+          A Max seat is required
         </h2>
         <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">
-          {account.name} is a Pro organization. Shared workspaces, Work, and
-          org admin stay locked until an Owner or Admin adds a Pro seat for
+          {account.name} is a Max organization. Shared workspaces, Work, and
+          org admin stay locked until an Owner or Admin adds a Max seat for
           you.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
@@ -48,10 +49,11 @@ export function InviteWall() {
             View plans
           </button>
         </div>
-        {entitlements.plan === "plus" ? (
+            {entitlements.plan === "pro" || entitlements.plan === "ultra" ? (
           <p className="mt-4 text-[12.5px] text-muted-foreground">
-            Your Plus account still works for personal workspaces
-            {entitlements.ultraAssigned ? " and full Platform via Ultra" : ""}.
+            Your {planLabel(entitlements.plan)} account still works for personal
+            workspaces
+            {entitlements.plan === "ultra" ? " with full development" : ""}.
           </p>
         ) : null}
       </div>
@@ -65,7 +67,7 @@ export function InviteBanner() {
 
   return (
     <div className="border-b border-border bg-card px-4 py-2.5 text-[13px] leading-relaxed text-muted-foreground">
-      Acme invited you. A Pro seat is required to use shared workspaces.{" "}
+      Acme invited you. A Max seat is required to use shared workspaces.{" "}
       <button
         type="button"
         onClick={() => openOverlay("invite-wall")}

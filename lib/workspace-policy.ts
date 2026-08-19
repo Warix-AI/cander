@@ -285,10 +285,16 @@ function hydrateMembers(raw: unknown): Member[] {
       row.role === "Owner" || row.role === "Admin" || row.role === "Member"
         ? row.role
         : base.role;
+    const storedPlan = String(row.plan ?? "");
     const plan: BillingPlan =
-      row.plan === "free" || row.plan === "plus" || row.plan === "pro"
-        ? row.plan
-        : base.plan;
+      storedPlan === "plus"
+        ? "pro"
+        : storedPlan === "free" ||
+            storedPlan === "pro" ||
+            storedPlan === "max" ||
+            storedPlan === "ultra"
+          ? (storedPlan as BillingPlan)
+          : base.plan;
     const seatStatus: SeatStatus =
       row.seatStatus === "active" || row.seatStatus === "pending"
         ? row.seatStatus
@@ -318,9 +324,9 @@ export function subscribePolicies(listener: Listener) {
     }
     const version = window.localStorage.getItem("courier-org-members-v");
     const storedMembers = window.localStorage.getItem("courier-org-members");
-    if (version !== "2") {
+    if (version !== "3") {
       orgMembers = structuredClone(seedMembers);
-      window.localStorage.setItem("courier-org-members-v", "2");
+      window.localStorage.setItem("courier-org-members-v", "3");
       persist();
     } else if (storedMembers) {
       try {
@@ -437,7 +443,7 @@ export function setMemberRole(memberId: string, role: Role, actorId?: string) {
       (item) =>
         item.role === "Owner" &&
         item.seatStatus === "active" &&
-        item.plan === "pro",
+        item.plan === "max",
     );
     if (owners.length <= 1) return;
   }
@@ -447,7 +453,7 @@ export function setMemberRole(memberId: string, role: Role, actorId?: string) {
   persist();
 }
 
-export function activateProSeat(memberId: string) {
+export function activateMaxSeat(memberId: string) {
   orgMembers = orgMembers.map((member) => {
     if (member.id !== memberId) return member;
     const workspaceIds = member.workspaceIds.filter(
@@ -455,7 +461,7 @@ export function activateProSeat(memberId: string) {
     );
     return {
       ...member,
-      plan: "pro" as const,
+      plan: "max" as const,
       seatStatus: "active" as const,
       role: member.role === "Owner" ? "Owner" : "Member",
       workspaceIds: workspaceIds.length ? workspaceIds : ["marketing"],
@@ -467,7 +473,7 @@ export function activateProSeat(memberId: string) {
 export function setMemberSeat(memberId: string, plan: BillingPlan) {
   orgMembers = orgMembers.map((member) => {
     if (member.id !== memberId) return member;
-    if (plan === "pro") {
+    if (plan === "max" || plan === "ultra") {
       const workspaceIds = member.workspaceIds.filter(
         (id) => !id.startsWith("solo-"),
       );
@@ -479,10 +485,10 @@ export function setMemberSeat(memberId: string, plan: BillingPlan) {
       };
     }
     const solo =
-      plan === "plus"
+      plan === "pro"
         ? member.id === "p-ultra"
           ? "solo-ultra"
-          : "solo-plus"
+          : "solo-pro"
         : "solo-free";
     return {
       ...member,
@@ -677,7 +683,7 @@ export function blockedConnectorIds(
   map: Record<string, WorkspacePolicy> | undefined,
   plan?: BillingPlan,
 ) {
-  if (plan && plan !== "pro") return [];
+  if (plan && plan !== "max" && plan !== "ultra") return [];
   return policyFor(workspaceId, map).disabledConnectors;
 }
 

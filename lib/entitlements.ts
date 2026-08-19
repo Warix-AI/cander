@@ -1,6 +1,6 @@
-import { accountPresets, workspaces } from "./data";
+import { accountPresets, workspaceResources, workspaces } from "./data";
 import {
-  hasLimitedPlatform,
+  hasConnectorPolicies,
   hasModelChoice,
   hasVoice,
   hasWorkSpace,
@@ -10,40 +10,45 @@ import {
   platformNavAllowed,
   workspaceCap,
 } from "./billing";
+import {
+  canAccessDevelopment,
+  canManageInfrastructure,
+  capabilitiesFor,
+  devDepthLabel,
+  type DevDepth,
+} from "./plan-entitlements";
 import type {
   AccountPresetId,
   BillingPlan,
   HostingMode,
   Member,
   PlatformNav,
-  Role,
-  UltraLicense,
   Workspace,
+  WorkspaceResource,
 } from "./types";
 
 export type Entitlements = {
   plan: BillingPlan;
-  role: Role;
+  role: Member["role"];
   inOrg: boolean;
   orgActive: boolean;
   pendingInvite: boolean;
-  ultraAssigned: boolean;
   isOwner: boolean;
   isAdmin: boolean;
   isMember: boolean;
   canManageBilling: boolean;
   canManageMembers: boolean;
-  canAssignUltra: boolean;
-  canBuyUltra: boolean;
   canManageWorkspaces: boolean;
   canUseSharedWorkspaces: boolean;
   canUseWorkSpace: boolean;
+  canAccessDevelopment: boolean;
+  canManageInfrastructure: boolean;
+  devDepth: DevDepth;
+  devDepthLabel: string;
   hasVoice: boolean;
   hasWorkspaces: boolean;
   hasWorkspaceKnowledge: boolean;
   hasConnectorPolicies: boolean;
-  hasLimitedPlatform: boolean;
-  hasFullPlatform: boolean;
   hasModelChoice: boolean;
   workspaceCap: number;
   showOrgSettings: boolean;
@@ -52,25 +57,25 @@ export type Entitlements = {
   showInviteWall: boolean;
   hostingAllowed: (mode: HostingMode) => boolean;
   platformNavAllowed: (nav: PlatformNav) => boolean;
+  canUseSharedResource: (resourceId: string) => boolean;
 };
 
-export function entitlementsFor(
-  actor: Member,
-  licenses: UltraLicense[],
-): Entitlements {
+function isOrgTeamPlan(plan: BillingPlan) {
+  return plan === "max" || plan === "ultra";
+}
+
+export function entitlementsFor(actor: Member): Entitlements {
   const plan = actor.plan;
   const orgActive =
     actor.kind === "org" &&
-    actor.plan === "pro" &&
+    isOrgTeamPlan(actor.plan) &&
     actor.seatStatus === "active";
   const pendingInvite =
     actor.kind === "org" && actor.seatStatus === "pending";
-  const ultraAssigned = licenses.some((item) => item.userId === actor.id);
   const isOwner = orgActive && actor.role === "Owner";
   const isAdmin = orgActive && actor.role === "Admin";
   const isMember = orgActive && actor.role === "Member";
-  const limited = hasLimitedPlatform(plan);
-  const full = ultraAssigned && plan !== "free";
+  const caps = capabilitiesFor(plan);
 
   return {
     plan,
@@ -78,31 +83,37 @@ export function entitlementsFor(
     inOrg: actor.kind === "org",
     orgActive,
     pendingInvite,
-    ultraAssigned,
     isOwner,
     isAdmin,
     isMember,
     canManageBilling: isOwner,
     canManageMembers: isOwner || isAdmin,
-    canAssignUltra: isOwner || isAdmin,
-    canBuyUltra: isOwner,
     canManageWorkspaces: isOwner || isAdmin,
     canUseSharedWorkspaces: orgActive,
     canUseWorkSpace: orgActive && hasWorkSpace(plan),
+    canAccessDevelopment: canAccessDevelopment(plan),
+    canManageInfrastructure: canManageInfrastructure(plan),
+    devDepth: caps.devDepth,
+    devDepthLabel: devDepthLabel(caps.devDepth),
     hasVoice: hasVoice(plan),
     hasWorkspaces: hasWorkspaces(plan),
     hasWorkspaceKnowledge: hasWorkspaceKnowledge(plan),
-    hasConnectorPolicies: orgActive,
-    hasLimitedPlatform: limited,
-    hasFullPlatform: full,
-    hasModelChoice: hasModelChoice(plan) && orgActive,
+    hasConnectorPolicies: orgActive && hasConnectorPolicies(plan),
+    hasModelChoice: hasModelChoice(plan),
     workspaceCap: workspaceCap(plan),
     showOrgSettings: isOwner || isAdmin,
     showWorkspacesAdmin: isOwner || isAdmin,
     showPlansBilling: isOwner || isAdmin,
     showInviteWall: pendingInvite,
     hostingAllowed: (mode) => hostingAllowed(plan, mode),
-    platformNavAllowed: (nav) => platformNavAllowed(plan, nav, full),
+    platformNavAllowed: (nav) => platformNavAllowed(plan, nav),
+    canUseSharedResource: (resourceId) => {
+      const resource = workspaceResources.find((item) => item.id === resourceId);
+      if (!resource) return false;
+      if (resource.ownerId === actor.id) return true;
+      if (!resource.authorizedMemberIds.includes(actor.id)) return false;
+      return canAccessDevelopment(plan);
+    },
   };
 }
 
@@ -110,14 +121,28 @@ export function orgMembersOf(members: Member[]) {
   return members.filter((item) => item.kind === "org");
 }
 
-export function orgProSeats(members: Member[]) {
+export function orgMaxSeats(members: Member[]) {
   return orgMembersOf(members).filter(
-    (item) => item.plan === "pro" && item.seatStatus === "active",
+    (item) => item.plan === "max" && item.seatStatus === "active",
   ).length;
 }
 
-export function orgUltraLicenses(licenses: UltraLicense[]) {
-  return licenses.filter((item) => item.scope === "org");
+export function orgUltraSeats(members: Member[]) {
+  return orgMembersOf(members).filter(
+    (item) => item.plan === "ultra" && item.seatStatus === "active",
+  ).length;
+}
+
+export function sharedResourcesFor(
+  workspaceId: string,
+  actor: Member,
+  access: Entitlements,
+): WorkspaceResource[] {
+  return workspaceResources.filter((item) => {
+    if (item.workspaceId !== workspaceId || item.status !== "active") return false;
+    if (access.canManageInfrastructure && item.ownerId === actor.id) return true;
+    return access.canUseSharedResource(item.id);
+  });
 }
 
 export function workspacesFor(actor: Member, access: Entitlements): Workspace[] {
@@ -139,6 +164,10 @@ export function homeWorkspaceId(actor: Member, access: Entitlements) {
 
 export function presetForActor(actorId: string): AccountPresetId {
   return (
-    accountPresets.find((item) => item.actorId === actorId)?.id ?? "pro-owner"
+    accountPresets.find((item) => item.actorId === actorId)?.id ?? "max-owner"
   );
+}
+
+export function memberName(memberId: string, members: Member[]) {
+  return members.find((item) => item.id === memberId)?.name ?? memberId;
 }

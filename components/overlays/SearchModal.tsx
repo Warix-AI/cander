@@ -88,8 +88,8 @@ export function SearchModal() {
         items.push({
           id: `nav-${item.id}`,
           title: item.label,
-          meta: "Platform",
-          group: "Platform",
+          meta: "Development",
+          group: "Development",
           run: () => setPlatformNav(item.id),
         });
       }
@@ -398,7 +398,7 @@ function HitIcon({ group }: { group: string }) {
   if (group === "Tasks") return <Sparkles className={className} strokeWidth={1.6} />;
   if (group === "Connectors") return <Blocks className={className} strokeWidth={1.6} />;
   if (group === "Chats") return <History className={className} strokeWidth={1.6} />;
-  if (group === "Platform") return <Clapperboard className={className} strokeWidth={1.6} />;
+  if (group === "Development") return <Clapperboard className={className} strokeWidth={1.6} />;
   if (group === "Spaces") return <Files className={className} strokeWidth={1.6} />;
   if (group === "Actions") return <SquarePen className={className} strokeWidth={1.6} />;
   return <Search className={className} strokeWidth={1.6} />;

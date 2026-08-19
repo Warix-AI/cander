@@ -18,7 +18,7 @@ const surfaces: {
     nav: "keys",
     words: ["api key", "api keys", "keys", "key", "token", "secret"],
     reply:
-      "Opened Keys. Create and rotate credentials here — keep them out of source.",
+      "Opened Keys. Credentials are managed here — Courier provisions them for your projects.",
   },
   {
     nav: "models",
@@ -30,7 +30,7 @@ const surfaces: {
     nav: "api",
     words: ["apis", "endpoints", "endpoint", "api"],
     reply:
-      "Opened APIs. Enable the license, inspect routes, and see what Courier Platform exposes.",
+      "Opened APIs. Routes are already wired — inspect what this workspace exposes.",
   },
   {
     nav: "hosting",
@@ -42,12 +42,12 @@ const surfaces: {
     nav: "usage",
     words: ["usage", "quota", "spend", "billing", "invoice"],
     reply:
-      "Opened Usage. Cloud is metered; local and on-device are unlimited. Seats and Ultra are in Settings → Plans.",
+      "Opened Usage. Cloud is metered; local and on-device are unlimited. Per-seat plan billing is in Settings → Plans.",
   },
   {
     nav: "docs",
     words: ["docs", "documentation", "guide", "reference"],
-    reply: "Opened Docs. Guides and API reference stay with the platform, not a separate site.",
+    reply: "Opened Docs. Guides and API reference stay in Courier, not a separate site.",
   },
   {
     nav: "deployments",
@@ -57,17 +57,17 @@ const surfaces: {
   {
     nav: "logs",
     words: ["logs", "log", "trace"],
-    reply: "Opened Logs. Recent platform traffic and errors are on this page.",
+    reply: "Opened Logs. Recent development traffic and errors are on this page.",
   },
   {
     nav: "overview",
     words: ["overview", "dashboard", "home"],
-    reply: "Opened Overview. Traffic, funnel, and runtime mix for Courier Platform.",
+    reply: "Opened Overview. Traffic, funnel, and runtime mix for Development.",
   },
   {
     nav: "recents",
     words: ["recents", "recent chats", "history"],
-    reply: "Opened Recents. Platform chats from this workspace are listed here.",
+    reply: "Opened Recents. Development chats from this workspace are listed here.",
   },
 ];
 
@@ -77,7 +77,7 @@ export function inferPlatformIntent(raw: string): PlatformIntent {
   if (includesAny(text, ["undo", "revert"])) {
     return {
       reply:
-        "Platform chat doesn’t keep a preview timeline. Ask me to open models, keys, hosting, or another page instead.",
+        "Development chat doesn’t keep a preview timeline. Ask me to open models, keys, hosting, or another page instead.",
     };
   }
 
@@ -86,6 +86,6 @@ export function inferPlatformIntent(raw: string): PlatformIntent {
 
   return {
     reply:
-      "I can help with APIs, keys, hosting, deployments, and docs. Pro also has models, logs, and usage. Ask to open any of those.",
+      "I can help with APIs, keys, and hosting. Max adds models, docs, team deploys, and logs. Ultra adds production. Ask to open any page.",
   };
 }

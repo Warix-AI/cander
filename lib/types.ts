@@ -1,6 +1,17 @@
 export type ProductId = "courier" | "platform";
+/** Where inference runs. Independent of BillingPlan and device class. */
 export type HostingMode = "cloud" | "local" | "on-device";
-export type BillingPlan = "free" | "plus" | "pro";
+
+/** What a model needs to run. Compare to hardware — never to a plan name. */
+export type ModelRequirements = {
+  memoryGb?: number;
+};
+
+/** What a machine can run. Detect later; do not infer from plan or phone vs desktop. */
+export type HardwareCapabilities = {
+  memoryGb?: number;
+};
+export type BillingPlan = "free" | "pro" | "max" | "ultra";
 export type Theme = "light" | "dark";
 export type SpaceId =
   | "work"
@@ -123,13 +134,27 @@ export type UltraLicense = {
 };
 
 export type AccountPresetId =
-  | "pro-owner"
-  | "pro-admin"
-  | "pro-member"
-  | "pro-member-ultra"
-  | "plus"
-  | "plus-ultra"
+  | "max-owner"
+  | "max-admin"
+  | "max-member"
+  | "ultra-member"
+  | "pro"
+  | "ultra"
   | "free";
+
+export type WorkspaceResource = {
+  id: string;
+  workspaceId: string;
+  kind: "model" | "deployment" | "api";
+  name: string;
+  createdBy: string;
+  ownerId: string;
+  hosting: HostingMode;
+  environment: "test" | "production";
+  /** Members who may consume this resource. They do not need Ultra to use it. */
+  authorizedMemberIds: string[];
+  status: "active" | "paused";
+};
 
 export type Message = {
   id: string;

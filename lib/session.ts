@@ -7,9 +7,8 @@ import type {
   ProductId,
   SpaceId,
   Theme,
-  UltraLicense,
 } from "@/lib/types";
-import { accountPresets, members, seedUltraLicenses } from "@/lib/data";
+import { accountPresets, members } from "@/lib/data";
 import {
   ALL_SPACE_IDS,
   defaultSidebarLayout,
@@ -189,120 +188,38 @@ export function persistActor(next: string) {
 
 export function presetIdForActor(id: string): AccountPresetId {
   return (
-    accountPresets.find((item) => item.actorId === id)?.id ?? "pro-owner"
+    accountPresets.find((item) => item.actorId === id)?.id ?? "max-owner"
   );
-}
-
-const ultraLicenseListeners = new Set<Listener>();
-let ultraLicenses: UltraLicense[] = seedUltraLicenses;
-const ULTRA_LICENSE_VERSION = "3";
-
-function emitUltraLicenses() {
-  ultraLicenseListeners.forEach((listener) => listener());
-}
-
-function hydrateUltraLicenses() {
-  if (typeof window === "undefined") return;
-  const version = window.localStorage.getItem("courier-ultra-licenses-v");
-  if (version !== ULTRA_LICENSE_VERSION) {
-    ultraLicenses = structuredClone(seedUltraLicenses);
-    window.localStorage.setItem("courier-ultra-licenses-v", ULTRA_LICENSE_VERSION);
-    window.localStorage.setItem(
-      "courier-ultra-licenses",
-      JSON.stringify(ultraLicenses),
-    );
-    return;
-  }
-  const stored = window.localStorage.getItem("courier-ultra-licenses");
-  if (!stored) return;
-  try {
-    const parsed = JSON.parse(stored) as unknown;
-    if (!Array.isArray(parsed)) return;
-    const next = parsed.flatMap((item) => {
-      if (!item || typeof item !== "object") return [];
-      const row = item as Partial<UltraLicense>;
-      if (!row.id) return [];
-      return [
-        {
-          id: String(row.id),
-          userId: row.userId ? String(row.userId) : null,
-          scope: row.scope === "personal" ? "personal" : "org",
-        } satisfies UltraLicense,
-      ];
-    });
-    if (next.length) ultraLicenses = next;
-  } catch {
-    ultraLicenses = structuredClone(seedUltraLicenses);
-  }
-}
-
-export function subscribeUltraLicenses(listener: Listener) {
-  hydrateUltraLicenses();
-  ultraLicenseListeners.add(listener);
-  return () => {
-    ultraLicenseListeners.delete(listener);
-  };
-}
-
-export function getUltraLicensesSnapshot() {
-  return ultraLicenses;
-}
-
-export function getUltraLicensesServerSnapshot() {
-  return seedUltraLicenses;
-}
-
-function persistUltraLicenses(next: UltraLicense[]) {
-  ultraLicenses = next;
-  window.localStorage.setItem("courier-ultra-licenses", JSON.stringify(next));
-  emitUltraLicenses();
-}
-
-export function addUltraLicense(scope: UltraLicense["scope"] = "org") {
-  persistUltraLicenses([
-    ...ultraLicenses,
-    {
-      id: `u-${scope}-${Date.now()}`,
-      userId: null,
-      scope,
-    },
-  ]);
-}
-
-export function removeUltraLicense(id: string) {
-  persistUltraLicenses(ultraLicenses.filter((item) => item.id !== id));
-}
-
-export function assignUltraLicense(id: string, userId: string | null) {
-  persistUltraLicenses(
-    ultraLicenses.map((item) => {
-      if (item.id === id) return { ...item, userId };
-      if (userId && item.userId === userId) return { ...item, userId: null };
-      return item;
-    }),
-  );
-}
-
-export function ultraAssignedTo(userId: string, licenses = ultraLicenses) {
-  return licenses.some((item) => item.userId === userId);
 }
 
 const planListeners = new Set<Listener>();
-let billingPlan: BillingPlan = "pro";
+let billingPlan: BillingPlan = "max";
 
 function emitPlan() {
   planListeners.forEach((listener) => listener());
 }
 
+const PLAN_STORAGE_VERSION = "4";
+
 export function subscribePlan(listener: Listener) {
   if (typeof window !== "undefined") {
+    const version = window.localStorage.getItem("courier-plan-v");
     const stored = window.localStorage.getItem("courier-plan");
-    if (stored === "free" || stored === "plus" || stored === "pro") {
+    if (version !== PLAN_STORAGE_VERSION) {
+      if (stored === "plus" || stored === "personal") billingPlan = "pro";
+      else if (stored === "pro" || stored === "business") billingPlan = "max";
+      else if (stored === "max" || stored === "ultra" || stored === "free") {
+        billingPlan = stored;
+      }
+      window.localStorage.setItem("courier-plan-v", PLAN_STORAGE_VERSION);
+      window.localStorage.setItem("courier-plan", billingPlan);
+    } else if (
+      stored === "free" ||
+      stored === "pro" ||
+      stored === "max" ||
+      stored === "ultra"
+    ) {
       billingPlan = stored;
-    } else if (stored === "personal") {
-      billingPlan = "plus";
-    } else if (stored === "business") {
-      billingPlan = "pro";
     }
   }
   planListeners.add(listener);
@@ -316,11 +233,12 @@ export function getPlanSnapshot() {
 }
 
 export function getPlanServerSnapshot(): BillingPlan {
-  return "pro";
+  return "max";
 }
 
 export function persistPlan(next: BillingPlan) {
   billingPlan = next;
+  window.localStorage.setItem("courier-plan-v", PLAN_STORAGE_VERSION);
   window.localStorage.setItem("courier-plan", next);
   emitPlan();
 }

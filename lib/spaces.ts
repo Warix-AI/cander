@@ -107,7 +107,13 @@ export function spaceAllowed(
   if (id === "browser" || id === "files" || id === "connectors") return false;
   if (id === "recents") return true;
     if (id === "work") {
-      if (opts?.billingPlan && opts.billingPlan !== "pro") return false;
+      if (
+        opts?.billingPlan &&
+        opts.billingPlan !== "max" &&
+        opts.billingPlan !== "ultra"
+      ) {
+        return false;
+      }
       return allowed.includes("work");
     }
     if (id === "personal") {
@@ -116,7 +122,13 @@ export function spaceAllowed(
       allowed.includes("finances") ||
       allowed.includes("health");
     if (!inCatalog) return false;
-    if (opts?.billingPlan && opts.billingPlan !== "pro") return true;
+    if (
+      opts?.billingPlan &&
+      opts.billingPlan !== "max" &&
+      opts.billingPlan !== "ultra"
+    ) {
+      return true;
+    }
     return Boolean(opts?.personalEnabled);
   }
   if (isExtraNavId(id)) return true;

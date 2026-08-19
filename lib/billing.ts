@@ -1,16 +1,31 @@
 import { account } from "./data";
-import type { BillingPlan, HostingMode, PlatformNav } from "./types";
+import {
+  capabilitiesFor,
+  canAccessDevelopment as planCanAccessDevelopment,
+  hasConnectorPolicies as planHasConnectorPolicies,
+  hasModelChoice as planHasModelChoice,
+  hasVoice as planHasVoice,
+  hasWorkSpace as planHasWorkSpace,
+  hasWorkspaceKnowledge as planHasWorkspaceKnowledge,
+  hasWorkspaces as planHasWorkspaces,
+  hostingAllowed as planHostingAllowed,
+  isTeamPlan as planIsTeamPlan,
+  platformNavAllowed as planPlatformNavAllowed,
+  workspaceCap as planWorkspaceCap,
+} from "./plan-entitlements";
+import type { BillingPlan, HostingMode, Member, PlatformNav } from "./types";
 
 export type BillingCycle = "month" | "year";
 export type CompareValue = boolean | string;
 
+export const ALL_PLANS: BillingPlan[] = ["free", "pro", "max", "ultra"];
+
 export const courierSeat: Record<BillingPlan, number> = {
   free: 0,
-  plus: 20,
-  pro: 50,
+  pro: 20,
+  max: 50,
+  ultra: 300,
 };
-
-export const PLATFORM_ULTRA = 599;
 
 export const courierPlans: {
   id: BillingPlan;
@@ -28,7 +43,7 @@ export const courierPlans: {
     name: "Free",
     price: 0,
     audience: "Get started",
-    blurb: "Chat, Spaces, and Cloud.",
+    blurb: "Get started with Courier.",
     cta: "Start free",
     points: [
       "Chat",
@@ -39,39 +54,62 @@ export const courierPlans: {
     ],
   },
   {
-    id: "plus",
-    name: "Plus",
+    id: "pro",
+    name: "Pro",
     price: 20,
     audience: "Everyday use",
-    blurb: "Full Courier for individuals. Limited Platform.",
-    cta: "Choose Plus",
+    blurb: "Full Courier for individuals.",
+    cta: "Choose Pro",
     popular: true,
     includes: "Everything in Free, plus",
     points: [
       "Voice",
       "Workspaces",
       "Knowledge bases",
+      "APIs and keys",
       "Local",
       "On-device",
     ],
   },
   {
-    id: "pro",
-    name: "Pro",
+    id: "max",
+    name: "Max",
     price: 50,
     audience: "Teams & power users",
-    blurb: "Work, shared workspaces, and the full toolkit for heavy hitters.",
-    cta: "Choose Pro",
-    includes: "Everything in Plus, plus",
+    blurb: "Courier for professionals and teams.",
+    cta: "Choose Max",
+    includes: "Everything in Pro, plus",
     points: [
       "Work",
       "Shared workspaces",
       "Invite members",
       "Roles and permissions",
+      "Shared dev resources",
       "Org admin and audit",
     ],
   },
+  {
+    id: "ultra",
+    name: "Ultra",
+    price: 300,
+    audience: "Production AI",
+    blurb: "Build and run production AI with Courier.",
+    cta: "Choose Ultra",
+    includes: "Everything in Max, plus",
+    points: [
+      "Production APIs and keys",
+      "Production hosting",
+      "Infrastructure management",
+      "Full models, logs, and usage",
+      "Shared infrastructure for the team",
+    ],
+  },
 ];
+
+/** Paid plans shown in-app. Free is marketing-site only. */
+export const appPlans = courierPlans.filter((plan) => plan.id !== "free");
+
+const allPlans = (values: Record<BillingPlan, CompareValue>) => values;
 
 export const comparisonGroups: {
   id: string;
@@ -82,61 +120,176 @@ export const comparisonGroups: {
     id: "chat",
     label: "Chat & Voice",
     rows: [
-      { label: "Chat", values: { free: true, plus: true, pro: true } },
-      { label: "Voice", values: { free: false, plus: true, pro: true } },
+      {
+        label: "Chat",
+        values: allPlans({ free: true, pro: true, max: true, ultra: true }),
+      },
+      {
+        label: "Voice",
+        values: allPlans({ free: false, pro: true, max: true, ultra: true }),
+      },
     ],
   },
   {
     id: "spaces",
     label: "Spaces",
     rows: [
-      { label: "Build", values: { free: true, plus: true, pro: true } },
-      { label: "Studio", values: { free: true, plus: true, pro: true } },
-      { label: "Research", values: { free: true, plus: true, pro: true } },
-      { label: "Personal", values: { free: true, plus: true, pro: true } },
-      { label: "Work", values: { free: false, plus: false, pro: true } },
+      {
+        label: "Build",
+        values: allPlans({ free: true, pro: true, max: true, ultra: true }),
+      },
+      {
+        label: "Studio",
+        values: allPlans({ free: true, pro: true, max: true, ultra: true }),
+      },
+      {
+        label: "Research",
+        values: allPlans({ free: true, pro: true, max: true, ultra: true }),
+      },
+      {
+        label: "Personal",
+        values: allPlans({ free: true, pro: true, max: true, ultra: true }),
+      },
+      {
+        label: "Work",
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
+      },
     ],
   },
   {
     id: "courier",
     label: "Courier",
     rows: [
-      { label: "Connectors", values: { free: true, plus: true, pro: true } },
-      { label: "Workspaces", values: { free: false, plus: true, pro: true } },
+      {
+        label: "Connectors",
+        values: allPlans({ free: true, pro: true, max: true, ultra: true }),
+      },
+      {
+        label: "Workspaces",
+        values: allPlans({ free: false, pro: true, max: true, ultra: true }),
+      },
       {
         label: "Knowledge bases",
-        values: { free: false, plus: true, pro: true },
+        values: allPlans({ free: false, pro: true, max: true, ultra: true }),
       },
       {
         label: "Shared workspaces",
-        values: { free: false, plus: false, pro: true },
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
       },
-      { label: "Invite members", values: { free: false, plus: false, pro: true } },
-      { label: "Roles", values: { free: false, plus: false, pro: true } },
-      { label: "Permissions", values: { free: false, plus: false, pro: true } },
+      {
+        label: "Invite members",
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
+      },
+      {
+        label: "Roles",
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
+      },
+      {
+        label: "Permissions",
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
+      },
       {
         label: "Shared spaces",
-        values: { free: false, plus: false, pro: true },
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
       },
       {
         label: "Connector policies",
-        values: { free: false, plus: false, pro: true },
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
       },
-      { label: "Org admin", values: { free: false, plus: false, pro: true } },
-      { label: "Audit", values: { free: false, plus: false, pro: true } },
+      {
+        label: "Org admin",
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
+      },
+      {
+        label: "Audit",
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
+      },
     ],
   },
   {
     id: "platform",
-    label: "Courier Platform",
+    label: "Development",
     rows: [
-      { label: "APIs", values: { free: false, plus: true, pro: true } },
-      { label: "Keys", values: { free: false, plus: true, pro: true } },
-      { label: "Deployments", values: { free: false, plus: true, pro: true } },
-      { label: "Docs", values: { free: false, plus: true, pro: true } },
-      { label: "Models", values: { free: false, plus: false, pro: true } },
-      { label: "Logs", values: { free: false, plus: false, pro: true } },
-      { label: "Usage", values: { free: false, plus: false, pro: true } },
+      {
+        label: "Development view",
+        values: allPlans({ free: false, pro: true, max: true, ultra: true }),
+      },
+      {
+        label: "APIs",
+        values: allPlans({ free: false, pro: true, max: true, ultra: true }),
+      },
+      {
+        label: "Keys",
+        values: allPlans({ free: false, pro: true, max: true, ultra: true }),
+      },
+      {
+        label: "Local hosting",
+        values: allPlans({ free: false, pro: true, max: true, ultra: true }),
+      },
+      {
+        label: "On-device hosting",
+        values: allPlans({ free: false, pro: true, max: true, ultra: true }),
+      },
+      {
+        label: "Models",
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
+      },
+      {
+        label: "Team deploys",
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
+      },
+      {
+        label: "Use shared resources",
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
+      },
+      {
+        label: "Logs",
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
+      },
+      {
+        label: "Usage",
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
+      },
+      {
+        label: "Docs",
+        values: allPlans({ free: false, pro: false, max: true, ultra: true }),
+      },
+      {
+        label: "Test deploys",
+        values: allPlans({ free: false, pro: false, max: false, ultra: true }),
+      },
+      {
+        label: "Production models",
+        values: allPlans({ free: false, pro: false, max: false, ultra: true }),
+      },
+      {
+        label: "Production APIs",
+        values: allPlans({ free: false, pro: false, max: false, ultra: true }),
+      },
+      {
+        label: "Production keys",
+        values: allPlans({ free: false, pro: false, max: false, ultra: true }),
+      },
+      {
+        label: "Production deploys",
+        values: allPlans({ free: false, pro: false, max: false, ultra: true }),
+      },
+      {
+        label: "Production serving",
+        values: allPlans({ free: false, pro: false, max: false, ultra: true }),
+      },
+      {
+        label: "Infrastructure management",
+        values: allPlans({ free: false, pro: false, max: false, ultra: true }),
+      },
+      {
+        label: "Full logs",
+        values: allPlans({ free: false, pro: false, max: false, ultra: true }),
+      },
+      {
+        label: "Full usage",
+        values: allPlans({ free: false, pro: false, max: false, ultra: true }),
+      },
     ],
   },
   {
@@ -145,54 +298,40 @@ export const comparisonGroups: {
     rows: [
       {
         label: "Cloud",
-        values: { free: true, plus: true, pro: true },
+        values: allPlans({ free: true, pro: true, max: true, ultra: true }),
       },
       {
         label: "Local",
-        values: { free: false, plus: true, pro: true },
+        values: allPlans({ free: false, pro: true, max: true, ultra: true }),
       },
       {
         label: "On-device",
-        values: { free: false, plus: true, pro: true },
+        values: allPlans({ free: false, pro: true, max: true, ultra: true }),
       },
     ],
   },
 ];
 
-export const platformUltra = {
-  name: "Ultra",
-  price: PLATFORM_ULTRA,
-  audience: "Add-on · per person",
-  blurb:
-    "Each Ultra is one licensed person with unlimited, full Courier Platform — Local or On-device. Production APIs, keys, models, apps, and runtime. Unassigned licenses do nothing.",
-  points: [
-    "Assigned to one person",
-    "Unlimited Platform on Local or On-device",
-    "Production APIs and keys",
-    "Models, apps, deployments, and logs",
-  ],
-};
-
 export const pricingFaqs: { q: string; a: string }[] = [
   {
     q: "Is hosting a plan?",
-    a: "No. Cloud, Local, and On-device are how inference runs. Cloud is on every plan. Local and On-device start on Plus. Courier Platform also starts on Plus.",
+    a: "No. Cloud, Local, and On-device are compute locations — where inference runs — not plans. Cloud is on every plan. Permission to use Local or On-device starts on Pro. Production serving is an Ultra capability, on whatever hardware can run it.",
   },
   {
     q: "Who gets Work?",
-    a: "Work is Pro — for teams and power users. Voice starts on Plus. Free includes Chat, Build, Studio, Research, and Personal.",
+    a: "Work is Max and Ultra — for teams and power users. Voice starts on Pro. Free includes Chat, Build, Studio, Research, and Personal.",
   },
   {
-    q: "What’s Limited Platform?",
-    a: "Plus includes APIs, Keys, Deployments, and Docs — one shared model, no picker. Logs and Usage are Pro, and Usage splits by account. Ultra on Plus or Pro unlocks Models, Logs, and Usage on the Platform. Free has none of that.",
+    q: "What’s development on each plan?",
+    a: "Development starts on Pro — APIs, keys, and local or on-device hosting, on one shared model. Max adds the model catalog, team deploys, docs, and logs. Ultra unlocks test and production deploys, production APIs, and infrastructure management. Free has no Development.",
   },
   {
     q: "When can we share workspaces?",
-    a: "Workspaces and knowledge bases start on Plus. Shared workspaces start on Pro.",
+    a: "Workspaces and knowledge bases start on Pro. Shared workspaces start on Max.",
   },
   {
     q: "What’s Ultra?",
-    a: "Ultra is a Plus or Pro add-on — $599 per license per month. Each license must be assigned to one person. That person gets unlimited, full Courier Platform on Local or On-device. Unassigned licenses do nothing. Courier seats stay separate. Free cannot hold Ultra.",
+    a: "Ultra is a full plan at $300 per user per month — not an add-on. Ultra members can manage production infrastructure and authorize teammates to use shared models and deployments.",
   },
   {
     q: "Need something custom?",
@@ -265,66 +404,55 @@ export function licensedHint(mode: HostingMode, users: number) {
 }
 
 export function planLabel(plan: BillingPlan) {
-  return courierPlans.find((item) => item.id === plan)?.name ?? "Plus";
+  return courierPlans.find((item) => item.id === plan)?.name ?? "Pro";
 }
 
 export function hasWorkSpace(plan: BillingPlan) {
-  return plan === "pro";
+  return planHasWorkSpace(plan);
 }
 
 export function isTeamPlan(plan: BillingPlan) {
-  return plan === "pro";
+  return planIsTeamPlan(plan);
 }
 
 export function hasWorkspaceKnowledge(plan: BillingPlan) {
-  return plan !== "free";
+  return planHasWorkspaceKnowledge(plan);
 }
 
 export function hasVoice(plan: BillingPlan) {
-  return plan !== "free";
+  return planHasVoice(plan);
 }
 
 export function hasLimitedPlatform(plan: BillingPlan) {
-  return plan !== "free";
+  return planCanAccessDevelopment(plan);
 }
 
 export function hostingAllowed(plan: BillingPlan, mode: HostingMode) {
-  if (mode === "cloud") return true;
-  return plan !== "free";
+  return planHostingAllowed(plan, mode);
 }
 
 export function platformNavAllowed(
   plan: BillingPlan,
   nav: PlatformNav,
-  ultra = false,
+  _ultra = false,
 ) {
-  if (!hasLimitedPlatform(plan)) return false;
-  if (nav === "models" || nav === "logs" || nav === "usage") {
-    return plan === "pro" || ultra;
-  }
-  return true;
+  return planPlatformNavAllowed(plan, nav);
 }
 
 export function hasModelChoice(plan: BillingPlan) {
-  return plan === "pro";
+  return planHasModelChoice(plan);
 }
 
 export function hasWorkspaces(plan: BillingPlan) {
-  return plan !== "free";
+  return planHasWorkspaces(plan);
 }
 
 export function hasConnectorPolicies(plan: BillingPlan) {
-  return plan === "pro";
-}
-
-export function canHoldUltra(plan: BillingPlan) {
-  return plan !== "free";
+  return planHasConnectorPolicies(plan);
 }
 
 export function workspaceCap(plan: BillingPlan) {
-  if (plan === "free") return 0;
-  if (plan === "plus") return 3;
-  return Infinity;
+  return planWorkspaceCap(plan);
 }
 
 export function cycleAmount(monthly: number, cycle: BillingCycle) {
@@ -335,43 +463,70 @@ export function cycleSuffix(cycle: BillingCycle) {
   return cycle === "year" ? "/year" : "/month";
 }
 
+export type SeatMix = Record<BillingPlan, number>;
+
+export function orgSeatMix(members: Member[]): SeatMix {
+  const mix: SeatMix = { free: 0, pro: 0, max: 0, ultra: 0 };
+  for (const member of members) {
+    if (member.kind !== "org" || member.seatStatus !== "active") continue;
+    mix[member.plan] += 1;
+  }
+  return mix;
+}
+
+export function seatMixLabel(mix: SeatMix) {
+  return ALL_PLANS.filter((plan) => mix[plan] > 0).map(
+    (plan) => `${mix[plan]} ${planLabel(plan)}`,
+  );
+}
+
 export function billingFor(
   mode: HostingMode,
   opts?: {
     users?: number;
-    courierEnabled?: boolean;
-    apiEnabled?: boolean;
-    ultraLicenses?: number;
-    ultraDevices?: number;
     plan?: BillingPlan;
+    seatMix?: SeatMix;
   },
 ) {
-  const users = opts?.users ?? account.seats;
-  const courierEnabled = opts?.courierEnabled ?? true;
-  const apiEnabled = opts?.apiEnabled ?? true;
-  const ultraCount = Math.max(
+  const mix =
+    opts?.seatMix ??
+    ({
+      free: 0,
+      pro: 0,
+      max: opts?.plan === "max" ? (opts?.users ?? 1) : 0,
+      ultra: opts?.plan === "ultra" ? (opts?.users ?? 1) : 0,
+    } satisfies SeatMix);
+  if (opts?.plan && !opts?.seatMix) {
+    mix.free = 0;
+    mix.pro = 0;
+    mix.max = 0;
+    mix.ultra = 0;
+    if (opts.plan === "pro") {
+      mix.pro = opts.users ?? 1;
+    } else if (opts.plan === "max") {
+      mix.max = opts.users ?? 1;
+    } else if (opts.plan === "ultra") {
+      mix.ultra = opts.users ?? 1;
+    } else if (opts.plan === "free") {
+      mix.free = opts.users ?? 1;
+    }
+  }
+  const users = Object.values(mix).reduce((sum, count) => sum + count, 0);
+  const courier = ALL_PLANS.reduce(
+    (sum, plan) => sum + mix[plan] * courierSeat[plan],
     0,
-    opts?.ultraLicenses ?? opts?.ultraDevices ?? 0,
   );
-  const plan = opts?.plan ?? "pro";
-  const seat = courierSeat[plan];
-  const ultraSeat = PLATFORM_ULTRA;
-  const courier = courierEnabled ? users * seat : 0;
-  const devices = apiEnabled ? ultraCount : 0;
-  const api = devices * ultraSeat;
+  const primary =
+    opts?.plan ??
+    (mix.ultra ? "ultra" : mix.max ? "max" : mix.pro ? "pro" : "free");
+  const seat = courierSeat[primary];
   return {
     users,
     seat,
-    ultraSeat,
-    ultraDevices: devices,
-    ultraLicenses: devices,
-    license: ultraSeat,
+    seatMix: mix,
     courier,
-    api,
-    total: courier + api,
-    courierEnabled,
-    apiEnabled,
-    plan,
+    total: courier,
+    plan: primary,
     deployments: licensedHint(mode, users),
     apis: hostedApis,
   };
@@ -382,3 +537,7 @@ export const hostedApis = [
   "embeddings",
   "images.generations",
 ];
+
+export function productionTier(plan: BillingPlan) {
+  return capabilitiesFor(plan).productionServing;
+}

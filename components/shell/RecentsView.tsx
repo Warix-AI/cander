@@ -22,6 +22,7 @@ import {
   spaces,
 } from "@/lib/data";
 import { inferPlatformIntent } from "@/lib/platform-intent";
+import { developmentView } from "@/lib/product-copy";
 import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
 import type { PlatformNav, SpaceId, Thread } from "@/lib/types";
 
@@ -93,9 +94,9 @@ function PlatformRecents() {
     <div className="flex min-h-0 flex-1 flex-col">
       <DashFrame
         banner={false}
-        kicker="Courier Platform"
+        kicker={developmentView.kicker}
         title="Recents"
-        subtitle="Platform chats in this workspace."
+        subtitle="Development chats in this workspace."
         actions={<PlatformAskButton />}
       >
         <ScopeToggle

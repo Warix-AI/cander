@@ -197,7 +197,7 @@ function WorkspacePage({
         <p className="mt-1 text-[13px] text-muted-foreground">
           {entitlements.hasWorkspaceKnowledge
             ? `Sources Courier can use inside ${workspace.name}.`
-            : "Knowledge bases start on Plus."}
+            : "Knowledge bases start on Pro."}
         </p>
         {entitlements.hasWorkspaceKnowledge ? (
           <>

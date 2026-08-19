@@ -3,25 +3,23 @@
 import { Check, ChevronDown } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { Dropdown, MenuRow } from "@/components/ui/Controls";
+import { developmentView, homeView } from "@/lib/product-copy";
+import type { ProductId } from "@/lib/types";
 
-const products = [
-  {
-    id: "courier" as const,
-    label: "Courier",
-    description: "Chat, spaces, and projects",
-  },
-  {
-    id: "platform" as const,
-    label: "Courier Platform",
-    description: "APIs, keys, and hosting",
-  },
+const views: {
+  id: ProductId;
+  label: string;
+  description: string;
+}[] = [
+  { id: "courier", ...homeView },
+  { id: "platform", ...developmentView },
 ];
 
 export function ProductSwitcher() {
   const { product, setProduct, entitlements } = useApp();
-  const current = products.find((item) => item.id === product) ?? products[0];
-  const options = products.filter(
-    (item) => item.id === "courier" || entitlements.hasLimitedPlatform,
+  const current = views.find((item) => item.id === product) ?? views[0];
+  const options = views.filter(
+    (item) => item.id === "courier" || entitlements.canAccessDevelopment,
   );
 
   return (

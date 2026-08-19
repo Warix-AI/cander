@@ -88,7 +88,7 @@ export function BuildDashboard() {
       space="build"
       kicker={meta.kicker}
       title="Build"
-      subtitle="Apps, websites, and tasks — plus Platform APIs and keys for what you ship."
+      subtitle="Apps, websites, and tasks — development is integrated in the right panel as you build."
       actions={
         <>
           <SpaceSettingsButton space="build" />
@@ -104,14 +104,14 @@ export function BuildDashboard() {
             wrap
             value={scope}
             onChange={(value) => {
-              if (value === "models" && !entitlements.hasModelChoice) {
+              if (value === "models" && !entitlements.platformNavAllowed("models")) {
                 return;
               }
               setScope(value as BuildScope);
             }}
             options={buildScopeOptions().filter(
               (item) =>
-                item.id !== "models" || entitlements.hasModelChoice,
+                item.id !== "models" || entitlements.platformNavAllowed("models"),
             )}
           />
           {scope === "tasks" ? (

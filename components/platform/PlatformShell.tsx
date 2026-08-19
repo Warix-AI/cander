@@ -13,13 +13,18 @@ import {
   billingFor,
   hostingModes,
   money,
+  orgSeatMix,
+  planLabel,
 } from "@/lib/billing";
 import {
   apiKeys,
   platformApis,
   platformDocs,
+  workspaceResources,
   workspaces,
 } from "@/lib/data";
+import { memberName, sharedResourcesFor } from "@/lib/entitlements";
+import { nextPlanTier } from "@/lib/plan-entitlements";
 import { PlatformAskButton } from "@/components/platform/PlatformChatDock";
 import {
   PlatformPreviewGrid,
@@ -32,35 +37,42 @@ import {
   modelPreviews,
 } from "@/components/platform/PlatformPreview";
 import { DashFrame, Pill } from "@/components/spaces/ItemSet";
+import { developmentView } from "@/lib/product-copy";
 import type { HostingMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const requestSeries = [42, 48, 45, 61, 70, 68, 82, 90, 86, 98, 112, 108];
 
 export function PlatformMain() {
-  const { platformNav, hostingMode, apiEnabled, billingPlan, entitlements, ultraLicenses } =
-    useApp();
-  const orgUltra = ultraLicenses.filter((item) => item.scope === "org").length;
+  const {
+    platformNav,
+    hostingMode,
+    billingPlan,
+    entitlements,
+    orgMembers,
+    workspaceId,
+    actor,
+  } = useApp();
   const bill = billingFor(hostingMode, {
-    apiEnabled: orgUltra > 0,
+    seatMix: orgSeatMix(orgMembers),
     plan: billingPlan,
-    ultraLicenses: orgUltra,
   });
+  const shared = sharedResourcesFor(workspaceId, actor, entitlements);
 
   if (platformNav === "overview") {
     return (
       <Page
         title="Overview"
-        kicker="Courier Platform"
-        subtitle="Traffic, runtimes, and production unlock for this workspace."
+        kicker={developmentView.kicker}
+        subtitle="Traffic, runtimes, and production capacity for this workspace."
       >
         <div className="flex flex-wrap gap-px overflow-hidden rounded-[10px] border border-border bg-border">
           <Kpi label="Requests" value="1.24M" delta="+12% vs last month" />
           <Kpi label="Completion rate" value="81%" delta="+3.1 pts" />
           <Kpi label="Uptime" value="99.97%" />
           <Kpi
-            label="Platform"
-            value={apiEnabled ? money(bill.api) : "Limited"}
+            label="Development"
+            value={entitlements.devDepthLabel}
           />
         </div>
 
@@ -89,8 +101,8 @@ export function PlatformMain() {
             <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
               Active hosting is{" "}
               {hostingModes.find((item) => item.id === hostingMode)?.label}.
-              Seats and Ultra are billed in Settings → Plans. Hosting
-              only chooses where inference runs.
+              Seats are billed in Settings → Plans. Hosting only chooses where
+              inference runs.
             </p>
           </ChartCard>
           <ChartCard title="Runtime mix">
@@ -125,12 +137,35 @@ export function PlatformMain() {
   if (platformNav === "hosting") return <HostingPage />;
 
   if (platformNav === "models") {
+    const managed = workspaceResources.filter(
+      (item) => item.workspaceId === workspaceId && item.status === "active",
+    );
     return (
       <Page
         title="Models"
         kicker="Runtime"
         subtitle="Cloud, local, and on-device models this workspace can run."
       >
+        {managed.length ? (
+          <div className="mb-5 space-y-2">
+            {managed.map((item) => {
+              const owner = memberName(item.ownerId, orgMembers);
+              const authorized = shared.some((row) => row.id === item.id);
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-[10px] border border-border bg-card px-4 py-3 text-[13px]"
+                >
+                  <p className="font-medium tracking-[-0.01em]">{item.name}</p>
+                  <p className="mt-1 text-muted-foreground">
+                    Managed by {owner}
+                    {authorized ? " · authorized for you" : ""}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
         <PlatformPreviewGrid
           items={modelPreviews()}
           filters={modelFilters()}
@@ -195,7 +230,7 @@ export function PlatformMain() {
         subtitle={
           splitAccounts
             ? "Split by account — each workspace has its own request mix."
-            : "Pooled for this account. Split by workspace starts on Pro."
+            : "Pooled for this account. Split by workspace starts on Max."
         }
       >
         <div className="grid gap-4 lg:grid-cols-2">
@@ -226,7 +261,7 @@ export function PlatformMain() {
           ) : (
             <ChartCard title="This account">
               <p className="text-[13px] leading-relaxed text-muted-foreground">
-                Usage is pooled on Plus. Pro splits requests by workspace.
+                Usage is pooled on Pro. Max splits requests by workspace.
               </p>
               <p className="mt-4 font-mono text-[12px] text-muted-foreground">
                 1.24M requests · 12 weeks
@@ -246,11 +281,11 @@ export function PlatformMain() {
             : null}
           <Row k="Cloud requests" v="1.2M · metered" />
           <Row k="Local + on-device" v="Unlimited on your hardware" />
+          <Row k="Plan" v={planLabel(bill.plan)} />
           <Row
-            k="Ultra"
-            v={apiEnabled ? `${money(bill.ultraSeat)}/person` : "Limited"}
+            k="Seats"
+            v={`${bill.users} · ${money(bill.courier)}/month`}
           />
-          <Row k="Courier seats" v={`${bill.users} × ${money(bill.seat)}`} />
         </div>
       </Page>
     );
@@ -262,7 +297,7 @@ export function PlatformMain() {
     <Page
       title="Docs & SDK"
       kicker="Developers"
-      subtitle="Guides and SDKs for Courier Platform."
+      subtitle="Guides and SDKs for development in Courier."
     >
       <PlatformGrid>
         {platformDocs.map((item) => (
@@ -406,10 +441,12 @@ function KeysPage() {
 
 function TestAccessNote() {
   const { entitlements, openSettings } = useApp();
-  if (entitlements.hasFullPlatform) return null;
+  const next = nextPlanTier(entitlements.plan);
+  if (!next) return null;
   return (
     <div className="mb-5 rounded-[10px] border border-border bg-card px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
-      Limited Platform. Production APIs, live keys, and deployments need Ultra.{" "}
+      {entitlements.devDepthLabel} development on {planLabel(entitlements.plan)}.
+      Upgrade to {planLabel(next)} for the next tier.{" "}
       <button
         type="button"
         onClick={() => openSettings("plans")}
@@ -466,9 +503,8 @@ function HostingPage() {
       subtitle="Cloud, Local, and On-device — same product, different runtimes. Not a plan."
     >
       <p className="mb-5 max-w-2xl text-[13.5px] leading-relaxed text-muted-foreground">
-        Cloud is on every plan. Local and On-device start on Plus, and are
-        effectively unlimited on your hardware. Seats and Ultra live in
-        Settings.
+        Cloud is on every plan. Local and On-device start on Pro, and are
+        effectively unlimited on your hardware. Seats live in Settings.
       </p>
       <button
         type="button"

@@ -6,6 +6,7 @@ import {
   Database,
   Plug,
   Search,
+  Server,
   Shield,
   Sparkles,
   Waypoints,
@@ -21,9 +22,18 @@ import {
   subscribeBuildRuntime,
 } from "@/lib/build-runtime";
 import { connectors } from "@/lib/data";
+import { hostingLabel } from "@/lib/billing";
+import { runtimeLabel } from "@/lib/plan-entitlements";
+import { sharedResourcesFor } from "@/lib/entitlements";
+import {
+  developmentDeepView,
+  developmentIntegrated,
+  developmentView,
+} from "@/lib/product-copy";
 import { cn } from "@/lib/utils";
 
 type MoreSection =
+  | "development"
   | "analytics"
   | "database"
   | "ai"
@@ -37,6 +47,7 @@ const NAV: {
   label: string;
   icon: typeof BarChart3;
 }[] = [
+  { id: "development", label: "Development", icon: Server },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "database", label: "Database", icon: Database },
   { id: "ai", label: "AI", icon: Sparkles },
@@ -58,7 +69,7 @@ const metrics = [
 ] as const;
 
 export function BuildMore() {
-  const [section, setSection] = useState<MoreSection>("analytics");
+  const [section, setSection] = useState<MoreSection>("development");
 
   return (
     <div className="flex h-full min-h-0">
@@ -88,6 +99,7 @@ export function BuildMore() {
         })}
       </nav>
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-background px-8 py-8">
+        {section === "development" ? <DevelopmentPane /> : null}
         {section === "analytics" ? <AnalyticsPane /> : null}
         {section === "database" ? <DatabasePane /> : null}
         {section === "ai" ? <AiPane /> : null}
@@ -97,6 +109,48 @@ export function BuildMore() {
         {section === "seo" ? <SeoPane /> : null}
       </div>
     </div>
+  );
+}
+
+function DevelopmentPane() {
+  const selectedModel = useSyncExternalStore(
+    subscribeBuildRuntime,
+    getBuildRuntimeSnapshot,
+    getBuildRuntimeServerSnapshot,
+  );
+  const { hostingMode, setProduct, entitlements, workspaceId, actor } = useApp();
+  const shared = sharedResourcesFor(workspaceId, actor, entitlements);
+  const usingShared = shared.find((item) => item.kind === "model");
+
+  return (
+    <Section title="Development" body={developmentIntegrated}>
+      <Fact label="Hosting" value={hostingLabel(hostingMode)} />
+      <Fact label="Model" value={selectedModel} />
+      {usingShared ? (
+        <Fact
+          label="Shared runtime"
+          value={`Using ${usingShared.name} (shared)`}
+        />
+      ) : null}
+      <Fact label="API routes" value="Provisioned" />
+      <Fact label="Keys" value="Managed by Courier" />
+      <Fact
+        label="Runtime"
+        value={runtimeLabel(entitlements.plan)}
+      />
+      <div className="border-t border-border px-4 py-4">
+        <p className="text-[13px] leading-relaxed text-muted-foreground">
+          {developmentDeepView}
+        </p>
+        <button
+          type="button"
+          onClick={() => setProduct("platform")}
+          className="mt-4 inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:bg-foreground"
+        >
+          Open {developmentView.label} view
+        </button>
+      </div>
+    </Section>
   );
 }
 
@@ -260,8 +314,8 @@ function AiPane() {
       title="AI"
       body={
         canChoose
-          ? "Models, APIs, and keys from Courier Platform — pick what this app uses when it runs."
-          : "This plan runs on one shared model. Pro can choose from the catalog."
+          ? "Models and APIs are already wired in. Pick what this app uses when it runs."
+          : "This plan runs on one shared model. Max can choose from the catalog."
       }
     >
       <Fact label="Default model" value={selectedModel} />
