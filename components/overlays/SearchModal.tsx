@@ -172,6 +172,13 @@ export function SearchModal() {
         group: "Actions",
         run: () => openBrowser({ chat: true }),
       },
+      {
+        id: "action-new-personal",
+        title: "New Personal",
+        meta: "Today, money, goals, the car",
+        group: "Actions",
+        run: () => newChat("personal"),
+      },
     ];
     if (view === "browser") {
       actions.unshift({

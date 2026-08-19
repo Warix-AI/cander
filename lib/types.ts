@@ -227,6 +227,7 @@ export type AssetFile = {
   projectId?: string;
   workspaceId: string;
   updatedAt: string;
+  cover?: string;
 };
 
 export type Workspace = {

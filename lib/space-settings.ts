@@ -836,12 +836,12 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
   },
   personal: {
     title: "Personal",
-    subtitle: "Today, money, and health — separate from product work.",
+    subtitle: "Today, money, health, goals, and the car — separate from product work.",
     sections: [
       {
         id: "areas",
         label: "Areas",
-        description: "What Personal can track.",
+        description: "What Personal can track. Add more as life needs them.",
         items: [
           {
             id: "today",
@@ -868,6 +868,24 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
             preview: "theme",
             themeClass: "media-c",
             colors: ["#14B8A6", "#CCFBF1"],
+            active: true,
+          },
+          {
+            id: "goals",
+            name: "Goals",
+            detail: "What you’re finishing this year, and what’s slipping.",
+            preview: "theme",
+            themeClass: "media-d",
+            colors: ["#818CF8", "#EEF2FF"],
+            active: true,
+          },
+          {
+            id: "car",
+            name: "Car",
+            detail: "Registration, insurance, and service.",
+            preview: "theme",
+            themeClass: "media-b",
+            colors: ["#38BDF8", "#0F172A"],
             active: true,
           },
         ],

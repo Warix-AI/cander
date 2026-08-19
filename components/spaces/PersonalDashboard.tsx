@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import {
+  DashBtn,
   DashFrame,
   Pill,
   ScopeToggle,
@@ -13,39 +14,143 @@ import { StatsBanner } from "@/components/spaces/StatsBanner";
 import { projects, spaceStats } from "@/lib/data";
 import type { Project } from "@/lib/types";
 
-type PersonalScope = "today" | "money" | "health";
+type PersonalScope = "today" | "money" | "health" | "goals" | "car";
 
-const todayPrompts = [
-  "What’s on my plate today?",
-  "Plan this weekend.",
-  "Any birthdays or reservations coming up?",
+const areaById: Record<string, PersonalScope> = {
+  "weekend-plans": "today",
+  subscriptions: "money",
+  runway: "money",
+  "q3-invoices": "money",
+  "infra-spend": "money",
+  "ops-close": "money",
+  "benefits-review": "health",
+  "care-plan": "health",
+  "ops-wellness": "health",
+  "annual-goals": "goals",
+  "car-service": "car",
+};
+
+const areas: {
+  id: PersonalScope;
+  label: string;
+  cta: string;
+  kicker: string;
+  prompts: string[];
+  empty: string;
+  stats: { label: string; value: string; delta?: string }[];
+}[] = [
+  {
+    id: "today",
+    label: "Today",
+    cta: "New personal",
+    kicker: "Plans, bills, and whatever is due",
+    stats: spaceStats.personal.stats,
+    prompts: [
+      "What’s on my plate today?",
+      "Plan this weekend.",
+      "Any birthdays or reservations coming up?",
+    ],
+    empty: "Nothing on the list yet. Ask Courier about today, this weekend, or what’s due.",
+  },
+  {
+    id: "money",
+    label: "Money",
+    cta: "New money",
+    kicker: "Books, invoices, and spend",
+    stats: spaceStats.finances.stats,
+    prompts: [
+      "Summarize this month's invoices and what's still unpaid.",
+      "What's our runway and burn looking like?",
+      "Flag anything that needs a receipt or approval.",
+    ],
+    empty: "Nothing tracked yet. Ask Courier about invoices, runway, or spend.",
+  },
+  {
+    id: "health",
+    label: "Health",
+    cta: "New health",
+    kicker: "Care plans, benefits, and follow-ups",
+    stats: spaceStats.health.stats,
+    prompts: [
+      "Draft a care-plan recap from last quarter's notes.",
+      "Compare our benefits options for open enrollment.",
+      "What follow-ups are due this week?",
+    ],
+    empty: "Nothing tracked yet. Ask Courier about benefits, care plans, or wellness.",
+  },
+  {
+    id: "goals",
+    label: "Goals",
+    cta: "New goal",
+    kicker: "What you’re actually trying to finish",
+    stats: [
+      { label: "This year", value: "4" },
+      { label: "On track", value: "2" },
+      { label: "Due soon", value: "1" },
+      { label: "Parked", value: "1" },
+    ],
+    prompts: [
+      "What should I finish this quarter?",
+      "Break this year’s goals into weekly moves.",
+      "What’s slipping that I still care about?",
+    ],
+    empty: "No goals yet. Ask Courier to set one, recap the year, or pick what to drop.",
+  },
+  {
+    id: "car",
+    label: "Car",
+    cta: "New car",
+    kicker: "Registration, insurance, and service",
+    stats: [
+      { label: "Service due", value: "Oct" },
+      { label: "Insurance", value: "Active" },
+      { label: "Registration", value: "Mar" },
+      { label: "Open items", value: "2" },
+    ],
+    prompts: [
+      "When is the car due for service?",
+      "What does insurance cover if I get a loaner?",
+      "Remind me before registration lapses.",
+    ],
+    empty: "Nothing on the car yet. Ask Courier about service, insurance, or registration.",
+  },
 ];
 
-const moneyPrompts = [
-  "Summarize this month's invoices and what's still unpaid.",
-  "What's our runway and burn looking like?",
-  "Flag anything that needs a receipt or approval.",
-];
-
-const healthPrompts = [
-  "Draft a care-plan recap from last quarter's notes.",
-  "Compare our benefits options for open enrollment.",
-  "What follow-ups are due this week?",
-];
+function areaOf(item: Project): PersonalScope {
+  if (areaById[item.id]) return areaById[item.id];
+  if (item.space === "finances") return "money";
+  if (item.space === "health") return "health";
+  return "today";
+}
 
 export function PersonalDashboard() {
-  const { spaceId, newChat, sendMessage, armChatInterface } = useApp();
+  const { spaceId, workspaceId, newChat, sendMessage, armChatInterface } =
+    useApp();
   const [scope, setScope] = useState<PersonalScope>("today");
   const meta = spaceStats.personal;
+  const area = areas.find((item) => item.id === scope) ?? areas[0];
 
   useEffect(() => {
     if (spaceId === "health") setScope("health");
     else if (spaceId === "finances") setScope("money");
   }, [spaceId]);
 
-  const ask = (text: string) => {
+  const items = projects.filter(
+    (item) =>
+      item.workspaceId === workspaceId &&
+      (item.space === "personal" ||
+        item.space === "finances" ||
+        item.space === "health") &&
+      areaOf(item) === scope,
+  );
+
+  const start = () => {
     newChat("personal");
     armChatInterface("personal");
+  };
+
+  const ask = (text: string) => {
+    start();
     sendMessage(text, { space: "personal" });
   };
 
@@ -54,110 +159,31 @@ export function PersonalDashboard() {
       space="personal"
       kicker={meta.kicker}
       title="Personal"
-      subtitle="Today, money, and health — kept separate from product work."
-      actions={<SpaceSettingsButton space="personal" />}
+      subtitle="Today, money, health, goals, and the car — kept separate from product work."
+      actions={
+        <>
+          <SpaceSettingsButton space="personal" />
+          <DashBtn primary onClick={start}>
+            {area.cta}
+          </DashBtn>
+        </>
+      }
     >
       <div>
         <ScopeToggle
+          wrap
           value={scope}
           onChange={(value) => setScope(value as PersonalScope)}
-          options={[
-            { id: "today", label: "Today" },
-            { id: "money", label: "Money" },
-            { id: "health", label: "Health" },
-          ]}
+          options={areas.map((item) => ({ id: item.id, label: item.label }))}
         />
       </div>
 
-      {scope === "today" ? (
-        <TodayPanel onAsk={ask} />
-      ) : scope === "money" ? (
-        <MoneyPanel onAsk={ask} />
-      ) : (
-        <HealthPanel onAsk={ask} />
-      )}
-    </DashFrame>
-  );
-}
-
-function TodayPanel({ onAsk }: { onAsk: (text: string) => void }) {
-  const { workspaceId } = useApp();
-  const items = projects.filter(
-    (item) => item.space === "personal" && item.workspaceId === workspaceId,
-  );
-
-  return (
-    <PersonalPanel
-      kicker="Plans, bills, and whatever is due"
-      stats={spaceStats.personal.stats}
-      prompts={todayPrompts}
-      items={items}
-      onAsk={onAsk}
-      empty="Nothing on the list yet. Ask Courier about today, this weekend, or what’s due."
-    />
-  );
-}
-
-function MoneyPanel({ onAsk }: { onAsk: (text: string) => void }) {
-  const { workspaceId } = useApp();
-  const items = projects.filter(
-    (item) => item.space === "finances" && item.workspaceId === workspaceId,
-  );
-
-  return (
-    <PersonalPanel
-      kicker="Books, invoices, and spend"
-      stats={spaceStats.finances.stats}
-      prompts={moneyPrompts}
-      items={items}
-      onAsk={onAsk}
-      empty="Nothing tracked yet. Ask Courier about invoices, runway, or spend."
-    />
-  );
-}
-
-function HealthPanel({ onAsk }: { onAsk: (text: string) => void }) {
-  const { workspaceId } = useApp();
-  const items = projects.filter(
-    (item) => item.space === "health" && item.workspaceId === workspaceId,
-  );
-
-  return (
-    <PersonalPanel
-      kicker="Care plans, benefits, and follow-ups"
-      stats={spaceStats.health.stats}
-      prompts={healthPrompts}
-      items={items}
-      onAsk={onAsk}
-      empty="Nothing tracked yet. Ask Courier about benefits, care plans, or wellness."
-    />
-  );
-}
-
-function PersonalPanel({
-  kicker,
-  stats,
-  prompts,
-  items,
-  onAsk,
-  empty,
-}: {
-  kicker: string;
-  stats: { label: string; value: string; delta?: string }[];
-  prompts: string[];
-  items: Project[];
-  onAsk: (text: string) => void;
-  empty: string;
-}) {
-  return (
-    <>
-      <p className="mt-4 text-[14px] text-muted-foreground">{kicker}</p>
-
-      <StatsBanner stats={stats} />
+      <p className="mt-4 text-[14px] text-muted-foreground">{area.kicker}</p>
+      <StatsBanner stats={area.stats} />
 
       <div className="mt-6 flex flex-wrap gap-2">
-        {prompts.map((prompt) => (
-          <Pill key={prompt} onClick={() => onAsk(prompt)}>
+        {area.prompts.map((prompt) => (
+          <Pill key={prompt} onClick={() => ask(prompt)}>
             {prompt}
           </Pill>
         ))}
@@ -173,7 +199,7 @@ function PersonalPanel({
               <button
                 key={item.id}
                 type="button"
-                onClick={() => onAsk(`Help me with ${item.name.toLowerCase()}.`)}
+                onClick={() => ask(`Help me with ${item.name.toLowerCase()}.`)}
                 className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 first:rounded-t-[10px] last:rounded-b-[10px] hover:bg-muted/60"
               >
                 <span className="min-w-0 flex-1">
@@ -194,10 +220,12 @@ function PersonalPanel({
               </button>
             ))
           ) : (
-            <p className="px-4 py-6 text-[13px] text-muted-foreground">{empty}</p>
+            <p className="px-4 py-6 text-[13px] text-muted-foreground">
+              {area.empty}
+            </p>
           )}
         </div>
       </section>
-    </>
+    </DashFrame>
   );
 }

@@ -289,6 +289,50 @@ export function inferIntent(
 
   if (
     includesAny(text, [
+      "goal",
+      "goals",
+      "resolutions",
+    ])
+  ) {
+    const project =
+      mentioned?.id === "annual-goals"
+        ? mentioned
+        : projects.find(
+            (item) =>
+              item.id === "annual-goals" && item.workspaceId === workspaceId,
+          );
+    return finish({
+      space: "personal",
+      projectId: project?.id ?? mentioned?.id,
+      reply: `Opened Personal → Goals${project ? ` on ${project.name}` : ""}. I’ll keep this with the rest of life admin.`,
+    });
+  }
+
+  if (
+    includesAny(text, [
+      "car",
+      "registration",
+      "oil change",
+      "loaner",
+      "dmv",
+    ])
+  ) {
+    const project =
+      mentioned?.id === "car-service"
+        ? mentioned
+        : projects.find(
+            (item) =>
+              item.id === "car-service" && item.workspaceId === workspaceId,
+          );
+    return finish({
+      space: "personal",
+      projectId: project?.id ?? mentioned?.id,
+      reply: `Opened Personal → Car${project ? ` on ${project.name}` : ""}. Service, insurance, and registration stay with this chat.`,
+    });
+  }
+
+  if (
+    includesAny(text, [
       "image",
       "photo",
       "video",

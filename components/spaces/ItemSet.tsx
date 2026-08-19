@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { LayoutGrid, List, Pin, Settings } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { NavToggle } from "@/components/shell/NavToggle";
-import { SpaceBanner, BannerPicker } from "@/components/spaces/SpaceBanner";
+import { SpaceBanner } from "@/components/spaces/SpaceBanner";
 import type { SpaceId, SpaceLayout } from "@/lib/types";
 import type { BannerKey } from "@/lib/space-banners";
 import { cn } from "@/lib/utils";
@@ -323,14 +323,11 @@ export function DashFrame({
                 subtitle={subtitle}
                 titleAction={titleAction}
                 actions={
-                  <>
-                    <BannerPicker space={bannerSpace} onBanner />
-                    {actions ? (
-                      <span className="flex flex-wrap items-center gap-2 [&_button]:border-white/25 [&_button]:bg-white/10 [&_button]:text-white [&_button]:hover:bg-white/20 [&_button.bg-primary]:border-transparent [&_button.bg-primary]:bg-white [&_button.bg-primary]:text-neutral-950 [&_button.bg-primary]:hover:bg-white/90">
-                        {actions}
-                      </span>
-                    ) : null}
-                  </>
+                  actions ? (
+                    <span className="flex flex-wrap items-center gap-2 [&_button]:border-white/25 [&_button]:bg-white/10 [&_button]:text-white [&_button]:hover:bg-white/20 [&_button.bg-primary]:border-transparent [&_button.bg-primary]:bg-white [&_button.bg-primary]:text-neutral-950 [&_button.bg-primary]:hover:bg-white/90">
+                      {actions}
+                    </span>
+                  ) : null
                 }
                 onBanner
               />

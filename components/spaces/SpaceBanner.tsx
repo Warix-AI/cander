@@ -4,7 +4,6 @@ import { useRef, useSyncExternalStore } from "react";
 import { ImagePlus } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { NavToggle } from "@/components/shell/NavToggle";
-import { Dropdown } from "@/components/ui/Controls";
 import {
   BANNER_PRESETS,
   bannerClass,
@@ -155,54 +154,6 @@ function BannerOptions({
         />
         Upload custom
       </button>
-    </>
-  );
-}
-
-export function BannerPicker({ space, onBanner = false }: { space: BannerKey; onBanner?: boolean }) {
-  const input = useRef<HTMLInputElement>(null);
-
-  return (
-    <>
-      <BannerUploadInput space={space} inputRef={input} />
-      <Dropdown
-        align="end"
-        matchTrigger={false}
-        menuClassName="w-[13.5rem] p-2"
-        trigger={({ open, toggle }) => (
-          <button
-            type="button"
-            aria-label="Change banner"
-            aria-expanded={open}
-            onClick={toggle}
-            className={cn(
-              "inline-flex h-10 w-10 items-center justify-center rounded-[10px] border transition-colors duration-200",
-              onBanner
-                ? "border-white/25 bg-white/10 text-white hover:bg-white/20"
-                : "border-foreground/15 hover:bg-muted",
-            )}
-          >
-            <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
-          </button>
-        )}
-      >
-        {(close) => (
-          <>
-            <p className="px-1.5 pb-1.5 text-[11px] tracking-[0.06em] text-muted-foreground uppercase">
-              Background
-            </p>
-            <BannerOptions
-              space={space}
-              compact
-              onPick={close}
-              onUpload={() => {
-                close();
-                window.setTimeout(() => input.current?.click(), 0);
-              }}
-            />
-          </>
-        )}
-      </Dropdown>
     </>
   );
 }
