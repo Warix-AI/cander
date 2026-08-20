@@ -68,19 +68,27 @@ function generatedItemsFor(
   return templates
     .filter((item) => item.lanes.includes(scope))
     .map((item) => ({
-      ...item,
-      id: `gen-${connectorId}-${item.id}`,
+      lanes: item.lanes,
+      title: item.title,
+      summary: item.summary,
+      meta: item.meta,
+      badge: item.badge,
+      tone: item.tone,
+      prompt: item.prompt,
+      id: `gen-${connectorId}-${item.key}`,
       workspaceId,
       connectorId,
     }));
 }
 
-const connectorWorkTemplates: Record<
-  string,
-  Omit<WorkItem, "id" | "workspaceId" | "connectorId">[]
-> = {
+type WorkItemTemplate = Omit<WorkItem, "id" | "workspaceId" | "connectorId"> & {
+  key: string;
+};
+
+const connectorWorkTemplates: Record<string, WorkItemTemplate[]> = {
   notion: [
     {
+      key: "shared",
       lanes: ["today", "inbox"],
       title: "Notion — pages shared with you",
       summary: "Two docs need a review before the launch sync.",
@@ -92,6 +100,7 @@ const connectorWorkTemplates: Record<
   ],
   linear: [
     {
+      key: "issues",
       lanes: ["today", "inbox"],
       title: "Linear — assigned issues",
       summary: "Three issues tagged to you this morning.",
@@ -103,6 +112,7 @@ const connectorWorkTemplates: Record<
   ],
   figma: [
     {
+      key: "comments",
       lanes: ["today", "followups"],
       title: "Figma — comments waiting",
       summary: "Design left two comments on the hero frame.",
@@ -114,6 +124,7 @@ const connectorWorkTemplates: Record<
   ],
   gdrive: [
     {
+      key: "shared",
       lanes: ["today", "inbox"],
       title: "Drive — shared with me",
       summary: "A proposal draft landed in Shared drives.",
