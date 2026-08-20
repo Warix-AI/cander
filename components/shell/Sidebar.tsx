@@ -1,9 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { Ellipsis, Pin, SquarePen } from "lucide-react";
+import { useRef, useState, type ReactNode } from "react";
+import { Ellipsis, GripVertical, Pin, SquarePen } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
-import { VoiceControl } from "@/components/shell/VoiceControl";
 import { AccountMenu } from "@/components/shell/AccountMenu";
 import { ProductSwitcher } from "@/components/shell/ProductSwitcher";
 import { WindowChrome } from "@/components/shell/WindowChrome";
@@ -20,6 +19,7 @@ import {
   resolveSidebarNav,
   type SidebarNavId,
 } from "@/lib/spaces";
+import type { PinKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { memberSpaces } from "@/lib/workspace-policy";
 
@@ -51,6 +51,7 @@ export function Sidebar() {
     sidebarLayout,
     isPinned,
     togglePin,
+    reorderPins,
     openThread,
     openProject,
     openConnector,
@@ -233,6 +234,8 @@ export function Sidebar() {
               {pinnedItems.map((item) => (
                 <PinnedRow
                   key={`${item.kind}-${item.id}`}
+                  kind={item.kind}
+                  id={item.id}
                   title={item.title}
                   leading={
                     item.kind === "connector" && item.icon ? (
@@ -253,6 +256,7 @@ export function Sidebar() {
                     else openProject(item.id);
                   }}
                   onPin={() => togglePin(item.kind, item.id)}
+                  onReorder={reorderPins}
                 />
               ))}
             </div>
@@ -261,7 +265,6 @@ export function Sidebar() {
       )}
 
       <div className="mt-auto p-2">
-        <VoiceControl />
         <AccountMenu />
       </div>
     </aside>
@@ -335,30 +338,66 @@ function MoreMenu({
 }
 
 function PinnedRow({
+  kind,
+  id,
   title,
   active,
   pinned,
   onOpen,
   onPin,
+  onReorder,
   leading,
 }: {
+  kind: PinKind;
+  id: string;
   title: string;
   active: boolean;
   pinned: boolean;
   onOpen: () => void;
   onPin: () => void;
+  onReorder: (
+    from: { kind: PinKind; id: string },
+    to: { kind: PinKind; id: string },
+  ) => void;
   leading?: ReactNode;
 }) {
+  const [dragging, setDragging] = useState(false);
+  const [over, setOver] = useState(false);
+  const dragKey = `${kind}:${id}`;
+  const skipClick = useRef(false);
+
   return (
     <div
       className={cn(
         "group flex w-full items-center rounded-lg transition-colors duration-200",
         active ? "bg-sidebar-accent" : "hover:bg-sidebar-accent",
+        dragging && "opacity-50",
+        over && !dragging && "ring-1 ring-foreground/20",
       )}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        setOver(false);
+        const raw =
+          event.dataTransfer.getData("text/pin") ||
+          event.dataTransfer.getData("text/plain");
+        if (!raw || raw === dragKey) return;
+        const [fromKind, fromId] = raw.split(":") as [PinKind, string];
+        if (!fromKind || !fromId) return;
+        onReorder({ kind: fromKind, id: fromId }, { kind, id });
+      }}
     >
       <button
         type="button"
-        onClick={onOpen}
+        onClick={() => {
+          if (skipClick.current) return;
+          onOpen();
+        }}
         className={cn(
           "flex min-w-0 flex-1 items-center gap-2 truncate px-3 py-1.5 text-left text-[13.5px]",
           active && "font-medium",
@@ -366,6 +405,34 @@ function PinnedRow({
       >
         {leading}
         {title}
+      </button>
+      <button
+        type="button"
+        draggable
+        aria-label={`Reorder ${title}`}
+        title="Drag to reorder"
+        onDragStart={(event) => {
+          skipClick.current = true;
+          setDragging(true);
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", dragKey);
+          event.dataTransfer.setData("text/pin", dragKey);
+        }}
+        onDragEnd={() => {
+          setDragging(false);
+          setOver(false);
+          window.setTimeout(() => {
+            skipClick.current = false;
+          }, 0);
+        }}
+        className={cn(
+          "inline-flex h-6 w-5 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground transition-opacity duration-200 active:cursor-grabbing",
+          active || dragging
+            ? "opacity-100"
+            : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+        )}
+      >
+        <GripVertical className="h-3.5 w-3.5" strokeWidth={1.8} />
       </button>
       <button
         type="button"

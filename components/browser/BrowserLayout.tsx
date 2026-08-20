@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Monitor,
   MousePointer2,
+  PanelRight,
   Plus,
   RotateCw,
   Search,
@@ -48,6 +49,7 @@ export function BrowserLayout() {
     sidebarOpen,
     mobileNav,
     setBrowserPage,
+    newChat,
   } = useApp();
   const [tabs, setTabs] = useState(seedTabs);
   const [activeId, setActiveId] = useState(seedTabs[0].id);
@@ -150,6 +152,15 @@ export function BrowserLayout() {
             onClose={closeTab}
             onAdd={addTab}
           />
+          <button
+            type="button"
+            aria-label="Close browser"
+            title="Close browser"
+            onClick={() => newChat()}
+            className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <PanelRight className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </button>
         </div>
 
         <BrowserToolbar

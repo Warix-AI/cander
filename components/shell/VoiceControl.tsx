@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
-import { VoiceOrb } from "@/components/shell/VoiceOrb";
+import { VoiceOrb, VoiceWaveform } from "@/components/shell/VoiceOrb";
 import type { VoiceAnchor } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 const ORB_SIZE = 45;
 
@@ -63,13 +64,42 @@ export function VoiceControl() {
   if (!inSidebar || !entitlements.hasVoice) return null;
 
   return (
-    <div className="mb-2 px-3">
-      <VoiceOrb
-        active={voiceActive}
+    <div className="mb-1 px-1">
+      <button
+        type="button"
+        aria-pressed={voiceActive}
+        aria-label={voiceActive ? "Stop voice" : "Start voice"}
         onClick={toggleVoice}
-        size={38}
-        label={voiceActive ? "Hide orb" : "Show orb"}
-      />
+        className={cn(
+          "flex w-full items-center gap-3 rounded-[10px] px-2 py-2 text-left transition-colors duration-200",
+          voiceActive
+            ? "bg-sidebar-accent"
+            : "hover:bg-sidebar-accent",
+        )}
+      >
+        <VoiceOrb
+          active={voiceActive}
+          as="div"
+          size={36}
+          label={voiceActive ? "Listening" : "Voice"}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[12.5px] font-medium tracking-[-0.01em]">
+            Voice
+          </span>
+          <span className="block truncate text-[11px] text-muted-foreground">
+            {voiceActive ? "Listening…" : "Talk with Courier"}
+          </span>
+        </span>
+        {voiceActive ? (
+          <VoiceWaveform
+            bars={5}
+            height={14}
+            className="w-8 shrink-0"
+            barClassName="bg-[oklch(0.62_0.16_260)] dark:bg-[oklch(0.78_0.12_252)]"
+          />
+        ) : null}
+      </button>
     </div>
   );
 }
@@ -80,11 +110,17 @@ export function FloatingVoiceDock() {
     voiceAnchor,
     toggleVoice,
     setVoiceAnchor,
-    sidebarOpen,
-    mobileNav,
     entitlements,
+    view,
+    thread,
+    drafting,
+    product,
   } = useApp();
-  const inSidebar = sidebarOpen || mobileNav;
+  const onNewChatLanding =
+    product === "courier" &&
+    view === "chat" &&
+    !thread &&
+    !drafting;
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const movedRef = useRef(false);
@@ -97,7 +133,7 @@ export function FloatingVoiceDock() {
     if (!dragging) setPos(null);
   }, [voiceAnchor, dragging]);
 
-  if (inSidebar || !voiceActive || !entitlements.hasVoice) return null;
+  if (!voiceActive || onNewChatLanding || !entitlements.hasVoice) return null;
 
   const point = pos ?? settle();
   const half = ORB_SIZE / 2;

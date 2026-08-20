@@ -380,6 +380,25 @@ export function toggleStoredPin(kind: PinKind, id: string) {
   );
 }
 
+export function reorderStoredPins(
+  from: { kind: PinKind; id: string },
+  to: { kind: PinKind; id: string },
+) {
+  hydratePins();
+  if (from.kind === to.kind && from.id === to.id) return;
+  const fromIndex = pins.findIndex(
+    (item) => item.kind === from.kind && item.id === from.id,
+  );
+  const toIndex = pins.findIndex(
+    (item) => item.kind === to.kind && item.id === to.id,
+  );
+  if (fromIndex < 0 || toIndex < 0) return;
+  const next = [...pins];
+  const [item] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, item);
+  persistPins(next);
+}
+
 const sidebarListeners = new Set<Listener>();
 let sidebarLayout: SidebarLayout = defaultSidebarLayout;
 let sidebarHydrated = false;

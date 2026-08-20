@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Class-based dark mode (matches ThemeProvider / html.dark) */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* RecursionAI / Courier brand tokens */
 
 :root {
@@ -341,8 +344,13 @@ select:focus-visible {
 }
 
 .voice-orb {
+  position: relative;
   overflow: hidden;
   border-radius: 9999px;
+}
+
+.voice-orb-live {
+  box-shadow: 0 0 14px oklch(0.7 0.15 45 / 0.4);
 }
 
 @keyframes voice-pulse {

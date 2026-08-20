@@ -54,6 +54,7 @@ import {
   subscribeSidebar,
   subscribeWorkspace,
   toggleStoredPin,
+  reorderStoredPins,
 } from "@/lib/session";
 import {
   getMembersServerSnapshot,
@@ -225,6 +226,10 @@ type AppContextValue = {
   pins: Pin[];
   isPinned: (kind: PinKind, id: string) => boolean;
   togglePin: (kind: PinKind, id: string) => void;
+  reorderPins: (
+    from: { kind: PinKind; id: string },
+    to: { kind: PinKind; id: string },
+  ) => void;
   sidebarLayout: SidebarLayout;
   moveSidebarNav: (id: SidebarNavId, dir: -1 | 1) => void;
   voiceActive: boolean;
@@ -1291,6 +1296,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toggleStoredPin(kind, id);
   }, []);
 
+  const reorderPins = useCallback(
+    (
+      from: { kind: PinKind; id: string },
+      to: { kind: PinKind; id: string },
+    ) => {
+      reorderStoredPins(from, to);
+    },
+    [],
+  );
+
   const moveNavItem = useCallback(
     (id: SidebarNavId, dir: -1 | 1) => {
       persistMoveSidebarNav(
@@ -1720,6 +1735,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleSpaceLibrary,
       isPinned,
       togglePin,
+      reorderPins,
       moveSidebarNav: moveNavItem,
       openProject,
       openProjectChat,
@@ -1837,6 +1853,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleSpaceLibrary,
       isPinned,
       togglePin,
+      reorderPins,
       moveNavItem,
       openProject,
       openProjectChat,

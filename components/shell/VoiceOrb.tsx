@@ -17,7 +17,11 @@ export function VoiceOrb({
   label?: string;
   as?: "button" | "div";
 }) {
-  const shared = cn("voice-orb shrink-0", className);
+  const shared = cn(
+    "voice-orb relative shrink-0 overflow-hidden rounded-full",
+    active && "voice-orb-live",
+    className,
+  );
   const style = { width: size, height: size };
   const orb = (
     <img
@@ -67,12 +71,15 @@ export function VoiceWaveform({
   height?: number;
 }) {
   return (
-    <div className={cn("flex w-full items-end gap-[2px]", className)} style={{ height }}>
+    <div
+      className={cn("flex w-full items-end gap-[2px]", className)}
+      style={{ height }}
+    >
       {Array.from({ length: bars }).map((_, index) => (
         <span
           key={index}
           className={cn(
-            "voice-bar flex-1 rounded-full bg-sky-300/90",
+            "voice-bar flex-1 rounded-full bg-[oklch(0.72_0.12_252)]",
             barClassName,
           )}
           style={{

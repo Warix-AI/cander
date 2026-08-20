@@ -1,9 +1,8 @@
 "use client";
 
-import { Building2, Blocks, CreditCard, LogOut, Settings } from "lucide-react";
+import { Building2, Blocks, Settings } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { Dropdown } from "@/components/ui/Controls";
-import { PreviewAccount } from "@/components/settings/PreviewAccount";
 import { account } from "@/lib/data";
 import { planLabel } from "@/lib/billing";
 import { cn } from "@/lib/utils";
@@ -78,24 +77,6 @@ export function AccountMenu() {
               }}
             />
           ) : null}
-          {entitlements.showInviteWall ? (
-            <MenuItem
-              icon={Building2}
-              label={`Join ${account.name}`}
-              onClick={() => {
-                close();
-                openOverlay("invite-wall");
-              }}
-            />
-          ) : null}
-          <MenuItem
-            icon={CreditCard}
-            label="Plans"
-            onClick={() => {
-              close();
-              openSettings("plans");
-            }}
-          />
           <MenuItem
             icon={Settings}
             label="Settings"
@@ -105,10 +86,6 @@ export function AccountMenu() {
               openSettings();
             }}
           />
-          <div className="mt-2 border-t border-border px-2 pt-2 pb-1">
-            <PreviewAccount compact onSelect={close} />
-          </div>
-          <MenuItem icon={LogOut} label="Log out" onClick={close} />
         </>
       )}
     </Dropdown>
