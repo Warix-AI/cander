@@ -1,29 +1,38 @@
+import { StatLine } from "@/components/panels/Bits";
+import {
+  HandshakeBadge,
+  HandshakeCard,
+} from "@/components/panels/handshake/HandshakeCard";
 import { handshakeCapabilities } from "@/lib/handshake";
-import { cn } from "@/lib/utils";
 
 export function CapabilitiesPage() {
   return (
-    <div className="space-y-4 p-4">
-      <p className="rounded-[10px] border border-border bg-muted/40 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
-        {handshakeCapabilities.disclaimer}
+    <div className="space-y-3 p-4">
+      <p className="text-[13px] text-muted-foreground">
+        {handshakeCapabilities.intro}
       </p>
+
       {handshakeCapabilities.items.map((item) => (
-        <section
-          key={item.name}
-          className="flex items-center justify-between rounded-[10px] border border-border bg-card px-4 py-3"
-        >
-          <p className="text-[14px] font-medium tracking-[-0.01em]">{item.name}</p>
-          <span
-            className={cn(
-              "rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
-              item.status === "Active"
-                ? "border-chart-2/30 bg-chart-2/10 text-chart-2"
-                : "border-chart-3/30 bg-chart-3/10 text-chart-3",
-            )}
-          >
-            {item.status}
-          </span>
-        </section>
+        <HandshakeCard key={item.name}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[14px] font-medium">{item.name}</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                {item.description}
+              </p>
+            </div>
+            <HandshakeBadge
+              tone={item.status === "Enabled" ? "success" : "warn"}
+            >
+              {item.status === "Enabled" ? "✓ Enabled" : item.status}
+            </HandshakeBadge>
+          </div>
+          <div className="mt-3 space-y-1 border-t border-border pt-3">
+            <StatLine label="Used" value={`${item.usage} times`} />
+            <StatLine label="Connected to" value={item.connectedSystem} />
+            <StatLine label="Permissions" value={item.permissions} />
+          </div>
+        </HandshakeCard>
       ))}
     </div>
   );

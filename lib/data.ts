@@ -838,7 +838,7 @@ export const connectors: Connector[] = [
     icon: "handshake",
     featured: true,
     installed: false,
-    actions: ["Verify agents", "Manage capabilities", "Review activity"],
+    actions: ["Connect systems", "Manage capabilities", "Review conversations"],
   }),
   conn({
     id: "gmail",

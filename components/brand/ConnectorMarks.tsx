@@ -250,30 +250,12 @@ function LetterMark({
   );
 }
 
+import { HandshakeIcon } from "@/components/panels/handshake/HandshakeIcon";
+
 function HandshakeMark({ className, size }: { className?: string; size?: MarkSize }) {
-  return (
-    <Tile size={size} className={cn("bg-foreground text-background", className)}>
-      <Svg label="Handshake">
-        <path
-          d="M8 12.5 10.5 10l1.5 1.5L15 8.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M6 14.5c1.2-1.2 2.8-2 4.5-2.3M14 9.5c1.4.3 2.7 1 3.7 2"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-        <circle cx="8" cy="8" r="2.25" fill="none" stroke="currentColor" strokeWidth="1.6" />
-        <circle cx="16" cy="8" r="2.25" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      </Svg>
-    </Tile>
-  );
+  const iconSize =
+    size === "xs" ? "xs" : size === "sm" ? "sm" : size === "md" ? "md" : "lg";
+  return <HandshakeIcon size={iconSize} className={className} />;
 }
 
 const marks: Record<

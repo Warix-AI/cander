@@ -98,6 +98,7 @@ export function Composer({
 }) {
   const {
     spaceId,
+    connectorId,
     view,
     setChatSpace,
     openConnector,
@@ -178,6 +179,10 @@ export function Composer({
   };
 
   const browserMode = view === "browser";
+  const activeConnector =
+    connectorId && spaceId === "connectors"
+      ? connectors.find((item) => item.id === connectorId)
+      : null;
   const showLibrary =
     !!spaceId &&
     isSpaceLibrarySpace(spaceId) &&
@@ -231,9 +236,11 @@ export function Composer({
   const stayInPlace = compact || hideSpaceTools;
   const hint =
     placeholder ??
-    (selectedId && !stayInPlace
-      ? `Change the ${labelFor(selectedId)}…`
-      : "Describe what you want…");
+    (activeConnector
+      ? `Ask about ${activeConnector.name}…`
+      : selectedId && !stayInPlace
+        ? `Change the ${labelFor(selectedId)}…`
+        : "Describe what you want…");
   const tools = [
     { id: "files" as const, hit: "files attach upload" },
     { id: "image" as const, hit: "image photo picture attach" },
@@ -671,6 +678,15 @@ export function Composer({
                 >
                   <Globe className="h-4 w-4" strokeWidth={1.7} />
                 </ToolBtn>
+              ) : null}
+              {activeConnector ? (
+                <span
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-muted/70 ring-2 ring-border"
+                  title={`${activeConnector.name} context`}
+                  aria-label={`${activeConnector.name} context`}
+                >
+                  <ConnectorMark id={activeConnector.icon} size="xs" />
+                </span>
               ) : null}
               {showLibrary ? (
                 <button

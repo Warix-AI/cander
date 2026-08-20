@@ -1,104 +1,96 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useState } from "react";
+import { StatLine } from "@/components/panels/Bits";
 import {
-  handshakeArchitecture,
-  handshakeOverview,
+  HandshakeBadge,
+  HandshakeCard,
+} from "@/components/panels/handshake/HandshakeCard";
+import { hs } from "@/components/panels/handshake/handshake-ui";
+import {
+  handshakeArchitectureLayers,
   handshakePositioning,
+  handshakeStatus,
+  type ArchitectureLayerId,
 } from "@/lib/handshake";
+import { cn } from "@/lib/utils";
 
 export function OverviewPage() {
-  return (
-    <div className="space-y-5 p-4">
-      <section className="rounded-[10px] border border-border bg-card p-5">
-        <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-          AI Readiness
-        </p>
-        <p className="mt-2 text-4xl font-medium tracking-[-0.03em]">
-          {handshakeOverview.readinessScore}%
-        </p>
-        <p className="mt-2 text-[13px] text-muted-foreground">
-          {handshakePositioning}
-        </p>
-      </section>
+  const [layer, setLayer] = useState<ArchitectureLayerId>("handshake");
+  const selected = handshakeArchitectureLayers.find((item) => item.id === layer);
 
-      <section className="rounded-[10px] border border-border bg-card p-5">
-        <p className="text-[13px] font-medium tracking-[-0.01em]">Architecture</p>
-        <div className="mt-3 space-y-1 font-mono text-[11.5px] text-muted-foreground">
-          {handshakeArchitecture.map((row, index) => (
-            <div key={row} className="flex items-center gap-2">
-              {index > 0 ? <span className="text-foreground/40">↓</span> : null}
-              <span>{row}</span>
+  return (
+    <div className="space-y-4 p-4">
+      <HandshakeCard className="p-5">
+        <p className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
+          Handshake Status
+        </p>
+        <p className={cn("mt-2", hs.statusActive)}>{handshakeStatus.state}</p>
+        <p className="mt-2 text-[14px] leading-relaxed">{handshakeStatus.headline}</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {handshakeStatus.stats.map((stat) => (
+            <div
+              key={stat.label}
+              className="rounded-lg border border-border bg-muted/30 px-3 py-2.5"
+            >
+              <p className="text-[11px] text-muted-foreground">{stat.label}</p>
+              <p className="mt-0.5 text-lg font-semibold tracking-[-0.02em]">
+                {stat.value}
+              </p>
             </div>
           ))}
         </div>
-      </section>
+      </HandshakeCard>
 
-      <section className="grid gap-3 sm:grid-cols-2">
-        <Card title="Connected Agents">
-          <ul className="mt-2 space-y-1.5 text-[13px]">
-            {handshakeOverview.connectedAgents.map((agent) => (
-              <li key={agent.name} className="flex items-center justify-between">
-                <span>{agent.name}</span>
-                <Badge tone="success">{agent.status}</Badge>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-[12px] text-muted-foreground">Future providers</p>
-          <p className="mt-1 text-[13px]">
-            {handshakeOverview.futureProviders.join(" · ")}
-          </p>
-        </Card>
-        <Card title="Active Capabilities">
-          <ul className="mt-2 space-y-1 text-[13px] text-muted-foreground">
-            {handshakeOverview.activeCapabilities.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </Card>
-      </section>
-
-      <Card title="Recent Handshakes">
-        <ul className="mt-2 space-y-2">
-          {handshakeOverview.recentHandshakes.map((item) => (
-            <li
-              key={item}
-              className="rounded-lg border border-border/70 px-3 py-2 text-[13px]"
+      <HandshakeCard title="Architecture">
+        <p className="mt-1 text-[12.5px] text-muted-foreground">
+          Click a layer to inspect how AI agents connect to your business.
+        </p>
+        <div className="mt-3 space-y-1.5">
+          {handshakeArchitectureLayers.map((item, index) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setLayer(item.id)}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[13px] transition-colors",
+                layer === item.id
+                  ? "border-border bg-background shadow-sm"
+                  : "border-transparent bg-muted/30 hover:bg-muted/50",
+              )}
             >
-              {item}
-            </li>
+              {index > 0 ? (
+                <span className="font-mono text-[11px] text-muted-foreground">↓</span>
+              ) : (
+                <span className="w-3" />
+              )}
+              <span className="font-medium">{item.label}</span>
+            </button>
           ))}
-        </ul>
-      </Card>
+        </div>
+        {selected ? (
+          <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
+            <p className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
+              {selected.label}
+            </p>
+            <div className="mt-2 space-y-1">
+              {selected.details.map((row) => (
+                <StatLine key={row.label} label={row.label} value={row.value} />
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </HandshakeCard>
+
+      <HandshakeCard>
+        <p className="text-[13px] leading-relaxed text-muted-foreground">
+          {handshakePositioning}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <HandshakeBadge tone="success">Network healthy</HandshakeBadge>
+          <HandshakeBadge tone="neutral">4 active connections</HandshakeBadge>
+        </div>
+      </HandshakeCard>
     </div>
-  );
-}
-
-function Card({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="rounded-[10px] border border-border bg-card p-4">
-      <p className="text-[13px] font-medium tracking-[-0.01em]">{title}</p>
-      {children}
-    </section>
-  );
-}
-
-function Badge({
-  children,
-  tone = "neutral",
-}: {
-  children: ReactNode;
-  tone?: "success" | "neutral" | "warn";
-}) {
-  const cls =
-    tone === "success"
-      ? "border-chart-2/30 bg-chart-2/10 text-chart-2"
-      : tone === "warn"
-        ? "border-chart-3/30 bg-chart-3/10 text-chart-3"
-        : "border-border bg-muted text-muted-foreground";
-  return (
-    <span
-      className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${cls}`}
-    >
-      {children}
-    </span>
   );
 }
