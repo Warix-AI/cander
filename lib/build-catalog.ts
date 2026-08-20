@@ -1,7 +1,13 @@
 import { buildPreviews, scheduledJobs, skills } from "./data";
 import type { ScheduledJob, Skill } from "./types";
 
-export type BuildScope = "all" | "apps" | "websites" | "tasks" | "apis" | "keys" | "models";
+export type BuildScope =
+  | "all"
+  | "apps"
+  | "websites"
+  | "automations"
+  | "tasks";
+
 export type TaskCadence = "all" | "recurring" | "once";
 
 export type BuildPreview = (typeof buildPreviews)[number];
@@ -35,20 +41,16 @@ export function buildScopeOptions(): { id: BuildScope; label: string }[] {
     { id: "all", label: "All" },
     { id: "apps", label: "Apps" },
     { id: "websites", label: "Websites" },
+    { id: "automations", label: "Automations" },
     { id: "tasks", label: "Tasks" },
-    { id: "apis", label: "APIs" },
-    { id: "keys", label: "Keys" },
-    { id: "models", label: "Models" },
   ];
 }
 
 export function buildCtaLabel(scope: BuildScope) {
-  if (scope === "apps") return "New app build";
-  if (scope === "websites") return "New website build";
-  if (scope === "tasks") return "New task build";
-  if (scope === "apis") return "New API";
-  if (scope === "keys") return "New key";
-  if (scope === "models") return "New build";
+  if (scope === "apps") return "New app";
+  if (scope === "websites") return "New website";
+  if (scope === "automations") return "New automation";
+  if (scope === "tasks") return "New task";
   return "New build";
 }
 
@@ -60,9 +62,7 @@ export function filterPreviews(
   if (scope === "websites") {
     return items.filter((item) => previewKind(item) === "website");
   }
-  if (scope === "tasks" || scope === "apis" || scope === "keys" || scope === "models") {
-    return [];
-  }
+  if (scope === "automations" || scope === "tasks") return [];
   return items;
 }
 
@@ -121,6 +121,18 @@ export function workspaceTasks(workspaceId: string): BuildTask[] {
     }));
 
   return [...fromSkills, ...fromJobs];
+}
+
+/** Recurring workflows attached to builds. */
+export function workspaceAutomations(workspaceId: string): BuildTask[] {
+  return workspaceTasks(workspaceId).filter(
+    (item) => item.cadence === "recurring",
+  );
+}
+
+/** One-off build tasks. */
+export function workspaceOneOffTasks(workspaceId: string): BuildTask[] {
+  return workspaceTasks(workspaceId).filter((item) => item.cadence === "once");
 }
 
 export function filterTasks(items: BuildTask[], cadence: TaskCadence) {

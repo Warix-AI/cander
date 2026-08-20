@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Check, MoreHorizontal, Search, Settings } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
@@ -17,6 +17,11 @@ import { connectors as seed, spaceStats } from "@/lib/data";
 import type { Connector, ConnectorScope } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
+import {
+  attachWorkConnector,
+  clearWorkConnectorAttach,
+  peekWorkConnectorAttach,
+} from "@/lib/work-connectors";
 
 const SECTION_ORDER = [
   "Featured",
@@ -48,6 +53,11 @@ export function ConnectorsDashboard() {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<ConnectorScope>("public");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [workAttachFor, setWorkAttachFor] = useState<string | null>(null);
+
+  useEffect(() => {
+    setWorkAttachFor(peekWorkConnectorAttach());
+  }, []);
 
   const blockedIds = blockedConnectorIds(
     workspaceId,
@@ -77,9 +87,26 @@ export function ConnectorsDashboard() {
     [installedIds],
   );
 
+  const bindToWorkIfArmed = (id: string) => {
+    const target = peekWorkConnectorAttach();
+    if (!target) return;
+    attachWorkConnector(target, id);
+    clearWorkConnectorAttach();
+    setWorkAttachFor(null);
+  };
+
   const install = (id: string) => {
     if (blockedIds.includes(id)) return;
     installConnector(id);
+    bindToWorkIfArmed(id);
+    openConnector(id);
+  };
+
+  const selectConnector = (id: string) => {
+    if (workAttachFor) {
+      installConnector(id);
+      bindToWorkIfArmed(id);
+    }
     openConnector(id);
   };
 
@@ -141,6 +168,26 @@ export function ConnectorsDashboard() {
       actions={<SpaceSettingsButton space="connectors" />}
     >
 
+        {workAttachFor ? (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-border bg-muted/50 px-4 py-3">
+            <p className="text-[13px] leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Adding to Work.</span>{" "}
+              Install or open a connector — it attaches to Work and starts
+              feeding Today, Inbox, and the rest.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                clearWorkConnectorAttach();
+                setWorkAttachFor(null);
+              }}
+              className="shrink-0 text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : null}
+
         <div className="relative">
           <Search
             className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -163,7 +210,7 @@ export function ConnectorsDashboard() {
               <button
                 type="button"
                 aria-label="Manage installed connectors"
-                onClick={() => openConnector(installed[0].id)}
+                    onClick={() => selectConnector(installed[0].id)}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
               >
                 <Settings className="h-3.5 w-3.5" strokeWidth={1.6} />
@@ -179,7 +226,7 @@ export function ConnectorsDashboard() {
                     key={item.id}
                     type="button"
                     title={item.name}
-                    onClick={() => openConnector(item.id)}
+                    onClick={() => selectConnector(item.id)}
                     className={cn(
                       "relative shrink-0 rounded-[10px] transition-opacity duration-200 hover:opacity-80",
                       connectorId === item.id && "ring-2 ring-foreground/15",
@@ -235,10 +282,11 @@ export function ConnectorsDashboard() {
                       item={item}
                       active={connectorId === item.id}
                       pinned={isPinned("connector", item.id)}
-                      onOpen={() => openConnector(item.id)}
+                      onOpen={() => selectConnector(item.id)}
                       onInstall={() => install(item.id)}
                       onUninstall={() => uninstall(item.id)}
                       onTogglePin={() => togglePin("connector", item.id)}
+                      workAttach={Boolean(workAttachFor)}
                     />
                   ))}
                 </div>
@@ -273,6 +321,7 @@ function DirectoryItem({
   onInstall,
   onUninstall,
   onTogglePin,
+  workAttach,
 }: {
   item: Connector;
   active: boolean;
@@ -281,6 +330,7 @@ function DirectoryItem({
   onInstall: () => void;
   onUninstall: () => void;
   onTogglePin: () => void;
+  workAttach?: boolean;
 }) {
   return (
     <div
@@ -302,6 +352,15 @@ function DirectoryItem({
             {item.name}
           </button>
           {item.installed ? (
+            workAttach ? (
+              <button
+                type="button"
+                onClick={onOpen}
+                className="inline-flex h-7 shrink-0 items-center rounded-full border border-foreground/15 px-2.5 text-[11.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+              >
+                Add to Work
+              </button>
+            ) : (
             <Dropdown
               align="end"
               menuClassName="min-w-[8.5rem]"
@@ -355,13 +414,14 @@ function DirectoryItem({
                 </>
               )}
             </Dropdown>
+            )
           ) : (
             <button
               type="button"
               onClick={onInstall}
               className="inline-flex h-7 shrink-0 items-center rounded-full border border-foreground/15 px-2.5 text-[11.5px] font-medium tracking-[-0.01em] hover:bg-muted"
             >
-              Install
+              {workAttach ? "Add to Work" : "Install"}
             </button>
           )}
         </div>

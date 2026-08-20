@@ -2057,12 +2057,12 @@ export const spaceStats: Record<
   }
 > = {
   work: {
-    kicker: "Inbox, calendar, customers",
+    kicker: "Today, follow-ups, approvals",
     stats: [
       { label: "Needs a reply", value: "5" },
-      { label: "Meetings today", value: "3" },
-      { label: "Customers", value: "2" },
+      { label: "Meetings today", value: "2" },
       { label: "Follow-ups", value: "4" },
+      { label: "Approvals", value: "3" },
     ],
   },
   build: {
