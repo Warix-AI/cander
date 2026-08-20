@@ -69,7 +69,7 @@ import {
   homeWorkspaceId,
   type Entitlements,
 } from "@/lib/entitlements";
-import { isChatSpace, spaceAllowed, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
+import { isChatSpace, PRIMARY_NAV_SPACES, spaceAllowed, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
 import type {
   AccountPresetId,
   BuildTool,
@@ -201,6 +201,8 @@ type AppContextValue = {
   setChatSpace: (id: SpaceId | null) => void;
   armChatInterface: (id: SpaceId) => void;
   collapseDraft: () => void;
+  /** Close space chat and restore the full workspace dashboard. */
+  closeSpaceChat: () => void;
   sendMessage: (text: string, opts?: SendOpts) => void;
   platformMessages: Message[];
   sendPlatformMessage: (text: string) => void;
@@ -351,7 +353,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("organization");
   const [platformNav, setPlatformNavState] = useState<PlatformNav>("overview");
   const [platformThreadId, setPlatformThreadId] = useState<string | null>(null);
-  const [platformDockOpen, setPlatformDockOpen] = useState(false);
+  const [platformDockOpen, setPlatformDockOpenState] = useState(false);
   const [spaceLayout, setSpaceLayout] = useState<SpaceLayout>("cards");
   const [overlay, setOverlay] = useState<OverlayId>(null);
   const [settingsSpaceId, setSettingsSpaceId] = useState<SpaceId | null>(null);
@@ -450,6 +452,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     persistProduct(id);
     setMobileNav(false);
     setOverlay(null);
+    if (id !== "platform") {
+      setPlatformDockOpenState(false);
+    }
+    const nextPanelMode = id === "platform" ? panelMode : "collapsed";
+    if (id !== "platform") setPanelMode("collapsed");
     pushTarget({
       product: id,
       view,
@@ -457,7 +464,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       threadId,
       projectId,
       platformNav,
-      panelMode,
+      panelMode: nextPanelMode,
       panelIntent,
       connectorId,
       jobId,
@@ -557,6 +564,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setOverlay(null);
   }, []);
 
+  const setPlatformDockOpen = useCallback((open: boolean) => {
+    setPlatformDockOpenState(open);
+    setPanelMode(open ? "split" : "collapsed");
+  }, []);
+
   const newChat = useCallback((space?: SpaceId) => {
     if (product === "platform") {
       setPlatformThreadId(null);
@@ -564,23 +576,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMobileNav(false);
       return;
     }
-    setView("chat");
+    const chatSpace = space && isChatSpace(space) ? space : null;
     setThreadId(null);
-    setSpaceId(space ?? null);
-    if (!space) setProjectId(null);
+    setSpaceId(chatSpace);
+    setProjectId(null);
     setConnectorId(null);
     setJobId(null);
     setSkillId(null);
+    setMobileNav(false);
+
+    if (chatSpace) {
+      // Keep the space open: chat slides in on the left, dashboard condenses right.
+      setView("space");
+      setDrafting(true);
+      setPanelIntent("execute");
+      setPanelMode("split");
+      if (chatSpace === "build") setBuildTool("preview");
+      if (chatSpace === "studio") setStudioTool("canvas");
+      if (chatSpace === "research") setResearchTool("browser");
+      if (chatSpace === "skills") setSkillsTool("editor");
+      pushTarget({
+        product,
+        view: "space",
+        spaceId: chatSpace,
+        threadId: null,
+        projectId: null,
+        platformNav,
+        panelMode: "split",
+        panelIntent: "execute",
+        connectorId: null,
+        jobId: null,
+        skillId: null,
+      });
+      return;
+    }
+
+    setView("chat");
     setDrafting(false);
     setPanelIntent("browse");
     setPanelMode("collapsed");
-    setMobileNav(false);
     pushTarget({
       product,
       view: "chat",
-      spaceId: space ?? null,
+      spaceId: null,
       threadId: null,
-      projectId: space ? projectId : null,
+      projectId: null,
       platformNav,
       panelMode: "collapsed",
       panelIntent: "browse",
@@ -588,7 +628,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       jobId: null,
       skillId: null,
     });
-  }, [product, projectId, platformNav, pushTarget]);
+  }, [product, platformNav, pushTarget, setPlatformDockOpen]);
 
   const setChatSpace = useCallback((id: SpaceId | null) => {
     setSpaceId(id);
@@ -607,7 +647,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const armChatInterface = useCallback((id: SpaceId) => {
     if (!isChatSpace(id)) return;
     setDrafting(true);
-    setView("chat");
+    setView("space");
     setSpaceId(id);
     setPanelIntent("execute");
     setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
@@ -622,6 +662,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPanelMode((mode) => (threadId ? mode : "collapsed"));
     if (!threadId) setPanelIntent("browse");
   }, [threadId]);
+
+  const closeSpaceChat = useCallback(() => {
+    setDrafting(false);
+    setThreadId(null);
+    setProjectId(null);
+    setConnectorId(null);
+    setJobId(null);
+    setSkillId(null);
+    setPanelMode("collapsed");
+    setPanelIntent("browse");
+    if (view === "space" && spaceId) {
+      pushTarget({
+        product,
+        view: "space",
+        spaceId,
+        threadId: null,
+        projectId: null,
+        platformNav,
+        panelMode: "collapsed",
+        panelIntent: "browse",
+        connectorId: null,
+        jobId: null,
+        skillId: null,
+      });
+    }
+  }, [view, spaceId, product, platformNav, pushTarget]);
 
   const sendMessage = useCallback(
     (text: string, opts?: SendOpts) => {
@@ -962,7 +1028,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
         return;
       }
-      setView("chat");
+      const keepSpace =
+        view === "space" &&
+        (PRIMARY_NAV_SPACES as readonly string[]).includes(space);
+      setView(keepSpace ? "space" : "chat");
       setSpaceId(space);
       setProjectId(space === "skills" ? null : (intent.projectId ?? null));
       setSkillId(opts?.skillId ?? (space === "skills" ? "sk-brand" : null));
@@ -978,7 +1047,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
       pushTarget({
         product,
-        view: "chat",
+        view: keepSpace ? "space" : "chat",
         spaceId: space,
         threadId: activeId,
         projectId: space === "skills" ? null : (intent.projectId ?? null),
@@ -1227,6 +1296,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [entitlements.hasVoice]);
 
   useEffect(() => {
+    if (panelMode !== "collapsed") return;
+    if (!drafting || threadId) return;
+    setDrafting(false);
+    setPanelIntent("browse");
+  }, [panelMode, drafting, threadId]);
+
+  useEffect(() => {
     if (entitlements.canAccessDevelopment) return;
     if (product === "platform") persistProduct("courier");
   }, [entitlements.canAccessDevelopment, product]);
@@ -1368,7 +1444,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           threadId,
           projectId,
           platformNav: product === "platform" ? platformNav : "recents",
-          panelMode,
+          panelMode: "split",
           panelIntent,
           connectorId,
           jobId,
@@ -1711,6 +1787,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setChatSpace,
       armChatInterface,
       collapseDraft,
+      closeSpaceChat,
       sendMessage,
       platformMessages,
       sendPlatformMessage,
@@ -1830,6 +1907,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setChatSpace,
       armChatInterface,
       collapseDraft,
+      closeSpaceChat,
       sendMessage,
       platformMessages,
       sendPlatformMessage,

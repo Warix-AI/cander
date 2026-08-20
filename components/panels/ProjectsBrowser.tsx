@@ -201,34 +201,101 @@ export function ProjectsBrowser({
       );
     }
 
-    const previews = buildPreviews.filter((item) => item.workspaceId === workspaceId);
-    const names = new Map(projects.map((item) => [item.id, item.name]));
-    const items = previews.map((item) =>
-      entry(
-        item.id,
-        item.name,
-        item.projectId,
-        `Edited ${item.updatedAt}`,
+    if (space === "work") {
+      const list = projects.filter(
+        (item) => item.space === "work" && item.workspaceId === workspaceId,
+      );
+      const items = list.map((item) =>
+        entry(
+          item.id,
+          item.name,
+          item.id,
+          `Edited ${item.updatedAt}`,
+          "product",
+          undefined,
+          item.cover,
+        ),
+      );
+      return pack(
         "product",
-        item.published ? "Published" : undefined,
-        item.image,
-      ),
-    );
-    const grouped: { name: string; items: PreviewEntry[] }[] = [];
-    for (const preview of previews) {
-      const label = names.get(preview.projectId) ?? preview.name;
-      const current = grouped.find((group) => group.name === label);
-      const mapped = items.find((item) => item.id === preview.id) as PreviewEntry;
-      if (current) current.items.push(mapped);
-      else grouped.push({ name: label, items: [mapped] });
+        "Work",
+        "Nothing open in Work yet.",
+        openProject,
+        items,
+        items.map((item) => ({ name: item.name, items: [item] })),
+      );
     }
+
+    if (space === "personal") {
+      const list = projects.filter(
+        (item) =>
+          item.workspaceId === workspaceId &&
+          (item.space === "personal" ||
+            item.space === "finances" ||
+            item.space === "health"),
+      );
+      const items = list.map((item) =>
+        entry(
+          item.id,
+          item.name,
+          item.id,
+          `Edited ${item.updatedAt}`,
+          "product",
+          undefined,
+          item.cover,
+        ),
+      );
+      return pack(
+        "product",
+        "Personal",
+        "Nothing open in Personal yet.",
+        openProject,
+        items,
+        items.map((item) => ({ name: item.name, items: [item] })),
+      );
+    }
+
+    if (space === "build") {
+      const previews = buildPreviews.filter(
+        (item) => item.workspaceId === workspaceId,
+      );
+      const names = new Map(projects.map((item) => [item.id, item.name]));
+      const items = previews.map((item) =>
+        entry(
+          item.id,
+          item.name,
+          item.projectId,
+          `Edited ${item.updatedAt}`,
+          "product",
+          item.published ? "Published" : undefined,
+          item.image,
+        ),
+      );
+      const grouped: { name: string; items: PreviewEntry[] }[] = [];
+      for (const preview of previews) {
+        const label = names.get(preview.projectId) ?? preview.name;
+        const current = grouped.find((group) => group.name === label);
+        const mapped = items.find((item) => item.id === preview.id) as PreviewEntry;
+        if (current) current.items.push(mapped);
+        else grouped.push({ name: label, items: [mapped] });
+      }
+      return pack(
+        "product",
+        "Projects",
+        "No Build projects in this workspace.",
+        openProject,
+        items,
+        grouped,
+      );
+    }
+
     return pack(
       "product",
       "Projects",
-      "No Build projects in this workspace.",
+      "Nothing here yet.",
       openProject,
-      items,
-      grouped,
+      [],
+      [],
     );
   }, [
     space,

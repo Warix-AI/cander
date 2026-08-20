@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelRight, Pin } from "lucide-react";
+import { PanelRight, Pin, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { isChatSpace } from "@/lib/spaces";
@@ -21,6 +21,7 @@ export function TopRail() {
     mobileNav,
     isPinned,
     togglePin,
+    closeSpaceChat,
   } = useApp();
 
   const panelOpen = panelMode !== "collapsed" && view === "chat";
@@ -29,6 +30,11 @@ export function TopRail() {
     view === "chat" &&
     (Boolean(thread) || drafting || isChatSpace(spaceId));
   const showPanelBtn = canPanel && !panelOpen;
+  const spaceChatOpen =
+    product === "courier" &&
+    view === "space" &&
+    panelMode !== "collapsed" &&
+    (drafting || Boolean(thread));
   const pinTarget = thread
     ? ({ kind: "thread" as const, id: thread.id })
     : projectId
@@ -42,7 +48,11 @@ export function TopRail() {
     <header
       className={cn(
         "flex h-11 shrink-0 items-center justify-end gap-1 bg-background px-2",
-        !showPanelBtn && !pinTarget && sidebarOpen && "lg:hidden",
+        !showPanelBtn &&
+          !pinTarget &&
+          !spaceChatOpen &&
+          sidebarOpen &&
+          "lg:hidden",
       )}
     >
       <NavToggle
@@ -79,6 +89,16 @@ export function TopRail() {
           className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
         >
           <PanelRight className="h-4 w-4" strokeWidth={1.6} />
+        </button>
+      ) : null}
+      {spaceChatOpen ? (
+        <button
+          type="button"
+          aria-label="Close chat"
+          onClick={() => closeSpaceChat()}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-4 w-4" strokeWidth={1.6} />
         </button>
       ) : null}
     </header>

@@ -167,18 +167,23 @@ export function workEmptyCopy(scope: WorkScope) {
 export const workBriefActions = [
   {
     id: "brief-inbox",
-    label: "Brief my inbox",
+    label: "Needs a reply",
     prompt: "Brief my inbox — what needs a reply today?",
   },
   {
     id: "prep-meeting",
-    label: "Prep next meeting",
-    prompt: "Prep me for my next meeting — agenda, open questions, and last notes.",
+    label: "Meetings today",
+    prompt: "Prep me for my meetings today — agenda, open questions, and last notes.",
   },
   {
     id: "chase-followups",
-    label: "Chase follow-ups",
+    label: "Follow-ups",
     prompt: "What follow-ups are overdue or due today? Draft nudges where helpful.",
+  },
+  {
+    id: "approvals",
+    label: "Approvals",
+    prompt: "What approvals are waiting on me? Summarize risk and draft a decision note.",
   },
 ] as const;
 

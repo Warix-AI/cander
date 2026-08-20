@@ -4,14 +4,13 @@ import { useEffect } from "react";
 import { AppProvider, useApp } from "@/components/app/AppProvider";
 import { ChatColumn } from "@/components/shell/ChatColumn";
 import { Sidebar } from "@/components/shell/Sidebar";
-import { SpaceDashboard } from "@/components/shell/SpaceDashboard";
+import { SpaceChatLayout } from "@/components/shell/SpaceChatLayout";
 import { RecentsView } from "@/components/shell/RecentsView";
 import { SplitMainLayout } from "@/components/shell/SplitMainLayout";
 import { SettingsModal } from "@/components/settings/SettingsView";
 import { SharedPanel } from "@/components/panels/SharedPanel";
 import { PublishSheet } from "@/components/preview/PublishSheet";
-import { PlatformChatDock } from "@/components/platform/PlatformChatDock";
-import { PlatformMain } from "@/components/platform/PlatformShell";
+import { PlatformChatLayout } from "@/components/platform/PlatformChatLayout";
 import { SearchModal } from "@/components/overlays/SearchModal";
 import { ConfigureModal } from "@/components/overlays/ConfigureModal";
 import { SpaceSettingsModal } from "@/components/overlays/SpaceSettingsModal";
@@ -91,24 +90,20 @@ function Root() {
 }
 
 function CourierMain() {
-  const { product, view, platformNav, platformDockOpen } = useApp();
+  const {
+    product,
+    view,
+    drafting,
+    thread,
+    projectId,
+    skillId,
+    jobId,
+    connectorId,
+    spaceLibraryOpen,
+  } = useApp();
 
   if (product === "platform") {
-    return (
-      <div
-        id="courier-main"
-        className="flex min-h-0 min-w-0 flex-1 overflow-hidden"
-      >
-        {platformDockOpen ? <PlatformChatDock /> : null}
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          {platformNav === "recents" ? (
-            <RecentsView />
-          ) : (
-            <PlatformMain />
-          )}
-        </div>
-      </div>
-    );
+    return <PlatformChatLayout />;
   }
 
   if (view === "browser") {
@@ -116,16 +111,22 @@ function CourierMain() {
   }
 
   if (view === "space") {
-    return (
-      <SplitMainLayout>
-        <div className="flex min-h-0 flex-1 flex-col">
-          <InviteBanner />
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <SpaceDashboard />
-          </div>
-        </div>
-      </SplitMainLayout>
+    const entityOpen = Boolean(
+      projectId || skillId || jobId || connectorId || spaceLibraryOpen,
     );
+    // Project / connector tools use the normal context panel.
+    // Otherwise the space itself slides into the right pane.
+    if (entityOpen && (drafting || thread)) {
+      return (
+        <SplitMainLayout>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <InviteBanner />
+            <ChatColumn />
+          </div>
+        </SplitMainLayout>
+      );
+    }
+    return <SpaceChatLayout />;
   }
 
   if (view === "recents") {

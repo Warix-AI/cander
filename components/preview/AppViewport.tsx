@@ -1,7 +1,9 @@
 "use client";
 
 import { useApp } from "@/components/app/AppProvider";
+import { BannerWash } from "@/components/spaces/BannerWash";
 import { buildPreviews } from "@/lib/data";
+import type { BannerKey } from "@/lib/space-banners";
 import type { PreviewNodeId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -20,12 +22,17 @@ export function AppViewport({
     selectElement,
     previewKey,
     project,
+    spaceId,
   } = useApp();
 
   const framed = viewport !== "desktop";
   const cover =
     project?.cover ??
     buildPreviews.find((item) => item.projectId === project?.id)?.image;
+  const washSpace: BannerKey =
+    (project?.space as BannerKey | undefined) ??
+    (spaceId as BannerKey | null) ??
+    "build";
 
   return (
     <div
@@ -38,7 +45,6 @@ export function AppViewport({
         key={previewKey}
         className={cn(
           "relative overflow-hidden",
-          !cover && "media-a",
           viewport === "desktop" && "h-full min-h-0 w-full rounded-none",
           viewport === "tablet" &&
             "h-full w-auto max-w-full aspect-[3/4] rounded-[10px] shadow-[0_16px_40px_rgba(0,0,0,0.28)]",
@@ -54,7 +60,7 @@ export function AppViewport({
           />
         ) : (
           <>
-            <div className="grain-layer" />
+            <BannerWash space={washSpace} />
             <div className="absolute inset-x-0 top-0 flex items-center justify-between p-6 text-[12px] text-white/80">
               <PreviewHit
                 id="nav"

@@ -5,6 +5,7 @@ import { Search, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { Modal } from "@/components/ui/Modal";
 import { BannerSettingsPanel } from "@/components/spaces/SpaceBanner";
+import { WorkConnectorsSettings } from "@/components/spaces/WorkConnectorsSettings";
 import { spaceSettings, type SpaceSettingsItem } from "@/lib/space-settings";
 import { cn } from "@/lib/utils";
 
@@ -117,6 +118,8 @@ export function SpaceSettingsModal() {
 
             {tab === BACKGROUND_TAB && settingsSpaceId ? (
               <BannerSettingsPanel space={settingsSpaceId} />
+            ) : tab === "connectors" && settingsSpaceId === "work" ? (
+              <WorkConnectorsSettings />
             ) : section ? (
               <>
                 <h2

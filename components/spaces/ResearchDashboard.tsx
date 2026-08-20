@@ -10,7 +10,7 @@ import {
   SpaceSettingsButton,
 } from "@/components/spaces/ItemSet";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
-import { projects, researchPaperPreviews, spaceStats } from "@/lib/data";
+import { projects, researchPaperPreviews } from "@/lib/data";
 import { projectsInSpace } from "@/lib/selectors";
 
 type ResearchScope = "all" | "reports" | "papers";
@@ -37,7 +37,7 @@ export function ResearchDashboard() {
     openProject,
     spaceLayout,
     setSpaceLayout,
-    openBrowser,
+    newChat,
   } = useApp();
   const [scope, setScope] = useState<ResearchScope>("all");
 
@@ -49,27 +49,22 @@ export function ResearchDashboard() {
     if (scope === "all") return spaceProjects;
     return spaceProjects.filter((item) => researchKind(item.id) === scope);
   }, [scope, spaceProjects]);
-  const meta = spaceStats.research;
 
   return (
     <DashFrame
       space="research"
-      kicker={meta.kicker}
       title="Research"
-      subtitle="Browse, save sources, and turn findings into something you can cite."
+      subtitle="Find sources, take notes, and cite your findings."
       actions={
         <>
-          <SpaceSettingsButton space="research" />
-          <DashBtn
-            primary
-            onClick={() => openBrowser({ chat: true })}
-          >
+          <DashBtn primary onClick={() => newChat("research")}>
             {researchCta(scope)}
           </DashBtn>
+          <SpaceSettingsButton space="research" />
         </>
       }
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 @min-[420px]:flex-row @min-[420px]:flex-wrap @min-[420px]:items-center @min-[420px]:justify-between">
         <ScopeToggle
           value={scope}
           onChange={(value) => setScope(value as ResearchScope)}
@@ -91,6 +86,7 @@ export function ResearchDashboard() {
             name: item.name,
             projectId: item.id,
             meta: `${researchKind(item.id) === "papers" ? "Paper" : "Report"} · edited ${item.updatedAt}`,
+            bannerKey: "research" as const,
             paperPreview: researchPaperPreviews[item.id] ?? {
               title: item.name,
               lines: [item.summary],

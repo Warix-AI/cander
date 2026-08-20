@@ -19,7 +19,7 @@ import {
   workspaceOneOffTasks,
   type BuildScope,
 } from "@/lib/build-catalog";
-import { buildPreviews, spaceStats } from "@/lib/data";
+import { buildPreviews } from "@/lib/data";
 
 export function BuildDashboard() {
   const {
@@ -36,7 +36,6 @@ export function BuildDashboard() {
   const previews = buildPreviews.filter(
     (item) => item.workspaceId === workspaceId,
   );
-  const meta = spaceStats.build;
   const automations = useMemo(
     () => workspaceAutomations(workspaceId),
     [workspaceId],
@@ -58,19 +57,18 @@ export function BuildDashboard() {
   return (
     <DashFrame
       space="build"
-      kicker={meta.kicker}
       title="Build"
-      subtitle="Apps, websites, automations, and tasks. Models, APIs, and keys live inside each build."
+      subtitle="Ship apps, websites, automations, and your recurring tasks."
       actions={
         <>
-          <SpaceSettingsButton space="build" />
           <DashBtn primary onClick={() => newChat("build")}>
             {buildCtaLabel(scope)}
           </DashBtn>
+          <SpaceSettingsButton space="build" />
         </>
       }
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 @min-[420px]:flex-row @min-[420px]:flex-wrap @min-[420px]:items-center @min-[420px]:justify-between">
         <ScopeToggle
           wrap
           value={scope}

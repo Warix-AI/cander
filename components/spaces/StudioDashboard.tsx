@@ -1,17 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Upload } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import {
+  DashBtn,
   DashFrame,
   LayoutToggle,
-  Pill,
   ScopeToggle,
   SpaceSettingsButton,
 } from "@/components/spaces/ItemSet";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
-import { assetFiles as seedFiles, projects, spaceStats } from "@/lib/data";
+import { assetFiles as seedFiles, projects } from "@/lib/data";
 import type { AssetFile, AssetKind } from "@/lib/types";
 
 type StudioScope = "all" | "projects" | "photos" | "videos" | "files";
@@ -35,7 +34,6 @@ export function StudioDashboard() {
   } = useApp();
   const [scope, setScope] = useState<StudioScope>("all");
   const [localFiles, setLocalFiles] = useState<AssetFile[]>([]);
-  const meta = spaceStats.studio;
 
   const spaceProjects = projects.filter(
     (item) => item.space === "studio" && item.workspaceId === workspaceId,
@@ -72,31 +70,24 @@ export function StudioDashboard() {
   return (
     <DashFrame
       space="studio"
-      kicker={meta.kicker}
       title="Studio"
-      subtitle="Projects plus the photos, videos, and files that go with them."
+      subtitle="Create photos, videos, and project files here together."
       actions={
         <>
-          <SpaceSettingsButton space="studio" />
           {libraryScope ? (
-            <Pill primary onClick={upload}>
-              <span className="inline-flex items-center gap-1.5">
-                <Upload className="h-3.5 w-3.5" strokeWidth={1.6} />
-                Upload
-              </span>
-            </Pill>
+            <DashBtn primary onClick={upload}>
+              Upload
+            </DashBtn>
           ) : (
-            <Pill primary onClick={() => newChat("studio")}>
-              <span className="inline-flex items-center gap-1.5">
-                <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
-                New project
-              </span>
-            </Pill>
+            <DashBtn primary onClick={() => newChat("studio")}>
+              New chat
+            </DashBtn>
           )}
+          <SpaceSettingsButton space="studio" />
         </>
       }
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 @min-[420px]:flex-row @min-[420px]:flex-wrap @min-[420px]:items-center @min-[420px]:justify-between">
         <ScopeToggle
           wrap
           value={scope}

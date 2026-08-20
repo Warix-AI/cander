@@ -1,6 +1,7 @@
 "use client";
 
 import { useApp } from "@/components/app/AppProvider";
+import { BannerWash } from "@/components/spaces/BannerWash";
 import { PanelChrome } from "@/components/panels/PanelChrome";
 import { SpaceLibraryPanel } from "@/components/panels/SpaceLibraryPanel";
 import { Row, SectionLabel } from "@/components/panels/Bits";
@@ -50,7 +51,8 @@ export function StudioPanel() {
       ) : null}
       {tool === "generate" ? (
         <div className="flex flex-1 flex-col p-4">
-          <div className="relative flex min-h-[12rem] items-end overflow-hidden rounded-[10px] media-a p-4 text-white">
+          <div className="relative flex min-h-[12rem] items-end overflow-hidden rounded-[10px] p-4 text-white">
+            <BannerWash space="studio" />
             <p className="relative text-[13px] text-white/80">
               Describe a still. Courier will drop it on the canvas.
             </p>
@@ -59,9 +61,15 @@ export function StudioPanel() {
       ) : null}
       {tool === "canvas" ? (
         <div className="flex flex-1 items-center justify-center p-6">
-          <div className="relative aspect-[4/5] w-[min(100%,220px)] rounded-lg border border-border bg-muted">
-            <div className="absolute inset-8 rounded-lg border border-dashed border-foreground/20" />
-            <p className="absolute right-3 bottom-3 font-mono text-[10px] text-muted-foreground">
+          <div className="relative aspect-[4/5] w-[min(100%,220px)] overflow-hidden rounded-lg border border-border">
+            {project ? (
+              <div className="absolute inset-0 bg-muted">
+                <div className="absolute inset-8 rounded-lg border border-dashed border-foreground/20" />
+              </div>
+            ) : (
+              <BannerWash space="studio" />
+            )}
+            <p className="absolute right-3 bottom-3 z-10 font-mono text-[10px] text-white/80">
               {project ? "BG removed" : "Empty canvas"}
             </p>
           </div>
@@ -76,7 +84,8 @@ export function StudioPanel() {
       ) : null}
       {tool === "video" ? (
         <div className="p-4">
-          <div className="relative flex aspect-video items-end overflow-hidden rounded-[10px] media-c p-4 text-white">
+          <div className="relative flex aspect-video items-end overflow-hidden rounded-[10px] p-4 text-white">
+            <BannerWash space="studio" />
             <div className="relative">
               <p className="font-mono text-[11px] tracking-[0.08em] text-white/70 uppercase">
                 Text to video

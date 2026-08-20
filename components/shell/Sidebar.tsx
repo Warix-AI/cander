@@ -1,7 +1,14 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
-import { Ellipsis, GripVertical, Pin, SquarePen } from "lucide-react";
+import {
+  Ellipsis,
+  FolderKanban,
+  GripVertical,
+  MessageSquare,
+  Pin,
+  SquarePen,
+} from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { AccountMenu } from "@/components/shell/AccountMenu";
 import { ProductSwitcher } from "@/components/shell/ProductSwitcher";
@@ -13,13 +20,14 @@ import {
   extraNavLabels,
   navIcon,
   platformNavIcons,
+  spaceIcons,
 } from "@/lib/space-icons";
 import {
   isExtraNavId,
   resolveSidebarNav,
   type SidebarNavId,
 } from "@/lib/spaces";
-import type { PinKind } from "@/lib/types";
+import type { PinKind, SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { memberSpaces } from "@/lib/workspace-policy";
 
@@ -75,6 +83,7 @@ export function Sidebar() {
     id: string;
     title: string;
     icon?: string;
+    spaceId?: SpaceId;
   };
 
   const pinnedItems: PinnedItem[] = [];
@@ -103,6 +112,7 @@ export function Sidebar() {
           kind: "thread",
           id: thread.id,
           title: thread.title,
+          spaceId: thread.spaceId,
         });
       }
       continue;
@@ -115,6 +125,7 @@ export function Sidebar() {
         kind: "project",
         id: project.id,
         title: project.name,
+        spaceId: project.space,
       });
     }
   }
@@ -237,11 +248,7 @@ export function Sidebar() {
                   kind={item.kind}
                   id={item.id}
                   title={item.title}
-                  leading={
-                    item.kind === "connector" && item.icon ? (
-                      <ConnectorMark id={item.icon} size="xs" />
-                    ) : null
-                  }
+                  leading={<PinnedLeading item={item} />}
                   active={
                     item.kind === "thread"
                       ? threadId === item.id
@@ -337,6 +344,38 @@ function MoreMenu({
   );
 }
 
+function PinnedLeading({
+  item,
+}: {
+  item: {
+    kind: "thread" | "project" | "connector";
+    icon?: string;
+    spaceId?: SpaceId;
+  };
+}) {
+  if (item.kind === "connector") {
+    return <ConnectorMark id={item.icon ?? "connector"} size="nav" />;
+  }
+  if (item.kind === "project") {
+    const Icon =
+      (item.spaceId && spaceIcons[item.spaceId]) || FolderKanban;
+    return (
+      <Icon
+        className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+        strokeWidth={2}
+      />
+    );
+  }
+  const Icon =
+    (item.spaceId && spaceIcons[item.spaceId]) || MessageSquare;
+  return (
+    <Icon
+      className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+      strokeWidth={2}
+    />
+  );
+}
+
 function PinnedRow({
   kind,
   id,
@@ -399,11 +438,16 @@ function PinnedRow({
           onOpen();
         }}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-2 truncate px-3 py-1.5 text-left text-[13.5px]",
+          "flex min-w-0 flex-1 items-center gap-2.5 truncate px-3 py-1.5 text-left text-[13.5px]",
           active && "font-medium",
         )}
       >
-        {leading}
+        {leading ?? (
+          <MessageSquare
+            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+            strokeWidth={2}
+          />
+        )}
         {title}
       </button>
       <button

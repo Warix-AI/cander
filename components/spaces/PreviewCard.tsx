@@ -2,11 +2,11 @@
 
 import { CalendarClock, Ellipsis, FileText, Folder, Link2, Pin, Sparkles } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { BannerWash } from "@/components/spaces/BannerWash";
 import { Dropdown } from "@/components/ui/Controls";
+import type { BannerKey } from "@/lib/space-banners";
 import type { SpaceLayout } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-export const previewMesh = ["media-a", "media-b", "media-c", "media-d"] as const;
 
 export type PreviewKind = "product" | "paper" | "skill" | "schedule" | "file";
 
@@ -21,6 +21,8 @@ export type PreviewEntry = {
   detail?: string;
   image?: string;
   paperPreview?: { title: string; lines: string[] };
+  /** When set, empty preview faces use this space’s banner wash. */
+  bannerKey?: BannerKey;
 };
 
 export function PreviewGrid({
@@ -62,7 +64,9 @@ export function PreviewGrid({
     <div
       className={cn(
         "grid gap-x-3 gap-y-6",
-        dense ? "grid-cols-1 sm:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-3",
+        dense
+          ? "grid-cols-1 @min-[480px]:grid-cols-2"
+          : "grid-cols-1 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3",
       )}
     >
       {items.map((item, index) => (
@@ -114,7 +118,11 @@ function PreviewFace({
   kind: PreviewKind;
   compact?: boolean;
 }) {
-  const tone = previewMesh[index % previewMesh.length];
+  const { spaceId } = useApp();
+  const washSpace: BannerKey =
+    item.bannerKey ??
+    (spaceId as BannerKey | null) ??
+    "build";
 
   if (item.image) {
     return (
@@ -145,10 +153,9 @@ function PreviewFace({
         className={cn(
           "relative overflow-hidden rounded-[10px]",
           compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
-          tone,
         )}
       >
-        <div className="grain-layer" />
+        <BannerWash space={washSpace} />
         <div
           className={cn(
             "absolute bg-white text-left shadow-sm",
@@ -288,10 +295,9 @@ function PreviewFace({
       className={cn(
         "relative overflow-hidden rounded-[10px]",
         compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
-        tone,
       )}
     >
-      <div className="grain-layer" />
+      <BannerWash space={washSpace} />
       {!compact && item.badge ? (
         <span className="absolute bottom-3 left-3 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium tracking-[-0.01em] text-foreground">
           {item.badge}
@@ -398,7 +404,7 @@ function PreviewActions({
               togglePin("project", item.projectId);
             }}
             className={cn(
-              "inline-flex h-7 w-7 items-center justify-center rounded-lg hover:bg-muted",
+              "inline-flex h-7 w-7 items-center justify-center rounded-lg hover:bg-muted @max-[520px]:hidden",
               pinned
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground",
@@ -416,7 +422,7 @@ function PreviewActions({
               event.stopPropagation();
               copyLink();
             }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground @max-[520px]:hidden"
           >
             <Link2 className="h-3.5 w-3.5" strokeWidth={1.6} />
           </button>

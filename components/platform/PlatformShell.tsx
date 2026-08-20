@@ -66,7 +66,7 @@ export function PlatformMain() {
         kicker={developmentView.kicker}
         subtitle="Traffic, runtimes, and production capacity for this workspace."
       >
-        <div className="flex flex-wrap gap-px overflow-hidden rounded-[10px] border border-border bg-border">
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-[10px] border border-border bg-border @min-[360px]:grid-cols-2 @min-[640px]:grid-cols-4">
           <Kpi label="Requests" value="1.24M" delta="+12% vs last month" />
           <Kpi label="Completion rate" value="81%" delta="+3.1 pts" />
           <Kpi label="Uptime" value="99.97%" />
@@ -76,7 +76,7 @@ export function PlatformMain() {
           />
         </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <div className="mt-5 grid grid-cols-1 gap-4 @min-[560px]:grid-cols-2">
           <ChartCard title="Traffic" hint="Last 12 weeks">
             <AreaChart values={requestSeries} />
           </ChartCard>
@@ -92,7 +92,7 @@ export function PlatformMain() {
           </ChartCard>
         </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <div className="mt-5 grid grid-cols-1 gap-4 @min-[560px]:grid-cols-2">
           <ChartCard title="Where it ran">
             <BarPair
               left={{ label: "Cloud", pct: 64 }}
@@ -233,7 +233,7 @@ export function PlatformMain() {
             : "Pooled for this account. Split by workspace starts on Max."
         }
       >
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 @min-[560px]:grid-cols-2">
           <ChartCard title="Requests" hint="12 weeks">
             <AreaChart values={requestSeries} />
           </ChartCard>
@@ -460,7 +460,9 @@ function TestAccessNote() {
 
 function PlatformGrid({ children }: { children: ReactNode }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+    <div className="grid grid-cols-1 gap-3 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3">
+      {children}
+    </div>
   );
 }
 

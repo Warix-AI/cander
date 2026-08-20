@@ -7,8 +7,8 @@ import { useApp } from "@/components/app/AppProvider";
 import { cn } from "@/lib/utils";
 
 export function SplitMainLayout({ children }: { children: ReactNode }) {
-  const { panelMode, panelRatio, view } = useApp();
-  const bannerFlush = view === "space";
+  const { panelMode, panelRatio, view, drafting, thread } = useApp();
+  const bannerFlush = view === "space" && !drafting && !thread;
   const panelOn = panelMode !== "collapsed";
   const immersive = panelMode === "immersive";
   const wide = panelMode === "wide";

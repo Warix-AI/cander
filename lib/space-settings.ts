@@ -64,6 +64,13 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
           },
         ],
       },
+      {
+        id: "connectors",
+        label: "Connectors",
+        description:
+          "Attach mail, calendar, chat, and CRM so Work can surface what needs you.",
+        items: [],
+      },
     ],
   },
   build: {

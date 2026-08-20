@@ -5,6 +5,7 @@ import { LayoutGrid, List, Pin, Settings } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { SpaceBanner } from "@/components/spaces/SpaceBanner";
+import { useSpaceRenderMode } from "@/components/spaces/SpaceRenderMode";
 import type { SpaceId, SpaceLayout } from "@/lib/types";
 import type { BannerKey } from "@/lib/space-banners";
 import { cn } from "@/lib/utils";
@@ -19,20 +20,15 @@ export function LayoutToggle({
   compact?: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        "inline-flex items-center rounded-[10px] border border-foreground/12 p-0.5",
-        compact ? "h-8" : "h-10",
-      )}
-    >
+    <div className="inline-flex items-center gap-0.5 rounded-[10px] border border-foreground/12 p-1">
       <button
         type="button"
         aria-label="Card view"
         aria-pressed={layout === "cards"}
         onClick={() => onChange("cards")}
         className={cn(
-          "inline-flex items-center justify-center rounded-[10px] transition-colors duration-200",
-          compact ? "h-7 w-7" : "h-9 w-9",
+          "inline-flex items-center justify-center rounded-[8px] transition-colors duration-200",
+          compact ? "h-6 w-6" : "h-8 w-8",
           layout === "cards"
             ? "bg-muted text-foreground"
             : "text-muted-foreground hover:text-foreground",
@@ -46,8 +42,8 @@ export function LayoutToggle({
         aria-pressed={layout === "list"}
         onClick={() => onChange("list")}
         className={cn(
-          "inline-flex items-center justify-center rounded-[10px] transition-colors duration-200",
-          compact ? "h-7 w-7" : "h-9 w-9",
+          "inline-flex items-center justify-center rounded-[8px] transition-colors duration-200",
+          compact ? "h-6 w-6" : "h-8 w-8",
           layout === "list"
             ? "bg-muted text-foreground"
             : "text-muted-foreground hover:text-foreground",
@@ -126,7 +122,7 @@ export function ItemSet({
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 @min-[440px]:grid-cols-2">
       {items.map((item) => (
         <div
           key={item.id}
@@ -250,9 +246,8 @@ export function ScopeToggle({
   return (
     <div
       className={cn(
-        "items-center rounded-[10px] border border-foreground/12 p-0.5",
-        wrap ? "flex flex-wrap" : "inline-flex",
-        wrap ? (compact ? "min-h-8" : "min-h-10") : compact ? "h-8" : "h-10",
+        "inline-flex max-w-full items-center gap-0.5 rounded-[10px] border border-foreground/12 p-1",
+        wrap ? "flex-wrap" : null,
       )}
     >
       {options.map((item) => (
@@ -262,8 +257,8 @@ export function ScopeToggle({
           aria-pressed={value === item.id}
           onClick={() => onChange(item.id)}
           className={cn(
-            "inline-flex items-center rounded-[10px] font-medium tracking-[-0.01em] transition-colors duration-200",
-            compact ? "h-7 px-2.5 text-[12px]" : "h-9 px-3 text-[13px]",
+            "inline-flex items-center rounded-[8px] font-medium tracking-[-0.01em] transition-colors duration-200",
+            compact ? "h-6 px-2.5 text-[12px]" : "h-8 px-3 text-[13px]",
             value === item.id
               ? "bg-muted text-foreground"
               : "text-muted-foreground hover:text-foreground",
@@ -289,7 +284,7 @@ export function DashFrame({
 }: {
   space?: SpaceId;
   bannerKey?: BannerKey;
-  kicker: string;
+  kicker?: string;
   title: string;
   subtitle?: string;
   actions?: ReactNode;
@@ -298,13 +293,17 @@ export function DashFrame({
   children: ReactNode;
 }) {
   const { spaceId, sidebarOpen, mobileNav, view, product } = useApp();
+  const mode = useSpaceRenderMode();
+  const inPanel = mode === "panel";
   const bannerSpace = banner
     ? (bannerKey ?? space ?? (product === "platform" ? null : spaceId))
     : null;
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-y-auto">
-      {((view === "space" || product === "platform") && !bannerSpace) ? (
+    <div className="@container relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-background">
+      {((view === "space" || product === "platform") &&
+      !bannerSpace &&
+      !inPanel) ? (
         <NavToggle
           className={cn(
             "absolute top-1.5 left-2 z-20",
@@ -316,7 +315,12 @@ export function DashFrame({
       {bannerSpace ? (
         <div>
           <SpaceBanner space={bannerSpace}>
-            <div className="mx-auto flex h-full w-full max-w-6xl items-start px-8 pt-8">
+            <div
+              className={cn(
+                "mx-auto flex h-full w-full items-start px-4 pt-5 @min-[480px]:px-8 @min-[480px]:pt-6",
+                inPanel ? "max-w-none" : "max-w-6xl",
+              )}
+            >
               <DashHeader
                 kicker={kicker}
                 title={title}
@@ -324,7 +328,12 @@ export function DashFrame({
                 titleAction={titleAction}
                 actions={
                   actions ? (
-                    <span className="flex flex-wrap items-center gap-2 [&_button]:border-white/25 [&_button]:bg-white/10 [&_button]:text-white [&_button]:hover:bg-white/20 [&_button.bg-primary]:border-transparent [&_button.bg-primary]:bg-white [&_button.bg-primary]:text-neutral-950 [&_button.bg-primary]:hover:bg-white/90">
+                    <span
+                      className={cn(
+                        "flex flex-wrap items-center gap-2 [&_button]:border-white/25 [&_button]:bg-white/10 [&_button]:text-white [&_button]:hover:bg-white/20 [&_button.bg-primary]:border-transparent [&_button.bg-primary]:bg-white [&_button.bg-primary]:text-neutral-950 [&_button.bg-primary]:hover:bg-white/90",
+                        inPanel && "[&>button:first-child]:hidden",
+                      )}
+                    >
                       {actions}
                     </span>
                   ) : null
@@ -335,17 +344,35 @@ export function DashFrame({
           </SpaceBanner>
         </div>
       ) : (
-        <div className="mx-auto w-full max-w-6xl px-8 pt-8">
+        <div
+          className={cn(
+            "mx-auto w-full px-4 pt-6 @min-[480px]:px-8 @min-[480px]:pt-8",
+            inPanel ? "max-w-none" : "max-w-6xl",
+          )}
+        >
           <DashHeader
             kicker={kicker}
             title={title}
             subtitle={subtitle}
             titleAction={titleAction}
-            actions={actions}
+            actions={
+              inPanel ? (
+                <span className="[&>button:first-child]:hidden">{actions}</span>
+              ) : (
+                actions
+              )
+            }
           />
         </div>
       )}
-      <div className="mx-auto w-full max-w-6xl px-8 py-6">{children}</div>
+      <div
+        className={cn(
+          "mx-auto w-full px-4 py-4 @min-[480px]:px-8 @min-[480px]:py-6",
+          inPanel ? "max-w-none" : "max-w-6xl",
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -358,7 +385,7 @@ function DashHeader({
   titleAction,
   onBanner = false,
 }: {
-  kicker: string;
+  kicker?: string;
   title: string;
   subtitle?: string;
   actions?: ReactNode;
@@ -366,20 +393,22 @@ function DashHeader({
   onBanner?: boolean;
 }) {
   return (
-    <div className="flex w-full flex-wrap items-start justify-between gap-4">
+    <div className="flex w-full flex-col items-start justify-between gap-3 @min-[520px]:flex-row @min-[520px]:flex-wrap">
       <div className="min-w-0">
-        <p
-          className={cn(
-            "text-[11px] tracking-[0.06em] uppercase",
-            onBanner ? "text-white/65" : "text-muted-foreground",
-          )}
-        >
-          {kicker}
-        </p>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
+        {kicker ? (
+          <p
+            className={cn(
+              "text-[11px] tracking-[0.06em] uppercase",
+              onBanner ? "text-white/65" : "text-muted-foreground",
+            )}
+          >
+            {kicker}
+          </p>
+        ) : null}
+        <div className={cn("flex flex-wrap items-center gap-3", kicker && "mt-2")}>
           <h1
             className={cn(
-              "heading-display text-[1.85rem]",
+              "heading-display text-[1.55rem] @min-[480px]:text-[1.85rem]",
               onBanner && "text-white",
             )}
           >
@@ -390,7 +419,7 @@ function DashHeader({
         {subtitle ? (
           <p
             className={cn(
-              "mt-2 max-w-xl truncate text-[14px] leading-relaxed",
+              "mt-2 max-w-xl text-[13.5px] leading-relaxed @min-[480px]:text-[14px]",
               onBanner ? "text-white/70" : "text-muted-foreground",
             )}
           >

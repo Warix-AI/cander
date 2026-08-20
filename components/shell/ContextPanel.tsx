@@ -41,7 +41,7 @@ export function ContextPanel() {
   return (
     <aside
       className={cn(
-        "flex h-full min-h-0 min-w-0 flex-col border-l border-sidebar-border bg-sidebar",
+        "@container flex h-full min-h-0 min-w-0 flex-col border-l border-border bg-background",
         !dragging &&
           "transition-[width] duration-[550ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
       )}
@@ -79,8 +79,14 @@ export function ContextPanel() {
 }
 
 export function ResizeHandle() {
-  const { setPanelRatio, panelMode } = useApp();
-  if (panelMode === "collapsed" || panelMode === "immersive") return null;
+  const { setPanelRatio, panelMode, product, platformDockOpen } = useApp();
+  const platformChat = product === "platform" && platformDockOpen;
+  if (
+    !platformChat &&
+    (panelMode === "collapsed" || panelMode === "immersive")
+  ) {
+    return null;
+  }
 
   return (
     <SplitHandle

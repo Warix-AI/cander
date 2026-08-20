@@ -22,7 +22,6 @@ import {
   spaces,
 } from "@/lib/data";
 import { inferPlatformIntent } from "@/lib/platform-intent";
-import { developmentView } from "@/lib/product-copy";
 import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
 import type { PlatformNav, SpaceId, Thread } from "@/lib/types";
 
@@ -94,9 +93,8 @@ function PlatformRecents() {
     <div className="flex min-h-0 flex-1 flex-col">
       <DashFrame
         banner={false}
-        kicker={developmentView.kicker}
         title="Recents"
-        subtitle="Development chats in this workspace."
+        subtitle="Recent development chats in this workspace, newest first."
         actions={<PlatformAskButton />}
       >
         <ScopeToggle
@@ -197,6 +195,7 @@ function CourierRecents() {
           title: thread.title,
           lines: thread.snippet ? [thread.snippet] : [],
         },
+        bannerKey: thread.spaceId ?? undefined,
         rank: recencyRank(thread.updatedAt),
         space: thread.spaceId,
       });
@@ -224,6 +223,7 @@ function CourierRecents() {
           title: project.name,
           lines: [project.summary],
         },
+        bannerKey: project.space,
         rank: recencyRank(project.updatedAt),
         space: project.space,
       });
@@ -244,7 +244,6 @@ function CourierRecents() {
     <div className="flex min-h-0 flex-1 flex-col">
       <DashFrame
         banner={false}
-        kicker="This workspace"
         title="Recents"
         subtitle="Chats and work from every Space, newest first."
         actions={

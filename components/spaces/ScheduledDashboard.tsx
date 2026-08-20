@@ -72,7 +72,7 @@ export function ScheduledDashboard() {
         <Kpi label="Failed" value="0" />
       </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 gap-4 @min-[560px]:grid-cols-2">
         <ChartCard title="Runs this month" hint="Last 12 weeks">
           <AreaChart values={runSeries} />
         </ChartCard>

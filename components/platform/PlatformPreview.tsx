@@ -45,7 +45,7 @@ export function PlatformPreviewGrid({
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 @min-[420px]:flex-row @min-[420px]:flex-wrap @min-[420px]:items-center @min-[420px]:justify-between">
         {filters?.length ? (
           <ScopeToggle value={scope} onChange={setScope} options={filters} />
         ) : (

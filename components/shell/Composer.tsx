@@ -72,15 +72,32 @@ export function Composer({
 
   const LINE_HEIGHT = 20;
   const MAX_LINES = 10;
+  const MIN_HEIGHT = 32;
 
   useEffect(() => {
     const el = textRef.current;
     if (!el || compact) return;
-    const max = LINE_HEIGHT * MAX_LINES + 12;
-    el.style.height = "auto";
-    const scroll = el.scrollHeight;
-    el.style.height = `${Math.min(Math.max(scroll, 32), max)}px`;
-    el.style.overflowY = scroll > max ? "auto" : "hidden";
+
+    const resize = () => {
+      // Empty: always one line. Avoids the space-slide animation measuring
+      // the placeholder at ~0 width and locking the box at max height.
+      if (!value) {
+        el.style.height = `${MIN_HEIGHT}px`;
+        el.style.overflowY = "hidden";
+        return;
+      }
+      const max = LINE_HEIGHT * MAX_LINES + 12;
+      el.style.height = "auto";
+      const scroll = el.scrollHeight;
+      el.style.height = `${Math.min(Math.max(scroll, MIN_HEIGHT), max)}px`;
+      el.style.overflowY = scroll > max ? "auto" : "hidden";
+    };
+
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(el);
+    if (wrapRef.current) ro.observe(wrapRef.current);
+    return () => ro.disconnect();
   }, [value, compact]);
 
   useEffect(() => {
@@ -332,7 +349,7 @@ export function Composer({
                     className={cn(
                       "inline-flex h-7 items-center rounded-lg px-2 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
                       spaceLibraryOpen
-                        ? "bg-muted/70 text-foreground ring-2 ring-sky-400/90"
+                        ? "bg-background text-foreground"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
@@ -384,7 +401,7 @@ export function Composer({
                     submit();
                   }
                 }}
-                className="max-h-[212px] min-h-8 min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent py-1.5 text-[14px] leading-5 outline-none placeholder:text-muted-foreground"
+                className="h-8 max-h-[212px] min-h-8 min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent py-1.5 text-[14px] leading-5 outline-none placeholder:text-muted-foreground"
               />
               {listening ? (
                 <div

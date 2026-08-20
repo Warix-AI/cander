@@ -19,8 +19,10 @@ import { useApp } from "@/components/app/AppProvider";
 import { CourierMark } from "@/components/brand/CourierMark";
 import { ChatMessage } from "@/components/chat/MessageBlocks";
 import { Composer } from "@/components/shell/Composer";
+import { SuggestionPrompts } from "@/components/shell/SuggestionPrompts";
 import { VoiceOrb } from "@/components/shell/VoiceOrb";
 import { homeSuggestions } from "@/lib/suggestions";
+import { spaceChatSuggestions } from "@/lib/space-suggestions";
 import { chatSpaceCopy, spaceIconTint } from "@/lib/space-icons";
 import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -40,6 +42,8 @@ export function ChatColumn() {
   const { thread, spaceId, sendMessage, drafting, view } = useApp();
   const browserMode = view === "browser";
   const showLanding = !browserMode && !thread && !drafting;
+  const showSpacePrompts = !browserMode && !thread && !!spaceId;
+  const spacePrompts = spaceChatSuggestions(spaceId);
   const endRef = useRef<HTMLDivElement>(null);
   const last = thread?.messages.at(-1);
 
@@ -83,7 +87,7 @@ export function ChatColumn() {
   }
 
   return (
-    <section className="relative flex min-w-0 flex-1 flex-col bg-background">
+    <section className="@container relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
       {showLanding ? (
         <EmptyChat spaceId={spaceId} onPrompt={send} />
       ) : (
@@ -99,7 +103,14 @@ export function ChatColumn() {
         </div>
       )}
 
-      {showLanding ? null : <Composer onSend={send} />}
+      {showLanding ? null : (
+        <>
+          {showSpacePrompts && spacePrompts.length ? (
+            <SuggestionPrompts items={spacePrompts} onSelect={send} />
+          ) : null}
+          <Composer onSend={send} />
+        </>
+      )}
     </section>
   );
 }

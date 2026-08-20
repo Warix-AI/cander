@@ -4,6 +4,7 @@ import { useRef, useSyncExternalStore } from "react";
 import { ImagePlus } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { NavToggle } from "@/components/shell/NavToggle";
+import { useSpaceRenderMode } from "@/components/spaces/SpaceRenderMode";
 import {
   BANNER_PRESETS,
   bannerClass,
@@ -25,6 +26,8 @@ export function SpaceBanner({
   children: React.ReactNode;
 }) {
   const { sidebarOpen, mobileNav } = useApp();
+  const mode = useSpaceRenderMode();
+  const inPanel = mode === "panel";
   const banners = useSyncExternalStore(
     subscribeSpaceBanners,
     getSpaceBannersSnapshot,
@@ -33,7 +36,7 @@ export function SpaceBanner({
   const choice = bannerFor(space, banners);
 
   return (
-    <div className="relative h-40 shrink-0">
+    <div className="relative h-32 shrink-0">
       <div className="absolute inset-0 overflow-hidden">
         {choice.custom ? (
           <img
@@ -49,14 +52,16 @@ export function SpaceBanner({
         <div className="panel-grain" />
         <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-black/15 to-transparent" />
       </div>
-      <NavToggle
-        onBanner
-        className={cn(
-          "absolute top-1.5 left-2 z-20",
-          sidebarOpen && "lg:hidden",
-          mobileNav && "max-lg:hidden",
-        )}
-      />
+      {inPanel ? null : (
+        <NavToggle
+          onBanner
+          className={cn(
+            "absolute top-1.5 left-2 z-20",
+            sidebarOpen && "lg:hidden",
+            mobileNav && "max-lg:hidden",
+          )}
+        />
+      )}
       <div className="relative z-10 h-full">{children}</div>
     </div>
   );
