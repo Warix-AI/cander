@@ -11,6 +11,7 @@ import {
 } from "react";
 import { accountPresets, projects, starterThreads, workspaces } from "@/lib/data";
 import { inferIntent, nextId } from "@/lib/intent";
+import { latestThreadForProject } from "@/lib/selectors";
 import { inferPlatformIntent } from "@/lib/platform-intent";
 import {
   buildCard,
@@ -1410,18 +1411,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (id: string) => {
       const match = projects.find((item) => item.id === id);
       if (!match) return;
-      const linked =
-        (match.threadId
-          ? threads.find((item) => item.id === match.threadId)
-          : null) ??
-        [...threads]
-          .filter(
-            (item) =>
-              item.projectId === id &&
-              item.spaceId === match.space &&
-              item.workspaceId === match.workspaceId,
-          )
-          .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))[0];
+      const linked = latestThreadForProject(threads, match);
       if (linked) {
         openThread(linked.id);
         return;

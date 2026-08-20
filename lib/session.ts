@@ -327,7 +327,9 @@ function parsePins(raw: string | null): Pin[] {
       (item): item is Pin =>
         Boolean(item) &&
         typeof item === "object" &&
-        (item.kind === "thread" || item.kind === "project") &&
+        (item.kind === "thread" ||
+          item.kind === "project" ||
+          item.kind === "connector") &&
         typeof item.id === "string",
     );
     return next.length ? next : emptyPins;

@@ -1,13 +1,15 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Ellipsis, Pin, SquarePen } from "lucide-react";
+import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { VoiceControl } from "@/components/shell/VoiceControl";
 import { AccountMenu } from "@/components/shell/AccountMenu";
 import { ProductSwitcher } from "@/components/shell/ProductSwitcher";
 import { WindowChrome } from "@/components/shell/WindowChrome";
 import { useApp } from "@/components/app/AppProvider";
 import { Dropdown } from "@/components/ui/Controls";
-import { platformNavItems, projects, spaces } from "@/lib/data";
+import { platformNavItems, projects, spaces, connectors } from "@/lib/data";
 import {
   extraNavLabels,
   navIcon,
@@ -53,6 +55,8 @@ export function Sidebar() {
     togglePin,
     openThread,
     openProject,
+    openConnector,
+    connectorId,
     actor,
     billingPlan,
     personalSpaceEnabled,
@@ -68,13 +72,26 @@ export function Sidebar() {
     view === "chat" && !threadId && !spaceId && product === "courier";
 
   type PinnedItem = {
-    kind: "thread" | "project";
+    kind: "thread" | "project" | "connector";
     id: string;
     title: string;
+    icon?: string;
   };
 
   const pinnedItems: PinnedItem[] = [];
   for (const pin of pins) {
+    if (pin.kind === "connector") {
+      const connector = connectors.find((item) => item.id === pin.id);
+      if (connector) {
+        pinnedItems.push({
+          kind: "connector",
+          id: connector.id,
+          title: connector.name,
+          icon: connector.icon,
+        });
+      }
+      continue;
+    }
     if (pin.kind === "thread") {
       const thread = threads.find(
         (item) =>
@@ -222,17 +239,24 @@ export function Sidebar() {
                 <PinnedRow
                   key={`${item.kind}-${item.id}`}
                   title={item.title}
+                  leading={
+                    item.kind === "connector" && item.icon ? (
+                      <ConnectorMark id={item.icon} size="xs" />
+                    ) : null
+                  }
                   active={
                     item.kind === "thread"
                       ? threadId === item.id
-                      : projectId === item.id && !threadId
+                      : item.kind === "connector"
+                        ? connectorId === item.id && spaceId === "connectors"
+                        : projectId === item.id && !threadId
                   }
                   pinned={isPinned(item.kind, item.id)}
-                  onOpen={() =>
-                    item.kind === "thread"
-                      ? openThread(item.id)
-                      : openProject(item.id)
-                  }
+                  onOpen={() => {
+                    if (item.kind === "thread") openThread(item.id);
+                    else if (item.kind === "connector") openConnector(item.id);
+                    else openProject(item.id);
+                  }}
                   onPin={() => togglePin(item.kind, item.id)}
                 />
               ))}
@@ -326,12 +350,14 @@ function PinnedRow({
   pinned,
   onOpen,
   onPin,
+  leading,
 }: {
   title: string;
   active: boolean;
   pinned: boolean;
   onOpen: () => void;
   onPin: () => void;
+  leading?: ReactNode;
 }) {
   return (
     <div
@@ -344,10 +370,11 @@ function PinnedRow({
         type="button"
         onClick={onOpen}
         className={cn(
-          "min-w-0 flex-1 truncate px-3 py-1.5 text-left text-[13.5px]",
+          "flex min-w-0 flex-1 items-center gap-2 truncate px-3 py-1.5 text-left text-[13.5px]",
           active && "font-medium",
         )}
       >
+        {leading}
         {title}
       </button>
       <button

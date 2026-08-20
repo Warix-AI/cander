@@ -104,7 +104,9 @@ export function spaceAllowed(
   allowed: SpaceId[],
   opts?: SidebarNavOpts,
 ): boolean {
-  if (id === "browser" || id === "files" || id === "connectors") return false;
+  if (id === "browser") return false;
+  if (id === "connectors") return allowed.includes("connectors");
+  if (id === "files") return allowed.includes("files");
   if (id === "recents") return true;
     if (id === "work") {
       if (

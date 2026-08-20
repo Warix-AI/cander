@@ -2,6 +2,7 @@
 
 import { BuildPanel } from "@/components/panels/BuildPanel";
 import { ConnectorsPanel } from "@/components/panels/ConnectorsPanel";
+import { HandshakePanel } from "@/components/panels/handshake/HandshakePanel";
 import { PanelEmptyState } from "@/components/panels/PanelEmptyState";
 import { ProjectsBrowser } from "@/components/panels/ProjectsBrowser";
 import { ResearchPanel } from "@/components/panels/ResearchPanel";
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 export function ContextPanel() {
   const {
     spaceId,
+    connectorId,
     dragging,
     view,
     thread,
@@ -54,6 +56,8 @@ export function ContextPanel() {
           <SkillsPanel />
         ) : spaceId === "scheduled" || (spaceId === "build" && jobId) ? (
           <ScheduledPanel />
+        ) : spaceId === "connectors" && connectorId === "handshake" ? (
+          <HandshakePanel />
         ) : spaceId === "connectors" ? (
           <ConnectorsPanel />
         ) : spaceId === "files" ? (

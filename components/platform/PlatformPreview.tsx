@@ -15,7 +15,12 @@ import {
   platformModels,
 } from "@/lib/data";
 import { hostingModes } from "@/lib/billing";
-import type { HostingMode } from "@/lib/types";
+import {
+  demoLocalHardware,
+  modelFitsHardware,
+  parseMemoryGb,
+} from "@/lib/compute";
+import type { HardwareCapabilities, HostingMode } from "@/lib/types";
 
 export function PlatformPreviewGrid({
   items,
@@ -61,16 +66,36 @@ export function PlatformPreviewGrid({
   );
 }
 
-export function modelPreviews(): PreviewEntry[] {
-  return platformModels.map((model) => ({
-    id: model.name,
-    name: model.name,
-    projectId: `${model.runtime.toLowerCase().replace(/\s+/g, "-")}:${model.name}`,
-    meta: `${model.runtime} · ${model.memory}`,
-    badge: model.status,
-    initial: model.name.charAt(0),
-    kind: "product" as const,
-  }));
+export function modelPreviews(opts?: {
+  hostingMode?: HostingMode;
+  hardware?: HardwareCapabilities;
+}): PreviewEntry[] {
+  const showHardwareHints =
+    opts?.hostingMode === "local" || opts?.hostingMode === "on-device";
+  const hardware = opts?.hardware ?? demoLocalHardware;
+
+  return platformModels.map((model) => {
+    const memoryGb = parseMemoryGb(model.memory);
+    const fits =
+      !showHardwareHints ||
+      modelFitsHardware({ memoryGb }, hardware);
+    const hardwareHint =
+      showHardwareHints && memoryGb != null && !fits
+        ? `Needs ${model.memory}`
+        : null;
+
+    return {
+      id: model.name,
+      name: model.name,
+      projectId: `${model.runtime.toLowerCase().replace(/\s+/g, "-")}:${model.name}`,
+      meta: hardwareHint
+        ? `${model.runtime} · ${hardwareHint}`
+        : `${model.runtime} · ${model.memory}`,
+      badge: model.status,
+      initial: model.name.charAt(0),
+      kind: "product" as const,
+    };
+  });
 }
 
 export function modelFilters() {
@@ -114,7 +139,7 @@ export function deploymentPreviews(): PreviewEntry[] {
   return platformDeployments.map((item) => ({
     id: item.name,
     name: item.name,
-    projectId: `${item.status.toLowerCase()}:${item.name}`,
+    projectId: `${item.status.toLowerCase()}:${item.hosting}:${item.name}`,
     meta: item.hint,
     badge: item.status,
     initial: item.name.charAt(0),

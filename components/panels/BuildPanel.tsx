@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { Row, SectionLabel, StatLine } from "@/components/panels/Bits";
 import { SpaceLibraryPanel } from "@/components/panels/SpaceLibraryPanel";
@@ -7,12 +8,8 @@ import { BuildMore } from "@/components/panels/BuildMore";
 import { PreviewChrome, previewAddress } from "@/components/panels/PreviewChrome";
 import { AppViewport } from "@/components/preview/AppViewport";
 import { ChangeTimeline } from "@/components/preview/ChangeTimeline";
-import {
-  canderCode,
-  canderFiles,
-  scheduledJobs,
-  starbaseFiles,
-} from "@/lib/data";
+import { canderCode, canderFiles, scheduledJobs, starbaseFiles } from "@/lib/data";
+import { threadsForProject } from "@/lib/selectors";
 import type { BuildTool } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +26,6 @@ const ADVANCED_TOOLS: BuildTool[] = [
 
 export function BuildPanel() {
   const {
-    workspaceId,
     project,
     panelIntent,
     buildTool,
@@ -40,6 +36,16 @@ export function BuildPanel() {
     liveUrl,
   } = useApp();
   const execute = panelIntent === "execute";
+  const projectThreads = useMemo(
+    () =>
+      project
+        ? threadsForProject(threads, {
+            projectId: project.id,
+            workspaceId: project.workspaceId,
+          })
+        : [],
+    [project, threads],
+  );
 
   if ((!project || project.space !== "build") && !execute) {
     return <SpaceLibraryPanel />;
@@ -109,15 +115,13 @@ export function BuildPanel() {
 
         {!locked && tool === "chats" ? (
           <div className="py-2">
-            {threads
-              .filter((thread) => project && thread.projectId === project.id)
-              .map((thread) => (
-                <Row
-                  key={thread.id}
-                  title={thread.title}
-                  meta={thread.updatedAt}
-                />
-              ))}
+            {projectThreads.map((thread) => (
+              <Row
+                key={thread.id}
+                title={thread.title}
+                meta={thread.updatedAt}
+              />
+            ))}
           </div>
         ) : null}
 

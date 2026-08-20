@@ -1,11 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { Check, MoreHorizontal, Search, Settings } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import { SpaceSettingsButton, DashFrame } from "@/components/spaces/ItemSet";
 import { Dropdown } from "@/components/ui/Controls";
+import {
+  getInstalledConnectorsServerSnapshot,
+  getInstalledConnectorsSnapshot,
+  installConnector,
+  subscribeInstalledConnectors,
+  uninstallConnector,
+} from "@/lib/connector-install";
 import { connectors as seed, spaceStats } from "@/lib/data";
 import type { Connector, ConnectorScope } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -26,7 +33,11 @@ const PREVIEW_ROWS = 8;
 export function ConnectorsDashboard() {
   const { connectorId, openConnector, workspaceId, workspacePolicies, billingPlan } =
     useApp();
-  const [apps, setApps] = useState<Connector[]>(seed);
+  const installedIds = useSyncExternalStore(
+    subscribeInstalledConnectors,
+    getInstalledConnectorsSnapshot,
+    getInstalledConnectorsServerSnapshot,
+  );
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<ConnectorScope>("public");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -37,29 +48,36 @@ export function ConnectorsDashboard() {
     billingPlan,
   );
 
+  const apps = useMemo(
+    () =>
+      seed.map((item) => {
+        const installed = item.installed || installedIds.includes(item.id);
+        return {
+          ...item,
+          installed,
+          accounts:
+            installed && !item.accounts.length
+              ? [
+                  {
+                    id: item.id === "handshake" ? "hs-1" : `${item.id}-1`,
+                    label: "Acme Inc.",
+                    status: "connected" as const,
+                  },
+                ]
+              : item.accounts,
+        };
+      }),
+    [installedIds],
+  );
+
   const install = (id: string) => {
     if (blockedIds.includes(id)) return;
-    setApps((current) =>
-      current.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              installed: true,
-              accounts: item.accounts.length
-                ? item.accounts
-                : [{ id: `${id}-1`, label: "Acme Inc.", status: "connected" }],
-            }
-          : item,
-      ),
-    );
+    installConnector(id);
+    openConnector(id);
   };
 
   const uninstall = (id: string) => {
-    setApps((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, installed: false, accounts: [] } : item,
-      ),
-    );
+    uninstallConnector(id);
   };
 
   const installed = apps.filter(

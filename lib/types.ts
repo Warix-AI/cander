@@ -34,7 +34,7 @@ export type CourierView =
   | "recents"
   | "browser";
 
-export type PinKind = "thread" | "project";
+export type PinKind = "thread" | "project" | "connector";
 
 export type Pin = {
   kind: PinKind;
@@ -156,6 +156,13 @@ export type WorkspaceResource = {
   status: "active" | "paused";
 };
 
+export type PlatformDeployment = {
+  name: string;
+  status: "Active" | "Standby" | "Ready";
+  hint: string;
+  hosting: HostingMode;
+};
+
 export type Message = {
   id: string;
   role: "user" | "assistant";
@@ -204,11 +211,14 @@ export type ProjectMemory = {
   rejected: string[];
 };
 
+/** A conversation. `spaceId` is the active UI lens — it may differ from the linked project's home space. */
 export type Thread = {
   id: string;
   title: string;
+  /** Tenancy boundary — objects do not cross workspaces. */
   workspaceId: string;
   product?: ProductId;
+  /** Cross-space link back to a project, when this chat belongs to one. */
   projectId?: string;
   spaceId?: SpaceId;
   platformNav?: PlatformNav;
@@ -228,10 +238,13 @@ export type VoiceAnchor =
   | "bottom-center"
   | "bottom-right";
 
+/** A durable unit of work. `space` is the dashboard/home bucket, not a storage partition. */
 export type Project = {
   id: string;
   name: string;
+  /** Where the project card lives in Home navigation. */
   space: SpaceId;
+  /** Tenancy boundary — objects do not cross workspaces. */
   workspaceId: string;
   summary: string;
   updatedAt: string;
@@ -242,14 +255,18 @@ export type Project = {
 
 export type AssetKind = "image" | "document" | "code" | "media" | "data" | "folder";
 
+/** A file or output. Link to a project via `projectId`; `source` records where it was created. */
 export type AssetFile = {
   id: string;
   name: string;
   kind: AssetKind;
   ext: string;
   size: string;
+  /** Space where the asset was produced — not a hard ownership boundary. */
   source: SpaceId;
+  /** Cross-space link back to a project, when applicable. */
   projectId?: string;
+  /** Tenancy boundary — objects do not cross workspaces. */
   workspaceId: string;
   updatedAt: string;
   cover?: string;

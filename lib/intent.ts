@@ -71,6 +71,15 @@ export function inferIntent(
 
   const finish = (intent: Intent) => withHandoff(intent, currentSpace);
 
+  if (includesAny(text, ["handshake", "ai readiness", "ai-ready"])) {
+    return finish({
+      space: "connectors",
+      connectorId: "handshake",
+      reply:
+        "Opening Handshake — your trust layer for AI agents and businesses.",
+    });
+  }
+
   if (
     connecting &&
     includesAny(text, [

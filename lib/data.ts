@@ -4,6 +4,7 @@ import type {
   Connector,
   ConnectorAccount,
   Member,
+  PlatformDeployment,
   PlatformNav,
   Project,
   ScheduledJob,
@@ -829,6 +830,16 @@ function conn(
 }
 
 export const connectors: Connector[] = [
+  conn({
+    id: "handshake",
+    name: "Handshake",
+    category: "Featured",
+    description: "Trust layer between AI agents and your business",
+    icon: "handshake",
+    featured: true,
+    installed: false,
+    actions: ["Verify agents", "Manage capabilities", "Review activity"],
+  }),
   conn({
     id: "gmail",
     name: "Gmail",
@@ -1938,13 +1949,13 @@ export const apiKeys = [
   { name: "Preview", hint: "crr_prev_••••9q3c", created: "Aug 14" },
 ];
 
-export const platformDeployments = [
-  { name: "Cloud · us-east-1", status: "Active", hint: "Primary" },
-  { name: "Cloud · eu-west-1", status: "Standby", hint: "Failover" },
-  { name: "Local · office LAN", status: "Standby", hint: "Engineering" },
-  { name: "On-device · this Mac", status: "Ready", hint: "Personal" },
-  { name: "On-device · fleet", status: "Ready", hint: "12 machines" },
-  { name: "Preview · staging", status: "Active", hint: "API sandbox" },
+export const platformDeployments: PlatformDeployment[] = [
+  { name: "Cloud · us-east-1", status: "Active", hint: "Primary", hosting: "cloud" },
+  { name: "Cloud · eu-west-1", status: "Standby", hint: "Failover", hosting: "cloud" },
+  { name: "Local · office LAN", status: "Standby", hint: "Engineering", hosting: "local" },
+  { name: "On-device · this Mac", status: "Ready", hint: "Personal", hosting: "on-device" },
+  { name: "On-device · fleet", status: "Ready", hint: "12 machines", hosting: "on-device" },
+  { name: "Preview · staging", status: "Active", hint: "API sandbox", hosting: "cloud" },
 ];
 
 export const platformDocs = [

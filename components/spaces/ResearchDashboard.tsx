@@ -11,6 +11,7 @@ import {
 } from "@/components/spaces/ItemSet";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import { projects, researchPaperPreviews, spaceStats } from "@/lib/data";
+import { projectsInSpace } from "@/lib/selectors";
 
 type ResearchScope = "all" | "reports" | "papers";
 
@@ -40,8 +41,9 @@ export function ResearchDashboard() {
   } = useApp();
   const [scope, setScope] = useState<ResearchScope>("all");
 
-  const spaceProjects = projects.filter(
-    (item) => item.space === "research" && item.workspaceId === workspaceId,
+  const spaceProjects = useMemo(
+    () => projectsInSpace(projects, { space: "research", workspaceId }),
+    [workspaceId],
   );
   const visible = useMemo(() => {
     if (scope === "all") return spaceProjects;

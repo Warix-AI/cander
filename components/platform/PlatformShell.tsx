@@ -167,7 +167,7 @@ export function PlatformMain() {
           </div>
         ) : null}
         <PlatformPreviewGrid
-          items={modelPreviews()}
+          items={modelPreviews({ hostingMode })}
           filters={modelFilters()}
           empty="No models in this filter."
         />
