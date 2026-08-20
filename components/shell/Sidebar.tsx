@@ -14,14 +14,12 @@ import {
   extraNavLabels,
   navIcon,
   platformNavIcons,
-  spaceIconTint,
 } from "@/lib/space-icons";
 import {
   isExtraNavId,
   resolveSidebarNav,
   type SidebarNavId,
 } from "@/lib/spaces";
-import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { memberSpaces } from "@/lib/workspace-policy";
 
@@ -147,10 +145,7 @@ export function Sidebar() {
         )}
       >
         <Icon
-          className={cn(
-            "h-3.5 w-3.5",
-            isExtraNavId(id) ? "text-muted-foreground" : spaceIconTint(id as SpaceId),
-          )}
+          className="h-3.5 w-3.5 text-muted-foreground"
           strokeWidth={2}
         />
         {label}
@@ -322,12 +317,7 @@ function MoreMenu({
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[13.5px] transition-colors duration-200 hover:bg-muted"
               >
                 <Icon
-                  className={cn(
-                    "h-3.5 w-3.5 shrink-0",
-                    isExtraNavId(id)
-                      ? "text-muted-foreground"
-                      : spaceIconTint(id),
-                  )}
+                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                   strokeWidth={2}
                 />
                 {label}

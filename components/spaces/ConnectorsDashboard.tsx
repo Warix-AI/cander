@@ -31,8 +31,15 @@ const SECTION_ORDER = [
 const PREVIEW_ROWS = 8;
 
 export function ConnectorsDashboard() {
-  const { connectorId, openConnector, workspaceId, workspacePolicies, billingPlan } =
-    useApp();
+  const {
+    connectorId,
+    openConnector,
+    workspaceId,
+    workspacePolicies,
+    billingPlan,
+    isPinned,
+    togglePin,
+  } = useApp();
   const installedIds = useSyncExternalStore(
     subscribeInstalledConnectors,
     getInstalledConnectorsSnapshot,
@@ -227,9 +234,11 @@ export function ConnectorsDashboard() {
                       key={item.id}
                       item={item}
                       active={connectorId === item.id}
+                      pinned={isPinned("connector", item.id)}
                       onOpen={() => openConnector(item.id)}
                       onInstall={() => install(item.id)}
                       onUninstall={() => uninstall(item.id)}
+                      onTogglePin={() => togglePin("connector", item.id)}
                     />
                   ))}
                 </div>
@@ -259,15 +268,19 @@ export function ConnectorsDashboard() {
 function DirectoryItem({
   item,
   active,
+  pinned,
   onOpen,
   onInstall,
   onUninstall,
+  onTogglePin,
 }: {
   item: Connector;
   active: boolean;
+  pinned: boolean;
   onOpen: () => void;
   onInstall: () => void;
   onUninstall: () => void;
+  onTogglePin: () => void;
 }) {
   return (
     <div
@@ -315,7 +328,18 @@ function DirectoryItem({
                     }}
                     className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
                   >
-                    Manage
+                    Open
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      close();
+                      onTogglePin();
+                    }}
+                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                  >
+                    {pinned ? "Unpin from menu" : "Pin to menu"}
                   </button>
                   <button
                     type="button"

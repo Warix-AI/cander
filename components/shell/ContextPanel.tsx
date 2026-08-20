@@ -2,6 +2,7 @@
 
 import { BuildPanel } from "@/components/panels/BuildPanel";
 import { ConnectorsPanel } from "@/components/panels/ConnectorsPanel";
+import { GmailPanel } from "@/components/panels/gmail/GmailPanel";
 import { HandshakePanel } from "@/components/panels/handshake/HandshakePanel";
 import { PanelEmptyState } from "@/components/panels/PanelEmptyState";
 import { ProjectsBrowser } from "@/components/panels/ProjectsBrowser";
@@ -58,6 +59,8 @@ export function ContextPanel() {
           <ScheduledPanel />
         ) : spaceId === "connectors" && connectorId === "handshake" ? (
           <HandshakePanel />
+        ) : spaceId === "connectors" && connectorId === "gmail" ? (
+          <GmailPanel />
         ) : spaceId === "connectors" ? (
           <ConnectorsPanel />
         ) : spaceId === "files" ? (

@@ -55,7 +55,7 @@ export function OverviewPage() {
               className={cn(
                 "flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[13px] transition-colors",
                 layer === item.id
-                  ? "border-border bg-background shadow-sm"
+                  ? "border-border bg-card shadow-sm"
                   : "border-transparent bg-muted/30 hover:bg-muted/50",
               )}
             >

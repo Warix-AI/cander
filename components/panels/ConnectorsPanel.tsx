@@ -32,7 +32,7 @@ export function ConnectorsPanel() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar">
       <PanelChrome kicker="Connector" title={selected.name} />
-      <div className="min-h-0 flex-1 overflow-hidden bg-background">
+      <div className="min-h-0 flex-1 overflow-hidden bg-sidebar">
     <div className="flex h-full">
       <div className="w-[42%] min-w-[10rem] border-r border-border py-3">
         <SectionLabel>Apps</SectionLabel>

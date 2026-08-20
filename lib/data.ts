@@ -844,7 +844,7 @@ export const connectors: Connector[] = [
     id: "gmail",
     name: "Gmail",
     category: "Productivity",
-    description: "Read and send mail",
+    description: "Search, read, draft, and send mail via MCP",
     icon: "gmail",
     featured: true,
     installed: true,
@@ -853,7 +853,7 @@ export const connectors: Connector[] = [
       { id: "g2", label: "support@acme.com", status: "connected" },
       { id: "g3", label: "sales@acme.com", status: "needs-reauth" },
     ],
-    actions: ["Send", "Draft", "Search", "Label"],
+    actions: ["Search", "Read", "Draft", "Send", "Labels", "Filters"],
   }),
   conn({
     id: "slack",

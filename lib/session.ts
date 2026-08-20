@@ -314,7 +314,7 @@ export function persistPersonalSpace(next: boolean) {
 }
 
 const pinListeners = new Set<Listener>();
-const emptyPins: Pin[] = [];
+const emptyPins: Pin[] = [{ kind: "connector", id: "gmail" }];
 let pins: Pin[] = emptyPins;
 let pinsHydrated = false;
 

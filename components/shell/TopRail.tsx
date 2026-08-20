@@ -13,6 +13,7 @@ export function TopRail() {
     thread,
     projectId,
     spaceId,
+    connectorId,
     drafting,
     panelMode,
     setPanelMode,
@@ -32,7 +33,9 @@ export function TopRail() {
     ? ({ kind: "thread" as const, id: thread.id })
     : projectId
       ? ({ kind: "project" as const, id: projectId })
-      : null;
+      : spaceId === "connectors" && connectorId
+        ? ({ kind: "connector" as const, id: connectorId })
+        : null;
   const pinned = pinTarget ? isPinned(pinTarget.kind, pinTarget.id) : false;
 
   return (

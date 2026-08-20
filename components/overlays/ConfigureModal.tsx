@@ -7,14 +7,12 @@ import { spaces } from "@/lib/data";
 import {
   extraNavLabels,
   navIcon,
-  spaceIconTint,
 } from "@/lib/space-icons";
 import {
   isExtraNavId,
   resolveSidebarNav,
   type SidebarNavId,
 } from "@/lib/spaces";
-import { cn } from "@/lib/utils";
 import { memberSpaces } from "@/lib/workspace-policy";
 
 export function ConfigureModal() {
@@ -143,10 +141,7 @@ function NavRow({
   return (
     <div className="flex items-center gap-1 rounded-[10px] px-1 py-1">
       <Icon
-        className={cn(
-          "ml-1 h-3.5 w-3.5 shrink-0",
-          isExtraNavId(id) ? "text-muted-foreground" : spaceIconTint(id),
-        )}
+        className="ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground"
         strokeWidth={1.6}
       />
       <span className="min-w-0 flex-1 truncate px-1.5 text-[13.5px]">

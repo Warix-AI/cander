@@ -46,8 +46,8 @@ export function SpaceBanner({
             className={cn("absolute inset-0", bannerClass(choice.preset))}
           />
         )}
-        <div className="grain-layer" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/25 to-black/10" />
+        <div className="panel-grain" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-black/15 to-transparent" />
       </div>
       <NavToggle
         onBanner
@@ -132,7 +132,7 @@ function BannerOptions({
             )}
           >
             <span className={cn("relative block", compact ? "h-10" : "h-16", item.className)}>
-              <span className="grain-layer" />
+              <span className="panel-grain" />
             </span>
             <span className="block px-2 py-1.5 text-[11.5px] font-medium">
               {item.label}
@@ -184,8 +184,8 @@ export function BannerSettingsPanel({ space }: { space: BannerKey }) {
         ) : (
           <div className={cn("absolute inset-0", bannerClass(choice.preset))} />
         )}
-        <div className="grain-layer" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/25 to-black/10" />
+        <div className="panel-grain" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-black/15 to-transparent" />
       </div>
       <div className="mt-4">
         <BannerOptions

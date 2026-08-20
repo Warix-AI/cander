@@ -2,11 +2,23 @@ import type { PlatformNav, SpaceId } from "./types";
 
 export type BannerKey = SpaceId | `plat-${PlatformNav}`;
 
-export type BannerPresetId = "graphite" | "drift" | "depth" | "signal";
+export type BannerPresetId = "host" | "price" | "spaces" | "dusk";
 
 export type SpaceBannerChoice = {
   preset: BannerPresetId;
   custom: string | null;
+};
+
+/** Maps legacy Graphite preset ids stored in localStorage. */
+const LEGACY_PRESET: Record<string, BannerPresetId> = {
+  graphite: "host",
+  drift: "price",
+  depth: "spaces",
+  signal: "dusk",
+  host: "host",
+  price: "price",
+  spaces: "spaces",
+  dusk: "dusk",
 };
 
 export const BANNER_PRESETS: {
@@ -14,43 +26,44 @@ export const BANNER_PRESETS: {
   label: string;
   className: string;
 }[] = [
-  { id: "graphite", label: "Graphite", className: "media-a" },
-  { id: "drift", label: "Drift", className: "media-b" },
-  { id: "depth", label: "Depth", className: "media-c" },
-  { id: "signal", label: "Signal", className: "media-d" },
+  { id: "host", label: "Ember", className: "panel-wash-host" },
+  { id: "price", label: "Indigo", className: "panel-wash-price" },
+  { id: "spaces", label: "Aurora", className: "panel-wash-spaces" },
+  { id: "dusk", label: "Dusk", className: "panel-wash-dusk" },
 ];
 
 export const defaultBannerPreset: Record<BannerKey, BannerPresetId> = {
-  work: "graphite",
-  build: "graphite",
-  studio: "drift",
-  research: "depth",
-  personal: "signal",
-  connectors: "graphite",
-  files: "drift",
-  skills: "depth",
-  scheduled: "signal",
-  finances: "signal",
-  health: "signal",
-  "plat-overview": "graphite",
-  "plat-hosting": "drift",
-  "plat-models": "depth",
-  "plat-api": "signal",
-  "plat-keys": "graphite",
-  "plat-deployments": "drift",
-  "plat-logs": "depth",
-  "plat-usage": "signal",
-  "plat-docs": "graphite",
-  "plat-recents": "graphite",
+  work: "price",
+  build: "spaces",
+  studio: "dusk",
+  research: "host",
+  personal: "spaces",
+  connectors: "price",
+  files: "dusk",
+  skills: "host",
+  scheduled: "spaces",
+  finances: "price",
+  health: "host",
+  "plat-overview": "price",
+  "plat-hosting": "host",
+  "plat-models": "dusk",
+  "plat-api": "spaces",
+  "plat-keys": "price",
+  "plat-deployments": "host",
+  "plat-logs": "dusk",
+  "plat-usage": "spaces",
+  "plat-docs": "price",
+  "plat-recents": "dusk",
 };
 
 export function emptyBannerChoice(space: BannerKey): SpaceBannerChoice {
-  return { preset: defaultBannerPreset[space] ?? "graphite", custom: null };
+  return { preset: defaultBannerPreset[space] ?? "price", custom: null };
 }
 
 export function bannerClass(preset: BannerPresetId) {
   return (
-    BANNER_PRESETS.find((item) => item.id === preset)?.className ?? "media-a"
+    BANNER_PRESETS.find((item) => item.id === preset)?.className ??
+    "panel-wash-price"
   );
 }
 
@@ -64,6 +77,11 @@ function emit() {
   listeners.forEach((listener) => listener());
 }
 
+function resolvePreset(value: unknown): BannerPresetId | undefined {
+  if (typeof value !== "string") return undefined;
+  return LEGACY_PRESET[value];
+}
+
 function parseBanners(raw: string | null): Partial<Record<BannerKey, SpaceBannerChoice>> {
   if (!raw) return {};
   try {
@@ -72,9 +90,7 @@ function parseBanners(raw: string | null): Partial<Record<BannerKey, SpaceBanner
     for (const [key, value] of Object.entries(data)) {
       if (!value || typeof value !== "object") continue;
       const row = value as { preset?: unknown; custom?: unknown };
-      const preset = BANNER_PRESETS.some((item) => item.id === row.preset)
-        ? (row.preset as BannerPresetId)
-        : undefined;
+      const preset = resolvePreset(row.preset);
       if (!preset) continue;
       next[key as BannerKey] = {
         preset,

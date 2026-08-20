@@ -69,16 +69,10 @@ export const platformNavIcons: Record<PlatformNav, typeof Hammer> = {
   recents: History,
 };
 
-export const spaceIconColor: Partial<Record<SpaceId, string>> = {
-  work: "text-rose-400",
-  build: "text-sky-400",
-  studio: "text-violet-400",
-  research: "text-orange-400",
-  personal: "text-emerald-400",
-};
+export const spaceIconColor: Partial<Record<SpaceId, string>> = {};
 
-export function spaceIconTint(id: SpaceId | null | undefined) {
-  return (id && spaceIconColor[id]) || "text-muted-foreground";
+export function spaceIconTint(_id?: SpaceId | null) {
+  return "text-muted-foreground";
 }
 
 export const chatSpaceCopy: Record<
