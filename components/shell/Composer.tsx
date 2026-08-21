@@ -362,8 +362,12 @@ export function Composer({
               className={cn(
                 "flex gap-1",
                 // Desktop landing: grow down with + / send fixed at the top.
-                // Mobile + docked chat: grow up with + / send locked at the bottom.
-                landing ? "items-start max-md:items-end" : "items-end",
+                // Mobile + docked chat: center on one line; lock to bottom when taller.
+                landing
+                  ? "items-start max-md:items-end"
+                  : value
+                    ? "items-end"
+                    : "items-center",
               )}
             >
               <ToolBtn
@@ -407,7 +411,7 @@ export function Composer({
                 <div
                   className={cn(
                     "mr-0.5 flex shrink-0 items-center gap-2",
-                    landing ? "mt-1.5 max-md:mt-0 max-md:mb-1.5" : "mb-1.5",
+                    landing ? "mt-1.5 max-md:mt-0 max-md:mb-1.5" : null,
                   )}
                 >
                   <div className="flex h-4 items-end gap-[2px]">
@@ -430,12 +434,9 @@ export function Composer({
               <button
                 type="submit"
                 aria-label="Send"
-                className={cn(
-                  "inline-flex h-[27px] w-[27px] shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors duration-200 hover:bg-foreground",
-                  landing ? "mt-0.5 max-md:mt-0" : null,
-                )}
+                className="inline-flex h-[28.5px] w-[28.5px] shrink-0 self-center items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors duration-200 hover:bg-foreground"
               >
-                <ArrowUp className="h-[15px] w-[15px]" strokeWidth={2.25} />
+                <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.25} />
               </button>
             </div>
           </div>

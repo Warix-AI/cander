@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Check, MoreHorizontal, Search, Settings } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { MoreHorizontal, Search, X } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
-import { SpaceSettingsButton, DashFrame } from "@/components/spaces/ItemSet";
+import { DashFrame, ScopeToggle } from "@/components/spaces/ItemSet";
 import { Dropdown } from "@/components/ui/Controls";
 import {
   getInstalledConnectorsServerSnapshot,
@@ -13,8 +13,8 @@ import {
   subscribeInstalledConnectors,
   uninstallConnector,
 } from "@/lib/connector-install";
-import { connectors as seed, spaceStats } from "@/lib/data";
-import type { Connector, ConnectorScope } from "@/lib/types";
+import { connectors as seed } from "@/lib/data";
+import type { Connector } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
 import {
@@ -33,7 +33,9 @@ const SECTION_ORDER = [
   "Internal",
 ] as const;
 
-const PREVIEW_ROWS = 8;
+const PREVIEW_ROWS = 6;
+
+type ConnectorsView = "connectors" | "installed";
 
 export function ConnectorsDashboard() {
   const {
@@ -51,13 +53,19 @@ export function ConnectorsDashboard() {
     getInstalledConnectorsServerSnapshot,
   );
   const [query, setQuery] = useState("");
-  const [scope, setScope] = useState<ConnectorScope>("public");
+  const [view, setView] = useState<ConnectorsView>("connectors");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [workAttachFor, setWorkAttachFor] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setWorkAttachFor(peekWorkConnectorAttach());
   }, []);
+
+  useEffect(() => {
+    if (searchOpen) searchRef.current?.focus();
+  }, [searchOpen]);
 
   const blockedIds = blockedConnectorIds(
     workspaceId,
@@ -120,9 +128,9 @@ export function ConnectorsDashboard() {
 
   const needle = query.trim().toLowerCase();
   const directory = useMemo(() => {
-    return apps.filter((item) => {
+    const pool = view === "installed" ? installed : apps;
+    return pool.filter((item) => {
       if (blockedIds.includes(item.id)) return false;
-      if (item.scope !== scope) return false;
       if (!needle) return true;
       return (
         item.name.toLowerCase().includes(needle) ||
@@ -130,13 +138,18 @@ export function ConnectorsDashboard() {
         item.category.toLowerCase().includes(needle)
       );
     });
-  }, [apps, blockedIds, needle, scope]);
+  }, [apps, blockedIds, installed, needle, view]);
 
   const sections = useMemo(() => {
+    if (view === "installed") {
+      return directory.length
+        ? [{ title: "Installed", items: directory }]
+        : [];
+    }
     const featured = directory.filter((item) => item.featured);
     const featuredIds = new Set(featured.map((item) => item.id));
     const groups: { title: string; items: Connector[] }[] = [];
-    if (featured.length && scope === "public") {
+    if (featured.length) {
       groups.push({ title: "Featured", items: featured });
     }
     for (const title of SECTION_ORDER) {
@@ -156,18 +169,15 @@ export function ConnectorsDashboard() {
     );
     if (leftover.length) groups.push({ title: "More", items: leftover });
     return groups;
-  }, [directory, scope]);
+  }, [directory, view]);
 
   return (
     <DashFrame
       space="connectors"
       banner={false}
-      kicker={spaceStats.connectors.kicker}
       title="Connectors"
-      subtitle="Work with Courier across your favorite tools."
-      actions={<SpaceSettingsButton space="connectors" />}
+      subtitle="Link apps so Courier can act across them."
     >
-
         {workAttachFor ? (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-border bg-muted/50 px-4 py-3">
             <p className="text-[13px] leading-relaxed text-muted-foreground">
@@ -188,94 +198,80 @@ export function ConnectorsDashboard() {
           </div>
         ) : null}
 
-        <div className="relative">
-          <Search
-            className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-            strokeWidth={1.6}
+        <div className="flex items-center gap-3">
+          <ScopeToggle
+            value={view}
+            onChange={(value) => setView(value as ConnectorsView)}
+            options={[
+              { id: "connectors", label: "Connectors" },
+              { id: "installed", label: "Installed" },
+            ]}
           />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search connectors"
-            className="h-11 w-full rounded-full border border-border bg-card pr-4 pl-11 text-[14px] outline-none placeholder:text-muted-foreground focus:border-foreground/20"
-          />
-        </div>
-
-        {installed.length ? (
-          <section className="mt-8">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[13px] font-medium tracking-[-0.01em]">
-                Installed
-              </p>
+          <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-1">
+            {searchOpen ? (
+              <div className="relative w-full max-w-[22rem] transition-[max-width] duration-200">
+                <Search
+                  className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                  strokeWidth={1.6}
+                />
+                <input
+                  ref={searchRef}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      setQuery("");
+                      setSearchOpen(false);
+                    }
+                  }}
+                  placeholder="Search"
+                  className="h-10 w-full rounded-[10px] border border-border bg-background pr-9 pl-9 text-[13px] outline-none placeholder:text-muted-foreground focus:border-foreground/20"
+                />
+                <button
+                  type="button"
+                  aria-label="Close search"
+                  onClick={() => {
+                    setQuery("");
+                    setSearchOpen(false);
+                  }}
+                  className="absolute top-1/2 right-1.5 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </button>
+              </div>
+            ) : (
               <button
                 type="button"
-                aria-label="Manage installed connectors"
-                    onClick={() => selectConnector(installed[0].id)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+                aria-label="Search connectors"
+                onClick={() => setSearchOpen(true)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] border border-border text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
               >
-                <Settings className="h-3.5 w-3.5" strokeWidth={1.6} />
+                <Search className="h-4 w-4" strokeWidth={1.6} />
               </button>
-            </div>
-            <div className="mt-3 flex gap-3 overflow-x-auto pt-1.5 pr-1 pb-1 pl-1.5">
-              {installed.map((item) => {
-                const active = item.accounts.some(
-                  (account) => account.status === "connected",
-                );
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    title={item.name}
-                    onClick={() => selectConnector(item.id)}
-                    className={cn(
-                      "relative shrink-0 rounded-[10px] transition-opacity duration-200 hover:opacity-80",
-                      connectorId === item.id && "ring-2 ring-foreground/15",
-                    )}
-                  >
-                    <ConnectorMark id={item.icon} size="md" />
-                    {active ? (
-                      <span className="absolute -top-1 -left-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-chart-2 text-white">
-                        <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-
-        <div className="mt-8 inline-flex rounded-full border border-border p-0.5">
-          {(["public", "personal"] as const).map((id) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setScope(id)}
-              className={cn(
-                "inline-flex h-8 items-center rounded-full px-4 text-[13px] font-medium tracking-[-0.01em] capitalize transition-colors duration-200",
-                scope === id
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {id}
-            </button>
-          ))}
+            )}
+          </div>
         </div>
 
         {sections.length ? (
           sections.map((section) => {
-            const open = expanded[section.title] || Boolean(needle);
+            const open = expanded[section.title] || Boolean(needle) || view === "installed";
             const visible = open
               ? section.items
               : section.items.slice(0, PREVIEW_ROWS);
             const rest = section.items.slice(PREVIEW_ROWS);
             return (
               <section key={section.title} className="mt-10">
-                <h2 className="text-[15px] font-medium tracking-[-0.02em]">
-                  {section.title}
-                </h2>
-                <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+                {view === "connectors" ? (
+                  <h2 className="text-[15px] font-medium tracking-[-0.02em]">
+                    {section.title}
+                  </h2>
+                ) : null}
+                <div
+                  className={cn(
+                    "grid grid-cols-1 gap-x-8 gap-y-3 @min-[440px]:grid-cols-2",
+                    view === "connectors" ? "mt-4" : "mt-0",
+                  )}
+                >
                   {visible.map((item) => (
                     <DirectoryItem
                       key={item.id}
@@ -287,6 +283,7 @@ export function ConnectorsDashboard() {
                       onUninstall={() => uninstall(item.id)}
                       onTogglePin={() => togglePin("connector", item.id)}
                       workAttach={Boolean(workAttachFor)}
+                      catalog={view === "connectors"}
                     />
                   ))}
                 </div>
@@ -306,7 +303,9 @@ export function ConnectorsDashboard() {
           })
         ) : (
           <p className="mt-10 text-[13px] text-muted-foreground">
-            No connectors match that search.
+            {view === "installed"
+              ? "No connectors installed yet."
+              : "No connectors match that search."}
           </p>
         )}
     </DashFrame>
@@ -322,6 +321,7 @@ function DirectoryItem({
   onUninstall,
   onTogglePin,
   workAttach,
+  catalog = false,
 }: {
   item: Connector;
   active: boolean;
@@ -331,6 +331,7 @@ function DirectoryItem({
   onUninstall: () => void;
   onTogglePin: () => void;
   workAttach?: boolean;
+  catalog?: boolean;
 }) {
   return (
     <div
@@ -360,6 +361,10 @@ function DirectoryItem({
               >
                 Add to Work
               </button>
+            ) : catalog ? (
+              <span className="inline-flex h-7 shrink-0 items-center px-1 text-[11.5px] font-medium tracking-[-0.01em] text-muted-foreground">
+                Connected
+              </span>
             ) : (
             <Dropdown
               align="end"

@@ -36,6 +36,7 @@ const ICONS: Record<string, LucideIcon> = {
   "chase-followups": ListTodo,
   approvals: CheckSquare,
   "personal-today": ListTodo,
+  "personal-money": Wallet,
   "personal-goals": Target,
   "personal-car": Car,
   "personal-week": Calendar,

@@ -233,7 +233,7 @@ function EmptyChat({
         className="flex w-full max-w-[44rem] flex-col items-center max-md:!mt-0"
         style={{ marginTop: padTop }}
       >
-        <CourierMark className="landing-mark mb-4 translate-y-[5px]" />
+        <CourierMark className="landing-mark mb-4 !h-[35.64px] !w-[37.2px] -translate-y-[2px]" />
         <h1 className="landing-headline heading-display text-center text-[1.85rem] md:text-[2.15rem]">
           {heading ?? "Leave the thinking to us."}
         </h1>

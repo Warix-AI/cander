@@ -1,18 +1,48 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import {
   DashBtn,
   DashFrame,
   LayoutToggle,
+  ScopeToggle,
   SpaceSettingsButton,
 } from "@/components/spaces/ItemSet";
+import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import { projects } from "@/lib/data";
+import type { BannerKey } from "@/lib/space-banners";
 import type { Project } from "@/lib/types";
 
 type PersonalScope = "today" | "money" | "health" | "goals" | "car";
+
+const scopes: { id: PersonalScope; label: string; empty: string }[] = [
+  {
+    id: "today",
+    label: "Today",
+    empty: "Nothing on the list yet. Start a chat about today or what’s due.",
+  },
+  {
+    id: "money",
+    label: "Finances",
+    empty: "Nothing tracked yet. Ask about invoices, runway, or spend.",
+  },
+  {
+    id: "health",
+    label: "Health",
+    empty: "Nothing tracked yet. Ask about benefits, care plans, or wellness.",
+  },
+  {
+    id: "goals",
+    label: "Goals",
+    empty: "No goals yet. Ask Courier to set one or recap the year.",
+  },
+  {
+    id: "car",
+    label: "Car",
+    empty: "Nothing on the car yet. Ask about service, insurance, or registration.",
+  },
+];
 
 const areaById: Record<string, PersonalScope> = {
   "weekend-plans": "today",
@@ -35,124 +65,105 @@ function areaOf(item: Project): PersonalScope {
   return "today";
 }
 
+function bannerForArea(area: PersonalScope): BannerKey {
+  if (area === "money") return "finances";
+  if (area === "health") return "health";
+  return "personal";
+}
+
+function personalCta(scope: PersonalScope) {
+  if (scope === "money") return "New finances";
+  if (scope === "health") return "New health";
+  if (scope === "goals") return "New goal";
+  if (scope === "car") return "New car";
+  return "New personal";
+}
+
 export function PersonalDashboard() {
-  const { spaceId, workspaceId, newChat, sendMessage, spaceLayout, setSpaceLayout } =
-    useApp();
-  const [scope, setScope] = useState<PersonalScope | "all">("all");
+  const {
+    spaceId,
+    workspaceId,
+    newChat,
+    sendMessage,
+    spaceLayout,
+    setSpaceLayout,
+  } = useApp();
+  const [scope, setScope] = useState<PersonalScope>("today");
+  const area = scopes.find((item) => item.id === scope) ?? scopes[0];
 
   useEffect(() => {
     if (spaceId === "health") setScope("health");
     else if (spaceId === "finances") setScope("money");
   }, [spaceId]);
 
-  const items = projects.filter((item) => {
-    if (
-      item.workspaceId !== workspaceId ||
-      !(
-        item.space === "personal" ||
-        item.space === "finances" ||
-        item.space === "health"
-      )
-    ) {
-      return false;
-    }
-    if (scope === "all") return true;
-    return areaOf(item) === scope;
-  });
+  const items = useMemo(
+    () =>
+      projects.filter(
+        (item) =>
+          item.workspaceId === workspaceId &&
+          (item.space === "personal" ||
+            item.space === "finances" ||
+            item.space === "health") &&
+          areaOf(item) === scope,
+      ),
+    [workspaceId, scope],
+  );
 
   const start = () => {
     newChat("personal");
   };
 
-  const ask = (text: string) => {
+  const openItem = (id: string) => {
+    const item = items.find((entry) => entry.id === id);
+    if (!item) return;
     newChat("personal");
-    sendMessage(text, { space: "personal" });
+    sendMessage(`Help me with ${item.name.toLowerCase()}.`, {
+      space: "personal",
+    });
   };
 
   return (
     <DashFrame
       space="personal"
       title="Personal"
-      subtitle="Handle today, money, health, goals, and the car."
+      subtitle="Today, finances, health, goals, and the car."
       actions={
         <>
           <DashBtn primary onClick={start}>
-            New chat
+            {personalCta(scope)}
           </DashBtn>
           <SpaceSettingsButton space="personal" />
         </>
       }
     >
-      <div className="flex flex-wrap items-center justify-end gap-3">
+      <div className="flex flex-col gap-3 @min-[420px]:flex-row @min-[420px]:flex-wrap @min-[420px]:items-center @min-[420px]:justify-between">
+        <ScopeToggle
+          wrap
+          value={scope}
+          onChange={(value) => setScope(value as PersonalScope)}
+          options={scopes.map((item) => ({ id: item.id, label: item.label }))}
+        />
         <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
       </div>
 
-      <section className="mt-6">
-        <h2 className="text-[13px] font-medium tracking-[-0.01em] text-muted-foreground">
-          Open
-        </h2>
-        {spaceLayout === "cards" ? (
-          <div className="mt-3 grid grid-cols-1 gap-3 @min-[440px]:grid-cols-2">
-            {items.length ? (
-              items.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => ask(`Help me with ${item.name.toLowerCase()}.`)}
-                  className="rounded-[10px] border border-border px-4 py-3.5 text-left transition-colors duration-200 hover:bg-muted/60"
-                >
-                  <span className="block text-[14px] font-medium tracking-[-0.02em]">
-                    {item.name}
-                  </span>
-                  <span className="mt-1 block text-[13px] leading-relaxed text-muted-foreground">
-                    {item.summary}
-                  </span>
-                  <span className="mt-2 block text-[12px] text-muted-foreground">
-                    {item.updatedAt}
-                  </span>
-                </button>
-              ))
-            ) : (
-              <p className="col-span-full px-1 py-4 text-[13px] text-muted-foreground">
-                Nothing open yet. Start a chat to add something.
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="mt-3 divide-y divide-border rounded-[10px] border border-border">
-            {items.length ? (
-              items.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => ask(`Help me with ${item.name.toLowerCase()}.`)}
-                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 first:rounded-t-[10px] last:rounded-b-[10px] hover:bg-muted/60"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[14px] font-medium tracking-[-0.02em]">
-                      {item.name}
-                    </span>
-                    <span className="mt-0.5 block text-[13px] leading-relaxed text-muted-foreground">
-                      {item.summary}
-                    </span>
-                  </span>
-                  <span className="hidden shrink-0 text-[12px] text-muted-foreground sm:block">
-                    {item.updatedAt}
-                  </span>
-                  <ChevronRight
-                    className="h-4 w-4 shrink-0 text-muted-foreground"
-                    strokeWidth={1.6}
-                  />
-                </button>
-              ))
-            ) : (
-              <p className="px-4 py-6 text-[13px] text-muted-foreground">
-                Nothing open yet. Start a chat to add something.
-              </p>
-            )}
-          </div>
-        )}
-      </section>
+      <div className="mt-5">
+        <PreviewGrid
+          layout={spaceLayout}
+          items={items.map((item) => {
+            const areaId = areaOf(item);
+            return {
+              id: item.id,
+              name: item.name,
+              projectId: item.id,
+              meta: `${scopes.find((s) => s.id === areaId)?.label ?? "Personal"} · edited ${item.updatedAt}`,
+              detail: item.summary,
+              bannerKey: bannerForArea(areaId),
+            };
+          })}
+          onOpen={openItem}
+          empty={area.empty}
+        />
+      </div>
     </DashFrame>
   );
 }

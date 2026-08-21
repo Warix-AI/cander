@@ -32,6 +32,11 @@ export function spaceChatSuggestions(
         prompt: "What’s on my plate today?",
       },
       {
+        id: "personal-money",
+        label: "Finances",
+        prompt: "Summarize this month’s invoices and what’s still unpaid.",
+      },
+      {
         id: "personal-goals",
         label: "Goals",
         prompt: "How are my goals looking this quarter?",
@@ -40,11 +45,6 @@ export function spaceChatSuggestions(
         id: "personal-car",
         label: "Car",
         prompt: "Anything due on the car — service, insurance, or registration?",
-      },
-      {
-        id: "personal-week",
-        label: "Due this week",
-        prompt: "What’s due this week that I shouldn’t miss?",
       },
     ];
   }
