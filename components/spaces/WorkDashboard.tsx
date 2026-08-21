@@ -56,7 +56,7 @@ export function WorkDashboard() {
       actions={
         <>
           <DashBtn primary onClick={() => newChat("work")}>
-            New work
+            Ask
           </DashBtn>
           <SpaceSettingsButton space="work" />
         </>
@@ -124,29 +124,31 @@ function WorkCard({
     <button
       type="button"
       onClick={() => onAsk(item.prompt)}
-      className="min-w-0 text-left"
+      className="flex h-full min-w-0 flex-col text-left"
     >
-      <div className="relative aspect-[16/9] overflow-hidden rounded-[10px]">
+      <p className="mb-2 truncate text-[12px] text-muted-foreground">
+        {item.meta}
+      </p>
+      <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[10px] max-lg:aspect-[16/11]">
         <BannerWash space="work" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-3.5 text-white">
+        <div className="absolute inset-x-0 bottom-0 p-3.5 pb-4 text-white">
           <span className="flex flex-wrap items-center gap-2">
             <ToneDot tone={item.tone} light />
             {item.badge ? (
-              <span className="rounded-md bg-white/90 px-1.5 py-0.5 text-[11px] font-medium text-foreground">
+              <span className="inline-flex items-center rounded-md bg-white/90 px-1.5 py-0.5 text-[11px] leading-none font-medium text-foreground">
                 {item.badge}
               </span>
             ) : null}
           </span>
-          <p className="mt-2 line-clamp-2 text-[14px] font-medium tracking-[-0.02em]">
+          <p className="mt-2 line-clamp-2 min-h-[2.5rem] text-[14px] font-medium tracking-[-0.02em]">
             {item.title}
           </p>
         </div>
       </div>
-      <p className="mt-2.5 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
+      <p className="mt-2.5 line-clamp-2 min-h-[2.5rem] text-[13px] leading-relaxed text-muted-foreground">
         {item.summary}
       </p>
-      <p className="mt-1 text-[12px] text-muted-foreground">{item.meta}</p>
     </button>
   );
 }

@@ -29,6 +29,7 @@ import {
   Waypoints,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMobileShell } from "@/lib/use-media-query";
 
 const ICONS: Record<string, LucideIcon> = {
   "brief-inbox": MessageSquare,
@@ -99,7 +100,9 @@ export function SuggestionPrompts({
   onSelect: (prompt: string) => void;
   className?: string;
 }) {
-  if (!items.length) return null;
+  const mobile = useMobileShell();
+  const visible = mobile ? items.slice(0, 2) : items;
+  if (!visible.length) return null;
 
   return (
     <div
@@ -109,7 +112,7 @@ export function SuggestionPrompts({
       )}
     >
       <div className="flex flex-col">
-        {items.map((item) => {
+        {visible.map((item) => {
           const Icon = ICONS[item.id] ?? Sparkles;
           return (
             <button

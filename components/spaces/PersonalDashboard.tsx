@@ -71,14 +71,6 @@ function bannerForArea(area: PersonalScope): BannerKey {
   return "personal";
 }
 
-function personalCta(scope: PersonalScope) {
-  if (scope === "money") return "New finances";
-  if (scope === "health") return "New health";
-  if (scope === "goals") return "New goal";
-  if (scope === "car") return "New car";
-  return "New personal";
-}
-
 export function PersonalDashboard() {
   const {
     spaceId,
@@ -130,7 +122,7 @@ export function PersonalDashboard() {
       actions={
         <>
           <DashBtn primary onClick={start}>
-            {personalCta(scope)}
+            Ask
           </DashBtn>
           <SpaceSettingsButton space="personal" />
         </>

@@ -94,7 +94,7 @@ export function PreviewCard({
   onOpen: (projectId: string) => void;
 }) {
   return (
-    <div className="min-w-0 text-left">
+    <div className="flex h-full min-w-0 flex-col text-left">
       <button
         type="button"
         onClick={() => onOpen(item.projectId)}

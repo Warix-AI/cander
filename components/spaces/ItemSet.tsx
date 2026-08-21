@@ -317,7 +317,8 @@ export function DashFrame({
           <SpaceBanner space={bannerSpace}>
             <div
               className={cn(
-                "mx-auto flex h-full w-full items-start px-4 pt-5 @min-[480px]:px-8 @min-[480px]:pt-6",
+                "mx-auto flex h-full w-full items-start px-4 pt-10 pb-4 max-lg:pt-11 @min-[480px]:px-8 @min-[480px]:pt-6 @min-[480px]:pb-5",
+                inPanel && "pt-5 max-lg:pt-5",
                 inPanel ? "max-w-none" : "max-w-6xl",
               )}
             >
@@ -393,19 +394,19 @@ function DashHeader({
   onBanner?: boolean;
 }) {
   return (
-    <div className="flex w-full flex-col items-start justify-between gap-3 @min-[520px]:flex-row @min-[520px]:flex-wrap">
+    <div className="flex w-full flex-col items-start justify-between gap-3 @min-[520px]:flex-row @min-[520px]:items-end @min-[520px]:flex-wrap">
       <div className="min-w-0">
         {kicker ? (
           <p
             className={cn(
-              "text-[11px] tracking-[0.06em] uppercase",
+              "flex items-center gap-1.5 text-[11px] tracking-[0.06em] uppercase",
               onBanner ? "text-white/65" : "text-muted-foreground",
             )}
           >
             {kicker}
           </p>
         ) : null}
-        <div className={cn("flex flex-wrap items-center gap-3", kicker && "mt-2")}>
+        <div className={cn("flex flex-wrap items-center gap-3", kicker && "mt-1.5 max-lg:mt-2")}>
           <h1
             className={cn(
               "heading-display text-[1.55rem] @min-[480px]:text-[1.85rem]",
@@ -419,7 +420,7 @@ function DashHeader({
         {subtitle ? (
           <p
             className={cn(
-              "mt-2 max-w-xl text-[13.5px] leading-relaxed @min-[480px]:text-[14px]",
+              "mt-1.5 max-w-xl text-[13.5px] leading-relaxed @min-[480px]:mt-2 @min-[480px]:text-[14px]",
               onBanner ? "text-white/70" : "text-muted-foreground",
             )}
           >
@@ -428,7 +429,9 @@ function DashHeader({
         ) : null}
       </div>
       {actions ? (
-        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+        <div className="flex flex-wrap items-center gap-2 max-lg:w-full">
+          {actions}
+        </div>
       ) : null}
     </div>
   );

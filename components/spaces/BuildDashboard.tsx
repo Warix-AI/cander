@@ -11,7 +11,6 @@ import {
 } from "@/components/spaces/ItemSet";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import {
-  buildCtaLabel,
   buildScopeOptions,
   filterPreviews,
   taskMeta,
@@ -62,7 +61,7 @@ export function BuildDashboard() {
       actions={
         <>
           <DashBtn primary onClick={() => newChat("build")}>
-            {buildCtaLabel(scope)}
+            Ask
           </DashBtn>
           <SpaceSettingsButton space="build" />
         </>

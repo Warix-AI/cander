@@ -1,4 +1,4 @@
-import { accountPresets, workspaceResources, workspaces } from "./data";
+import { accountPresets, workspaceResources } from "./data";
 import {
   hasConnectorPolicies,
   hasModelChoice,
@@ -26,6 +26,7 @@ import type {
   Workspace,
   WorkspaceResource,
 } from "./types";
+import { getWorkspaceCatalogSnapshot } from "./workspace-catalog";
 
 export type Entitlements = {
   plan: BillingPlan;
@@ -146,6 +147,7 @@ export function sharedResourcesFor(
 }
 
 export function workspacesFor(actor: Member, access: Entitlements): Workspace[] {
+  const workspaces = getWorkspaceCatalogSnapshot();
   if (access.canManageWorkspaces) {
     return workspaces.filter((item) => !item.personal);
   }

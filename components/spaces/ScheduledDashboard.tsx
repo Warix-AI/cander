@@ -60,7 +60,7 @@ export function ScheduledDashboard() {
         <>
           <SpaceSettingsButton space="scheduled" />
           <Pill primary onClick={() => newChat("build")}>
-            New scheduled chat
+            Ask
           </Pill>
         </>
       }

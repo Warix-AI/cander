@@ -53,6 +53,8 @@ export type OverlayId =
 export type SpaceLayout = "cards" | "list";
 export type PanelMode = "collapsed" | "split" | "wide" | "immersive";
 export type PanelIntent = "browse" | "execute";
+/** Mobile exclusive surface: chat vs space/preview panel. */
+export type MobileSurface = "chat" | "panel";
 
 export type PageReference = {
   url: string;
@@ -226,6 +228,10 @@ export type Thread = {
   snippet: string;
   messages: Message[];
   shared?: boolean;
+  /** Dock chat for a space or Development nav — resumes instead of minting new. */
+  persistent?: boolean;
+  /** Short Cursor-style blurb written when the dock chat is closed. */
+  sessionSummary?: string | null;
 };
 
 export type VoiceAnchor =

@@ -18,6 +18,7 @@ import {
 import { useApp } from "@/components/app/AppProvider";
 import { CourierMark } from "@/components/brand/CourierMark";
 import { ChatMessage } from "@/components/chat/MessageBlocks";
+import { SessionSummaryBubble } from "@/components/chat/SessionSummaryBubble";
 import { Composer } from "@/components/shell/Composer";
 import { SuggestionPrompts } from "@/components/shell/SuggestionPrompts";
 import { VoiceOrb } from "@/components/shell/VoiceOrb";
@@ -26,6 +27,7 @@ import { spaceChatSuggestions } from "@/lib/space-suggestions";
 import { chatSpaceCopy, spaceIconTint } from "@/lib/space-icons";
 import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useMobileShell } from "@/lib/use-media-query";
 
 const promptIcons = {
   p0: Briefcase,
@@ -42,7 +44,10 @@ export function ChatColumn() {
   const { thread, spaceId, sendMessage, drafting, view } = useApp();
   const browserMode = view === "browser";
   const showLanding = !browserMode && !thread && !drafting;
-  const showSpacePrompts = !browserMode && !thread && !!spaceId;
+  const showSpacePrompts =
+    !browserMode &&
+    !!spaceId &&
+    (!thread || thread.messages.length === 0);
   const spacePrompts = spaceChatSuggestions(spaceId);
   const endRef = useRef<HTMLDivElement>(null);
   const last = thread?.messages.at(-1);
@@ -69,7 +74,7 @@ export function ChatColumn() {
   if (browserMode) {
     return (
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-        <div className="flex-1 overflow-y-auto px-5 py-6">
+        <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-5 sm:py-6">
           {thread ? (
             <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-6">
               {thread.messages.map((message) => (
@@ -91,8 +96,14 @@ export function ChatColumn() {
       {showLanding ? (
         <EmptyChat spaceId={spaceId} onPrompt={send} />
       ) : (
-        <div className="flex-1 overflow-y-auto px-5 py-6">
+        <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-5 sm:py-6">
           <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-6">
+            {thread?.sessionSummary ? (
+              <SessionSummaryBubble
+                threadId={thread.id}
+                summary={thread.sessionSummary}
+              />
+            ) : null}
             {thread
               ? thread.messages.map((message) => (
                   <ChatMessage key={message.id} message={message} />
@@ -180,7 +191,9 @@ function EmptyChat({
     spaceId && spaceId in chatSpaceCopy
       ? chatSpaceCopy[spaceId as keyof typeof chatSpaceCopy]
       : null;
-  const visible = inSpace ? [] : homeSuggestions();
+  const allVisible = inSpace ? [] : homeSuggestions();
+  const mobile = useMobileShell();
+  const visible = mobile ? allVisible.slice(0, 2) : allVisible;
   const shellRef = useRef<HTMLDivElement>(null);
   const clusterRef = useRef<HTMLDivElement>(null);
   const baseHeightRef = useRef(0);
@@ -241,7 +254,14 @@ function EmptyChat({
           <Composer onSend={onPrompt} landing />
         </div>
         {visible.length ? (
-          <div className="landing-suggestions mt-3 grid w-full grid-cols-3 gap-2.5">
+          <div
+            className={cn(
+              "landing-suggestions mt-3 grid w-full gap-2.5",
+              visible.length === 2
+                ? "grid-cols-2"
+                : "grid-cols-2 md:grid-cols-3",
+            )}
+          >
             {visible.map((item) => {
               const Icon =
                 promptIcons[item.id as keyof typeof promptIcons] ?? Hammer;
