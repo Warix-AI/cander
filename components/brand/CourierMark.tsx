@@ -10,15 +10,17 @@ export function CourierMark({
 }) {
   const { theme } = useTheme();
   const src =
-    theme === "light" ? "/courier-mark-light.png" : "/courier-mark-dark.png";
+    theme === "light"
+      ? "/courier-mark-light.png?v=2"
+      : "/courier-mark-dark.png?v=2";
 
   return (
     <img
       src={src}
       alt=""
       aria-hidden="true"
-      width={40}
-      height={38}
+      width={73}
+      height={70}
       className={cn("h-[29.7px] w-[31px] object-contain", className)}
     />
   );
