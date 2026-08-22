@@ -11,19 +11,29 @@ export function NavToggle({
   className?: string;
   onBanner?: boolean;
 }) {
-  const { sidebarOpen, setSidebarOpen, mobileNav, setMobileNav } = useApp();
+  const {
+    sidebarOpen,
+    mobileNav,
+    workspaceRailOpen,
+    toggleLeftPanel,
+    entitlements,
+  } = useApp();
+  const canRail =
+    entitlements.hasWorkspaces && !entitlements.showInviteWall;
+  const open = sidebarOpen || mobileNav;
+  const closingRailNext = open && canRail && workspaceRailOpen;
 
   return (
     <button
       type="button"
-      aria-label={sidebarOpen || mobileNav ? "Close left panel" : "Open left panel"}
-      onClick={() => {
-        if (window.matchMedia("(min-width: 1024px)").matches) {
-          setSidebarOpen(!sidebarOpen);
-        } else {
-          setMobileNav(!mobileNav);
-        }
-      }}
+      aria-label={
+        !open
+          ? "Open left panel"
+          : closingRailNext
+            ? "Hide workspaces"
+            : "Close left panel"
+      }
+      onClick={() => toggleLeftPanel()}
       className={cn(
         "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
         onBanner

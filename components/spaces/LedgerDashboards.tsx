@@ -9,29 +9,19 @@ import { projects, spaceStats } from "@/lib/data";
 import type { SpaceId } from "@/lib/types";
 
 export function FinancesDashboard() {
-  return (
-    <LedgerDashboard
-      space="finances"
-      title="Finances"
-      chatLabel="New Finances"
-    />
-  );
+  return <LedgerDashboard space="finances" title="Finances" />;
 }
 
 export function HealthDashboard() {
-  return (
-    <LedgerDashboard space="health" title="Health" chatLabel="New Health" />
-  );
+  return <LedgerDashboard space="health" title="Health" />;
 }
 
 function LedgerDashboard({
   space,
   title,
-  chatLabel,
 }: {
   space: SpaceId;
   title: string;
-  chatLabel: string;
 }) {
   const { workspaceId, openProject, newChat, spaceLayout, setSpaceLayout } =
     useApp();
@@ -50,7 +40,7 @@ function LedgerDashboard({
         <>
           <SpaceSettingsButton space={space} />
           <Pill primary onClick={() => newChat(space)}>
-            {chatLabel}
+            Ask
           </Pill>
         </>
       }

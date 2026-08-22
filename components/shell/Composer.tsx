@@ -178,7 +178,11 @@ export function Composer({
 
   return (
     <form
-      className={compact || landing ? "w-full" : "px-4 pb-4"}
+      className={
+        compact || landing
+          ? "w-full"
+          : "px-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-4 sm:pb-4"
+      }
       onSubmit={(event) => {
         event.preventDefault();
         submit();

@@ -1,4 +1,5 @@
-import { members as seedMembers, workspaces } from "./data";
+import { members as seedMembers, workspaces as seedWorkspaces } from "./data";
+import { getWorkspaceCatalogSnapshot } from "./workspace-catalog";
 import { ALL_SPACE_IDS } from "./spaces";
 import type {
   BillingPlan,
@@ -252,7 +253,9 @@ function hydrate(raw: unknown): Record<string, WorkspacePolicy> {
     if (!value || typeof value !== "object") continue;
     const policy = value as Partial<WorkspacePolicy>;
     const fallback =
-      workspaces.find((item) => item.id === id)?.spaces ?? ALL_SPACES;
+      getWorkspaceCatalogSnapshot().find((item) => item.id === id)?.spaces ??
+      seedWorkspaces.find((item) => item.id === id)?.spaces ??
+      ALL_SPACES;
     next[id] = {
       knowledgeBases: Array.isArray(policy.knowledgeBases)
         ? asKnowledge(policy.knowledgeBases)
@@ -359,7 +362,12 @@ export function getMembersServerSnapshot() {
 }
 
 function workspaceSpaces(workspaceId: string): SpaceId[] {
-  return workspaces.find((item) => item.id === workspaceId)?.spaces ?? ALL_SPACES;
+  return (
+    getWorkspaceCatalogSnapshot().find((item) => item.id === workspaceId)
+      ?.spaces ??
+    seedWorkspaces.find((item) => item.id === workspaceId)?.spaces ??
+    ALL_SPACES
+  );
 }
 
 export function policyFor(

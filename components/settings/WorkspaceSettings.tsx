@@ -1,12 +1,27 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Upload } from "lucide-react";
+import { useRef, useState, useSyncExternalStore } from "react";
+import { ChevronLeft, ChevronRight, ImagePlus, Upload } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { connectors, spaces as spaceCatalog, workspaces as seedWorkspaces } from "@/lib/data";
-import { NAV_SPACES } from "@/lib/spaces";
+import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
+import { connectors, spaces as spaceCatalog } from "@/lib/data";
 import type { KnowledgeBase, Workspace } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {
+  createWorkspace,
+  getWorkspaceCatalogServerSnapshot,
+  getWorkspaceCatalogSnapshot,
+  subscribeWorkspaceCatalog,
+} from "@/lib/workspace-catalog";
+import {
+  clearWorkspaceIcon,
+  getWorkspaceIconsServerSnapshot,
+  getWorkspaceIconsSnapshot,
+  readWorkspaceIconFile,
+  setWorkspaceIcon,
+  subscribeWorkspaceIcons,
+  workspaceIconFor,
+} from "@/lib/workspace-icons";
 import {
   addKnowledgeBase,
   addKnowledgeFile,
@@ -28,9 +43,12 @@ export function WorkspacesSettings({
   onSelect: (id: string | null) => void;
 }) {
   const { workspacePolicies, orgMembers, entitlements, personalSpaceEnabled, setPersonalSpaceEnabled } = useApp();
-  const [workspaceList, setWorkspaceList] = useState<Workspace[]>(
-    seedWorkspaces.filter((item) => !item.personal),
+  const catalog = useSyncExternalStore(
+    subscribeWorkspaceCatalog,
+    getWorkspaceCatalogSnapshot,
+    getWorkspaceCatalogServerSnapshot,
   );
+  const workspaceList = catalog.filter((item) => !item.personal);
   const [newName, setNewName] = useState("");
   const selected = workspaceList.find((item) => item.id === selectedId) ?? null;
 
@@ -87,22 +105,11 @@ export function WorkspacesSettings({
           const name = newName.trim();
           if (!name) return;
           if (workspaceList.length >= entitlements.workspaceCap) return;
-          const id = name.toLowerCase().replace(/\s+/g, "-");
-          if (workspaceList.some((item) => item.id === id)) return;
-          ensurePolicy(id, orgMembers[0]?.id);
-          setWorkspaceList((current) => [
-            ...current,
-            {
-              id,
-              name,
-              spaces: [...NAV_SPACES],
-              members: 1,
-              budget: "$0",
-              spend: "$0",
-            },
-          ]);
+          const created = createWorkspace({ name });
+          if (!created) return;
+          ensurePolicy(created.id, orgMembers[0]?.id);
           setNewName("");
-          onSelect(id);
+          onSelect(created.id);
         }}
       >
         <input
@@ -129,15 +136,17 @@ export function WorkspacesSettings({
               onClick={() => onSelect(item.id)}
               className="flex w-full items-center justify-between gap-3 border-b border-border py-3.5 text-left transition-colors duration-200 hover:bg-muted/40"
             >
-              <span>
-                <span className="block text-[14px] tracking-[-0.01em]">
-                  {item.name}
-                </span>
-                <span className="mt-0.5 block text-[12px] text-muted-foreground">
-                  {policy.knowledgeBases.length} knowledge bases
-                  {entitlements.canManageMembers
-                    ? ` · ${policy.members.length} people`
-                    : ""}
+              <span className="flex min-w-0 items-center gap-3">
+                <WorkspaceMark id={item.id} name={item.name} size="sm" />
+                <span className="min-w-0">
+                  <span className="block text-[14px] tracking-[-0.01em]">
+                    {item.name}
+                  </span>
+                  <span className="mt-0.5 block text-[12px] text-muted-foreground">
+                    {policy.members.length === 1
+                      ? "1 person"
+                      : `${policy.members.length} people`}
+                  </span>
                 </span>
               </span>
               <ChevronRight
@@ -189,6 +198,8 @@ function WorkspacePage({
         Assigned people get these knowledge bases. Toggle spaces to control what
         they can open — role stays on Organization.
       </p>
+
+      <WorkspaceIconSection workspace={workspace} />
 
       <section className="mt-8 max-w-2xl">
         <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
@@ -369,6 +380,80 @@ function WorkspacePage({
       </section>
       ) : null}
     </>
+  );
+}
+
+function WorkspaceIconSection({ workspace }: { workspace: Workspace }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const icons = useSyncExternalStore(
+    subscribeWorkspaceIcons,
+    getWorkspaceIconsSnapshot,
+    getWorkspaceIconsServerSnapshot,
+  );
+  const icon = workspaceIconFor(workspace.id, icons);
+
+  return (
+    <section className="mt-8 max-w-2xl">
+      <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
+        Icon
+      </p>
+      <p className="mt-1 text-[13px] text-muted-foreground">
+        Shown in the workspace rail. Initials are used when no image is set.
+      </p>
+      <div className="mt-4 flex items-center gap-4">
+        <WorkspaceMark id={workspace.id} name={workspace.name} />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              input.current?.click();
+            }}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-foreground/15 px-3.5 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
+          >
+            <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
+            {icon ? "Replace" : "Upload"}
+          </button>
+          {icon ? (
+            <button
+              type="button"
+              onClick={() => {
+                clearWorkspaceIcon(workspace.id);
+                setError(null);
+              }}
+              className="inline-flex h-9 items-center rounded-full px-3.5 text-[13px] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+            >
+              Remove
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {error ? (
+        <p className="mt-2 text-[12.5px] text-destructive">{error}</p>
+      ) : null}
+      <input
+        ref={input}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          void readWorkspaceIconFile(file)
+            .then((dataUrl) => {
+              setWorkspaceIcon(workspace.id, dataUrl);
+              setError(null);
+            })
+            .catch((err: unknown) => {
+              setError(
+                err instanceof Error ? err.message : "Could not upload image.",
+              );
+            });
+        }}
+      />
+    </section>
   );
 }
 

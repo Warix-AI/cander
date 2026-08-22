@@ -80,7 +80,7 @@ export function StudioDashboard() {
             </DashBtn>
           ) : (
             <DashBtn primary onClick={() => newChat("studio")}>
-              New chat
+              Ask
             </DashBtn>
           )}
           <SpaceSettingsButton space="studio" />

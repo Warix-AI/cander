@@ -13,6 +13,7 @@ import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { AccountMenu } from "@/components/shell/AccountMenu";
 import { ProductSwitcher } from "@/components/shell/ProductSwitcher";
 import { WindowChrome } from "@/components/shell/WindowChrome";
+import { WorkspaceRail } from "@/components/shell/WorkspaceRail";
 import { useApp } from "@/components/app/AppProvider";
 import { Dropdown } from "@/components/ui/Controls";
 import { platformNavItems, projects, spaces, connectors } from "@/lib/data";
@@ -168,15 +169,17 @@ export function Sidebar() {
   const moreActive = more.some(navActive);
 
   return (
-    <aside
+    <div
       className={cn(
-        "h-full w-[244px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+        "h-full max-w-[100vw] shrink-0",
         mobileNav
           ? "absolute inset-y-0 left-0 z-40 flex lg:hidden"
           : "hidden",
-        sidebarOpen ? "lg:static lg:flex" : "lg:hidden",
+        sidebarOpen ? "lg:static lg:flex lg:max-w-none" : "lg:hidden",
       )}
     >
+      <WorkspaceRail />
+      <aside className="flex h-full w-[min(244px,calc(100vw-3.5rem))] shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:w-[244px]">
       <WindowChrome />
 
       <div className="px-2">
@@ -275,6 +278,7 @@ export function Sidebar() {
         <AccountMenu />
       </div>
     </aside>
+    </div>
   );
 }
 

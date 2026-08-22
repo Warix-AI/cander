@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Moon, Search, Sun, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { ImagePlus, Moon, Search, Sun, X } from "lucide-react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useApp } from "@/components/app/AppProvider";
+import { AccountAvatar } from "@/components/shell/AccountAvatar";
 import { PlansSettings } from "@/components/settings/PlansSettings";
 import { WorkspacesSettings } from "@/components/settings/WorkspaceSettings";
 import { Modal } from "@/components/ui/Modal";
@@ -17,6 +18,15 @@ import {
 import { orgSeatMix, planLabel, seatMixLabel } from "@/lib/billing";
 import type { Role, SettingsTab } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {
+  clearProfilePhoto,
+  getProfilePhotosServerSnapshot,
+  getProfilePhotosSnapshot,
+  profilePhotoFor,
+  readProfilePhotoFile,
+  setProfilePhoto,
+  subscribeProfilePhotos,
+} from "@/lib/profile-photos";
 import { persistSignedOut } from "@/lib/session";
 import {
   activateMaxSeat,
@@ -413,7 +423,15 @@ function OrganizationSettings() {
 
 function GeneralSettings({ onLogout }: { onLogout: () => void }) {
   const [gone, setGone] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
   const { actor, entitlements } = useApp();
+  const photos = useSyncExternalStore(
+    subscribeProfilePhotos,
+    getProfilePhotosSnapshot,
+    getProfilePhotosServerSnapshot,
+  );
+  const photo = profilePhotoFor(actor.id, photos);
 
   return (
     <>
@@ -427,6 +445,70 @@ function GeneralSettings({ onLogout }: { onLogout: () => void }) {
         Account information for this login.
       </p>
       <div className="mt-6 max-w-xl space-y-4">
+        <div>
+          <p className="mb-2 text-[12.5px] font-medium text-muted-foreground">
+            Profile photo
+          </p>
+          <div className="flex items-center gap-4">
+            <AccountAvatar
+              memberId={actor.id}
+              name={actor.name}
+              initials={actor.initials}
+              size="lg"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPhotoError(null);
+                  photoInput.current?.click();
+                }}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-foreground/15 px-3.5 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
+              >
+                <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
+                {photo ? "Replace" : "Upload"}
+              </button>
+              {photo ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearProfilePhoto(actor.id);
+                    setPhotoError(null);
+                  }}
+                  className="inline-flex h-9 items-center rounded-full px-3.5 text-[13px] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {photoError ? (
+            <p className="mt-2 text-[12.5px] text-destructive">{photoError}</p>
+          ) : null}
+          <input
+            ref={photoInput}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (!file) return;
+              void readProfilePhotoFile(file)
+                .then((dataUrl) => {
+                  setProfilePhoto(actor.id, dataUrl);
+                  setPhotoError(null);
+                })
+                .catch((err: unknown) => {
+                  setPhotoError(
+                    err instanceof Error
+                      ? err.message
+                      : "Could not upload image.",
+                  );
+                });
+            }}
+          />
+        </div>
         <Field label="Full name">
           <input
             defaultValue={actor.name}

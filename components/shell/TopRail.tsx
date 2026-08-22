@@ -2,7 +2,9 @@
 
 import { PanelRight, Pin, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { MobileSurfaceToggle } from "@/components/shell/MobileSurfaceChrome";
 import { NavToggle } from "@/components/shell/NavToggle";
+import { useMobileShell } from "@/lib/use-media-query";
 import { isChatSpace } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 
@@ -17,12 +19,14 @@ export function TopRail() {
     drafting,
     panelMode,
     setPanelMode,
+    setMobileSurface,
     sidebarOpen,
     mobileNav,
     isPinned,
     togglePin,
     closeSpaceChat,
   } = useApp();
+  const mobile = useMobileShell();
 
   const panelOpen = panelMode !== "collapsed" && view === "chat";
   const canPanel =
@@ -35,6 +39,13 @@ export function TopRail() {
     view === "space" &&
     panelMode !== "collapsed" &&
     (drafting || Boolean(thread));
+  const chatPanelOpen =
+    product === "courier" &&
+    view === "chat" &&
+    panelMode !== "collapsed" &&
+    (drafting || Boolean(thread));
+  const showMobileSurfaceToggle =
+    mobile && (spaceChatOpen || chatPanelOpen);
   const pinTarget = thread
     ? ({ kind: "thread" as const, id: thread.id })
     : projectId
@@ -51,6 +62,7 @@ export function TopRail() {
         !showPanelBtn &&
           !pinTarget &&
           !spaceChatOpen &&
+          !showMobileSurfaceToggle &&
           sidebarOpen &&
           "lg:hidden",
       )}
@@ -85,18 +97,32 @@ export function TopRail() {
         <button
           type="button"
           aria-label="Open right panel"
-          onClick={() => setPanelMode("split")}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+          onClick={() => {
+            setMobileSurface("chat");
+            setPanelMode("split");
+          }}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground max-lg:hidden"
         >
           <PanelRight className="h-4 w-4" strokeWidth={1.6} />
         </button>
       ) : null}
+      {showMobileSurfaceToggle ? <MobileSurfaceToggle /> : null}
       {spaceChatOpen ? (
         <button
           type="button"
           aria-label="Close chat"
           onClick={() => closeSpaceChat()}
           className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-4 w-4" strokeWidth={1.6} />
+        </button>
+      ) : null}
+      {chatPanelOpen && mobile ? (
+        <button
+          type="button"
+          aria-label="Close panel"
+          onClick={() => setPanelMode("collapsed")}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground lg:hidden"
         >
           <X className="h-4 w-4" strokeWidth={1.6} />
         </button>

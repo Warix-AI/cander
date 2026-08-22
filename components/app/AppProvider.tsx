@@ -9,7 +9,13 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { accountPresets, projects, starterThreads, workspaces } from "@/lib/data";
+import { accountPresets, projects, starterThreads } from "@/lib/data";
+import {
+  getWorkspaceCatalogServerSnapshot,
+  getWorkspaceCatalogSnapshot,
+  subscribeWorkspaceCatalog,
+  workspaceById,
+} from "@/lib/workspace-catalog";
 import { inferIntent, nextId } from "@/lib/intent";
 import { latestThreadForProject } from "@/lib/selectors";
 import { inferPlatformIntent } from "@/lib/platform-intent";
@@ -79,6 +85,7 @@ import type {
   Checkpoint,
   Message,
   Member,
+  MobileSurface,
   OverlayId,
   PageReference,
   PanelIntent,
@@ -99,9 +106,15 @@ import type {
   Thread,
   ViewportId,
   VoiceAnchor,
+  Workspace,
   WorkspacePolicy,
 } from "@/lib/types";
 import { isSpaceLibrarySpace } from "@/lib/space-library";
+import {
+  summarizeSession,
+  upsertPersistentPlatformThread,
+  upsertPersistentSpaceThread,
+} from "@/lib/persistent-chat";
 
 type Snapshot = {
   product: ProductId;
@@ -151,11 +164,12 @@ type AppContextValue = {
   orgMembers: Member[];
   workspaceId: string;
   setWorkspace: (id: string) => void;
-  workspace: (typeof workspaces)[number];
+  workspace: Workspace;
   view: CourierView;
   threads: Thread[];
   threadId: string | null;
   thread: Thread | null;
+  platformThreadId: string | null;
   spaceId: SpaceId | null;
   projectId: string | null;
   project: Project | undefined;
@@ -165,8 +179,13 @@ type AppContextValue = {
   setPanelRatio: (n: number) => void;
   setPanelMode: (mode: PanelMode) => void;
   setPanelIntent: (intent: PanelIntent) => void;
+  mobileSurface: MobileSurface;
+  setMobileSurface: (surface: MobileSurface) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  workspaceRailOpen: boolean;
+  setWorkspaceRailOpen: (open: boolean) => void;
+  toggleLeftPanel: () => void;
   mobileNav: boolean;
   setMobileNav: (open: boolean) => void;
   dragging: boolean;
@@ -198,11 +217,16 @@ type AppContextValue = {
   platformNav: PlatformNav;
   setPlatformNav: (id: PlatformNav) => void;
   newChat: (space?: SpaceId) => void;
+  /** Resume (or create) the persistent dock chat for a space. */
+  openSpaceChat: (space: SpaceId) => void;
   setChatSpace: (id: SpaceId | null) => void;
   armChatInterface: (id: SpaceId) => void;
   collapseDraft: () => void;
   /** Close space chat and restore the full workspace dashboard. */
   closeSpaceChat: () => void;
+  clearSessionSummary: (threadId?: string | null) => void;
+  updateSessionSummary: (text: string, threadId?: string | null) => void;
+  clearPersistentChat: (threadId?: string | null) => void;
   sendMessage: (text: string, opts?: SendOpts) => void;
   platformMessages: Message[];
   sendPlatformMessage: (text: string) => void;
@@ -318,6 +342,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     getWorkspaceSnapshot,
     getWorkspaceServerSnapshot,
   );
+  const workspaceCatalog = useSyncExternalStore(
+    subscribeWorkspaceCatalog,
+    getWorkspaceCatalogSnapshot,
+    getWorkspaceCatalogServerSnapshot,
+  );
   const pins = useSyncExternalStore(
     subscribePins,
     getPinsSnapshot,
@@ -337,7 +366,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [panelMode, setPanelMode] = useState<PanelMode>("collapsed");
   const [panelIntent, setPanelIntent] = useState<PanelIntent>("browse");
   const [panelRatio, setPanelRatio] = useState(0.58);
+  const [mobileSurface, setMobileSurface] = useState<MobileSurface>("chat");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [workspaceRailOpen, setWorkspaceRailOpen] = useState(true);
   const [mobileNav, setMobileNav] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [drafting, setDrafting] = useState(false);
@@ -437,8 +468,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setHist((h) => ({ ...h, i: Math.min(h.stack.length - 1, h.i + 1) }));
   }, [hist, applySnapshot]);
 
-  const workspace =
-    workspaces.find((item) => item.id === workspaceId) ?? workspaces[0];
+  const workspace = workspaceById(workspaceId, workspaceCatalog);
   const project = projects.find((item) => item.id === projectId);
   const thread = threads.find((item) => item.id === threadId) ?? null;
   const platformThread =
@@ -522,6 +552,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (id: PlatformNav) => {
       if (!entitlements.platformNavAllowed(id)) return;
       setPlatformNavState(id);
+      let nextThreadId = platformThreadId;
+      setThreads((current) => {
+        const { threads: next, id: tid } = upsertPersistentPlatformThread(
+          current,
+          workspaceId,
+          id,
+        );
+        nextThreadId = tid;
+        return next;
+      });
+      setPlatformThreadId(nextThreadId);
       pushTarget({
         product: "platform",
         view,
@@ -548,6 +589,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       jobId,
       skillId,
       entitlements,
+      platformThreadId,
+      workspaceId,
     ],
   );
 
@@ -564,42 +607,123 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setOverlay(null);
   }, []);
 
-  const setPlatformDockOpen = useCallback((open: boolean) => {
-    setPlatformDockOpenState(open);
-    setPanelMode(open ? "split" : "collapsed");
+  const summarizeThreadById = useCallback((id: string | null) => {
+    if (!id) return;
+    setThreads((current) =>
+      current.map((item) => {
+        if (item.id !== id) return item;
+        const summary = summarizeSession(item.messages);
+        if (!summary) return item;
+        return {
+          ...item,
+          persistent: item.persistent ?? true,
+          sessionSummary: summary,
+        };
+      }),
+    );
   }, []);
 
-  const newChat = useCallback((space?: SpaceId) => {
-    if (product === "platform") {
-      setPlatformThreadId(null);
-      setPlatformDockOpen(true);
-      setMobileNav(false);
+  const setPlatformDockOpen = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        summarizeThreadById(platformThreadId);
+        setPlatformDockOpenState(false);
+        setPanelMode("collapsed");
+        return;
+      }
+      let tid = platformThreadId;
+      setThreads((current) => {
+        const { threads: next, id } = upsertPersistentPlatformThread(
+          current,
+          workspaceId,
+          platformNav,
+        );
+        tid = id;
+        return next;
+      });
+      setPlatformThreadId(tid);
+      setPlatformDockOpenState(true);
+      setPanelMode("split");
+      setMobileSurface("chat");
+    },
+    [platformThreadId, platformNav, workspaceId, summarizeThreadById],
+  );
+
+  const toggleLeftPanel = useCallback(() => {
+    const desktop = window.matchMedia("(min-width: 1024px)").matches;
+    const canRail =
+      entitlements.hasWorkspaces && !entitlements.showInviteWall;
+
+    if (desktop) {
+      if (!sidebarOpen) {
+        setSidebarOpen(true);
+        if (canRail) setWorkspaceRailOpen(true);
+        return;
+      }
+      if (canRail && workspaceRailOpen) {
+        setWorkspaceRailOpen(false);
+        return;
+      }
+      setSidebarOpen(false);
       return;
     }
-    const chatSpace = space && isChatSpace(space) ? space : null;
-    setThreadId(null);
-    setSpaceId(chatSpace);
-    setProjectId(null);
-    setConnectorId(null);
-    setJobId(null);
-    setSkillId(null);
-    setMobileNav(false);
 
-    if (chatSpace) {
-      // Keep the space open: chat slides in on the left, dashboard condenses right.
+    if (!mobileNav) {
+      setMobileNav(true);
+      if (canRail) setWorkspaceRailOpen(true);
+      return;
+    }
+    if (canRail && workspaceRailOpen) {
+      setWorkspaceRailOpen(false);
+      return;
+    }
+    setMobileNav(false);
+  }, [
+    sidebarOpen,
+    workspaceRailOpen,
+    mobileNav,
+    entitlements.hasWorkspaces,
+    entitlements.showInviteWall,
+  ]);
+
+  const openSpaceChat = useCallback(
+    (space: SpaceId) => {
+      if (!isChatSpace(space)) return;
+      let tid = "";
+      let hasMessages = false;
+      setThreads((current) => {
+        const { threads: next, id } = upsertPersistentSpaceThread(
+          current,
+          workspaceId,
+          space,
+        );
+        tid = id;
+        hasMessages = Boolean(
+          next.find((item) => item.id === id)?.messages.length,
+        );
+        return next;
+      });
+      setThreadId(tid);
+      setSpaceId(space);
+      setProjectId(null);
+      setConnectorId(null);
+      setJobId(null);
+      setSkillId(null);
+      setMobileNav(false);
       setView("space");
-      setDrafting(true);
       setPanelIntent("execute");
       setPanelMode("split");
-      if (chatSpace === "build") setBuildTool("preview");
-      if (chatSpace === "studio") setStudioTool("canvas");
-      if (chatSpace === "research") setResearchTool("browser");
-      if (chatSpace === "skills") setSkillsTool("editor");
+      setMobileSurface("chat");
+      setDrafting(!hasMessages);
+      if (space === "build") setBuildTool("preview");
+      if (space === "studio") setStudioTool("canvas");
+      if (space === "research") setResearchTool("browser");
+      if (space === "skills") setSkillsTool("editor");
       pushTarget({
         product,
         view: "space",
-        spaceId: chatSpace,
-        threadId: null,
+        spaceId: space,
+        threadId: tid,
         projectId: null,
         platformNav,
         panelMode: "split",
@@ -608,27 +732,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         jobId: null,
         skillId: null,
       });
-      return;
-    }
+    },
+    [workspaceId, product, platformNav, pushTarget],
+  );
 
-    setView("chat");
-    setDrafting(false);
-    setPanelIntent("browse");
-    setPanelMode("collapsed");
-    pushTarget({
-      product,
-      view: "chat",
-      spaceId: null,
-      threadId: null,
-      projectId: null,
-      platformNav,
-      panelMode: "collapsed",
-      panelIntent: "browse",
-      connectorId: null,
-      jobId: null,
-      skillId: null,
-    });
-  }, [product, platformNav, pushTarget, setPlatformDockOpen]);
+  const newChat = useCallback(
+    (space?: SpaceId) => {
+      if (product === "platform") {
+        setPlatformDockOpen(true);
+        setMobileNav(false);
+        return;
+      }
+      if (space && isChatSpace(space)) {
+        openSpaceChat(space);
+        return;
+      }
+      setThreadId(null);
+      setSpaceId(null);
+      setProjectId(null);
+      setConnectorId(null);
+      setJobId(null);
+      setSkillId(null);
+      setMobileNav(false);
+      setView("chat");
+      setDrafting(false);
+      setPanelIntent("browse");
+      setPanelMode("collapsed");
+      pushTarget({
+        product,
+        view: "chat",
+        spaceId: null,
+        threadId: null,
+        projectId: null,
+        platformNav,
+        panelMode: "collapsed",
+        panelIntent: "browse",
+        connectorId: null,
+        jobId: null,
+        skillId: null,
+      });
+    },
+    [product, platformNav, pushTarget, setPlatformDockOpen, openSpaceChat],
+  );
 
   const setChatSpace = useCallback((id: SpaceId | null) => {
     setSpaceId(id);
@@ -644,18 +789,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const armChatInterface = useCallback((id: SpaceId) => {
-    if (!isChatSpace(id)) return;
-    setDrafting(true);
-    setView("space");
-    setSpaceId(id);
-    setPanelIntent("execute");
-    setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
-    if (id === "build") setBuildTool("preview");
-    if (id === "studio") setStudioTool("canvas");
-    if (id === "research") setResearchTool("browser");
-    if (id === "skills") setSkillsTool("editor");
-  }, []);
+  const armChatInterface = useCallback(
+    (id: SpaceId) => {
+      if (!isChatSpace(id)) return;
+      let tid = "";
+      let hasMessages = false;
+      setThreads((current) => {
+        const { threads: next, id: nextId } = upsertPersistentSpaceThread(
+          current,
+          workspaceId,
+          id,
+        );
+        tid = nextId;
+        hasMessages = Boolean(
+          next.find((item) => item.id === nextId)?.messages.length,
+        );
+        return next;
+      });
+      setThreadId(tid);
+      setDrafting(!hasMessages);
+      setView("space");
+      setSpaceId(id);
+      setPanelIntent("execute");
+      setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
+      setMobileSurface("chat");
+      if (id === "build") setBuildTool("preview");
+      if (id === "studio") setStudioTool("canvas");
+      if (id === "research") setResearchTool("browser");
+      if (id === "skills") setSkillsTool("editor");
+    },
+    [workspaceId],
+  );
 
   const collapseDraft = useCallback(() => {
     setDrafting(false);
@@ -664,6 +828,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [threadId]);
 
   const closeSpaceChat = useCallback(() => {
+    summarizeThreadById(threadId);
     setDrafting(false);
     setThreadId(null);
     setProjectId(null);
@@ -672,6 +837,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSkillId(null);
     setPanelMode("collapsed");
     setPanelIntent("browse");
+    setMobileSurface("chat");
     if (view === "space" && spaceId) {
       pushTarget({
         product,
@@ -687,7 +853,66 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: null,
       });
     }
-  }, [view, spaceId, product, platformNav, pushTarget]);
+  }, [
+    view,
+    spaceId,
+    product,
+    platformNav,
+    pushTarget,
+    threadId,
+    summarizeThreadById,
+  ]);
+
+  const clearSessionSummary = useCallback(
+    (id?: string | null) => {
+      const target = id ?? threadId ?? platformThreadId;
+      if (!target) return;
+      setThreads((current) =>
+        current.map((item) =>
+          item.id === target ? { ...item, sessionSummary: null } : item,
+        ),
+      );
+    },
+    [threadId, platformThreadId],
+  );
+
+  const updateSessionSummary = useCallback(
+    (text: string, id?: string | null) => {
+      const target = id ?? threadId ?? platformThreadId;
+      if (!target) return;
+      const next = text.trim();
+      setThreads((current) =>
+        current.map((item) =>
+          item.id === target
+            ? { ...item, sessionSummary: next || null }
+            : item,
+        ),
+      );
+    },
+    [threadId, platformThreadId],
+  );
+
+  const clearPersistentChat = useCallback(
+    (id?: string | null) => {
+      const target = id ?? threadId ?? platformThreadId;
+      if (!target) return;
+      setThreads((current) =>
+        current.map((item) =>
+          item.id === target
+            ? {
+                ...item,
+                messages: [],
+                snippet: "",
+                title: "Chat",
+                sessionSummary: null,
+              }
+            : item,
+        ),
+      );
+      setDrafting(true);
+    },
+    [threadId, platformThreadId],
+  );
 
   const sendMessage = useCallback(
     (text: string, opts?: SendOpts) => {
@@ -879,13 +1104,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       const assistantId = assistantMsg.id;
-      const activeId = threadId ?? nextId("t");
-      if (!threadId) setThreadId(activeId);
+      const usePersistent =
+        Boolean(space) &&
+        isChatSpace(space) &&
+        !projectId &&
+        !intent.projectId &&
+        (view === "space" || Boolean(opts?.space));
+      let activeId = threadId ?? nextId("t");
 
       setThreads((current) => {
-        const existing = current.find((item) => item.id === activeId);
+        let list = current;
+        if (usePersistent && space) {
+          const upserted = upsertPersistentSpaceThread(
+            list,
+            workspaceId,
+            space,
+          );
+          list = upserted.threads;
+          activeId = upserted.id;
+        }
+        const existing = list.find((item) => item.id === activeId);
         if (existing) {
-          return current.map((item) =>
+          return list.map((item) =>
             item.id === existing.id
               ? {
                   ...item,
@@ -895,6 +1135,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   spaceId: space,
                   projectId: intent.projectId ?? item.projectId,
                   workspaceId: matched?.workspaceId ?? item.workspaceId,
+                  persistent: usePersistent ? true : item.persistent,
+                  sessionSummary: null,
                   messages: [...item.messages, userMsg, assistantMsg],
                 }
               : item,
@@ -909,9 +1151,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           updatedAt: "Just now",
           snippet: trimmed,
           messages: [userMsg, assistantMsg],
+          persistent: usePersistent || undefined,
+          sessionSummary: null,
         };
-        return [created, ...current];
+        return [created, ...list];
       });
+      setThreadId(activeId);
+      setDrafting(false);
 
       if (kind === "build" || kind === "refine" || kind === "fix") {
         const checkpoint = makeCheckpoint(trimmed, selection);
@@ -1029,7 +1275,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       const keepSpace =
-        view === "space" &&
+        (view === "space" || Boolean(opts?.space)) &&
         (PRIMARY_NAV_SPACES as readonly string[]).includes(space);
       setView(keepSpace ? "space" : "chat");
       setSpaceId(space);
@@ -1045,6 +1291,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (kind === "build" || kind === "refine" || kind === "fix") setBuildTool("preview");
       if (kind === "changes") setBuildTool("activity");
       setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
+      setMobileSurface("chat");
       pushTarget({
         product,
         view: keepSpace ? "space" : "chat",
@@ -1063,6 +1310,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       threadId,
       workspaceId,
       spaceId,
+      projectId,
       view,
       product,
       platformNav,
@@ -1106,42 +1354,53 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         at: nowTime(),
       };
 
-      const activeId = platformThreadId ?? nextId("t");
-      if (!platformThreadId) setPlatformThreadId(activeId);
-      setPlatformDockOpen(true);
+      const activeIdRef = { id: platformThreadId ?? "" };
+      const targetNav = nav ?? platformNav;
 
       setThreads((current) => {
-        const existing = current.find(
-          (item) => item.id === activeId && item.product === "platform",
+        const { threads: list, id } = upsertPersistentPlatformThread(
+          current,
+          workspaceId,
+          targetNav,
+        );
+        activeIdRef.id = id;
+        const existing = list.find(
+          (item) => item.id === id && item.product === "platform",
         );
         if (existing) {
-          return current.map((item) =>
+          return list.map((item) =>
             item.id === existing.id
               ? {
                   ...item,
                   title: item.messages.length ? item.title : trimmed.slice(0, 52),
                   snippet: trimmed,
                   updatedAt: "Just now",
-                  platformNav: nav ?? item.platformNav,
+                  platformNav: targetNav,
+                  persistent: true,
+                  sessionSummary: null,
                   messages: [...item.messages, userMsg, assistantMsg],
                 }
               : item,
           );
         }
         const created: Thread = {
-          id: activeId,
+          id,
           title: trimmed.slice(0, 52),
           workspaceId,
           product: "platform",
-          platformNav: nav,
+          platformNav: targetNav,
           updatedAt: "Just now",
           snippet: trimmed,
           messages: [userMsg, assistantMsg],
+          persistent: true,
+          sessionSummary: null,
         };
-        return [created, ...current];
+        return [created, ...list];
       });
+      setPlatformThreadId(activeIdRef.id);
+      setPlatformDockOpen(true);
     },
-    [platformThreadId, workspaceId, setPlatformNav, entitlements],
+    [platformThreadId, workspaceId, setPlatformNav, entitlements, platformNav],
   );
 
   const selectElement = useCallback((id: PreviewNodeId) => {
@@ -1235,13 +1494,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setView("space");
     setSpaceId(target);
     setProjectId(null);
-    setThreadId(null);
     setDrafting(false);
     setPanelIntent("browse");
     setConnectorId(null);
     setJobId(null);
     setPanelMode("collapsed");
     setMobileNav(false);
+    setMobileSurface("chat");
+    // Keep persistent space threads in memory; only detach the active pointer.
+    setThreadId(null);
     pushTarget({
       product,
       view: "space",
@@ -1264,6 +1525,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     billingPlan,
     personalSpaceEnabled,
     newChat,
+    actor.id,
   ]);
 
   const openRecents = useCallback(() => {
@@ -1323,17 +1585,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const allowed = new Set(
       actor.workspaceIds.concat(
         entitlements.canManageWorkspaces
-          ? workspaces.filter((item) => !item.personal).map((item) => item.id)
+          ? workspaceCatalog
+              .filter((item) => !item.personal)
+              .map((item) => item.id)
           : [],
       ),
     );
     if (entitlements.canManageWorkspaces) {
-      workspaces
+      workspaceCatalog
         .filter((item) => !item.personal)
         .forEach((item) => allowed.add(item.id));
     }
     if (!allowed.has(workspaceId)) persistWorkspace(home);
-  }, [actor, entitlements, workspaceId]);
+  }, [actor, entitlements, workspaceId, workspaceCatalog]);
 
   useEffect(() => {
     if (product !== "courier") return;
@@ -1408,6 +1672,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (match.space === "studio") setStudioTool("canvas");
     if (match.space === "research") setResearchTool("browser");
     setPanelMode("split");
+    setMobileSurface("chat");
     setMobileNav(false);
     pushTarget({
       product,
@@ -1464,6 +1729,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (found.spaceId === "research") setResearchTool("browser");
       if (found.spaceId === "build") setBuildTool("preview");
       setPanelMode("split");
+      setMobileSurface("chat");
       setMobileNav(false);
       pushTarget({
         product: "courier",
@@ -1594,6 +1860,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setDrafting(true);
       setPanelIntent("execute");
       setPanelMode("split");
+      setMobileSurface("chat");
       if (target === "build") setBuildTool("preview");
       if (target === "studio") setStudioTool("canvas");
       if (target === "research") setResearchTool("browser");
@@ -1627,6 +1894,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDrafting(true);
     setPanelIntent("execute");
     setPanelMode("split");
+    setMobileSurface("chat");
     setMobileNav(false);
     pushTarget({
       product,
@@ -1651,6 +1919,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDrafting(true);
     setPanelIntent("execute");
     setPanelMode("split");
+    setMobileSurface("chat");
     setMobileNav(false);
     pushTarget({
       product,
@@ -1676,6 +1945,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPanelIntent("execute");
     setSkillsTool("editor");
     setPanelMode("split");
+    setMobileSurface("chat");
     setMobileNav(false);
     pushTarget({
       product,
@@ -1740,6 +2010,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       threads,
       threadId,
       thread,
+      platformThreadId,
       spaceId,
       projectId,
       project,
@@ -1751,8 +2022,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPanelRatio,
       setPanelMode,
       setPanelIntent,
+      mobileSurface,
+      setMobileSurface,
       sidebarOpen,
       setSidebarOpen,
+      workspaceRailOpen,
+      setWorkspaceRailOpen,
+      toggleLeftPanel,
       mobileNav,
       setMobileNav,
       dragging,
@@ -1784,10 +2060,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSpaceSettings,
       closeOverlay,
       newChat,
+      openSpaceChat,
       setChatSpace,
       armChatInterface,
       collapseDraft,
       closeSpaceChat,
+      clearSessionSummary,
+      updateSessionSummary,
+      clearPersistentChat,
       sendMessage,
       platformMessages,
       sendPlatformMessage,
@@ -1873,6 +2153,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       threads,
       threadId,
       thread,
+      platformThreadId,
       spaceId,
       projectId,
       project,
@@ -1881,7 +2162,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       panelMode,
       panelIntent,
       panelRatio,
+      mobileSurface,
       sidebarOpen,
+      workspaceRailOpen,
+      toggleLeftPanel,
       mobileNav,
       dragging,
       drafting,
@@ -1904,10 +2188,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSpaceSettings,
       closeOverlay,
       newChat,
+      openSpaceChat,
       setChatSpace,
       armChatInterface,
       collapseDraft,
       closeSpaceChat,
+      clearSessionSummary,
+      updateSessionSummary,
+      clearPersistentChat,
       sendMessage,
       platformMessages,
       sendPlatformMessage,

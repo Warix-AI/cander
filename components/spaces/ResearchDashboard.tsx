@@ -25,12 +25,6 @@ function researchKind(id: string): "papers" | "reports" {
   return paperIds.has(id) ? "papers" : "reports";
 }
 
-function researchCta(scope: ResearchScope) {
-  if (scope === "reports") return "New report";
-  if (scope === "papers") return "New paper";
-  return "New research";
-}
-
 export function ResearchDashboard() {
   const {
     workspaceId,
@@ -58,7 +52,7 @@ export function ResearchDashboard() {
       actions={
         <>
           <DashBtn primary onClick={() => newChat("research")}>
-            {researchCta(scope)}
+            Ask
           </DashBtn>
           <SpaceSettingsButton space="research" />
         </>

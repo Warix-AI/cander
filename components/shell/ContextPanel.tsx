@@ -12,6 +12,7 @@ import { SkillsPanel } from "@/components/panels/SkillsPanel";
 import { StudioPanel } from "@/components/panels/StudioPanel";
 import { useApp } from "@/components/app/AppProvider";
 import { SplitHandle } from "@/components/shell/SplitHandle";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 export function ContextPanel() {
@@ -80,7 +81,9 @@ export function ContextPanel() {
 
 export function ResizeHandle() {
   const { setPanelRatio, panelMode, product, platformDockOpen } = useApp();
+  const mobile = useMobileShell();
   const platformChat = product === "platform" && platformDockOpen;
+  if (mobile) return null;
   if (
     !platformChat &&
     (panelMode === "collapsed" || panelMode === "immersive")

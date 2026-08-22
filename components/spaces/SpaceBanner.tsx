@@ -36,7 +36,7 @@ export function SpaceBanner({
   const choice = bannerFor(space, banners);
 
   return (
-    <div className="relative h-32 shrink-0">
+    <div className="relative h-[11.5rem] shrink-0 max-lg:h-[13rem] sm:h-40 lg:h-36">
       <div className="absolute inset-0 overflow-hidden">
         {choice.custom ? (
           <img
@@ -56,7 +56,7 @@ export function SpaceBanner({
         <NavToggle
           onBanner
           className={cn(
-            "absolute top-1.5 left-2 z-20",
+            "absolute top-2.5 left-2 z-20 max-lg:top-3",
             sidebarOpen && "lg:hidden",
             mobileNav && "max-lg:hidden",
           )}
