@@ -1,22 +1,31 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  Blocks,
+  Building2,
+  CreditCard,
   Ellipsis,
   FolderKanban,
   GripVertical,
+  LayoutGrid,
   MessageSquare,
+  Palette,
   Pin,
+  Search,
   SquarePen,
+  UserRound,
 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { AccountMenu } from "@/components/shell/AccountMenu";
+import { DiscoverySidebarCard } from "@/components/discovery/DiscoverySidebarCard";
 import { ProductSwitcher } from "@/components/shell/ProductSwitcher";
 import { WindowChrome } from "@/components/shell/WindowChrome";
 import { WorkspaceRail } from "@/components/shell/WorkspaceRail";
 import { useApp } from "@/components/app/AppProvider";
 import { Dropdown } from "@/components/ui/Controls";
 import { platformNavItems, projects, spaces, connectors } from "@/lib/data";
+import { visibleSettingsTabs } from "@/lib/settings-nav";
 import {
   extraNavLabels,
   navIcon,
@@ -28,9 +37,19 @@ import {
   resolveSidebarNav,
   type SidebarNavId,
 } from "@/lib/spaces";
-import type { PinKind, SpaceId } from "@/lib/types";
+import type { PinKind, SettingsTab, SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { SHELL_FLOAT_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { memberSpaces } from "@/lib/workspace-policy";
+
+const settingsIcons: Record<SettingsTab, typeof Building2> = {
+  organization: Building2,
+  workspaces: LayoutGrid,
+  connectors: Blocks,
+  plans: CreditCard,
+  general: UserRound,
+  appearance: Palette,
+};
 
 function navLabel(id: SidebarNavId) {
   if (isExtraNavId(id)) return extraNavLabels[id];
@@ -69,7 +88,30 @@ export function Sidebar() {
     billingPlan,
     personalSpaceEnabled,
     entitlements,
+    settingsTab,
+    setSettingsTab,
+    workspaceRailOpen,
   } = useApp();
+
+  const settingsNav = visibleSettingsTabs(entitlements);
+  const inSettings = view === "settings";
+  const [settingsQuery, setSettingsQuery] = useState("");
+  const filteredSettingsNav = useMemo(() => {
+    const needle = settingsQuery.trim().toLowerCase();
+    if (!needle) return settingsNav;
+    return settingsNav.filter((tab) =>
+      tab.label.toLowerCase().includes(needle),
+    );
+  }, [settingsNav, settingsQuery]);
+  useEffect(() => {
+    if (!inSettings) setSettingsQuery("");
+  }, [inSettings]);
+  const shellStyle = useShellStyle();
+  const floating = shellStyle === "floating";
+  const showRail =
+    entitlements.hasWorkspaces &&
+    !entitlements.showInviteWall &&
+    workspaceRailOpen;
 
   const { main, more } = resolveSidebarNav(
     memberSpaces(workspace.id, actor.id, workspacePolicies),
@@ -171,7 +213,7 @@ export function Sidebar() {
   return (
     <div
       className={cn(
-        "h-full max-w-[100vw] shrink-0",
+        "h-full max-w-[100vw] shrink-0 gap-0",
         mobileNav
           ? "absolute inset-y-0 left-0 z-40 flex lg:hidden"
           : "hidden",
@@ -179,14 +221,77 @@ export function Sidebar() {
       )}
     >
       <WorkspaceRail />
-      <aside className="flex h-full w-[min(244px,calc(100vw-3.5rem))] shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:w-[244px]">
+      <aside
+        className={cn(
+          "flex w-[min(244px,calc(100vw-3.5rem))] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:w-[244px]",
+          floating
+            ? cn(
+                "overflow-hidden border border-sidebar-border shadow-[0_1px_2px_oklch(0_0_0/0.04)]",
+                SHELL_FLOAT_RADIUS,
+                "my-3 mr-3 h-[calc(100%-1.5rem)]",
+                !showRail && "ml-3",
+                mobileNav && !showRail && "ml-2",
+              )
+            : "h-full overflow-hidden border-r border-sidebar-border",
+        )}
+      >
       <WindowChrome />
 
       <div className="px-2">
         <ProductSwitcher />
       </div>
 
-      {product === "platform" ? (
+      {inSettings ? (
+        <nav
+          className="mt-1 flex min-h-0 flex-1 flex-col px-2"
+          aria-label="Settings"
+        >
+          <div className="relative mb-2">
+            <Search
+              className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+              strokeWidth={1.6}
+            />
+            <input
+              value={settingsQuery}
+              onChange={(event) => setSettingsQuery(event.target.value)}
+              placeholder="Search settings"
+              className="h-9 w-full rounded-[10px] border border-sidebar-border bg-background pr-3 pl-8 text-[12.5px] outline-none placeholder:text-muted-foreground focus:border-foreground/20"
+            />
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {filteredSettingsNav.map((tab) => {
+              const Icon = settingsIcons[tab.id];
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setSettingsTab(tab.id);
+                    setMobileNav(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
+                    settingsTab === tab.id
+                      ? "bg-sidebar-accent font-medium"
+                      : "hover:bg-sidebar-accent",
+                  )}
+                >
+                  <Icon
+                    className="h-3.5 w-3.5 text-muted-foreground"
+                    strokeWidth={2}
+                  />
+                  {tab.label}
+                </button>
+              );
+            })}
+            {!filteredSettingsNav.length ? (
+              <p className="px-3 py-2 text-[12.5px] text-muted-foreground">
+                No matching settings.
+              </p>
+            ) : null}
+          </div>
+        </nav>
+      ) : product === "platform" ? (
         <nav className="mt-1 min-h-0 flex-1 overflow-y-auto px-2" aria-label="Development">
           {platformNavItems
             .filter((item) => entitlements.platformNavAllowed(item.id))
@@ -275,6 +380,7 @@ export function Sidebar() {
       )}
 
       <div className="mt-auto p-2">
+        <DiscoverySidebarCard />
         <AccountMenu />
       </div>
     </aside>

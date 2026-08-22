@@ -7,7 +7,7 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { SpaceChatLayout } from "@/components/shell/SpaceChatLayout";
 import { RecentsView } from "@/components/shell/RecentsView";
 import { SplitMainLayout } from "@/components/shell/SplitMainLayout";
-import { SettingsModal } from "@/components/settings/SettingsView";
+import { SettingsView } from "@/components/settings/SettingsView";
 import { SharedPanel } from "@/components/panels/SharedPanel";
 import { PublishSheet } from "@/components/preview/PublishSheet";
 import { PlatformChatLayout } from "@/components/platform/PlatformChatLayout";
@@ -16,7 +16,7 @@ import { ConfigureModal } from "@/components/overlays/ConfigureModal";
 import { SpaceSettingsModal } from "@/components/overlays/SpaceSettingsModal";
 import { WorkspaceModal } from "@/components/overlays/WorkspaceModal";
 import { InviteBanner, InviteWall } from "@/components/overlays/InviteWall";
-import { SignInWall } from "@/components/overlays/SignInWall";
+import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import {
   getAuthServerSnapshot,
   getAuthSnapshot,
@@ -25,6 +25,11 @@ import {
 import { useSyncExternalStore } from "react";
 import { BrowserLayout } from "@/components/browser/BrowserLayout";
 import { FloatingVoiceDock } from "@/components/shell/VoiceControl";
+import { DiscoveryView } from "@/components/discovery/DiscoveryView";
+import {
+  DiscoveryAutoOpenListener,
+  DiscoveryModal,
+} from "@/components/discovery/DiscoveryModal";
 
 export function AppShell() {
   return (
@@ -35,8 +40,18 @@ export function AppShell() {
 }
 
 function Root() {
-  const { mobileNav, setMobileNav, overlay, openSettings, openOverlay, closeOverlay } =
-    useApp();
+  const {
+    mobileNav,
+    setMobileNav,
+    overlay,
+    view,
+    openSettings,
+    openOverlay,
+    closeOverlay,
+    canGoBack,
+    goBack,
+    newChat,
+  } = useApp();
   const signedIn = useSyncExternalStore(
     subscribeAuth,
     getAuthSnapshot,
@@ -44,11 +59,14 @@ function Root() {
   );
 
   useEffect(() => {
+    if (!signedIn) return;
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === ",") {
         event.preventDefault();
-        if (overlay === "settings") closeOverlay();
-        else openSettings();
+        if (view === "settings") {
+          if (canGoBack) goBack();
+          else newChat();
+        } else openSettings();
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -58,13 +76,25 @@ function Root() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [overlay, openSettings, openOverlay, closeOverlay]);
+  }, [
+    signedIn,
+    overlay,
+    view,
+    openSettings,
+    openOverlay,
+    closeOverlay,
+    canGoBack,
+    goBack,
+    newChat,
+  ]);
+
+  if (!signedIn) {
+    return <OnboardingFlow />;
+  }
 
   return (
     <>
-      <div
-        className={`relative flex h-svh overflow-hidden bg-background text-foreground ${signedIn ? "" : "pointer-events-none select-none blur-[2px] opacity-90"}`}
-      >
+      <div className="relative flex h-svh overflow-hidden bg-background text-foreground">
         {mobileNav ? (
           <button
             type="button"
@@ -75,16 +105,16 @@ function Root() {
         ) : null}
         <Sidebar />
         <CourierMain />
-        <SettingsModal />
         <SearchModal />
         <ConfigureModal />
         <SpaceSettingsModal />
         <WorkspaceModal />
         <InviteWall />
         <PublishSheet />
+        <DiscoveryModal />
+        <DiscoveryAutoOpenListener />
         <FloatingVoiceDock />
       </div>
-      <SignInWall />
     </>
   );
 }
@@ -101,6 +131,17 @@ function CourierMain() {
     connectorId,
     spaceLibraryOpen,
   } = useApp();
+
+  if (view === "settings") {
+    return (
+      <SplitMainLayout>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <InviteBanner />
+          <SettingsView />
+        </div>
+      </SplitMainLayout>
+    );
+  }
 
   if (product === "platform") {
     return <PlatformChatLayout />;
@@ -135,6 +176,17 @@ function CourierMain() {
         <div className="flex min-h-0 flex-1 flex-col">
           <InviteBanner />
           <RecentsView />
+        </div>
+      </SplitMainLayout>
+    );
+  }
+
+  if (view === "discovery") {
+    return (
+      <SplitMainLayout>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <InviteBanner />
+          <DiscoveryView />
         </div>
       </SplitMainLayout>
     );

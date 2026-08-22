@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
 import { workspacesFor } from "@/lib/entitlements";
+import { useShellStyle } from "@/lib/shell-chrome";
 import {
   getWorkspaceCatalogServerSnapshot,
   getWorkspaceCatalogSnapshot,
@@ -22,6 +23,8 @@ export function WorkspaceRail() {
     entitlements,
     workspaceRailOpen,
   } = useApp();
+  const shellStyle = useShellStyle();
+  const floating = shellStyle === "floating";
 
   useSyncExternalStore(
     subscribeWorkspaceCatalog,
@@ -41,7 +44,12 @@ export function WorkspaceRail() {
 
   return (
     <div
-      className="flex h-full w-[58px] shrink-0 flex-col items-center border-r border-sidebar-border bg-sidebar py-3"
+      className={cn(
+        "flex h-full w-[58px] shrink-0 flex-col items-center py-3",
+        floating
+          ? "bg-transparent"
+          : "border-r border-sidebar-border bg-sidebar",
+      )}
       aria-label="Workspaces"
     >
       <div className="flex min-h-0 flex-1 flex-col items-center gap-2.5 overflow-y-auto px-2 pt-1">
@@ -73,7 +81,12 @@ export function WorkspaceRail() {
                 active={active}
                 className={
                   !active
-                    ? "transition-colors duration-200 group-hover:bg-sidebar-accent"
+                    ? cn(
+                        "transition-colors duration-200",
+                        floating
+                          ? "group-hover:bg-muted"
+                          : "group-hover:bg-sidebar-accent",
+                      )
                     : undefined
                 }
               />
@@ -82,13 +95,17 @@ export function WorkspaceRail() {
         })}
       </div>
 
-      {entitlements.canManageWorkspaces ? (
+      {entitlements.canCreatePersonalWorkspace ||
+      entitlements.canCreateBusinessWorkspace ? (
         <button
           type="button"
           title="New workspace"
           aria-label="New workspace"
           onClick={() => openOverlay("workspace")}
-          className="mt-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+          className={cn(
+            "mt-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-200 hover:text-foreground",
+            floating ? "hover:bg-muted" : "hover:bg-sidebar-accent",
+          )}
         >
           <Plus className="h-3.5 w-3.5" strokeWidth={1.7} />
         </button>

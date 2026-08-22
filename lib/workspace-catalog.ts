@@ -1,6 +1,7 @@
 import { workspaces as seedWorkspaces } from "./data";
 import { NAV_SPACES } from "./spaces";
-import type { Workspace } from "./types";
+import type { Workspace, WorkspaceKind } from "./types";
+import { workspaceKindOf } from "./workspace-kind";
 
 type Listener = () => void;
 
@@ -21,6 +22,32 @@ function rebuildCatalog() {
   catalog = Array.from(byId.values());
 }
 
+function normalizeWorkspace(row: Record<string, unknown>): Workspace | null {
+  const id = String(row.id ?? "").trim();
+  const name = String(row.name ?? "").trim();
+  if (!id || !name) return null;
+  const kindRaw = row.kind;
+  const kind: WorkspaceKind | undefined =
+    kindRaw === "personal" || kindRaw === "business"
+      ? kindRaw
+      : row.personal === true
+        ? "personal"
+        : undefined;
+  const personal = kind === "personal" || row.personal === true;
+  return {
+    id,
+    name,
+    spaces: Array.isArray(row.spaces)
+      ? (row.spaces.map(String) as Workspace["spaces"])
+      : [...NAV_SPACES],
+    members: typeof row.members === "number" ? row.members : 1,
+    budget: typeof row.budget === "string" ? row.budget : "$0",
+    spend: typeof row.spend === "string" ? row.spend : "$0",
+    ...(personal ? { personal: true } : {}),
+    ...(kind ? { kind } : {}),
+  };
+}
+
 function parse(raw: string | null): Workspace[] {
   if (!raw) return [];
   try {
@@ -29,21 +56,8 @@ function parse(raw: string | null): Workspace[] {
     const next: Workspace[] = [];
     for (const item of data) {
       if (!item || typeof item !== "object") continue;
-      const row = item as Record<string, unknown>;
-      const id = String(row.id ?? "").trim();
-      const name = String(row.name ?? "").trim();
-      if (!id || !name) continue;
-      next.push({
-        id,
-        name,
-        spaces: Array.isArray(row.spaces)
-          ? (row.spaces.map(String) as Workspace["spaces"])
-          : [...NAV_SPACES],
-        members: typeof row.members === "number" ? row.members : 1,
-        budget: typeof row.budget === "string" ? row.budget : "$0",
-        spend: typeof row.spend === "string" ? row.spend : "$0",
-        ...(row.personal === true ? { personal: true } : {}),
-      });
+      const row = normalizeWorkspace(item as Record<string, unknown>);
+      if (row) next.push(row);
     }
     return next;
   } catch {
@@ -78,7 +92,6 @@ export function subscribeWorkspaceCatalog(listener: Listener) {
 }
 
 export function getWorkspaceCatalogSnapshot(): Workspace[] {
-  // Match server snapshot on the first client paint to avoid hydration mismatch.
   if (!hydrated) return seedWorkspaces;
   return catalog;
 }
@@ -120,34 +133,31 @@ export function uniqueWorkspaceId(name: string, existing: Workspace[]) {
 
 export function createWorkspace(input: {
   name: string;
+  kind: WorkspaceKind;
   spaces?: Workspace["spaces"];
-  includeWork?: boolean;
-  includePersonal?: boolean;
 }): Workspace | null {
   hydrate();
   const name = input.name.trim();
   if (!name) return null;
   const id = uniqueWorkspaceId(name, catalog);
-  const spaces =
-    input.spaces ??
-    spacesForNewWorkspace({
-      includeWork: input.includeWork,
-      includePersonal: input.includePersonal,
-    });
+  const spaces = input.spaces ? [...input.spaces] : [...NAV_SPACES];
+  const kind = input.kind;
   const next: Workspace = {
     id,
     name,
-    spaces: [...spaces],
+    spaces,
     members: 1,
     budget: "$0",
     spend: "$0",
+    kind,
+    ...(kind === "personal" ? { personal: true } : {}),
   };
   custom = [...custom, next];
   persist();
   return next;
 }
 
-/** Default nav spaces for a new workspace, with optional Work / Personal. */
+/** @deprecated Prefer createWorkspace({ kind }) — kept for older call sites. */
 export function spacesForNewWorkspace(opts?: {
   includeWork?: boolean;
   includePersonal?: boolean;
@@ -164,4 +174,10 @@ export function spacesForNewWorkspace(opts?: {
 export function listCustomWorkspaces() {
   hydrate();
   return custom;
+}
+
+export function countWorkspacesByKind(kind: WorkspaceKind) {
+  return getWorkspaceCatalogSnapshot().filter(
+    (item) => workspaceKindOf(item) === kind,
+  ).length;
 }

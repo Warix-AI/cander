@@ -121,10 +121,12 @@ export function getSpaceBannersSnapshot() {
   return banners;
 }
 
+const EMPTY_BANNERS: Partial<Record<BannerKey, SpaceBannerChoice>> = {};
+
 export function getSpaceBannersServerSnapshot(): Partial<
   Record<BannerKey, SpaceBannerChoice>
 > {
-  return {};
+  return EMPTY_BANNERS;
 }
 
 export function bannerFor(

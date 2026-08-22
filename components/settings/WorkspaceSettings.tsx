@@ -3,16 +3,29 @@
 import { useRef, useState, useSyncExternalStore } from "react";
 import { ChevronLeft, ChevronRight, ImagePlus, Upload } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import {
+  SettingsGroup,
+  SettingsHeader,
+  SettingsPage,
+  SettingsPanel,
+  SettingsRow,
+  SettingsSection,
+  settingsInputClass,
+} from "@/components/settings/SettingsChrome";
 import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
+import { workspacesFor } from "@/lib/entitlements";
 import { connectors, spaces as spaceCatalog } from "@/lib/data";
 import type { KnowledgeBase, Workspace } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
-  createWorkspace,
   getWorkspaceCatalogServerSnapshot,
   getWorkspaceCatalogSnapshot,
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
+import {
+  workspaceKindLabel,
+  workspaceKindOf,
+} from "@/lib/workspace-kind";
 import {
   clearWorkspaceIcon,
   getWorkspaceIconsServerSnapshot,
@@ -25,7 +38,6 @@ import {
 import {
   addKnowledgeBase,
   addKnowledgeFile,
-  ensurePolicy,
   fileSizeLabel,
   memberSpaces,
   policyFor,
@@ -42,14 +54,20 @@ export function WorkspacesSettings({
   selectedId: string | null;
   onSelect: (id: string | null) => void;
 }) {
-  const { workspacePolicies, orgMembers, entitlements, personalSpaceEnabled, setPersonalSpaceEnabled } = useApp();
-  const catalog = useSyncExternalStore(
+  const {
+    workspacePolicies,
+    entitlements,
+    personalSpaceEnabled,
+    setPersonalSpaceEnabled,
+    actor,
+    openOverlay,
+  } = useApp();
+  useSyncExternalStore(
     subscribeWorkspaceCatalog,
     getWorkspaceCatalogSnapshot,
     getWorkspaceCatalogServerSnapshot,
   );
-  const workspaceList = catalog.filter((item) => !item.personal);
-  const [newName, setNewName] = useState("");
+  const workspaceList = workspacesFor(actor, entitlements);
   const selected = workspaceList.find((item) => item.id === selectedId) ?? null;
 
   if (selected) {
@@ -63,103 +81,93 @@ export function WorkspacesSettings({
     );
   }
 
-  const atCap = workspaceList.length >= entitlements.workspaceCap;
+  const canCreate =
+    entitlements.canCreatePersonalWorkspace ||
+    entitlements.canCreateBusinessWorkspace;
 
   return (
-    <>
-      <h2
-        id="settings-title"
-        className="text-[18px] font-medium tracking-[-0.02em]"
-      >
-        Workspaces
-      </h2>
-      <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted-foreground">
-        Knowledge bases live on the workspace. People assigned from Organization
-        inherit them. Permissions here only toggle which spaces they can open.
-      </p>
-      {entitlements.canManageWorkspaces ? (
-        <div className="mt-6 flex max-w-xl items-start justify-between gap-4 rounded-[10px] border border-border p-4">
-          <div>
-            <p className="text-[13.5px]">Allow Personal space</p>
-            <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
-              Organization setting — show Personal next to Research.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={personalSpaceEnabled}
-            onClick={() => setPersonalSpaceEnabled(!personalSpaceEnabled)}
-            className="inline-flex h-8 shrink-0 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-          >
-            {personalSpaceEnabled ? "On" : "Off"}
-          </button>
-        </div>
-      ) : null}
-      {entitlements.hasWorkspaces ? (
-        <>
-      <form
-        className="mt-6 flex max-w-xl gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const name = newName.trim();
-          if (!name) return;
-          if (workspaceList.length >= entitlements.workspaceCap) return;
-          const created = createWorkspace({ name });
-          if (!created) return;
-          ensurePolicy(created.id, orgMembers[0]?.id);
-          setNewName("");
-          onSelect(created.id);
-        }}
-      >
-        <input
-          value={newName}
-          onChange={(event) => setNewName(event.target.value)}
-          placeholder="New workspace name"
-          className="h-10 min-w-0 flex-1 rounded-[10px] border border-border bg-card px-3 text-[13.5px] outline-none focus:border-foreground/20"
-        />
-        <button
-          type="submit"
-          disabled={atCap}
-          className="inline-flex h-10 items-center rounded-full bg-primary px-4 text-[13.5px] font-medium tracking-[-0.01em] text-primary-foreground disabled:opacity-40"
-        >
-          Add
-        </button>
-      </form>
-      <div className="mt-6 max-w-xl">
-        {workspaceList.map((item) => {
-          const policy = policyFor(item.id, workspacePolicies);
-          return (
+    <SettingsPage>
+      <SettingsHeader
+        title="Workspaces"
+        subtitle="Personal and business workspaces share the same Courier UI. Differences are permissions, invites, and admin tools — not a separate product."
+        actions={
+          canCreate ? (
             <button
-              key={item.id}
               type="button"
-              onClick={() => onSelect(item.id)}
-              className="flex w-full items-center justify-between gap-3 border-b border-border py-3.5 text-left transition-colors duration-200 hover:bg-muted/40"
+              onClick={() => openOverlay("workspace")}
+              className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium tracking-[-0.01em] text-primary-foreground"
             >
-              <span className="flex min-w-0 items-center gap-3">
-                <WorkspaceMark id={item.id} name={item.name} size="sm" />
-                <span className="min-w-0">
-                  <span className="block text-[14px] tracking-[-0.01em]">
-                    {item.name}
-                  </span>
-                  <span className="mt-0.5 block text-[12px] text-muted-foreground">
-                    {policy.members.length === 1
-                      ? "1 person"
-                      : `${policy.members.length} people`}
-                  </span>
-                </span>
-              </span>
-              <ChevronRight
-                className="h-4 w-4 shrink-0 text-muted-foreground"
-                strokeWidth={1.6}
-              />
+              Create workspace
             </button>
-          );
-        })}
-      </div>
-        </>
+          ) : null
+        }
+      />
+
+      {entitlements.canManageWorkspaces ? (
+        <SettingsSection
+          title="Organization defaults"
+          description="Applies across business workspaces for this organization."
+          className="mt-8"
+        >
+          <SettingsGroup>
+            <SettingsRow
+              label="Allow Personal space"
+              description="Show Personal next to Research in business workspaces."
+            >
+              <button
+                type="button"
+                role="switch"
+                aria-checked={personalSpaceEnabled}
+                onClick={() => setPersonalSpaceEnabled(!personalSpaceEnabled)}
+                className="inline-flex h-8 shrink-0 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+              >
+                {personalSpaceEnabled ? "On" : "Off"}
+              </button>
+            </SettingsRow>
+          </SettingsGroup>
+        </SettingsSection>
       ) : null}
-    </>
+
+      {entitlements.hasWorkspaces || canCreate ? (
+        <SettingsSection
+          title="Your workspaces"
+          description="Open a workspace to manage people, connectors, and knowledge."
+          className={entitlements.canManageWorkspaces ? undefined : "mt-8"}
+        >
+          <SettingsGroup>
+            {workspaceList.map((item) => {
+              const policy = policyFor(item.id, workspacePolicies);
+              const kind = workspaceKindOf(item);
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onSelect(item.id)}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-muted/50"
+                >
+                  <WorkspaceMark id={item.id} name={item.name} size="sm" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13.5px] font-medium tracking-[-0.01em]">
+                      {item.name}
+                    </span>
+                    <span className="mt-0.5 block text-[12.5px] text-muted-foreground">
+                      {workspaceKindLabel(kind)} ·{" "}
+                      {policy.members.length === 1
+                        ? "1 person"
+                        : `${policy.members.length} people`}
+                    </span>
+                  </span>
+                  <ChevronRight
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    strokeWidth={1.6}
+                  />
+                </button>
+              );
+            })}
+          </SettingsGroup>
+        </SettingsSection>
+      ) : null}
+    </SettingsPage>
   );
 }
 
@@ -179,7 +187,7 @@ function WorkspacePage({
   );
 
   return (
-    <>
+    <SettingsPage>
       <button
         type="button"
         onClick={onBack}
@@ -188,32 +196,32 @@ function WorkspacePage({
         <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.7} />
         Workspaces
       </button>
-      <h2
-        id="settings-title"
-        className="mt-3 text-[18px] font-medium tracking-[-0.02em]"
-      >
-        {workspace.name}
-      </h2>
-      <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted-foreground">
-        Assigned people get these knowledge bases. Toggle spaces to control what
-        they can open — role stays on Organization.
-      </p>
+      <SettingsHeader
+        kicker={workspaceKindLabel(workspaceKindOf(workspace))}
+        title={workspace.name}
+        subtitle={
+          workspaceKindOf(workspace) === "personal"
+            ? "Friends and family share chats, files, and projects here. Roles stay simple: Owner and Member. Company emails can’t join."
+            : "Assigned people get these knowledge bases. Toggle spaces to control what they can open — organization roles and seats still apply. Personal emails can’t join."
+        }
+      />
 
-      <WorkspaceIconSection workspace={workspace} />
+      <div className="mt-8">
+        <WorkspaceIconSection workspace={workspace} />
+      </div>
 
-      <section className="mt-8 max-w-2xl">
-        <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-          Knowledge bases
-        </p>
-        <p className="mt-1 text-[13px] text-muted-foreground">
-          {entitlements.hasWorkspaceKnowledge
+      <SettingsSection
+        title="Knowledge bases"
+        description={
+          entitlements.hasWorkspaceKnowledge
             ? `Sources Courier can use inside ${workspace.name}.`
-            : "Knowledge bases start on Pro."}
-        </p>
+            : "Knowledge bases start on Pro."
+        }
+      >
         {entitlements.hasWorkspaceKnowledge ? (
           <>
             <form
-              className="mt-4 flex gap-2"
+              className="mb-3 flex max-w-xl gap-2"
               onSubmit={(event) => {
                 event.preventDefault();
                 addKnowledgeBase(workspace.id, kbName);
@@ -224,16 +232,16 @@ function WorkspacePage({
                 value={kbName}
                 onChange={(event) => setKbName(event.target.value)}
                 placeholder="New knowledge base"
-                className="h-10 min-w-0 flex-1 rounded-[10px] border border-border bg-card px-3 text-[13.5px] outline-none focus:border-foreground/20"
+                className={cn(settingsInputClass, "min-w-0 flex-1")}
               />
               <button
                 type="submit"
-                className="inline-flex h-10 items-center rounded-full border border-foreground/15 px-4 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+                className="inline-flex h-10 items-center rounded-full border border-foreground/15 px-4 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
               >
                 Add
               </button>
             </form>
-            <div className="mt-4 space-y-3">
+            <div className="space-y-3">
               {policy.knowledgeBases.length ? (
                 policy.knowledgeBases.map((item) => (
                   <KnowledgeCard
@@ -243,25 +251,23 @@ function WorkspacePage({
                   />
                 ))
               ) : (
-                <p className="rounded-[10px] border border-border px-4 py-4 text-[13px] text-muted-foreground">
-                  No knowledge bases yet.
-                </p>
+                <SettingsGroup>
+                  <div className="px-4 py-4 text-[13px] text-muted-foreground">
+                    No knowledge bases yet.
+                  </div>
+                </SettingsGroup>
               )}
             </div>
           </>
         ) : null}
-      </section>
+      </SettingsSection>
 
       {entitlements.hasConnectorPolicies ? (
-        <section className="mt-10 max-w-2xl">
-          <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-            Connector policies
-          </p>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            Turn a connector off for this workspace. Installed apps stay in
-            Courier; they just can’t run here.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-1.5">
+        <SettingsSection
+          title="Connector policies"
+          description="Turn a connector off for this workspace. Installed apps stay in Courier; they just can’t run here."
+        >
+          <div className="flex flex-wrap gap-1.5">
             {connectors
               .filter(
                 (item) =>
@@ -274,7 +280,9 @@ function WorkspacePage({
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => toggleDisabledConnector(workspace.id, item.id)}
+                    onClick={() =>
+                      toggleDisabledConnector(workspace.id, item.id)
+                    }
                     className={cn(
                       "inline-flex h-8 items-center rounded-full px-3 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
                       off
@@ -288,98 +296,93 @@ function WorkspacePage({
                 );
               })}
           </div>
-        </section>
+        </SettingsSection>
       ) : null}
 
       {entitlements.canManageWorkspaces ? (
-      <section className="mt-10 max-w-2xl pb-6">
-        <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-          Permissions
-        </p>
-        <p className="mt-1 text-[13px] text-muted-foreground">
-          Click a person to turn spaces on or off. Role is not set here.
-        </p>
-        <div className="mt-4 rounded-[10px] border border-border">
-          {policy.members.map((row) => {
-            const member = orgMembers.find((item) => item.id === row.memberId);
-            if (!member) return null;
-            const open = openUser === row.memberId;
-            const enabled = memberSpaces(
-              workspace.id,
-              row.memberId,
-              workspacePolicies,
-            );
-            return (
-              <div
-                key={row.memberId}
-                className="border-b border-border last:border-b-0"
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setOpenUser((current) =>
-                      current === row.memberId ? null : row.memberId,
-                    )
-                  }
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-muted/50"
-                >
-                  <span>
-                    <span className="block text-[13.5px]">{member.name}</span>
-                    <span className="block font-mono text-[11px] text-muted-foreground">
-                      {member.email} · {enabled.length} of {workspace.spaces.length}{" "}
-                      spaces
-                    </span>
-                  </span>
-                  <ChevronRight
-                    className={cn(
-                      "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                      open && "rotate-90",
-                    )}
-                    strokeWidth={1.6}
-                  />
-                </button>
-                {open ? (
-                  <div className="flex flex-wrap gap-1.5 px-4 pb-4">
-                    {workspace.spaces
-                      .filter(
-                        (spaceId) =>
-                          spaceId !== "work" || entitlements.canUseWorkSpace,
+        <SettingsSection
+          title="Permissions"
+          description="Click a person to turn spaces on or off. Role is not set here."
+        >
+          <SettingsGroup>
+            {policy.members.map((row) => {
+              const member = orgMembers.find(
+                (item) => item.id === row.memberId,
+              );
+              if (!member) return null;
+              const open = openUser === row.memberId;
+              const enabled = memberSpaces(
+                workspace.id,
+                row.memberId,
+                workspacePolicies,
+              );
+              return (
+                <div key={row.memberId}>
+                  <SettingsRow
+                    label={member.name}
+                    description={`${member.email} · ${enabled.length} of ${workspace.spaces.length} spaces`}
+                    onClick={() =>
+                      setOpenUser((current) =>
+                        current === row.memberId ? null : row.memberId,
                       )
-                      .map((spaceId) => {
-                      const on = row.spaces.includes(spaceId);
-                      const space = spaceCatalog.find((item) => item.id === spaceId);
-                      return (
-                        <button
-                          key={spaceId}
-                          type="button"
-                          onClick={() =>
-                            toggleMemberSpace(workspace.id, row.memberId, spaceId)
-                          }
-                          className={cn(
-                            "inline-flex h-8 items-center rounded-full px-3 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
-                            on
-                              ? "bg-primary text-primary-foreground"
-                              : "border border-foreground/15 text-muted-foreground hover:text-foreground",
-                          )}
-                        >
-                          {space?.label ?? spaceId}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
+                    }
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                        open && "rotate-90",
+                      )}
+                      strokeWidth={1.6}
+                    />
+                  </SettingsRow>
+                  {open ? (
+                    <div className="flex flex-wrap gap-1.5 px-4 pb-3.5">
+                      {workspace.spaces
+                        .filter(
+                          (spaceId) =>
+                            spaceId !== "work" || entitlements.canUseWorkSpace,
+                        )
+                        .map((spaceId) => {
+                          const on = row.spaces.includes(spaceId);
+                          const space = spaceCatalog.find(
+                            (item) => item.id === spaceId,
+                          );
+                          return (
+                            <button
+                              key={spaceId}
+                              type="button"
+                              onClick={() =>
+                                toggleMemberSpace(
+                                  workspace.id,
+                                  row.memberId,
+                                  spaceId,
+                                )
+                              }
+                              className={cn(
+                                "inline-flex h-7 items-center rounded-full px-2.5 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
+                                on
+                                  ? "bg-primary text-primary-foreground"
+                                  : "border border-foreground/15 text-muted-foreground hover:text-foreground",
+                              )}
+                            >
+                              {space?.label ?? spaceId}
+                            </button>
+                          );
+                        })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+            {!policy.members.length ? (
+              <div className="px-4 py-4 text-[13px] text-muted-foreground">
+                Assign people to this workspace from Organization.
               </div>
-            );
-          })}
-          {!policy.members.length ? (
-            <p className="px-4 py-4 text-[13px] text-muted-foreground">
-              Assign people to this workspace from Organization.
-            </p>
-          ) : null}
-        </div>
-      </section>
+            ) : null}
+          </SettingsGroup>
+        </SettingsSection>
       ) : null}
-    </>
+    </SettingsPage>
   );
 }
 
@@ -394,44 +397,40 @@ function WorkspaceIconSection({ workspace }: { workspace: Workspace }) {
   const icon = workspaceIconFor(workspace.id, icons);
 
   return (
-    <section className="mt-8 max-w-2xl">
-      <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-        Icon
-      </p>
-      <p className="mt-1 text-[13px] text-muted-foreground">
-        Shown in the workspace rail. Initials are used when no image is set.
-      </p>
-      <div className="mt-4 flex items-center gap-4">
-        <WorkspaceMark id={workspace.id} name={workspace.name} />
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setError(null);
-              input.current?.click();
-            }}
-            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-foreground/15 px-3.5 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
-          >
-            <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
-            {icon ? "Replace" : "Upload"}
-          </button>
-          {icon ? (
+    <SettingsSection title="Icon" description="Shown in the workspace rail. Initials are used when no image is set." className="mt-0">
+      <SettingsGroup>
+        <div className="flex items-center gap-4 px-4 py-4">
+          <WorkspaceMark id={workspace.id} name={workspace.name} />
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => {
-                clearWorkspaceIcon(workspace.id);
                 setError(null);
+                input.current?.click();
               }}
-              className="inline-flex h-9 items-center rounded-full px-3.5 text-[13px] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
             >
-              Remove
+              <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
+              {icon ? "Replace" : "Upload"}
             </button>
-          ) : null}
+            {icon ? (
+              <button
+                type="button"
+                onClick={() => {
+                  clearWorkspaceIcon(workspace.id);
+                  setError(null);
+                }}
+                className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+              >
+                Remove
+              </button>
+            ) : null}
+          </div>
         </div>
-      </div>
-      {error ? (
-        <p className="mt-2 text-[12.5px] text-destructive">{error}</p>
-      ) : null}
+        {error ? (
+          <p className="px-4 pb-3 text-[12.5px] text-destructive">{error}</p>
+        ) : null}
+      </SettingsGroup>
       <input
         ref={input}
         type="file"
@@ -453,7 +452,7 @@ function WorkspaceIconSection({ workspace }: { workspace: Workspace }) {
             });
         }}
       />
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -467,7 +466,7 @@ function KnowledgeCard({
   const input = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="rounded-[10px] border border-border p-4">
+    <div className="rounded-[10px] border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[14px] tracking-[-0.01em]">{item.name}</p>

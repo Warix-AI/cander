@@ -5,6 +5,10 @@ import { Check, Mail, Minus } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { PreviewAccount } from "@/components/settings/PreviewAccount";
 import {
+  SettingsHeader,
+  SettingsPage,
+} from "@/components/settings/SettingsChrome";
+import {
   appPlans,
   billingFor,
   comparisonGroups,
@@ -47,22 +51,14 @@ export function PlansSettings() {
   const mixSummary = seatMixLabel(seatMix).join(" · ");
 
   return (
-    <div className="pb-10">
-      <p className="font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase">
-        Plans
-      </p>
-      <h2
-        id="settings-title"
-        className="heading-display mt-2 max-w-xl text-[1.85rem]"
-      >
-        Courier for people. Development for what they build.
-      </h2>
-      <p className="mt-3 max-w-2xl text-[14.5px] leading-relaxed text-muted-foreground">
-        Pro, Max, and Ultra. Every paid tier includes Development — depth
-        increases as you move up. Org billing is per seat by plan.
-      </p>
+    <SettingsPage wide>
+      <SettingsHeader
+        kicker="Plans"
+        title="Courier for people. Development for what they build."
+        subtitle="Pro, Max, and Ultra. Every paid tier includes Development — depth increases as you move up. Org billing is per seat by plan."
+      />
 
-      <div className="mt-6">
+      <div className="mt-8">
         <PreviewAccount />
       </div>
 
@@ -295,7 +291,7 @@ export function PlansSettings() {
           </details>
         ))}
       </div>
-    </div>
+    </SettingsPage>
   );
 }
 

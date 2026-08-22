@@ -1,13 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { ImagePlus, Moon, Search, Sun, X } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { AppWindow, ImagePlus, Moon, Square, Sun } from "lucide-react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useApp } from "@/components/app/AppProvider";
 import { AccountAvatar } from "@/components/shell/AccountAvatar";
+import { ConnectorsSettings } from "@/components/settings/ConnectorsSettings";
 import { PlansSettings } from "@/components/settings/PlansSettings";
+import {
+  SettingsField,
+  SettingsGroup,
+  SettingsHeader,
+  SettingsPage,
+  SettingsPanel,
+  SettingsRow,
+  SettingsSection,
+  SettingsStatGrid,
+  settingsInputClass,
+  settingsSelectClass,
+} from "@/components/settings/SettingsChrome";
 import { WorkspacesSettings } from "@/components/settings/WorkspaceSettings";
-import { Modal } from "@/components/ui/Modal";
 import { workspaces, workspaceResources } from "@/lib/data";
 import {
   memberName,
@@ -16,8 +28,10 @@ import {
   orgUltraSeats,
 } from "@/lib/entitlements";
 import { orgSeatMix, planLabel, seatMixLabel } from "@/lib/billing";
-import type { Role, SettingsTab } from "@/lib/types";
+import type { Role } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { SHELL_STYLES, setShellStyle, useShellStyle } from "@/lib/shell-chrome";
+import { workspaceKindOf } from "@/lib/workspace-kind";
 import {
   clearProfilePhoto,
   getProfilePhotosServerSnapshot,
@@ -27,7 +41,7 @@ import {
   setProfilePhoto,
   subscribeProfilePhotos,
 } from "@/lib/profile-photos";
-import { persistSignedOut } from "@/lib/session";
+import { persistSignedOut, persistActor } from "@/lib/session";
 import {
   activateMaxSeat,
   setMemberRole,
@@ -35,38 +49,19 @@ import {
   toggleMemberWorkspace,
 } from "@/lib/workspace-policy";
 
-const tabs: { id: SettingsTab; label: string }[] = [
-  { id: "organization", label: "Organization" },
-  { id: "workspaces", label: "Workspaces" },
-  { id: "plans", label: "Plans" },
-  { id: "general", label: "General" },
-  { id: "appearance", label: "Appearance" },
-];
-
 const roles: Role[] = ["Owner", "Admin", "Member"];
 
-export function SettingsModal() {
+/** Full-screen account settings — tabs live in the sidebar. */
+export function SettingsView() {
   const {
-    overlay,
-    closeOverlay,
     settingsTab,
     setSettingsTab,
     entitlements,
+    canGoBack,
+    goBack,
+    newChat,
   } = useApp();
-  const { theme, setTheme } = useTheme();
-  const [query, setQuery] = useState("");
   const [workspacePage, setWorkspacePage] = useState<string | null>(null);
-
-  const visible = useMemo(() => {
-    const list = tabs.filter((tab) => {
-      if (tab.id === "organization") return entitlements.showOrgSettings;
-      if (tab.id === "workspaces") return entitlements.showWorkspacesAdmin;
-      return true;
-    });
-    const needle = query.trim().toLowerCase();
-    if (!needle) return list;
-    return list.filter((tab) => tab.label.toLowerCase().includes(needle));
-  }, [query, entitlements.showOrgSettings, entitlements.showWorkspacesAdmin]);
 
   useEffect(() => {
     if (settingsTab === "workspaces" && !entitlements.showWorkspacesAdmin) {
@@ -82,120 +77,164 @@ export function SettingsModal() {
     setSettingsTab,
   ]);
 
+  const leave = () => {
+    if (canGoBack) goBack();
+    else newChat();
+  };
+
   return (
-    <Modal
-      open={overlay === "settings"}
-      onClose={closeOverlay}
-      labelledBy="settings-title"
+    <>
+      {settingsTab === "organization" ? <OrganizationSettings /> : null}
+
+      {settingsTab === "workspaces" ? (
+        <WorkspacesSettings
+          selectedId={workspacePage}
+          onSelect={setWorkspacePage}
+        />
+      ) : null}
+
+      {settingsTab === "connectors" ? <ConnectorsSettings /> : null}
+
+      {settingsTab === "plans" ? <PlansSettings /> : null}
+
+      {settingsTab === "general" ? (
+        <GeneralSettings
+          onLogout={() => {
+            persistActor("m1");
+            persistSignedOut();
+            leave();
+          }}
+          onRestartOnboarding={() => {
+            persistActor("m1");
+            persistSignedOut();
+          }}
+        />
+      ) : null}
+
+      {settingsTab === "appearance" ? <AppearanceSettings /> : null}
+    </>
+  );
+}
+
+function AppearanceSettings() {
+  const { theme, setTheme } = useTheme();
+  const shellStyle = useShellStyle();
+
+  return (
+    <SettingsPage>
+      <SettingsHeader
+        title="Appearance"
+        subtitle="Theme and shell style for this device. Changes apply immediately."
+      />
+
+      <div className="mt-8 space-y-3">
+        <SettingsGroup title="Theme">
+          <SettingsRow
+            label="Color mode"
+            description="Light for daytime work. Dark when you prefer lower contrast."
+          >
+            <div className="inline-flex rounded-[10px] border border-border p-0.5">
+              {(["light", "dark"] as const).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setTheme(id)}
+                  className={cn(
+                    "inline-flex h-8 items-center gap-1.5 rounded-[8px] px-3 text-[12.5px] font-medium tracking-[-0.01em] transition-colors duration-200",
+                    theme === id
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {id === "light" ? (
+                    <Sun className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  ) : (
+                    <Moon className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  )}
+                  {id === "light" ? "Light" : "Dark"}
+                </button>
+              ))}
+            </div>
+          </SettingsRow>
+        </SettingsGroup>
+
+        <SettingsSection
+          title="Style"
+          description="How the menu and space banners sit against the rest of the shell."
+          className="mt-6"
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            {SHELL_STYLES.map((item) => {
+              const active = shellStyle === item.id;
+              const Icon = item.id === "floating" ? AppWindow : Square;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setShellStyle(item.id)}
+                  className={cn(
+                    "rounded-[10px] border p-4 text-left transition-colors duration-200",
+                    active
+                      ? "border-foreground/25 bg-card"
+                      : "border-border bg-card hover:border-foreground/20 hover:bg-muted/40",
+                  )}
+                >
+                  <StylePreview kind={item.id} active={active} />
+                  <span className="mt-3 flex items-center gap-2">
+                    <Icon
+                      className="h-3.5 w-3.5 text-muted-foreground"
+                      strokeWidth={1.6}
+                    />
+                    <span className="text-[13.5px] font-medium tracking-[-0.02em]">
+                      {item.label}
+                    </span>
+                  </span>
+                  <span className="mt-1 block text-[12.5px] leading-relaxed text-muted-foreground">
+                    {item.description}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </SettingsSection>
+      </div>
+    </SettingsPage>
+  );
+}
+
+function StylePreview({
+  kind,
+  active,
+}: {
+  kind: "classic" | "floating";
+  active: boolean;
+}) {
+  return (
+    <div
       className={cn(
-        "flex h-[min(52rem,calc(100vh-3rem))]",
-        settingsTab === "plans"
-          ? "w-[min(76rem,calc(100vw-2rem))]"
-          : "w-[min(56rem,calc(100vw-2rem))]",
+        "relative h-24 overflow-hidden rounded-[10px] border border-border bg-background",
+        active && "border-foreground/15",
       )}
     >
-      <nav className="flex w-[13.5rem] shrink-0 flex-col border-r border-border bg-muted/40 p-3">
-        <div className="relative">
-          <Search
-            className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-            strokeWidth={1.6}
-          />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search"
-            className="h-9 w-full rounded-[10px] border border-border bg-background pr-3 pl-8 text-[13px] outline-none placeholder:text-muted-foreground focus:border-foreground/20"
-          />
-        </div>
-        <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
-          {visible.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                if (tab.id === "workspaces") setWorkspacePage(null);
-                setSettingsTab(tab.id);
-              }}
-              className={cn(
-                "flex w-full rounded-[10px] px-2.5 py-2 text-left text-[13.5px] transition-colors duration-200",
-                settingsTab === tab.id
-                  ? "bg-muted font-medium"
-                  : "hover:bg-muted",
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </nav>
-
-      <div className="relative min-w-0 flex-1 overflow-y-auto px-8 py-7">
-        <button
-          type="button"
-          aria-label="Close settings"
-          onClick={closeOverlay}
-          className="absolute top-4 right-4 inline-flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-        >
-          <X className="h-4 w-4" strokeWidth={1.6} />
-        </button>
-
-        {settingsTab === "organization" ? <OrganizationSettings /> : null}
-
-        {settingsTab === "workspaces" ? (
-          <WorkspacesSettings
-            selectedId={workspacePage}
-            onSelect={setWorkspacePage}
-          />
-        ) : null}
-
-        {settingsTab === "plans" ? <PlansSettings /> : null}
-
-        {settingsTab === "general" ? (
-          <GeneralSettings
-            onLogout={() => {
-              persistSignedOut();
-              closeOverlay();
-            }}
-          />
-        ) : null}
-
-        {settingsTab === "appearance" ? (
-          <>
-            <h2
-              id="settings-title"
-              className="text-[18px] font-semibold tracking-[-0.03em]"
-            >
-              Appearance
-            </h2>
-            <div className="mt-6 max-w-lg">
-              <p className="mb-2 text-[13px] text-muted-foreground">Theme</p>
-              <div className="inline-flex rounded-[10px] border border-border p-0.5">
-                {(["light", "dark"] as const).map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setTheme(id)}
-                    className={cn(
-                      "inline-flex h-9 items-center gap-1.5 rounded-[10px] px-3 text-[13px] transition-colors duration-200",
-                      theme === id
-                        ? "bg-muted text-foreground"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {id === "light" ? (
-                      <Sun className="h-3.5 w-3.5" strokeWidth={1.6} />
-                    ) : (
-                      <Moon className="h-3.5 w-3.5" strokeWidth={1.6} />
-                    )}
-                    {id === "light" ? "Light" : "Dark"}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </>
-        ) : null}
+      <div className="absolute inset-y-0 left-0 flex w-[18%] flex-col items-center gap-1.5 border-r border-border/80 bg-muted/40 py-2">
+        <span className="h-2.5 w-2.5 rounded-[3px] bg-foreground/25" />
+        <span className="h-2.5 w-2.5 rounded-[3px] bg-foreground/15" />
+        <span className="h-2.5 w-2.5 rounded-[3px] bg-foreground/10" />
       </div>
-    </Modal>
+      {kind === "floating" ? (
+        <div className="absolute top-2 bottom-2 left-[22%] w-[28%] rounded-[8px] border border-border bg-muted/70" />
+      ) : (
+        <div className="absolute inset-y-0 left-[18%] w-[32%] border-r border-border bg-muted/55" />
+      )}
+      <div
+        className={cn(
+          "absolute right-2 left-[54%] bg-chart-2/35",
+          kind === "floating"
+            ? "top-2 h-7 rounded-[8px]"
+            : "top-0 h-8 rounded-none",
+        )}
+      />
+    </div>
   );
 }
 
@@ -209,7 +248,9 @@ function OrganizationSettings() {
     entitlements,
   } = useApp();
   const roster = orgMembersOf(orgMembers);
-  const orgWorkspaces = workspaces.filter((item) => !item.personal);
+  const orgWorkspaces = workspaces.filter(
+    (item) => workspaceKindOf(item) === "business",
+  );
   const maxSeats = orgMaxSeats(orgMembers);
   const ultraSeats = orgUltraSeats(orgMembers);
   const mixLabel = seatMixLabel(orgSeatMix(orgMembers)).join(" · ");
@@ -218,210 +259,200 @@ function OrganizationSettings() {
   );
 
   return (
-    <>
-      <h2
-        id="settings-title"
-        className="text-[18px] font-medium tracking-[-0.02em]"
-      >
-        Organization
-      </h2>
-      <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted-foreground">
-        People and roles live here. Assign each person to workspaces and a plan
-        seat. Pending invites need a Max or Ultra seat before shared workspaces
-        unlock.
-      </p>
+    <SettingsPage>
+      <SettingsHeader
+        title="Organization"
+        subtitle="People, roles, and seats for Acme. Pending invites need a Max or Ultra seat before shared workspaces unlock."
+        actions={
+          <button
+            type="button"
+            onClick={() => setSettingsTab("plans")}
+            className="inline-flex h-9 items-center rounded-full border border-foreground/15 px-3.5 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
+          >
+            View plans
+          </button>
+        }
+      />
 
-      <div className="mt-6 max-w-2xl rounded-[10px] border border-border p-5">
-        <Line k="Legal name" v="Acme Incorporated" />
-        <Line k="Domain" v="acme.com" />
-        <Line k="Seat mix" v={mixLabel || "None"} />
-        <Line k="Max seats" v={`${maxSeats}`} />
-        <Line k="Ultra seats" v={`${ultraSeats}`} />
-      </div>
-      <button
-        type="button"
-        onClick={() => setSettingsTab("plans")}
-        className="mt-3 inline-flex h-10 items-center rounded-full border border-foreground/15 px-4 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-      >
-        View plans
-      </button>
+      <SettingsSection title="Overview" className="mt-8">
+        <SettingsStatGrid
+          items={[
+            { label: "Legal name", value: "Acme Incorporated" },
+            { label: "Domain", value: "acme.com" },
+            { label: "Seat mix", value: mixLabel || "None" },
+            { label: "Max seats", value: `${maxSeats}` },
+            { label: "Ultra seats", value: `${ultraSeats}` },
+            { label: "People", value: `${roster.length}` },
+          ]}
+        />
+      </SettingsSection>
 
       {entitlements.canManageInfrastructure && managedResources.length ? (
-        <>
-          <h3 className="mt-10 text-[15px] font-medium">Shared infrastructure</h3>
-          <p className="mt-1 max-w-2xl text-[13px] text-muted-foreground">
-            Ultra-managed resources this organization can use. Owners assign who
-            may consume each resource.
-          </p>
-          <div className="mt-4 max-w-2xl space-y-3">
+        <SettingsSection
+          title="Shared infrastructure"
+          description="Ultra-managed resources this organization can use."
+        >
+          <div className="space-y-3">
             {managedResources.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-[10px] border border-border p-4"
-              >
-                <p className="text-[14px] font-medium tracking-[-0.01em]">
+              <SettingsPanel key={item.id}>
+                <p className="text-[14px] font-medium tracking-[-0.02em]">
                   {item.name}
                 </p>
                 <p className="mt-1 text-[12.5px] text-muted-foreground">
                   {item.kind} · {item.environment} · managed by{" "}
                   {memberName(item.ownerId, orgMembers)}
                 </p>
-                <p className="mt-2 text-[12px] text-muted-foreground">
+                <p className="mt-2 text-[12.5px] text-muted-foreground">
                   Authorized:{" "}
                   {item.authorizedMemberIds
                     .map((id) => memberName(id, orgMembers))
                     .join(", ") || "None"}
                 </p>
-              </div>
+              </SettingsPanel>
             ))}
           </div>
-        </>
+        </SettingsSection>
       ) : null}
 
-      <h3 className="mt-10 text-[15px] font-medium">Spaces</h3>
-      <p className="mt-1 max-w-2xl text-[13px] text-muted-foreground">
-        Personal is on every plan. This organization can hide it for the team.
-      </p>
-      <div className="mt-4 max-w-2xl rounded-[10px] border border-border p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[13.5px]">Allow Personal space</p>
-            <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
-              Show Personal in the sidebar for this organization.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={personalSpaceEnabled}
-            onClick={() => setPersonalSpaceEnabled(!personalSpaceEnabled)}
-            className="inline-flex h-8 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+      <SettingsSection title="Spaces">
+        <SettingsGroup>
+          <SettingsRow
+            label="Allow Personal space"
+            description="Show Personal in the sidebar for this organization."
           >
-            {personalSpaceEnabled ? "On" : "Off"}
-          </button>
-        </div>
-      </div>
-
-      <h3 className="mt-10 text-[15px] font-medium">Users</h3>
-      <p className="mt-1 max-w-2xl text-[13px] text-muted-foreground">
-        Role is organization-wide. Only Max seats can use shared workspaces.
-      </p>
-      <div className="mt-4 max-w-2xl space-y-3">
-        {roster.map((member) => {
-          const pending = member.seatStatus === "pending";
-          const roleOptions: Role[] = entitlements.isOwner
-            ? roles
-            : roles.filter((role) => role !== "Owner");
-          const canEditRole =
-            entitlements.canManageMembers &&
-            (entitlements.isOwner || member.role !== "Owner") &&
-            !pending;
-          return (
-            <div
-              key={member.id}
-              className="rounded-[10px] border border-border p-4"
+            <button
+              type="button"
+              role="switch"
+              aria-checked={personalSpaceEnabled}
+              onClick={() => setPersonalSpaceEnabled(!personalSpaceEnabled)}
+              className="inline-flex h-8 shrink-0 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[14px] tracking-[-0.01em]">{member.name}</p>
-                  <p className="font-mono text-[11px] text-muted-foreground">
-                    {member.email}
-                  </p>
-                  <p className="mt-1 text-[12px] text-muted-foreground">
-                    {planLabel(member.plan)}
-                    {pending ? " · Needs Max seat" : ""}
-                    {member.id === actor.id ? " · You" : ""}
-                  </p>
-                </div>
-                {pending ? (
-                  <button
-                    type="button"
-                    onClick={() => activateMaxSeat(member.id)}
-                    className="inline-flex h-8 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-                  >
-                    Add Max seat
-                  </button>
-                ) : canEditRole ? (
-                  <select
-                    value={member.role}
-                    onChange={(event) =>
-                      setMemberRole(
-                        member.id,
-                        event.target.value as Role,
-                        actor.id,
-                      )
-                    }
-                    className="h-8 rounded-[10px] border border-border bg-background px-2 text-[12.5px] outline-none focus:border-foreground/20"
-                  >
-                    {roleOptions.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <p className="text-[12.5px] text-muted-foreground">
-                    {member.role}
-                  </p>
-                )}
-              </div>
-              {!pending && entitlements.isOwner ? (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {(["max", "ultra", "pro", "free"] as const).map((plan) => (
+              {personalSpaceEnabled ? "On" : "Off"}
+            </button>
+          </SettingsRow>
+        </SettingsGroup>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Users"
+        description="Role is organization-wide. Only Max seats can use shared workspaces."
+      >
+        <div className="space-y-3">
+          {roster.map((member) => {
+            const pending = member.seatStatus === "pending";
+            const roleOptions: Role[] = entitlements.isOwner
+              ? roles
+              : roles.filter((role) => role !== "Owner");
+            const canEditRole =
+              entitlements.canManageMembers &&
+              (entitlements.isOwner || member.role !== "Owner") &&
+              !pending;
+            return (
+              <SettingsGroup key={member.id}>
+                <SettingsRow
+                  label={
+                    member.id === actor.id
+                      ? `${member.name} (You)`
+                      : member.name
+                  }
+                  description={`${member.email} · ${planLabel(member.plan)}${pending ? " · Needs Max seat" : ""}`}
+                >
+                  {pending ? (
                     <button
-                      key={plan}
                       type="button"
-                      onClick={() => setMemberSeat(member.id, plan)}
-                      className={cn(
-                        "inline-flex h-7 items-center rounded-full px-2.5 text-[11.5px] font-medium tracking-[-0.01em]",
-                        member.plan === plan && member.seatStatus === "active"
-                          ? "bg-muted"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
+                      onClick={() => activateMaxSeat(member.id)}
+                      className="inline-flex h-8 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
                     >
-                      {planLabel(plan)}
+                      Add Max seat
                     </button>
-                  ))}
-                </div>
-              ) : null}
-              {!pending ? (
-                <>
-                  <p className="mt-3 text-[12px] text-muted-foreground">
-                    Workspaces
-                  </p>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {orgWorkspaces.map((workspace) => {
-                      const on = member.workspaceIds.includes(workspace.id);
-                      return (
-                        <button
-                          key={workspace.id}
-                          type="button"
-                          onClick={() =>
-                            toggleMemberWorkspace(member.id, workspace.id)
-                          }
-                          className={cn(
-                            "inline-flex h-8 items-center rounded-full px-3 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
-                            on
-                              ? "bg-primary text-primary-foreground"
-                              : "border border-foreground/15 text-muted-foreground hover:text-foreground",
-                          )}
-                        >
-                          {workspace.name}
-                        </button>
-                      );
-                    })}
+                  ) : canEditRole ? (
+                    <select
+                      value={member.role}
+                      onChange={(event) =>
+                        setMemberRole(
+                          member.id,
+                          event.target.value as Role,
+                          actor.id,
+                        )
+                      }
+                      className={settingsSelectClass}
+                    >
+                      {roleOptions.map((role) => (
+                        <option key={role} value={role}>
+                          {role}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-[12.5px] text-muted-foreground">
+                      {member.role}
+                    </span>
+                  )}
+                </SettingsRow>
+                {!pending && entitlements.isOwner ? (
+                  <div className="flex flex-wrap gap-1.5 px-4 py-3">
+                    {(["max", "ultra", "pro", "free"] as const).map((plan) => (
+                      <button
+                        key={plan}
+                        type="button"
+                        onClick={() => setMemberSeat(member.id, plan)}
+                        className={cn(
+                          "inline-flex h-7 items-center rounded-full px-2.5 text-[11.5px] font-medium tracking-[-0.01em]",
+                          member.plan === plan && member.seatStatus === "active"
+                            ? "bg-muted text-foreground"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                        )}
+                      >
+                        {planLabel(plan)}
+                      </button>
+                    ))}
                   </div>
-                </>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    </>
+                ) : null}
+                {!pending ? (
+                  <div className="px-4 py-3">
+                    <p className="text-[12px] font-medium tracking-[-0.01em] text-muted-foreground">
+                      Workspaces
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {orgWorkspaces.map((workspace) => {
+                        const on = member.workspaceIds.includes(workspace.id);
+                        return (
+                          <button
+                            key={workspace.id}
+                            type="button"
+                            onClick={() =>
+                              toggleMemberWorkspace(member.id, workspace.id)
+                            }
+                            className={cn(
+                              "inline-flex h-7 items-center rounded-full px-2.5 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
+                              on
+                                ? "bg-primary text-primary-foreground"
+                                : "border border-foreground/15 text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            {workspace.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </SettingsGroup>
+            );
+          })}
+        </div>
+      </SettingsSection>
+    </SettingsPage>
   );
 }
 
-function GeneralSettings({ onLogout }: { onLogout: () => void }) {
+function GeneralSettings({
+  onLogout,
+  onRestartOnboarding,
+}: {
+  onLogout: () => void;
+  onRestartOnboarding: () => void;
+}) {
   const [gone, setGone] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const photoInput = useRef<HTMLInputElement>(null);
@@ -434,57 +465,58 @@ function GeneralSettings({ onLogout }: { onLogout: () => void }) {
   const photo = profilePhotoFor(actor.id, photos);
 
   return (
-    <>
-      <h2
-        id="settings-title"
-        className="text-[18px] font-semibold tracking-[-0.03em]"
-      >
-        General
-      </h2>
-      <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted-foreground">
-        Account information for this login.
-      </p>
-      <div className="mt-6 max-w-xl space-y-4">
-        <div>
-          <p className="mb-2 text-[12.5px] font-medium text-muted-foreground">
-            Profile photo
-          </p>
-          <div className="flex items-center gap-4">
+    <SettingsPage>
+      <SettingsHeader
+        title="General"
+        subtitle="Account information for this login."
+      />
+
+      <div className="mt-8 space-y-3">
+        <SettingsGroup title="Profile">
+          <div className="flex flex-wrap items-center gap-4 px-4 py-4">
             <AccountAvatar
               memberId={actor.id}
               name={actor.name}
               initials={actor.initials}
               size="lg"
             />
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setPhotoError(null);
-                  photoInput.current?.click();
-                }}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-foreground/15 px-3.5 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
-              >
-                <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
-                {photo ? "Replace" : "Upload"}
-              </button>
-              {photo ? (
+            <div className="min-w-0 flex-1">
+              <p className="text-[13.5px] font-medium tracking-[-0.01em]">
+                Profile photo
+              </p>
+              <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                Shown on your account row and in shared workspaces.
+              </p>
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    clearProfilePhoto(actor.id);
                     setPhotoError(null);
+                    photoInput.current?.click();
                   }}
-                  className="inline-flex h-9 items-center rounded-full px-3.5 text-[13px] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
                 >
-                  Remove
+                  <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  {photo ? "Replace" : "Upload"}
                 </button>
+                {photo ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearProfilePhoto(actor.id);
+                      setPhotoError(null);
+                    }}
+                    className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </div>
+              {photoError ? (
+                <p className="mt-2 text-[12.5px] text-destructive">{photoError}</p>
               ) : null}
             </div>
           </div>
-          {photoError ? (
-            <p className="mt-2 text-[12.5px] text-destructive">{photoError}</p>
-          ) : null}
           <input
             ref={photoInput}
             type="file"
@@ -508,107 +540,85 @@ function GeneralSettings({ onLogout }: { onLogout: () => void }) {
                 });
             }}
           />
-        </div>
-        <Field label="Full name">
-          <input
-            defaultValue={actor.name}
-            key={`${actor.id}-name`}
-            className="h-10 w-full rounded-[10px] border border-border bg-card px-3 text-[13.5px] outline-none focus:border-foreground/20"
-          />
-        </Field>
-        <Field label="Email">
-          <input
-            defaultValue={actor.email}
-            key={`${actor.id}-email`}
-            className="h-10 w-full rounded-[10px] border border-border bg-card px-3 text-[13.5px] outline-none focus:border-foreground/20"
-          />
-        </Field>
-        <Field label="What should Courier call you?">
-          <input
-            defaultValue={actor.short}
-            key={`${actor.id}-short`}
-            className="h-10 w-full rounded-[10px] border border-border bg-card px-3 text-[13.5px] outline-none focus:border-foreground/20"
-          />
-        </Field>
-        <Field
-          label="Instructions for Courier"
-          hint={
-            entitlements.hasWorkspaces
-              ? "Optional. Applied across workspaces on this account."
-              : "Optional. Applied on this account."
-          }
-        >
-          <textarea
-            rows={4}
-            placeholder="Keep replies short. Prefer Recursion brand language."
-            className="w-full rounded-[10px] border border-border bg-card px-3 py-2 text-[13.5px] outline-none focus:border-foreground/20"
-          />
-        </Field>
-      </div>
-
-      <div className="mt-10 max-w-xl space-y-3 border-t border-border pt-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-[14px]">Log out</p>
-            <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-              Sign out of Courier on this device.
-            </p>
+          <div className="grid gap-4 px-4 py-4 sm:grid-cols-2">
+            <SettingsField label="Full name">
+              <input
+                defaultValue={actor.name}
+                key={`${actor.id}-name`}
+                className={settingsInputClass}
+              />
+            </SettingsField>
+            <SettingsField label="Email">
+              <input
+                defaultValue={actor.email}
+                key={`${actor.id}-email`}
+                className={settingsInputClass}
+              />
+            </SettingsField>
+            <SettingsField label="What should Courier call you?">
+              <input
+                defaultValue={actor.short}
+                key={`${actor.id}-short`}
+                className={settingsInputClass}
+              />
+            </SettingsField>
+            <SettingsField
+              label="Instructions for Courier"
+              hint={
+                entitlements.hasWorkspaces
+                  ? "Optional. Applied across workspaces on this account."
+                  : "Optional. Applied on this account."
+              }
+              className="sm:col-span-2"
+            >
+              <textarea
+                rows={3}
+                placeholder="Keep replies short. Prefer Recursion brand language."
+                className="w-full rounded-[10px] border border-border bg-background px-3 py-2 text-[13.5px] outline-none focus:border-foreground/20"
+              />
+            </SettingsField>
           </div>
-          <button
-            type="button"
-            onClick={onLogout}
-            className="inline-flex h-10 items-center rounded-full border border-foreground/15 px-4 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+        </SettingsGroup>
+
+        <SettingsGroup title="Account">
+          <SettingsRow
+            label="Restart onboarding"
+            description="Sign out and open the full-screen welcome flow. Useful for testing."
           >
-            Log out
-          </button>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-          <div>
-            <p className="text-[14px]">Delete account</p>
-            <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-              Remove this login and its local Courier data.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setGone(true)}
-            className="inline-flex h-10 items-center rounded-full border border-destructive/30 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/10"
+            <button
+              type="button"
+              onClick={onRestartOnboarding}
+              className="inline-flex h-8 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+            >
+              Start onboarding
+            </button>
+          </SettingsRow>
+          <SettingsRow
+            label="Log out"
+            description="Sign out of Courier on this device."
           >
-            {gone ? "Deleted" : "Delete account"}
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="inline-flex h-8 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+            >
+              Log out
+            </button>
+          </SettingsRow>
+          <SettingsRow
+            label="Delete account"
+            description="Remove this login and its local Courier data."
+          >
+            <button
+              type="button"
+              onClick={() => setGone(true)}
+              className="inline-flex h-8 items-center rounded-full border border-destructive/30 px-3 text-[12.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/10"
+            >
+              {gone ? "Deleted" : "Delete account"}
+            </button>
+          </SettingsRow>
+        </SettingsGroup>
       </div>
-    </>
-  );
-}
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="text-[13px] text-muted-foreground">{label}</span>
-      {hint ? (
-        <span className="mt-0.5 block text-[12px] text-muted-foreground/80">
-          {hint}
-        </span>
-      ) : null}
-      <span className="mt-1.5 block">{children}</span>
-    </label>
-  );
-}
-
-function Line({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 py-2">
-      <span className="text-[13px] text-muted-foreground">{k}</span>
-      <span className="text-[13px]">{v}</span>
-    </div>
+    </SettingsPage>
   );
 }

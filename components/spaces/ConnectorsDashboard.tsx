@@ -22,6 +22,12 @@ import {
   clearWorkConnectorAttach,
   peekWorkConnectorAttach,
 } from "@/lib/work-connectors";
+import {
+  connectionsForConnector,
+  getWorkspaceConnectionsServerSnapshot,
+  getWorkspaceConnectionsSnapshot,
+  subscribeWorkspaceConnections,
+} from "@/lib/workspace-connections";
 
 const SECTION_ORDER = [
   "Featured",
@@ -42,6 +48,7 @@ export function ConnectorsDashboard() {
     connectorId,
     openConnector,
     workspaceId,
+    workspace,
     workspacePolicies,
     billingPlan,
     isPinned,
@@ -51,6 +58,11 @@ export function ConnectorsDashboard() {
     subscribeInstalledConnectors,
     getInstalledConnectorsSnapshot,
     getInstalledConnectorsServerSnapshot,
+  );
+  const workspaceConnections = useSyncExternalStore(
+    subscribeWorkspaceConnections,
+    getWorkspaceConnectionsSnapshot,
+    getWorkspaceConnectionsServerSnapshot,
   );
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ConnectorsView>("connectors");
@@ -76,23 +88,22 @@ export function ConnectorsDashboard() {
   const apps = useMemo(
     () =>
       seed.map((item) => {
-        const installed = item.installed || installedIds.includes(item.id);
+        const accounts = connectionsForConnector(
+          workspaceId,
+          item.id,
+          workspace,
+        );
+        const installed =
+          item.installed ||
+          installedIds.includes(item.id) ||
+          accounts.length > 0;
         return {
           ...item,
           installed,
-          accounts:
-            installed && !item.accounts.length
-              ? [
-                  {
-                    id: item.id === "handshake" ? "hs-1" : `${item.id}-1`,
-                    label: "Acme Inc.",
-                    status: "connected" as const,
-                  },
-                ]
-              : item.accounts,
+          accounts,
         };
       }),
-    [installedIds],
+    [installedIds, workspace, workspaceConnections, workspaceId],
   );
 
   const bindToWorkIfArmed = (id: string) => {

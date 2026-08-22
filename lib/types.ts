@@ -32,7 +32,8 @@ export type CourierView =
   | "settings"
   | "shared"
   | "recents"
-  | "browser";
+  | "browser"
+  | "discovery";
 
 export type PinKind = "thread" | "project" | "connector";
 
@@ -42,13 +43,13 @@ export type Pin = {
 };
 
 export type OverlayId =
-  | "settings"
   | "workspace"
   | "publish"
   | "search"
   | "configure"
   | "space-settings"
   | "invite-wall"
+  | "discovery"
   | null;
 export type SpaceLayout = "cards" | "list";
 export type PanelMode = "collapsed" | "split" | "wide" | "immersive";
@@ -108,6 +109,7 @@ export type ScheduledStatus =
 export type SettingsTab =
   | "organization"
   | "workspaces"
+  | "connectors"
   | "plans"
   | "general"
   | "appearance";
@@ -127,6 +129,8 @@ export type PlatformNav =
 export type Role = "Owner" | "Admin" | "Member";
 export type SeatStatus = "active" | "pending";
 export type MemberKind = "org" | "personal";
+/** Tenancy flavor — same UI, different permissions and invite rules. */
+export type WorkspaceKind = "personal" | "business";
 export type UltraScope = "org" | "personal";
 
 export type UltraLicense = {
@@ -285,7 +289,9 @@ export type Workspace = {
   members: number;
   budget: string;
   spend: string;
+  /** Prefer `kind`. Kept for older persisted rows. */
   personal?: boolean;
+  kind?: WorkspaceKind;
 };
 
 export type KnowledgeFile = {

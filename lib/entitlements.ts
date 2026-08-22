@@ -27,6 +27,10 @@ import type {
   WorkspaceResource,
 } from "./types";
 import { getWorkspaceCatalogSnapshot } from "./workspace-catalog";
+import {
+  emailFitsWorkspaceKind,
+  workspaceKindOf,
+} from "./workspace-kind";
 
 export type Entitlements = {
   plan: BillingPlan;
@@ -40,6 +44,8 @@ export type Entitlements = {
   canManageBilling: boolean;
   canManageMembers: boolean;
   canManageWorkspaces: boolean;
+  canCreatePersonalWorkspace: boolean;
+  canCreateBusinessWorkspace: boolean;
   canUseSharedWorkspaces: boolean;
   canUseWorkSpace: boolean;
   canAccessDevelopment: boolean;
@@ -90,6 +96,10 @@ export function entitlementsFor(actor: Member): Entitlements {
     canManageBilling: isOwner,
     canManageMembers: isOwner || isAdmin,
     canManageWorkspaces: isOwner || isAdmin,
+    /** Friends/family workspaces — available on every plan. */
+    canCreatePersonalWorkspace: !pendingInvite,
+    /** Company workspaces — owners/admins on Max/Ultra. */
+    canCreateBusinessWorkspace: isOwner || isAdmin,
     canUseSharedWorkspaces: orgActive,
     canUseWorkSpace: orgActive && hasWorkSpace(plan),
     canAccessDevelopment: canAccessDevelopment(plan),
@@ -148,15 +158,36 @@ export function sharedResourcesFor(
 
 export function workspacesFor(actor: Member, access: Entitlements): Workspace[] {
   const workspaces = getWorkspaceCatalogSnapshot();
-  if (access.canManageWorkspaces) {
-    return workspaces.filter((item) => !item.personal);
+  return workspaces.filter((item) => {
+    const kind = workspaceKindOf(item);
+
+    if (item.id.startsWith("solo-")) {
+      if (item.id === "solo-pro" && actor.plan !== "pro") return false;
+      if (item.id === "solo-ultra" && actor.plan !== "ultra") return false;
+      if (item.id === "solo-free" && actor.plan !== "free") return false;
+      return actor.workspaceIds.includes(item.id) || !access.orgActive;
+    }
+
+    if (kind === "business") {
+      if (access.canManageWorkspaces) return true;
+      return actor.workspaceIds.includes(item.id);
+    }
+
+    // Personal (non-solo): members only
+    return actor.workspaceIds.includes(item.id);
+  });
+}
+
+export function canInviteEmailToWorkspace(
+  workspace: Workspace,
+  email: string,
+): string | null {
+  const kind = workspaceKindOf(workspace);
+  if (emailFitsWorkspaceKind(kind, email)) return null;
+  if (kind === "business") {
+    return "Business workspaces only accept company email addresses.";
   }
-  if (access.canUseSharedWorkspaces) {
-    return workspaces.filter(
-      (item) => !item.personal && actor.workspaceIds.includes(item.id),
-    );
-  }
-  return workspaces.filter((item) => actor.workspaceIds.includes(item.id));
+  return "Personal workspaces only accept personal email addresses.";
 }
 
 export function homeWorkspaceId(actor: Member, access: Entitlements) {

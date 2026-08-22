@@ -57,8 +57,10 @@ export function getWorkConnectorsSnapshot() {
   return byWorkspace;
 }
 
+const EMPTY_WORK_CONNECTORS: Record<string, string[]> = {};
+
 export function getWorkConnectorsServerSnapshot() {
-  return {} as Record<string, string[]>;
+  return EMPTY_WORK_CONNECTORS;
 }
 
 export function workConnectorIds(workspaceId: string): string[] {

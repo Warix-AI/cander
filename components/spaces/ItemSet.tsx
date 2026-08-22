@@ -218,7 +218,7 @@ function PinToggle({
         onPin();
       }}
       className={cn(
-        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-muted hover:text-foreground",
+        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] transition-colors duration-200 hover:bg-muted hover:text-foreground",
         pinned ? "text-foreground" : "text-muted-foreground",
       )}
     >

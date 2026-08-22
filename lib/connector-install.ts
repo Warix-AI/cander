@@ -2,7 +2,8 @@ type Listener = () => void;
 
 const STORAGE_KEY = "courier-installed-connectors";
 const installListeners = new Set<Listener>();
-let installedIds: string[] = [];
+const EMPTY_INSTALLED: string[] = [];
+let installedIds: string[] = EMPTY_INSTALLED;
 let hydrated = false;
 
 function emit() {
@@ -10,13 +11,13 @@ function emit() {
 }
 
 function parse(raw: string | null): string[] {
-  if (!raw) return [];
+  if (!raw) return EMPTY_INSTALLED;
   try {
     const data = JSON.parse(raw) as unknown;
-    if (!Array.isArray(data)) return [];
+    if (!Array.isArray(data)) return EMPTY_INSTALLED;
     return data.filter((item): item is string => typeof item === "string");
   } catch {
-    return [];
+    return EMPTY_INSTALLED;
   }
 }
 
@@ -39,7 +40,7 @@ export function getInstalledConnectorsSnapshot() {
 }
 
 export function getInstalledConnectorsServerSnapshot() {
-  return [] as string[];
+  return EMPTY_INSTALLED;
 }
 
 export function isConnectorInstalled(id: string) {

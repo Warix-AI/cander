@@ -26,7 +26,7 @@ export function ConversationsPage() {
           </div>
 
           <div className="mt-4 space-y-3">
-            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+            <div className="rounded-[10px] border border-border bg-card px-3 py-2.5">
               <p className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
                 Customer Agent
               </p>

@@ -58,7 +58,7 @@ export function SecurityPage() {
           {permissions.actions.map((action) => (
             <div
               key={action.name}
-              className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2 text-[13px]"
+              className="flex items-center justify-between rounded-[10px] border border-border bg-card px-3 py-2 text-[13px]"
             >
               <span>{action.name}</span>
               <span className="text-muted-foreground">{action.mode}</span>
@@ -72,7 +72,7 @@ export function SecurityPage() {
           {handshakeSecurity.accessPolicies.map((policy) => (
             <li
               key={policy}
-              className="rounded-lg border border-border bg-muted/30 px-3 py-2"
+              className="rounded-[10px] border border-border bg-card px-3 py-2"
             >
               {policy}
             </li>

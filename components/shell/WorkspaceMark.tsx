@@ -50,7 +50,7 @@ export function WorkspaceMark({
         className={cn(
           "relative inline-flex shrink-0 overflow-hidden rounded-[10px]",
           dim,
-          active && "ring-2 ring-foreground/15 ring-offset-1 ring-offset-sidebar",
+          active && "ring-2 ring-foreground/15 ring-offset-1 ring-offset-background",
           className,
         )}
       >
@@ -65,7 +65,7 @@ export function WorkspaceMark({
         "inline-flex shrink-0 items-center justify-center rounded-[10px] font-semibold tracking-[-0.02em]",
         dim,
         active
-          ? "bg-sidebar-accent text-foreground ring-2 ring-foreground/15 ring-offset-1 ring-offset-sidebar"
+          ? "bg-sidebar-accent text-foreground ring-2 ring-foreground/15 ring-offset-1 ring-offset-background"
           : workspaceTint[id] ?? "bg-muted text-muted-foreground",
         className,
       )}

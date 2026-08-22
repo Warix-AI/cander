@@ -16,6 +16,7 @@ import {
   subscribeWorkspaceCatalog,
   workspaceById,
 } from "@/lib/workspace-catalog";
+import { workspaceKindOf } from "@/lib/workspace-kind";
 import { inferIntent, nextId } from "@/lib/intent";
 import { latestThreadForProject } from "@/lib/selectors";
 import { inferPlatformIntent } from "@/lib/platform-intent";
@@ -234,6 +235,14 @@ type AppContextValue = {
   setPlatformDockOpen: (open: boolean) => void;
   openSpace: (id: SpaceId) => void;
   openRecents: () => void;
+  openDiscovery: () => void;
+  openDiscoveryItem: (id: string) => void;
+  clearDiscoveryFocus: () => void;
+  discoveryFocusId: string | null;
+  runDiscoveryAction: (
+    action: import("@/lib/discovery-types").DiscoveryAction,
+    item?: import("@/lib/discovery-types").DiscoveryItem | null,
+  ) => void;
   openBrowser: (opts?: { chat?: boolean; query?: string }) => void;
   browserChatOpen: boolean;
   setBrowserChatOpen: (open: boolean) => void;
@@ -387,6 +396,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [platformDockOpen, setPlatformDockOpenState] = useState(false);
   const [spaceLayout, setSpaceLayout] = useState<SpaceLayout>("cards");
   const [overlay, setOverlay] = useState<OverlayId>(null);
+  const [discoveryFocusId, setDiscoveryFocusId] = useState<string | null>(null);
   const [settingsSpaceId, setSettingsSpaceId] = useState<SpaceId | null>(null);
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceAnchor, setVoiceAnchor] = useState<VoiceAnchor>("bottom-right");
@@ -594,18 +604,220 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ],
   );
 
-  const setWorkspace = useCallback((id: string) => {
-    persistWorkspace(id);
-    setProjectId(null);
-    setSpaceId(null);
-    setThreadId(null);
-    setPlatformThreadId(null);
-    setView("chat");
-    setPanelMode("collapsed");
-    setDrafting(false);
-    setMobileNav(false);
-    setOverlay(null);
-  }, []);
+  const setWorkspace = useCallback(
+    (id: string) => {
+      if (id === workspaceId) {
+        setMobileNav(false);
+        return;
+      }
+
+      const prevProduct = product;
+      const prevView = view;
+      const prevSpace = spaceId;
+      const prevPlatformNav = platformNav;
+      const chatWasOpen =
+        panelMode !== "collapsed" &&
+        (drafting || Boolean(threadId) || platformDockOpen);
+
+      persistWorkspace(id);
+      setProjectId(null);
+      setConnectorId(null);
+      setJobId(null);
+      setSkillId(null);
+      setThreadId(null);
+      setPlatformThreadId(null);
+      setOverlay(null);
+      setMobileNav(false);
+      setMobileSurface("chat");
+
+      const allowed = memberSpaces(id, actor.id, workspacePolicies);
+      const opts = { billingPlan, personalEnabled: personalSpaceEnabled };
+
+      // Development product: keep the same nav surface when possible.
+      if (prevProduct === "platform") {
+        persistProduct("platform");
+        setView("chat");
+        setSpaceId(null);
+        setDrafting(false);
+        if (entitlements.platformNavAllowed(prevPlatformNav)) {
+          setPlatformNavState(prevPlatformNav);
+        }
+        if (chatWasOpen && platformDockOpen) {
+          let tid = "";
+          setThreads((current) => {
+            const { threads: next, id: tidNext } = upsertPersistentPlatformThread(
+              current,
+              id,
+              entitlements.platformNavAllowed(prevPlatformNav)
+                ? prevPlatformNav
+                : "overview",
+            );
+            tid = tidNext;
+            return next;
+          });
+          setPlatformThreadId(tid);
+          setPlatformDockOpenState(true);
+          setPanelMode("split");
+        } else {
+          setPlatformDockOpenState(false);
+          setPanelMode("collapsed");
+          setPanelIntent("browse");
+        }
+        pushTarget({
+          product: "platform",
+          view: "chat",
+          spaceId: null,
+          threadId: null,
+          projectId: null,
+          platformNav: entitlements.platformNavAllowed(prevPlatformNav)
+            ? prevPlatformNav
+            : "overview",
+          panelMode: chatWasOpen && platformDockOpen ? "split" : "collapsed",
+          panelIntent:
+            chatWasOpen && platformDockOpen ? "execute" : "browse",
+          connectorId: null,
+          jobId: null,
+          skillId: null,
+        });
+        return;
+      }
+
+      persistProduct("courier");
+
+      // Global surfaces that aren't space-scoped — keep them.
+      if (
+        prevView === "discovery" ||
+        prevView === "recents" ||
+        prevView === "browser" ||
+        prevView === "shared" ||
+        prevView === "settings"
+      ) {
+        setView(prevView);
+        setSpaceId(null);
+        setDrafting(false);
+        setPanelMode("collapsed");
+        setPanelIntent("browse");
+        setPlatformDockOpenState(false);
+        pushTarget({
+          product: "courier",
+          view: prevView,
+          spaceId: null,
+          threadId: null,
+          projectId: null,
+          platformNav: prevPlatformNav,
+          panelMode: "collapsed",
+          panelIntent: "browse",
+          connectorId: null,
+          jobId: null,
+          skillId: null,
+        });
+        return;
+      }
+
+      const canKeepSpace =
+        Boolean(prevSpace) && spaceAllowed(prevSpace!, allowed, opts);
+
+      if (canKeepSpace && prevSpace) {
+        setView("space");
+        setSpaceId(prevSpace);
+        if (prevSpace === "build") setBuildTool("preview");
+        if (prevSpace === "studio") setStudioTool("canvas");
+        if (prevSpace === "research") setResearchTool("browser");
+        if (prevSpace === "skills") setSkillsTool("editor");
+
+        if (chatWasOpen && isChatSpace(prevSpace)) {
+          let tid = "";
+          let hasMessages = false;
+          setThreads((current) => {
+            const { threads: next, id: nextId } = upsertPersistentSpaceThread(
+              current,
+              id,
+              prevSpace,
+            );
+            tid = nextId;
+            hasMessages = Boolean(
+              next.find((item) => item.id === nextId)?.messages.length,
+            );
+            return next;
+          });
+          setThreadId(tid);
+          setDrafting(!hasMessages);
+          setPanelMode("split");
+          setPanelIntent("execute");
+          pushTarget({
+            product: "courier",
+            view: "space",
+            spaceId: prevSpace,
+            threadId: tid,
+            projectId: null,
+            platformNav: prevPlatformNav,
+            panelMode: "split",
+            panelIntent: "execute",
+            connectorId: null,
+            jobId: null,
+            skillId: null,
+          });
+          return;
+        }
+
+        setDrafting(false);
+        setPanelMode("collapsed");
+        setPanelIntent("browse");
+        pushTarget({
+          product: "courier",
+          view: "space",
+          spaceId: prevSpace,
+          threadId: null,
+          projectId: null,
+          platformNav: prevPlatformNav,
+          panelMode: "collapsed",
+          panelIntent: "browse",
+          connectorId: null,
+          jobId: null,
+          skillId: null,
+        });
+        return;
+      }
+
+      // Target workspace doesn't have this space — home New chat.
+      setView("chat");
+      setSpaceId(null);
+      setDrafting(false);
+      setPanelMode("collapsed");
+      setPanelIntent("browse");
+      setPlatformDockOpenState(false);
+      pushTarget({
+        product: "courier",
+        view: "chat",
+        spaceId: null,
+        threadId: null,
+        projectId: null,
+        platformNav: prevPlatformNav,
+        panelMode: "collapsed",
+        panelIntent: "browse",
+        connectorId: null,
+        jobId: null,
+        skillId: null,
+      });
+    },
+    [
+      workspaceId,
+      product,
+      view,
+      spaceId,
+      platformNav,
+      panelMode,
+      drafting,
+      threadId,
+      platformDockOpen,
+      actor.id,
+      workspacePolicies,
+      billingPlan,
+      personalSpaceEnabled,
+      entitlements,
+      pushTarget,
+    ],
+  );
 
   const summarizeThreadById = useCallback((id: string | null) => {
     if (!id) return;
@@ -1552,6 +1764,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [product, platformNav, pushTarget]);
 
+  const openDiscovery = useCallback(() => {
+    setView("discovery");
+    setSpaceId(null);
+    setProjectId(null);
+    setThreadId(null);
+    setConnectorId(null);
+    setDrafting(false);
+    setPanelIntent("browse");
+    setPanelMode("collapsed");
+    setMobileNav(false);
+    setOverlay(null);
+    setDiscoveryFocusId(null);
+    pushTarget({
+      product: "courier",
+      view: "discovery",
+      spaceId: null,
+      threadId: null,
+      projectId: null,
+      platformNav,
+      panelMode: "collapsed",
+      panelIntent: "browse",
+      connectorId: null,
+      jobId: null,
+      skillId: null,
+    });
+  }, [platformNav, pushTarget]);
+
+  const clearDiscoveryFocus = useCallback(() => {
+    setDiscoveryFocusId(null);
+  }, []);
+
+  const openDiscoveryItem = useCallback((id: string) => {
+    setDiscoveryFocusId(id);
+    setOverlay("discovery");
+  }, []);
+
   useEffect(() => {
     if (entitlements.hasVoice) return;
     setVoiceActive(false);
@@ -1586,14 +1834,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       actor.workspaceIds.concat(
         entitlements.canManageWorkspaces
           ? workspaceCatalog
-              .filter((item) => !item.personal)
+              .filter((item) => workspaceKindOf(item) === "business")
               .map((item) => item.id)
           : [],
       ),
     );
     if (entitlements.canManageWorkspaces) {
       workspaceCatalog
-        .filter((item) => !item.personal)
+        .filter((item) => workspaceKindOf(item) === "business")
         .forEach((item) => allowed.add(item.id));
     }
     if (!allowed.has(workspaceId)) persistWorkspace(home);
@@ -1790,9 +2038,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSettingsTab(
       tab ?? (entitlements.showOrgSettings ? "organization" : "plans"),
     );
-    setOverlay("settings");
+    setView("settings");
+    setSpaceId(null);
+    setProjectId(null);
+    setThreadId(null);
+    setConnectorId(null);
+    setDrafting(false);
+    setPanelIntent("browse");
+    setPanelMode("collapsed");
     setMobileNav(false);
-  }, [entitlements.showOrgSettings]);
+    setOverlay(null);
+    pushTarget({
+      product,
+      view: "settings",
+      spaceId: null,
+      threadId: null,
+      projectId: null,
+      platformNav,
+      panelMode: "collapsed",
+      panelIntent: "browse",
+      connectorId: null,
+      jobId: null,
+      skillId: null,
+    });
+  }, [entitlements.showOrgSettings, product, platformNav, pushTarget]);
 
   const openOverlay = useCallback((id: OverlayId) => {
     setOverlay(id);
@@ -1910,6 +2179,57 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       skillId: null,
     });
   }, [product, platformNav, pushTarget]);
+
+  const runDiscoveryAction = useCallback(
+    (
+      action: import("@/lib/discovery-types").DiscoveryAction,
+      _item?: import("@/lib/discovery-types").DiscoveryItem | null,
+    ) => {
+      void _item;
+      switch (action.kind) {
+        case "openSpace":
+          if (action.target) openSpace(action.target as SpaceId);
+          break;
+        case "openConnector":
+          if (action.target) openConnector(action.target);
+          else openSpace("connectors");
+          break;
+        case "openBrowser":
+          openBrowser({ chat: true });
+          break;
+        case "openPlatform":
+          persistProduct("platform");
+          if (action.target) setPlatformNav(action.target as PlatformNav);
+          setPlatformDockOpen(false);
+          break;
+        case "newChat":
+          newChat();
+          break;
+        case "openDiscovery":
+          openDiscovery();
+          break;
+        case "prompt":
+          if (action.target) {
+            const text = action.target;
+            newChat();
+            window.setTimeout(() => sendMessage(text), 40);
+          }
+          break;
+        default:
+          break;
+      }
+    },
+    [
+      openSpace,
+      openConnector,
+      openBrowser,
+      setPlatformNav,
+      setPlatformDockOpen,
+      newChat,
+      openDiscovery,
+      sendMessage,
+    ],
+  );
 
   const openJob = useCallback((id: string) => {
     setView("chat");
@@ -2075,6 +2395,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPlatformDockOpen,
       openSpace,
       openRecents,
+      openDiscovery,
+      openDiscoveryItem,
+      clearDiscoveryFocus,
+      discoveryFocusId,
+      runDiscoveryAction,
       openBrowser,
       browserChatOpen,
       setBrowserChatOpen,
@@ -2202,6 +2527,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       platformDockOpen,
       openSpace,
       openRecents,
+      openDiscovery,
+      openDiscoveryItem,
+      clearDiscoveryFocus,
+      discoveryFocusId,
+      runDiscoveryAction,
       openBrowser,
       browserChatOpen,
       setBrowserChatOpen,

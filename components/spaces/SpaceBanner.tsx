@@ -16,6 +16,7 @@ import {
   subscribeSpaceBanners,
   type BannerKey,
 } from "@/lib/space-banners";
+import { SHELL_FLOAT_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 export function SpaceBanner({
@@ -28,6 +29,8 @@ export function SpaceBanner({
   const { sidebarOpen, mobileNav } = useApp();
   const mode = useSpaceRenderMode();
   const inPanel = mode === "panel";
+  const shellStyle = useShellStyle();
+  const floating = shellStyle === "floating";
   const banners = useSyncExternalStore(
     subscribeSpaceBanners,
     getSpaceBannersSnapshot,
@@ -36,33 +39,46 @@ export function SpaceBanner({
   const choice = bannerFor(space, banners);
 
   return (
-    <div className="relative h-[11.5rem] shrink-0 max-lg:h-[13rem] sm:h-40 lg:h-36">
-      <div className="absolute inset-0 overflow-hidden">
-        {choice.custom ? (
-          <img
-            src={choice.custom}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-        ) : (
-          <div
-            className={cn("absolute inset-0", bannerClass(choice.preset))}
+    <div
+      className={cn(
+        "relative shrink-0",
+        floating && "pt-3 pr-3",
+        floating && inPanel && "pl-3",
+      )}
+    >
+      <div
+        className={cn(
+          "relative h-[11.5rem] overflow-hidden max-lg:h-[13rem] sm:h-40 lg:h-36",
+          floating && SHELL_FLOAT_RADIUS,
+        )}
+      >
+        <div className="absolute inset-0 overflow-hidden">
+          {choice.custom ? (
+            <img
+              src={choice.custom}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <div
+              className={cn("absolute inset-0", bannerClass(choice.preset))}
+            />
+          )}
+          <div className="panel-grain" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-black/15 to-transparent" />
+        </div>
+        {inPanel ? null : (
+          <NavToggle
+            onBanner
+            className={cn(
+              "absolute top-2.5 left-2 z-20 max-lg:top-3",
+              sidebarOpen && "lg:hidden",
+              mobileNav && "max-lg:hidden",
+            )}
           />
         )}
-        <div className="panel-grain" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-black/15 to-transparent" />
+        <div className="relative z-10 h-full">{children}</div>
       </div>
-      {inPanel ? null : (
-        <NavToggle
-          onBanner
-          className={cn(
-            "absolute top-2.5 left-2 z-20 max-lg:top-3",
-            sidebarOpen && "lg:hidden",
-            mobileNav && "max-lg:hidden",
-          )}
-        />
-      )}
-      <div className="relative z-10 h-full">{children}</div>
     </div>
   );
 }

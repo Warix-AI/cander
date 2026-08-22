@@ -31,7 +31,7 @@ export function OverviewPage() {
           {handshakeStatus.stats.map((stat) => (
             <div
               key={stat.label}
-              className="rounded-lg border border-border bg-muted/30 px-3 py-2.5"
+              className="rounded-[10px] border border-border bg-card px-3 py-2.5"
             >
               <p className="text-[11px] text-muted-foreground">{stat.label}</p>
               <p className="mt-0.5 text-lg font-semibold tracking-[-0.02em]">
@@ -69,7 +69,7 @@ export function OverviewPage() {
           ))}
         </div>
         {selected ? (
-          <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
+          <div className="mt-4 rounded-[10px] border border-border bg-card p-3">
             <p className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
               {selected.label}
             </p>

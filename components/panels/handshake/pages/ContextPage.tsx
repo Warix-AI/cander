@@ -37,7 +37,7 @@ export function ContextPage() {
             </ul>
           </div>
         </div>
-        <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
+        <div className="mt-4 rounded-[10px] border border-border bg-card p-3">
           <p className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
             Live example
           </p>
@@ -67,7 +67,7 @@ export function ContextPage() {
           {business.items.map((item) => (
             <div
               key={item.label}
-              className="rounded-lg border border-border bg-muted/30 px-3 py-2.5"
+              className="rounded-[10px] border border-border bg-card px-3 py-2.5"
             >
               <p className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
                 {item.label}

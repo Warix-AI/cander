@@ -260,6 +260,7 @@ export const workspaces: Workspace[] = [
   {
     id: "marketing",
     name: "Marketing",
+    kind: "business",
     spaces: [
       "work",
       "build",
@@ -275,6 +276,7 @@ export const workspaces: Workspace[] = [
   {
     id: "engineering",
     name: "Engineering",
+    kind: "business",
     spaces: ["work", "build", "research", "personal", "connectors"],
     members: 18,
     budget: "$6,800",
@@ -283,6 +285,7 @@ export const workspaces: Workspace[] = [
   {
     id: "operations",
     name: "Operations",
+    kind: "business",
     spaces: ["work", "research", "personal", "connectors"],
     members: 8,
     budget: "$1,400",
@@ -291,8 +294,9 @@ export const workspaces: Workspace[] = [
   {
     id: "solo-pro",
     name: "Personal",
+    kind: "personal",
     personal: true,
-    spaces: ["build", "studio", "research", "personal", "connectors"],
+    spaces: ["work", "build", "studio", "research", "personal", "connectors"],
     members: 1,
     budget: "$0",
     spend: "$0",
@@ -300,8 +304,9 @@ export const workspaces: Workspace[] = [
   {
     id: "solo-ultra",
     name: "Personal",
+    kind: "personal",
     personal: true,
-    spaces: ["build", "studio", "research", "personal", "connectors"],
+    spaces: ["work", "build", "studio", "research", "personal", "connectors"],
     members: 1,
     budget: "$0",
     spend: "$0",
@@ -309,8 +314,9 @@ export const workspaces: Workspace[] = [
   {
     id: "solo-free",
     name: "Personal",
+    kind: "personal",
     personal: true,
-    spaces: ["build", "studio", "research", "personal", "connectors"],
+    spaces: ["work", "build", "studio", "research", "personal", "connectors"],
     members: 1,
     budget: "$0",
     spend: "$0",

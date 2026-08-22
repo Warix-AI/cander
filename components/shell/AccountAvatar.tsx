@@ -35,7 +35,7 @@ export function AccountAvatar({
     return (
       <span
         className={cn(
-          "relative inline-flex shrink-0 overflow-hidden rounded-lg",
+          "relative inline-flex shrink-0 overflow-hidden rounded-[10px]",
           dim,
           className,
         )}
@@ -48,7 +48,7 @@ export function AccountAvatar({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-lg bg-muted font-semibold",
+        "inline-flex shrink-0 items-center justify-center rounded-[10px] bg-muted font-semibold",
         dim,
         className,
       )}

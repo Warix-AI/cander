@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { Dropdown, MenuRow } from "@/components/ui/Controls";
 import { developmentView, homeView } from "@/lib/product-copy";
@@ -16,7 +16,38 @@ const views: {
 ];
 
 export function ProductSwitcher() {
-  const { product, setProduct, entitlements } = useApp();
+  const {
+    product,
+    setProduct,
+    entitlements,
+    view,
+    canGoBack,
+    goBack,
+    newChat,
+  } = useApp();
+
+  if (view === "settings") {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          if (canGoBack) goBack();
+          else newChat();
+        }}
+        className="flex w-full items-center gap-1.5 rounded-lg px-2 py-2.5 text-left transition-colors duration-200 hover:bg-sidebar-accent"
+        aria-label="Back"
+      >
+        <ArrowLeft
+          className="h-4 w-4 shrink-0 text-muted-foreground"
+          strokeWidth={1.75}
+        />
+        <span className="truncate text-[15.4px] font-semibold tracking-[-0.03em]">
+          Back
+        </span>
+      </button>
+    );
+  }
+
   const current = views.find((item) => item.id === product) ?? views[0];
   const options = views.filter(
     (item) => item.id === "courier" || entitlements.canAccessDevelopment,
