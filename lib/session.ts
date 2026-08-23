@@ -4,6 +4,7 @@ import type {
   HostingMode,
   Pin,
   PinKind,
+  PinTier,
   ProductId,
   SpaceId,
   Theme,
@@ -23,7 +24,7 @@ import {
 
 type Listener = () => void;
 
-const SIDEBAR_STORAGE_VERSION = 9;
+const SIDEBAR_STORAGE_VERSION = 11;
 
 const workspaceListeners = new Set<Listener>();
 let workspaceId = "marketing";
@@ -109,7 +110,7 @@ export function getThemeSnapshot(): Theme {
 }
 
 export function getThemeServerSnapshot(): Theme {
-  return "dark";
+  return "light";
 }
 
 export function persistTheme(next: Theme) {
@@ -125,16 +126,22 @@ function emitAuth() {
 }
 
 export function subscribeAuth(listener: Listener) {
-  if (typeof window !== "undefined") {
-    signedIn = window.localStorage.getItem("courier-signed-in") === "1";
-  }
   authListeners.add(listener);
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", listener);
+  }
   return () => {
     authListeners.delete(listener);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", listener);
+    }
   };
 }
 
 export function getAuthSnapshot() {
+  if (typeof window !== "undefined") {
+    signedIn = window.localStorage.getItem("courier-signed-in") === "1";
+  }
   return signedIn;
 }
 
@@ -314,24 +321,36 @@ export function persistPersonalSpace(next: boolean) {
 }
 
 const pinListeners = new Set<Listener>();
-const emptyPins: Pin[] = [{ kind: "connector", id: "gmail" }];
+const emptyPins: Pin[] = [
+  { kind: "connector", id: "gmail", tier: "primary" },
+];
 let pins: Pin[] = emptyPins;
 let pinsHydrated = false;
+
+function normalizePin(item: Pin): Pin {
+  return {
+    kind: item.kind,
+    id: item.id,
+    tier: item.tier === "secondary" ? "secondary" : "primary",
+  };
+}
 
 function parsePins(raw: string | null): Pin[] {
   if (!raw) return emptyPins;
   try {
     const data = JSON.parse(raw) as unknown;
     if (!Array.isArray(data)) return emptyPins;
-    const next = data.filter(
-      (item): item is Pin =>
-        Boolean(item) &&
-        typeof item === "object" &&
-        (item.kind === "thread" ||
-          item.kind === "project" ||
-          item.kind === "connector") &&
-        typeof item.id === "string",
-    );
+    const next = data
+      .filter(
+        (item): item is Pin =>
+          Boolean(item) &&
+          typeof item === "object" &&
+          (item.kind === "thread" ||
+            item.kind === "project" ||
+            item.kind === "connector") &&
+          typeof item.id === "string",
+      )
+      .map(normalizePin);
     return next.length ? next : emptyPins;
   } catch {
     return emptyPins;
@@ -365,19 +384,37 @@ export function getPinsServerSnapshot(): Pin[] {
 }
 
 export function persistPins(next: Pin[]) {
-  pins = next.length ? next : emptyPins;
+  pins = next.length ? next.map(normalizePin) : emptyPins;
   window.localStorage.setItem("courier-pins", JSON.stringify(pins));
   emitPins();
 }
 
+export function pinTierOf(kind: PinKind, id: string): PinTier | null {
+  hydratePins();
+  const match = pins.find((item) => item.kind === kind && item.id === id);
+  return match ? (match.tier === "secondary" ? "secondary" : "primary") : null;
+}
+
+/** Add or move a pin to a tier. */
+export function setStoredPin(kind: PinKind, id: string, tier: PinTier) {
+  hydratePins();
+  const without = pins.filter(
+    (item) => !(item.kind === kind && item.id === id),
+  );
+  persistPins([{ kind, id, tier }, ...without]);
+}
+
+export function removeStoredPin(kind: PinKind, id: string) {
+  hydratePins();
+  persistPins(pins.filter((item) => !(item.kind === kind && item.id === id)));
+}
+
+/** @deprecated Prefer setStoredPin / removeStoredPin — toggles primary. */
 export function toggleStoredPin(kind: PinKind, id: string) {
   hydratePins();
   const exists = pins.some((item) => item.kind === kind && item.id === id);
-  persistPins(
-    exists
-      ? pins.filter((item) => !(item.kind === kind && item.id === id))
-      : [{ kind, id }, ...pins],
-  );
+  if (exists) removeStoredPin(kind, id);
+  else setStoredPin(kind, id, "primary");
 }
 
 export function reorderStoredPins(
@@ -393,9 +430,20 @@ export function reorderStoredPins(
     (item) => item.kind === to.kind && item.id === to.id,
   );
   if (fromIndex < 0 || toIndex < 0) return;
+  const fromPin = pins[fromIndex];
+  const toPin = pins[toIndex];
+  if (!fromPin || !toPin) return;
+  // Keep tiers aligned when reordering across lists.
   const next = [...pins];
   const [item] = next.splice(fromIndex, 1);
-  next.splice(toIndex, 0, item);
+  const insertAt = next.findIndex(
+    (row) => row.kind === to.kind && row.id === to.id,
+  );
+  if (insertAt < 0) return;
+  next.splice(insertAt, 0, {
+    ...item,
+    tier: toPin.tier === "secondary" ? "secondary" : "primary",
+  });
   persistPins(next);
 }
 
@@ -563,38 +611,19 @@ export function moveSidebarNav(
   opts?: SidebarNavOpts,
 ) {
   hydrateSidebar();
-  const { main, more } = resolveSidebarNav(allowed, sidebarLayout, opts);
-  const combined = [...main, ...more];
-  const split = main.length;
-  const at = combined.indexOf(id);
+  const { main } = resolveSidebarNav(allowed, sidebarLayout, opts);
+  const at = main.indexOf(id);
   if (at < 0) return;
-
-  if (dir === 1 && at === split - 1) {
-    persistSidebar({
-      main: combined.slice(0, split - 1),
-      more: combined.slice(split - 1),
-    });
-    return;
-  }
-
-  if (dir === -1 && at === split) {
-    persistSidebar({
-      main: combined.slice(0, split + 1),
-      more: combined.slice(split + 1),
-    });
-    return;
-  }
-
   const next = at + dir;
-  if (next < 0 || next >= combined.length) return;
-  const swapped = [...combined];
+  if (next < 0 || next >= main.length) return;
+  const swapped = [...main];
   const current = swapped[at];
   const other = swapped[next];
   if (!current || !other) return;
   swapped[at] = other;
   swapped[next] = current;
   persistSidebar({
-    main: swapped.slice(0, split),
-    more: swapped.slice(split),
+    main: swapped,
+    more: [],
   });
 }

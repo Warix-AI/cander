@@ -14,7 +14,7 @@ import {
   uninstallConnector,
 } from "@/lib/connector-install";
 import { connectors as seed } from "@/lib/data";
-import type { Connector } from "@/lib/types";
+import type { Connector, PinTier } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
 import {
@@ -51,8 +51,9 @@ export function ConnectorsDashboard() {
     workspace,
     workspacePolicies,
     billingPlan,
-    isPinned,
-    togglePin,
+    pinTier,
+    setPin,
+    clearPin,
   } = useApp();
   const installedIds = useSyncExternalStore(
     subscribeInstalledConnectors,
@@ -209,8 +210,9 @@ export function ConnectorsDashboard() {
           </div>
         ) : null}
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 @min-[420px]:flex-row @min-[420px]:flex-wrap @min-[420px]:items-center @min-[420px]:justify-between">
           <ScopeToggle
+            wrap
             value={view}
             onChange={(value) => setView(value as ConnectorsView)}
             options={[
@@ -218,7 +220,7 @@ export function ConnectorsDashboard() {
               { id: "installed", label: "Installed" },
             ]}
           />
-          <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-1">
+          <div className="flex min-w-0 items-center justify-end gap-1 @min-[420px]:ml-auto @min-[420px]:flex-1">
             {searchOpen ? (
               <div className="relative w-full max-w-[22rem] transition-[max-width] duration-200">
                 <Search
@@ -288,11 +290,12 @@ export function ConnectorsDashboard() {
                       key={item.id}
                       item={item}
                       active={connectorId === item.id}
-                      pinned={isPinned("connector", item.id)}
+                      tier={pinTier("connector", item.id)}
                       onOpen={() => selectConnector(item.id)}
                       onInstall={() => install(item.id)}
                       onUninstall={() => uninstall(item.id)}
-                      onTogglePin={() => togglePin("connector", item.id)}
+                      onSetPin={(next) => setPin("connector", item.id, next)}
+                      onClearPin={() => clearPin("connector", item.id)}
                       workAttach={Boolean(workAttachFor)}
                       catalog={view === "connectors"}
                     />
@@ -326,24 +329,27 @@ export function ConnectorsDashboard() {
 function DirectoryItem({
   item,
   active,
-  pinned,
+  tier,
   onOpen,
   onInstall,
   onUninstall,
-  onTogglePin,
+  onSetPin,
+  onClearPin,
   workAttach,
   catalog = false,
 }: {
   item: Connector;
   active: boolean;
-  pinned: boolean;
+  tier: PinTier | null;
   onOpen: () => void;
   onInstall: () => void;
   onUninstall: () => void;
-  onTogglePin: () => void;
+  onSetPin: (tier: PinTier) => void;
+  onClearPin: () => void;
   workAttach?: boolean;
   catalog?: boolean;
 }) {
+  const pinned = Boolean(tier);
   return (
     <div
       className={cn(
@@ -379,7 +385,7 @@ function DirectoryItem({
             ) : (
             <Dropdown
               align="end"
-              menuClassName="min-w-[8.5rem]"
+              menuClassName="min-w-[9.5rem]"
               matchTrigger={false}
               trigger={({ toggle }) => (
                 <button
@@ -405,17 +411,72 @@ function DirectoryItem({
                   >
                     Open
                   </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      close();
-                      onTogglePin();
-                    }}
-                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                  >
-                    {pinned ? "Unpin from menu" : "Pin to menu"}
-                  </button>
+                  {!pinned ? (
+                    <>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          close();
+                          onSetPin("primary");
+                        }}
+                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                      >
+                        Pin to Primary
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          close();
+                          onSetPin("secondary");
+                        }}
+                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                      >
+                        Pin to Secondary
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          close();
+                          onClearPin();
+                        }}
+                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                      >
+                        Unpin
+                      </button>
+                      {tier !== "primary" ? (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            close();
+                            onSetPin("primary");
+                          }}
+                          className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                        >
+                          Move to Primary
+                        </button>
+                      ) : null}
+                      {tier !== "secondary" ? (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            close();
+                            onSetPin("secondary");
+                          }}
+                          className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                        >
+                          Move to Secondary
+                        </button>
+                      ) : null}
+                    </>
+                  )}
                   <button
                     type="button"
                     role="menuitem"

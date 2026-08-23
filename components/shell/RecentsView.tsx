@@ -2,6 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
+import {
+  DataList,
+  DataRow,
+  EmptyHint,
+  PanelToolbar,
+  Section,
+  StatusPill,
+} from "@/components/platform/DevChrome";
 import { PlatformAskButton } from "@/components/platform/PlatformChatDock";
 import {
   DashBtn,
@@ -97,55 +105,55 @@ function PlatformRecents() {
         subtitle="Recent development chats in this workspace, newest first."
         actions={<PlatformAskButton />}
       >
-        <ScopeToggle
-          wrap
-          value={scope}
-          onChange={setScope}
-          options={[
-            { id: "all", label: "All" },
-            ...filters.map((item) => ({
-              id: item.id,
-              label: item.label,
-            })),
-          ]}
-        />
-        <div className="mt-5">
-          {visible.length ? (
-            <div>
-              {visible.map(({ thread, surface }) => {
-                const label =
-                  platformFilters.find((item) => item.id === surface)?.label ??
-                  "Chat";
-                return (
-                  <button
-                    key={thread.id}
-                    type="button"
-                    onClick={() => openThread(thread.id)}
-                    className="flex w-full items-baseline justify-between gap-4 rounded-[10px] px-3 py-2.5 text-left transition-colors duration-200 hover:bg-muted"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-[14px] font-medium tracking-[-0.02em]">
-                        {thread.title}
-                      </span>
-                      {thread.snippet ? (
-                        <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
-                          {thread.snippet}
+        <PanelToolbar>
+          <ScopeToggle
+            wrap
+            value={scope}
+            onChange={setScope}
+            options={[
+              { id: "all", label: "All" },
+              ...filters.map((item) => ({
+                id: item.id,
+                label: item.label,
+              })),
+            ]}
+          />
+        </PanelToolbar>
+
+        <div className="mt-6">
+          <Section
+            title="Chats"
+            description="Newest first · filtered by surface when selected."
+          >
+            {visible.length ? (
+              <DataList>
+                {visible.map(({ thread, surface }) => {
+                  const label =
+                    platformFilters.find((item) => item.id === surface)
+                      ?.label ?? "Chat";
+                  return (
+                    <DataRow
+                      key={thread.id}
+                      onClick={() => openThread(thread.id)}
+                      label={
+                        <span className="flex flex-wrap items-center gap-2">
+                          {thread.title}
+                          <StatusPill tone="outline">{label}</StatusPill>
                         </span>
-                      ) : null}
-                    </span>
-                    <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-                      {label} · {thread.updatedAt}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="px-3 py-4 text-[13px] text-muted-foreground">
-              No platform chats
-              {scope === "all" ? " yet." : " in this filter."}
-            </p>
-          )}
+                      }
+                      meta={thread.snippet || undefined}
+                      value={thread.updatedAt}
+                    />
+                  );
+                })}
+              </DataList>
+            ) : (
+              <EmptyHint>
+                No platform chats
+                {scope === "all" ? " yet." : " in this filter."}
+              </EmptyHint>
+            )}
+          </Section>
         </div>
       </DashFrame>
     </div>
@@ -252,8 +260,9 @@ function CourierRecents() {
           </DashBtn>
         }
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 @min-[420px]:flex-row @min-[420px]:flex-wrap @min-[420px]:items-center @min-[420px]:justify-between">
           <ScopeToggle
+            wrap
             value={scope}
             onChange={setScope}
             options={[

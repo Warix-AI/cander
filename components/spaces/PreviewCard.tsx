@@ -1,7 +1,8 @@
 "use client";
 
-import { CalendarClock, Ellipsis, FileText, Folder, Link2, Pin, Sparkles } from "lucide-react";
+import { CalendarClock, Ellipsis, FileText, Folder, Link2, Sparkles } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { PinControl } from "@/components/shell/PinControl";
 import { BannerWash } from "@/components/spaces/BannerWash";
 import { Dropdown } from "@/components/ui/Controls";
 import type { BannerKey } from "@/lib/space-banners";
@@ -41,7 +42,9 @@ export function PreviewGrid({
   dense?: boolean;
 }) {
   if (!items.length) {
-    return <p className="px-3 py-4 text-[13px] text-muted-foreground">{empty}</p>;
+    return (
+      <p className="mt-3 px-3 py-4 text-[13px] text-muted-foreground">{empty}</p>
+    );
   }
 
   if (layout === "list") {
@@ -383,8 +386,9 @@ function PreviewActions({
   kind: PreviewKind;
   onOpen: (projectId: string) => void;
 }) {
-  const { isPinned, togglePin } = useApp();
-  const pinned = isPinned("project", item.projectId);
+  const { pinTier, setPin, clearPin } = useApp();
+  const tier = pinTier("project", item.projectId);
+  const pinned = Boolean(tier);
 
   const copyLink = () => {
     const slug = item.name.toLowerCase().replace(/\s+/g, "-");
@@ -395,26 +399,12 @@ function PreviewActions({
     <span className="flex shrink-0 items-center">
       {kind === "product" ? (
         <>
-          <button
-            type="button"
-            aria-label={pinned ? "Unpin" : "Pin"}
-            aria-pressed={pinned}
-            onClick={(event) => {
-              event.stopPropagation();
-              togglePin("project", item.projectId);
-            }}
-            className={cn(
-              "inline-flex h-7 w-7 items-center justify-center rounded-lg hover:bg-muted @max-[520px]:hidden",
-              pinned
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Pin
-              className={cn("h-3.5 w-3.5", pinned && "fill-current")}
-              strokeWidth={1.6}
-            />
-          </button>
+          <PinControl
+            kind="project"
+            id={item.projectId}
+            alwaysVisible
+            className="[&_button]:h-7 [&_button]:w-7 @max-[520px]:hidden"
+          />
           <button
             type="button"
             aria-label="Copy link"
@@ -461,17 +451,72 @@ function PreviewActions({
             </button>
             {kind === "product" ? (
               <>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    togglePin("project", item.projectId);
-                    close();
-                  }}
-                  className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                >
-                  {pinned ? "Unpin" : "Pin"}
-                </button>
+                {!pinned ? (
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setPin("project", item.projectId, "primary");
+                        close();
+                      }}
+                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                    >
+                      Pin to Primary
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setPin("project", item.projectId, "secondary");
+                        close();
+                      }}
+                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                    >
+                      Pin to Secondary
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        clearPin("project", item.projectId);
+                        close();
+                      }}
+                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                    >
+                      Unpin
+                    </button>
+                    {tier !== "primary" ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setPin("project", item.projectId, "primary");
+                          close();
+                        }}
+                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                      >
+                        Move to Primary
+                      </button>
+                    ) : null}
+                    {tier !== "secondary" ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setPin("project", item.projectId, "secondary");
+                          close();
+                        }}
+                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                      >
+                        Move to Secondary
+                      </button>
+                    ) : null}
+                  </>
+                )}
                 <button
                   type="button"
                   role="menuitem"

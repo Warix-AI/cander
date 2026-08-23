@@ -32,7 +32,7 @@ export function ConfigureModal() {
     actor.id,
     workspacePolicies,
   );
-  const { main, more } = resolveSidebarNav(allowed, sidebarLayout, {
+  const { main } = resolveSidebarNav(allowed, sidebarLayout, {
     billingPlan,
     personalEnabled: personalSpaceEnabled,
   });
@@ -53,7 +53,7 @@ export function ConfigureModal() {
             Configure
           </h2>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            Reorder the sidebar, or move links into More. New chat stays put.
+            Reorder the sidebar. New chat stays put.
           </p>
         </div>
         <button
@@ -73,29 +73,10 @@ export function ConfigureModal() {
             key={id}
             id={id}
             upDisabled={index === 0}
-            downDisabled={false}
+            downDisabled={index === main.length - 1}
             onMove={moveSidebarNav}
           />
         ))}
-
-        <div className="mx-2 mt-3 mb-2 h-px bg-foreground/12" />
-        <p className="px-2 pb-1.5 text-[12px] text-muted-foreground">More</p>
-        {more.length ? (
-          more.map((id, index) => (
-            <NavRow
-              key={id}
-              id={id}
-              upDisabled={false}
-              downDisabled={index === more.length - 1}
-              onMove={moveSidebarNav}
-            />
-          ))
-        ) : (
-          <p className="px-2 py-2 text-[12.5px] leading-relaxed text-muted-foreground">
-            Move any link down into More to keep the sidebar shorter. They’ll
-            open from the More menu.
-          </p>
-        )}
       </div>
     </Modal>
   );

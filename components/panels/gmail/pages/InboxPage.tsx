@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Paperclip, Search } from "lucide-react";
+import { useState } from "react";
+import { Paperclip } from "lucide-react";
 import { SectionLabel } from "@/components/panels/Bits";
 import {
-  gmailAccount,
   gmailInbox,
   gmailThreadMessages,
   type GmailMessage,
@@ -12,48 +11,19 @@ import {
 import { cn } from "@/lib/utils";
 
 export function InboxPage() {
-  const [query, setQuery] = useState("in:inbox");
-  const [selectedId, setSelectedId] = useState<string | null>(gmailInbox[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    gmailInbox[0]?.id ?? null,
+  );
 
-  const results = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle || needle === "in:inbox") return gmailInbox;
-    return gmailInbox.filter((item) => {
-      const hay = `${item.from} ${item.subject} ${item.snippet} ${item.labels.join(" ")}`.toLowerCase();
-      if (needle.startsWith("from:")) {
-        return item.from.toLowerCase().includes(needle.slice(5).trim());
-      }
-      if (needle.startsWith("label:")) {
-        return item.labels.some((label) =>
-          label.toLowerCase().includes(needle.slice(6).trim()),
-        );
-      }
-      return hay.includes(needle);
-    });
-  }, [query]);
-
-  const selected = results.find((item) => item.id === selectedId) ?? results[0] ?? null;
+  const results = gmailInbox;
+  const selected =
+    results.find((item) => item.id === selectedId) ?? results[0] ?? null;
   const thread = selected
-    ? gmailThreadMessages[selected.threadId] ?? [selected]
+    ? (gmailThreadMessages[selected.threadId] ?? [selected])
     : [];
 
   return (
     <div className="flex h-full min-h-[28rem] flex-col">
-      <div className="border-b border-border px-3 py-2.5">
-        <p className="mb-2 font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
-          search_gmail_messages · {gmailAccount}
-        </p>
-        <label className="flex h-9 items-center gap-2 rounded-[10px] border border-border bg-muted/40 px-2.5">
-          <Search className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.6} />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Gmail query — from:, label:, has:attachment…"
-            className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground"
-          />
-        </label>
-      </div>
-
       <div className="flex min-h-0 flex-1">
         <div className="w-[44%] min-w-[11rem] overflow-y-auto border-r border-border">
           <SectionLabel>{`Results · ${results.length}`}</SectionLabel>
@@ -67,7 +37,7 @@ export function InboxPage() {
           ))}
           {!results.length ? (
             <p className="px-3 py-4 text-[12.5px] text-muted-foreground">
-              No messages match that query.
+              No messages.
             </p>
           ) : null}
         </div>

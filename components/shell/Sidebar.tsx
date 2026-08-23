@@ -1,29 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Blocks,
   Building2,
   CreditCard,
-  Ellipsis,
   FolderKanban,
   GripVertical,
   LayoutGrid,
   MessageSquare,
   Palette,
-  Pin,
-  Search,
   SquarePen,
   UserRound,
+  X,
 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
-import { AccountMenu } from "@/components/shell/AccountMenu";
-import { DiscoverySidebarCard } from "@/components/discovery/DiscoverySidebarCard";
+import { PinControl } from "@/components/shell/PinControl";
 import { ProductSwitcher } from "@/components/shell/ProductSwitcher";
 import { WindowChrome } from "@/components/shell/WindowChrome";
 import { WorkspaceRail } from "@/components/shell/WorkspaceRail";
 import { useApp } from "@/components/app/AppProvider";
-import { Dropdown } from "@/components/ui/Controls";
 import { platformNavItems, projects, spaces, connectors } from "@/lib/data";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import {
@@ -37,7 +33,7 @@ import {
   resolveSidebarNav,
   type SidebarNavId,
 } from "@/lib/spaces";
-import type { PinKind, SettingsTab, SpaceId } from "@/lib/types";
+import type { PinKind, PinTier, SettingsTab, SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SHELL_FLOAT_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { memberSpaces } from "@/lib/workspace-policy";
@@ -55,6 +51,15 @@ function navLabel(id: SidebarNavId) {
   if (isExtraNavId(id)) return extraNavLabels[id];
   return spaces.find((item) => item.id === id)?.label;
 }
+
+type PinnedItem = {
+  kind: "thread" | "project" | "connector";
+  id: string;
+  title: string;
+  tier: PinTier;
+  icon?: string;
+  spaceId?: SpaceId;
+};
 
 export function Sidebar() {
   const {
@@ -77,8 +82,6 @@ export function Sidebar() {
     threads,
     pins,
     sidebarLayout,
-    isPinned,
-    togglePin,
     reorderPins,
     openThread,
     openProject,
@@ -95,17 +98,10 @@ export function Sidebar() {
 
   const settingsNav = visibleSettingsTabs(entitlements);
   const inSettings = view === "settings";
-  const [settingsQuery, setSettingsQuery] = useState("");
-  const filteredSettingsNav = useMemo(() => {
-    const needle = settingsQuery.trim().toLowerCase();
-    if (!needle) return settingsNav;
-    return settingsNav.filter((tab) =>
-      tab.label.toLowerCase().includes(needle),
-    );
-  }, [settingsNav, settingsQuery]);
+  const [secondaryOpen, setSecondaryOpen] = useState(false);
   useEffect(() => {
-    if (!inSettings) setSettingsQuery("");
-  }, [inSettings]);
+    if (inSettings || product !== "courier") setSecondaryOpen(false);
+  }, [inSettings, product]);
   const shellStyle = useShellStyle();
   const floating = shellStyle === "floating";
   const showRail =
@@ -113,7 +109,7 @@ export function Sidebar() {
     !entitlements.showInviteWall &&
     workspaceRailOpen;
 
-  const { main, more } = resolveSidebarNav(
+  const { main } = resolveSidebarNav(
     memberSpaces(workspace.id, actor.id, workspacePolicies),
     sidebarLayout,
     { billingPlan, personalEnabled: personalSpaceEnabled },
@@ -121,16 +117,10 @@ export function Sidebar() {
   const chatActive =
     view === "chat" && !threadId && !spaceId && product === "courier";
 
-  type PinnedItem = {
-    kind: "thread" | "project" | "connector";
-    id: string;
-    title: string;
-    icon?: string;
-    spaceId?: SpaceId;
-  };
-
   const pinnedItems: PinnedItem[] = [];
   for (const pin of pins) {
+    const tier: PinTier =
+      pin.tier === "secondary" ? "secondary" : "primary";
     if (pin.kind === "connector") {
       const connector = connectors.find((item) => item.id === pin.id);
       if (connector) {
@@ -139,6 +129,7 @@ export function Sidebar() {
           id: connector.id,
           title: connector.name,
           icon: connector.icon,
+          tier,
         });
       }
       continue;
@@ -156,6 +147,7 @@ export function Sidebar() {
           id: thread.id,
           title: thread.title,
           spaceId: thread.spaceId,
+          tier,
         });
       }
       continue;
@@ -169,9 +161,15 @@ export function Sidebar() {
         id: project.id,
         title: project.name,
         spaceId: project.space,
+        tier,
       });
     }
   }
+
+  const primaryItems = pinnedItems.filter((item) => item.tier === "primary");
+  const secondaryItems = pinnedItems.filter(
+    (item) => item.tier === "secondary",
+  );
 
   const navActive = (id: SidebarNavId) => {
     if (id === "recents") return view === "recents";
@@ -208,7 +206,28 @@ export function Sidebar() {
     );
   };
 
-  const moreActive = more.some(navActive);
+  const renderPinnedRow = (item: PinnedItem) => (
+    <PinnedRow
+      key={`${item.kind}-${item.id}`}
+      kind={item.kind}
+      id={item.id}
+      title={item.title}
+      leading={<PinnedLeading item={item} />}
+      active={
+        item.kind === "thread"
+          ? threadId === item.id
+          : item.kind === "connector"
+            ? connectorId === item.id && spaceId === "connectors"
+            : projectId === item.id && !threadId
+      }
+      onOpen={() => {
+        if (item.kind === "thread") openThread(item.id);
+        else if (item.kind === "connector") openConnector(item.id);
+        else openProject(item.id);
+      }}
+      onReorder={reorderPins}
+    />
+  );
 
   return (
     <div
@@ -243,53 +262,34 @@ export function Sidebar() {
 
       {inSettings ? (
         <nav
-          className="mt-1 flex min-h-0 flex-1 flex-col px-2"
+          className="mt-1 min-h-0 flex-1 overflow-y-auto px-2"
           aria-label="Settings"
         >
-          <div className="relative mb-2">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-              strokeWidth={1.6}
-            />
-            <input
-              value={settingsQuery}
-              onChange={(event) => setSettingsQuery(event.target.value)}
-              placeholder="Search settings"
-              className="h-9 w-full rounded-[10px] border border-sidebar-border bg-background pr-3 pl-8 text-[12.5px] outline-none placeholder:text-muted-foreground focus:border-foreground/20"
-            />
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {filteredSettingsNav.map((tab) => {
-              const Icon = settingsIcons[tab.id];
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    setSettingsTab(tab.id);
-                    setMobileNav(false);
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
-                    settingsTab === tab.id
-                      ? "bg-sidebar-accent font-medium"
-                      : "hover:bg-sidebar-accent",
-                  )}
-                >
-                  <Icon
-                    className="h-3.5 w-3.5 text-muted-foreground"
-                    strokeWidth={2}
-                  />
-                  {tab.label}
-                </button>
-              );
-            })}
-            {!filteredSettingsNav.length ? (
-              <p className="px-3 py-2 text-[12.5px] text-muted-foreground">
-                No matching settings.
-              </p>
-            ) : null}
-          </div>
+          {settingsNav.map((tab) => {
+            const Icon = settingsIcons[tab.id];
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setSettingsTab(tab.id);
+                  setMobileNav(false);
+                }}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
+                  settingsTab === tab.id
+                    ? "bg-sidebar-accent font-medium"
+                    : "hover:bg-sidebar-accent",
+                )}
+              >
+                <Icon
+                  className="h-3.5 w-3.5 text-muted-foreground"
+                  strokeWidth={2}
+                />
+                {tab.label}
+              </button>
+            );
+          })}
         </nav>
       ) : product === "platform" ? (
         <nav className="mt-1 min-h-0 flex-1 overflow-y-auto px-2" aria-label="Development">
@@ -322,135 +322,99 @@ export function Sidebar() {
           })}
         </nav>
       ) : (
-        <nav className="mt-1 min-h-0 flex-1 overflow-y-auto px-2" aria-label="Primary">
-          <button
-            type="button"
-            onClick={() => newChat()}
-            className={cn(
-              "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
-              chatActive
-                ? "bg-sidebar-accent font-medium"
-                : "hover:bg-sidebar-accent",
-            )}
+        <>
+          <nav
+            className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden px-2"
+            aria-label="Home"
           >
-            <SquarePen
-              className="h-3.5 w-3.5 text-muted-foreground"
-              strokeWidth={2}
-            />
-            New chat
-          </button>
-          {main.map((id) => (
-            <NavBtn key={id} id={id} />
-          ))}
-          {more.length ? (
-            <MoreMenu items={more} active={moreActive} onOpen={openNav} />
-          ) : null}
-          {pinnedItems.length ? (
-            <div className="pt-3">
-              <p className="px-3 pb-1 text-[12px] text-muted-foreground">
-                Pinned
-              </p>
-              {pinnedItems.map((item) => (
-                <PinnedRow
-                  key={`${item.kind}-${item.id}`}
-                  kind={item.kind}
-                  id={item.id}
-                  title={item.title}
-                  leading={<PinnedLeading item={item} />}
-                  active={
-                    item.kind === "thread"
-                      ? threadId === item.id
-                      : item.kind === "connector"
-                        ? connectorId === item.id && spaceId === "connectors"
-                        : projectId === item.id && !threadId
-                  }
-                  pinned={isPinned(item.kind, item.id)}
-                  onOpen={() => {
-                    if (item.kind === "thread") openThread(item.id);
-                    else if (item.kind === "connector") openConnector(item.id);
-                    else openProject(item.id);
-                  }}
-                  onPin={() => togglePin(item.kind, item.id)}
-                  onReorder={reorderPins}
-                />
-              ))}
-            </div>
-          ) : null}
-        </nav>
-      )}
-
-      <div className="mt-auto p-2">
-        <DiscoverySidebarCard />
-        <AccountMenu />
-      </div>
-    </aside>
-    </div>
-  );
-}
-
-function MoreMenu({
-  items,
-  active,
-  onOpen,
-}: {
-  items: SidebarNavId[];
-  active: boolean;
-  onOpen: (id: SidebarNavId) => void;
-}) {
-  return (
-    <Dropdown
-      className="w-full"
-      trigger={({ open, toggle }) => (
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={toggle}
-          className={cn(
-            "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
-            open || active
-              ? "bg-sidebar-accent font-medium"
-              : "hover:bg-sidebar-accent",
-          )}
-        >
-          <Ellipsis
-            className="h-3.5 w-3.5 text-muted-foreground"
-            strokeWidth={2}
-          />
-          More
-        </button>
-      )}
-    >
-      {(close) =>
-        items.length ? (
-          items.map((id) => {
-            const Icon = navIcon(id);
-            const label = navLabel(id);
-            if (!label) return null;
-            return (
+            <div className="min-h-0 shrink overflow-y-auto">
               <button
-                key={id}
                 type="button"
-                onClick={() => {
-                  close();
-                  onOpen(id);
-                }}
-                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[13.5px] transition-colors duration-200 hover:bg-muted"
+                onClick={() => newChat()}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
+                  chatActive
+                    ? "bg-sidebar-accent font-medium"
+                    : "hover:bg-sidebar-accent",
+                )}
               >
-                <Icon
-                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                <SquarePen
+                  className="h-3.5 w-3.5 text-muted-foreground"
                   strokeWidth={2}
                 />
-                {label}
+                New chat
               </button>
-            );
-          })
-        ) : (
-          <p className="px-3 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
-            Move sidebar links into More from Configure.
-          </p>
-        )
-      }
-    </Dropdown>
+              {main.map((id) => (
+                <NavBtn key={id} id={id} />
+              ))}
+            </div>
+
+            <div className="relative mt-3 min-h-0 flex-1 overflow-hidden">
+              <div className="h-full overflow-y-auto">
+                <p className="px-3 pb-1 text-[12px] text-muted-foreground">
+                  Primary
+                </p>
+                {primaryItems.length ? (
+                  primaryItems.map(renderPinnedRow)
+                ) : (
+                  <p className="px-3 py-1.5 text-[12px] text-muted-foreground/70">
+                    No primary pins
+                  </p>
+                )}
+              </div>
+
+              <div
+                className={cn(
+                  "absolute inset-0 z-20 flex flex-col overflow-hidden rounded-t-[14px] border border-b-0 border-sidebar-border bg-sidebar transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                  secondaryOpen
+                    ? "translate-y-0 shadow-[0_-8px_24px_oklch(0_0_0/0.08)]"
+                    : "pointer-events-none translate-y-full",
+                )}
+                aria-hidden={!secondaryOpen}
+              >
+                <div className="flex shrink-0 items-center gap-2 px-3 pt-2.5 pb-1">
+                  <p className="min-w-0 flex-1 text-[12px] text-muted-foreground">
+                    Secondary
+                  </p>
+                  <button
+                    type="button"
+                    aria-label="Close secondary"
+                    onClick={() => setSecondaryOpen(false)}
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+                  {secondaryItems.length ? (
+                    secondaryItems.map(renderPinnedRow)
+                  ) : (
+                    <p className="px-1 py-1.5 text-[12px] text-muted-foreground/70">
+                      Pin secondary items here
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </nav>
+
+          {!secondaryOpen ? (
+            <div className="relative z-30 flex shrink-0 justify-center px-2 pb-2">
+              <button
+                type="button"
+                aria-expanded={false}
+                aria-label="Show secondary pins"
+                onClick={() => setSecondaryOpen(true)}
+                className="h-8 w-full rounded-[10px] border border-sidebar-border bg-transparent text-[12.5px] font-medium tracking-[-0.01em] text-sidebar-foreground/80 transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+              >
+                Secondary
+              </button>
+            </div>
+          ) : null}
+        </>
+      )}
+    </aside>
+    </div>
   );
 }
 
@@ -491,9 +455,7 @@ function PinnedRow({
   id,
   title,
   active,
-  pinned,
   onOpen,
-  onPin,
   onReorder,
   leading,
 }: {
@@ -501,9 +463,7 @@ function PinnedRow({
   id: string;
   title: string;
   active: boolean;
-  pinned: boolean;
   onOpen: () => void;
-  onPin: () => void;
   onReorder: (
     from: { kind: PinKind; id: string },
     to: { kind: PinKind; id: string },
@@ -588,25 +548,7 @@ function PinnedRow({
       >
         <GripVertical className="h-3.5 w-3.5" strokeWidth={1.8} />
       </button>
-      <button
-        type="button"
-        aria-label={pinned ? "Unpin" : "Pin"}
-        onClick={(event) => {
-          event.stopPropagation();
-          onPin();
-        }}
-        className={cn(
-          "mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-opacity duration-200 hover:text-foreground",
-          active
-            ? "opacity-100"
-            : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
-        )}
-      >
-        <Pin
-          className={cn("h-3 w-3", pinned && "fill-current text-foreground")}
-          strokeWidth={2}
-        />
-      </button>
+      <PinControl kind={kind} id={id} className="mr-1" />
     </div>
   );
 }

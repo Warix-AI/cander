@@ -3,9 +3,9 @@
 import { useMemo, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import {
+  DashBtn,
   DashFrame,
   LayoutToggle,
-  Pill,
   ScopeToggle,
   SpaceSettingsButton,
 } from "@/components/spaces/ItemSet";
@@ -66,17 +66,17 @@ export function FilesLibrary({
     <div className={compact || hideChrome ? "" : "mt-4"}>
       {!compact && !hideChrome ? (
         <div className="mb-6 flex flex-wrap items-center gap-2">
-          <Pill
+          <DashBtn
             onClick={() => addFile("folder", "Folder", "Untitled folder")}
           >
             New folder
-          </Pill>
-          <Pill
+          </DashBtn>
+          <DashBtn
             primary
             onClick={() => addFile("document", "PDF", "Untitled.pdf")}
           >
             Upload
-          </Pill>
+          </DashBtn>
         </div>
       ) : null}
 

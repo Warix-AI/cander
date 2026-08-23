@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { LayoutToggle, ScopeToggle } from "@/components/spaces/ItemSet";
 import {
@@ -28,12 +28,14 @@ export function PlatformPreviewGrid({
   empty = "Nothing here yet.",
   kind = "product",
   filters,
+  actions,
 }: {
   items: PreviewEntry[];
   onOpen?: (id: string) => void;
   empty?: string;
   kind?: PreviewKind;
   filters?: { id: string; label: string }[];
+  actions?: ReactNode;
 }) {
   const { spaceLayout, setSpaceLayout } = useApp();
   const [scope, setScope] = useState(filters?.[0]?.id ?? "all");
@@ -45,12 +47,13 @@ export function PlatformPreviewGrid({
 
   return (
     <>
-      <div className="flex flex-col gap-3 @min-[420px]:flex-row @min-[420px]:flex-wrap @min-[420px]:items-center @min-[420px]:justify-between">
-        {filters?.length ? (
-          <ScopeToggle value={scope} onChange={setScope} options={filters} />
-        ) : (
-          <span />
-        )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {actions}
+          {filters?.length ? (
+            <ScopeToggle value={scope} onChange={setScope} options={filters} />
+          ) : null}
+        </div>
         <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
       </div>
       <div className="mt-5">

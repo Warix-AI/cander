@@ -6,6 +6,7 @@ import { MobileArmedPanelChrome } from "@/components/shell/MobileSurfaceChrome";
 import { TopRail } from "@/components/shell/TopRail";
 import { useApp } from "@/components/app/AppProvider";
 import { useMobileShell } from "@/lib/use-media-query";
+import { useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 export function SplitMainLayout({ children }: { children: ReactNode }) {
@@ -19,6 +20,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
     setPanelMode,
   } = useApp();
   const mobile = useMobileShell();
+  const floating = useShellStyle() === "floating";
   const bannerFlush = view === "space" && !drafting && !thread;
   const panelOn = panelMode !== "collapsed";
   const immersive = panelMode === "immersive";
@@ -101,6 +103,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
               slideWidth > 0 &&
                 showChat &&
                 !mobileExclusive &&
+                !floating &&
                 "border-l border-border",
             )}
             style={

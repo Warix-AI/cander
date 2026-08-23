@@ -13,6 +13,7 @@ import { StudioPanel } from "@/components/panels/StudioPanel";
 import { useApp } from "@/components/app/AppProvider";
 import { SplitHandle } from "@/components/shell/SplitHandle";
 import { useMobileShell } from "@/lib/use-media-query";
+import { SHELL_FLOAT_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 export function ContextPanel() {
@@ -28,6 +29,8 @@ export function ContextPanel() {
     skillId,
     jobId,
   } = useApp();
+  const shell = useShellStyle();
+  const floating = shell === "floating";
 
   const showEmpty =
     view === "chat" &&
@@ -42,7 +45,10 @@ export function ContextPanel() {
   return (
     <aside
       className={cn(
-        "@container flex h-full min-h-0 min-w-0 flex-col border-l border-border bg-background",
+        "@container flex h-full min-h-0 min-w-0 flex-col bg-background",
+        floating
+          ? cn("my-3 mr-3 overflow-hidden border border-border", SHELL_FLOAT_RADIUS)
+          : "border-l border-border",
         !dragging &&
           "transition-[width] duration-[550ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
       )}

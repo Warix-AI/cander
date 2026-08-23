@@ -97,6 +97,8 @@ export const courierPlans: {
     cta: "Choose Ultra",
     includes: "Everything in Max, plus",
     points: [
+      "One production machine per Ultra seat",
+      "Machine-only seats (no extra login)",
       "Production APIs and keys",
       "Production hosting",
       "Infrastructure management",
@@ -331,7 +333,7 @@ export const pricingFaqs: { q: string; a: string }[] = [
   },
   {
     q: "What’s Ultra?",
-    a: "Ultra is a full plan at $300 per user per month — not an add-on. Ultra members can manage production infrastructure and authorize teammates to use shared models and deployments.",
+    a: "Ultra is $300 per seat per month — not an add-on. Each Ultra seat licenses one production machine. Seats can attach to a person, or stay machine-only so one admin can run a fleet without creating extra logins. Ultra members can manage production infrastructure and authorize teammates to use shared models and deployments.",
   },
   {
     q: "Need something custom?",

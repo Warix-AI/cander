@@ -111,6 +111,12 @@
   --color-accent: var(--accent);
   --color-border: var(--border);
   --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -159,6 +165,150 @@ body {
   letter-spacing: var(--letter-spacing);
   font-size: 14.5px;
   line-height: 1.5;
+}
+
+/* Signed-in app personalization (Appearance sliders) */
+.courier-app-appearance {
+  --font-size-app: 14.5px;
+  --density: 1;
+  --motion: 1;
+  --app-hue: 260;
+  --app-chroma: 0.06;
+  --app-accent-chroma: 0.19;
+  font-size: var(--font-size-app);
+  font-family: var(--font-sans);
+  letter-spacing: var(--letter-spacing);
+  --spacing: calc(0.25rem * var(--density));
+  --app-transition: calc(200ms * var(--motion));
+  --chart-1: oklch(0.81 var(--app-accent-chroma) calc(var(--app-hue) - 8));
+  --chart-2: oklch(0.62 var(--app-accent-chroma) var(--app-hue));
+  --chart-3: oklch(0.55 var(--app-accent-chroma) calc(var(--app-hue) + 3));
+  --chart-4: oklch(0.49 var(--app-accent-chroma) calc(var(--app-hue) + 4));
+  --chart-5: oklch(0.42 calc(var(--app-accent-chroma) * 0.9) calc(var(--app-hue) + 6));
+}
+
+/* Light tinted / mono surfaces */
+html:not(.dark) .courier-app-appearance[data-palette="tint"],
+html:not(.dark) .courier-app-appearance[data-palette="mono"] {
+  --background: oklch(0.995 var(--app-chroma) var(--app-hue));
+  --card: oklch(0.992 calc(var(--app-chroma) * 0.7) var(--app-hue));
+  --muted: oklch(0.95 calc(var(--app-chroma) * 0.85) var(--app-hue));
+  --accent: oklch(0.94 calc(var(--app-chroma) * 0.9) var(--app-hue));
+  --border: oklch(0.92 calc(var(--app-chroma) * 0.6) var(--app-hue));
+  --input: oklch(0.96 calc(var(--app-chroma) * 0.5) var(--app-hue));
+  --sidebar: oklch(0.955 calc(var(--app-chroma) * 0.8) var(--app-hue));
+  --sidebar-accent: oklch(0.91 calc(var(--app-chroma) * 0.9) var(--app-hue));
+  --sidebar-border: oklch(0.9 calc(var(--app-chroma) * 0.55) var(--app-hue));
+  --secondary: oklch(0.88 calc(var(--app-chroma) * 0.5) var(--app-hue));
+}
+
+/* Dark tinted / mono surfaces */
+html.dark .courier-app-appearance[data-palette="tint"],
+html.dark .courier-app-appearance[data-palette="mono"] {
+  --background: oklch(0.205 var(--app-chroma) var(--app-hue));
+  --card: oklch(0.175 calc(var(--app-chroma) * 0.85) var(--app-hue));
+  --muted: oklch(0.269 calc(var(--app-chroma) * 0.7) var(--app-hue));
+  --accent: oklch(0.32 calc(var(--app-chroma) * 0.9) var(--app-hue));
+  --border: oklch(0.28 calc(var(--app-chroma) * 0.55) var(--app-hue));
+  --input: oklch(0.269 calc(var(--app-chroma) * 0.5) var(--app-hue));
+  --sidebar: oklch(0.175 calc(var(--app-chroma) * 0.75) var(--app-hue));
+  --sidebar-accent: oklch(0.23 calc(var(--app-chroma) * 0.85) var(--app-hue));
+  --sidebar-border: oklch(0.24 calc(var(--app-chroma) * 0.5) var(--app-hue));
+  --secondary: oklch(0.269 calc(var(--app-chroma) * 0.55) var(--app-hue));
+  --popover: oklch(0.2 calc(var(--app-chroma) * 0.7) var(--app-hue));
+}
+
+.courier-app-appearance .rounded-box {
+  border-radius: var(--radius);
+}
+
+/* Hard-coded 10px radii follow the Shapes slider inside appearance scopes */
+.courier-app-appearance :is(
+  [class*="rounded-[10px]"],
+  [class*="rounded-[8px]"],
+  [class*="rounded-[12px]"]
+) {
+  border-radius: var(--radius) !important;
+}
+
+.courier-app-appearance :is([class*="rounded-[18px]"]) {
+  border-radius: max(var(--radius), 14px) !important;
+}
+
+/* Density shows up on common padding/gap utilities */
+.courier-app-appearance {
+  --space-1: calc(0.25rem * var(--density));
+  --space-2: calc(0.5rem * var(--density));
+  --space-3: calc(0.75rem * var(--density));
+  --space-4: calc(1rem * var(--density));
+}
+
+.courier-app-appearance[data-motion="off"] *,
+.courier-app-appearance[data-motion="off"] *::before,
+.courier-app-appearance[data-motion="off"] *::after {
+  transition-duration: 0ms !important;
+  animation-duration: 0ms !important;
+  animation-delay: 0ms !important;
+}
+
+/*
+  Appearance slider: original thin track (12px), pill 25% taller (15px) × 30px wide.
+*/
+.appearance-slider-track {
+  height: 12px !important;
+  min-height: 12px !important;
+  max-height: 12px !important;
+}
+
+.appearance-slider-thumb {
+  height: 15px !important;
+  min-height: 15px !important;
+  max-height: 15px !important;
+  width: 30px !important;
+}
+
+.appearance-range {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 15px;
+  margin: 0;
+  background: transparent;
+  outline: none;
+}
+
+.appearance-range::-webkit-slider-runnable-track {
+  height: 12px;
+  border-radius: 999px;
+  background: var(--muted);
+}
+
+.appearance-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 30px;
+  height: 15px;
+  margin-top: -1.5px;
+  border-radius: 999px;
+  border: none;
+  background: var(--foreground);
+  cursor: pointer;
+}
+
+.appearance-range::-moz-range-track {
+  height: 12px;
+  border-radius: 999px;
+  background: var(--muted);
+}
+
+.appearance-range::-moz-range-thumb {
+  width: 30px;
+  height: 15px;
+  border-radius: 999px;
+  border: none;
+  background: var(--foreground);
+  cursor: pointer;
 }
 
 ::selection {

@@ -72,33 +72,25 @@ export function WorkDashboard() {
         <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
       </div>
 
-      <section className="mt-8">
+      <section className="mt-5">
         <h2 className="text-[13px] font-medium tracking-[-0.01em] text-muted-foreground">
           {workSectionTitle(scope)}
         </h2>
-        {spaceLayout === "cards" ? (
+        {!items.length ? (
+          <p className="mt-3 px-3 py-4 text-[13px] text-muted-foreground">
+            {workEmptyCopy(scope)}
+          </p>
+        ) : spaceLayout === "cards" ? (
           <div className="mt-3 grid grid-cols-1 gap-x-3 gap-y-5 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3">
-            {items.length ? (
-              items.map((item) => (
-                <WorkCard key={item.id} item={item} onAsk={ask} />
-              ))
-            ) : (
-              <p className="col-span-full px-1 py-4 text-[13px] text-muted-foreground">
-                {workEmptyCopy(scope)}
-              </p>
-            )}
+            {items.map((item) => (
+              <WorkCard key={item.id} item={item} onAsk={ask} />
+            ))}
           </div>
         ) : (
           <div className="mt-3 divide-y divide-border rounded-[10px] border border-border">
-            {items.length ? (
-              items.map((item) => (
-                <WorkRow key={item.id} item={item} onAsk={ask} />
-              ))
-            ) : (
-              <p className="px-4 py-6 text-[13px] text-muted-foreground">
-                {workEmptyCopy(scope)}
-              </p>
-            )}
+            {items.map((item) => (
+              <WorkRow key={item.id} item={item} onAsk={ask} />
+            ))}
           </div>
         )}
       </section>

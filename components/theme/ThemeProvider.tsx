@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
+import { getAppearanceSnapshot, setAppearance } from "@/lib/appearance";
 import {
   getThemeServerSnapshot,
   getThemeSnapshot,
@@ -14,10 +15,24 @@ const ThemeContext = createContext<{
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
 }>({
-  theme: "dark",
+  theme: "light",
   setTheme: () => {},
   toggleTheme: () => {},
 });
+
+/** Keep marketing toggle and app appearance sliders on the same theme. */
+function applyTheme(next: Theme) {
+  const appearance = getAppearanceSnapshot();
+  if (next === "light" && appearance.color >= 45) {
+    setAppearance({ color: 8 });
+    return;
+  }
+  if (next === "dark" && appearance.color < 45) {
+    setAppearance({ color: 50 });
+    return;
+  }
+  persistTheme(next);
+}
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useSyncExternalStore(
@@ -27,11 +42,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 
   const setTheme = useCallback((next: Theme) => {
-    persistTheme(next);
+    applyTheme(next);
   }, []);
 
   const toggleTheme = useCallback(() => {
-    persistTheme(theme === "dark" ? "light" : "dark");
+    applyTheme(theme === "dark" ? "light" : "dark");
   }, [theme]);
 
   const value = useMemo(

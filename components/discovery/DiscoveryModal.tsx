@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { DiscoveryIcon } from "@/components/discovery/DiscoveryIcon";
+import { DashBtn } from "@/components/spaces/ItemSet";
 import { Modal } from "@/components/ui/Modal";
 import {
   subscribeInstalledConnectors,
@@ -135,30 +136,20 @@ export function DiscoveryModal() {
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2 px-6 pt-4 pb-6">
-        <button
-          type="button"
-          onClick={() => {
-            softClose();
-            openDiscovery();
-          }}
-          className="mr-auto inline-flex h-9 items-center rounded-full px-3.5 text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          Discover more
-        </button>
-        <button
-          type="button"
-          onClick={close}
-          className="inline-flex h-9 items-center rounded-full px-3.5 text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          Not now
-        </button>
-        <button
-          type="button"
-          onClick={onPrimary}
-          className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium tracking-[-0.01em] text-primary-foreground"
-        >
+        <div className="mr-auto">
+          <DashBtn
+            onClick={() => {
+              softClose();
+              openDiscovery();
+            }}
+          >
+            Discover more
+          </DashBtn>
+        </div>
+        <DashBtn onClick={close}>Not now</DashBtn>
+        <DashBtn primary onClick={onPrimary}>
           {!isLast && steps ? "Continue" : primary.label}
-        </button>
+        </DashBtn>
       </div>
     </Modal>
   );

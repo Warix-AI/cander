@@ -2,11 +2,15 @@
 
 import { useState, type ReactNode } from "react";
 import {
+  Activity,
+  BookOpen,
+  Gauge,
+  Radio,
+} from "lucide-react";
+import {
   AreaChart,
   BarPair,
-  ChartCard,
   FunnelChart,
-  Kpi,
 } from "@/components/platform/Charts";
 import { useApp } from "@/components/app/AppProvider";
 import {
@@ -19,29 +23,75 @@ import {
 import {
   apiKeys,
   platformApis,
+  platformDeployments,
   platformDocs,
-  workspaceResources,
   workspaces,
 } from "@/lib/data";
-import { memberName, sharedResourcesFor } from "@/lib/entitlements";
 import { nextPlanTier } from "@/lib/plan-entitlements";
 import { PlatformAskButton } from "@/components/platform/PlatformChatDock";
 import {
-  PlatformPreviewGrid,
-  apiPreviews,
-  deploymentFilters,
-  deploymentPreviews,
-  hostingPreviews,
-  keyPreviews,
-  modelFilters,
-  modelPreviews,
-} from "@/components/platform/PlatformPreview";
-import { DashFrame, Pill } from "@/components/spaces/ItemSet";
+  DataList,
+  DataRow,
+  EmptyHint,
+  GhostBtn,
+  ItemCard,
+  MeterCard,
+  PanelToolbar,
+  Section,
+  SoftNote,
+  StatCard,
+  StatusPill,
+} from "@/components/platform/DevChrome";
+import { HostingPanel } from "@/components/platform/HostingPanel";
+import { ModelsPanel } from "@/components/platform/ModelsPanel";
+import { DashFrame, ScopeToggle } from "@/components/spaces/ItemSet";
 import { developmentView } from "@/lib/product-copy";
-import type { HostingMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const requestSeries = [42, 48, 45, 61, 70, 68, 82, 90, 86, 98, 112, 108];
+
+const LOG_ROWS = [
+  {
+    time: "14:11",
+    route: "chat.completions",
+    status: 200,
+    latency: "340ms",
+    model: "gemma-4-e4b",
+    where: "on-device",
+  },
+  {
+    time: "14:09",
+    route: "embeddings",
+    status: 200,
+    latency: "22ms",
+    model: "embedding-3",
+    where: "cloud",
+  },
+  {
+    time: "14:02",
+    route: "chat.completions",
+    status: 200,
+    latency: "180ms",
+    model: "local-lan",
+    where: "local",
+  },
+  {
+    time: "13:58",
+    route: "images.generations",
+    status: 429,
+    latency: "12ms",
+    model: "cloud",
+    where: "cloud",
+  },
+  {
+    time: "13:51",
+    route: "tools",
+    status: 200,
+    latency: "96ms",
+    model: "mistral-small",
+    where: "cloud",
+  },
+];
 
 export function PlatformMain() {
   const {
@@ -50,85 +100,96 @@ export function PlatformMain() {
     billingPlan,
     entitlements,
     orgMembers,
-    workspaceId,
-    actor,
   } = useApp();
   const bill = billingFor(hostingMode, {
     seatMix: orgSeatMix(orgMembers),
     plan: billingPlan,
   });
-  const shared = sharedResourcesFor(workspaceId, actor, entitlements);
 
   if (platformNav === "overview") {
+    const hostingLabel =
+      hostingModes.find((item) => item.id === hostingMode)?.label ?? hostingMode;
+
     return (
       <Page
         title="Overview"
         kicker={developmentView.kicker}
         subtitle="Traffic, runtimes, and production capacity for this workspace."
       >
-        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-[10px] border border-border bg-border @min-[360px]:grid-cols-2 @min-[640px]:grid-cols-4">
-          <Kpi label="Requests" value="1.24M" delta="+12% vs last month" />
-          <Kpi label="Completion rate" value="81%" delta="+3.1 pts" />
-          <Kpi label="Uptime" value="99.97%" />
-          <Kpi
-            label="Development"
-            value={entitlements.devDepthLabel}
-          />
-        </div>
+        <div className="space-y-6">
+          <Section title="Snapshot">
+            <div className="grid grid-cols-1 gap-3 @min-[360px]:grid-cols-2 @min-[720px]:grid-cols-4">
+              <StatCard
+                icon={Activity}
+                label="Requests"
+                value="1.24M"
+                hint="+12% vs last month"
+              />
+              <StatCard
+                icon={Gauge}
+                label="Completion rate"
+                value="81%"
+                hint="+3.1 pts"
+              />
+              <StatCard icon={Radio} label="Uptime" value="99.97%" />
+              <StatCard
+                icon={BookOpen}
+                label="Development"
+                value={entitlements.devDepthLabel}
+              />
+            </div>
+          </Section>
 
-        <div className="mt-5 grid grid-cols-1 gap-4 @min-[560px]:grid-cols-2">
-          <ChartCard title="Traffic" hint="Last 12 weeks">
-            <AreaChart values={requestSeries} />
-          </ChartCard>
-          <ChartCard title="Funnel" hint="This month">
-            <FunnelChart
-              stages={[
-                { label: "Requests", value: "1.24M", pct: 100 },
-                { label: "Completions", value: "1.01M", pct: 81 },
-                { label: "Cache hits", value: "420k", pct: 34 },
-                { label: "Routed locally", value: "88k", pct: 7 },
-              ]}
-            />
-          </ChartCard>
-        </div>
+          <Section title="Traffic" hint="Last 12 weeks">
+            <div className="rounded-[10px] border border-border bg-card p-4 sm:p-5">
+              <AreaChart values={requestSeries} />
+            </div>
+          </Section>
 
-        <div className="mt-5 grid grid-cols-1 gap-4 @min-[560px]:grid-cols-2">
-          <ChartCard title="Where it ran">
-            <BarPair
-              left={{ label: "Cloud", pct: 64 }}
-              right={{ label: "Local + on-device", pct: 36 }}
-            />
-            <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-              Active hosting is{" "}
-              {hostingModes.find((item) => item.id === hostingMode)?.label}.
-              Seats are billed in Settings → Plans. Hosting only chooses where
-              inference runs.
-            </p>
-          </ChartCard>
-          <ChartCard title="Runtime mix">
-            <div className="space-y-2.5">
+          <div className="grid grid-cols-1 gap-6 @min-[640px]:grid-cols-2">
+            <Section title="Funnel" hint="This month">
+              <div className="rounded-[10px] border border-border bg-card p-4 sm:p-5">
+                <FunnelChart
+                  stages={[
+                    { label: "Requests", value: "1.24M", pct: 100 },
+                    { label: "Completions", value: "1.01M", pct: 81 },
+                    { label: "Cache hits", value: "420k", pct: 34 },
+                    { label: "Routed locally", value: "88k", pct: 7 },
+                  ]}
+                />
+              </div>
+            </Section>
+
+            <Section title="Where it ran">
+              <div className="rounded-[10px] border border-border bg-card p-4 sm:p-5">
+                <BarPair
+                  left={{ label: "Cloud", pct: 64 }}
+                  right={{ label: "Local + on-device", pct: 36 }}
+                />
+                <p className="mt-3 text-[12.5px] leading-relaxed text-muted-foreground">
+                  Active hosting is {hostingLabel}. Seats bill in Settings →
+                  Plans; hosting only chooses where inference runs.
+                </p>
+              </div>
+            </Section>
+          </div>
+
+          <Section title="Runtime mix">
+            <div className="space-y-3">
               {[
                 { name: "On-device Gemma 4", pct: 38 },
                 { name: "Cloud large", pct: 41 },
                 { name: "Local LAN", pct: 21 },
               ].map((row) => (
-                <div key={row.name}>
-                  <div className="mb-1 flex justify-between text-[12px]">
-                    <span>{row.name}</span>
-                    <span className="font-mono text-muted-foreground">
-                      {row.pct}%
-                    </span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-chart-3"
-                      style={{ width: `${row.pct}%` }}
-                    />
-                  </div>
-                </div>
+                <MeterCard
+                  key={row.name}
+                  label={row.name}
+                  valueLabel={`${row.pct}%`}
+                  pct={row.pct}
+                />
               ))}
             </div>
-          </ChartCard>
+          </Section>
         </div>
       </Page>
     );
@@ -137,40 +198,13 @@ export function PlatformMain() {
   if (platformNav === "hosting") return <HostingPage />;
 
   if (platformNav === "models") {
-    const managed = workspaceResources.filter(
-      (item) => item.workspaceId === workspaceId && item.status === "active",
-    );
     return (
       <Page
         title="Models"
         kicker="Runtime"
         subtitle="Cloud, local, and on-device models this workspace can run."
       >
-        {managed.length ? (
-          <div className="mb-5 space-y-2">
-            {managed.map((item) => {
-              const owner = memberName(item.ownerId, orgMembers);
-              const authorized = shared.some((row) => row.id === item.id);
-              return (
-                <div
-                  key={item.id}
-                  className="rounded-[10px] border border-border bg-card px-4 py-3 text-[13px]"
-                >
-                  <p className="font-medium tracking-[-0.01em]">{item.name}</p>
-                  <p className="mt-1 text-muted-foreground">
-                    Managed by {owner}
-                    {authorized ? " · authorized for you" : ""}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        ) : null}
-        <PlatformPreviewGrid
-          items={modelPreviews({ hostingMode })}
-          filters={modelFilters()}
-          empty="No models in this filter."
-        />
+        <ModelsPanel />
       </Page>
     );
   }
@@ -179,22 +213,7 @@ export function PlatformMain() {
 
   if (platformNav === "keys") return <KeysPage />;
 
-  if (platformNav === "deployments") {
-    return (
-      <Page
-        title="Deployments"
-        kicker="Hosting"
-        subtitle="Where this workspace’s runtime is live."
-      >
-        <TestAccessNote />
-        <PlatformPreviewGrid
-          items={deploymentPreviews()}
-          filters={deploymentFilters()}
-          empty="No deployments in this filter."
-        />
-      </Page>
-    );
-  }
+  if (platformNav === "deployments") return <DeploymentsPage />;
 
   if (platformNav === "logs") {
     return (
@@ -203,11 +222,39 @@ export function PlatformMain() {
         kicker="Infrastructure"
         subtitle="Recent platform traffic and errors."
       >
-        <pre className="overflow-x-auto rounded-[10px] border border-border bg-card p-5 font-mono text-[12px] leading-relaxed text-muted-foreground">
-          {`14:11  chat.completions  200  340ms  gemma-4-e4b  on-device
-14:09  embeddings         200   22ms  cloud
-14:02  chat.completions  200  180ms  local-lan`}
-        </pre>
+        <Section
+          title="Recent requests"
+          description="Newest first · live demo sample."
+        >
+          <DataList>
+            {LOG_ROWS.map((row) => (
+              <div
+                key={`${row.time}-${row.route}-${row.model}`}
+                className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[13.5px] font-medium tracking-[-0.01em]">
+                      {row.route}
+                    </p>
+                    <StatusPill
+                      tone={row.status >= 400 ? "danger" : "muted"}
+                    >
+                      {row.status}
+                    </StatusPill>
+                  </div>
+                  <p className="mt-1 font-mono text-[11.5px] text-muted-foreground">
+                    {row.model} · {row.where}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3 font-mono text-[12px] text-muted-foreground">
+                  <span>{row.latency}</span>
+                  <span>{row.time}</span>
+                </div>
+              </div>
+            ))}
+          </DataList>
+        </Section>
       </Page>
     );
   }
@@ -233,59 +280,60 @@ export function PlatformMain() {
             : "Pooled for this account. Split by workspace starts on Max."
         }
       >
-        <div className="grid grid-cols-1 gap-4 @min-[560px]:grid-cols-2">
-          <ChartCard title="Requests" hint="12 weeks">
-            <AreaChart values={requestSeries} />
-          </ChartCard>
-          {splitAccounts ? (
-            <ChartCard title="By account">
-              <div className="space-y-2.5">
+        <div className="space-y-6">
+          <Section title="Requests" hint="Last 12 weeks">
+            <div className="rounded-[10px] border border-border bg-card p-4 sm:p-5">
+              <AreaChart values={requestSeries} />
+            </div>
+          </Section>
+
+          <Section
+            title={splitAccounts ? "By account" : "This account"}
+            description={
+              splitAccounts
+                ? "Share of requests across workspaces."
+                : "Usage is pooled on Pro. Max splits requests by workspace."
+            }
+          >
+            {splitAccounts ? (
+              <div className="space-y-3">
                 {split.map((row) => (
-                  <div key={row.id}>
-                    <div className="mb-1 flex justify-between text-[12px]">
-                      <span>{row.name}</span>
-                      <span className="font-mono text-muted-foreground">
-                        {row.requests} · {row.pct}%
-                      </span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-chart-3"
-                        style={{ width: `${row.pct}%` }}
-                      />
-                    </div>
-                  </div>
+                  <MeterCard
+                    key={row.id}
+                    label={row.name}
+                    valueLabel={`${row.requests} · ${row.pct}%`}
+                    pct={row.pct}
+                  />
                 ))}
               </div>
-            </ChartCard>
-          ) : (
-            <ChartCard title="This account">
-              <p className="text-[13px] leading-relaxed text-muted-foreground">
-                Usage is pooled on Pro. Max splits requests by workspace.
-              </p>
-              <p className="mt-4 font-mono text-[12px] text-muted-foreground">
-                1.24M requests · 12 weeks
-              </p>
-            </ChartCard>
-          )}
-        </div>
-        <div className="mt-4 overflow-hidden rounded-[10px] border border-border">
-          {splitAccounts
-            ? split.map((row) => (
-                <Row
-                  key={row.id}
-                  k={row.name}
-                  v={`${row.requests} requests · ${row.pct}%`}
-                />
-              ))
-            : null}
-          <Row k="Cloud requests" v="1.2M · metered" />
-          <Row k="Local + on-device" v="Unlimited on your hardware" />
-          <Row k="Plan" v={planLabel(bill.plan)} />
-          <Row
-            k="Seats"
-            v={`${bill.users} · ${money(bill.courier)}/month`}
-          />
+            ) : (
+              <SoftNote>1.24M requests · 12 weeks · pooled</SoftNote>
+            )}
+          </Section>
+
+          <Section title="Capacity">
+            <DataList>
+              {splitAccounts
+                ? split.map((row) => (
+                    <DataRow
+                      key={row.id}
+                      label={row.name}
+                      value={`${row.requests} · ${row.pct}%`}
+                    />
+                  ))
+                : null}
+              <DataRow label="Cloud requests" value="1.2M · metered" />
+              <DataRow
+                label="Local + on-device"
+                value="Unlimited on your hardware"
+              />
+              <DataRow label="Plan" value={planLabel(bill.plan)} />
+              <DataRow
+                label="Seats"
+                value={`${bill.users} · ${money(bill.courier)}/month`}
+              />
+            </DataList>
+          </Section>
         </div>
       </Page>
     );
@@ -299,17 +347,31 @@ export function PlatformMain() {
       kicker="Developers"
       subtitle="Guides and SDKs for development in Courier."
     >
-      <PlatformGrid>
-        {platformDocs.map((item) => (
-          <PlatformCard
-            key={item.title}
-            title={item.title}
-            body={item.body}
-            meta={item.kind}
-            mono
-          />
-        ))}
-      </PlatformGrid>
+      <Section
+        title="Guides"
+        description="SDKs and platform docs for this workspace."
+      >
+        <div className="grid grid-cols-1 gap-3 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3">
+          {platformDocs.map((item) => (
+            <ItemCard
+              key={item.title}
+              title={item.title}
+              meta={item.kind}
+              badge={<StatusPill tone="outline">{item.kind}</StatusPill>}
+              body={
+                <p
+                  className={cn(
+                    "text-[12.5px] leading-relaxed text-muted-foreground",
+                    item.kind === "SDK" && "break-all font-mono text-[12px]",
+                  )}
+                >
+                  {item.body}
+                </p>
+              }
+            />
+          ))}
+        </div>
+      </Section>
     </Page>
   );
 }
@@ -319,11 +381,20 @@ function ApisPage() {
   const [draft, setDraft] = useState<{ name: string; path: string } | null>(
     null,
   );
+  const [scope, setScope] = useState("all");
   const apis = [...extra, ...platformApis];
+  const visible =
+    scope === "all"
+      ? apis
+      : apis.filter((api) => api.method.toLowerCase() === scope);
 
   const addApi = () => {
     const name = draft?.name.trim() || "Custom API";
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "custom";
+    const slug =
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || "custom";
     const path = draft?.path.trim() || `/v1/${slug}`;
     setExtra((current) => [
       {
@@ -343,10 +414,30 @@ function ApisPage() {
       kicker="OpenAI-compatible"
       subtitle="Routes this workspace exposes for apps you build in Courier."
     >
-      <TestAccessNote />
+      <PanelToolbar
+        trailing={
+          <>
+            <GhostBtn onClick={() => setDraft({ name: "", path: "" })}>
+              Add API
+            </GhostBtn>
+            <UpgradeTrailing />
+          </>
+        }
+      >
+        <ScopeToggle
+          value={scope}
+          onChange={setScope}
+          options={[
+            { id: "all", label: "All" },
+            { id: "post", label: "POST" },
+            { id: "get", label: "GET" },
+          ]}
+        />
+      </PanelToolbar>
+
       {draft ? (
-        <article className="mb-5 rounded-[10px] border border-border bg-card p-5">
-          <p className="text-[15px] font-medium tracking-[-0.02em]">New API</p>
+        <div className="mt-6 rounded-[10px] border border-border bg-card px-4 py-4 sm:px-5">
+          <p className="text-[14px] font-medium tracking-[-0.02em]">New API</p>
           <input
             autoFocus
             value={draft.name}
@@ -369,32 +460,43 @@ function ApisPage() {
             className="mt-2 w-full rounded-[10px] border border-foreground/10 bg-background px-3 py-2 font-mono text-[12px] outline-none"
           />
           <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              onClick={addApi}
-              className="inline-flex h-10 items-center justify-center rounded-full bg-primary px-4 text-[13.5px] font-medium tracking-[-0.01em] text-primary-foreground hover:bg-foreground"
-            >
+            <GhostBtn primary onClick={addApi}>
               Add API
-            </button>
-            <button
-              type="button"
-              onClick={() => setDraft(null)}
-              className="inline-flex h-10 items-center justify-center rounded-full border border-foreground/15 px-4 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-            >
-              Cancel
-            </button>
+            </GhostBtn>
+            <GhostBtn onClick={() => setDraft(null)}>Cancel</GhostBtn>
           </div>
-        </article>
-      ) : (
-        <div className="mb-5">
-          <Pill onClick={() => setDraft({ name: "", path: "" })}>Add API</Pill>
         </div>
-      )}
-      <PlatformPreviewGrid
-        items={apiPreviews(apis)}
-        kind="skill"
-        empty="No APIs yet."
-      />
+      ) : null}
+
+      <div className="mt-6">
+        <Section
+          title="Routes"
+          description="OpenAI-compatible paths served for this workspace."
+        >
+          {visible.length ? (
+            <DataList>
+              {visible.map((api) => (
+                <DataRow
+                  key={api.id}
+                  label={
+                    <span className="flex flex-wrap items-center gap-2">
+                      {api.name}
+                      <StatusPill tone="outline">{api.method}</StatusPill>
+                    </span>
+                  }
+                  meta={
+                    <span className="font-mono text-[11.5px]">
+                      {api.path} · api.courier.dev
+                    </span>
+                  }
+                />
+              ))}
+            </DataList>
+          ) : (
+            <EmptyHint>No APIs in this filter.</EmptyHint>
+          )}
+        </Section>
+      </div>
     </Page>
   );
 }
@@ -409,122 +511,151 @@ function KeysPage() {
       kicker="Developers"
       subtitle="Credentials for apps and CI. Keep them out of source."
     >
-      <TestAccessNote />
-      <div className="mb-5">
-        <Pill
-          onClick={() => {
-            const stamp = Math.random().toString(36).slice(2, 6);
-            setExtra((current) => [
-              {
-                name: `Key ${current.length + 1}`,
-                hint: `crr_live_••••${stamp}`,
-                created: "Just now",
-              },
-              ...current,
-            ]);
-          }}
-        >
-          Add key
-        </Pill>
-      </div>
-      <PlatformPreviewGrid
-        items={keyPreviews(keys)}
-        kind="file"
-        empty="No keys yet."
-        onOpen={(hint) => {
-          void navigator.clipboard.writeText(hint);
-        }}
+      <PanelToolbar
+        trailing={
+          <>
+            <GhostBtn
+              onClick={() => {
+                const stamp = Math.random().toString(36).slice(2, 6);
+                setExtra((current) => [
+                  {
+                    name: `Key ${current.length + 1}`,
+                    hint: `crr_live_••••${stamp}`,
+                    created: "Just now",
+                  },
+                  ...current,
+                ]);
+              }}
+            >
+              Add key
+            </GhostBtn>
+            <UpgradeTrailing />
+          </>
+        }
       />
+
+      <div className="mt-6">
+        <Section
+          title="API keys"
+          description="Click a row to copy the hint to your clipboard."
+        >
+          {keys.length ? (
+            <DataList>
+              {keys.map((key) => (
+                <DataRow
+                  key={`${key.name}-${key.hint}`}
+                  label={key.name}
+                  meta={
+                    <span className="font-mono text-[11.5px]">{key.hint}</span>
+                  }
+                  value={`Created ${key.created}`}
+                  onClick={() => {
+                    void navigator.clipboard.writeText(key.hint);
+                  }}
+                />
+              ))}
+            </DataList>
+          ) : (
+            <EmptyHint>No keys yet.</EmptyHint>
+          )}
+        </Section>
+      </div>
     </Page>
   );
 }
 
-function TestAccessNote() {
+function DeploymentsPage() {
+  const [scope, setScope] = useState("all");
+  const visible =
+    scope === "all"
+      ? platformDeployments
+      : platformDeployments.filter(
+          (item) => item.status.toLowerCase() === scope,
+        );
+
+  return (
+    <Page
+      title="Deployments"
+      kicker="Hosting"
+      subtitle="Where this workspace’s runtime is live."
+    >
+      <PanelToolbar trailing={<UpgradeTrailing />}>
+        <ScopeToggle
+          value={scope}
+          onChange={setScope}
+          options={[
+            { id: "all", label: "All" },
+            { id: "active", label: "Active" },
+            { id: "standby", label: "Standby" },
+            { id: "ready", label: "Ready" },
+          ]}
+        />
+      </PanelToolbar>
+
+      <div className="mt-6">
+        <Section
+          title="Runtimes"
+          description="Cloud regions, LAN boxes, and on-device fleets."
+        >
+          {visible.length ? (
+            <div className="grid grid-cols-1 gap-3 @min-[480px]:grid-cols-2">
+              {visible.map((item) => (
+                <ItemCard
+                  key={item.name}
+                  title={item.name}
+                  meta={`${item.hosting} · ${item.hint}`}
+                  selected={item.status === "Active"}
+                  badge={
+                    <StatusPill
+                      tone={
+                        item.status === "Active"
+                          ? "active"
+                          : item.status === "Standby"
+                            ? "muted"
+                            : "outline"
+                      }
+                    >
+                      {item.status}
+                    </StatusPill>
+                  }
+                  body={
+                    <p className="text-[12.5px] text-muted-foreground">
+                      {item.status === "Active"
+                        ? "Serving production traffic for this workspace."
+                        : item.status === "Standby"
+                          ? "Warm failover — ready to promote."
+                          : "Available capacity, not currently primary."}
+                    </p>
+                  }
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyHint>No deployments in this filter.</EmptyHint>
+          )}
+        </Section>
+      </div>
+    </Page>
+  );
+}
+
+function UpgradeTrailing() {
   const { entitlements, openSettings } = useApp();
   const next = nextPlanTier(entitlements.plan);
   if (!next) return null;
   return (
-    <div className="mb-5 rounded-[10px] border border-border bg-card px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
-      {entitlements.devDepthLabel} development on {planLabel(entitlements.plan)}.
-      Upgrade to {planLabel(next)} for the next tier.{" "}
-      <button
-        type="button"
-        onClick={() => openSettings("plans")}
-        className="text-foreground underline-offset-2 hover:underline"
-      >
-        View plans
-      </button>
-    </div>
-  );
-}
-
-function PlatformGrid({ children }: { children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-1 gap-3 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3">
-      {children}
-    </div>
-  );
-}
-
-function PlatformCard({
-  title,
-  body,
-  meta,
-  mono = false,
-}: {
-  title: string;
-  body: string;
-  meta: string;
-  mono?: boolean;
-}) {
-  return (
-    <article className="rounded-[10px] border border-border bg-card p-5">
-      <p className="text-[15px] font-medium tracking-[-0.02em]">{title}</p>
-      <p
-        className={cn(
-          "mt-1.5 text-[13px] leading-relaxed text-muted-foreground",
-          mono && "break-all font-mono text-[12px]",
-        )}
-      >
-        {body}
-      </p>
-      <p className="mt-4 font-mono text-[11px] tracking-[0.06em] text-muted-foreground uppercase">
-        {meta}
-      </p>
-    </article>
+    <GhostBtn onClick={() => openSettings("plans")}>View plans</GhostBtn>
   );
 }
 
 function HostingPage() {
-  const { hostingMode, setHostingMode, openSettings, entitlements } = useApp();
-
   return (
     <Page
       title="Hosting"
       kicker="Capacity"
       subtitle="Cloud, Local, and On-device — same product, different runtimes. Not a plan."
     >
-      <p className="mb-5 max-w-2xl text-[13.5px] leading-relaxed text-muted-foreground">
-        Cloud is on every plan. Local and On-device start on Pro, and are
-        effectively unlimited on your hardware. Seats live in Settings.
-      </p>
-      <button
-        type="button"
-        onClick={() => openSettings("plans")}
-        className="mb-5 inline-flex h-10 items-center rounded-full border border-foreground/15 px-4 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-      >
-        View plans
-      </button>
-      <PlatformPreviewGrid
-        items={hostingPreviews(hostingMode).filter((item) =>
-          entitlements.hostingAllowed(item.id as HostingMode),
-        )}
-        onOpen={(id) => {
-          if (!entitlements.hostingAllowed(id as HostingMode)) return;
-          setHostingMode(id as HostingMode);
-        }}
-        empty="No hosting options."
-      />
+      <HostingPanel />
     </Page>
   );
 }
@@ -551,14 +682,5 @@ function Page({
     >
       {children}
     </DashFrame>
-  );
-}
-
-function Row({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="flex items-baseline justify-between border-b border-border px-5 py-3.5 last:border-b-0">
-      <span className="text-[14px]">{k}</span>
-      <span className="font-mono text-[12px] text-muted-foreground">{v}</span>
-    </div>
   );
 }

@@ -42,8 +42,7 @@ export function SpaceBanner({
     <div
       className={cn(
         "relative shrink-0",
-        floating && "pt-3 pr-3",
-        floating && inPanel && "pl-3",
+        floating && "pt-3 pr-3 pl-3",
       )}
     >
       <div

@@ -1,9 +1,10 @@
 "use client";
 
-import { PanelRight, Pin, X } from "lucide-react";
+import { PanelRight, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { MobileSurfaceToggle } from "@/components/shell/MobileSurfaceChrome";
 import { NavToggle } from "@/components/shell/NavToggle";
+import { PinControl } from "@/components/shell/PinControl";
 import { useMobileShell } from "@/lib/use-media-query";
 import { isChatSpace } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
@@ -22,8 +23,6 @@ export function TopRail() {
     setMobileSurface,
     sidebarOpen,
     mobileNav,
-    isPinned,
-    togglePin,
     closeSpaceChat,
   } = useApp();
   const mobile = useMobileShell();
@@ -53,7 +52,6 @@ export function TopRail() {
       : spaceId === "connectors" && connectorId
         ? ({ kind: "connector" as const, id: connectorId })
         : null;
-  const pinned = pinTarget ? isPinned(pinTarget.kind, pinTarget.id) : false;
 
   return (
     <header
@@ -75,23 +73,11 @@ export function TopRail() {
         )}
       />
       {pinTarget ? (
-        <button
-          type="button"
-          aria-label={pinned ? "Unpin" : "Pin"}
-          aria-pressed={pinned}
-          onClick={() => togglePin(pinTarget.kind, pinTarget.id)}
-          className={cn(
-            "inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-muted",
-            pinned
-              ? "text-foreground"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <Pin
-            className={cn("h-4 w-4", pinned && "fill-current")}
-            strokeWidth={1.6}
-          />
-        </button>
+        <PinControl
+          kind={pinTarget.kind}
+          id={pinTarget.id}
+          alwaysVisible
+        />
       ) : null}
       {showPanelBtn ? (
         <button

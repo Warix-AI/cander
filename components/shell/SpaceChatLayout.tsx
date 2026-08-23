@@ -10,6 +10,7 @@ import { MobileArmedPanelChrome } from "@/components/shell/MobileSurfaceChrome";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
 import { InviteBanner } from "@/components/overlays/InviteWall";
 import { useMobileShell } from "@/lib/use-media-query";
+import { useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 /**
@@ -28,6 +29,7 @@ export function SpaceChatLayout() {
     closeSpaceChat,
   } = useApp();
   const mobile = useMobileShell();
+  const floating = useShellStyle() === "floating";
   const chatArmed = drafting || Boolean(thread);
   const chatOpen = chatArmed && panelMode !== "collapsed";
   const immersive = panelMode === "immersive";
@@ -109,7 +111,7 @@ export function SpaceChatLayout() {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
-          chatOpen && chatPct > 0 && "border-l border-border",
+          chatOpen && chatPct > 0 && !floating && "border-l border-border",
           !dragging &&
             "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
           spacePct === 0 && "pointer-events-none",

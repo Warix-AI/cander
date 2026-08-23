@@ -73,10 +73,11 @@ export function PreviewAccount({
   return (
     <div className="rounded-[10px] border border-border p-4">
       <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-        Preview role
+        Demo seat
       </p>
       <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-        Switch who you are signed in as. Same product, different seat and role.
+        Prototype only — switch who you are signed in as. Same product, different
+        seat and role.
       </p>
       <Dropdown
         className="mt-3 w-full max-w-sm"

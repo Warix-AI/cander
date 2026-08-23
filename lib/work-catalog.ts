@@ -146,22 +146,12 @@ export function workSectionTitle(scope: WorkScope) {
 }
 
 export function workEmptyCopy(scope: WorkScope) {
-  if (scope === "today") {
-    return "You’re clear for now. Ask Courier to brief your inbox, prep a meeting, or check follow-ups.";
-  }
-  if (scope === "inbox") {
-    return "No messages waiting. Ask Courier to scan Slack or email.";
-  }
-  if (scope === "calendar") {
-    return "No meetings in view. Ask Courier to prep the next one on your calendar.";
-  }
-  if (scope === "customers") {
-    return "No customer threads open. Ask Courier about renewals or accounts.";
-  }
-  if (scope === "followups") {
-    return "Nothing waiting. Ask Courier to chase a reply or set a reminder.";
-  }
-  return "No approvals queued. Ask Courier to check expenses, access, or reviews.";
+  if (scope === "today") return "Nothing on today yet.";
+  if (scope === "inbox") return "No messages waiting.";
+  if (scope === "calendar") return "No meetings in view.";
+  if (scope === "customers") return "No customer threads open.";
+  if (scope === "followups") return "Nothing waiting.";
+  return "No approvals queued.";
 }
 
 export const workBriefActions = [

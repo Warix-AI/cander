@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -60,8 +61,10 @@ import {
   subscribeProduct,
   subscribeSidebar,
   subscribeWorkspace,
-  toggleStoredPin,
+  removeStoredPin,
   reorderStoredPins,
+  setStoredPin,
+  toggleStoredPin,
 } from "@/lib/session";
 import {
   getMembersServerSnapshot,
@@ -93,6 +96,7 @@ import type {
   PanelMode,
   Pin,
   PinKind,
+  PinTier,
   PlatformNav,
   PreviewNodeId,
   ProductId,
@@ -260,6 +264,10 @@ type AppContextValue = {
   toggleSpaceLibrary: () => void;
   pins: Pin[];
   isPinned: (kind: PinKind, id: string) => boolean;
+  pinTier: (kind: PinKind, id: string) => PinTier | null;
+  setPin: (kind: PinKind, id: string, tier: PinTier) => void;
+  clearPin: (kind: PinKind, id: string) => void;
+  /** Pins to primary or unpins. Prefer PinControl for tier choice. */
   togglePin: (kind: PinKind, id: string) => void;
   reorderPins: (
     from: { kind: PinKind; id: string },
@@ -394,6 +402,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [platformNav, setPlatformNavState] = useState<PlatformNav>("overview");
   const [platformThreadId, setPlatformThreadId] = useState<string | null>(null);
   const [platformDockOpen, setPlatformDockOpenState] = useState(false);
+  const productMemory = useRef({
+    courier: {
+      view: "chat" as CourierView,
+      spaceId: null as SpaceId | null,
+      threadId: null as string | null,
+      projectId: null as string | null,
+      panelMode: "collapsed" as PanelMode,
+      panelIntent: "browse" as PanelIntent,
+      connectorId: null as string | null,
+      jobId: null as string | null,
+      skillId: null as string | null,
+    },
+    platform: {
+      platformNav: "overview" as PlatformNav,
+      dockOpen: false,
+    },
+  });
   const [spaceLayout, setSpaceLayout] = useState<SpaceLayout>("cards");
   const [overlay, setOverlay] = useState<OverlayId>(null);
   const [discoveryFocusId, setDiscoveryFocusId] = useState<string | null>(null);
@@ -489,29 +514,77 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const setProduct = useCallback((id: ProductId) => {
     if (id === "platform" && !entitlements.canAccessDevelopment) return;
-    persistProduct(id);
+    if (id === product) {
+      setMobileNav(false);
+      setOverlay(null);
+      return;
+    }
+
+    if (product === "courier") {
+      productMemory.current.courier = {
+        view,
+        spaceId,
+        threadId,
+        projectId,
+        panelMode,
+        panelIntent,
+        connectorId,
+        jobId,
+        skillId,
+      };
+    } else {
+      productMemory.current.platform = {
+        platformNav,
+        dockOpen: platformDockOpen,
+      };
+    }
+
     setMobileNav(false);
     setOverlay(null);
-    if (id !== "platform") {
-      setPlatformDockOpenState(false);
+
+    if (id === "platform") {
+      const mem = productMemory.current.platform;
+      const nav = entitlements.platformNavAllowed(mem.platformNav)
+        ? mem.platformNav
+        : "overview";
+      setPlatformDockOpenState(mem.dockOpen);
+      const snap = {
+        product: id,
+        view: "chat" as const,
+        spaceId: null,
+        threadId: null,
+        projectId: null,
+        platformNav: nav,
+        panelMode: "collapsed" as const,
+        panelIntent: "browse" as const,
+        connectorId: null,
+        jobId: null,
+        skillId: null,
+      };
+      applySnapshot(snap);
+      pushTarget(snap);
+      return;
     }
-    const nextPanelMode = id === "platform" ? panelMode : "collapsed";
-    if (id !== "platform") setPanelMode("collapsed");
-    pushTarget({
+
+    const mem = productMemory.current.courier;
+    setPlatformDockOpenState(false);
+    const snap = {
       product: id,
-      view,
-      spaceId,
-      threadId,
-      projectId,
+      view: mem.view,
+      spaceId: mem.spaceId,
+      threadId: mem.threadId,
+      projectId: mem.projectId,
       platformNav,
-      panelMode: nextPanelMode,
-      panelIntent,
-      connectorId,
-      jobId,
-      skillId,
-    });
+      panelMode: mem.panelMode,
+      panelIntent: mem.panelIntent,
+      connectorId: mem.connectorId,
+      jobId: mem.jobId,
+      skillId: mem.skillId,
+    };
+    applySnapshot(snap);
+    pushTarget(snap);
   }, [
-    pushTarget,
+    product,
     view,
     spaceId,
     threadId,
@@ -522,7 +595,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     connectorId,
     jobId,
     skillId,
-    entitlements.canAccessDevelopment,
+    platformDockOpen,
+    entitlements,
+    applySnapshot,
+    pushTarget,
   ]);
 
   const setHostingMode = useCallback((id: HostingMode) => {
@@ -1880,6 +1956,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [pins],
   );
 
+  const pinTier = useCallback(
+    (kind: PinKind, id: string): PinTier | null => {
+      const match = pins.find((item) => item.kind === kind && item.id === id);
+      if (!match) return null;
+      return match.tier === "secondary" ? "secondary" : "primary";
+    },
+    [pins],
+  );
+
+  const setPin = useCallback((kind: PinKind, id: string, tier: PinTier) => {
+    setStoredPin(kind, id, tier);
+  }, []);
+
+  const clearPin = useCallback((kind: PinKind, id: string) => {
+    removeStoredPin(kind, id);
+  }, []);
+
   const togglePin = useCallback((kind: PinKind, id: string) => {
     toggleStoredPin(kind, id);
   }, []);
@@ -2187,9 +2280,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ) => {
       void _item;
       switch (action.kind) {
-        case "openSpace":
-          if (action.target) openSpace(action.target as SpaceId);
+        case "openSpace": {
+          const space = action.target as SpaceId | undefined;
+          if (!space) break;
+          if (space === "work" && !entitlements.canUseWorkSpace) {
+            openSettings("plans");
+            break;
+          }
+          openSpace(space);
           break;
+        }
         case "openConnector":
           if (action.target) openConnector(action.target);
           else openSpace("connectors");
@@ -2197,11 +2297,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         case "openBrowser":
           openBrowser({ chat: true });
           break;
-        case "openPlatform":
+        case "openPlatform": {
+          if (!entitlements.canAccessDevelopment) {
+            openSettings("plans");
+            break;
+          }
+          const nav = (action.target as PlatformNav | undefined) ?? "overview";
           persistProduct("platform");
-          if (action.target) setPlatformNav(action.target as PlatformNav);
+          if (entitlements.platformNavAllowed(nav)) {
+            setPlatformNav(nav);
+          } else {
+            setPlatformNav("overview");
+            openSettings("plans");
+          }
           setPlatformDockOpen(false);
           break;
+        }
         case "newChat":
           newChat();
           break;
@@ -2220,9 +2331,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [
+      entitlements,
       openSpace,
       openConnector,
       openBrowser,
+      openSettings,
       setPlatformNav,
       setPlatformDockOpen,
       newChat,
@@ -2416,6 +2529,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       spaceLibraryOpen,
       toggleSpaceLibrary,
       isPinned,
+      pinTier,
+      setPin,
+      clearPin,
       togglePin,
       reorderPins,
       moveSidebarNav: moveNavItem,
@@ -2548,6 +2664,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       spaceLibraryOpen,
       toggleSpaceLibrary,
       isPinned,
+      pinTier,
+      setPin,
+      clearPin,
       togglePin,
       reorderPins,
       moveNavItem,

@@ -86,6 +86,6 @@ export function inferPlatformIntent(raw: string): PlatformIntent {
 
   return {
     reply:
-      "I can help with APIs, keys, and hosting. Max adds models, docs, team deploys, and logs. Ultra adds production. Ask to open any page.",
+      "I can help with APIs, keys, hosting, and an explore model set. Max adds the full catalog, docs, team deploys, and richer logs. Ultra adds production. Ask to open any page.",
   };
 }

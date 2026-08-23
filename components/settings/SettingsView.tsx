@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AppWindow, ImagePlus, Moon, Square, Sun } from "lucide-react";
-import { useTheme } from "@/components/theme/ThemeProvider";
+import { ImagePlus } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { AccountAvatar } from "@/components/shell/AccountAvatar";
+import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { ConnectorsSettings } from "@/components/settings/ConnectorsSettings";
 import { PlansSettings } from "@/components/settings/PlansSettings";
+import { DashBtn } from "@/components/spaces/ItemSet";
 import {
   SettingsField,
   SettingsGroup,
@@ -28,9 +29,16 @@ import {
   orgUltraSeats,
 } from "@/lib/entitlements";
 import { orgSeatMix, planLabel, seatMixLabel } from "@/lib/billing";
+import {
+  addUltraLicense,
+  getUltraLicensesServerSnapshot,
+  getUltraLicensesSnapshot,
+  machineUltraSeats,
+  removeUltraLicense,
+  subscribeUltraLicenses,
+} from "@/lib/ultra-licenses";
 import type { Role } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { SHELL_STYLES, setShellStyle, useShellStyle } from "@/lib/shell-chrome";
 import { workspaceKindOf } from "@/lib/workspace-kind";
 import {
   clearProfilePhoto,
@@ -116,128 +124,6 @@ export function SettingsView() {
   );
 }
 
-function AppearanceSettings() {
-  const { theme, setTheme } = useTheme();
-  const shellStyle = useShellStyle();
-
-  return (
-    <SettingsPage>
-      <SettingsHeader
-        title="Appearance"
-        subtitle="Theme and shell style for this device. Changes apply immediately."
-      />
-
-      <div className="mt-8 space-y-3">
-        <SettingsGroup title="Theme">
-          <SettingsRow
-            label="Color mode"
-            description="Light for daytime work. Dark when you prefer lower contrast."
-          >
-            <div className="inline-flex rounded-[10px] border border-border p-0.5">
-              {(["light", "dark"] as const).map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setTheme(id)}
-                  className={cn(
-                    "inline-flex h-8 items-center gap-1.5 rounded-[8px] px-3 text-[12.5px] font-medium tracking-[-0.01em] transition-colors duration-200",
-                    theme === id
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {id === "light" ? (
-                    <Sun className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  ) : (
-                    <Moon className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  )}
-                  {id === "light" ? "Light" : "Dark"}
-                </button>
-              ))}
-            </div>
-          </SettingsRow>
-        </SettingsGroup>
-
-        <SettingsSection
-          title="Style"
-          description="How the menu and space banners sit against the rest of the shell."
-          className="mt-6"
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            {SHELL_STYLES.map((item) => {
-              const active = shellStyle === item.id;
-              const Icon = item.id === "floating" ? AppWindow : Square;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setShellStyle(item.id)}
-                  className={cn(
-                    "rounded-[10px] border p-4 text-left transition-colors duration-200",
-                    active
-                      ? "border-foreground/25 bg-card"
-                      : "border-border bg-card hover:border-foreground/20 hover:bg-muted/40",
-                  )}
-                >
-                  <StylePreview kind={item.id} active={active} />
-                  <span className="mt-3 flex items-center gap-2">
-                    <Icon
-                      className="h-3.5 w-3.5 text-muted-foreground"
-                      strokeWidth={1.6}
-                    />
-                    <span className="text-[13.5px] font-medium tracking-[-0.02em]">
-                      {item.label}
-                    </span>
-                  </span>
-                  <span className="mt-1 block text-[12.5px] leading-relaxed text-muted-foreground">
-                    {item.description}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </SettingsSection>
-      </div>
-    </SettingsPage>
-  );
-}
-
-function StylePreview({
-  kind,
-  active,
-}: {
-  kind: "classic" | "floating";
-  active: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "relative h-24 overflow-hidden rounded-[10px] border border-border bg-background",
-        active && "border-foreground/15",
-      )}
-    >
-      <div className="absolute inset-y-0 left-0 flex w-[18%] flex-col items-center gap-1.5 border-r border-border/80 bg-muted/40 py-2">
-        <span className="h-2.5 w-2.5 rounded-[3px] bg-foreground/25" />
-        <span className="h-2.5 w-2.5 rounded-[3px] bg-foreground/15" />
-        <span className="h-2.5 w-2.5 rounded-[3px] bg-foreground/10" />
-      </div>
-      {kind === "floating" ? (
-        <div className="absolute top-2 bottom-2 left-[22%] w-[28%] rounded-[8px] border border-border bg-muted/70" />
-      ) : (
-        <div className="absolute inset-y-0 left-[18%] w-[32%] border-r border-border bg-muted/55" />
-      )}
-      <div
-        className={cn(
-          "absolute right-2 left-[54%] bg-chart-2/35",
-          kind === "floating"
-            ? "top-2 h-7 rounded-[8px]"
-            : "top-0 h-8 rounded-none",
-        )}
-      />
-    </div>
-  );
-}
-
 function OrganizationSettings() {
   const {
     orgMembers,
@@ -257,6 +143,12 @@ function OrganizationSettings() {
   const managedResources = workspaceResources.filter(
     (item) => item.status === "active",
   );
+  const ultraLicenses = useSyncExternalStore(
+    subscribeUltraLicenses,
+    getUltraLicensesSnapshot,
+    getUltraLicensesServerSnapshot,
+  );
+  const machineSeats = machineUltraSeats(ultraLicenses);
 
   return (
     <SettingsPage>
@@ -282,10 +174,58 @@ function OrganizationSettings() {
             { label: "Seat mix", value: mixLabel || "None" },
             { label: "Max seats", value: `${maxSeats}` },
             { label: "Ultra seats", value: `${ultraSeats}` },
+            {
+              label: "Machine Ultra",
+              value: `${machineSeats.length}`,
+            },
             { label: "People", value: `${roster.length}` },
           ]}
         />
       </SettingsSection>
+
+      {entitlements.canManageInfrastructure ? (
+        <SettingsSection
+          title="Ultra machine seats"
+          description="Each Ultra seat licenses one production machine. Machine-only seats don’t need a separate login — you manage them here."
+        >
+          <div className="space-y-3">
+            {machineSeats.map((seat) => (
+              <SettingsGroup key={seat.id}>
+                <SettingsRow
+                  label={seat.label ?? "Machine seat"}
+                  description="Machine-only · no user attached"
+                >
+                  <button
+                    type="button"
+                    onClick={() => removeUltraLicense(seat.id)}
+                    className="inline-flex h-8 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+                  >
+                    Remove
+                  </button>
+                </SettingsRow>
+              </SettingsGroup>
+            ))}
+            {!machineSeats.length ? (
+              <p className="text-[13px] text-muted-foreground">
+                No machine-only Ultra seats yet.
+              </p>
+            ) : null}
+            <button
+              type="button"
+              onClick={() =>
+                addUltraLicense({
+                  kind: "machine",
+                  scope: "org",
+                  label: `Machine ${machineSeats.length + 1}`,
+                })
+              }
+              className="inline-flex h-9 items-center rounded-full border border-foreground/15 px-3.5 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
+            >
+              Add machine Ultra seat
+            </button>
+          </div>
+        </SettingsSection>
+      ) : null}
 
       {entitlements.canManageInfrastructure && managedResources.length ? (
         <SettingsSection
@@ -471,6 +411,12 @@ function GeneralSettings({
         subtitle="Account information for this login."
       />
 
+      {!entitlements.showOrgSettings ? (
+        <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
+          Organization and Workspaces admin tabs are for owners and admins.
+        </p>
+      ) : null}
+
       <div className="mt-8 space-y-3">
         <SettingsGroup title="Profile">
           <div className="flex flex-wrap items-center gap-4 px-4 py-4">
@@ -583,36 +529,24 @@ function GeneralSettings({
         <SettingsGroup title="Account">
           <SettingsRow
             label="Restart onboarding"
-            description="Sign out and open the full-screen welcome flow. Useful for testing."
+            description="Prototype — sign out and open the full-screen welcome flow."
           >
-            <button
-              type="button"
-              onClick={onRestartOnboarding}
-              className="inline-flex h-8 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-            >
-              Start onboarding
-            </button>
+            <DashBtn onClick={onRestartOnboarding}>Start onboarding</DashBtn>
           </SettingsRow>
           <SettingsRow
             label="Log out"
             description="Sign out of Courier on this device."
           >
-            <button
-              type="button"
-              onClick={onLogout}
-              className="inline-flex h-8 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-            >
-              Log out
-            </button>
+            <DashBtn onClick={onLogout}>Log out</DashBtn>
           </SettingsRow>
           <SettingsRow
             label="Delete account"
-            description="Remove this login and its local Courier data."
+            description="Prototype only — toggles a local deleted state; nothing is removed from a server."
           >
             <button
               type="button"
               onClick={() => setGone(true)}
-              className="inline-flex h-8 items-center rounded-full border border-destructive/30 px-3 text-[12.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/10"
+              className="inline-flex h-10 items-center rounded-[10px] border border-destructive/30 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/10"
             >
               {gone ? "Deleted" : "Delete account"}
             </button>

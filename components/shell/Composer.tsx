@@ -23,6 +23,7 @@ import {
 } from "@/lib/space-library";
 import { isChatSpace } from "@/lib/spaces";
 import { labelFor } from "@/lib/build-loop";
+import { useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 type MenuId = "plus" | null;
@@ -60,6 +61,7 @@ export function Composer({
     clearPageReference,
     entitlements,
   } = useApp();
+  const floating = useShellStyle() === "floating";
   const [value, setValue] = useState("");
   const [menu, setMenu] = useState<MenuId>(null);
   const [files, setFiles] = useState<string[]>([]);
@@ -181,7 +183,9 @@ export function Composer({
       className={
         compact || landing
           ? "w-full"
-          : "px-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-4 sm:pb-4"
+          : floating
+            ? "pr-3 pb-[max(1rem,env(safe-area-inset-bottom))] pl-1 sm:pr-4 sm:pb-4 sm:pl-1"
+            : "px-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-4 sm:pb-4"
       }
       onSubmit={(event) => {
         event.preventDefault();

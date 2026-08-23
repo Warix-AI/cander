@@ -9,7 +9,7 @@ import { Composer } from "@/components/shell/Composer";
 import { MobileSurfaceToggle } from "@/components/shell/MobileSurfaceChrome";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { SuggestionPrompts } from "@/components/shell/SuggestionPrompts";
-import { DashBtn } from "@/components/spaces/ItemSet";
+import { GhostBtn } from "@/components/platform/DevChrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { platformChatSuggestions } from "@/lib/platform-suggestions";
 import { cn } from "@/lib/utils";
@@ -20,9 +20,9 @@ export function PlatformAskButton() {
   const { platformDockOpen, setPlatformDockOpen } = useApp();
   if (platformDockOpen) return null;
   return (
-    <DashBtn primary onClick={() => setPlatformDockOpen(true)}>
+    <GhostBtn primary onClick={() => setPlatformDockOpen(true)}>
       Ask
-    </DashBtn>
+    </GhostBtn>
   );
 }
 
@@ -73,7 +73,17 @@ export function PlatformChatColumn() {
       </header>
 
       {empty && !summary ? (
-        <div className="min-h-0 flex-1" />
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-3 sm:px-5">
+          <div className="mx-auto w-full max-w-[38rem] text-center">
+            <p className="text-[15px] font-medium tracking-[-0.02em] text-muted-foreground">
+              Ask Development
+            </p>
+            <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+              Models, keys, hosting, APIs — ask anything about this workspace’s
+              runtime.
+            </p>
+          </div>
+        </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-5 sm:px-5 sm:py-6">
           <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-6">

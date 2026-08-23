@@ -21,6 +21,7 @@ export function CourierMark({
       aria-hidden="true"
       width={73}
       height={70}
+      suppressHydrationWarning
       className={cn("h-[29.7px] w-[31px] object-contain", className)}
     />
   );

@@ -14,14 +14,24 @@ import {
   persistWorkspace,
   subscribeAuth,
 } from "@/lib/session";
-import type { BillingPlan } from "@/lib/types";
+import { AppearanceSliders } from "@/components/settings/AppearanceSliders";
+import { OnboardingCourierPreview } from "@/components/onboarding/OnboardingCourierPreview";
+import { AppearanceScope } from "@/components/theme/AppearanceProvider";
+import { resetAppearance } from "@/lib/appearance";
+import type { AccountPresetId, BillingPlan, UltraSeatKind } from "@/lib/types";
 import { createWorkspace } from "@/lib/workspace-catalog";
+import { addUltraLicense } from "@/lib/ultra-licenses";
 import { cn } from "@/lib/utils";
 
 const demoEmail = "matthew@acme.com";
 const demoPassword = "courier";
-/** Prototype always continues as Matthew (Max Owner). */
-const MATT_PRESET = "max-owner" as const;
+
+function presetForPlan(plan: BillingPlan): AccountPresetId {
+  if (plan === "free") return "free";
+  if (plan === "pro") return "pro";
+  if (plan === "ultra") return "ultra";
+  return "max-owner";
+}
 
 type Step =
   | "welcome"
@@ -30,15 +40,16 @@ type Step =
   | "profile"
   | "workspace"
   | "plan"
+  | "ultra-seat"
+  | "appearance"
   | "connectors";
 
-const CREATE_STEPS: Step[] = [
-  "create",
-  "profile",
-  "workspace",
-  "plan",
-  "connectors",
-];
+function createStepsFor(plan: BillingPlan): Step[] {
+  const steps: Step[] = ["create", "profile", "workspace", "plan"];
+  if (plan === "ultra") steps.push("ultra-seat");
+  steps.push("appearance", "connectors");
+  return steps;
+}
 
 const ONBOARDING_CONNECTORS = ["gmail", "slack", "gcal", "notion", "github", "linear"];
 
@@ -70,7 +81,7 @@ const PLANS: {
     id: "ultra",
     title: "Ultra",
     price: "$300/mo",
-    body: "Production infrastructure, private models, and priority.",
+    body: "One production machine license per seat — add more Ultra seats for more machines.",
   },
 ];
 
@@ -88,7 +99,7 @@ const PANEL_COPY: Record<
   },
   create: {
     title: "Create an account, then set Courier up properly.",
-    body: "We’ll walk through profile, workspace, plan, and connectors — then drop you into Matt’s demo.",
+    body: "We’ll walk through profile, workspace, plan, appearance, and connectors — then open Courier on the plan you pick.",
   },
   profile: {
     title: "Courier should sound like it knows you.",
@@ -101,6 +112,14 @@ const PANEL_COPY: Record<
   plan: {
     title: "Choose the depth you need.",
     body: "Plans unlock Development, hosting, and team seats. The prototype still lands on Matthew’s Max account.",
+  },
+  "ultra-seat": {
+    title: "Who is this Ultra seat for?",
+    body: "Each Ultra seat licenses one production machine. Attach it to a person, or keep it as a machine-only seat you manage.",
+  },
+  appearance: {
+    title: "Make Courier feel like yours.",
+    body: "Color, type, spacing, shapes, and motion — watch the preview update as you go.",
   },
   connectors: {
     title: "Wire up the apps you already live in.",
@@ -134,6 +153,7 @@ function OnboardingShell() {
   );
   const [workspaceName, setWorkspaceName] = useState("Acme Inc.");
   const [plan, setPlan] = useState<BillingPlan>("max");
+  const [ultraSeatKind, setUltraSeatKind] = useState<UltraSeatKind>("user");
   const [selectedConnectors, setSelectedConnectors] = useState<string[]>([
     "gmail",
     "slack",
@@ -141,9 +161,10 @@ function OnboardingShell() {
   ]);
   const [error, setError] = useState("");
 
-  const createIndex = CREATE_STEPS.indexOf(step);
+  const createSteps = useMemo(() => createStepsFor(plan), [plan]);
+  const createIndex = createSteps.indexOf(step);
   const createProgress =
-    createIndex >= 0 ? `${createIndex + 1} / ${CREATE_STEPS.length}` : null;
+    createIndex >= 0 ? `${createIndex + 1} / ${createSteps.length}` : null;
 
   const connectorOptions = useMemo(
     () =>
@@ -153,8 +174,8 @@ function OnboardingShell() {
     [],
   );
 
-  const enterAsMatt = () => {
-    setPreview(MATT_PRESET);
+  const enterWithPlan = (chosen: BillingPlan = "max") => {
+    setPreview(presetForPlan(chosen));
     persistSignedIn();
   };
 
@@ -170,9 +191,16 @@ function OnboardingShell() {
       persistWorkspace(created.id);
       setWorkspace(created.id);
     }
-    // Prototype: always continue as Matthew / Max Owner (ignore plan actor remap).
-    void plan;
-    enterAsMatt();
+    if (plan === "ultra") {
+      addUltraLicense({
+        kind: ultraSeatKind,
+        scope: workspaceKind === "business" ? "org" : "personal",
+        userId: ultraSeatKind === "user" ? "self" : null,
+        label:
+          ultraSeatKind === "machine" ? "Production machine 1" : undefined,
+      });
+    }
+    enterWithPlan(plan);
   };
 
   const signIn = () => {
@@ -185,7 +213,7 @@ function OnboardingShell() {
       return;
     }
     setError("");
-    enterAsMatt();
+    enterWithPlan("max");
   };
 
   const goCreateNext = () => {
@@ -225,6 +253,16 @@ function OnboardingShell() {
     }
     if (step === "plan") {
       setError("");
+      setStep(plan === "ultra" ? "ultra-seat" : "appearance");
+      return;
+    }
+    if (step === "ultra-seat") {
+      setError("");
+      setStep("appearance");
+      return;
+    }
+    if (step === "appearance") {
+      setError("");
       setStep("connectors");
       return;
     }
@@ -239,14 +277,17 @@ function OnboardingShell() {
       setStep("welcome");
       return;
     }
-    const idx = CREATE_STEPS.indexOf(step);
-    if (idx > 0) setStep(CREATE_STEPS[idx - 1]);
+    const idx = createSteps.indexOf(step);
+    if (idx > 0) setStep(createSteps[idx - 1]);
   };
 
   const panel = PANEL_COPY[step];
+  const showAppearancePreview = step === "appearance";
 
   return (
-    <div className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground lg:flex-row">
+    <AppearanceScope
+      className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground lg:flex-row"
+    >
       {/* Left: auth / onboarding — 50% on desktop */}
       <div className="relative flex min-h-0 w-full flex-1 flex-col lg:w-1/2 lg:flex-none">
         <div className="flex items-center justify-between gap-3 px-6 pt-6 sm:px-10">
@@ -263,8 +304,18 @@ function OnboardingShell() {
           ) : null}
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto px-6 py-10 sm:px-10">
-          <div className="mx-auto w-full max-w-[26rem]">
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-10 sm:px-10",
+            showAppearancePreview ? "justify-start" : "justify-center",
+          )}
+        >
+          <div
+            className={cn(
+              "mx-auto w-full",
+              showAppearancePreview ? "max-w-[28rem]" : "max-w-[26rem]",
+            )}
+          >
             {step !== "welcome" ? (
               <button
                 type="button"
@@ -284,6 +335,7 @@ function OnboardingShell() {
                 }}
                 onCreate={() => {
                   setError("");
+                  resetAppearance();
                   setStep("create");
                 }}
               />
@@ -364,6 +416,18 @@ function OnboardingShell() {
               <PlanStep plan={plan} onPlan={setPlan} onSubmit={goCreateNext} />
             ) : null}
 
+            {step === "ultra-seat" ? (
+              <UltraSeatStep
+                kind={ultraSeatKind}
+                onKind={setUltraSeatKind}
+                onSubmit={goCreateNext}
+              />
+            ) : null}
+
+            {step === "appearance" ? (
+              <AppearanceStep onSubmit={goCreateNext} />
+            ) : null}
+
             {step === "connectors" ? (
               <ConnectorsStep
                 options={connectorOptions}
@@ -395,24 +459,67 @@ function OnboardingShell() {
         </div>
       </div>
 
-      {/* Right: 50% wash */}
+      {/* Right: live preview on appearance; wash otherwise */}
       <div
         className="relative hidden min-h-0 w-1/2 overflow-hidden lg:block"
-        aria-hidden
+        aria-hidden={!showAppearancePreview}
       >
-        <div className="absolute inset-0 panel-wash-price" />
-        <div className="panel-grain" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
-        <div className="absolute inset-x-0 bottom-0 p-10 xl:p-14">
-          <p className="max-w-lg text-[1.75rem] font-medium tracking-[-0.03em] text-white xl:text-[2rem]">
-            {panel.title}
-          </p>
-          <p className="mt-3 max-w-md text-[14.5px] leading-relaxed text-white/75">
-            {panel.body}
-          </p>
-        </div>
+        {showAppearancePreview ? (
+          <div className="absolute inset-0 bg-gradient-to-br from-black/50 via-black/30 to-black/55">
+            <div className="absolute inset-0 panel-wash-price opacity-60" />
+            <div className="panel-grain opacity-40" />
+            <OnboardingCourierPreview />
+          </div>
+        ) : (
+          <>
+            <div className="absolute inset-0 panel-wash-price" />
+            <div className="panel-grain" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
+            <div className="absolute inset-x-0 bottom-0 p-10 xl:p-14">
+              <p className="max-w-lg text-[1.75rem] font-medium tracking-[-0.03em] text-white xl:text-[2rem]">
+                {panel.title}
+              </p>
+              <p className="mt-3 max-w-md text-[14.5px] leading-relaxed text-white/75">
+                {panel.body}
+              </p>
+            </div>
+          </>
+        )}
       </div>
-    </div>
+    </AppearanceScope>
+  );
+}
+
+function AppearanceStep({ onSubmit }: { onSubmit: () => void }) {
+  return (
+    <>
+      <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
+        Make it yours
+      </h1>
+      <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
+        Tune color, type, spacing, shapes, motion, and layout. The preview on
+        the right updates as you go — continue when it feels right.
+      </p>
+      <div className="mt-8">
+        <AppearanceSliders compact />
+      </div>
+      <button
+        type="button"
+        onClick={onSubmit}
+        className="mt-8 inline-flex h-11 w-full items-center justify-center rounded-full bg-primary text-[14px] font-medium tracking-[-0.01em] text-primary-foreground hover:bg-foreground"
+      >
+        Continue
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          resetAppearance();
+        }}
+        className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-full text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        Reset defaults
+      </button>
+    </>
   );
 }
 
@@ -758,8 +865,7 @@ function PlanStep({
         Choose a plan
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Pick what you&apos;d start on. For this prototype you&apos;ll still enter
-        as Matthew on Max.
+        Your choice sets the demo seat you enter on — Free, Pro, Max, or Ultra.
       </p>
       <form
         className="mt-8 space-y-5"
@@ -790,6 +896,84 @@ function PlanStep({
                   <span className="font-mono text-[12px] text-muted-foreground">
                     {item.price}
                   </span>
+                </span>
+                <span className="mt-0.5 block text-[12.5px] leading-relaxed text-muted-foreground">
+                  {item.body}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="submit"
+          className="inline-flex h-11 w-full items-center justify-center rounded-full bg-primary text-[14px] font-medium tracking-[-0.01em] text-primary-foreground hover:bg-foreground"
+        >
+          Continue
+        </button>
+      </form>
+    </>
+  );
+}
+
+function UltraSeatStep({
+  kind,
+  onKind,
+  onSubmit,
+}: {
+  kind: UltraSeatKind;
+  onKind: (value: UltraSeatKind) => void;
+  onSubmit: () => void;
+}) {
+  const options: {
+    id: UltraSeatKind;
+    title: string;
+    body: string;
+  }[] = [
+    {
+      id: "user",
+      title: "A person will use it",
+      body: "Normal Ultra user. They get their own seat and can add a production machine on the network.",
+    },
+    {
+      id: "machine",
+      title: "Just a machine I’ll manage",
+      body: "No separate login. This Ultra seat licenses another production machine under your account.",
+    },
+  ];
+
+  return (
+    <>
+      <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
+        Ultra seat type
+      </h1>
+      <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
+        Need three machines? That&apos;s three Ultra seats. Extra seats can stay
+        machine-only — you manage them without inviting more people.
+      </p>
+      <form
+        className="mt-8 space-y-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+      >
+        <div className="grid gap-2">
+          {options.map((item) => {
+            const active = kind === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onKind(item.id)}
+                className={cn(
+                  "rounded-[10px] border px-3.5 py-3 text-left transition-colors duration-200",
+                  active
+                    ? "border-foreground/25 bg-muted"
+                    : "border-border hover:border-foreground/20 hover:bg-muted/40",
+                )}
+              >
+                <span className="text-[13.5px] font-medium tracking-[-0.01em]">
+                  {item.title}
                 </span>
                 <span className="mt-0.5 block text-[12.5px] leading-relaxed text-muted-foreground">
                   {item.body}

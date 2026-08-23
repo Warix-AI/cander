@@ -37,9 +37,13 @@ export type CourierView =
 
 export type PinKind = "thread" | "project" | "connector";
 
+export type PinTier = "primary" | "secondary";
+
 export type Pin = {
   kind: PinKind;
   id: string;
+  /** Defaults to primary when missing (legacy pins). */
+  tier?: PinTier;
 };
 
 export type OverlayId =
@@ -133,10 +137,17 @@ export type MemberKind = "org" | "personal";
 export type WorkspaceKind = "personal" | "business";
 export type UltraScope = "org" | "personal";
 
+/** Ultra seat can attach to a person, or just license a machine. */
+export type UltraSeatKind = "user" | "machine";
+
 export type UltraLicense = {
   id: string;
+  /** Null when kind is machine — managed without a separate login. */
   userId: string | null;
   scope: UltraScope;
+  kind: UltraSeatKind;
+  /** Optional label for machine seats (e.g. "Inference rack 2"). */
+  label?: string;
 };
 
 export type AccountPresetId =

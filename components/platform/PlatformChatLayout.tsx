@@ -10,6 +10,7 @@ import { RecentsView } from "@/components/shell/RecentsView";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
 import { InviteBanner } from "@/components/overlays/InviteWall";
 import { useMobileShell } from "@/lib/use-media-query";
+import { useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 /**
@@ -27,6 +28,7 @@ export function PlatformChatLayout() {
     setPlatformDockOpen,
   } = useApp();
   const mobile = useMobileShell();
+  const floating = useShellStyle() === "floating";
   const chatOpen = platformDockOpen;
   const panelPct = Math.max(panelRatio, 0.42) * 100;
 
@@ -92,7 +94,7 @@ export function PlatformChatLayout() {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
-          chatOpen && chatPct > 0 && "border-l border-border",
+          chatOpen && chatPct > 0 && !floating && "border-l border-border",
           !dragging &&
             "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
           spacePct === 0 && "pointer-events-none",

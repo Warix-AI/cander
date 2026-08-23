@@ -26,6 +26,7 @@ import { useSyncExternalStore } from "react";
 import { BrowserLayout } from "@/components/browser/BrowserLayout";
 import { FloatingVoiceDock } from "@/components/shell/VoiceControl";
 import { DiscoveryView } from "@/components/discovery/DiscoveryView";
+import { AppearanceProvider } from "@/components/theme/AppearanceProvider";
 import {
   DiscoveryAutoOpenListener,
   DiscoveryModal,
@@ -93,8 +94,8 @@ function Root() {
   }
 
   return (
-    <>
-      <div className="relative flex h-svh overflow-hidden bg-background text-foreground">
+    <AppearanceProvider>
+      <div className="relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background text-foreground">
         {mobileNav ? (
           <button
             type="button"
@@ -115,7 +116,7 @@ function Root() {
         <DiscoveryAutoOpenListener />
         <FloatingVoiceDock />
       </div>
-    </>
+    </AppearanceProvider>
   );
 }
 

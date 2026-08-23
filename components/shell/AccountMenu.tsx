@@ -6,7 +6,7 @@ import { account } from "@/lib/data";
 import { planLabel } from "@/lib/billing";
 import { cn } from "@/lib/utils";
 
-/** Shared footer row chrome — keep in sync with DiscoverySidebarCard. */
+/** Shared footer row chrome for AccountMenu. */
 export const SIDEBAR_FOOTER_ROW =
   "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-200 hover:bg-sidebar-accent";
 

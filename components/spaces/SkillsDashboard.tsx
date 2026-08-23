@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Kpi } from "@/components/platform/Charts";
 import { useApp } from "@/components/app/AppProvider";
-import { DashFrame, LayoutToggle, Pill, ScopeToggle, SpaceSettingsButton } from "@/components/spaces/ItemSet";
+import { DashBtn, DashFrame, LayoutToggle, ScopeToggle, SpaceSettingsButton } from "@/components/spaces/ItemSet";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import { skills as seedSkills, spaceStats } from "@/lib/data";
 import type { Skill } from "@/lib/types";
@@ -60,8 +60,8 @@ export function SkillsDashboard() {
       actions={
         <>
           <SpaceSettingsButton space="skills" />
-          <Pill onClick={createBlank}>Create task</Pill>
-          <Pill
+          <DashBtn onClick={createBlank}>Create task</DashBtn>
+          <DashBtn
             primary
             onClick={() => {
               newChat("skills");
@@ -72,7 +72,7 @@ export function SkillsDashboard() {
             }}
           >
             Create with AI
-          </Pill>
+          </DashBtn>
         </>
       }
     >
@@ -82,8 +82,9 @@ export function SkillsDashboard() {
         ))}
       </div>
 
-      <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-5 flex flex-col gap-3 @min-[420px]:flex-row @min-[420px]:flex-wrap @min-[420px]:items-center @min-[420px]:justify-between">
         <ScopeToggle
+          wrap
           value={scope}
           onChange={setScope}
           options={[

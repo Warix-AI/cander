@@ -12,7 +12,11 @@ export const PRIMARY_NAV_SPACES: SpaceId[] = [
 /** Navigable product destinations (Spaces + Connectors for permissions). */
 export const NAV_SPACES: SpaceId[] = [...PRIMARY_NAV_SPACES, "connectors"];
 
-/** Legacy spaces kept for data, deep links, and panel routing. */
+/**
+ * Legacy spaces: reachable via pins/deep links/panels, not primary sidebar.
+ * Strategy: keep data routing; surface via Discovery or space tools —
+ * do not re-add to PRIMARY_NAV without a product decision.
+ */
 export const LEGACY_SPACES: SpaceId[] = [
   "files",
   "skills",
@@ -23,6 +27,7 @@ export const LEGACY_SPACES: SpaceId[] = [
 
 export const ALL_SPACE_IDS: SpaceId[] = [...NAV_SPACES, ...LEGACY_SPACES];
 
+/** Extra ids — Recents stays in primary nav; Browser is not a sidebar link. */
 export const EXTRA_NAV_IDS = ["browser", "recents"] as const;
 
 export type ExtraNavId = (typeof EXTRA_NAV_IDS)[number];
@@ -66,7 +71,7 @@ export const DEFAULT_SIDEBAR_MAIN: SidebarNavId[] = [
   "recents",
 ];
 
-/** Overflow only — empty until someone moves a link into More. */
+/** @deprecated More menu removed — kept empty for persisted layout shape. */
 export const DEFAULT_MORE_NAV: SidebarNavId[] = [];
 
 export type SidebarLayout = {
@@ -93,32 +98,26 @@ function sortMainNav(ids: SidebarNavId[]): SidebarNavId[] {
   return dedupeNav([...ranked, ...extra]);
 }
 
-function sortMoreNav(ids: SidebarNavId[]): SidebarNavId[] {
-  const ranked = DEFAULT_MORE_NAV.filter((id) => ids.includes(id));
-  const extra = ids.filter((id) => !DEFAULT_MORE_NAV.includes(id));
-  return dedupeNav([...ranked, ...extra]);
-}
-
 export function spaceAllowed(
   id: SidebarNavId,
   allowed: SpaceId[],
   opts?: SidebarNavOpts,
 ): boolean {
   if (id === "browser") return false;
-  if (id === "connectors") return allowed.includes("connectors");
-  if (id === "files") return allowed.includes("files");
+  if (id === "connectors") return false;
+  if (id === "files") return false;
   if (id === "recents") return true;
-    if (id === "work") {
-      if (
-        opts?.billingPlan &&
-        opts.billingPlan !== "max" &&
-        opts.billingPlan !== "ultra"
-      ) {
-        return false;
-      }
-      return allowed.includes("work");
+  if (id === "work") {
+    if (
+      opts?.billingPlan &&
+      opts.billingPlan !== "max" &&
+      opts.billingPlan !== "ultra"
+    ) {
+      return false;
     }
-    if (id === "personal") {
+    return allowed.includes("work");
+  }
+  if (id === "personal") {
     const inCatalog =
       allowed.includes("personal") ||
       allowed.includes("finances") ||
@@ -168,7 +167,6 @@ export function resolveSidebarNav(
 ): { main: SidebarNavId[]; more: SidebarNavId[] } {
   const pool = allowedNavItems(allowed, opts);
   const defaultMain = DEFAULT_SIDEBAR_MAIN.filter((id) => pool.includes(id));
-  const defaultMore = DEFAULT_MORE_NAV.filter((id) => pool.includes(id));
 
   const migrateList = (list: SidebarNavId[]) => {
     const out: SidebarNavId[] = [];
@@ -181,20 +179,12 @@ export function resolveSidebarNav(
 
   const useDefaults = !layout.main.length && !layout.more.length;
 
-  let main = useDefaults ? defaultMain : migrateList(layout.main);
-  let more = useDefaults ? defaultMore : migrateList(layout.more);
+  // Fold any legacy "more" entries into main, then drop unsupported ids.
+  let main = useDefaults
+    ? defaultMain
+    : migrateList([...layout.main, ...layout.more]);
 
-  for (const id of [...more]) {
-    if (id === "personal" && pool.includes("personal")) {
-      more = more.filter((item) => item !== id);
-      if (!main.includes(id)) main.push(id);
-    }
-  }
-
-  more = sortMoreNav(more.filter((id) => pool.includes(id)));
-  main = main.filter((id) => pool.includes(id) && !more.includes(id));
-
-  const rest = pool.filter((id) => !main.includes(id) && !more.includes(id));
+  const rest = pool.filter((id) => !main.includes(id));
   if (useDefaults) {
     main = sortMainNav([...main, ...rest]);
   } else {
@@ -210,5 +200,5 @@ export function resolveSidebarNav(
     ...(main.includes("recents") ? (["recents"] as SidebarNavId[]) : []),
   ];
 
-  return { main, more };
+  return { main, more: [] };
 }

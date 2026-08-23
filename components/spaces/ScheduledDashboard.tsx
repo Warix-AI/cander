@@ -8,7 +8,7 @@ import {
   Kpi,
 } from "@/components/platform/Charts";
 import { useApp } from "@/components/app/AppProvider";
-import { DashFrame, LayoutToggle, Pill, ScopeToggle, SpaceSettingsButton } from "@/components/spaces/ItemSet";
+import { DashBtn, DashFrame, LayoutToggle, ScopeToggle, SpaceSettingsButton } from "@/components/spaces/ItemSet";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import { projects, scheduledJobs, spaceStats } from "@/lib/data";
 import type { ScheduledJob } from "@/lib/types";
@@ -59,9 +59,9 @@ export function ScheduledDashboard() {
       actions={
         <>
           <SpaceSettingsButton space="scheduled" />
-          <Pill primary onClick={() => newChat("build")}>
+          <DashBtn primary onClick={() => newChat("build")}>
             Ask
-          </Pill>
+          </DashBtn>
         </>
       }
     >

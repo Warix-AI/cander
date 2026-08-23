@@ -60,6 +60,7 @@ export function ResearchDashboard() {
     >
       <div className="flex flex-col gap-3 @min-[420px]:flex-row @min-[420px]:flex-wrap @min-[420px]:items-center @min-[420px]:justify-between">
         <ScopeToggle
+          wrap
           value={scope}
           onChange={(value) => setScope(value as ResearchScope)}
           options={[

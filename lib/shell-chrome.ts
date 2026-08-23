@@ -10,7 +10,7 @@ const listeners = new Set<Listener>();
 /** Shared float chrome for the menu card and space banners. */
 export const SHELL_FLOAT_RADIUS = "rounded-[18px]";
 
-let style: ShellStyle = "floating";
+let style: ShellStyle = "classic";
 let hydrated = false;
 
 function emit() {
@@ -19,7 +19,7 @@ function emit() {
 
 function parse(raw: string | null): ShellStyle {
   if (raw === "classic" || raw === "floating") return raw;
-  return "floating";
+  return "classic";
 }
 
 function hydrate() {
@@ -42,7 +42,7 @@ export function getShellStyleSnapshot() {
 }
 
 export function getShellStyleServerSnapshot(): ShellStyle {
-  return "floating";
+  return "classic";
 }
 
 export function setShellStyle(next: ShellStyle) {
