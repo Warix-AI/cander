@@ -2,7 +2,6 @@
 
 import { MessageSquare, PanelRight, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { NavToggle } from "@/components/shell/NavToggle";
 import { cn } from "@/lib/utils";
 
 /** Toggle between full-screen chat and space/preview on mobile. */
@@ -43,17 +42,8 @@ export function MobileArmedPanelChrome({
 }: {
   onClose: () => void;
 }) {
-  const { sidebarOpen, mobileNav } = useApp();
-
   return (
-    <header className="flex h-11 shrink-0 items-center gap-1 bg-background px-2 lg:hidden">
-      <NavToggle
-        className={cn(
-          "mr-auto",
-          sidebarOpen && "lg:hidden",
-          mobileNav && "max-lg:hidden",
-        )}
-      />
+    <header className="flex h-11 shrink-0 items-center justify-end gap-1 bg-background px-2 lg:hidden">
       <MobileSurfaceToggle />
       <button
         type="button"

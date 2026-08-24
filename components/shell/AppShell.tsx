@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { AppProvider, useApp } from "@/components/app/AppProvider";
 import { ChatColumn } from "@/components/shell/ChatColumn";
 import { Sidebar } from "@/components/shell/Sidebar";
+import { MobileBottomNav } from "@/components/shell/MobileBottomNav";
 import { SpaceChatLayout } from "@/components/shell/SpaceChatLayout";
 import { RecentsView } from "@/components/shell/RecentsView";
 import { SplitMainLayout } from "@/components/shell/SplitMainLayout";
@@ -42,8 +43,6 @@ export function AppShell() {
 
 function Root() {
   const {
-    mobileNav,
-    setMobileNav,
     overlay,
     view,
     openSettings,
@@ -95,15 +94,7 @@ function Root() {
 
   return (
     <AppearanceProvider>
-      <div className="relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background text-foreground">
-        {mobileNav ? (
-          <button
-            type="button"
-            aria-label="Close navigation"
-            className="absolute inset-0 z-30 bg-foreground/20 lg:hidden"
-            onClick={() => setMobileNav(false)}
-          />
-        ) : null}
+      <div className="relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background pb-[calc(68px+env(safe-area-inset-bottom))] text-foreground lg:pb-0">
         <Sidebar />
         <CourierMain />
         <SearchModal />
@@ -115,6 +106,7 @@ function Root() {
         <DiscoveryModal />
         <DiscoveryAutoOpenListener />
         <FloatingVoiceDock />
+        <MobileBottomNav />
       </div>
     </AppearanceProvider>
   );

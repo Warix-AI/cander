@@ -4,6 +4,10 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Pin } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import {
+  holdSidebarPeek,
+  releaseSidebarPeek,
+} from "@/lib/sidebar-peek";
 import type { PinKind, PinTier } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -85,6 +89,7 @@ export function PinControl({
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", onReposition);
       window.removeEventListener("scroll", onReposition, true);
+      releaseSidebarPeek();
     };
   }, [open]);
 
@@ -100,6 +105,9 @@ export function PinControl({
           ref={menuRef}
           id={menuId}
           role="menu"
+          data-sidebar-flyout=""
+          onMouseEnter={holdSidebarPeek}
+          onMouseLeave={releaseSidebarPeek}
           style={
             pos
               ? { top: pos.top, left: pos.left }

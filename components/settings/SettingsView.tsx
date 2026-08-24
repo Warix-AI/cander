@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ImagePlus } from "lucide-react";
+import {
+  ArrowLeft,
+  Blocks,
+  Building2,
+  CreditCard,
+  ImagePlus,
+  LayoutGrid,
+  Palette,
+  UserRound,
+} from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { AccountAvatar } from "@/components/shell/AccountAvatar";
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
@@ -37,7 +46,7 @@ import {
   removeUltraLicense,
   subscribeUltraLicenses,
 } from "@/lib/ultra-licenses";
-import type { Role } from "@/lib/types";
+import type { Role, SettingsTab } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { workspaceKindOf } from "@/lib/workspace-kind";
 import {
@@ -50,6 +59,8 @@ import {
   subscribeProfilePhotos,
 } from "@/lib/profile-photos";
 import { persistSignedOut, persistActor } from "@/lib/session";
+import { visibleSettingsTabs } from "@/lib/settings-nav";
+import { useMobileShell } from "@/lib/use-media-query";
 import {
   activateMaxSeat,
   setMemberRole,
@@ -59,17 +70,31 @@ import {
 
 const roles: Role[] = ["Owner", "Admin", "Member"];
 
-/** Full-screen account settings — tabs live in the sidebar. */
+const settingsIcons: Record<SettingsTab, typeof Building2> = {
+  organization: Building2,
+  workspaces: LayoutGrid,
+  connectors: Blocks,
+  plans: CreditCard,
+  general: UserRound,
+  appearance: Palette,
+};
+
+/** Full-screen account settings — hub on mobile, tabs in sidebar on desktop. */
 export function SettingsView() {
   const {
     settingsTab,
     setSettingsTab,
+    settingsMobileHub,
+    setSettingsMobileHub,
+    backToSettingsHub,
     entitlements,
     canGoBack,
     goBack,
     newChat,
   } = useApp();
   const [workspacePage, setWorkspacePage] = useState<string | null>(null);
+  const mobile = useMobileShell();
+  const settingsNav = visibleSettingsTabs(entitlements);
 
   useEffect(() => {
     if (settingsTab === "workspaces" && !entitlements.showWorkspacesAdmin) {
@@ -91,36 +116,91 @@ export function SettingsView() {
   };
 
   return (
-    <>
-      {settingsTab === "organization" ? <OrganizationSettings /> : null}
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {mobile && settingsMobileHub ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:hidden">
+          <h1 className="text-[22px] font-semibold tracking-[-0.03em]">
+            Settings
+          </h1>
+          <p className="mt-1 text-[13.5px] text-muted-foreground">
+            Organization, account, and preferences
+          </p>
+          <div className="mt-5 flex flex-col gap-1">
+            {settingsNav.map((tab) => {
+              const Icon = settingsIcons[tab.id];
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setSettingsTab(tab.id);
+                    setSettingsMobileHub(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-[10px] px-3 py-3 text-left transition-colors duration-200 hover:bg-muted"
+                >
+                  <Icon
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    strokeWidth={2}
+                  />
+                  <span className="text-[14px] font-medium tracking-[-0.01em]">
+                    {tab.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <>
+          {mobile ? (
+            <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-2 lg:hidden">
+              <button
+                type="button"
+                aria-label="Back to settings"
+                onClick={backToSettingsHub}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+              >
+                <ArrowLeft className="h-4 w-4" strokeWidth={1.6} />
+              </button>
+              <span className="truncate text-[14px] font-medium tracking-[-0.01em]">
+                {settingsNav.find((tab) => tab.id === settingsTab)?.label ??
+                  "Settings"}
+              </span>
+            </header>
+          ) : null}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {settingsTab === "organization" ? <OrganizationSettings /> : null}
 
-      {settingsTab === "workspaces" ? (
-        <WorkspacesSettings
-          selectedId={workspacePage}
-          onSelect={setWorkspacePage}
-        />
-      ) : null}
+            {settingsTab === "workspaces" ? (
+              <WorkspacesSettings
+                selectedId={workspacePage}
+                onSelect={setWorkspacePage}
+              />
+            ) : null}
 
-      {settingsTab === "connectors" ? <ConnectorsSettings /> : null}
+            {settingsTab === "connectors" ? <ConnectorsSettings /> : null}
 
-      {settingsTab === "plans" ? <PlansSettings /> : null}
+            {settingsTab === "plans" ? <PlansSettings /> : null}
 
-      {settingsTab === "general" ? (
-        <GeneralSettings
-          onLogout={() => {
-            persistActor("m1");
-            persistSignedOut();
-            leave();
-          }}
-          onRestartOnboarding={() => {
-            persistActor("m1");
-            persistSignedOut();
-          }}
-        />
-      ) : null}
+            {settingsTab === "general" ? (
+              <GeneralSettings
+                onLogout={() => {
+                  persistActor("m1");
+                  persistSignedOut();
+                  leave();
+                }}
+                onRestartOnboarding={() => {
+                  persistActor("m1");
+                  persistSignedOut();
+                }}
+              />
+            ) : null}
 
-      {settingsTab === "appearance" ? <AppearanceSettings /> : null}
-    </>
+            {settingsTab === "appearance" ? <AppearanceSettings /> : null}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

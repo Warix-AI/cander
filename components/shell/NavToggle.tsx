@@ -2,6 +2,7 @@
 
 import { PanelLeft } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 export function NavToggle({
@@ -13,14 +14,17 @@ export function NavToggle({
 }) {
   const {
     sidebarOpen,
-    mobileNav,
     workspaceRailOpen,
     toggleLeftPanel,
     entitlements,
   } = useApp();
+  const mobile = useMobileShell();
+
+  if (mobile) return null;
+
   const canRail =
     entitlements.hasWorkspaces && !entitlements.showInviteWall;
-  const open = sidebarOpen || mobileNav;
+  const open = sidebarOpen;
   const closingRailNext = open && canRail && workspaceRailOpen;
 
   return (

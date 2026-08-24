@@ -110,7 +110,11 @@ export function PlatformChatLayout() {
           ) : null}
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             {chatOpen && chatReady ? null : <InviteBanner />}
-            {platformNav === "recents" ? <RecentsView /> : <PlatformMain />}
+            {platformNav === "recents" ? (
+              <RecentsView />
+            ) : (
+              <PlatformMain />
+            )}
           </div>
         </SpaceRenderModeProvider>
       </div>

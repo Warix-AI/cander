@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import {
   DM_Sans,
@@ -60,6 +60,29 @@ export const metadata: Metadata = {
   },
   description:
     "One AI product to chat, work, build, research, create, and run production AI — in the cloud, locally, or on your device.",
+  applicationName: "Courier",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Courier",
+  },
+  icons: {
+    icon: [
+      { url: "/courier-mark-light.png", media: "(prefers-color-scheme: light)" },
+      { url: "/courier-mark-dark.png", media: "(prefers-color-scheme: dark)" },
+    ],
+    apple: "/courier-mark-light.png",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
 };
 
 const themeScript = `(function(){try{var a=localStorage.getItem('courier-appearance-v2');var theme=null;if(a){try{var j=JSON.parse(a);if(typeof j.color==='number'){theme=j.color<45?'light':'dark'}}catch(e){}}if(!theme){var t=localStorage.getItem('theme');theme=t==='dark'?'dark':t==='light'?'light':'light'}if(theme==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){document.documentElement.classList.remove('dark')}})();`;

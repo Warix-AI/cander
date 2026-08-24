@@ -212,6 +212,9 @@ type AppContextValue = {
   setScheduledFilter: (id: string) => void;
   settingsTab: SettingsTab;
   setSettingsTab: (tab: SettingsTab) => void;
+  settingsMobileHub: boolean;
+  setSettingsMobileHub: (hub: boolean) => void;
+  backToSettingsHub: () => void;
   spaceLayout: SpaceLayout;
   setSpaceLayout: (layout: SpaceLayout) => void;
   overlay: OverlayId;
@@ -222,6 +225,10 @@ type AppContextValue = {
   platformNav: PlatformNav;
   setPlatformNav: (id: PlatformNav) => void;
   newChat: (space?: SpaceId) => void;
+  /** Courier home chat — switches from Development when needed. */
+  openCourierHome: () => void;
+  /** Development overview — switches from Courier when needed. */
+  openDevelopmentOverview: () => void;
   /** Resume (or create) the persistent dock chat for a space. */
   openSpaceChat: (space: SpaceId) => void;
   setChatSpace: (id: SpaceId | null) => void;
@@ -283,7 +290,7 @@ type AppContextValue = {
   openProjectChat: (id: string) => void;
   openThread: (id: string) => void;
   openShared: () => void;
-  openSettings: (tab?: SettingsTab) => void;
+  openSettings: (tab?: SettingsTab, opts?: { hub?: boolean }) => void;
   openConnector: (id: string) => void;
   openJob: (id: string) => void;
   openSkill: (id: string) => void;
@@ -399,6 +406,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [jobId, setJobId] = useState<string | null>(null);
   const [scheduledFilter, setScheduledFilter] = useState("upcoming");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("organization");
+  const [settingsMobileHub, setSettingsMobileHub] = useState(true);
   const [platformNav, setPlatformNavState] = useState<PlatformNav>("overview");
   const [platformThreadId, setPlatformThreadId] = useState<string | null>(null);
   const [platformDockOpen, setPlatformDockOpenState] = useState(false);
@@ -939,25 +947,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const toggleLeftPanel = useCallback(() => {
     const desktop = window.matchMedia("(min-width: 1024px)").matches;
+    if (!desktop) return;
+
     const canRail =
       entitlements.hasWorkspaces && !entitlements.showInviteWall;
 
-    if (desktop) {
-      if (!sidebarOpen) {
-        setSidebarOpen(true);
-        if (canRail) setWorkspaceRailOpen(true);
-        return;
-      }
-      if (canRail && workspaceRailOpen) {
-        setWorkspaceRailOpen(false);
-        return;
-      }
-      setSidebarOpen(false);
-      return;
-    }
-
-    if (!mobileNav) {
-      setMobileNav(true);
+    if (!sidebarOpen) {
+      setSidebarOpen(true);
       if (canRail) setWorkspaceRailOpen(true);
       return;
     }
@@ -965,11 +961,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setWorkspaceRailOpen(false);
       return;
     }
-    setMobileNav(false);
+    setSidebarOpen(false);
   }, [
     sidebarOpen,
     workspaceRailOpen,
-    mobileNav,
     entitlements.hasWorkspaces,
     entitlements.showInviteWall,
   ]);
@@ -1062,6 +1057,63 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [product, platformNav, pushTarget, setPlatformDockOpen, openSpaceChat],
   );
+
+  const openCourierHome = useCallback(() => {
+    if (product === "courier") {
+      newChat();
+      return;
+    }
+    productMemory.current.platform = {
+      platformNav,
+      dockOpen: platformDockOpen,
+    };
+    setPlatformDockOpenState(false);
+    setMobileNav(false);
+    setOverlay(null);
+    setDrafting(false);
+    const snap = {
+      product: "courier" as const,
+      view: "chat" as const,
+      spaceId: null,
+      threadId: null,
+      projectId: null,
+      platformNav,
+      panelMode: "collapsed" as const,
+      panelIntent: "browse" as const,
+      connectorId: null,
+      jobId: null,
+      skillId: null,
+    };
+    applySnapshot(snap);
+    pushTarget(snap);
+  }, [
+    product,
+    platformNav,
+    platformDockOpen,
+    newChat,
+    applySnapshot,
+    pushTarget,
+  ]);
+
+  const openDevelopmentOverview = useCallback(() => {
+    if (product === "platform") {
+      setPlatformNav("overview");
+      setPlatformDockOpenState(false);
+      setMobileNav(false);
+      setOverlay(null);
+      return;
+    }
+    if (!entitlements.canAccessDevelopment) return;
+    setProduct("platform");
+    setPlatformNav("overview");
+    setPlatformDockOpenState(false);
+  }, [
+    product,
+    entitlements.canAccessDevelopment,
+    setProduct,
+    setPlatformNav,
+    setPlatformDockOpen,
+  ]);
 
   const setChatSpace = useCallback((id: SpaceId | null) => {
     setSpaceId(id);
@@ -2127,10 +2179,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setMobileNav(false);
   }, []);
 
-  const openSettings = useCallback((tab?: SettingsTab) => {
-    setSettingsTab(
-      tab ?? (entitlements.showOrgSettings ? "organization" : "plans"),
-    );
+  const openSettings = useCallback((tab?: SettingsTab, opts?: { hub?: boolean }) => {
+    if (opts?.hub) {
+      setSettingsMobileHub(true);
+    } else {
+      setSettingsMobileHub(false);
+      setSettingsTab(
+        tab ?? (entitlements.showOrgSettings ? "organization" : "plans"),
+      );
+    }
     setView("settings");
     setSpaceId(null);
     setProjectId(null);
@@ -2155,6 +2212,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       skillId: null,
     });
   }, [entitlements.showOrgSettings, product, platformNav, pushTarget]);
+
+  const backToSettingsHub = useCallback(() => {
+    setSettingsMobileHub(true);
+  }, []);
 
   const openOverlay = useCallback((id: OverlayId) => {
     setOverlay(id);
@@ -2483,6 +2544,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setScheduledFilter,
       settingsTab,
       setSettingsTab,
+      settingsMobileHub,
+      setSettingsMobileHub,
+      backToSettingsHub,
       platformNav,
       setPlatformNav,
       spaceLayout,
@@ -2493,6 +2557,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSpaceSettings,
       closeOverlay,
       newChat,
+      openCourierHome,
+      openDevelopmentOverview,
       openSpaceChat,
       setChatSpace,
       armChatInterface,
@@ -2620,6 +2686,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       jobId,
       scheduledFilter,
       settingsTab,
+      settingsMobileHub,
+      backToSettingsHub,
       platformNav,
       setPlatformNav,
       spaceLayout,
@@ -2629,6 +2697,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSpaceSettings,
       closeOverlay,
       newChat,
+      openCourierHome,
+      openDevelopmentOverview,
       openSpaceChat,
       setChatSpace,
       armChatInterface,

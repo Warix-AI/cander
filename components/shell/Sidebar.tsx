@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Blocks,
   Building2,
@@ -20,23 +20,25 @@ import { ProductSwitcher } from "@/components/shell/ProductSwitcher";
 import { WindowChrome } from "@/components/shell/WindowChrome";
 import { WorkspaceRail } from "@/components/shell/WorkspaceRail";
 import { useApp } from "@/components/app/AppProvider";
-import { platformNavItems, projects, spaces, connectors } from "@/lib/data";
+import { platformNavItems } from "@/lib/data";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import {
-  extraNavLabels,
-  navIcon,
   platformNavIcons,
   spaceIcons,
 } from "@/lib/space-icons";
+import { type SidebarNavId } from "@/lib/spaces";
 import {
-  isExtraNavId,
-  resolveSidebarNav,
-  type SidebarNavId,
-} from "@/lib/spaces";
-import type { PinKind, PinTier, SettingsTab, SpaceId } from "@/lib/types";
+  subscribeSidebarPeekHold,
+  subscribeSidebarPeekRelease,
+} from "@/lib/sidebar-peek";
+import { useMainNavItems } from "@/lib/use-main-nav-items";
+import { usePinnedItems, type PinnedItem } from "@/lib/use-pinned-items";
+import type { PinKind, SettingsTab, SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SHELL_FLOAT_RADIUS, useShellStyle } from "@/lib/shell-chrome";
-import { memberSpaces } from "@/lib/workspace-policy";
+
+const PEEK_CLOSE_MS = 160;
+const PEEK_EXIT_MS = 420;
 
 const settingsIcons: Record<SettingsTab, typeof Building2> = {
   organization: Building2,
@@ -47,129 +49,128 @@ const settingsIcons: Record<SettingsTab, typeof Building2> = {
   appearance: Palette,
 };
 
-function navLabel(id: SidebarNavId) {
-  if (isExtraNavId(id)) return extraNavLabels[id];
-  return spaces.find((item) => item.id === id)?.label;
-}
-
-type PinnedItem = {
-  kind: "thread" | "project" | "connector";
-  id: string;
-  title: string;
-  tier: PinTier;
-  icon?: string;
-  spaceId?: SpaceId;
-};
-
 export function Sidebar() {
   const {
     product,
-    workspace,
-    workspacePolicies,
     view,
     spaceId,
     threadId,
     projectId,
     sidebarOpen,
-    mobileNav,
     platformNav,
     setPlatformNav,
-    setMobileNav,
     newChat,
     openSpace,
     openRecents,
     openBrowser,
-    threads,
-    pins,
-    sidebarLayout,
     reorderPins,
     openThread,
     openProject,
     openConnector,
     connectorId,
-    actor,
-    billingPlan,
-    personalSpaceEnabled,
     entitlements,
     settingsTab,
     setSettingsTab,
     workspaceRailOpen,
   } = useApp();
 
-  const settingsNav = visibleSettingsTabs(entitlements);
+  const mainNavItems = useMainNavItems();
+  const { primaryItems, secondaryItems } = usePinnedItems();
   const inSettings = view === "settings";
   const [secondaryOpen, setSecondaryOpen] = useState(false);
+  const [peek, setPeek] = useState(false);
+  const [peekVisible, setPeekVisible] = useState(false);
+  const peekCloseTimer = useRef<number | null>(null);
+  const peekExitTimer = useRef<number | null>(null);
+  const edgeRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (inSettings || product !== "courier") setSecondaryOpen(false);
   }, [inSettings, product]);
+
+  useEffect(() => {
+    if (sidebarOpen) {
+      setPeek(false);
+      setPeekVisible(false);
+    }
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (peekCloseTimer.current) window.clearTimeout(peekCloseTimer.current);
+      if (peekExitTimer.current) window.clearTimeout(peekExitTimer.current);
+    };
+  }, []);
+
+  const clearPeekClose = useCallback(() => {
+    if (peekCloseTimer.current) {
+      window.clearTimeout(peekCloseTimer.current);
+      peekCloseTimer.current = null;
+    }
+  }, []);
+
+  const clearPeekExit = useCallback(() => {
+    if (peekExitTimer.current) {
+      window.clearTimeout(peekExitTimer.current);
+      peekExitTimer.current = null;
+    }
+  }, []);
+
+  const openPeek = useCallback(() => {
+    if (sidebarOpen) return;
+    clearPeekClose();
+    clearPeekExit();
+    setPeek(true);
+    setPeekVisible(true);
+  }, [sidebarOpen, clearPeekClose, clearPeekExit]);
+
+  const scheduleClosePeek = useCallback(() => {
+    if (sidebarOpen) return;
+    clearPeekClose();
+    peekCloseTimer.current = window.setTimeout(() => {
+      peekCloseTimer.current = null;
+      if (
+        panelRef.current?.matches(":hover") ||
+        edgeRef.current?.matches(":hover") ||
+        document.querySelector("[data-sidebar-flyout]:hover")
+      ) {
+        return;
+      }
+      setPeek(false);
+      clearPeekExit();
+      peekExitTimer.current = window.setTimeout(() => {
+        peekExitTimer.current = null;
+        setPeekVisible(false);
+      }, PEEK_EXIT_MS);
+    }, PEEK_CLOSE_MS);
+  }, [sidebarOpen, clearPeekClose, clearPeekExit]);
+
+  useEffect(() => {
+    return subscribeSidebarPeekHold(() => {
+      if (sidebarOpen) return;
+      clearPeekClose();
+      clearPeekExit();
+      setPeek(true);
+      setPeekVisible(true);
+    });
+  }, [sidebarOpen, clearPeekClose, clearPeekExit]);
+
+  useEffect(() => {
+    return subscribeSidebarPeekRelease(scheduleClosePeek);
+  }, [scheduleClosePeek]);
+
   const shellStyle = useShellStyle();
   const floating = shellStyle === "floating";
+  const peeking = peek && !sidebarOpen;
   const showRail =
     entitlements.hasWorkspaces &&
     !entitlements.showInviteWall &&
     workspaceRailOpen;
 
-  const { main } = resolveSidebarNav(
-    memberSpaces(workspace.id, actor.id, workspacePolicies),
-    sidebarLayout,
-    { billingPlan, personalEnabled: personalSpaceEnabled },
-  );
+  const settingsNav = visibleSettingsTabs(entitlements);
   const chatActive =
     view === "chat" && !threadId && !spaceId && product === "courier";
-
-  const pinnedItems: PinnedItem[] = [];
-  for (const pin of pins) {
-    const tier: PinTier =
-      pin.tier === "secondary" ? "secondary" : "primary";
-    if (pin.kind === "connector") {
-      const connector = connectors.find((item) => item.id === pin.id);
-      if (connector) {
-        pinnedItems.push({
-          kind: "connector",
-          id: connector.id,
-          title: connector.name,
-          icon: connector.icon,
-          tier,
-        });
-      }
-      continue;
-    }
-    if (pin.kind === "thread") {
-      const thread = threads.find(
-        (item) =>
-          item.id === pin.id &&
-          item.workspaceId === workspace.id &&
-          (item.product ?? "courier") === "courier",
-      );
-      if (thread) {
-        pinnedItems.push({
-          kind: "thread",
-          id: thread.id,
-          title: thread.title,
-          spaceId: thread.spaceId,
-          tier,
-        });
-      }
-      continue;
-    }
-    const project = projects.find(
-      (item) => item.id === pin.id && item.workspaceId === workspace.id,
-    );
-    if (project) {
-      pinnedItems.push({
-        kind: "project",
-        id: project.id,
-        title: project.name,
-        spaceId: project.space,
-        tier,
-      });
-    }
-  }
-
-  const primaryItems = pinnedItems.filter((item) => item.tier === "primary");
-  const secondaryItems = pinnedItems.filter(
-    (item) => item.tier === "secondary",
-  );
 
   const navActive = (id: SidebarNavId) => {
     if (id === "recents") return view === "recents";
@@ -184,9 +185,9 @@ export function Sidebar() {
   };
 
   const NavBtn = ({ id }: { id: SidebarNavId }) => {
-    const Icon = navIcon(id);
-    const label = navLabel(id);
-    if (!label) return null;
+    const item = mainNavItems.find((entry) => entry.id === id);
+    if (!item) return null;
+    const { Icon, label } = item;
     const active = navActive(id);
     return (
       <button
@@ -230,15 +231,37 @@ export function Sidebar() {
   );
 
   return (
-    <div
-      className={cn(
-        "h-full max-w-[100vw] shrink-0 gap-0",
-        mobileNav
-          ? "absolute inset-y-0 left-0 z-40 flex lg:hidden"
-          : "hidden",
-        sidebarOpen ? "lg:static lg:flex lg:max-w-none" : "lg:hidden",
-      )}
-    >
+    <>
+      {!sidebarOpen ? (
+        <div
+          ref={edgeRef}
+          aria-hidden
+          data-sidebar-edge=""
+          className="fixed inset-y-0 left-0 z-30 hidden w-[15px] lg:block"
+          onMouseEnter={openPeek}
+          onMouseLeave={scheduleClosePeek}
+        />
+      ) : null}
+      <div
+        ref={panelRef}
+        data-sidebar-panel=""
+        onMouseEnter={!sidebarOpen ? openPeek : undefined}
+        onMouseLeave={!sidebarOpen ? scheduleClosePeek : undefined}
+        className={cn(
+          "hidden h-full max-w-[100vw] shrink-0 gap-0 lg:flex",
+          sidebarOpen
+            ? "lg:static lg:max-w-none"
+            : cn(
+                "lg:fixed lg:inset-y-0 lg:left-0 lg:z-40",
+                "will-change-transform transition-[transform,opacity]",
+                peek
+                  ? "translate-x-0 opacity-100 duration-[360ms] ease-out"
+                  : "pointer-events-none -translate-x-full opacity-0 duration-[420ms] ease-in",
+                !peekVisible && "invisible",
+              ),
+        )}
+        aria-hidden={!sidebarOpen && !peek}
+      >
       <WorkspaceRail />
       <aside
         className={cn(
@@ -249,9 +272,11 @@ export function Sidebar() {
                 SHELL_FLOAT_RADIUS,
                 "my-3 mr-3 h-[calc(100%-1.5rem)]",
                 !showRail && "ml-3",
-                mobileNav && !showRail && "ml-2",
               )
-            : "h-full overflow-hidden border-r border-sidebar-border",
+            : cn(
+                "h-full overflow-hidden border-r border-sidebar-border",
+                peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
+              ),
         )}
       >
       <WindowChrome />
@@ -271,10 +296,7 @@ export function Sidebar() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => {
-                  setSettingsTab(tab.id);
-                  setMobileNav(false);
-                }}
+                onClick={() => setSettingsTab(tab.id)}
                 className={cn(
                   "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
                   settingsTab === tab.id
@@ -301,10 +323,7 @@ export function Sidebar() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => {
-                  setPlatformNav(item.id);
-                  setMobileNav(false);
-                }}
+                onClick={() => setPlatformNav(item.id)}
                 className={cn(
                   "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
                   platformNav === item.id
@@ -344,7 +363,7 @@ export function Sidebar() {
                 />
                 New chat
               </button>
-              {main.map((id) => (
+              {mainNavItems.map(({ id }) => (
                 <NavBtn key={id} id={id} />
               ))}
             </div>
@@ -415,6 +434,7 @@ export function Sidebar() {
       )}
     </aside>
     </div>
+    </>
   );
 }
 

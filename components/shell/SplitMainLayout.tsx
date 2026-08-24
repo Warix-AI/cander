@@ -21,7 +21,8 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
   } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
-  const bannerFlush = view === "space" && !drafting && !thread;
+  const hideTopRail =
+    view === "discovery" || (view === "space" && !drafting && !thread);
   const panelOn = panelMode !== "collapsed";
   const immersive = panelMode === "immersive";
   const wide = panelMode === "wide";
@@ -81,7 +82,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
         )}
         aria-hidden={mobileExclusive && !showChat}
       >
-        {bannerFlush ? null : <TopRail />}
+        {hideTopRail ? null : <TopRail />}
         {showChat || !mobileExclusive ? children : null}
       </div>
       {panelOn ? (

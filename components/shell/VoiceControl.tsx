@@ -3,15 +3,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { VoiceOrb, VoiceWaveform } from "@/components/shell/VoiceOrb";
+import { MOBILE_NAV_HEIGHT } from "@/lib/mobile-nav";
 import type { VoiceAnchor } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const ORB_SIZE = 45;
 
+function mobileNavLift() {
+  if (typeof window === "undefined") return 0;
+  return window.matchMedia("(min-width: 1024px)").matches ? 0 : MOBILE_NAV_HEIGHT;
+}
+
 function anchorPoint(anchor: VoiceAnchor) {
   const pad = 24;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
+  const lift = mobileNavLift();
   switch (anchor) {
     case "top-left":
       return { x: pad + ORB_SIZE / 2, y: pad + ORB_SIZE / 2 };
@@ -24,11 +31,11 @@ function anchorPoint(anchor: VoiceAnchor) {
     case "center-right":
       return { x: vw - pad - ORB_SIZE / 2, y: vh / 2 };
     case "bottom-left":
-      return { x: pad + ORB_SIZE / 2, y: vh - pad - ORB_SIZE / 2 };
+      return { x: pad + ORB_SIZE / 2, y: vh - pad - ORB_SIZE / 2 - lift };
     case "bottom-center":
-      return { x: vw / 2, y: vh - pad - ORB_SIZE / 2 };
+      return { x: vw / 2, y: vh - pad - ORB_SIZE / 2 - lift };
     default:
-      return { x: vw - pad - ORB_SIZE / 2, y: vh - pad - ORB_SIZE / 2 };
+      return { x: vw - pad - ORB_SIZE / 2, y: vh - pad - ORB_SIZE / 2 - lift };
   }
 }
 

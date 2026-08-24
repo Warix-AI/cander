@@ -4,7 +4,6 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { Search, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { DiscoveryIcon } from "@/components/discovery/DiscoveryIcon";
-import { NavToggle } from "@/components/shell/NavToggle";
 import {
   subscribeInstalledConnectors,
   getInstalledConnectorsSnapshot,
@@ -76,8 +75,6 @@ export function DiscoveryView() {
     product,
     openDiscoveryItem,
     runDiscoveryAction,
-    sidebarOpen,
-    mobileNav,
     newChat,
   } = useApp();
   const [query, setQuery] = useState("");
@@ -115,18 +112,12 @@ export function DiscoveryView() {
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-      <header className="flex h-11 shrink-0 items-center gap-1 bg-background px-2">
-        <NavToggle
-          className={cn(
-            sidebarOpen && "lg:hidden",
-            mobileNav && "max-lg:hidden",
-          )}
-        />
+      <header className="flex h-11 shrink-0 items-center justify-end gap-1 bg-background px-2">
         <button
           type="button"
           aria-label="Close discovery"
           onClick={() => newChat()}
-          className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <X className="h-4 w-4" strokeWidth={1.6} />
         </button>
