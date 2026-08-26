@@ -28,11 +28,14 @@ function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 640,
-    title: APP_NAME,
+    // Empty title avoids a native unclickable "title text" hit target on macOS.
+    title: "",
     backgroundColor: "#ffffff",
     show: false,
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 14 },
+    // hiddenInset leaves a native titlebar toolbar that eats clicks in the top
+    // ~38–52px. `hidden` + trafficLightPosition is the supported workaround.
+    titleBarStyle: "hidden",
+    trafficLightPosition: { x: 16, y: 18 },
     icon: ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -52,35 +55,25 @@ function createWindow() {
 
   mainWindow.webContents.on("did-finish-load", () => {
     markDesktopShell();
-    // Kill any prior drag overlays (insertCSS accumulates across reloads) and
-    // keep the chrome row fully clickable. Only explicit empty handles drag.
+    // Keep regions opt-in via inline styles in the React shell. Neutralize any
+    // leftover drag overlays from older Electron sessions (insertCSS stacks).
     void mainWindow?.webContents.insertCSS(`
       html.cander-desktop {
         --desktop-titlebar: ${TITLEBAR_PX}px !important;
         --desktop-traffic-clear: ${TRAFFIC_CLEAR_PX}px !important;
       }
-      /* Neutralize stale full-width titlebar drag layers from older shells. */
       html.cander-desktop::before,
       html.cander-desktop::after {
         content: none !important;
         display: none !important;
-        -webkit-app-region: no-drag !important;
         pointer-events: none !important;
-      }
-      html.cander-desktop,
-      html.cander-desktop body {
         -webkit-app-region: no-drag !important;
-      }
-      html.cander-desktop [data-desktop-no-drag],
-      html.cander-desktop [data-desktop-no-drag] * {
-        -webkit-app-region: no-drag !important;
-      }
-      html.cander-desktop [data-desktop-drag] {
-        -webkit-app-region: drag;
       }
     `);
   });
 
+  // Do not setTitle(APP_NAME) — a non-empty window title recreates a native
+  // unclickable hit target in the titlebar on macOS. Menu/Dock use app.setName.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     try {
       const target = new URL(url);

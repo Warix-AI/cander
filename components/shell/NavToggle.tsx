@@ -3,6 +3,7 @@
 import { PanelLeft } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import {
+  DESKTOP_NO_DRAG,
   DESKTOP_TRAFFIC_CLEAR_PX,
   useDesktopShell,
 } from "@/lib/desktop-shell";
@@ -30,6 +31,7 @@ export function NavToggle({
     entitlements,
   } = useApp();
   const mobile = useMobileShell();
+  const desktop = useDesktopShell();
 
   if (mobile) return null;
 
@@ -41,7 +43,7 @@ export function NavToggle({
   return (
     <button
       type="button"
-      data-desktop-no-drag=""
+      style={desktop ? DESKTOP_NO_DRAG : undefined}
       aria-label={
         !open
           ? "Open left panel"
@@ -88,9 +90,8 @@ export function LeftNavToggleDock({
   if (desktop && !floating) {
     return (
       <div
-        data-desktop-no-drag=""
         className="pointer-events-none fixed top-0 z-50 hidden h-[var(--desktop-titlebar,52px)] items-center lg:flex"
-        style={{ left: DESKTOP_TRAFFIC_CLEAR_PX }}
+        style={{ left: DESKTOP_TRAFFIC_CLEAR_PX, ...DESKTOP_NO_DRAG }}
       >
         <NavToggle docked className="pointer-events-auto" />
       </div>

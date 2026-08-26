@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 /** True when the UI is running inside the Cander Electron shell. */
 export function isDesktopShell() {
@@ -28,3 +28,15 @@ export const DESKTOP_TITLEBAR_PX = 52;
  * trafficLightPosition.x (16) + lights + a small gap (~80px).
  */
 export const DESKTOP_TRAFFIC_CLEAR_PX = 80;
+
+/**
+ * Inline app-region styles — more reliable in Electron than stylesheet rules
+ * for punching through the macOS titlebar hit target.
+ */
+export const DESKTOP_NO_DRAG = {
+  WebkitAppRegion: "no-drag",
+} as CSSProperties;
+
+export const DESKTOP_DRAG = {
+  WebkitAppRegion: "drag",
+} as CSSProperties;
