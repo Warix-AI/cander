@@ -18,6 +18,8 @@ import {
 import { connectors as seed } from "@/lib/data";
 import type { Connector, PinTier } from "@/lib/types";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
+import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
+import { useMobileShell } from "@/lib/use-media-query";
 import {
   attachWorkConnector,
   clearWorkConnectorAttach,
@@ -42,6 +44,11 @@ const SECTION_ORDER = [
 
 const PREVIEW_ROWS = 6;
 
+const connectorScopeOptions = [
+  { id: "connectors", label: "Connectors" },
+  { id: "installed", label: "Installed" },
+] as const;
+
 type ConnectorsView = "connectors" | "installed";
 
 export function ConnectorsDashboard() {
@@ -55,7 +62,13 @@ export function ConnectorsDashboard() {
     pinTier,
     setPin,
     clearPin,
+    newChat,
+    mobileSurface,
+    view: appView,
   } = useApp();
+  const mobile = useMobileShell();
+  const hoistFilters =
+    mobile && appView === "space" && mobileSurface === "panel";
   const installedIds = useSyncExternalStore(
     subscribeInstalledConnectors,
     getInstalledConnectorsSnapshot,
@@ -67,7 +80,7 @@ export function ConnectorsDashboard() {
     getWorkspaceConnectionsServerSnapshot,
   );
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<ConnectorsView>("connectors");
+  const [catalogView, setCatalogView] = useState<ConnectorsView>("connectors");
   const [searchOpen, setSearchOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [workAttachFor, setWorkAttachFor] = useState<string | null>(null);
@@ -141,7 +154,7 @@ export function ConnectorsDashboard() {
 
   const needle = query.trim().toLowerCase();
   const directory = useMemo(() => {
-    const pool = view === "installed" ? installed : apps;
+    const pool = catalogView === "installed" ? installed : apps;
     return pool.filter((item) => {
       if (blockedIds.includes(item.id)) return false;
       if (!needle) return true;
@@ -151,10 +164,10 @@ export function ConnectorsDashboard() {
         item.category.toLowerCase().includes(needle)
       );
     });
-  }, [apps, blockedIds, installed, needle, view]);
+  }, [apps, blockedIds, installed, needle, catalogView]);
 
   const sections = useMemo(() => {
-    if (view === "installed") {
+    if (catalogView === "installed") {
       return directory.length
         ? [{ title: "Installed", items: directory }]
         : [];
@@ -182,7 +195,7 @@ export function ConnectorsDashboard() {
     );
     if (leftover.length) groups.push({ title: "More", items: leftover });
     return groups;
-  }, [directory, view]);
+  }, [directory, catalogView]);
 
   return (
     <DashFrame
@@ -211,15 +224,28 @@ export function ConnectorsDashboard() {
           </div>
         ) : null}
 
-        <div className="flex flex-row flex-wrap items-center justify-between gap-2 @min-[420px]:gap-3">
+        <MobileFilterBar
+          active={hoistFilters}
+          onNewChat={() => newChat()}
+          scope={{
+            value: catalogView,
+            onChange: (value) => setCatalogView(value as ConnectorsView),
+            options: [...connectorScopeOptions],
+          }}
+          extras={[
+            {
+              id: "search",
+              label: searchOpen ? "Close search" : "Search",
+              active: searchOpen,
+              onClick: () => setSearchOpen((open) => !open),
+            },
+          ]}
+        >
           <ScopeToggle
             wrap
-            value={view}
-            onChange={(value) => setView(value as ConnectorsView)}
-            options={[
-              { id: "connectors", label: "Connectors" },
-              { id: "installed", label: "Installed" },
-            ]}
+            value={catalogView}
+            onChange={(value) => setCatalogView(value as ConnectorsView)}
+            options={[...connectorScopeOptions]}
           />
           <div className="flex min-w-0 items-center justify-end gap-1 @min-[420px]:ml-auto @min-[420px]:flex-1">
             {searchOpen ? (
@@ -264,18 +290,51 @@ export function ConnectorsDashboard() {
               </button>
             )}
           </div>
-        </div>
+        </MobileFilterBar>
+
+        {searchOpen ? (
+          <div className="relative mb-4 lg:hidden">
+            <Search
+              className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+              strokeWidth={1.6}
+            />
+            <input
+              ref={searchRef}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setQuery("");
+                  setSearchOpen(false);
+                }
+              }}
+              placeholder="Search connectors"
+              className="h-10 w-full rounded-[10px] border border-border bg-background pr-9 pl-9 text-[13px] outline-none placeholder:text-muted-foreground focus:border-foreground/20"
+            />
+            <button
+              type="button"
+              aria-label="Close search"
+              onClick={() => {
+                setQuery("");
+                setSearchOpen(false);
+              }}
+              className="absolute top-1/2 right-1.5 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={1.6} />
+            </button>
+          </div>
+        ) : null}
 
         {sections.length ? (
           sections.map((section) => {
-            const open = expanded[section.title] || Boolean(needle) || view === "installed";
+            const open = expanded[section.title] || Boolean(needle) || catalogView === "installed";
             const visible = open
               ? section.items
               : section.items.slice(0, PREVIEW_ROWS);
             const rest = section.items.slice(PREVIEW_ROWS);
             return (
               <section key={section.title} className="mt-10">
-                {view === "connectors" ? (
+                {catalogView === "connectors" ? (
                   <h2 className="text-[15px] font-medium tracking-[-0.02em]">
                     {section.title}
                   </h2>
@@ -283,7 +342,7 @@ export function ConnectorsDashboard() {
                 <div
                   className={cn(
                     "grid grid-cols-1 gap-x-8 gap-y-3 @min-[440px]:grid-cols-2",
-                    view === "connectors" ? "mt-4" : "mt-0",
+                    catalogView === "connectors" ? "mt-4" : "mt-0",
                   )}
                 >
                   {visible.map((item) => (
@@ -298,7 +357,7 @@ export function ConnectorsDashboard() {
                       onSetPin={() => setPin("connector", item.id, "primary")}
                       onClearPin={() => clearPin("connector", item.id)}
                       workAttach={Boolean(workAttachFor)}
-                      catalog={view === "connectors"}
+                      catalog={catalogView === "connectors"}
                     />
                   ))}
                 </div>
@@ -318,7 +377,7 @@ export function ConnectorsDashboard() {
           })
         ) : (
           <p className="mt-10 text-[13px] text-muted-foreground">
-            {view === "installed"
+            {catalogView === "installed"
               ? "No connectors installed yet."
               : "No connectors match that search."}
           </p>

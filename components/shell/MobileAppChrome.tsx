@@ -19,6 +19,10 @@ import {
 import { useApp } from "@/components/app/AppProvider";
 import { previewAddress } from "@/components/panels/PreviewChrome";
 import { Dropdown } from "@/components/ui/Controls";
+import {
+  MobilePanelActionsCluster,
+  useMobilePanelActionsState,
+} from "@/components/shell/mobile/MobilePanelActions";
 import { navLabel } from "@/lib/use-main-nav-items";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { isChatSpace, PRIMARY_NAV_SPACES } from "@/lib/spaces";
@@ -151,6 +155,18 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const hideNewChat =
     onMenuMain || inChromeSub || showBuildTools || showCreateWorkspace;
 
+  const panelActionsCtx = useMobilePanelActionsState();
+  const panelActions = panelActionsCtx?.actions;
+  const showPanelActions = Boolean(
+    panelActions &&
+    !onMenuMain &&
+    !inChromeSub &&
+    !showBuildTools &&
+    !showCreateWorkspace &&
+    (view === "recents" ||
+      (view === "space" && mobileSurface === "panel" && !entityOpen)),
+  );
+
   const startNewChat = () => {
     if (
       spaceId &&
@@ -160,6 +176,15 @@ export function MobileAppChrome({ className }: { className?: string }) {
       newChat(spaceId);
     } else {
       newChat();
+    }
+    setMobileSurface("chat");
+  };
+
+  const startPanelNewChat = () => {
+    if (panelActions?.onNewChat) {
+      panelActions.onNewChat();
+    } else {
+      startNewChat();
     }
     setMobileSurface("chat");
   };
@@ -342,6 +367,11 @@ export function MobileAppChrome({ className }: { className?: string }) {
           >
             <Plus className="h-5 w-5" strokeWidth={1.8} />
           </button>
+        ) : showPanelActions && panelActions ? (
+          <MobilePanelActionsCluster
+            config={panelActions}
+            onNewChat={startPanelNewChat}
+          />
         ) : hideNewChat ? (
           <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
         ) : (

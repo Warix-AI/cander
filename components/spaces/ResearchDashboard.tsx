@@ -13,8 +13,18 @@ import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import { projects, researchPaperPreviews } from "@/lib/data";
 import { projectsInSpace } from "@/lib/selectors";
 import type { Project } from "@/lib/types";
+import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
+import { useMobileShell } from "@/lib/use-media-query";
 
 type ExploreScope = "all" | "projects" | "research" | "reports" | "sources";
+
+const exploreScopeOptions = [
+  { id: "all", label: "All" },
+  { id: "projects", label: "Projects" },
+  { id: "research", label: "Research" },
+  { id: "reports", label: "Reports" },
+  { id: "sources", label: "Sources" },
+] as const;
 
 const sourceIds = new Set([
   "competitor-research",
@@ -35,7 +45,12 @@ export function ResearchDashboard() {
     spaceLayout,
     setSpaceLayout,
     newChat,
+    mobileSurface,
+    view,
   } = useApp();
+  const mobile = useMobileShell();
+  const hoistFilters =
+    mobile && view === "space" && mobileSurface === "panel";
   const [scope, setScope] = useState<ExploreScope>("all");
 
   const spaceProjects = useMemo(
@@ -61,21 +76,24 @@ export function ResearchDashboard() {
         </>
       }
     >
-      <div className="flex flex-row flex-wrap items-center justify-between gap-2 @min-[420px]:gap-3">
+      <MobileFilterBar
+        active={hoistFilters}
+        onNewChat={() => newChat("research")}
+        scope={{
+          value: scope,
+          onChange: (value) => setScope(value as ExploreScope),
+          options: [...exploreScopeOptions],
+        }}
+        layout={{ value: spaceLayout, onChange: setSpaceLayout }}
+      >
         <ScopeToggle
           wrap
           value={scope}
           onChange={(value) => setScope(value as ExploreScope)}
-          options={[
-            { id: "all", label: "All" },
-            { id: "projects", label: "Projects" },
-            { id: "research", label: "Research" },
-            { id: "reports", label: "Reports" },
-            { id: "sources", label: "Sources" },
-          ]}
+          options={[...exploreScopeOptions]}
         />
         <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
-      </div>
+      </MobileFilterBar>
 
       <div className="mt-5">
         <PreviewGrid

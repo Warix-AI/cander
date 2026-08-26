@@ -27,6 +27,7 @@ import { useSyncExternalStore } from "react";
 import { BrowserLayout } from "@/components/browser/BrowserLayout";
 import { FloatingVoiceDock } from "@/components/shell/VoiceControl";
 import { AppearanceProvider } from "@/components/theme/AppearanceProvider";
+import { MobilePanelActionsProvider } from "@/components/shell/mobile/MobilePanelActions";
 import { isDesktopShell } from "@/lib/desktop-shell";
 import {
   isMobileShell,
@@ -133,29 +134,31 @@ function Root() {
 
   return (
     <AppearanceProvider>
-      <div
-        data-app-shell=""
-        onTouchStart={swipe.onTouchStart}
-        onTouchEnd={swipe.onTouchEnd}
-        className={cn(
-          "relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background text-foreground",
-          // Bottom tab bar removed — no reserved nav inset on mobile.
-        )}
-      >
-        <MobileBootSplash />
-        <Sidebar />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          {mobile ? <MobileAppChrome /> : null}
-          <CourierMain />
+      <MobilePanelActionsProvider>
+        <div
+          data-app-shell=""
+          onTouchStart={swipe.onTouchStart}
+          onTouchEnd={swipe.onTouchEnd}
+          className={cn(
+            "relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background text-foreground",
+            // Bottom tab bar removed — no reserved nav inset on mobile.
+          )}
+        >
+          <MobileBootSplash />
+          <Sidebar />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {mobile ? <MobileAppChrome /> : null}
+            <CourierMain />
+          </div>
+          <SearchModal />
+          <ConfigureModal />
+          <SpaceSettingsModal />
+          <WorkspaceModal />
+          <InviteWall />
+          <PublishSheet />
+          <FloatingVoiceDock />
         </div>
-        <SearchModal />
-        <ConfigureModal />
-        <SpaceSettingsModal />
-        <WorkspaceModal />
-        <InviteWall />
-        <PublishSheet />
-        <FloatingVoiceDock />
-      </div>
+      </MobilePanelActionsProvider>
     </AppearanceProvider>
   );
 }

@@ -20,6 +20,8 @@ import {
 } from "@/lib/build-catalog";
 import { buildPreviews, projects } from "@/lib/data";
 import { projectsInSpace } from "@/lib/selectors";
+import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
+import { useMobileShell } from "@/lib/use-media-query";
 
 export function BuildDashboard() {
   const {
@@ -30,7 +32,12 @@ export function BuildDashboard() {
     newChat,
     spaceLayout,
     setSpaceLayout,
+    mobileSurface,
+    view,
   } = useApp();
+  const mobile = useMobileShell();
+  const hoistFilters =
+    mobile && view === "space" && mobileSurface === "panel";
   const [scope, setScope] = useState<BuildScope>("all");
 
   const previews = buildPreviews.filter(
@@ -72,7 +79,16 @@ export function BuildDashboard() {
         </>
       }
     >
-      <div className="flex flex-row flex-wrap items-center justify-between gap-2 @min-[420px]:gap-3">
+      <MobileFilterBar
+        active={hoistFilters}
+        onNewChat={() => newChat("build")}
+        scope={{
+          value: scope,
+          onChange: (value) => setScope(value as BuildScope),
+          options: buildScopeOptions(),
+        }}
+        layout={{ value: spaceLayout, onChange: setSpaceLayout }}
+      >
         <ScopeToggle
           wrap
           value={scope}
@@ -80,7 +96,7 @@ export function BuildDashboard() {
           options={buildScopeOptions()}
         />
         <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
-      </div>
+      </MobileFilterBar>
 
       <div className="mt-5">
         {scope === "projects" ? (

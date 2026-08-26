@@ -20,6 +20,8 @@ import {
 } from "@/lib/data";
 import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
 import type { SpaceId } from "@/lib/types";
+import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
+import { useMobileShell } from "@/lib/use-media-query";
 
 function recencyRank(updatedAt: string) {
   const text = updatedAt.toLowerCase();
@@ -48,10 +50,20 @@ export function RecentsView() {
     threads,
     openThread,
     openProject,
+    newChat,
     spaceLayout,
     setSpaceLayout,
   } = useApp();
+  const mobile = useMobileShell();
   const [scope, setScope] = useState("all");
+
+  const scopeOptions = [
+    { id: "all", label: "All" },
+    ...PRIMARY_NAV_SPACES.map((id) => ({
+      id,
+      label: spaces.find((item) => item.id === id)?.label ?? id,
+    })),
+  ];
 
   const items = useMemo(() => {
     const productThreads = threads.filter(
@@ -135,21 +147,20 @@ export function RecentsView() {
         title="Recents"
         subtitle="Chats and work from every Space, newest first."
       >
-        <div className="flex flex-row flex-wrap items-center justify-between gap-2 @min-[420px]:gap-3">
+        <MobileFilterBar
+          active={mobile}
+          onNewChat={() => newChat()}
+          scope={{ value: scope, onChange: setScope, options: scopeOptions }}
+          layout={{ value: spaceLayout, onChange: setSpaceLayout }}
+        >
           <ScopeToggle
             wrap
             value={scope}
             onChange={setScope}
-            options={[
-              { id: "all", label: "All" },
-              ...PRIMARY_NAV_SPACES.map((id) => ({
-                id,
-                label: spaces.find((item) => item.id === id)?.label ?? id,
-              })),
-            ]}
+            options={scopeOptions}
           />
           <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
-        </div>
+        </MobileFilterBar>
         <div className="mt-5">
           <PreviewGrid
             layout={spaceLayout}

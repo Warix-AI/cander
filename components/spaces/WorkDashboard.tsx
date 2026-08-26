@@ -19,6 +19,7 @@ import {
   getWorkConnectorsSnapshot,
   subscribeWorkConnectors,
   workConnectorIds,
+  armWorkConnectorAttach,
 } from "@/lib/work-connectors";
 import {
   getWorkAppsServerSnapshot,
@@ -36,6 +37,8 @@ import {
   type WorkScope,
   type WorkTone,
 } from "@/lib/work-catalog";
+import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 export function WorkDashboard() {
@@ -46,7 +49,14 @@ export function WorkDashboard() {
     openJob,
     spaceLayout,
     setSpaceLayout,
+    mobileSurface,
+    view,
+    openSpace,
+    openSpaceSettings,
   } = useApp();
+  const mobile = useMobileShell();
+  const hoistFilters =
+    mobile && view === "space" && mobileSurface === "panel";
   const [scope, setScope] = useState<WorkScope>("today");
   useSyncExternalStore(
     subscribeWorkConnectors,
@@ -124,7 +134,31 @@ export function WorkDashboard() {
         </>
       }
     >
-      <div className="flex flex-row flex-wrap items-center justify-between gap-2 @min-[420px]:gap-3">
+      <MobileFilterBar
+        active={hoistFilters}
+        onNewChat={() => newChat("work")}
+        scope={{
+          value: scope,
+          onChange: (value) => setScope(value as WorkScope),
+          options: workScopeOptions(),
+        }}
+        layout={{ value: spaceLayout, onChange: setSpaceLayout }}
+        extras={[
+          {
+            id: "add-connector",
+            label: "Add connector",
+            onClick: () => {
+              armWorkConnectorAttach(workspaceId);
+              openSpace("connectors");
+            },
+          },
+          {
+            id: "manage-connectors",
+            label: "Manage connectors",
+            onClick: () => openSpaceSettings("work"),
+          },
+        ]}
+      >
         <ScopeToggle
           wrap
           value={scope}
@@ -132,9 +166,9 @@ export function WorkDashboard() {
           options={workScopeOptions()}
         />
         <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
-      </div>
+      </MobileFilterBar>
 
-      <section className="mt-5">
+      <section className="mt-5 lg:mt-5">
         <h2 className="text-[13px] font-medium tracking-[-0.01em] text-muted-foreground">
           {workSectionTitle(scope)}
         </h2>

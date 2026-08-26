@@ -112,7 +112,7 @@
 /* Electron / macOS shell — classic chrome shares the traffic-light row */
 html.cander-desktop {
   --desktop-titlebar: 52px;
-  --desktop-traffic-clear: 80px;
+  --desktop-traffic-clear: 84px;
 }
 
 /* Capacitor iOS / Android — fixed app canvas; inner panels scroll only */

@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
 import {
   Link2,
@@ -96,6 +97,8 @@ export function Composer({
   const imageRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  /** Keep the + menu visible while the native file sheet is open (iOS). */
+  const awaitingFilePickRef = useRef(false);
 
   useEffect(() => {
     const apply = () => {
@@ -148,10 +151,14 @@ export function Composer({
   useEffect(() => {
     if (!menu) return;
     const onPointer = (event: MouseEvent) => {
+      if (awaitingFilePickRef.current) return;
       if (!wrapRef.current?.contains(event.target as Node)) setMenu(null);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenu(null);
+      if (event.key === "Escape") {
+        awaitingFilePickRef.current = false;
+        setMenu(null);
+      }
     };
     window.addEventListener("mousedown", onPointer);
     window.addEventListener("keydown", onKey);
@@ -160,6 +167,22 @@ export function Composer({
       window.removeEventListener("keydown", onKey);
     };
   }, [menu]);
+
+  const openFilePicker = (ref: RefObject<HTMLInputElement | null>) => {
+    awaitingFilePickRef.current = true;
+    ref.current?.click();
+  };
+
+  const finishFilePick = (
+    picked: FileList | null,
+    merge: (names: string[]) => void,
+  ) => {
+    awaitingFilePickRef.current = false;
+    const next = [...(picked ?? [])].map((file) => file.name);
+    if (!next.length) return;
+    merge(next);
+    setMenu(null);
+  };
 
   const toggleMenu = (id: MenuId) => {
     setMenu((current) => (current === id ? null : id));
@@ -293,8 +316,7 @@ export function Composer({
             ) : null}
             <MenuBtn
               onClick={() => {
-                fileRef.current?.click();
-                setMenu(null);
+                openFilePicker(fileRef);
               }}
             >
               <Paperclip className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.6} />
@@ -302,8 +324,7 @@ export function Composer({
             </MenuBtn>
             <MenuBtn
               onClick={() => {
-                imageRef.current?.click();
-                setMenu(null);
+                openFilePicker(imageRef);
               }}
             >
               <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.6} />
@@ -540,9 +561,13 @@ export function Composer({
       className="sr-only"
       aria-hidden
       onChange={(event) => {
-        const next = [...(event.target.files ?? [])].map((file) => file.name);
-        setFiles((current) => [...current, ...next].slice(0, 6));
+        finishFilePick(event.target.files, (next) => {
+          setFiles((current) => [...current, ...next].slice(0, 6));
+        });
         event.target.value = "";
+      }}
+      onCancel={() => {
+        awaitingFilePickRef.current = false;
       }}
     />
     <input
@@ -554,9 +579,13 @@ export function Composer({
       className="sr-only"
       aria-hidden
       onChange={(event) => {
-        const next = [...(event.target.files ?? [])].map((file) => file.name);
-        setFiles((current) => [...current, ...next].slice(0, 6));
+        finishFilePick(event.target.files, (next) => {
+          setFiles((current) => [...current, ...next].slice(0, 6));
+        });
         event.target.value = "";
+      }}
+      onCancel={() => {
+        awaitingFilePickRef.current = false;
       }}
     />
     </div>

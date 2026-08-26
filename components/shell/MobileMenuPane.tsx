@@ -41,6 +41,10 @@ export function MobileMenuPane() {
     if (mobileSurface !== "menu") setMobileMenuScreen("main");
   }, [mobileSurface, setMobileMenuScreen]);
 
+  const onMenuMain = mobileSurface === "menu" && mobileMenuScreen === "main";
+  /** Only paint nav selection while the menu pane is visible — avoids highlight sliding away. */
+  const showNavSelection = onMenuMain;
+
   const closeMenuOnly = () => {
     setMobileMenuScreen("main");
   };
@@ -101,7 +105,7 @@ export function MobileMenuPane() {
   if (mobileMenuScreen === "pinned" || mobileMenuScreen === "workspace") {
     return (
       <aside className="flex h-full min-h-0 flex-col bg-background text-foreground">
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top,0px)+12px)]">
           {mobileMenuScreen === "pinned" ? (
             <PinsSheet onSelect={closeToChat} hideHeading />
           ) : (
@@ -114,12 +118,15 @@ export function MobileMenuPane() {
 
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
-      <div className="flex min-h-0 flex-1 flex-col px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-[max(0.25rem,env(safe-area-inset-top))]">
+      <div className="flex min-h-0 flex-1 flex-col px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top,0px)+12px)]">
         <div>
           <button
             type="button"
             onClick={startNewChat}
-            className={cn(rowClass, chatActive && "bg-muted/70 font-medium")}
+            className={cn(
+              rowClass,
+              showNavSelection && chatActive && "bg-muted/70 font-medium",
+            )}
           >
             <SquarePen
               className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
@@ -153,7 +160,10 @@ export function MobileMenuPane() {
                 key={row.id}
                 type="button"
                 onClick={() => openNav(row.id)}
-                className={cn(rowClass, active && "bg-muted/70 font-medium")}
+                className={cn(
+                  rowClass,
+                  showNavSelection && active && "bg-muted/70 font-medium",
+                )}
               >
                 <row.Icon
                   className={cn(

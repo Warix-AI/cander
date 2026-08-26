@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, Menu, session } = require("electron");
+const { app, BrowserWindow, shell, Menu, session, ipcMain } = require("electron");
 const path = require("path");
 
 const APP_NAME = "Cander";
@@ -6,12 +6,12 @@ const DEFAULT_URL = "https://cander.app";
 const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Bumped when the native shell changes — visible on <html data-cander-shell>. */
-const SHELL_BUILD = "2026-08-26-load-retry";
+const SHELL_BUILD = "2026-08-26-frameless-traffic";
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
 /** Classic Mac titlebar / chrome row height (traffic-light axis). */
 const TITLEBAR_PX = 52;
-/** Left inset so header controls sit just past the traffic lights. */
-const TRAFFIC_CLEAR_PX = 80;
+/** Left inset so header controls sit just past custom traffic lights. */
+const TRAFFIC_CLEAR_PX = 84;
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
@@ -109,6 +109,7 @@ function loadApp(url) {
 }
 
 async function createWindow() {
+  const isMac = process.platform === "darwin";
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -117,9 +118,14 @@ async function createWindow() {
     title: "",
     backgroundColor: "#ffffff",
     show: false,
-    // hiddenInset leaves a native titlebar hit-target that eats top-row clicks.
-    titleBarStyle: "hidden",
-    trafficLightPosition: { x: 16, y: 18 },
+    // Frameless on macOS — custom traffic lights stay visible when unfocused.
+    frame: !isMac,
+    ...(isMac
+      ? {}
+      : {
+          titleBarStyle: "hidden",
+          trafficLightPosition: { x: 16, y: 18 },
+        }),
     icon: ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -302,6 +308,19 @@ app.whenReady().then(() => {
   if (process.platform === "darwin" && app.dock) {
     app.dock.setIcon(ICON_PATH);
   }
+
+  ipcMain.on("cander:window-minimize", () => {
+    mainWindow?.minimize();
+  });
+  ipcMain.on("cander:window-toggle-maximize", () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMaximized()) mainWindow.unmaximize();
+    else mainWindow.maximize();
+  });
+  ipcMain.on("cander:window-close", () => {
+    mainWindow?.close();
+  });
+
   buildMenu();
   void createWindow();
 
