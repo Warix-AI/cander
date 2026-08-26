@@ -45,7 +45,10 @@ export function MobileMenuPane() {
     if (mobileSurface !== "menu") setMobileMenuScreen("main");
   }, [mobileSurface, setMobileMenuScreen]);
 
-  const close = () => {
+  const closeMenuOnly = () => {
+    setMobileMenuScreen("main");
+  };
+  const closeToChat = () => {
     setMobileMenuScreen("main");
     setMobileSurface("chat");
   };
@@ -70,7 +73,8 @@ export function MobileMenuPane() {
       if (isChatSpace(id)) openSpaceChat(id);
       else openSpace(id as SpaceId);
     }
-    close();
+    // Let openSpace / openSpaceChat own mobileSurface — don't force chat.
+    closeMenuOnly();
   };
 
   const navRows: Array<
@@ -92,7 +96,7 @@ export function MobileMenuPane() {
       <aside className="flex h-full min-h-0 flex-col bg-background text-foreground">
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
           {mobileMenuScreen === "pinned" ? (
-            <PinsSheet onSelect={close} hideHeading />
+            <PinsSheet onSelect={closeToChat} hideHeading />
           ) : (
             <WorkspaceSheet
               onSelect={() => {}}
@@ -114,7 +118,7 @@ export function MobileMenuPane() {
           type="button"
           onClick={() => {
             newChat();
-            close();
+            closeToChat();
           }}
           className={cn(rowClass, chatActive && "bg-muted/70 font-medium")}
         >

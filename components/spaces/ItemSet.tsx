@@ -456,7 +456,7 @@ export function DashFrame({
               className={cn(
                 "mx-auto flex h-full w-full items-start px-4 pt-10 pb-4 max-lg:pt-11 @min-[480px]:px-8 @min-[480px]:pt-6 @min-[480px]:pb-5",
                 inPanel && "pt-5 max-lg:pt-5",
-                mobile && "px-3 pt-9 pb-3",
+                mobile && "px-4 pt-9 pb-3",
                 inPanel ? "max-w-none" : "max-w-6xl",
               )}
             >
@@ -487,7 +487,7 @@ export function DashFrame({
         <div
           className={cn(
             "mx-auto w-full px-4 pt-6 @min-[480px]:px-8 @min-[480px]:pt-8",
-            mobile && "px-3 pt-4",
+            mobile && "px-4 pt-4",
             inPanel ? "max-w-none" : "max-w-6xl",
           )}
         >
@@ -510,7 +510,7 @@ export function DashFrame({
       <div
         className={cn(
           "mx-auto w-full px-4 py-4 @min-[480px]:px-8 @min-[480px]:py-6",
-          mobile && "px-3 py-3",
+          mobile && "px-4 py-3",
           inPanel ? "max-w-none" : "max-w-6xl",
         )}
       >

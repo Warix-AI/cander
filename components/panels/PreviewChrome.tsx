@@ -80,6 +80,18 @@ export function PreviewChrome({
 
   return (
     <div className="min-w-0 shrink-0 overflow-hidden">
+      {mobile ? (
+        <div className="flex h-10 min-w-0 items-center gap-2 px-3">
+          <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.6} />
+          <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-muted-foreground">
+            {address}
+          </span>
+          <span className="truncate text-[12px] font-medium tracking-[-0.01em]">
+            {changing ? "Changes" : moreOpen ? "More" : title}
+          </span>
+        </div>
+      ) : (
+        <>
       <div className="flex h-11 min-w-0 items-center gap-1 px-3">
         <RailBtn
           active={changing}
@@ -119,7 +131,7 @@ export function PreviewChrome({
               <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
             )}
           </RailBtn>
-          {!mobile ? <PanelToggle /> : null}
+          <PanelToggle />
         </span>
       </div>
 
@@ -171,6 +183,8 @@ export function PreviewChrome({
           />
         </span>
       </div>
+        </>
+      )}
     </div>
   );
 }

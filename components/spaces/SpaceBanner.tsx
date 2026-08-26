@@ -54,8 +54,8 @@ export function SpaceBanner({
     <div
       className={cn(
         "relative shrink-0",
-        floating && !floatClearChrome && "pt-3 pr-3 pl-3",
-        floatClearChrome && "pt-3 pr-3",
+        floating && !floatClearChrome && "pt-3 pr-4 pl-4",
+        floatClearChrome && "pt-3 pr-4",
       )}
       style={
         floatClearChrome

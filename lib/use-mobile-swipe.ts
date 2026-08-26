@@ -7,6 +7,15 @@ import { useMobileShell } from "@/lib/use-media-query";
 
 const SWIPE_MIN = 56;
 
+function isChromeTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest(
+      "header, button, a, input, textarea, select, [role='tab'], [role='tablist'], [data-no-swipe]",
+    ),
+  );
+}
+
 /**
  * Horizontal swipe across menu · chat · panel.
  */
@@ -46,6 +55,10 @@ export function useMobileSwipeGestures() {
   const onTouchStart = useCallback(
     (event: TouchEvent) => {
       if (!mobile) return;
+      if (isChromeTarget(event.target)) {
+        tracking.current = false;
+        return;
+      }
       const touch = event.touches[0];
       if (!touch) return;
       startX.current = touch.clientX;

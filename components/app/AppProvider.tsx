@@ -274,6 +274,8 @@ type AppContextValue = {
   setVoiceAnchor: (anchor: VoiceAnchor) => void;
   openProject: (id: string) => void;
   openProjectChat: (id: string) => void;
+  /** Clear project/entity and return to the space directory on mobile/desktop. */
+  backToSpaceHome: () => void;
   openThread: (id: string) => void;
   openShared: () => void;
   openSettings: (tab?: SettingsTab, opts?: { hub?: boolean }) => void;
@@ -1762,7 +1764,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const chatActive = Boolean(threadId) || drafting;
     const keepChat = chatActive && projectId === id;
     if (match.workspaceId !== workspaceId) persistWorkspace(match.workspaceId);
-    setView("chat");
+    setView("space");
     setProjectId(match.id);
     setSpaceId(match.space);
     setConnectorId(null);
@@ -1777,9 +1779,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (match.space === "studio") setStudioTool("canvas");
     if (match.space === "research") setResearchTool("browser");
     setPanelMode("split");
-    setMobileSurface("chat");
+    setMobileSurface("panel");
     pushTarget({
-      view: "chat",
+      view: "space",
       spaceId: match.space,
       threadId: keepChat ? threadId : null,
       projectId: match.id,
@@ -1790,6 +1792,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       skillId: null,
     });
   }, [workspaceId, pushTarget, threadId, drafting, projectId]);
+
+  /** Leave a project/entity and return to the space directory on the panel. */
+  const backToSpaceHome = useCallback(() => {
+    if (!spaceId) return;
+    setProjectId(null);
+    setConnectorId(null);
+    setJobId(null);
+    setSkillId(null);
+    setPanelIntent("browse");
+    setView("space");
+    setMobileSurface("panel");
+    // Keep continuous chat armed when a thread exists; otherwise collapse drafting.
+    if (!threadId) {
+      setDrafting(false);
+      setPanelMode("collapsed");
+    } else {
+      setPanelMode("split");
+    }
+    pushTarget({
+      view: "space",
+      spaceId,
+      threadId,
+      projectId: null,
+      panelMode: threadId ? "split" : "collapsed",
+      panelIntent: "browse",
+      connectorId: null,
+      jobId: null,
+      skillId: null,
+    });
+  }, [spaceId, threadId, pushTarget]);
 
   const openThread = useCallback(
     (id: string) => {
@@ -2300,6 +2332,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       moveSidebarNav: moveNavItem,
       openProject,
       openProjectChat,
+      backToSpaceHome,
       openThread,
       openShared,
       openSettings,
@@ -2431,6 +2464,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       moveNavItem,
       openProject,
       openProjectChat,
+      backToSpaceHome,
       openThread,
       openShared,
       openSettings,
