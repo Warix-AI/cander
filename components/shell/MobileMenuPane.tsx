@@ -1,13 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Pin,
-  SquarePen,
-  UserRound,
-} from "lucide-react";
+import { useEffect } from "react";
+import { Pin, SquarePen, UserRound } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { AccountSheet } from "@/components/shell/mobile/AccountSheet";
 import { PinsSheet } from "@/components/shell/mobile/PinsSheet";
@@ -22,11 +16,10 @@ import { cn } from "@/lib/utils";
 const rowClass =
   "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[13.5px] transition-colors duration-200 hover:bg-muted/70";
 
-type MenuScreen = "main" | "pinned" | "workspace" | "account";
-
 /**
  * Full-screen menu pane for the mobile pager.
- * Main list is fixed; Pinned / Workspace / Account open scrollable sub-screens.
+ * Main list is fixed; Pinned / Workspace / Account open as sub-screens
+ * (chrome title/back live in MobileAppChrome).
  */
 export function MobileMenuPane() {
   const {
@@ -36,6 +29,8 @@ export function MobileMenuPane() {
     workspace,
     mobileSurface,
     setMobileSurface,
+    mobileMenuScreen,
+    setMobileMenuScreen,
     newChat,
     openSpaceChat,
     openSpace,
@@ -43,14 +38,13 @@ export function MobileMenuPane() {
     openBrowser,
   } = useApp();
   const items = useMainNavItems();
-  const [screen, setScreen] = useState<MenuScreen>("main");
 
   useEffect(() => {
-    if (mobileSurface !== "menu") setScreen("main");
-  }, [mobileSurface]);
+    if (mobileSurface !== "menu") setMobileMenuScreen("main");
+  }, [mobileSurface, setMobileMenuScreen]);
 
   const close = () => {
-    setScreen("main");
+    setMobileMenuScreen("main");
     setMobileSurface("chat");
   };
   const chatActive = view === "chat" && !threadId && !spaceId;
@@ -71,34 +65,19 @@ export function MobileMenuPane() {
     close();
   };
 
-  if (screen !== "main") {
-    const title =
-      screen === "pinned"
-        ? "Pinned"
-        : screen === "workspace"
-          ? "Workspace"
-          : "Account";
+  if (mobileMenuScreen !== "main") {
     return (
       <aside className="flex h-full min-h-0 flex-col bg-background text-foreground">
-        <div className="flex h-12 shrink-0 items-center gap-1 px-2">
-          <button
-            type="button"
-            aria-label="Back to menu"
-            onClick={() => setScreen("main")}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted/70"
-          >
-            <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
-          </button>
-          <p className="text-[15px] font-medium tracking-[-0.01em]">{title}</p>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-          {screen === "pinned" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
+          {mobileMenuScreen === "pinned" ? (
             <PinsSheet onSelect={close} hideHeading />
           ) : null}
-          {screen === "workspace" ? (
+          {mobileMenuScreen === "workspace" ? (
             <WorkspaceSheet onSelect={close} />
           ) : null}
-          {screen === "account" ? <AccountSheet onSelect={close} /> : null}
+          {mobileMenuScreen === "account" ? (
+            <AccountSheet onSelect={close} />
+          ) : null}
         </div>
       </aside>
     );
@@ -106,11 +85,7 @@ export function MobileMenuPane() {
 
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
-      <div className="flex h-12 shrink-0 items-center px-4">
-        <p className="text-[15px] font-medium tracking-[-0.01em]">Menu</p>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="flex min-h-0 flex-1 flex-col px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
         <button
           type="button"
           onClick={() => {
@@ -151,54 +126,40 @@ export function MobileMenuPane() {
           })}
         </div>
 
-        <div className="mt-auto space-y-0.5 border-t border-border pt-2">
+        <div className="mt-auto space-y-0.5">
           <button
             type="button"
-            onClick={() => setScreen("pinned")}
+            onClick={() => setMobileMenuScreen("pinned")}
             className={rowClass}
           >
             <Pin
               className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
               strokeWidth={2}
             />
-            <span className="min-w-0 flex-1 text-left">Pinned</span>
-            <ChevronRight
-              className="h-4 w-4 shrink-0 text-muted-foreground"
-              strokeWidth={1.8}
-            />
+            Pinned
           </button>
           <button
             type="button"
-            onClick={() => setScreen("workspace")}
+            onClick={() => setMobileMenuScreen("workspace")}
             className={rowClass}
           >
             <WorkspaceMark
               id={workspace.id}
               name={workspace.name}
-              size="sm"
+              size="nav"
             />
-            <span className="min-w-0 flex-1 truncate text-left">
-              {workspace.name}
-            </span>
-            <ChevronRight
-              className="h-4 w-4 shrink-0 text-muted-foreground"
-              strokeWidth={1.8}
-            />
+            <span className="min-w-0 truncate">{workspace.name}</span>
           </button>
           <button
             type="button"
-            onClick={() => setScreen("account")}
+            onClick={() => setMobileMenuScreen("account")}
             className={rowClass}
           >
             <UserRound
               className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
               strokeWidth={2}
             />
-            <span className="min-w-0 flex-1 text-left">Account</span>
-            <ChevronRight
-              className="h-4 w-4 shrink-0 text-muted-foreground"
-              strokeWidth={1.8}
-            />
+            Account
           </button>
         </div>
       </div>

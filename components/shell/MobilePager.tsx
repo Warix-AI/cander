@@ -26,7 +26,7 @@ export function MobilePager({
   return (
     <div className={cn("relative min-h-0 min-w-0 flex-1 overflow-hidden", className)}>
       <div
-        className="flex h-full transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
+        className="flex h-full transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform"
         style={{
           width: `${n * 100}%`,
           transform: `translate3d(-${(index * 100) / n}%, 0, 0)`,

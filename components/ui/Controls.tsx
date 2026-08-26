@@ -8,10 +8,12 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { Check, ChevronDown } from "lucide-react";
 import {
   holdSidebarPeek,
   releaseSidebarPeek,
 } from "@/lib/sidebar-peek";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 import {
   FLOAT_CONTROL_SHELL,
@@ -203,10 +205,72 @@ export function SegTabs({
   value: string;
   onChange: (id: string) => void;
 }) {
+  const mobile = useMobileShell();
+  const active = items.find((item) => item.id === value) ?? items[0];
+
+  if (mobile) {
+    return (
+      <Dropdown
+        align="start"
+        matchTrigger={false}
+        menuClassName="min-w-[11rem]"
+        trigger={({ open, toggle }) => (
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={toggle}
+            className={cn(
+              "inline-flex max-w-full items-center gap-1.5 rounded-[10px] px-3 h-8 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
+              FLOAT_CONTROL_SHELL,
+              "text-foreground",
+            )}
+          >
+            <span className="truncate">{active?.label ?? "View"}</span>
+            <ChevronDown
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
+                open && "rotate-180",
+              )}
+              strokeWidth={1.8}
+            />
+          </button>
+        )}
+      >
+        {(close) => (
+          <>
+            {items.map((item) => {
+              const selected = value === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    onChange(item.id);
+                    close();
+                  }}
+                  className={cn(
+                    "menu-row-hover flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-[13px] transition-colors",
+                    selected && "font-medium",
+                  )}
+                >
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {selected ? (
+                    <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+                  ) : null}
+                </button>
+              );
+            })}
+          </>
+        )}
+      </Dropdown>
+    );
+  }
+
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-0.5 rounded-[10px] p-1",
+        "inline-flex max-w-full items-center gap-0.5 rounded-[10px] p-1",
         FLOAT_CONTROL_SHELL,
       )}
     >
@@ -216,7 +280,7 @@ export function SegTabs({
           type="button"
           onClick={() => onChange(item.id)}
           className={cn(
-            "h-8 rounded-[8px] px-2.5 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
+            "h-8 shrink-0 rounded-[8px] px-2.5 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
             value === item.id
               ? FLOAT_TOGGLE_ACTIVE
               : "text-muted-foreground hover:text-foreground",

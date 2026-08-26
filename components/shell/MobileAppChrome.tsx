@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, SquarePen } from "lucide-react";
+import { ChevronLeft, Menu, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { navLabel } from "@/lib/use-main-nav-items";
 import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
@@ -9,21 +9,36 @@ import { cn } from "@/lib/utils";
 
 /**
  * ChatGPT-style mobile top bar.
- * Home: menu · · new chat
- * In Work / Build / Explore: menu · Chat | {Space} · new chat
+ * Home: menu · Chat|{Space} · new chat
+ * Menu sub-screen: back · title · (empty)
  */
 export function MobileAppChrome({ className }: { className?: string }) {
   const {
     view,
     spaceId,
+    workspace,
     mobileSurface,
     setMobileSurface,
+    mobileMenuScreen,
+    setMobileMenuScreen,
     panelMode,
     setPanelMode,
     newChat,
   } = useApp();
 
+  const inMenuSub =
+    mobileSurface === "menu" && mobileMenuScreen !== "main";
+  const subTitle =
+    mobileMenuScreen === "pinned"
+      ? "Pinned"
+      : mobileMenuScreen === "workspace"
+        ? workspace.name
+        : mobileMenuScreen === "account"
+          ? "Account"
+          : "";
+
   const showSpaceToggle =
+    !inMenuSub &&
     view === "space" &&
     Boolean(spaceId) &&
     (PRIMARY_NAV_SPACES as readonly string[]).includes(spaceId as string);
@@ -36,6 +51,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
         : "chat";
 
   const openMenu = () => {
+    if (inMenuSub) {
+      setMobileMenuScreen("main");
+      return;
+    }
     setMobileSurface(mobileSurface === "menu" ? "chat" : "menu");
   };
 
@@ -56,21 +75,35 @@ export function MobileAppChrome({ className }: { className?: string }) {
       <div className="flex h-12 items-center gap-2 px-3">
         <button
           type="button"
-          aria-label={mobileSurface === "menu" ? "Close menu" : "Open menu"}
-          aria-pressed={mobileSurface === "menu"}
+          aria-label={
+            inMenuSub
+              ? "Back to menu"
+              : mobileSurface === "menu"
+                ? "Close menu"
+                : "Open menu"
+          }
+          aria-pressed={!inMenuSub && mobileSurface === "menu"}
           onClick={openMenu}
           className={cn(
             "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors",
-            mobileSurface === "menu"
+            !inMenuSub && mobileSurface === "menu"
               ? "bg-foreground text-background"
               : "bg-muted/70 text-foreground hover:bg-muted",
           )}
         >
-          <Menu className="h-5 w-5" strokeWidth={1.8} />
+          {inMenuSub ? (
+            <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
+          ) : (
+            <Menu className="h-5 w-5" strokeWidth={1.8} />
+          )}
         </button>
 
         <div className="flex min-w-0 flex-1 items-center justify-center">
-          {showSpaceToggle ? (
+          {inMenuSub ? (
+            <p className="truncate text-[15px] font-medium tracking-[-0.01em]">
+              {subTitle}
+            </p>
+          ) : showSpaceToggle ? (
             <div
               role="tablist"
               aria-label="Surface"
@@ -108,17 +141,21 @@ export function MobileAppChrome({ className }: { className?: string }) {
           ) : null}
         </div>
 
-        <button
-          type="button"
-          aria-label="New chat"
-          onClick={() => {
-            newChat();
-            setMobileSurface("chat");
-          }}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
-        >
-          <SquarePen className="h-5 w-5" strokeWidth={1.8} />
-        </button>
+        {inMenuSub ? (
+          <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
+        ) : (
+          <button
+            type="button"
+            aria-label="New chat"
+            onClick={() => {
+              newChat();
+              setMobileSurface("chat");
+            }}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
+          >
+            <SquarePen className="h-5 w-5" strokeWidth={1.8} />
+          </button>
+        )}
       </div>
     </header>
   );

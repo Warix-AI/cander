@@ -27,7 +27,7 @@ export function WorkspaceMark({
   id: string;
   name: string;
   active?: boolean;
-  size?: "sm" | "md";
+  size?: "nav" | "sm" | "md";
   className?: string;
 }) {
   const icons = useSyncExternalStore(
@@ -37,15 +37,17 @@ export function WorkspaceMark({
   );
   const icon = workspaceIconFor(id, icons);
   const dim =
-    size === "sm"
-      ? "h-[26px] w-[26px] text-[11px]"
-      : "h-[35px] w-[35px] text-[12px]";
+    size === "nav"
+      ? "h-3.5 w-3.5 text-[7px] rounded-[4px]"
+      : size === "sm"
+        ? "h-[26px] w-[26px] text-[11px] rounded-[10px]"
+        : "h-[35px] w-[35px] text-[12px] rounded-[10px]";
 
   if (icon) {
     return (
       <span
         className={cn(
-          "relative inline-flex shrink-0 overflow-hidden rounded-[10px] border-[0.5px] border-foreground/15",
+          "relative inline-flex shrink-0 overflow-hidden border-[0.5px] border-foreground/15",
           dim,
           className,
         )}
@@ -58,7 +60,7 @@ export function WorkspaceMark({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-[10px] font-semibold tracking-[-0.02em] transition-colors duration-200",
+        "inline-flex shrink-0 items-center justify-center font-semibold tracking-[-0.02em] transition-colors duration-200",
         dim,
         active
           ? "bg-foreground text-background"

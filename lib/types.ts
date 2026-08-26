@@ -58,6 +58,9 @@ export type PanelIntent = "browse" | "execute";
 /** Mobile exclusive surface: menu · chat · right panel (swipeable). */
 export type MobileSurface = "menu" | "chat" | "panel";
 
+/** Nested screens inside the mobile menu pane. */
+export type MobileMenuScreen = "main" | "pinned" | "workspace" | "account";
+
 export type PageReference = {
   url: string;
   title: string;
@@ -166,10 +169,12 @@ export type PlatformDeployment = {
 
 export type Message = {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
   at: string;
   blocks?: ChatBlock[];
+  /** In-stream divider when the continuous chat switches spaces. */
+  spaceSwitch?: { from: SpaceId; to: SpaceId };
 };
 
 export type BuildStepStatus = "done" | "active" | "pending";

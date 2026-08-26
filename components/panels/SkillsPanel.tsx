@@ -7,6 +7,7 @@ import { Row, SectionLabel } from "@/components/panels/Bits";
 import { SegTabs } from "@/components/ui/Controls";
 import { skills } from "@/lib/data";
 import type { SkillsTool } from "@/lib/types";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
 
@@ -28,21 +29,30 @@ export function SkillsPanel() {
   const skill = skills.find((item) => item.id === skillId) ?? list[0];
   const execute = panelIntent === "execute" || Boolean(skillId);
   const tool = skillsTool === "overview" ? "editor" : skillsTool;
+  const mobile = useMobileShell();
 
   if (!execute) {
     return <ProjectsBrowser />;
   }
 
+  const tabs = (
+    <SegTabs
+      items={tools}
+      value={tool}
+      onChange={(id) => setSkillsTool(id as SkillsTool)}
+    />
+  );
+
   return (
     <div className={SHELL_PANEL_BODY}>
-      <PanelChrome kicker="Task" title={skill?.name ?? "Untitled task"} />
-      <div className="border-b border-border px-2 py-1.5">
-        <SegTabs
-          items={tools}
-          value={tool}
-          onChange={(id) => setSkillsTool(id as SkillsTool)}
-        />
-      </div>
+      <PanelChrome
+        kicker="Task"
+        title={skill?.name ?? "Untitled task"}
+        trailing={mobile ? tabs : undefined}
+      />
+      {!mobile ? (
+        <div className="border-b border-border px-2 py-1.5">{tabs}</div>
+      ) : null}
       <div className={SHELL_PANEL_SCROLL}>
         {tool === "editor" ? (
           <div className="flex h-full min-h-0 flex-col">

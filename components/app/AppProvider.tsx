@@ -90,6 +90,7 @@ import type {
   Message,
   Member,
   MobileSurface,
+  MobileMenuScreen,
   OverlayId,
   PageReference,
   PanelIntent,
@@ -114,8 +115,9 @@ import type {
 } from "@/lib/types";
 import { isSpaceLibrarySpace } from "@/lib/space-library";
 import {
+  ensureContinuousChat,
+  startContinuousChat,
   summarizeSession,
-  upsertPersistentSpaceThread,
 } from "@/lib/persistent-chat";
 
 type Snapshot = {
@@ -177,6 +179,8 @@ type AppContextValue = {
   setPanelIntent: (intent: PanelIntent) => void;
   mobileSurface: MobileSurface;
   setMobileSurface: (surface: MobileSurface) => void;
+  mobileMenuScreen: MobileMenuScreen;
+  setMobileMenuScreen: (screen: MobileMenuScreen) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
   workspaceRailOpen: boolean;
@@ -365,6 +369,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [panelIntent, setPanelIntent] = useState<PanelIntent>("browse");
   const [panelRatio, setPanelRatio] = useState(0.58);
   const [mobileSurface, setMobileSurface] = useState<MobileSurface>("chat");
+  const [mobileMenuScreen, setMobileMenuScreen] =
+    useState<MobileMenuScreen>("main");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [workspaceRailOpen, setWorkspaceRailOpen] = useState(true);
   const [dragging, setDragging] = useState(false);
@@ -559,14 +565,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           let tid = "";
           let hasMessages = false;
           setThreads((current) => {
-            const { threads: next, id: nextId } = upsertPersistentSpaceThread(
+            const { threads: next, id: nextId } = ensureContinuousChat(
               current,
               id,
               prevSpace,
             );
             tid = nextId;
             hasMessages = Boolean(
-              next.find((item) => item.id === nextId)?.messages.length,
+              next
+                .find((item) => item.id === nextId)
+                ?.messages.some(
+                  (msg) => msg.role === "user" || msg.role === "assistant",
+                ),
             );
             return next;
           });
@@ -736,14 +746,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let tid = "";
       let hasMessages = false;
       setThreads((current) => {
-        const { threads: next, id } = upsertPersistentSpaceThread(
+        const { threads: next, id } = ensureContinuousChat(
           current,
           workspaceId,
           space,
+          threadId,
         );
         tid = id;
         hasMessages = Boolean(
-          next.find((item) => item.id === id)?.messages.length,
+          next
+            .find((item) => item.id === id)
+            ?.messages.some(
+              (msg) => msg.role === "user" || msg.role === "assistant",
+            ),
         );
         return next;
       });
@@ -756,7 +771,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setView("space");
       setPanelIntent("execute");
       setPanelMode("split");
-      setMobileSurface("chat");
+      setMobileSurface((surface) => (surface === "menu" ? "chat" : surface));
       setDrafting(!hasMessages);
       if (space === "build") setBuildTool("preview");
       if (space === "studio") setStudioTool("canvas");
@@ -774,15 +789,55 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: null,
       });
     },
-    [workspaceId, pushTarget],
+    [workspaceId, threadId, pushTarget],
   );
 
   const newChat = useCallback(
     (space?: SpaceId) => {
-      if (space && isChatSpace(space)) {
-        openSpaceChat(space);
+      const nextSpace =
+        (space && isChatSpace(space) ? space : null) ??
+        (spaceId && isChatSpace(spaceId) ? spaceId : null);
+
+      if (nextSpace) {
+        let tid = "";
+        setThreads((current) => {
+          const started = startContinuousChat(
+            current,
+            workspaceId,
+            nextSpace,
+          );
+          tid = started.id;
+          return started.threads;
+        });
+        setThreadId(tid);
+        setSpaceId(nextSpace);
+        setProjectId(null);
+        setConnectorId(null);
+        setJobId(null);
+        setSkillId(null);
+        setView("space");
+        setDrafting(true);
+        setPanelIntent("execute");
+        setPanelMode("split");
+        setMobileSurface("chat");
+        if (nextSpace === "build") setBuildTool("preview");
+        if (nextSpace === "studio") setStudioTool("canvas");
+        if (nextSpace === "research") setResearchTool("browser");
+        if (nextSpace === "skills") setSkillsTool("editor");
+        pushTarget({
+          view: "space",
+          spaceId: nextSpace,
+          threadId: tid,
+          projectId: null,
+          panelMode: "split",
+          panelIntent: "execute",
+          connectorId: null,
+          jobId: null,
+          skillId: null,
+        });
         return;
       }
+
       setThreadId(null);
       setSpaceId(null);
       setProjectId(null);
@@ -805,7 +860,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: null,
       });
     },
-    [pushTarget, openSpaceChat],
+    [pushTarget, workspaceId, spaceId],
   );
 
   const openCourierHome = useCallback(() => {
@@ -832,14 +887,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let tid = "";
       let hasMessages = false;
       setThreads((current) => {
-        const { threads: next, id: nextId } = upsertPersistentSpaceThread(
+        const { threads: next, id: nextId } = ensureContinuousChat(
           current,
           workspaceId,
           id,
+          threadId,
         );
         tid = nextId;
         hasMessages = Boolean(
-          next.find((item) => item.id === nextId)?.messages.length,
+          next
+            .find((item) => item.id === nextId)
+            ?.messages.some(
+              (msg) => msg.role === "user" || msg.role === "assistant",
+            ),
         );
         return next;
       });
@@ -849,13 +909,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSpaceId(id);
       setPanelIntent("execute");
       setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
-      setMobileSurface("chat");
+      setMobileSurface((surface) => (surface === "menu" ? "chat" : surface));
       if (id === "build") setBuildTool("preview");
       if (id === "studio") setStudioTool("canvas");
       if (id === "research") setResearchTool("browser");
       if (id === "skills") setSkillsTool("editor");
     },
-    [workspaceId],
+    [workspaceId, threadId],
   );
 
   const selectChatSpace = useCallback(
@@ -865,21 +925,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSpaceId(id);
       setPanelIntent("execute");
       setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
-      setMobileSurface("chat");
+      setMobileSurface((surface) => (surface === "menu" ? "chat" : surface));
       if (id === "build") setBuildTool("preview");
       if (id === "studio") setStudioTool("canvas");
       if (id === "research")
         setResearchTool(opts?.researchTool ?? "browser");
       if (id === "skills") setSkillsTool("editor");
       if (threadId) {
-        setThreads((current) =>
-          current.map((item) =>
+        setThreads((current) => {
+          const existing = current.find((item) => item.id === threadId);
+          if (
+            existing?.persistent &&
+            !existing.projectId &&
+            existing.workspaceId === workspaceId
+          ) {
+            return ensureContinuousChat(
+              current,
+              workspaceId,
+              id,
+              threadId,
+            ).threads;
+          }
+          return current.map((item) =>
             item.id === threadId ? { ...item, spaceId: id } : item,
-          ),
-        );
+          );
+        });
       }
     },
-    [threadId],
+    [threadId, workspaceId],
   );
 
   const collapseDraft = useCallback(() => {
@@ -1192,10 +1265,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setThreads((current) => {
         let list = current;
         if (usePersistent && space) {
-          const upserted = upsertPersistentSpaceThread(
+          const upserted = ensureContinuousChat(
             list,
             workspaceId,
             space,
+            threadId,
           );
           list = upserted.threads;
           activeId = upserted.id;
@@ -2113,6 +2187,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPanelIntent,
       mobileSurface,
       setMobileSurface,
+      mobileMenuScreen,
+      setMobileMenuScreen,
       sidebarOpen,
       setSidebarOpen,
       workspaceRailOpen,
@@ -2251,6 +2327,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       panelIntent,
       panelRatio,
       mobileSurface,
+      mobileMenuScreen,
       sidebarOpen,
       workspaceRailOpen,
       toggleLeftPanel,

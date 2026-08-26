@@ -436,6 +436,7 @@ export function DashFrame({
   const mode = useSpaceRenderMode();
   const inPanel = mode === "panel";
   const desktop = useDesktopShell();
+  const mobile = useMobileShell();
   const bannerSpace = banner ? (bannerKey ?? space ?? spaceId) : null;
 
   return (
@@ -455,13 +456,14 @@ export function DashFrame({
               className={cn(
                 "mx-auto flex h-full w-full items-start px-4 pt-10 pb-4 max-lg:pt-11 @min-[480px]:px-8 @min-[480px]:pt-6 @min-[480px]:pb-5",
                 inPanel && "pt-5 max-lg:pt-5",
+                mobile && "px-3 pt-9 pb-3",
                 inPanel ? "max-w-none" : "max-w-6xl",
               )}
             >
               <DashHeader
                 kicker={kicker}
                 title={title}
-                subtitle={subtitle}
+                subtitle={mobile && inPanel ? undefined : subtitle}
                 titleAction={titleAction}
                 actions={
                   actions ? (
@@ -476,6 +478,7 @@ export function DashFrame({
                   ) : null
                 }
                 onBanner
+                compact={mobile}
               />
             </div>
           </SpaceBanner>
@@ -484,13 +487,14 @@ export function DashFrame({
         <div
           className={cn(
             "mx-auto w-full px-4 pt-6 @min-[480px]:px-8 @min-[480px]:pt-8",
+            mobile && "px-3 pt-4",
             inPanel ? "max-w-none" : "max-w-6xl",
           )}
         >
           <DashHeader
             kicker={kicker}
             title={title}
-            subtitle={subtitle}
+            subtitle={mobile && inPanel ? undefined : subtitle}
             titleAction={titleAction}
             actions={
               inPanel ? (
@@ -499,12 +503,14 @@ export function DashFrame({
                 actions
               )
             }
+            compact={mobile}
           />
         </div>
       )}
       <div
         className={cn(
           "mx-auto w-full px-4 py-4 @min-[480px]:px-8 @min-[480px]:py-6",
+          mobile && "px-3 py-3",
           inPanel ? "max-w-none" : "max-w-6xl",
         )}
       >
@@ -521,6 +527,7 @@ function DashHeader({
   actions,
   titleAction,
   onBanner = false,
+  compact = false,
 }: {
   kicker?: string;
   title: string;
@@ -528,6 +535,7 @@ function DashHeader({
   actions?: ReactNode;
   titleAction?: ReactNode;
   onBanner?: boolean;
+  compact?: boolean;
 }) {
   return (
     <div className="flex w-full flex-col items-start justify-between gap-3 @min-[520px]:flex-row @min-[520px]:items-end @min-[520px]:flex-wrap">
@@ -545,7 +553,10 @@ function DashHeader({
         <div className={cn("flex flex-wrap items-center gap-3", kicker && "mt-1.5 max-lg:mt-2")}>
           <h1
             className={cn(
-              "heading-display text-[1.55rem] @min-[480px]:text-[1.85rem]",
+              "heading-display",
+              compact
+                ? "text-[1.35rem] leading-tight"
+                : "text-[1.55rem] @min-[480px]:text-[1.85rem]",
               onBanner && "text-white",
             )}
           >
@@ -557,6 +568,7 @@ function DashHeader({
           <p
             className={cn(
               "mt-1.5 max-w-xl text-[13.5px] leading-relaxed @min-[480px]:mt-2 @min-[480px]:text-[14px]",
+              compact && "text-[13px]",
               onBanner ? "text-white/70" : "text-muted-foreground",
             )}
           >

@@ -7,6 +7,7 @@ import { SpaceLibraryPanel } from "@/components/panels/SpaceLibraryPanel";
 import { Row, SectionLabel } from "@/components/panels/Bits";
 import { SegTabs } from "@/components/ui/Controls";
 import type { StudioTool } from "@/lib/types";
+import { useMobileShell } from "@/lib/use-media-query";
 import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
 
 const tools: { id: StudioTool; label: string }[] = [
@@ -31,18 +32,26 @@ export function StudioPanel() {
     return <SpaceLibraryPanel />;
   }
 
+  const mobile = useMobileShell();
   const tool = execute && (studioTool === "overview" || !studioTool) ? "canvas" : studioTool;
+  const tabs = (
+    <SegTabs
+      items={tools}
+      value={tool}
+      onChange={(id) => setStudioTool(id as StudioTool)}
+    />
+  );
 
   return (
     <div className={SHELL_PANEL_BODY}>
-      <PanelChrome kicker="Studio" title={project?.name ?? "New canvas"} />
-      <div className="border-b border-border px-2 py-1.5">
-        <SegTabs
-          items={tools}
-          value={tool}
-          onChange={(id) => setStudioTool(id as StudioTool)}
-        />
-      </div>
+      <PanelChrome
+        kicker="Studio"
+        title={project?.name ?? "New canvas"}
+        trailing={mobile ? tabs : undefined}
+      />
+      {!mobile ? (
+        <div className="border-b border-border px-2 py-1.5">{tabs}</div>
+      ) : null}
       <div className={SHELL_PANEL_SCROLL}>
       {tool === "overview" ? (
         <div className="py-2">
