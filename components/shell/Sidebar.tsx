@@ -37,6 +37,7 @@ import {
 } from "@/lib/workspace-catalog";
 import type { PinKind, SettingsTab, SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useDesktopShell } from "@/lib/desktop-shell";
 import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 
 const PEEK_CLOSE_MS = 160;
@@ -163,6 +164,9 @@ export function Sidebar() {
 
   const shellStyle = useShellStyle();
   const floating = shellStyle === "floating";
+  const desktop = useDesktopShell();
+  /** Classic Mac: chrome on the traffic-light row, spanning rail + menu. */
+  const macClassic = desktop && !floating;
   const peeking = peek && !sidebarOpen;
   const workspaceCount = workspacesFor(actor, entitlements).length;
   const showRail =
@@ -257,6 +261,7 @@ export function Sidebar() {
         onMouseLeave={!sidebarOpen ? scheduleClosePeek : undefined}
         className={cn(
           "hidden h-full max-w-[100vw] shrink-0 gap-0 lg:flex",
+          macClassic && "flex-col",
           sidebarOpen
             ? "lg:static lg:max-w-none"
             : cn(
@@ -269,6 +274,19 @@ export function Sidebar() {
               ),
         )}
         aria-hidden={!sidebarOpen && !peek}
+      >
+      {macClassic ? (
+        <WindowChrome
+          clearTrafficLights
+          className="w-full bg-sidebar text-sidebar-foreground"
+        />
+      ) : null}
+
+      <div
+        className={cn(
+          "flex min-h-0",
+          macClassic ? "flex-1" : "h-full",
+        )}
       >
       <WorkspaceRail />
       <aside
@@ -288,8 +306,8 @@ export function Sidebar() {
               ),
         )}
       >
-      {/* Classic: separator + menu chrome start below the traffic-light zone. */}
-      {!floating ? (
+      {/* Browser classic only — Mac classic chrome sits on the traffic-light row. */}
+      {!floating && !macClassic ? (
         <div
           className="w-full shrink-0"
           style={{ height: "var(--desktop-titlebar)" }}
@@ -302,11 +320,14 @@ export function Sidebar() {
           !floating && "border-r border-sidebar-border",
         )}
       >
-      <WindowChrome />
+      {!macClassic ? <WindowChrome /> : null}
 
       {inSettings ? (
         <nav
-          className="mt-3.5 min-h-0 flex-1 overflow-y-auto px-2"
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto px-2",
+            macClassic ? "mt-2" : "mt-3.5",
+          )}
           aria-label="Settings"
         >
           <button
@@ -350,7 +371,10 @@ export function Sidebar() {
       ) : (
         <>
           <nav
-            className="mt-3.5 flex min-h-0 flex-1 flex-col overflow-hidden px-2"
+            className={cn(
+              "flex min-h-0 flex-1 flex-col overflow-hidden px-2",
+              macClassic ? "mt-2" : "mt-3.5",
+            )}
             aria-label="Main"
           >
             <div className="min-h-0 shrink overflow-y-auto">
@@ -398,6 +422,7 @@ export function Sidebar() {
       )}
       </div>
     </aside>
+      </div>
     </div>
     </>
   );

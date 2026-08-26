@@ -4,14 +4,11 @@ const path = require("path");
 const APP_NAME = "Cander";
 const DEFAULT_URL = "https://cander.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
-/** Clearance under traffic lights for left chrome only. */
-const TITLEBAR_PX = 47;
-/**
- * Drag only over the traffic-light cluster. A wider strip (e.g. full left chrome)
- * sits above the menu header and steals clicks from nav toggle / search.
- * trafficLightPosition.x (16) + ~3×14px buttons + gaps ≈ 78px.
- */
-const LEFT_DRAG_WIDTH_PX = 78;
+const ICON_PATH = path.join(__dirname, "../assets/icon.png");
+/** Classic Mac titlebar / chrome row height (traffic-light axis). */
+const TITLEBAR_PX = 52;
+/** Left inset so header controls sit just past the traffic lights. */
+const TRAFFIC_CLEAR_PX = 70;
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
@@ -21,6 +18,7 @@ function markDesktopShell() {
   void mainWindow.webContents.executeJavaScript(`
     document.documentElement.classList.add("cander-desktop");
     document.documentElement.style.setProperty("--desktop-titlebar", "${TITLEBAR_PX}px");
+    document.documentElement.style.setProperty("--desktop-traffic-clear", "${TRAFFIC_CLEAR_PX}px");
   `);
 }
 
@@ -35,7 +33,7 @@ function createWindow() {
     show: false,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 14 },
-    icon: path.join(__dirname, "../assets/icon.png"),
+    icon: ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -54,22 +52,23 @@ function createWindow() {
 
   mainWindow.webContents.on("did-finish-load", () => {
     markDesktopShell();
-    // Drag only over the left chrome so main content stays full-bleed and clickable.
+    // No full-width drag overlay — it steals clicks near the traffic lights.
+    // WindowChrome / dock use data-desktop-drag; buttons use data-desktop-no-drag.
     void mainWindow?.webContents.insertCSS(`
       html.cander-desktop {
         --desktop-titlebar: ${TITLEBAR_PX}px !important;
-      }
-      html.cander-desktop::before {
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: ${LEFT_DRAG_WIDTH_PX}px;
-        height: ${TITLEBAR_PX}px;
-        z-index: 2147483647;
-        -webkit-app-region: drag;
+        --desktop-traffic-clear: ${TRAFFIC_CLEAR_PX}px !important;
       }
       html.cander-desktop body {
+        -webkit-app-region: no-drag;
+      }
+      html.cander-desktop [data-desktop-drag] {
+        -webkit-app-region: drag;
+      }
+      html.cander-desktop [data-desktop-no-drag],
+      html.cander-desktop [data-desktop-drag] button,
+      html.cander-desktop [data-desktop-drag] a,
+      html.cander-desktop [data-desktop-drag] input {
         -webkit-app-region: no-drag;
       }
     `);
@@ -164,6 +163,9 @@ function buildMenu() {
 
 app.whenReady().then(() => {
   app.setName(APP_NAME);
+  if (process.platform === "darwin" && app.dock) {
+    app.dock.setIcon(ICON_PATH);
+  }
   buildMenu();
   createWindow();
 

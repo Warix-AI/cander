@@ -2,6 +2,10 @@
 
 import { PanelLeft } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import {
+  DESKTOP_TRAFFIC_CLEAR_PX,
+  useDesktopShell,
+} from "@/lib/desktop-shell";
 import { SHELL_FLOAT_INSET_PX, useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -37,6 +41,7 @@ export function NavToggle({
   return (
     <button
       type="button"
+      data-desktop-no-drag=""
       aria-label={
         !open
           ? "Open left panel"
@@ -60,7 +65,11 @@ export function NavToggle({
   );
 }
 
-/** Fixed toggle when the sidebar is collapsed — same spot as WindowChrome in the menu. */
+/**
+ * Fixed toggle when the sidebar is collapsed.
+ * Classic Mac: same spot as WindowChrome — just past the traffic lights —
+ * whether the rail was open or not.
+ */
 export function LeftNavToggleDock({
   showRail,
   peeking,
@@ -71,12 +80,34 @@ export function LeftNavToggleDock({
   const { sidebarOpen } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
+  const desktop = useDesktopShell();
 
   if (mobile || sidebarOpen || peeking) return null;
 
+  // Classic Mac: stay locked next to the traffic lights across collapse states.
+  if (desktop && !floating) {
+    return (
+      <div
+        className="pointer-events-none fixed top-0 z-50 hidden h-[var(--desktop-titlebar,52px)] items-center lg:flex"
+        style={{ left: DESKTOP_TRAFFIC_CLEAR_PX }}
+      >
+        <NavToggle docked className="pointer-events-auto" />
+        {/* Small drag handle so the window stays movable when the menu is closed. */}
+        <div
+          data-desktop-drag=""
+          className="pointer-events-auto ml-1 h-full w-16"
+          aria-hidden
+        />
+      </div>
+    );
+  }
+
   const leftPx =
-    (showRail ? WORKSPACE_RAIL_WIDTH_PX : floating ? SHELL_FLOAT_INSET_PX : 0) +
-    CHROME_PAD_PX;
+    (showRail
+      ? WORKSPACE_RAIL_WIDTH_PX
+      : floating
+        ? SHELL_FLOAT_INSET_PX
+        : 0) + CHROME_PAD_PX;
 
   return (
     <div

@@ -109,9 +109,10 @@
   --footer-foreground: oklch(0.985 0 0);
 }
 
-/* Electron / macOS shell — clear traffic lights on left chrome only */
+/* Electron / macOS shell — classic chrome shares the traffic-light row */
 html.cander-desktop {
-  --desktop-titlebar: 47px;
+  --desktop-titlebar: 52px;
+  --desktop-traffic-clear: 70px;
 }
 
 @theme inline {
