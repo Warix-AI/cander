@@ -223,13 +223,13 @@ export function Composer({
                     : "pr-3 pl-2 sm:pr-4 sm:pl-2.5",
                   showUsageBar
                     ? "pb-0"
-                    : "composer-keyboard-pad pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.35rem))] sm:pb-4",
+                    : "pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.35rem))] sm:pb-4",
                 )
               : cn(
                   "px-4 sm:px-6",
                   showUsageBar
                     ? "pb-0"
-                    : "composer-keyboard-pad pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.35rem))] sm:pb-4",
+                    : "pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.35rem))] sm:pb-4",
                 )
       }
       onSubmit={(event) => {
@@ -448,7 +448,18 @@ export function Composer({
                 rows={1}
                 placeholder={hint}
                 autoFocus={autoFocus}
-                onFocus={onFocus}
+                enterKeyHint="send"
+                autoComplete="off"
+                onFocus={(event) => {
+                  onFocus?.();
+                  window.setTimeout(() => {
+                    event.target.scrollIntoView({
+                      block: "nearest",
+                      inline: "nearest",
+                    });
+                    window.scrollTo(0, 0);
+                  }, 50);
+                }}
                 onChange={(event) => {
                   const next = event.target.value;
                   setValue(next);
@@ -490,34 +501,39 @@ export function Composer({
           </div>
         )}
 
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(event) => {
-            const next = [...(event.target.files ?? [])].map((file) => file.name);
-            setFiles((current) => [...current, ...next].slice(0, 6));
-            event.target.value = "";
-          }}
-        />
-        <input
-          ref={imageRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(event) => {
-            const next = [...(event.target.files ?? [])].map((file) => file.name);
-            setFiles((current) => [...current, ...next].slice(0, 6));
-            event.target.value = "";
-          }}
-        />
         {showUsageBar ? (
           <ComposerUsageBar floating={floating} percent={usagePercent} />
         ) : null}
       </div>
     </form>
+    {/* Outside <form> so iOS doesn’t show the prev/next accessory bar above the keyboard. */}
+    <input
+      ref={fileRef}
+      type="file"
+      multiple
+      tabIndex={-1}
+      className="sr-only"
+      aria-hidden
+      onChange={(event) => {
+        const next = [...(event.target.files ?? [])].map((file) => file.name);
+        setFiles((current) => [...current, ...next].slice(0, 6));
+        event.target.value = "";
+      }}
+    />
+    <input
+      ref={imageRef}
+      type="file"
+      accept="image/*"
+      multiple
+      tabIndex={-1}
+      className="sr-only"
+      aria-hidden
+      onChange={(event) => {
+        const next = [...(event.target.files ?? [])].map((file) => file.name);
+        setFiles((current) => [...current, ...next].slice(0, 6));
+        event.target.value = "";
+      }}
+    />
     </div>
   );
 }

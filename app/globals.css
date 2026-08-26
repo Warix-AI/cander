@@ -170,17 +170,6 @@ html.cander-narrow .landing-suggestions {
   view-transition-name: none !important;
 }
 
-/* Composer docks above the soft keyboard; drop home-indicator pad while typing */
-html.cander-mobile[data-keyboard="1"] .composer-keyboard-pad,
-html.cander-narrow[data-keyboard="1"] .composer-keyboard-pad {
-  padding-bottom: 0 !important;
-}
-
-html.cander-mobile[data-keyboard="1"] [data-app-shell],
-html.cander-narrow[data-keyboard="1"] [data-app-shell] {
-  padding-bottom: var(--keyboard-inset, 0px);
-}
-
 /* Narrow phone / tablet shell (browser + Capacitor) — same fixed canvas */
 @media (max-width: 1023px) {
   html {

@@ -22,6 +22,12 @@ const config = {
       "10.0.2.2",
     ],
   },
+  plugins: {
+    Keyboard: {
+      resize: "body",
+      resizeOnFullScreen: true,
+    },
+  },
   ios: {
     contentInset: "automatic",
     preferredContentMode: "mobile",

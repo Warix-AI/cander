@@ -10,8 +10,6 @@ class CanderBridgeViewController: CAPBridgeViewController {
     html.cander-mobile input,html.cander-mobile textarea,html.cander-mobile select{font-size:16px;touch-action:manipulation}
     html.cander-mobile [data-app-shell],html.cander-mobile .h-svh{height:100%;height:100dvh;max-height:100dvh}
     html.cander-mobile .composer-dock,html.cander-mobile .landing-mark,html.cander-mobile .landing-suggestions{view-transition-name:none!important}
-    html.cander-mobile[data-keyboard="1"] .composer-keyboard-pad{padding-bottom:0!important}
-    html.cander-mobile[data-keyboard="1"] [data-app-shell]{padding-bottom:var(--keyboard-inset,0px)}
     """
 
     private static let mobileShellScript = """

@@ -32,6 +32,7 @@ import {
   lockMobileViewport,
   useMobileShell as useCapacitorMobileShell,
 } from "@/lib/mobile-shell";
+import { setShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useMobileSwipeGestures } from "@/lib/use-mobile-swipe";
 import { cn } from "@/lib/utils";
@@ -81,6 +82,12 @@ function Root() {
       unlock();
       document.documentElement.classList.remove("cander-narrow");
     };
+  }, [mobile]);
+
+  // Floating chrome is the mobile default.
+  useEffect(() => {
+    if (!mobile) return;
+    setShellStyle("floating");
   }, [mobile]);
 
   useEffect(() => {

@@ -5,6 +5,12 @@ import { useEffect, useState } from "react";
 type CapacitorBridge = {
   isNativePlatform?: () => boolean;
   getPlatform?: () => string;
+  Plugins?: {
+    Keyboard?: {
+      setAccessoryBarVisible?: (opts: { isVisible: boolean }) => Promise<void>;
+      setScroll?: (opts: { isDisabled: boolean }) => Promise<void>;
+    };
+  };
 };
 
 function getCapacitor(): CapacitorBridge | undefined {
@@ -27,38 +33,36 @@ export function getMobilePlatform(): "ios" | "android" | "web" {
   return "web";
 }
 
+/** Hide iOS form accessory (↑↓ / Done) when Capacitor Keyboard is available. */
+async function hideKeyboardAccessory() {
+  try {
+    const keyboard = getCapacitor()?.Plugins?.Keyboard;
+    await keyboard?.setAccessoryBarVisible?.({ isVisible: false });
+    await keyboard?.setScroll?.({ isDisabled: true });
+  } catch {
+    // Plugin optional — accessory also fixed by keeping file inputs out of <form>.
+  }
+}
+
 /**
- * Keep the app canvas full-height. Track keyboard inset so the composer
- * can sit just above the keyboard — no shrinking the whole screen.
+ * Prevent pinch-zoom / document scroll. Do NOT resize the shell around the
+ * keyboard — that shoved the composer off-screen.
  */
 export function lockMobileViewport() {
   const root = document.documentElement;
+  void hideKeyboardAccessory();
 
-  const sync = () => {
-    const vv = window.visualViewport;
-    if (!vv) {
-      root.style.setProperty("--keyboard-inset", "0px");
-      root.dataset.keyboard = "0";
-      return;
-    }
-    // Visible gap between layout bottom and the visual viewport bottom.
-    const keyboard = Math.max(
-      0,
-      window.innerHeight - vv.height - vv.offsetTop,
-    );
-    root.style.setProperty("--keyboard-inset", `${Math.round(keyboard)}px`);
-    root.dataset.keyboard = keyboard > 40 ? "1" : "0";
+  const keepTop = () => {
     if (window.scrollY !== 0 || window.scrollX !== 0) {
       window.scrollTo(0, 0);
     }
   };
 
-  sync();
+  keepTop();
   const vv = window.visualViewport;
-  vv?.addEventListener("resize", sync);
-  vv?.addEventListener("scroll", sync);
-  window.addEventListener("focusin", sync);
-  window.addEventListener("focusout", sync);
+  vv?.addEventListener("resize", keepTop);
+  vv?.addEventListener("scroll", keepTop);
+  window.addEventListener("focusin", keepTop);
 
   const blockZoom = (event: Event) => {
     event.preventDefault();
@@ -74,10 +78,9 @@ export function lockMobileViewport() {
   } as AddEventListenerOptions);
 
   return () => {
-    vv?.removeEventListener("resize", sync);
-    vv?.removeEventListener("scroll", sync);
-    window.removeEventListener("focusin", sync);
-    window.removeEventListener("focusout", sync);
+    vv?.removeEventListener("resize", keepTop);
+    vv?.removeEventListener("scroll", keepTop);
+    window.removeEventListener("focusin", keepTop);
     document.removeEventListener("gesturestart", blockZoom);
     document.removeEventListener("gesturechange", blockZoom);
     document.removeEventListener("gestureend", blockZoom);
