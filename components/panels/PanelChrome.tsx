@@ -28,7 +28,8 @@ export function PanelChrome({
     <div
       className={cn(
         "flex min-w-0 shrink-0 items-center gap-1",
-        integrated ? "h-11 px-3" : "h-11 px-3",
+        "h-11 px-3",
+        mobile && "pr-3",
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2 px-0.5">
@@ -46,18 +47,20 @@ export function PanelChrome({
       </div>
       <span className="ml-auto flex shrink-0 items-center gap-0.5">
         {trailing}
-        <ChromeBtn
-          label={panelMode === "immersive" ? "Exit full screen" : "Full screen"}
-          onClick={() =>
-            setPanelMode(panelMode === "immersive" ? "split" : "immersive")
-          }
-        >
-          {panelMode === "immersive" ? (
-            <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-          ) : (
-            <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-          )}
-        </ChromeBtn>
+        {mobile ? null : (
+          <ChromeBtn
+            label={panelMode === "immersive" ? "Exit full screen" : "Full screen"}
+            onClick={() =>
+              setPanelMode(panelMode === "immersive" ? "split" : "immersive")
+            }
+          >
+            {panelMode === "immersive" ? (
+              <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+            ) : (
+              <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+            )}
+          </ChromeBtn>
+        )}
         {integrated && !mobile ? <PanelToggle /> : null}
       </span>
     </div>

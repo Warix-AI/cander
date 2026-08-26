@@ -21,6 +21,7 @@ import {
   type BannerKey,
 } from "@/lib/space-banners";
 import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 /** Traffic-light clear + panel toggle (32) + 15px gap before banner content. */
@@ -39,6 +40,7 @@ export function SpaceBanner({
   const shellStyle = useShellStyle();
   const floating = shellStyle === "floating";
   const desktop = useDesktopShell();
+  const mobile = useMobileShell();
   const banners = useSyncExternalStore(
     subscribeSpaceBanners,
     getSpaceBannersSnapshot,
@@ -54,7 +56,7 @@ export function SpaceBanner({
     <div
       className={cn(
         "relative shrink-0",
-        floating && !floatClearChrome && "pt-3 pr-4 pl-4",
+        floating && !floatClearChrome && !mobile && "pt-3 pr-4 pl-4",
         floatClearChrome && "pt-3 pr-4",
       )}
       style={

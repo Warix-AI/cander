@@ -1631,9 +1631,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSpaceId(null);
     setProjectId(null);
     setThreadId(null);
+    setConnectorId(null);
+    setJobId(null);
+    setSkillId(null);
     setDrafting(false);
     setPanelIntent("browse");
     setPanelMode("collapsed");
+    setMobileSurface("chat");
     pushTarget({
       view: "recents",
       spaceId: null,
@@ -2122,7 +2126,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     setPanelIntent("execute");
     setPanelMode("split");
-    setMobileSurface("chat");
+    setMobileSurface("panel");
     pushTarget({
       view: "chat",
       spaceId: "connectors",

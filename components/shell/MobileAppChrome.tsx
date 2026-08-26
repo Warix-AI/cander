@@ -18,6 +18,7 @@ import {
 import { useApp } from "@/components/app/AppProvider";
 import { previewAddress } from "@/components/panels/PreviewChrome";
 import { Dropdown } from "@/components/ui/Controls";
+import { setComposerSeed } from "@/lib/composer-seed";
 import { navLabel } from "@/lib/use-main-nav-items";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
@@ -52,6 +53,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     spaceId,
     projectId,
     project,
+    connectorId,
     entitlements,
     mobileSurface,
     setMobileSurface,
@@ -98,11 +100,13 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const inPrimarySpace =
     Boolean(spaceId) &&
     (PRIMARY_NAV_SPACES as readonly string[]).includes(spaceId as string);
-  const entityOpen = Boolean(projectId);
+  const inConnector =
+    spaceId === "connectors" && Boolean(connectorId);
+  const entityOpen = Boolean(projectId) || inConnector;
   const showSpaceToggle =
     !inChromeSub &&
     !onMenuMain &&
-    inPrimarySpace &&
+    (inPrimarySpace || inConnector) &&
     (view === "space" || (view === "chat" && Boolean(spaceId)));
 
   const settingsNav = visibleSettingsTabs(entitlements);
@@ -125,6 +129,12 @@ export function MobileAppChrome({ className }: { className?: string }) {
         : "";
 
   const spaceLabel = spaceId ? navLabel(spaceId as SpaceId) ?? "Space" : "Space";
+  const panelTabLabel = inConnector
+    ? "Connector"
+    : spaceLabel;
+  const backLabel = inConnector
+    ? "Connectors"
+    : spaceLabel;
   const surface =
     mobileSurface === "menu"
       ? "menu"
@@ -137,6 +147,12 @@ export function MobileAppChrome({ className }: { className?: string }) {
     !onMenuMain &&
     spaceId === "build" &&
     Boolean(projectId);
+  const isBuildHome =
+    !inChromeSub &&
+    !onMenuMain &&
+    spaceId === "build" &&
+    !projectId &&
+    (view === "space" || view === "chat");
   const hideNewChat = onMenuMain || inChromeSub || showBuildTools;
 
   const preview = previewAddress(project?.name);
@@ -262,7 +278,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
                           : "text-muted-foreground",
                       )}
                     >
-                      <span className="truncate">{spaceLabel}</span>
+                      <span className="truncate">{panelTabLabel}</span>
                       <ChevronDown
                         className={cn(
                           "h-3.5 w-3.5 shrink-0 transition-transform",
@@ -283,7 +299,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
                       }}
                       className="menu-row-hover flex w-full items-center rounded-[8px] px-2.5 py-2 text-left text-[13px]"
                     >
-                      Back to {spaceLabel}
+                      Back to {backLabel}
                     </button>
                   )}
                 </Dropdown>
@@ -300,7 +316,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
                       : "text-muted-foreground",
                   )}
                 >
-                  {spaceLabel}
+                  {panelTabLabel}
                 </button>
               )}
             </div>
@@ -326,9 +342,14 @@ export function MobileAppChrome({ className }: { className?: string }) {
         ) : (
           <button
             type="button"
-            aria-label="New chat"
+            aria-label={isBuildHome ? "New build" : "New chat"}
             onClick={() => {
-              newChat();
+              if (isBuildHome) {
+                setComposerSeed("Tell me what you want to build");
+                newChat("build");
+              } else {
+                newChat();
+              }
               setMobileSurface("chat");
             }}
             className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"

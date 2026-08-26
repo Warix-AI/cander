@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Paperclip } from "lucide-react";
 import { SectionLabel } from "@/components/panels/Bits";
 import {
@@ -11,21 +11,32 @@ import {
 import { cn } from "@/lib/utils";
 
 export function InboxPage() {
-  const [selectedId, setSelectedId] = useState<string | null>(
-    gmailInbox[0]?.id ?? null,
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.matchMedia("(min-width: 480px)").matches) return;
+    if (!gmailInbox[0]) return;
+    setSelectedId((current) => current ?? gmailInbox[0].id);
+  }, []);
 
   const results = gmailInbox;
-  const selected =
-    results.find((item) => item.id === selectedId) ?? results[0] ?? null;
+  const selected = results.find((item) => item.id === selectedId) ?? null;
   const thread = selected
     ? (gmailThreadMessages[selected.threadId] ?? [selected])
     : [];
 
   return (
-    <div className="flex h-full min-h-[28rem] flex-col">
-      <div className="flex min-h-0 flex-1">
-        <div className="w-[44%] min-w-[11rem] overflow-y-auto border-r border-border">
+    <div className="flex h-full min-h-0 flex-col @container">
+      <div className="flex min-h-0 flex-1 flex-col @min-[480px]:flex-row">
+        <div
+          className={cn(
+            "overflow-y-auto border-border",
+            selected
+              ? "hidden border-b @min-[480px]:block @min-[480px]:w-[44%] @min-[480px]:min-w-[11rem] @min-[480px]:border-r @min-[480px]:border-b-0"
+              : "min-h-0 flex-1 @min-[480px]:w-[44%] @min-[480px]:min-w-[11rem] @min-[480px]:border-r",
+          )}
+        >
           <SectionLabel>{`Results · ${results.length}`}</SectionLabel>
           {results.map((item) => (
             <MessageRow
@@ -42,11 +53,20 @@ export function InboxPage() {
           ) : null}
         </div>
 
-        <div className="min-w-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
           {selected ? (
-            <ThreadView threadId={selected.threadId} messages={thread} />
+            <>
+              <button
+                type="button"
+                onClick={() => setSelectedId(null)}
+                className="px-3 pt-3 text-[12.5px] font-medium text-muted-foreground hover:text-foreground @min-[480px]:hidden"
+              >
+                ← Inbox
+              </button>
+              <ThreadView threadId={selected.threadId} messages={thread} />
+            </>
           ) : (
-            <p className="p-4 text-[13px] text-muted-foreground">
+            <p className="hidden p-4 text-[13px] text-muted-foreground @min-[480px]:block">
               Select a message to open the thread.
             </p>
           )}

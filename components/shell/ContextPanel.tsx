@@ -32,7 +32,9 @@ export function ContextPanel() {
     panelMode,
   } = useApp();
   const shell = useShellStyle();
-  const floating = shell === "floating";
+  const mobile = useMobileShell();
+  // Desktop floating card only — full-bleed under MobileAppChrome on phone.
+  const floatingChrome = shell === "floating" && !mobile;
 
   const showChoice =
     view === "chat" &&
@@ -55,11 +57,14 @@ export function ContextPanel() {
   return (
     <aside
       className={cn(
-        "@container light-surface flex h-full min-h-0 min-w-0 flex-col",
-        floating
-          ? cn("my-3 mr-3 overflow-hidden", SHELL_G3_RADIUS)
-          : "rounded-none border-0 border-l border-border shadow-none",
+        "@container flex h-full min-h-0 min-w-0 flex-col",
+        floatingChrome
+          ? cn("light-surface my-3 mr-3 overflow-hidden", SHELL_G3_RADIUS)
+          : mobile
+            ? "overflow-hidden bg-background"
+            : "light-surface rounded-none border-0 border-l border-border shadow-none",
         !dragging &&
+          !mobile &&
           "transition-[width] duration-[550ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
       )}
     >

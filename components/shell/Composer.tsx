@@ -34,7 +34,13 @@ import {
 import { isChatSpace } from "@/lib/spaces";
 import { labelFor } from "@/lib/build-loop";
 import { useChatCanvasCentered } from "@/lib/chat-layout";
+import {
+  consumeComposerSeed,
+  peekComposerSeed,
+  subscribeComposerSeed,
+} from "@/lib/composer-seed";
 import { useShellStyle } from "@/lib/shell-chrome";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 type MenuId = "plus" | null;
@@ -79,6 +85,7 @@ export function Composer({
     clearPin,
   } = useApp();
   const floating = useShellStyle() === "floating";
+  const mobile = useMobileShell();
   const { centered } = useChatCanvasCentered();
   const usagePercent = useHourlyUsagePercent();
   const [value, setValue] = useState("");
@@ -89,6 +96,24 @@ export function Composer({
   const imageRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const apply = () => {
+      const seed = consumeComposerSeed();
+      if (!seed) return;
+      setValue(seed);
+      window.requestAnimationFrame(() => {
+        textRef.current?.focus();
+        const el = textRef.current;
+        if (el) {
+          const end = el.value.length;
+          el.setSelectionRange(end, end);
+        }
+      });
+    };
+    if (peekComposerSeed()) apply();
+    return subscribeComposerSeed(apply);
+  }, []);
 
   const LINE_HEIGHT = 20;
   const MAX_LINES = 10;
@@ -216,7 +241,7 @@ export function Composer({
           ? "w-full"
           : landing
             ? "w-full"
-            : floating
+            : floating && !mobile
               ? cn(
                   centered
                     ? "px-4 sm:px-6"

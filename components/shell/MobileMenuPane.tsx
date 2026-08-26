@@ -68,8 +68,11 @@ export function MobileMenuPane() {
 
   const openNav = (id: SidebarNavId) => {
     if (id === "browser") openBrowser();
-    else if (id === "recents") openRecents();
-    else if (!isExtraNavId(id)) {
+    else if (id === "recents") {
+      openRecents();
+      closeToChat();
+      return;
+    } else if (!isExtraNavId(id)) {
       if (isChatSpace(id)) openSpaceChat(id);
       else openSpace(id as SpaceId);
     }

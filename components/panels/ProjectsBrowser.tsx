@@ -21,6 +21,7 @@ import {
 import type { SpaceId } from "@/lib/types";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
 import { SHELL_PANEL_BODY } from "@/lib/shell-chrome";
+import { cn } from "@/lib/utils";
 
 export function ProjectsBrowser({
   title: titleOverride,
@@ -318,13 +319,20 @@ export function ProjectsBrowser({
 
   return (
     <div className={SHELL_PANEL_BODY}>
-      <div className="flex h-11 shrink-0 items-center gap-2 px-3">
-        <p className="min-w-0 flex-1 truncate text-[14px] font-medium tracking-[-0.02em]">
-          {projectLabel}
-        </p>
-        {!mobile ? <PanelToggle /> : null}
-      </div>
-      <div className="flex items-center justify-between gap-2 px-3 pb-3">
+      {mobile ? null : (
+        <div className="flex h-11 shrink-0 items-center gap-2 px-3">
+          <p className="min-w-0 flex-1 truncate text-[14px] font-medium tracking-[-0.02em]">
+            {projectLabel}
+          </p>
+          <PanelToggle />
+        </div>
+      )}
+      <div
+        className={cn(
+          "flex items-center justify-between gap-2 pb-3",
+          mobile ? "px-4 pt-3" : "px-3",
+        )}
+      >
         <ScopeToggle
           compact
           value={scope}
@@ -340,7 +348,7 @@ export function ProjectsBrowser({
           onChange={setSpaceLayout}
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+      <div className={cn("min-h-0 flex-1 overflow-y-auto pb-4", mobile ? "px-4" : "px-3")}>
         {scope === "all" ? (
           <PreviewGrid
             dense

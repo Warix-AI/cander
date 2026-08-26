@@ -438,6 +438,8 @@ export function DashFrame({
   const desktop = useDesktopShell();
   const mobile = useMobileShell();
   const bannerSpace = banner ? (bannerKey ?? space ?? spaceId) : null;
+  // Mobile: skip space gradient + title — filters/projects sit under MobileAppChrome.
+  const hideMobileHero = mobile && Boolean(bannerSpace);
 
   return (
     <div className="@container relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-background">
@@ -449,21 +451,20 @@ export function DashFrame({
           )}
         />
       ) : null}
-      {bannerSpace ? (
+      {hideMobileHero ? null : bannerSpace ? (
         <div>
           <SpaceBanner space={bannerSpace}>
             <div
               className={cn(
                 "mx-auto flex h-full w-full items-start px-4 pt-10 pb-4 max-lg:pt-11 @min-[480px]:px-8 @min-[480px]:pt-6 @min-[480px]:pb-5",
                 inPanel && "pt-5 max-lg:pt-5",
-                mobile && "px-4 pt-9 pb-3",
                 inPanel ? "max-w-none" : "max-w-6xl",
               )}
             >
               <DashHeader
                 kicker={kicker}
                 title={title}
-                subtitle={mobile && inPanel ? undefined : subtitle}
+                subtitle={subtitle}
                 titleAction={titleAction}
                 actions={
                   actions ? (
@@ -478,7 +479,7 @@ export function DashFrame({
                   ) : null
                 }
                 onBanner
-                compact={mobile}
+                compact={false}
               />
             </div>
           </SpaceBanner>
@@ -487,7 +488,7 @@ export function DashFrame({
         <div
           className={cn(
             "mx-auto w-full px-4 pt-6 @min-[480px]:px-8 @min-[480px]:pt-8",
-            mobile && "px-4 pt-4",
+            mobile && "px-4 pt-3",
             inPanel ? "max-w-none" : "max-w-6xl",
           )}
         >
@@ -511,6 +512,7 @@ export function DashFrame({
         className={cn(
           "mx-auto w-full px-4 py-4 @min-[480px]:px-8 @min-[480px]:py-6",
           mobile && "px-4 py-3",
+          hideMobileHero && "pt-3",
           inPanel ? "max-w-none" : "max-w-6xl",
         )}
       >
