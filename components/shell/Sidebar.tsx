@@ -38,10 +38,6 @@ import {
 import type { PinKind, SettingsTab, SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
-import {
-  DESKTOP_TRAFFIC_CLEAR_PX,
-  useDesktopShell,
-} from "@/lib/desktop-shell";
 
 const PEEK_CLOSE_MS = 160;
 const PEEK_EXIT_MS = 420;
@@ -167,9 +163,6 @@ export function Sidebar() {
 
   const shellStyle = useShellStyle();
   const floating = shellStyle === "floating";
-  const desktop = useDesktopShell();
-  /** Mac floating: folder-tab menu that wraps the traffic-light dead zone. */
-  const macFloating = desktop && floating;
   const peeking = peek && !sidebarOpen;
   const workspaceCount = workspacesFor(actor, entitlements).length;
   const showRail =
@@ -177,9 +170,6 @@ export function Sidebar() {
     !entitlements.showInviteWall &&
     workspaceRailOpen &&
     workspaceCount >= 2;
-
-  // When the rail is visible, lights sit mostly over it — smaller panel notch.
-  const folderClearPx = showRail ? 28 : DESKTOP_TRAFFIC_CLEAR_PX;
 
   const settingsNav = visibleSettingsTabs(entitlements);
   const chatActive = view === "chat" && !threadId && !spaceId;
@@ -284,27 +274,21 @@ export function Sidebar() {
       <aside
         className={cn(
           "flex w-[min(244px,calc(100vw-3.5rem))] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:w-[244px]",
-          macFloating
+          floating
             ? cn(
-                "light-surface mb-3 mr-2 mt-0 h-[calc(100%-0.75rem)] overflow-hidden",
-                showRail ? "mac-folder-menu-tight" : "mac-folder-menu",
+                "light-surface overflow-hidden",
+                SHELL_G3_RADIUS,
+                // Top clears traffic lights in desktop shell; bottom keeps floating gap.
+                "mb-3 mr-2 mt-[max(0.75rem,var(--desktop-titlebar))] h-[calc(100%-0.75rem-max(0.75rem,var(--desktop-titlebar)))]",
                 !showRail && "ml-3",
               )
-            : floating
-              ? cn(
-                  "light-surface overflow-hidden",
-                  SHELL_G3_RADIUS,
-                  // Browser floating / non-Mac: keep inset under titlebar when set.
-                  "mb-3 mr-2 mt-[max(0.75rem,var(--desktop-titlebar))] h-[calc(100%-0.75rem-max(0.75rem,var(--desktop-titlebar)))]",
-                  !showRail && "ml-3",
-                )
-              : cn(
-                  "h-full overflow-hidden",
-                  peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
-                ),
+            : cn(
+                "h-full overflow-hidden",
+                peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
+              ),
         )}
       >
-      {/* Classic (incl. Mac classic): spacer under traffic lights. */}
+      {/* Classic: separator + menu chrome start below the traffic-light zone. */}
       {!floating ? (
         <div
           className="w-full shrink-0"
@@ -318,18 +302,11 @@ export function Sidebar() {
           !floating && "border-r border-sidebar-border",
         )}
       >
-      <WindowChrome
-        clearTrafficLights={macFloating}
-        trafficClearPx={folderClearPx}
-        compact={macFloating && !showRail}
-      />
+      <WindowChrome />
 
       {inSettings ? (
         <nav
-          className={cn(
-            "min-h-0 flex-1 overflow-y-auto px-2",
-            macFloating ? "mt-1" : "mt-3.5",
-          )}
+          className="mt-3.5 min-h-0 flex-1 overflow-y-auto px-2"
           aria-label="Settings"
         >
           <button
@@ -373,10 +350,7 @@ export function Sidebar() {
       ) : (
         <>
           <nav
-            className={cn(
-              "flex min-h-0 flex-1 flex-col overflow-hidden px-2",
-              macFloating ? "mt-1" : "mt-3.5",
-            )}
+            className="mt-3.5 flex min-h-0 flex-1 flex-col overflow-hidden px-2"
             aria-label="Main"
           >
             <div className="min-h-0 shrink overflow-y-auto">

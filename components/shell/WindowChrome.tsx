@@ -5,40 +5,16 @@ import { NavToggle } from "@/components/shell/NavToggle";
 import { useApp } from "@/components/app/AppProvider";
 import { cn } from "@/lib/utils";
 
-export function WindowChrome({
-  clearTrafficLights = false,
-  trafficClearPx = 78,
-  compact = false,
-  className,
-}: {
-  /** Pad past macOS traffic lights when chrome shares their row. */
-  clearTrafficLights?: boolean;
-  trafficClearPx?: number;
-  /** Tighter gap between search and history (condensed floating menu). */
-  compact?: boolean;
-  className?: string;
-}) {
+export function WindowChrome() {
   return (
-    <div
-      className={cn(
-        "flex h-11 shrink-0 items-center pr-3",
-        clearTrafficLights ? "pl-0" : "px-3",
-        compact ? "gap-0.5" : "gap-1",
-        className,
-      )}
-      style={
-        clearTrafficLights
-          ? { paddingLeft: Math.max(12, trafficClearPx) }
-          : undefined
-      }
-    >
+    <div className="flex h-11 shrink-0 items-center gap-1 px-3">
       <NavToggle />
-      <HistoryButtons compact={compact} />
+      <HistoryButtons />
     </div>
   );
 }
 
-function HistoryButtons({ compact = false }: { compact?: boolean }) {
+function HistoryButtons() {
   const { canGoBack, canGoForward, goBack, goForward, openOverlay } = useApp();
 
   return (
@@ -51,12 +27,7 @@ function HistoryButtons({ compact = false }: { compact?: boolean }) {
       >
         <Search className="h-4 w-4" strokeWidth={1.7} />
       </button>
-      <div
-        className={cn(
-          "ml-auto flex items-center",
-          compact ? "gap-0" : "gap-0",
-        )}
-      >
+      <div className="ml-auto flex items-center">
         <button
           type="button"
           aria-label="Back"
