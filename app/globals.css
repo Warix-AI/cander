@@ -128,7 +128,8 @@ html.cander-narrow {
 
 html.cander-mobile body,
 html.cander-narrow body {
-  position: fixed;
+  /* Prefer absolute fill over position:fixed — fixed body was crashing WKWebView on boot. */
+  position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;

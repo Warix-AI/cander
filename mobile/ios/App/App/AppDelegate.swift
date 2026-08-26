@@ -7,7 +7,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Storyboard owns the window; keep a reference for Capacitor Keyboard lookups.
+        if window == nil {
+            for scene in application.connectedScenes {
+                guard let windowScene = scene as? UIWindowScene else { continue }
+                if let key = windowScene.windows.first(where: { $0.isKeyWindow }) {
+                    window = key
+                    break
+                }
+            }
+        }
         return true
     }
 

@@ -67,8 +67,8 @@ function ensureSharedListeners() {
   if (sharedCleanups.length > 0) return;
 
   const keyboard = getCapacitor()?.Plugins?.Keyboard;
-  void keyboard?.setAccessoryBarVisible?.({ isVisible: false });
-  void keyboard?.setScroll?.({ isDisabled: true });
+  // Do not call setScroll / setAccessoryBar on boot — they hit a null window
+  // on iOS before the scene is ready and spam Keyboard/scene warnings.
 
   if (keyboard?.addListener) {
     const onShow = (info: { keyboardHeight: number }) => {

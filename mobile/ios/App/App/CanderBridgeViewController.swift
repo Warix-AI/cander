@@ -2,17 +2,13 @@ import UIKit
 import WebKit
 import Capacitor
 
-/// Native shell tweaks: no root rubber-band scroll; inject fixed-layout CSS;
-/// push keyboard height into the web app so the composer can slide up.
+/// Native shell: light CSS inject, keyboard inset, recover from WebContent crashes.
 class CanderBridgeViewController: CAPBridgeViewController {
+    /// Keep this minimal — heavy `position:fixed` at document-start was crashing WKWebView.
     private static let mobileShellCSS = """
-    html.cander-mobile{height:100%;height:100dvh;overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%;touch-action:manipulation}
-    html.cander-mobile body{position:fixed;inset:0;width:100%;height:100%;height:100dvh;max-height:100dvh;min-height:0;overflow:hidden;overscroll-behavior:none;touch-action:manipulation}
+    html.cander-mobile{-webkit-text-size-adjust:100%;touch-action:manipulation;overscroll-behavior:none}
     html.cander-mobile input,html.cander-mobile textarea,html.cander-mobile select{font-size:16px;touch-action:manipulation}
-    html.cander-mobile [data-app-shell],html.cander-mobile .h-svh{height:100%;height:100dvh;max-height:100dvh}
     html.cander-mobile .composer-dock,html.cander-mobile .landing-mark,html.cander-mobile .landing-suggestions{view-transition-name:none!important}
-    html.cander-mobile [data-mobile-chat]{padding-bottom:var(--keyboard-inset,0px);transition:padding-bottom .22s cubic-bezier(.22,1,.36,1)}
-    html.cander-mobile[data-keyboard="1"] .composer-keyboard-pad{padding-bottom:0.35rem!important}
     """
 
     private static let mobileShellScript = """
@@ -48,12 +44,20 @@ class CanderBridgeViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         super.capacitorDidLoad()
         disableRootBounce()
-        observeKeyboard()
+        // Wait until the bridge webview is in a window before keyboard hooks.
+        DispatchQueue.main.async { [weak self] in
+            self?.observeKeyboard()
+        }
     }
 
     override open func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         disableRootBounce()
+        // Ensure AppDelegate.window is set for Capacitor Keyboard plugin lookups.
+        if let appDelegate = UIApplication.shared.delegate as? AppDelegate,
+           appDelegate.window == nil {
+            appDelegate.window = view.window
+        }
     }
 
     deinit {
@@ -72,6 +76,7 @@ class CanderBridgeViewController: CAPBridgeViewController {
     }
 
     private func observeKeyboard() {
+        guard keyboardShowObserver == nil else { return }
         let center = NotificationCenter.default
         keyboardShowObserver = center.addObserver(
             forName: UIResponder.keyboardWillChangeFrameNotification,
@@ -91,7 +96,9 @@ class CanderBridgeViewController: CAPBridgeViewController {
 
     private func applyKeyboard(from notification: Notification) {
         guard
-            let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+            let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+            webView?.window != nil,
+            webView?.isLoading == false
         else { return }
         let converted = view.convert(frame, from: nil)
         let overlap = max(0, view.bounds.maxY - converted.origin.y)
@@ -99,15 +106,17 @@ class CanderBridgeViewController: CAPBridgeViewController {
     }
 
     private func setKeyboardInset(_ height: CGFloat) {
+        guard let webView, webView.window != nil else { return }
         let px = max(0, Int(height.rounded()))
         let flag = px > 24 ? "1" : "0"
         let js = """
         (function(){
           var r=document.documentElement;
+          if(!r) return;
           r.style.setProperty('--keyboard-inset','\(px)px');
           r.dataset.keyboard='\(flag)';
         })();
         """
-        webView?.evaluateJavaScript(js, completionHandler: nil)
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
 }

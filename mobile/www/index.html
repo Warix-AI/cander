@@ -54,54 +54,26 @@
     </style>
   </head>
   <body>
-    <!-- Fallback when Capacitor cannot reach server.url -->
+    <!-- Local fallback only — Capacitor normally loads server.url directly. -->
     <main>
-      <h1 id="title">Opening Cander…</h1>
-      <p id="detail">Connecting to the hosted app.</p>
-      <p><code id="url"></code></p>
+      <h1>Cander</h1>
+      <p>Couldn’t reach the hosted app. Check your network, then try again.</p>
+      <p><code id="url">https://cander.app</code></p>
       <p style="margin-top: 1rem">
-        <button type="button" id="retry" hidden>Try again</button>
+        <button type="button" id="retry">Open Cander</button>
       </p>
     </main>
     <script>
       (function () {
         var PRIMARY = "https://cander.app";
         var FALLBACK = "https://cander.vercel.app";
-        var params = new URLSearchParams(location.search);
-        var target = params.get("url") || PRIMARY;
-        var title = document.getElementById("title");
-        var detail = document.getElementById("detail");
-        var urlEl = document.getElementById("url");
-        var retry = document.getElementById("retry");
-        urlEl.textContent = target;
-
-        function go(url) {
-          target = url;
-          urlEl.textContent = url;
-          title.textContent = "Opening Cander…";
-          detail.textContent = "Connecting to the hosted app.";
-          retry.hidden = true;
-          location.replace(url);
-        }
-
-        retry.onclick = function () {
-          go(target === PRIMARY ? FALLBACK : PRIMARY);
+        var next = PRIMARY;
+        document.getElementById("retry").onclick = function () {
+          var url = next;
+          next = url === PRIMARY ? FALLBACK : PRIMARY;
+          document.getElementById("url").textContent = url;
+          location.href = url;
         };
-
-        // If this local page is showing, remote load already failed — offer retry.
-        setTimeout(function () {
-          title.textContent = "Cander can’t load right now";
-          detail.textContent =
-            "Check your network, then try again. Dev builds need the local Next server running.";
-          retry.hidden = false;
-        }, 1200);
-
-        // Attempt an immediate hop to production when opened as the standalone fallback.
-        if (!params.get("stay")) {
-          setTimeout(function () {
-            go(PRIMARY);
-          }, 100);
-        }
       })();
     </script>
   </body>
