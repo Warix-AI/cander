@@ -42,7 +42,6 @@ import {
 } from "@/lib/composer-seed";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
-import { MOBILE_GLASS_DOCK } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 
 type MenuId = "plus" | null;
@@ -310,7 +309,6 @@ export function Composer({
           landing || compact ? "max-w-none" : "max-w-[38rem]",
           !landing && !compact && (!floating || centered) && "mx-auto",
           !stayInPlace && "composer-dock",
-          mobile && !landing && !compact && MOBILE_GLASS_DOCK,
         )}
       >
         {menu === "plus" && !compact ? (

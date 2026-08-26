@@ -116,7 +116,7 @@ export function ChatColumn() {
             <div ref={endRef} />
           )}
         </div>
-        <div className="shrink-0">
+        <div className="shrink-0 bg-white dark:bg-neutral-950">
           <Composer onSend={send} />
         </div>
       </section>

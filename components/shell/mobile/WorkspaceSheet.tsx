@@ -3,8 +3,12 @@
 import { Check } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { useApp } from "@/components/app/AppProvider";
-import { SettingsGroup } from "@/components/settings/SettingsChrome";
 import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
+import {
+  MOBILE_MENU_ICON_SIZE,
+  mobileMenuRowActiveClass,
+  mobileMenuRowClass,
+} from "@/lib/mobile-menu-styles";
 import { workspacesFor } from "@/lib/entitlements";
 import {
   getWorkspaceCatalogServerSnapshot,
@@ -34,39 +38,38 @@ export function WorkspaceSheet({
   const allowed = workspacesFor(actor, entitlements);
 
   return (
-    <SettingsGroup dividerInset="icon">
+    <div className="space-y-px">
       {allowed.map((item) => {
         const active = item.id === workspace.id;
         return (
           <button
             key={item.id}
             type="button"
-            data-active={active ? "true" : undefined}
             onClick={() => {
               setWorkspace(item.id);
               onSelect();
             }}
             className={cn(
-              "flex w-full items-center gap-3.5 px-4 py-3.5 text-left text-[16px] transition-colors duration-200 hover:bg-muted/50",
-              active && "bg-muted/70 font-medium",
+              mobileMenuRowClass,
+              active && mobileMenuRowActiveClass,
             )}
           >
             <WorkspaceMark
               id={item.id}
               name={item.name}
               active={active}
-              size="lg"
+              size="sm"
             />
             <span className="min-w-0 flex-1 truncate">{item.name}</span>
             {active ? (
               <Check
-                className="h-4 w-4 shrink-0 text-foreground"
+                className={cn(MOBILE_MENU_ICON_SIZE, "shrink-0")}
                 strokeWidth={2}
               />
             ) : null}
           </button>
         );
       })}
-    </SettingsGroup>
+    </div>
   );
 }

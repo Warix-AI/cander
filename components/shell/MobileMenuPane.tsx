@@ -292,11 +292,11 @@ function MenuSub({
           {title}
         </p>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/30 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1">
         {screen === "pinned" ? (
           <PinsSheet onSelect={onSelect} hideHeading />
         ) : (
-          <WorkspaceSheet onSelect={() => {}} />
+          <WorkspaceSheet onSelect={onSelect} />
         )}
       </div>
     </>

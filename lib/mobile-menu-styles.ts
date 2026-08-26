@@ -1,3 +1,5 @@
+import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
+
 /** Off-white menu canvas — contrasts with the white chat peek. */
 export const MOBILE_MENU_BG = "mobile-menu-canvas";
 
@@ -17,11 +19,14 @@ export const MOBILE_GLASS_CARD = "mobile-glass-card";
 export const MOBILE_GLASS_INSET = "mobile-glass-inset";
 export const MOBILE_GLASS_DOCK = "mobile-glass-dock";
 
-export const mobileMenuRowClass =
-  "flex w-full items-center gap-3 rounded-[12px] px-4 py-3 text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200 hover:bg-black/[0.06] dark:hover:bg-white/10";
+export const mobileMenuRowClass = [
+  "flex w-full items-center gap-3 px-4 py-3 text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200",
+  SHELL_G3_RADIUS,
+  "hover:bg-black/[0.03] dark:hover:bg-white/8",
+].join(" ");
 
 export const mobileMenuRowActiveClass =
-  "bg-black/[0.08] font-semibold dark:bg-white/12";
+  "bg-black/[0.04] font-semibold dark:bg-white/8";
 
 export const MOBILE_MENU_ICON_STROKE = 2.15;
 export const MOBILE_MENU_ICON_SIZE = "h-5 w-5";

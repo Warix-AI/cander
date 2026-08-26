@@ -4,7 +4,7 @@ import { useApp } from "@/components/app/AppProvider";
 import { BannerWash } from "@/components/spaces/BannerWash";
 import { PanelChrome } from "@/components/panels/PanelChrome";
 import { SpaceLibraryPanel } from "@/components/panels/SpaceLibraryPanel";
-import { Row, SectionLabel } from "@/components/panels/Bits";
+import { Row } from "@/components/panels/Bits";
 import { SegTabs } from "@/components/ui/Controls";
 import type { StudioTool } from "@/lib/types";
 import { useMobileShell } from "@/lib/use-media-query";
@@ -26,13 +26,12 @@ export function StudioPanel() {
     setStudioTool,
     panelIntent,
   } = useApp();
+  const mobile = useMobileShell();
   const execute = panelIntent === "execute";
 
   if ((!project || project.space !== "studio") && !execute) {
     return <SpaceLibraryPanel />;
   }
-
-  const mobile = useMobileShell();
   const tool = execute && (studioTool === "overview" || !studioTool) ? "canvas" : studioTool;
   const tabs = (
     <SegTabs
