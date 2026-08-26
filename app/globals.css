@@ -109,13 +109,9 @@
   --footer-foreground: oklch(0.985 0 0);
 }
 
-/* Electron / macOS shell — clear traffic lights with a titlebar inset */
+/* Electron / macOS shell — clear traffic lights on left chrome only */
 html.cander-desktop {
-  --desktop-titlebar: 44px;
-}
-
-html.cander-desktop body {
-  -webkit-app-region: no-drag;
+  --desktop-titlebar: 22px;
 }
 
 @theme inline {

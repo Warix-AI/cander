@@ -45,14 +45,15 @@ export function WorkspaceRail() {
   return (
     <div
       className={cn(
-        "flex h-full w-[58px] shrink-0 flex-col items-center py-3",
+        "flex h-full w-[58px] shrink-0 flex-col items-center",
         floating
           ? "bg-transparent"
           : "border-r border-sidebar-border bg-sidebar",
       )}
       aria-label="Workspaces"
     >
-      <div className="flex min-h-0 flex-1 flex-col items-center gap-2.5 overflow-y-auto px-2 pt-1">
+      {/* Rail runs full height; icons clear macOS traffic lights in the desktop shell. */}
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-2.5 overflow-y-auto px-2 pb-3 pt-[max(0.75rem,var(--desktop-titlebar))]">
         {allowed.map((item) => {
           const active = item.id === workspace.id;
           return (
@@ -85,7 +86,7 @@ export function WorkspaceRail() {
           aria-label="New workspace"
           onClick={() => openOverlay("workspace")}
           className={cn(
-            "mt-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-200 hover:text-foreground",
+            "mb-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-200 hover:text-foreground",
             floating ? "hover:bg-muted" : "hover:bg-sidebar-accent",
           )}
         >

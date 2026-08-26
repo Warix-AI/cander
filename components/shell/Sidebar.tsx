@@ -260,7 +260,7 @@ export function Sidebar() {
           sidebarOpen
             ? "lg:static lg:max-w-none"
             : cn(
-                "lg:fixed lg:bottom-0 lg:left-0 lg:top-[var(--desktop-titlebar)] lg:z-40",
+                "lg:fixed lg:inset-y-0 lg:left-0 lg:z-40",
                 "will-change-transform transition-[transform,opacity]",
                 peek
                   ? "translate-x-0 opacity-100 duration-[360ms] ease-out"
@@ -278,7 +278,8 @@ export function Sidebar() {
             ? cn(
                 "light-surface overflow-hidden",
                 SHELL_G3_RADIUS,
-                "my-3 mr-2 h-[calc(100%-1.5rem)]",
+                // Top clears traffic lights in desktop shell; bottom keeps floating gap.
+                "mb-3 mr-2 mt-[max(0.75rem,var(--desktop-titlebar))] h-[calc(100%-0.75rem-max(0.75rem,var(--desktop-titlebar)))]",
                 !showRail && "ml-3",
               )
             : cn(
@@ -287,7 +288,9 @@ export function Sidebar() {
               ),
         )}
       >
-      <WindowChrome />
+      <div className={cn(!floating && "pt-[var(--desktop-titlebar)]")}>
+        <WindowChrome />
+      </div>
 
       {inSettings ? (
         <nav

@@ -99,7 +99,7 @@ function Root() {
     <AppearanceProvider>
       <div
         data-app-shell=""
-        className="relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background pb-[calc(68px+env(safe-area-inset-bottom))] pt-[var(--desktop-titlebar)] text-foreground lg:pb-0"
+        className="relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background pb-[calc(68px+env(safe-area-inset-bottom))] text-foreground lg:pb-0"
       >
         <Sidebar />
         <CourierMain />

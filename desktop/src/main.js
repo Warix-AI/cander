@@ -4,7 +4,10 @@ const path = require("path");
 const APP_NAME = "Cander";
 const DEFAULT_URL = "https://cander.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
-const TITLEBAR_PX = 44;
+/** Half the previous inset — only the left chrome sits under traffic lights. */
+const TITLEBAR_PX = 22;
+/** Approx workspace rail + left menu width for the drag strip. */
+const LEFT_DRAG_WIDTH_PX = 320;
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
@@ -27,7 +30,7 @@ function createWindow() {
     backgroundColor: "#ffffff",
     show: false,
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 14 },
+    trafficLightPosition: { x: 16, y: 10 },
     icon: path.join(__dirname, "../assets/icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -47,7 +50,7 @@ function createWindow() {
 
   mainWindow.webContents.on("did-finish-load", () => {
     markDesktopShell();
-    // Drag only the native titlebar strip; leave app chrome clickable.
+    // Drag only over the left chrome so main content stays full-bleed and clickable.
     void mainWindow?.webContents.insertCSS(`
       html.cander-desktop {
         --desktop-titlebar: ${TITLEBAR_PX}px !important;
@@ -57,19 +60,13 @@ function createWindow() {
         position: fixed;
         top: 0;
         left: 0;
-        right: 0;
+        width: ${LEFT_DRAG_WIDTH_PX}px;
         height: ${TITLEBAR_PX}px;
         z-index: 2147483647;
         -webkit-app-region: drag;
       }
       html.cander-desktop body {
         -webkit-app-region: no-drag;
-      }
-      /* Works even before the hosted site ships the titlebar padding */
-      html.cander-desktop [data-app-shell],
-      html.cander-desktop body > div:first-child {
-        padding-top: ${TITLEBAR_PX}px !important;
-        box-sizing: border-box;
       }
     `);
   });

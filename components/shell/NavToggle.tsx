@@ -83,7 +83,7 @@ export function LeftNavToggleDock({
       className={cn(
         "pointer-events-none fixed z-50 hidden h-11 items-center lg:flex",
         floating
-          ? "top-[calc(var(--desktop-titlebar)+0.75rem)]"
+          ? "top-[max(0.75rem,var(--desktop-titlebar))]"
           : "top-[var(--desktop-titlebar)]",
       )}
       style={{ left: `${leftPx}px` }}

@@ -4,5 +4,9 @@ export function isDesktopShell() {
   return /\bElectron\b/i.test(navigator.userAgent);
 }
 
-/** macOS hiddenInset traffic-light clearance. */
-export const DESKTOP_TITLEBAR_PX = 44;
+/**
+ * Clearance under macOS traffic lights for the workspace rail + left menu only.
+ * Main content stays full-bleed to the top of the window.
+ */
+export const DESKTOP_TITLEBAR_PX = 22;
+
