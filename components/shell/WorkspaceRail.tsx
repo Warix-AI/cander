@@ -26,8 +26,9 @@ export function WorkspaceRail() {
   const shellStyle = useShellStyle();
   const floating = shellStyle === "floating";
   const desktop = useDesktopShell();
-  /** Classic Mac: chrome spans above the rail — no titlebar spacer here. */
-  const macClassic = desktop && !floating;
+  /** Desktop / outside-chrome layouts: no titlebar spacer on the rail. */
+  const macDesktop = desktop;
+  const chromeOutside = desktop || floating;
 
   useSyncExternalStore(
     subscribeWorkspaceCatalog,
@@ -72,8 +73,8 @@ export function WorkspaceRail() {
       )}
       aria-label="Workspaces"
     >
-      {/* Browser classic only — Mac classic puts chrome on the traffic-light row. */}
-      {!floating && !macClassic ? (
+      {/* Browser classic only — desktop chrome sits on the traffic-light row. */}
+      {!floating && !macDesktop ? (
         <div
           className="w-full shrink-0"
           style={{ height: "var(--desktop-titlebar)" }}
@@ -90,11 +91,7 @@ export function WorkspaceRail() {
         <div
           className={cn(
             "flex min-h-0 w-full flex-1 flex-col items-center gap-2.5 overflow-y-auto px-2 pb-3",
-            macClassic
-              ? "pt-2"
-              : floating
-                ? "pt-[max(0.75rem,var(--desktop-titlebar))]"
-                : "pt-3",
+            chromeOutside ? "pt-2" : "pt-3",
           )}
         >
           {allowed.map((item) => {

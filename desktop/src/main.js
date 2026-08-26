@@ -30,7 +30,6 @@ async function clearWebCache() {
   try {
     const ses = session.defaultSession;
     await ses.clearCache();
-    // Drop service workers / Cache Storage that can pin an old Next bundle.
     await ses.clearStorageData({
       storages: ["serviceworkers", "cachestorage"],
     });
@@ -47,12 +46,10 @@ async function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 640,
-    // Empty title avoids a native unclickable "title text" hit target on macOS.
     title: "",
     backgroundColor: "#ffffff",
     show: false,
-    // hiddenInset leaves a native titlebar toolbar that eats clicks in the top
-    // ~38–52px. `hidden` + trafficLightPosition is the supported workaround.
+    // hiddenInset leaves a native titlebar hit-target that eats top-row clicks.
     titleBarStyle: "hidden",
     trafficLightPosition: { x: 16, y: 18 },
     icon: ICON_PATH,
@@ -77,7 +74,6 @@ async function createWindow() {
     console.log(
       `[cander-desktop] loaded ${START_URL} (shell ${SHELL_BUILD}, titleBarStyle=hidden)`,
     );
-    // Neutralize leftover drag overlays from older Electron sessions.
     void mainWindow?.webContents.insertCSS(`
       html.cander-desktop {
         --desktop-titlebar: ${TITLEBAR_PX}px !important;
@@ -93,8 +89,6 @@ async function createWindow() {
     `);
   });
 
-  // Do not setTitle(APP_NAME) — a non-empty window title recreates a native
-  // unclickable hit target in the titlebar on macOS. Menu/Dock use app.setName.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     try {
       const target = new URL(url);

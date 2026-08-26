@@ -69,8 +69,8 @@ export function NavToggle({
 
 /**
  * Fixed toggle when the sidebar is collapsed.
- * Classic Mac: same spot as WindowChrome — just past the traffic lights —
- * whether the rail was open or not.
+ * Desktop (classic + floating): same traffic-light-adjacent spot as WindowChrome.
+ * Fully closed → only this control remains.
  */
 export function LeftNavToggleDock({
   showRail,
@@ -86,8 +86,7 @@ export function LeftNavToggleDock({
 
   if (mobile || sidebarOpen || peeking) return null;
 
-  // Classic Mac: stay locked next to the traffic lights across collapse states.
-  if (desktop && !floating) {
+  if (desktop) {
     return (
       <div
         className="pointer-events-none fixed top-0 z-50 hidden h-[var(--desktop-titlebar,52px)] items-center lg:flex"

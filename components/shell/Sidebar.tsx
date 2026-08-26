@@ -165,8 +165,13 @@ export function Sidebar() {
   const shellStyle = useShellStyle();
   const floating = shellStyle === "floating";
   const desktop = useDesktopShell();
-  /** Classic Mac: chrome on the traffic-light row, spanning rail + menu. */
-  const macClassic = desktop && !floating;
+  /**
+   * Desktop (classic + floating): panel toggle / search / history live on the
+   * traffic-light row, outside the menu body. Menu content starts at New Chat.
+   * Web floating: same idea — chrome above the floating card, not inside it.
+   */
+  const macDesktop = desktop;
+  const chromeOutside = desktop || floating;
   const peeking = peek && !sidebarOpen;
   const workspaceCount = workspacesFor(actor, entitlements).length;
   const showRail =
@@ -261,7 +266,7 @@ export function Sidebar() {
         onMouseLeave={!sidebarOpen ? scheduleClosePeek : undefined}
         className={cn(
           "hidden h-full max-w-[100vw] shrink-0 gap-0 lg:flex",
-          macClassic && "flex-col",
+          chromeOutside && "flex-col",
           sidebarOpen
             ? "lg:static lg:max-w-none"
             : cn(
@@ -275,17 +280,26 @@ export function Sidebar() {
         )}
         aria-hidden={!sidebarOpen && !peek}
       >
-      {macClassic ? (
+      {macDesktop ? (
         <WindowChrome
           clearTrafficLights
-          className="w-full bg-sidebar text-sidebar-foreground"
+          className={cn(
+            "w-full",
+            floating
+              ? "bg-transparent text-foreground"
+              : "bg-sidebar text-sidebar-foreground",
+          )}
         />
+      ) : floating ? (
+        <WindowChrome className="w-full shrink-0 bg-transparent text-foreground" />
       ) : null}
 
       <div
         className={cn(
           "flex min-h-0",
-          macClassic ? "flex-1" : "h-full",
+          chromeOutside ? "flex-1" : "h-full",
+          floating && "mb-3 mr-2",
+          floating && !macDesktop && "mt-0",
         )}
       >
       <WorkspaceRail />
@@ -296,9 +310,13 @@ export function Sidebar() {
             ? cn(
                 "light-surface overflow-hidden",
                 SHELL_G3_RADIUS,
-                // Top clears traffic lights in desktop shell; bottom keeps floating gap.
-                "mb-3 mr-2 mt-[max(0.75rem,var(--desktop-titlebar))] h-[calc(100%-0.75rem-max(0.75rem,var(--desktop-titlebar)))]",
-                !showRail && "ml-3",
+                chromeOutside
+                  ? // Chrome already owns the top row; panel sits under it.
+                    cn("h-full", !showRail && "ml-3")
+                  : cn(
+                      "mb-3 mr-2 mt-[max(0.75rem,var(--desktop-titlebar))] h-[calc(100%-0.75rem-max(0.75rem,var(--desktop-titlebar)))]",
+                      !showRail && "ml-3",
+                    ),
               )
             : cn(
                 "h-full overflow-hidden",
@@ -306,8 +324,8 @@ export function Sidebar() {
               ),
         )}
       >
-      {/* Browser classic only — Mac classic chrome sits on the traffic-light row. */}
-      {!floating && !macClassic ? (
+      {/* Browser classic only — desktop chrome sits on the traffic-light row. */}
+      {!floating && !macDesktop ? (
         <div
           className="w-full shrink-0"
           style={{ height: "var(--desktop-titlebar)" }}
@@ -320,13 +338,14 @@ export function Sidebar() {
           !floating && "border-r border-sidebar-border",
         )}
       >
-      {!macClassic ? <WindowChrome /> : null}
+      {/* Classic web only — floating/desktop chrome is outside the menu body. */}
+      {!chromeOutside ? <WindowChrome /> : null}
 
       {inSettings ? (
         <nav
           className={cn(
             "min-h-0 flex-1 overflow-y-auto px-2",
-            macClassic ? "mt-2" : "mt-3.5",
+            macDesktop || floating ? "mt-2" : "mt-3.5",
           )}
           aria-label="Settings"
         >
@@ -373,7 +392,7 @@ export function Sidebar() {
           <nav
             className={cn(
               "flex min-h-0 flex-1 flex-col overflow-hidden px-2",
-              macClassic ? "mt-2" : "mt-3.5",
+              macDesktop || floating ? "mt-2" : "mt-3.5",
             )}
             aria-label="Main"
           >
