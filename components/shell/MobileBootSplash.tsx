@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { CourierMark } from "@/components/brand/CourierMark";
 import { isMobileShell } from "@/lib/mobile-shell";
+import {
+  getThemeServerSnapshot,
+  getThemeSnapshot,
+  subscribeTheme,
+} from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,6 +15,12 @@ import { cn } from "@/lib/utils";
  * Native launch splash covers cold start; this covers the remote load gap.
  */
 export function MobileBootSplash() {
+  const theme = useSyncExternalStore(
+    subscribeTheme,
+    getThemeSnapshot,
+    getThemeServerSnapshot,
+  );
+  const dark = theme === "dark";
   const [visible, setVisible] = useState(false);
   const [fading, setFading] = useState(false);
 
@@ -56,11 +67,15 @@ export function MobileBootSplash() {
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none fixed inset-0 z-[200] flex items-center justify-center bg-background transition-opacity duration-300 ease-out",
+        "pointer-events-none fixed inset-0 z-[200] flex items-center justify-center transition-opacity duration-300 ease-out",
+        dark ? "bg-black" : "bg-white",
         fading && "opacity-0",
       )}
     >
-      <CourierMark className="!h-10 !w-[42px]" tone="auto" />
+      <CourierMark
+        className="!h-10 !w-[42px]"
+        tone={dark ? "white" : "black"}
+      />
     </div>
   );
 }

@@ -7,14 +7,59 @@
       content="viewport-fit=cover, width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
     <title>Cander</title>
+    <script>
+      (function () {
+        try {
+          var theme = null;
+          var a = localStorage.getItem("courier-appearance-v2");
+          if (a) {
+            try {
+              var j = JSON.parse(a);
+              if (
+                j.colorMode === "dark" ||
+                j.colorMode === "dark-charcoal" ||
+                j.colorMode === "dark-blue"
+              ) {
+                theme = "dark";
+              } else if (
+                j.colorMode === "light" ||
+                j.colorMode === "light-blue"
+              ) {
+                theme = "light";
+              } else if (typeof j.color === "number") {
+                theme = j.color < 45 ? "light" : "dark";
+              }
+            } catch (e) {}
+          }
+          if (!theme) {
+            var t = localStorage.getItem("theme");
+            theme =
+              t === "dark" ? "dark" : t === "light" ? "light" : null;
+          }
+          if (!theme) {
+            theme = window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+          }
+          document.documentElement.dataset.theme = theme;
+        } catch (e) {
+          document.documentElement.dataset.theme = "light";
+        }
+      })();
+    </script>
     <style>
       html,
       body {
         margin: 0;
         height: 100%;
         font-family: system-ui, -apple-system, sans-serif;
-        background: #fafafa;
+        background: #ffffff;
         color: #111;
+      }
+      html[data-theme="dark"],
+      html[data-theme="dark"] body {
+        background: #000000;
+        color: #f5f5f5;
       }
       .splash {
         min-height: 100%;
@@ -27,6 +72,9 @@
         border-radius: 10px;
         background: #111;
         opacity: 0.92;
+      }
+      html[data-theme="dark"] .mark {
+        background: #fff;
       }
       main {
         display: none;
@@ -64,6 +112,10 @@
         background: #111;
         color: #fff;
         cursor: pointer;
+      }
+      html[data-theme="dark"] button {
+        background: #fff;
+        color: #111;
       }
       code {
         font-size: 12px;

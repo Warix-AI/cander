@@ -152,7 +152,7 @@ export function MobilePanelActionsCluster({
         <Dropdown
           align="end"
           matchTrigger={false}
-          menuClassName="min-w-[12rem] max-h-[70vh] overflow-y-auto rounded-[14px] border border-border bg-popover shadow-lg dark:bg-card"
+          menuClassName="min-w-[12rem] max-h-[70vh] overflow-y-auto rounded-[14px]"
           trigger={({ open, toggle }) => (
             <button
               type="button"

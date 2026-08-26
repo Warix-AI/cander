@@ -122,6 +122,7 @@ export function Dropdown({
   }, [open]);
 
   const close = () => setOpen(false);
+  const mobile = useMobileShell();
 
   return (
     <div ref={root} className={cn("relative min-w-0", className)}>
@@ -146,7 +147,10 @@ export function Dropdown({
                   : { top: 0, left: 0, visibility: "hidden" }
               }
               className={cn(
-                "fixed z-[200] light-surface rounded-[10px] bg-popover p-1.5 text-popover-foreground shadow-[0_12px_40px_oklch(0_0_0/0.12)] dark:bg-transparent dark:shadow-[0_12px_40px_oklch(0_0_0/0.22)]",
+                "fixed z-[200] rounded-[10px] p-1.5 text-popover-foreground",
+                mobile
+                  ? "mobile-dropdown-menu"
+                  : "light-surface bg-popover shadow-[0_12px_40px_oklch(0_0_0/0.12)] dark:bg-transparent dark:shadow-[0_12px_40px_oklch(0_0_0/0.22)]",
                 menuClassName,
               )}
             >

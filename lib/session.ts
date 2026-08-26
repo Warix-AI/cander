@@ -87,7 +87,7 @@ function syncColorSchemeMeta(next: Theme) {
   meta.setAttribute("content", next);
 
   // Prefer a single theme-color that matches the app, not OS prefers-color-scheme.
-  const color = next === "dark" ? "#0a0a0a" : "#ffffff";
+  const color = next === "dark" ? "#000000" : "#ffffff";
   const tags = document.querySelectorAll('meta[name="theme-color"]');
   if (tags.length) {
     tags.forEach((tag) => {
