@@ -168,6 +168,23 @@ export function Composer({
     };
   }, [menu]);
 
+  useEffect(() => {
+    const resetAwaitingPick = () => {
+      awaitingFilePickRef.current = false;
+    };
+    const inputs: HTMLInputElement[] = [];
+    if (fileRef.current) inputs.push(fileRef.current);
+    if (imageRef.current) inputs.push(imageRef.current);
+    for (const input of inputs) {
+      input.addEventListener("cancel", resetAwaitingPick);
+    }
+    return () => {
+      for (const input of inputs) {
+        input.removeEventListener("cancel", resetAwaitingPick);
+      }
+    };
+  }, []);
+
   const openFilePicker = (ref: RefObject<HTMLInputElement | null>) => {
     awaitingFilePickRef.current = true;
     ref.current?.click();
@@ -566,9 +583,6 @@ export function Composer({
         });
         event.target.value = "";
       }}
-      onCancel={() => {
-        awaitingFilePickRef.current = false;
-      }}
     />
     <input
       ref={imageRef}
@@ -583,9 +597,6 @@ export function Composer({
           setFiles((current) => [...current, ...next].slice(0, 6));
         });
         event.target.value = "";
-      }}
-      onCancel={() => {
-        awaitingFilePickRef.current = false;
       }}
     />
     </div>
