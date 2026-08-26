@@ -114,7 +114,7 @@ export function MobileMenuPane() {
 
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
-      <div className="flex min-h-0 flex-1 flex-col px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
+      <div className="flex min-h-0 flex-1 flex-col px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-[max(0.25rem,env(safe-area-inset-top))]">
         <div>
           <button
             type="button"

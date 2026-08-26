@@ -129,10 +129,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const backLabel = inConnector
     ? "Connectors"
     : spaceLabel;
-  const surface =
+  const surface: MobileSurface =
     mobileSurface === "menu"
       ? "menu"
-      : panelMode !== "collapsed" && mobileSurface === "panel"
+      : mobileSurface === "panel"
         ? "panel"
         : "chat";
 
@@ -186,10 +186,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
       setMobileMenuScreen("main");
       return;
     }
-    if (onMenuMain) {
-      setMobileSurface("chat");
-      return;
-    }
     setMobileSurface("menu");
   };
 
@@ -202,6 +198,9 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const stopSwipe: TouchEventHandler = (event) => {
     event.stopPropagation();
   };
+
+  // Menu main: no chrome — only the menu list is visible.
+  if (onMenuMain) return null;
 
   return (
     <header

@@ -69,15 +69,12 @@ export function SpaceChatLayout() {
 
   if (mobile) {
     const panes: MobileSurface[] = ["menu", "chat", "panel"];
-    // Prefer explicit surface; when browsing a space with no chat armed, show panel.
     const active: MobileSurface =
       mobileSurface === "menu"
         ? "menu"
-        : mobileSurface === "chat" && chatArmed
-          ? "chat"
-          : mobileSurface === "panel" || !chatArmed
-            ? "panel"
-            : "chat";
+        : mobileSurface === "panel"
+          ? "panel"
+          : "chat";
 
     return (
       <MobilePager panes={panes} active={active}>

@@ -202,21 +202,9 @@ function OrganizationSettings() {
 
   return (
     <SettingsPage>
-      <SettingsHeader
-        title="Organization"
-        subtitle="People, roles, and seats for Acme. Pending invites need a Max or Ultra seat before shared workspaces unlock."
-        actions={
-          <button
-            type="button"
-            onClick={() => setSettingsTab("plans")}
-            className="inline-flex h-9 items-center rounded-full border border-foreground/15 px-3.5 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
-          >
-            View plans
-          </button>
-        }
-      />
+      <SettingsHeader title="Organization" />
 
-      <SettingsSection title="Overview" className="mt-8">
+      <SettingsSection title="Overview" className="mt-2 lg:mt-8">
         <SettingsStatGrid
           items={[
             { label: "Legal name", value: "Acme Incorporated" },

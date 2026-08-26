@@ -23,7 +23,10 @@ export function ChatColumn() {
       (item) => item.role === "user" || item.role === "assistant",
     ),
   );
-  const showLanding = !browserMode && !hasChatTurns && (!thread || drafting);
+  const showSpaceNewPrompt =
+    drafting && Boolean(spaceId) && !hasChatTurns && !browserMode;
+  const showLanding =
+    !browserMode && !hasChatTurns && (!thread || drafting) && !showSpaceNewPrompt;
   const endRef = useRef<HTMLDivElement>(null);
   const last = thread?.messages.at(-1);
   const floating = useShellStyle() === "floating";
@@ -79,9 +82,9 @@ export function ChatColumn() {
         className="relative box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
       >
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 touch-pan-y">
-          {showLanding ? (
+          {showSpaceNewPrompt ? (
             <MobileEmptyPrompt spaceId={spaceId} />
-          ) : (
+          ) : hasChatTurns || thread ? (
             <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-6">
               {thread?.sessionSummary ? (
                 <SessionSummaryBubble
@@ -96,6 +99,8 @@ export function ChatColumn() {
                 : null}
               <div ref={endRef} />
             </div>
+          ) : (
+            <div ref={endRef} />
           )}
         </div>
         <div className="shrink-0">
@@ -112,7 +117,7 @@ export function ChatColumn() {
       )}
     >
       {showLanding ? (
-        <EmptyChat spaceId={spaceId} onPrompt={send} />
+        <EmptyChat spaceId={spaceId} drafting={drafting} onPrompt={send} />
       ) : (
         <div
           className={cn(
@@ -155,14 +160,12 @@ function emptyCopy(spaceId: SpaceId | null) {
   if (spaceId && spaceId in chatSpaceCopy) {
     return chatSpaceCopy[spaceId as keyof typeof chatSpaceCopy];
   }
-  return {
-    headline: "Leave the thinking to us.",
-    detail: "Describe what you need.",
-  };
+  return null;
 }
 
 function MobileEmptyPrompt({ spaceId }: { spaceId: SpaceId | null }) {
   const copy = emptyCopy(spaceId);
+  if (!copy) return null;
   return (
     <div className="flex min-h-full flex-col items-center justify-center px-4 pb-6 text-center">
       <p className="text-[17px] font-medium tracking-[-0.02em]">{copy.headline}</p>
@@ -175,12 +178,14 @@ function MobileEmptyPrompt({ spaceId }: { spaceId: SpaceId | null }) {
 
 function EmptyChat({
   spaceId,
+  drafting,
   onPrompt,
 }: {
   spaceId: SpaceId | null;
+  drafting: boolean;
   onPrompt: (text: string) => void;
 }) {
-  const copy = emptyCopy(spaceId);
+  const copy = drafting ? emptyCopy(spaceId) : null;
   const shellRef = useRef<HTMLDivElement>(null);
   const clusterRef = useRef<HTMLDivElement>(null);
   const baseHeightRef = useRef(0);
@@ -220,7 +225,7 @@ function EmptyChat({
       ro.disconnect();
       window.removeEventListener("resize", place);
     };
-  }, [copy.headline, spaceId]);
+  }, [copy?.headline, spaceId]);
 
   return (
     <div
@@ -235,13 +240,17 @@ function EmptyChat({
         style={{ marginTop: padTop }}
       >
         <CourierMark className="landing-mark mb-4 !h-[35.64px] !w-[37.2px] -translate-y-[2px]" />
-        <h1 className="landing-headline heading-display text-center text-[1.85rem] md:text-[2.15rem]">
-          {copy.headline}
-        </h1>
-        <p className="mt-2 max-w-md text-center text-[15px] leading-relaxed text-muted-foreground">
-          {copy.detail}
-        </p>
-        <div className="mt-8 w-full">
+        {copy ? (
+          <>
+            <h1 className="landing-headline heading-display text-center text-[1.85rem] md:text-[2.15rem]">
+              {copy.headline}
+            </h1>
+            <p className="mt-2 max-w-md text-center text-[15px] leading-relaxed text-muted-foreground">
+              {copy.detail}
+            </p>
+          </>
+        ) : null}
+        <div className={cn(copy ? "mt-8 w-full" : "mt-4 w-full")}>
           <Composer onSend={onPrompt} landing />
         </div>
       </div>

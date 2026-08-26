@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import {
-  DashBtn,
   DashFrame,
   LayoutToggle,
   ScopeToggle,
@@ -49,7 +48,6 @@ export function RecentsView() {
     threads,
     openThread,
     openProject,
-    newChat,
     spaceLayout,
     setSpaceLayout,
   } = useApp();
@@ -136,11 +134,6 @@ export function RecentsView() {
         banner={false}
         title="Recents"
         subtitle="Chats and work from every Space, newest first."
-        actions={
-          <DashBtn primary onClick={() => newChat()}>
-            New chat
-          </DashBtn>
-        }
       >
         <div className="flex flex-row flex-wrap items-center justify-between gap-2 @min-[420px]:gap-3">
           <ScopeToggle
