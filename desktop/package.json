@@ -1,0 +1,45 @@
+{
+  "name": "cander-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cander macOS desktop shell",
+  "main": "src/main.js",
+  "author": "Warix AI",
+  "scripts": {
+    "dev": "env -u ELECTRON_RUN_AS_NODE CANDER_URL=http://localhost:3000 electron .",
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "pack": "env -u ELECTRON_RUN_AS_NODE electron-builder --dir",
+    "dist": "env -u ELECTRON_RUN_AS_NODE electron-builder --mac dmg",
+    "dist:unsigned": "env -u ELECTRON_RUN_AS_NODE CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg",
+    "postinstall": "node scripts/ensure-electron.js"
+  },
+  "build": {
+    "appId": "ai.warix.cander",
+    "productName": "Cander",
+    "copyright": "Copyright © Warix AI",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns",
+      "target": [
+        "dmg"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "Cander"
+    }
+  },
+  "devDependencies": {
+    "electron": "^37.2.6",
+    "electron-builder": "^26.0.12"
+  }
+}
