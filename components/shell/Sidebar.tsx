@@ -36,8 +36,12 @@ import {
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
 import type { PinKind, SettingsTab, SpaceId } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
+import {
+  DESKTOP_RAIL_WIDTH_PX,
+  useDesktopShell,
+} from "@/lib/desktop-shell";
+import { cn } from "@/lib/utils";
 
 const PEEK_CLOSE_MS = 160;
 const PEEK_EXIT_MS = 420;
@@ -163,6 +167,11 @@ export function Sidebar() {
 
   const shellStyle = useShellStyle();
   const floating = shellStyle === "floating";
+  const desktop = useDesktopShell();
+  /** Mac floating: one panel with workspaces inside. */
+  const macFloating = desktop && floating;
+  /** Mac classic: header on the traffic-light axis, wider rail. */
+  const macClassic = desktop && !floating;
   const peeking = peek && !sidebarOpen;
   const workspaceCount = workspacesFor(actor, entitlements).length;
   const showRail =
@@ -170,6 +179,10 @@ export function Sidebar() {
     !entitlements.showInviteWall &&
     workspaceRailOpen &&
     workspaceCount >= 2;
+
+  const menuWidthPx = 244;
+  const macFloatingWidthPx =
+    menuWidthPx + (showRail ? DESKTOP_RAIL_WIDTH_PX : 0);
 
   const settingsNav = visibleSettingsTabs(entitlements);
   const chatActive = view === "chat" && !threadId && !spaceId;
@@ -237,6 +250,99 @@ export function Sidebar() {
     />
   );
 
+  const menuBody = inSettings ? (
+    <nav
+      className="mt-3.5 min-h-0 flex-1 overflow-y-auto px-2"
+      aria-label="Settings"
+    >
+      <button
+        type="button"
+        onClick={() => {
+          if (canGoBack) goBack();
+          else newChat();
+        }}
+        className="mb-0.5 flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200 hover:bg-sidebar-accent"
+        aria-label="Back"
+      >
+        <ArrowLeft
+          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+          strokeWidth={2}
+        />
+        <span className="font-medium tracking-[-0.01em]">Back</span>
+      </button>
+      {settingsNav.map((tab) => {
+        const Icon = settingsIcons[tab.id];
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setSettingsTab(tab.id)}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
+              settingsTab === tab.id
+                ? "bg-sidebar-accent font-medium"
+                : "hover:bg-sidebar-accent",
+            )}
+          >
+            <Icon
+              className="h-3.5 w-3.5 text-muted-foreground"
+              strokeWidth={2}
+            />
+            {tab.label}
+          </button>
+        );
+      })}
+    </nav>
+  ) : (
+    <>
+      <nav
+        className="mt-3.5 flex min-h-0 flex-1 flex-col overflow-hidden px-2"
+        aria-label="Main"
+      >
+        <div className="min-h-0 shrink overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => newChat()}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
+              chatActive
+                ? "bg-sidebar-accent font-medium"
+                : "hover:bg-sidebar-accent",
+            )}
+          >
+            <SquarePen
+              className="h-3.5 w-3.5 text-muted-foreground"
+              strokeWidth={2}
+            />
+            New Chat
+          </button>
+          {mainNavItems.map(({ id }) => (
+            <NavBtn key={id} id={id} />
+          ))}
+        </div>
+
+        <div className="relative mt-3 min-h-0 flex-1 overflow-hidden">
+          <div className="h-full overflow-y-auto">
+            <p className="px-3 pb-1 text-[12px] text-muted-foreground">
+              Pinned
+            </p>
+            {pinnedItems.length ? (
+              pinnedItems.map(renderPinnedRow)
+            ) : (
+              <p className="px-3 py-1.5 text-[12px] text-muted-foreground/70">
+                No pinned items
+              </p>
+            )}
+          </div>
+        </div>
+      </nav>
+
+      <div className="shrink-0 px-2 pb-2">
+        <AccountMenu />
+      </div>
+    </>
+  );
+
   return (
     <>
       <LeftNavToggleDock showRail={showRail} peeking={peeking} />
@@ -270,135 +376,70 @@ export function Sidebar() {
         )}
         aria-hidden={!sidebarOpen && !peek}
       >
-      <WorkspaceRail />
-      <aside
-        className={cn(
-          "flex w-[min(244px,calc(100vw-3.5rem))] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:w-[244px]",
-          floating
-            ? cn(
-                "light-surface overflow-hidden",
-                SHELL_G3_RADIUS,
-                // Top clears traffic lights in desktop shell; bottom keeps floating gap.
-                "mb-3 mr-2 mt-[max(0.75rem,var(--desktop-titlebar))] h-[calc(100%-0.75rem-max(0.75rem,var(--desktop-titlebar)))]",
-                !showRail && "ml-3",
-              )
-            : cn(
-                "h-full overflow-hidden",
-                peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
-              ),
-        )}
-      >
-      {/* Classic: separator + menu chrome start below the traffic-light zone. */}
-      {!floating ? (
-        <div
-          className="w-full shrink-0"
-          style={{ height: "var(--desktop-titlebar)" }}
-          aria-hidden
-        />
-      ) : null}
-      <div
-        className={cn(
-          "flex min-h-0 flex-1 flex-col",
-          !floating && "border-r border-sidebar-border",
-        )}
-      >
-      <WindowChrome />
+        {/* Browser / classic Mac: rail stays outside the menu. Mac floating embeds it. */}
+        {!macFloating ? <WorkspaceRail /> : null}
 
-      {inSettings ? (
-        <nav
-          className="mt-3.5 min-h-0 flex-1 overflow-y-auto px-2"
-          aria-label="Settings"
+        <aside
+          className={cn(
+            "flex shrink-0 flex-col bg-sidebar text-sidebar-foreground",
+            macFloating
+              ? cn(
+                  "light-surface overflow-hidden",
+                  SHELL_G3_RADIUS,
+                  "my-3 ml-3 mr-2 h-[calc(100%-1.5rem)]",
+                )
+              : floating
+                ? cn(
+                    "light-surface w-[min(244px,calc(100vw-3.5rem))] overflow-hidden lg:w-[244px]",
+                    SHELL_G3_RADIUS,
+                    "mb-3 mr-2 mt-[max(0.75rem,var(--desktop-titlebar))] h-[calc(100%-0.75rem-max(0.75rem,var(--desktop-titlebar)))]",
+                    !showRail && "ml-3",
+                  )
+                : cn(
+                    "h-full w-[min(244px,calc(100vw-3.5rem))] overflow-hidden lg:w-[244px]",
+                    peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
+                  ),
+          )}
+          style={
+            macFloating
+              ? {
+                  width: `min(${macFloatingWidthPx}px, calc(100vw - 3.5rem))`,
+                }
+              : undefined
+          }
         >
-          <button
-            type="button"
-            onClick={() => {
-              if (canGoBack) goBack();
-              else newChat();
-            }}
-            className="mb-0.5 flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200 hover:bg-sidebar-accent"
-            aria-label="Back"
-          >
-            <ArrowLeft
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-              strokeWidth={2}
+          {/* Browser classic only — Mac classic puts chrome on the traffic-light row. */}
+          {!floating && !macClassic ? (
+            <div
+              className="w-full shrink-0"
+              style={{ height: "var(--desktop-titlebar)" }}
+              aria-hidden
             />
-            <span className="font-medium tracking-[-0.01em]">Back</span>
-          </button>
-          {settingsNav.map((tab) => {
-            const Icon = settingsIcons[tab.id];
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setSettingsTab(tab.id)}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
-                  settingsTab === tab.id
-                    ? "bg-sidebar-accent font-medium"
-                    : "hover:bg-sidebar-accent",
-                )}
-              >
-                <Icon
-                  className="h-3.5 w-3.5 text-muted-foreground"
-                  strokeWidth={2}
-                />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-      ) : (
-        <>
-          <nav
-            className="mt-3.5 flex min-h-0 flex-1 flex-col overflow-hidden px-2"
-            aria-label="Main"
-          >
-            <div className="min-h-0 shrink overflow-y-auto">
-              <button
-                type="button"
-                onClick={() => newChat()}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
-                  chatActive
-                    ? "bg-sidebar-accent font-medium"
-                    : "hover:bg-sidebar-accent",
-                )}
-              >
-                <SquarePen
-                  className="h-3.5 w-3.5 text-muted-foreground"
-                  strokeWidth={2}
-                />
-                New Chat
-              </button>
-              {mainNavItems.map(({ id }) => (
-                <NavBtn key={id} id={id} />
-              ))}
-            </div>
+          ) : null}
 
-            <div className="relative mt-3 min-h-0 flex-1 overflow-hidden">
-              <div className="h-full overflow-y-auto">
-                <p className="px-3 pb-1 text-[12px] text-muted-foreground">
-                  Pinned
-                </p>
-                {pinnedItems.length ? (
-                  pinnedItems.map(renderPinnedRow)
-                ) : (
-                  <p className="px-3 py-1.5 text-[12px] text-muted-foreground/70">
-                    No pinned items
-                  </p>
-                )}
+          {macFloating ? (
+            <>
+              <WindowChrome clearTrafficLights />
+              <div className="flex min-h-0 flex-1">
+                {showRail ? <WorkspaceRail embedded /> : null}
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  {menuBody}
+                </div>
               </div>
+            </>
+          ) : (
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 flex-col",
+                !floating && "border-r border-sidebar-border",
+              )}
+            >
+              <WindowChrome clearTrafficLights={macClassic} />
+              {menuBody}
             </div>
-          </nav>
-
-          <div className="shrink-0 px-2 pb-2">
-            <AccountMenu />
-          </div>
-        </>
-      )}
+          )}
+        </aside>
       </div>
-    </aside>
-    </div>
     </>
   );
 }

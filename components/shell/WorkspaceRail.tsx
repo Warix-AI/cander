@@ -5,6 +5,10 @@ import { Plus } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
 import { workspacesFor } from "@/lib/entitlements";
+import {
+  DESKTOP_RAIL_WIDTH_PX,
+  useDesktopShell,
+} from "@/lib/desktop-shell";
 import { useShellStyle } from "@/lib/shell-chrome";
 import {
   getWorkspaceCatalogServerSnapshot,
@@ -13,7 +17,12 @@ import {
 } from "@/lib/workspace-catalog";
 import { cn } from "@/lib/utils";
 
-export function WorkspaceRail() {
+export function WorkspaceRail({
+  embedded = false,
+}: {
+  /** Inside a Mac floating panel — no outer titlebar spacer / separate float. */
+  embedded?: boolean;
+}) {
   const {
     workspace,
     setWorkspace,
@@ -24,6 +33,9 @@ export function WorkspaceRail() {
   } = useApp();
   const shellStyle = useShellStyle();
   const floating = shellStyle === "floating";
+  const desktop = useDesktopShell();
+  const macClassic = desktop && !floating && !embedded;
+  const macEmbedded = desktop && embedded;
 
   useSyncExternalStore(
     subscribeWorkspaceCatalog,
@@ -42,6 +54,10 @@ export function WorkspaceRail() {
     return null;
   }
 
+  const wide = macClassic || macEmbedded;
+  const markSize = wide ? "lg" : "md";
+  const railWidth = wide ? DESKTOP_RAIL_WIDTH_PX : 58;
+
   const createButton =
     entitlements.canCreatePersonalWorkspace ||
     entitlements.canCreateBusinessWorkspace ? (
@@ -52,23 +68,34 @@ export function WorkspaceRail() {
         onClick={() => openOverlay("workspace")}
         className={cn(
           "mb-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-200 hover:text-foreground",
-          floating ? "hover:bg-muted" : "hover:bg-sidebar-accent",
+          floating || embedded
+            ? "hover:bg-muted"
+            : "hover:bg-sidebar-accent",
         )}
       >
         <Plus className="h-3.5 w-3.5" strokeWidth={1.7} />
       </button>
     ) : null;
 
+  // Classic Mac: match WindowChrome height so the separator starts under the header.
+  const classicHeaderSpacer = macClassic;
+
   return (
     <div
       className={cn(
-        "flex h-full w-[58px] shrink-0 flex-col items-center",
-        floating ? "bg-transparent" : "bg-sidebar",
+        "flex h-full shrink-0 flex-col items-center",
+        embedded
+          ? "bg-transparent"
+          : floating
+            ? "bg-transparent"
+            : "bg-sidebar",
       )}
+      style={{ width: railWidth }}
       aria-label="Workspaces"
     >
-      {/* Classic: keep traffic-light zone free of the rail/menu separator. */}
-      {!floating ? (
+      {classicHeaderSpacer ? (
+        <div className="h-11 w-full shrink-0" aria-hidden />
+      ) : !floating && !embedded ? (
         <div
           className="w-full shrink-0"
           style={{ height: "var(--desktop-titlebar)" }}
@@ -79,15 +106,18 @@ export function WorkspaceRail() {
       <div
         className={cn(
           "flex min-h-0 w-full flex-1 flex-col items-center",
-          !floating && "border-r border-sidebar-border",
+          !floating && !embedded && "border-r border-sidebar-border",
+          embedded && "border-r border-border/80",
         )}
       >
         <div
           className={cn(
             "flex min-h-0 w-full flex-1 flex-col items-center gap-2.5 overflow-y-auto px-2 pb-3",
-            floating
-              ? "pt-[max(0.75rem,var(--desktop-titlebar))]"
-              : "pt-3",
+            embedded || macClassic
+              ? "pt-2"
+              : floating
+                ? "pt-[max(0.75rem,var(--desktop-titlebar))]"
+                : "pt-3",
           )}
         >
           {allowed.map((item) => {
@@ -102,12 +132,16 @@ export function WorkspaceRail() {
                 onClick={() => {
                   setWorkspace(item.id);
                 }}
-                className="relative flex h-9 w-9 shrink-0 items-center justify-center"
+                className={cn(
+                  "relative flex shrink-0 items-center justify-center",
+                  wide ? "h-10 w-10" : "h-9 w-9",
+                )}
               >
                 <WorkspaceMark
                   id={item.id}
                   name={item.name}
                   active={active}
+                  size={markSize}
                 />
               </button>
             );
