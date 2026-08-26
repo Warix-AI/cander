@@ -3,9 +3,10 @@ const path = require("path");
 
 const APP_NAME = "Cander";
 const DEFAULT_URL = "https://cander.app";
+const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Bumped when the native shell changes — visible on <html data-cander-shell>. */
-const SHELL_BUILD = "2026-08-25-hidden-titlebar";
+const SHELL_BUILD = "2026-08-26-load-retry";
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
 /** Classic Mac titlebar / chrome row height (traffic-light axis). */
 const TITLEBAR_PX = 52;
@@ -14,13 +15,16 @@ const TRAFFIC_CLEAR_PX = 80;
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
+/** @type {string} */
+let activeUrl = START_URL;
+let loadAttempts = 0;
 
 function markDesktopShell() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   void mainWindow.webContents.executeJavaScript(`
     document.documentElement.classList.add("cander-desktop");
     document.documentElement.dataset.canderShell = ${JSON.stringify(SHELL_BUILD)};
-    document.documentElement.dataset.canderUrl = ${JSON.stringify(START_URL)};
+    document.documentElement.dataset.canderUrl = ${JSON.stringify(activeUrl)};
     document.documentElement.style.setProperty("--desktop-titlebar", "${TITLEBAR_PX}px");
     document.documentElement.style.setProperty("--desktop-traffic-clear", "${TRAFFIC_CLEAR_PX}px");
   `);
@@ -38,9 +42,73 @@ async function clearWebCache() {
   }
 }
 
-async function createWindow() {
-  await clearWebCache();
+function loadErrorPage(code, desc, failedUrl) {
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cander</title>
+  <style>
+    html, body { margin: 0; height: 100%; font-family: ui-sans-serif, system-ui, sans-serif; background: #fafafa; color: #111; }
+    body { display: grid; place-items: center; -webkit-app-region: drag; }
+    main { max-width: 28rem; padding: 2rem; text-align: center; -webkit-app-region: no-drag; }
+    h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.5rem; letter-spacing: -0.02em; }
+    p { margin: 0 0 0.75rem; color: #555; font-size: 0.95rem; line-height: 1.45; }
+    code { font-size: 0.8rem; color: #333; word-break: break-all; }
+    .row { display: flex; gap: 0.5rem; justify-content: center; margin-top: 1.25rem; flex-wrap: wrap; }
+    button, a.btn {
+      appearance: none; border: 0; border-radius: 999px; padding: 0.65rem 1.1rem;
+      font: inherit; font-size: 0.9rem; font-weight: 500; cursor: pointer; text-decoration: none;
+    }
+    button.primary, a.primary { background: #111; color: #fff; }
+    button.secondary, a.secondary { background: #eee; color: #111; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Cander can’t load right now</h1>
+    <p>The desktop shell opens the hosted web app. Check your connection, then try again.</p>
+    <p><code>${escapeHtml(failedUrl || activeUrl)}</code></p>
+    <p><code>${escapeHtml(String(code))} · ${escapeHtml(desc || "load failed")}</code></p>
+    <div class="row">
+      <button class="primary" id="retry">Try again</button>
+      <button class="secondary" id="fallback">Open backup host</button>
+      <a class="secondary btn" href="${escapeAttr(DEFAULT_URL)}" target="_blank" rel="noreferrer">Open in browser</a>
+    </div>
+  </main>
+  <script>
+    document.getElementById('retry').onclick = () => {
+      location.href = ${JSON.stringify(activeUrl)};
+    };
+    document.getElementById('fallback').onclick = () => {
+      location.href = ${JSON.stringify(FALLBACK_URL)};
+    };
+  </script>
+</body>
+</html>`;
+  void mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+}
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/'/g, "&#39;");
+}
+
+function loadApp(url) {
+  activeUrl = url;
+  console.log(`[cander-desktop] loading ${url}`);
+  void mainWindow?.loadURL(url);
+}
+
+async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -66,13 +134,18 @@ async function createWindow() {
   });
 
   mainWindow.webContents.on("dom-ready", () => {
+    const current = mainWindow?.webContents.getURL() || "";
+    if (current.startsWith("data:")) return;
     markDesktopShell();
   });
 
   mainWindow.webContents.on("did-finish-load", () => {
+    const current = mainWindow?.webContents.getURL() || "";
+    if (current.startsWith("data:")) return;
+    loadAttempts = 0;
     markDesktopShell();
     console.log(
-      `[cander-desktop] loaded ${START_URL} (shell ${SHELL_BUILD}, titleBarStyle=hidden)`,
+      `[cander-desktop] loaded ${current} (shell ${SHELL_BUILD}, titleBarStyle=hidden)`,
     );
     void mainWindow?.webContents.insertCSS(`
       html.cander-desktop {
@@ -89,11 +162,41 @@ async function createWindow() {
     `);
   });
 
+  mainWindow.webContents.on(
+    "did-fail-load",
+    (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame) return;
+      // -3 is ERR_ABORTED (often from a new navigation).
+      if (errorCode === -3) return;
+      console.error(
+        `[cander-desktop] did-fail-load ${errorCode} ${errorDescription} ${validatedURL}`,
+      );
+      loadAttempts += 1;
+      if (loadAttempts === 1) {
+        setTimeout(() => loadApp(activeUrl), 900);
+        return;
+      }
+      if (
+        loadAttempts === 2 &&
+        activeUrl === DEFAULT_URL &&
+        !process.env.CANDER_URL
+      ) {
+        loadApp(FALLBACK_URL);
+        return;
+      }
+      loadErrorPage(errorCode, errorDescription, validatedURL);
+    },
+  );
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     try {
       const target = new URL(url);
-      const appOrigin = new URL(START_URL).origin;
-      if (target.origin === appOrigin) {
+      const allowed = new Set([
+        new URL(DEFAULT_URL).origin,
+        new URL(FALLBACK_URL).origin,
+        new URL(START_URL).origin,
+      ]);
+      if (allowed.has(target.origin)) {
         return { action: "allow" };
       }
     } catch {
@@ -107,9 +210,8 @@ async function createWindow() {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
 
-  void mainWindow.loadURL(START_URL, {
-    extraHeaders: "Cache-Control: no-cache\nPragma: no-cache\n",
-  });
+  loadAttempts = 0;
+  loadApp(START_URL);
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -160,7 +262,8 @@ function buildMenu() {
           click: () => {
             void (async () => {
               await clearWebCache();
-              mainWindow?.webContents.reloadIgnoringCache();
+              loadAttempts = 0;
+              loadApp(activeUrl || START_URL);
             })();
           },
         },
