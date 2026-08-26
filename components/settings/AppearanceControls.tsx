@@ -8,6 +8,7 @@ import {
   swatchForMode,
   useAppearance,
 } from "@/lib/appearance";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 export function AppearanceControls({
@@ -19,6 +20,7 @@ export function AppearanceControls({
 }) {
   const appearance = useAppearance();
   const activeLayout = layoutModeFor(appearance.layout);
+  const mobile = useMobileShell();
 
   return (
     <div className={cn(compact ? "space-y-8" : "space-y-10", className)}>
@@ -55,6 +57,7 @@ export function AppearanceControls({
         </div>
       </section>
 
+      {mobile ? null : (
       <section>
         <h3 className="text-[14px] font-medium tracking-[-0.01em]">Layout</h3>
         {!compact ? (
@@ -82,6 +85,7 @@ export function AppearanceControls({
           />
         </div>
       </section>
+      )}
     </div>
   );
 }

@@ -209,6 +209,9 @@ type AppContextValue = {
   settingsMobileHub: boolean;
   setSettingsMobileHub: (hub: boolean) => void;
   backToSettingsHub: () => void;
+  settingsWorkspaceId: string | null;
+  setSettingsWorkspaceId: (id: string | null) => void;
+  closeSettings: () => void;
   spaceLayout: SpaceLayout;
   setSpaceLayout: (layout: SpaceLayout) => void;
   overlay: OverlayId;
@@ -386,6 +389,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [scheduledFilter, setScheduledFilter] = useState("upcoming");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("organization");
   const [settingsMobileHub, setSettingsMobileHub] = useState(true);
+  const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string | null>(
+    null,
+  );
   const [spaceLayout, setSpaceLayout] = useState<SpaceLayout>("cards");
   const [overlay, setOverlay] = useState<OverlayId>(null);
   const [settingsSpaceId, setSettingsSpaceId] = useState<SpaceId | null>(null);
@@ -519,7 +525,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSkillId(null);
       setThreadId(null);
       setOverlay(null);
-      setMobileSurface("chat");
+      setMobileSurface((surface) => (surface === "menu" ? surface : "chat"));
 
       const allowed = memberSpaces(id, actor.id, workspacePolicies);
       const opts = { billingPlan, personalEnabled: personalSpaceEnabled };
@@ -794,23 +800,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const newChat = useCallback(
     (space?: SpaceId) => {
-      const nextSpace =
-        (space && isChatSpace(space) ? space : null) ??
-        (spaceId && isChatSpace(spaceId) ? spaceId : null);
-
-      if (nextSpace) {
+      if (space && isChatSpace(space)) {
         let tid = "";
         setThreads((current) => {
-          const started = startContinuousChat(
-            current,
-            workspaceId,
-            nextSpace,
-          );
+          const started = startContinuousChat(current, workspaceId, space);
           tid = started.id;
           return started.threads;
         });
         setThreadId(tid);
-        setSpaceId(nextSpace);
+        setSpaceId(space);
         setProjectId(null);
         setConnectorId(null);
         setJobId(null);
@@ -820,13 +818,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setPanelIntent("execute");
         setPanelMode("split");
         setMobileSurface("chat");
-        if (nextSpace === "build") setBuildTool("preview");
-        if (nextSpace === "studio") setStudioTool("canvas");
-        if (nextSpace === "research") setResearchTool("browser");
-        if (nextSpace === "skills") setSkillsTool("editor");
+        if (space === "build") setBuildTool("preview");
+        if (space === "studio") setStudioTool("canvas");
+        if (space === "research") setResearchTool("browser");
+        if (space === "skills") setSkillsTool("editor");
         pushTarget({
           view: "space",
-          spaceId: nextSpace,
+          spaceId: space,
           threadId: tid,
           projectId: null,
           panelMode: "split",
@@ -860,7 +858,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: null,
       });
     },
-    [pushTarget, workspaceId, spaceId],
+    [pushTarget, workspaceId],
   );
 
   const openCourierHome = useCallback(() => {
@@ -1849,6 +1847,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const openSettings = useCallback((tab?: SettingsTab, opts?: { hub?: boolean }) => {
+    setSettingsWorkspaceId(null);
     if (opts?.hub) {
       setSettingsMobileHub(true);
     } else {
@@ -1880,7 +1879,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [entitlements.showOrgSettings, pushTarget]);
 
   const backToSettingsHub = useCallback(() => {
+    setSettingsWorkspaceId(null);
     setSettingsMobileHub(true);
+  }, []);
+
+  const closeSettings = useCallback(() => {
+    setSettingsWorkspaceId(null);
+    setSettingsMobileHub(true);
+    if (hist.i > 0) {
+      goBack();
+      return;
+    }
+    setThreadId(null);
+    setSpaceId(null);
+    setProjectId(null);
+    setConnectorId(null);
+    setJobId(null);
+    setSkillId(null);
+    setView("chat");
+    setDrafting(false);
+    setPanelIntent("browse");
+    setPanelMode("collapsed");
+    pushTarget({
+      view: "chat",
+      spaceId: null,
+      threadId: null,
+      projectId: null,
+      panelMode: "collapsed",
+      panelIntent: "browse",
+      connectorId: null,
+      jobId: null,
+      skillId: null,
+    });
+  }, [hist.i, goBack, pushTarget]);
+
+  const selectSettingsTab = useCallback((tab: SettingsTab) => {
+    setSettingsWorkspaceId(null);
+    setSettingsTab(tab);
   }, []);
 
   const openOverlay = useCallback((id: OverlayId) => {
@@ -2213,10 +2248,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       scheduledFilter,
       setScheduledFilter,
       settingsTab,
-      setSettingsTab,
+      setSettingsTab: selectSettingsTab,
       settingsMobileHub,
       setSettingsMobileHub,
       backToSettingsHub,
+      settingsWorkspaceId,
+      setSettingsWorkspaceId,
+      closeSettings,
       spaceLayout,
       setSpaceLayout,
       overlay,
@@ -2346,6 +2384,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       settingsTab,
       settingsMobileHub,
       backToSettingsHub,
+      settingsWorkspaceId,
+      closeSettings,
+      selectSettingsTab,
       spaceLayout,
       overlay,
       settingsSpaceId,

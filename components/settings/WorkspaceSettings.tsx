@@ -210,7 +210,7 @@ function WorkspacePage({
       <button
         type="button"
         onClick={onBack}
-        className="inline-flex items-center gap-1 text-[13px] text-muted-foreground transition-colors duration-200 hover:text-foreground"
+        className="mb-3 inline-flex items-center gap-1 text-[13px] text-muted-foreground transition-colors duration-200 hover:text-foreground max-lg:hidden"
       >
         <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.7} />
         Workspaces
@@ -225,7 +225,7 @@ function WorkspacePage({
         }
       />
 
-      <div className="mt-8">
+      <div className="mt-8 max-lg:mt-4">
         <WorkspaceIconSection workspace={workspace} />
       </div>
 

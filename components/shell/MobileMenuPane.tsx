@@ -95,7 +95,11 @@ export function MobileMenuPane() {
             <PinsSheet onSelect={close} hideHeading />
           ) : (
             <WorkspaceSheet
-              onSelect={() => setMobileMenuScreen("main")}
+              onSelect={() => {}}
+              onCreate={() => {
+                setMobileMenuScreen("main");
+                setMobileSurface("chat");
+              }}
             />
           )}
         </div>

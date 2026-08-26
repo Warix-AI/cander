@@ -115,7 +115,7 @@ export function ChatColumn() {
             floating
               ? centered
                 ? "px-4 sm:px-6"
-                : "pl-2 pr-3 sm:pl-2.5 sm:pr-4"
+                : "pl-1.5 pr-2.5 sm:pl-2 sm:pr-3"
               : "px-4 sm:px-6",
           )}
         >

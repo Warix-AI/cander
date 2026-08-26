@@ -220,7 +220,7 @@ export function Composer({
               ? cn(
                   centered
                     ? "px-4 sm:px-6"
-                    : "pr-3 pl-2 sm:pr-4 sm:pl-2.5",
+                    : "pr-2.5 pl-1.5 sm:pr-3 sm:pl-2",
                   showUsageBar
                     ? "pb-0"
                     : "composer-keyboard-pad pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.35rem))] sm:pb-4",
@@ -345,7 +345,7 @@ export function Composer({
         ) : (
           <div
             className={cn(
-              "composer-shell px-3 py-2 pr-4",
+              "composer-shell px-2.5 py-2",
               showUsageBar && "mb-2.5",
             )}
           >

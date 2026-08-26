@@ -82,12 +82,13 @@ export function SettingsView() {
     setSettingsTab,
     settingsMobileHub,
     setSettingsMobileHub,
+    settingsWorkspaceId,
+    setSettingsWorkspaceId,
     entitlements,
     canGoBack,
     goBack,
     newChat,
   } = useApp();
-  const [workspacePage, setWorkspacePage] = useState<string | null>(null);
   const mobile = useMobileShell();
   const settingsNav = visibleSettingsTabs(entitlements);
 
@@ -114,32 +115,31 @@ export function SettingsView() {
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {mobile && settingsMobileHub ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-2 lg:hidden">
-          <p className="text-[13.5px] text-muted-foreground">
-            Organization, account, and preferences
-          </p>
-          <div className="mt-4 flex flex-col gap-1">
-            {settingsNav.map((tab) => {
-              const Icon = settingsIcons[tab.id];
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    setSettingsTab(tab.id);
-                    setSettingsMobileHub(false);
-                  }}
-                  className="flex w-full items-center gap-3 rounded-[10px] px-3 py-3 text-left transition-colors duration-200 hover:bg-muted"
-                >
-                  <Icon
-                    className="h-4 w-4 shrink-0 text-muted-foreground"
-                    strokeWidth={2}
-                  />
-                  <span className="text-[14px] font-medium tracking-[-0.01em]">
-                    {tab.label}
-                  </span>
-                </button>
-              );
-            })}
+          <div className="overflow-hidden border border-border bg-card shell-g3-radius">
+            <div className="divide-y divide-border">
+              {settingsNav.map((tab) => {
+                const Icon = settingsIcons[tab.id];
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      setSettingsTab(tab.id);
+                      setSettingsMobileHub(false);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-muted/50"
+                  >
+                    <Icon
+                      className="h-4 w-4 shrink-0 text-muted-foreground"
+                      strokeWidth={2}
+                    />
+                    <span className="text-[14px] font-medium tracking-[-0.01em]">
+                      {tab.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       ) : (
@@ -148,8 +148,8 @@ export function SettingsView() {
 
           {settingsTab === "workspaces" ? (
             <WorkspacesSettings
-              selectedId={workspacePage}
-              onSelect={setWorkspacePage}
+              selectedId={settingsWorkspaceId}
+              onSelect={setSettingsWorkspaceId}
             />
           ) : null}
 

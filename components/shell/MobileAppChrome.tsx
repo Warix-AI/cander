@@ -1,10 +1,16 @@
 "use client";
 
 import { ChevronLeft, Menu, SquarePen } from "lucide-react";
+import { useSyncExternalStore } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { navLabel } from "@/lib/use-main-nav-items";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
+import {
+  getWorkspaceCatalogServerSnapshot,
+  getWorkspaceCatalogSnapshot,
+  subscribeWorkspaceCatalog,
+} from "@/lib/workspace-catalog";
 import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -27,10 +33,17 @@ export function MobileAppChrome({ className }: { className?: string }) {
     newChat,
     settingsMobileHub,
     settingsTab,
+    settingsWorkspaceId,
+    setSettingsWorkspaceId,
     backToSettingsHub,
-    canGoBack,
-    goBack,
+    closeSettings,
   } = useApp();
+
+  const catalog = useSyncExternalStore(
+    subscribeWorkspaceCatalog,
+    getWorkspaceCatalogSnapshot,
+    getWorkspaceCatalogServerSnapshot,
+  );
 
   const inSettings = view === "settings";
   const inMenuSub =
@@ -39,9 +52,15 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const onMenuMain = mobileSurface === "menu" && mobileMenuScreen === "main";
 
   const settingsNav = visibleSettingsTabs(entitlements);
+  const workspaceName = settingsWorkspaceId
+    ? catalog.find((item) => item.id === settingsWorkspaceId)?.name
+    : null;
   const settingsTitle = settingsMobileHub
     ? "Settings"
-    : (settingsNav.find((tab) => tab.id === settingsTab)?.label ?? "Settings");
+    : workspaceName && settingsTab === "workspaces"
+      ? workspaceName
+      : (settingsNav.find((tab) => tab.id === settingsTab)?.label ??
+        "Settings");
 
   const subTitle = inSettings
     ? settingsTitle
@@ -69,12 +88,16 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
   const onLeadingClick = () => {
     if (inSettings) {
+      if (settingsWorkspaceId) {
+        setSettingsWorkspaceId(null);
+        return;
+      }
       if (!settingsMobileHub) {
         backToSettingsHub();
         return;
       }
-      if (canGoBack) goBack();
-      else newChat();
+      closeSettings();
+      setMobileMenuScreen("main");
       setMobileSurface("menu");
       return;
     }

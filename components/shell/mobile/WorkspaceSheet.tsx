@@ -15,7 +15,14 @@ import { cn } from "@/lib/utils";
 const rowClass =
   "menu-row-hover flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[13.5px] transition-colors duration-200";
 
-export function WorkspaceSheet({ onSelect }: { onSelect: () => void }) {
+export function WorkspaceSheet({
+  onSelect,
+  onCreate,
+}: {
+  onSelect: () => void;
+  /** Called after opening the new-workspace flow (optional). */
+  onCreate?: () => void;
+}) {
   const {
     workspace,
     setWorkspace,
@@ -47,7 +54,12 @@ export function WorkspaceSheet({ onSelect }: { onSelect: () => void }) {
             }}
             className={cn(rowClass, active && "bg-muted/70 font-medium")}
           >
-            <WorkspaceMark id={item.id} name={item.name} active={active} size="sm" />
+            <WorkspaceMark
+              id={item.id}
+              name={item.name}
+              active={active}
+              size="sm"
+            />
             <span className="min-w-0 flex-1 truncate">{item.name}</span>
             {active ? (
               <Check
@@ -64,7 +76,7 @@ export function WorkspaceSheet({ onSelect }: { onSelect: () => void }) {
           type="button"
           onClick={() => {
             openOverlay("workspace");
-            onSelect();
+            (onCreate ?? onSelect)();
           }}
           className={cn(
             rowClass,

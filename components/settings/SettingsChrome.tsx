@@ -1,4 +1,8 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 /** Full-page settings canvas — matches space dashboard width and padding. */
@@ -12,11 +16,15 @@ export function SettingsPage({
   wide?: boolean;
   className?: string;
 }) {
+  const mobile = useMobileShell();
   return (
     <div className="min-h-0 flex-1 overflow-y-auto bg-background">
       <div
         className={cn(
-          "mx-auto w-full px-5 pt-7 pb-14 sm:px-8 lg:px-10 lg:pt-9",
+          "mx-auto w-full",
+          mobile
+            ? "px-4 pt-3 pb-10"
+            : "px-5 pt-7 pb-14 sm:px-8 lg:px-10 lg:pt-9",
           wide ? "max-w-6xl" : "max-w-[53.2rem]",
           className,
         )}
@@ -38,6 +46,25 @@ export function SettingsHeader({
   subtitle?: string;
   actions?: ReactNode;
 }) {
+  const mobile = useMobileShell();
+
+  // Mobile chrome already shows the title — keep subtitle/actions only.
+  if (mobile) {
+    if (!subtitle && !actions) return null;
+    return (
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        {subtitle ? (
+          <p className="min-w-0 max-w-xl text-[13.5px] leading-relaxed text-muted-foreground">
+            {subtitle}
+          </p>
+        ) : null}
+        {actions ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+        ) : null}
+      </header>
+    );
+  }
+
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0 max-w-2xl">
@@ -77,14 +104,26 @@ export function SettingsSection({
   children: ReactNode;
   className?: string;
 }) {
+  const mobile = useMobileShell();
   return (
-    <section className={cn("mt-8", className)}>
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+    <section className={cn(mobile ? "mt-6" : "mt-8", className)}>
+      <div
+        className={cn(
+          "flex flex-wrap items-end justify-between gap-3",
+          mobile ? "mb-2 px-1" : "mb-3",
+        )}
+      >
         <div className="min-w-0 max-w-2xl">
-          <h3 className="heading-section text-[1rem] tracking-[-0.02em]">
+          <h3
+            className={cn(
+              mobile
+                ? "text-[12px] font-medium tracking-[0.04em] text-muted-foreground uppercase"
+                : "heading-section text-[1rem] tracking-[-0.02em]",
+            )}
+          >
             {title}
           </h3>
-          {description ? (
+          {description && !mobile ? (
             <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
               {description}
             </p>
@@ -110,10 +149,12 @@ export function SettingsGroup({
   children: ReactNode;
   className?: string;
 }) {
+  const mobile = useMobileShell();
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-[10px] border border-border bg-card",
+        "overflow-hidden border border-border bg-card",
+        mobile ? SHELL_G3_RADIUS : "rounded-[10px]",
         className,
       )}
     >
@@ -191,10 +232,12 @@ export function SettingsPanel({
   className?: string;
   padded?: boolean;
 }) {
+  const mobile = useMobileShell();
   return (
     <div
       className={cn(
-        "rounded-[10px] border border-border bg-card",
+        "border border-border bg-card",
+        mobile ? SHELL_G3_RADIUS : "rounded-[10px]",
         padded && "p-4 sm:p-5",
         className,
       )}
@@ -209,12 +252,16 @@ export function SettingsStatGrid({
 }: {
   items: { label: string; value: string }[];
 }) {
+  const mobile = useMobileShell();
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((item) => (
         <div
           key={item.label}
-          className="rounded-[10px] border border-border bg-card px-4 py-3.5"
+          className={cn(
+            "border border-border bg-card px-4 py-3.5",
+            mobile ? SHELL_G3_RADIUS : "rounded-[10px]",
+          )}
         >
           <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
             {item.label}
