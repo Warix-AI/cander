@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+type ListenerHandle = { remove: () => void };
+
 type KeyboardPlugin = {
   setAccessoryBarVisible?: (opts: { isVisible: boolean }) => Promise<void>;
   setScroll?: (opts: { isDisabled: boolean }) => Promise<void>;
@@ -12,7 +14,7 @@ type KeyboardPlugin = {
       | "keyboardWillHide"
       | "keyboardDidHide",
     cb: (info: { keyboardHeight: number }) => void,
-  ) => Promise<{ remove: () => void }>;
+  ) => ListenerHandle | Promise<ListenerHandle> | void;
 };
 
 type CapacitorBridge = {
@@ -63,34 +65,95 @@ function applyKeyboardInset() {
   if (window.scrollY !== 0 || window.scrollX !== 0) window.scrollTo(0, 0);
 }
 
+function heightFromEvent(event: Event): number {
+  const anyEvent = event as Event & {
+    keyboardHeight?: number;
+    detail?: { keyboardHeight?: number } | string;
+  };
+  if (typeof anyEvent.keyboardHeight === "number") return anyEvent.keyboardHeight;
+  const detail = anyEvent.detail;
+  if (detail && typeof detail === "object" && typeof detail.keyboardHeight === "number") {
+    return detail.keyboardHeight;
+  }
+  if (typeof detail === "string") {
+    try {
+      const parsed = JSON.parse(detail.replace(/'/g, '"')) as {
+        keyboardHeight?: number;
+      };
+      if (typeof parsed.keyboardHeight === "number") return parsed.keyboardHeight;
+    } catch {
+      // ignore
+    }
+  }
+  return 0;
+}
+
+/** Capacitor Plugins.Keyboard.addListener may return a handle OR a Promise — never assume .then. */
+function bindPluginListener(
+  keyboard: KeyboardPlugin,
+  event:
+    | "keyboardWillShow"
+    | "keyboardDidShow"
+    | "keyboardWillHide"
+    | "keyboardDidHide",
+  cb: (info: { keyboardHeight: number }) => void,
+) {
+  if (!keyboard.addListener) return;
+  try {
+    const result = keyboard.addListener(event, cb) as unknown;
+    if (!result) return;
+    if (typeof (result as Promise<ListenerHandle>).then === "function") {
+      void (result as Promise<ListenerHandle>)
+        .then((handle) => {
+          if (handle?.remove) sharedCleanups.push(() => handle.remove());
+        })
+        .catch(() => {
+          // never blank the app over keyboard wiring
+        });
+      return;
+    }
+    if (typeof (result as ListenerHandle).remove === "function") {
+      sharedCleanups.push(() => (result as ListenerHandle).remove());
+    }
+  } catch {
+    // ignore plugin wiring failures
+  }
+}
+
 function ensureSharedListeners() {
   if (sharedCleanups.length > 0) return;
 
-  const keyboard = getCapacitor()?.Plugins?.Keyboard;
-  // Do not call setScroll / setAccessoryBar on boot — they hit a null window
-  // on iOS before the scene is ready and spam Keyboard/scene warnings.
+  const onShow = (info: { keyboardHeight: number }) => {
+    pluginHeight = Math.max(0, info.keyboardHeight || 0);
+    applyKeyboardInset();
+  };
+  const onHide = () => {
+    pluginHeight = 0;
+    applyKeyboardInset();
+  };
 
-  if (keyboard?.addListener) {
-    const onShow = (info: { keyboardHeight: number }) => {
-      pluginHeight = Math.max(0, info.keyboardHeight || 0);
-      applyKeyboardInset();
-    };
-    const onHide = () => {
-      pluginHeight = 0;
-      applyKeyboardInset();
-    };
-    void keyboard.addListener("keyboardWillShow", onShow).then((handle) =>
-      sharedCleanups.push(() => handle.remove()),
-    );
-    void keyboard.addListener("keyboardDidShow", onShow).then((handle) =>
-      sharedCleanups.push(() => handle.remove()),
-    );
-    void keyboard.addListener("keyboardWillHide", onHide).then((handle) =>
-      sharedCleanups.push(() => handle.remove()),
-    );
-    void keyboard.addListener("keyboardDidHide", onHide).then((handle) =>
-      sharedCleanups.push(() => handle.remove()),
-    );
+  // Window events fired by @capacitor/keyboard (safe; no Promise assumptions).
+  const onWinShow = (event: Event) => {
+    onShow({ keyboardHeight: heightFromEvent(event) });
+  };
+  const onWinHide = () => onHide();
+  window.addEventListener("keyboardWillShow", onWinShow);
+  window.addEventListener("keyboardDidShow", onWinShow);
+  window.addEventListener("keyboardWillHide", onWinHide);
+  window.addEventListener("keyboardDidHide", onWinHide);
+  sharedCleanups.push(() => {
+    window.removeEventListener("keyboardWillShow", onWinShow);
+    window.removeEventListener("keyboardDidShow", onWinShow);
+    window.removeEventListener("keyboardWillHide", onWinHide);
+    window.removeEventListener("keyboardDidHide", onWinHide);
+  });
+
+  const keyboard = getCapacitor()?.Plugins?.Keyboard;
+  if (keyboard) {
+    bindPluginListener(keyboard, "keyboardWillShow", onShow);
+    bindPluginListener(keyboard, "keyboardDidShow", onShow);
+    bindPluginListener(keyboard, "keyboardWillHide", onHide);
+    bindPluginListener(keyboard, "keyboardDidHide", onHide);
   }
 
   const vv = window.visualViewport;
@@ -134,20 +197,29 @@ function ensureSharedListeners() {
 
 /**
  * Lift the composer with the keyboard (padding-bottom = keyboard height).
- * Hide iOS form accessory when Capacitor Keyboard is present.
  *
  * With Capacitor `Keyboard.resize: none`, the WebView often does not shrink, so
- * visualViewport alone is unreliable — merge plugin events + viewport. Native
- * iOS/Android bridges may also write `--keyboard-inset` directly.
+ * visualViewport alone is unreliable — merge plugin/window events + viewport.
+ * Native iOS/Android bridges may also write `--keyboard-inset` directly.
  */
 export function lockMobileViewport() {
   lockCount += 1;
-  ensureSharedListeners();
+  try {
+    ensureSharedListeners();
+  } catch {
+    // Keyboard wiring must never blank the app.
+  }
 
   return () => {
     lockCount = Math.max(0, lockCount - 1);
     if (lockCount > 0) return;
-    sharedCleanups.forEach((fn) => fn());
+    sharedCleanups.forEach((fn) => {
+      try {
+        fn();
+      } catch {
+        // ignore
+      }
+    });
     sharedCleanups = [];
     pluginHeight = 0;
     writeKeyboardInset(0);
