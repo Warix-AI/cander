@@ -260,7 +260,7 @@ export function Sidebar() {
           sidebarOpen
             ? "lg:static lg:max-w-none"
             : cn(
-                "lg:fixed lg:inset-y-0 lg:left-0 lg:z-40",
+                "lg:fixed lg:bottom-0 lg:left-0 lg:top-[var(--desktop-titlebar)] lg:z-40",
                 "will-change-transform transition-[transform,opacity]",
                 peek
                   ? "translate-x-0 opacity-100 duration-[360ms] ease-out"

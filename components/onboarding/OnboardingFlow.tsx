@@ -286,7 +286,7 @@ function OnboardingShell() {
 
   return (
     <AppearanceScope
-      className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground lg:flex-row"
+      className="flex h-svh w-full flex-col overflow-hidden bg-background pt-[var(--desktop-titlebar)] text-foreground lg:flex-row"
     >
       {/* Left: auth / onboarding — 50% on desktop */}
       <div className="relative flex min-h-0 w-full flex-1 flex-col lg:w-1/2 lg:flex-none">

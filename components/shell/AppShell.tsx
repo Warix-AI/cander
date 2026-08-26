@@ -26,6 +26,7 @@ import { useSyncExternalStore } from "react";
 import { BrowserLayout } from "@/components/browser/BrowserLayout";
 import { FloatingVoiceDock } from "@/components/shell/VoiceControl";
 import { AppearanceProvider } from "@/components/theme/AppearanceProvider";
+import { isDesktopShell } from "@/lib/desktop-shell";
 
 export function AppShell() {
   return (
@@ -51,6 +52,14 @@ function Root() {
     getAuthSnapshot,
     getAuthServerSnapshot,
   );
+
+  useEffect(() => {
+    if (!isDesktopShell()) return;
+    document.documentElement.classList.add("cander-desktop");
+    return () => {
+      document.documentElement.classList.remove("cander-desktop");
+    };
+  }, []);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -89,7 +98,8 @@ function Root() {
   return (
     <AppearanceProvider>
       <div
-        className="relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background pb-[calc(68px+env(safe-area-inset-bottom))] text-foreground lg:pb-0"
+        data-app-shell=""
+        className="relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background pb-[calc(68px+env(safe-area-inset-bottom))] pt-[var(--desktop-titlebar)] text-foreground lg:pb-0"
       >
         <Sidebar />
         <CourierMain />

@@ -4,9 +4,18 @@ const path = require("path");
 const APP_NAME = "Cander";
 const DEFAULT_URL = "https://cander.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
+const TITLEBAR_PX = 44;
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
+
+function markDesktopShell() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  void mainWindow.webContents.executeJavaScript(`
+    document.documentElement.classList.add("cander-desktop");
+    document.documentElement.style.setProperty("--desktop-titlebar", "${TITLEBAR_PX}px");
+  `);
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -18,7 +27,7 @@ function createWindow() {
     backgroundColor: "#ffffff",
     show: false,
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 18 },
+    trafficLightPosition: { x: 16, y: 14 },
     icon: path.join(__dirname, "../assets/icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -32,21 +41,35 @@ function createWindow() {
     mainWindow?.show();
   });
 
-  // Thin native drag strip under traffic lights so the window moves like a Mac app.
+  mainWindow.webContents.on("dom-ready", () => {
+    markDesktopShell();
+  });
+
   mainWindow.webContents.on("did-finish-load", () => {
+    markDesktopShell();
+    // Drag only the native titlebar strip; leave app chrome clickable.
     void mainWindow?.webContents.insertCSS(`
-      html::before {
+      html.cander-desktop {
+        --desktop-titlebar: ${TITLEBAR_PX}px !important;
+      }
+      html.cander-desktop::before {
         content: "";
         position: fixed;
         top: 0;
         left: 0;
         right: 0;
-        height: 44px;
+        height: ${TITLEBAR_PX}px;
         z-index: 2147483647;
         -webkit-app-region: drag;
       }
-      header, nav, [data-no-drag], button, a, input, textarea, [role="button"] {
+      html.cander-desktop body {
         -webkit-app-region: no-drag;
+      }
+      /* Works even before the hosted site ships the titlebar padding */
+      html.cander-desktop [data-app-shell],
+      html.cander-desktop body > div:first-child {
+        padding-top: ${TITLEBAR_PX}px !important;
+        box-sizing: border-box;
       }
     `);
   });

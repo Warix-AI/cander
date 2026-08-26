@@ -13,6 +13,7 @@
   --accent: oklch(0.95 0 0);
   --border: oklch(0.95 0 0);
   --radius: 10px;
+  --desktop-titlebar: 0px;
   --chart-1: oklch(0.81 0.1 252);
   --chart-2: oklch(0.62 0.19 260);
   --chart-3: oklch(0.55 0.22 263);
@@ -106,6 +107,15 @@
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --footer: oklch(0.165 0 0);
   --footer-foreground: oklch(0.985 0 0);
+}
+
+/* Electron / macOS shell — clear traffic lights with a titlebar inset */
+html.cander-desktop {
+  --desktop-titlebar: 44px;
+}
+
+html.cander-desktop body {
+  -webkit-app-region: no-drag;
 }
 
 @theme inline {
