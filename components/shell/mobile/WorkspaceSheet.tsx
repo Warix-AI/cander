@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const rowClass =
-  "menu-row-hover flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[13.5px] transition-colors duration-200";
+  "menu-row-hover flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[13.5px] transition-colors duration-200";
 
 export function WorkspaceSheet({ onSelect }: { onSelect: () => void }) {
   const {
@@ -33,7 +33,7 @@ export function WorkspaceSheet({ onSelect }: { onSelect: () => void }) {
   const allowed = workspacesFor(actor, entitlements);
 
   return (
-    <div className="p-2">
+    <div className="px-1 py-1">
       {allowed.map((item) => {
         const active = item.id === workspace.id;
         return (
@@ -45,10 +45,16 @@ export function WorkspaceSheet({ onSelect }: { onSelect: () => void }) {
               setWorkspace(item.id);
               onSelect();
             }}
-            className={cn(rowClass, active && "font-medium")}
+            className={cn(rowClass, active && "bg-muted/70 font-medium")}
           >
-            <WorkspaceMark id={item.id} name={item.name} active={active} />
-            <span className="truncate">{item.name}</span>
+            <WorkspaceMark id={item.id} name={item.name} active={active} size="sm" />
+            <span className="min-w-0 flex-1 truncate">{item.name}</span>
+            {active ? (
+              <Check
+                className="h-3.5 w-3.5 shrink-0 text-foreground"
+                strokeWidth={2}
+              />
+            ) : null}
           </button>
         );
       })}

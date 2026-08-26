@@ -7,10 +7,7 @@ import { CourierMark } from "@/components/brand/CourierMark";
 import { ChatMessage } from "@/components/chat/MessageBlocks";
 import { SessionSummaryBubble } from "@/components/chat/SessionSummaryBubble";
 import { Composer } from "@/components/shell/Composer";
-import { SuggestionPrompts } from "@/components/shell/SuggestionPrompts";
-import { homeSuggestions } from "@/lib/suggestions";
-import { spaceChatSuggestions } from "@/lib/space-suggestions";
-import { chatSpaceCopy, navIcon, spaceIconTint } from "@/lib/space-icons";
+import { chatSpaceCopy } from "@/lib/space-icons";
 import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatCanvasCentered } from "@/lib/chat-layout";
@@ -22,11 +19,6 @@ export function ChatColumn() {
   const browserMode = view === "browser";
   const mobile = useMobileShell();
   const showLanding = !browserMode && !thread && !drafting;
-  const showSpacePrompts =
-    !browserMode &&
-    !!spaceId &&
-    (!thread || thread.messages.length === 0);
-  const spacePrompts = spaceChatSuggestions(spaceId);
   const endRef = useRef<HTMLDivElement>(null);
   const last = thread?.messages.at(-1);
   const floating = useShellStyle() === "floating";
@@ -76,7 +68,6 @@ export function ChatColumn() {
 
   // Mobile ChatGPT-style: empty canvas + composer always pinned to bottom.
   if (mobile) {
-    const chips = showLanding && !spaceId ? homeSuggestions().slice(0, 1) : [];
     return (
       <section
         data-mobile-chat=""
@@ -84,22 +75,7 @@ export function ChatColumn() {
       >
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 touch-pan-y">
           {showLanding ? (
-            <div className="flex min-h-full flex-col justify-end pb-3">
-              {chips.length ? (
-                <div className="mb-4 flex flex-col items-start gap-2.5">
-                  {chips.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => send(item.label)}
-                      className="max-w-[90%] text-left text-[14px] leading-snug tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      {item.label.replace(/\.$/, "")}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
+            <div className="flex min-h-full flex-col justify-end pb-3" />
           ) : (
             <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-6">
               {thread?.sessionSummary ? (
@@ -117,9 +93,6 @@ export function ChatColumn() {
             </div>
           )}
         </div>
-        {showSpacePrompts && spacePrompts.length && !showLanding ? (
-          <SuggestionPrompts items={spacePrompts} onSelect={send} />
-        ) : null}
         <div className="shrink-0">
           <Composer onSend={send} />
         </div>
@@ -168,14 +141,7 @@ export function ChatColumn() {
         </div>
       )}
 
-      {showLanding ? null : (
-        <>
-          {showSpacePrompts && spacePrompts.length ? (
-            <SuggestionPrompts items={spacePrompts} onSelect={send} />
-          ) : null}
-          <Composer onSend={send} />
-        </>
-      )}
+      {showLanding ? null : <Composer onSend={send} />}
     </section>
   );
 }
@@ -187,13 +153,10 @@ function EmptyChat({
   spaceId: SpaceId | null;
   onPrompt: (text: string) => void;
 }) {
-  const inSpace = spaceId !== null;
   const heading =
     spaceId && spaceId in chatSpaceCopy
       ? chatSpaceCopy[spaceId as keyof typeof chatSpaceCopy]
       : null;
-  const allVisible = inSpace ? [] : homeSuggestions();
-  const visible = allVisible;
   const shellRef = useRef<HTMLDivElement>(null);
   const clusterRef = useRef<HTMLDivElement>(null);
   const baseHeightRef = useRef(0);
@@ -233,7 +196,7 @@ function EmptyChat({
       ro.disconnect();
       window.removeEventListener("resize", place);
     };
-  }, [visible.length, heading, inSpace]);
+  }, [heading, spaceId]);
 
   return (
     <div
@@ -254,36 +217,6 @@ function EmptyChat({
         <div className="mt-8 w-full">
           <Composer onSend={onPrompt} landing />
         </div>
-        {visible.length ? (
-          <div
-            className={cn(
-              "landing-suggestions mt-3 grid w-full gap-2.5",
-              visible.length === 2
-                ? "grid-cols-2"
-                : "grid-cols-2 md:grid-cols-3",
-            )}
-          >
-            {visible.map((item) => {
-              const Icon = navIcon(item.space);
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onPrompt(item.label)}
-                  className="light-surface light-surface-interactive flex min-h-[6.25rem] flex-col justify-between rounded-[15px] p-3 text-left"
-                >
-                  <Icon
-                    className={cn("h-3.5 w-3.5", spaceIconTint(item.space))}
-                    strokeWidth={1.6}
-                  />
-                  <span className="text-[12.5px] leading-snug tracking-[-0.02em]">
-                    {item.label.replace(/\.$/, "")}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
       </div>
     </div>
   );

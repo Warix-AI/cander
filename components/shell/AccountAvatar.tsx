@@ -29,7 +29,11 @@ export function AccountAvatar({
   );
   const photo = profilePhotoFor(memberId, photos);
   const dim =
-    size === "lg" ? "h-14 w-14 text-[15px]" : size === "sm" ? "h-7 w-7 text-[10px]" : "h-8 w-8 text-[11px]";
+    size === "lg"
+      ? "h-14 w-14 text-[15px]"
+      : size === "sm"
+        ? "h-7 w-7 text-[10px]"
+        : "h-8 w-8 text-[11px]";
 
   if (photo) {
     return (

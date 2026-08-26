@@ -3,6 +3,7 @@
 import { ChevronLeft, Menu, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { navLabel } from "@/lib/use-main-nav-items";
+import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
 import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -10,13 +11,13 @@ import { cn } from "@/lib/utils";
 /**
  * ChatGPT-style mobile top bar.
  * Home: menu · Chat|{Space} · new chat
- * Menu sub-screen: back · title · (empty)
+ * Menu / settings screens: back · title · (no new chat)
  */
 export function MobileAppChrome({ className }: { className?: string }) {
   const {
     view,
     spaceId,
-    workspace,
+    entitlements,
     mobileSurface,
     setMobileSurface,
     mobileMenuScreen,
@@ -24,21 +25,35 @@ export function MobileAppChrome({ className }: { className?: string }) {
     panelMode,
     setPanelMode,
     newChat,
+    settingsMobileHub,
+    settingsTab,
+    backToSettingsHub,
+    canGoBack,
+    goBack,
   } = useApp();
 
+  const inSettings = view === "settings";
   const inMenuSub =
     mobileSurface === "menu" && mobileMenuScreen !== "main";
-  const subTitle =
-    mobileMenuScreen === "pinned"
+  const inChromeSub = inMenuSub || inSettings;
+  const onMenuMain = mobileSurface === "menu" && mobileMenuScreen === "main";
+
+  const settingsNav = visibleSettingsTabs(entitlements);
+  const settingsTitle = settingsMobileHub
+    ? "Settings"
+    : (settingsNav.find((tab) => tab.id === settingsTab)?.label ?? "Settings");
+
+  const subTitle = inSettings
+    ? settingsTitle
+    : mobileMenuScreen === "pinned"
       ? "Pinned"
       : mobileMenuScreen === "workspace"
-        ? workspace.name
-        : mobileMenuScreen === "account"
-          ? "Account"
-          : "";
+        ? "Workspace"
+        : "";
 
   const showSpaceToggle =
-    !inMenuSub &&
+    !inChromeSub &&
+    !onMenuMain &&
     view === "space" &&
     Boolean(spaceId) &&
     (PRIMARY_NAV_SPACES as readonly string[]).includes(spaceId as string);
@@ -50,7 +65,19 @@ export function MobileAppChrome({ className }: { className?: string }) {
         ? "panel"
         : "chat";
 
-  const openMenu = () => {
+  const hideNewChat = onMenuMain || inChromeSub;
+
+  const onLeadingClick = () => {
+    if (inSettings) {
+      if (!settingsMobileHub) {
+        backToSettingsHub();
+        return;
+      }
+      if (canGoBack) goBack();
+      else newChat();
+      setMobileSurface("menu");
+      return;
+    }
     if (inMenuSub) {
       setMobileMenuScreen("main");
       return;
@@ -76,22 +103,22 @@ export function MobileAppChrome({ className }: { className?: string }) {
         <button
           type="button"
           aria-label={
-            inMenuSub
-              ? "Back to menu"
+            inChromeSub
+              ? "Back"
               : mobileSurface === "menu"
                 ? "Close menu"
                 : "Open menu"
           }
-          aria-pressed={!inMenuSub && mobileSurface === "menu"}
-          onClick={openMenu}
+          aria-pressed={!inChromeSub && mobileSurface === "menu"}
+          onClick={onLeadingClick}
           className={cn(
             "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors",
-            !inMenuSub && mobileSurface === "menu"
+            !inChromeSub && mobileSurface === "menu"
               ? "bg-foreground text-background"
               : "bg-muted/70 text-foreground hover:bg-muted",
           )}
         >
-          {inMenuSub ? (
+          {inChromeSub ? (
             <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
           ) : (
             <Menu className="h-5 w-5" strokeWidth={1.8} />
@@ -99,7 +126,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
         </button>
 
         <div className="flex min-w-0 flex-1 items-center justify-center">
-          {inMenuSub ? (
+          {inChromeSub ? (
             <p className="truncate text-[15px] font-medium tracking-[-0.01em]">
               {subTitle}
             </p>
@@ -141,7 +168,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
           ) : null}
         </div>
 
-        {inMenuSub ? (
+        {hideNewChat ? (
           <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
         ) : (
           <button

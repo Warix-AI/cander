@@ -12,16 +12,34 @@
       body {
         margin: 0;
         height: 100%;
-        font-family: system-ui, sans-serif;
+        font-family: system-ui, -apple-system, sans-serif;
         background: #fafafa;
         color: #111;
+      }
+      .splash {
+        min-height: 100%;
         display: grid;
         place-items: center;
       }
+      .mark {
+        width: 42px;
+        height: 40px;
+        border-radius: 10px;
+        background: #111;
+        opacity: 0.92;
+      }
       main {
+        display: none;
         max-width: 22rem;
         padding: 1.5rem;
         text-align: center;
+        margin: 0 auto;
+      }
+      body.offline main {
+        display: block;
+      }
+      body.offline .splash {
+        display: none;
       }
       h1 {
         margin: 0 0 0.5rem;
@@ -54,7 +72,10 @@
     </style>
   </head>
   <body>
-    <!-- Local fallback only — Capacitor normally loads server.url directly. -->
+    <!-- Shown briefly if Capacitor falls back to local www before remote loads. -->
+    <div class="splash" aria-hidden="true">
+      <div class="mark"></div>
+    </div>
     <main>
       <h1>Cander</h1>
       <p>Couldn’t reach the hosted app. Check your network, then try again.</p>
@@ -68,12 +89,19 @@
         var PRIMARY = "https://cander.app";
         var FALLBACK = "https://cander.vercel.app";
         var next = PRIMARY;
-        document.getElementById("retry").onclick = function () {
-          var url = next;
-          next = url === PRIMARY ? FALLBACK : PRIMARY;
-          document.getElementById("url").textContent = url;
-          location.href = url;
-        };
+        var retry = document.getElementById("retry");
+        if (retry) {
+          retry.onclick = function () {
+            var url = next;
+            next = url === PRIMARY ? FALLBACK : PRIMARY;
+            document.getElementById("url").textContent = url;
+            location.href = url;
+          };
+        }
+        // If we're still on local www after a few seconds, show offline UI.
+        setTimeout(function () {
+          if (!navigator.onLine) document.body.classList.add("offline");
+        }, 2500);
       })();
     </script>
   </body>

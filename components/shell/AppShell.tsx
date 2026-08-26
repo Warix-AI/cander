@@ -5,6 +5,7 @@ import { AppProvider, useApp } from "@/components/app/AppProvider";
 import { ChatColumn } from "@/components/shell/ChatColumn";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { MobileAppChrome } from "@/components/shell/MobileAppChrome";
+import { MobileBootSplash } from "@/components/shell/MobileBootSplash";
 import { SpaceChatLayout } from "@/components/shell/SpaceChatLayout";
 import { RecentsView } from "@/components/shell/RecentsView";
 import { SplitMainLayout } from "@/components/shell/SplitMainLayout";
@@ -141,6 +142,7 @@ function Root() {
           // Bottom tab bar removed — no reserved nav inset on mobile.
         )}
       >
+        <MobileBootSplash />
         <Sidebar />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {mobile ? <MobileAppChrome /> : null}

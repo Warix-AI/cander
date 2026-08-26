@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
-  ArrowLeft,
   Building2,
   CreditCard,
   ImagePlus,
@@ -83,7 +82,6 @@ export function SettingsView() {
     setSettingsTab,
     settingsMobileHub,
     setSettingsMobileHub,
-    backToSettingsHub,
     entitlements,
     canGoBack,
     goBack,
@@ -115,14 +113,11 @@ export function SettingsView() {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {mobile && settingsMobileHub ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:hidden">
-          <h1 className="text-[22px] font-semibold tracking-[-0.03em]">
-            Settings
-          </h1>
-          <p className="mt-1 text-[13.5px] text-muted-foreground">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-2 lg:hidden">
+          <p className="text-[13.5px] text-muted-foreground">
             Organization, account, and preferences
           </p>
-          <div className="mt-5 flex flex-col gap-1">
+          <div className="mt-4 flex flex-col gap-1">
             {settingsNav.map((tab) => {
               const Icon = settingsIcons[tab.id];
               return (
@@ -148,52 +143,34 @@ export function SettingsView() {
           </div>
         </div>
       ) : (
-        <>
-          {mobile ? (
-            <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-2 lg:hidden">
-              <button
-                type="button"
-                aria-label="Back to settings"
-                onClick={backToSettingsHub}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-              >
-                <ArrowLeft className="h-4 w-4" strokeWidth={1.6} />
-              </button>
-              <span className="truncate text-[14px] font-medium tracking-[-0.01em]">
-                {settingsNav.find((tab) => tab.id === settingsTab)?.label ??
-                  "Settings"}
-              </span>
-            </header>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {settingsTab === "organization" ? <OrganizationSettings /> : null}
+
+          {settingsTab === "workspaces" ? (
+            <WorkspacesSettings
+              selectedId={workspacePage}
+              onSelect={setWorkspacePage}
+            />
           ) : null}
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {settingsTab === "organization" ? <OrganizationSettings /> : null}
 
-            {settingsTab === "workspaces" ? (
-              <WorkspacesSettings
-                selectedId={workspacePage}
-                onSelect={setWorkspacePage}
-              />
-            ) : null}
+          {settingsTab === "plans" ? <PlansSettings /> : null}
 
-            {settingsTab === "plans" ? <PlansSettings /> : null}
+          {settingsTab === "general" ? (
+            <GeneralSettings
+              onLogout={() => {
+                persistActor("m1");
+                persistSignedOut();
+                leave();
+              }}
+              onRestartOnboarding={() => {
+                persistActor("m1");
+                persistSignedOut();
+              }}
+            />
+          ) : null}
 
-            {settingsTab === "general" ? (
-              <GeneralSettings
-                onLogout={() => {
-                  persistActor("m1");
-                  persistSignedOut();
-                  leave();
-                }}
-                onRestartOnboarding={() => {
-                  persistActor("m1");
-                  persistSignedOut();
-                }}
-              />
-            ) : null}
-
-            {settingsTab === "appearance" ? <AppearanceSettings /> : null}
-          </div>
-        </>
+          {settingsTab === "appearance" ? <AppearanceSettings /> : null}
+        </div>
       )}
     </div>
   );
