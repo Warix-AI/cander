@@ -394,7 +394,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string | null>(
     null,
   );
-  const [spaceLayout, setSpaceLayout] = useState<SpaceLayout>("cards");
+  const [spaceLayout, setSpaceLayout] = useState<SpaceLayout>("list");
   const [overlay, setOverlay] = useState<OverlayId>(null);
   const [settingsSpaceId, setSettingsSpaceId] = useState<SpaceId | null>(null);
   const [voiceActive, setVoiceActive] = useState(false);

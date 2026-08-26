@@ -28,11 +28,6 @@ export function AppearanceControls({
         <h3 className="text-[14px] font-medium tracking-[-0.01em]">
           Color mode
         </h3>
-        {!compact ? (
-          <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
-            Light or dark monochrome.
-          </p>
-        ) : null}
         <div
           className={cn(
             "grid gap-2",

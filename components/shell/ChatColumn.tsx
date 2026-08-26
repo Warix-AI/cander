@@ -18,7 +18,12 @@ export function ChatColumn() {
   const { thread, spaceId, sendMessage, drafting, view } = useApp();
   const browserMode = view === "browser";
   const mobile = useMobileShell();
-  const showLanding = !browserMode && !thread && !drafting;
+  const hasChatTurns = Boolean(
+    thread?.messages.some(
+      (item) => item.role === "user" || item.role === "assistant",
+    ),
+  );
+  const showLanding = !browserMode && !hasChatTurns && (!thread || drafting);
   const endRef = useRef<HTMLDivElement>(null);
   const last = thread?.messages.at(-1);
   const floating = useShellStyle() === "floating";
@@ -66,7 +71,7 @@ export function ChatColumn() {
     );
   }
 
-  // Mobile ChatGPT-style: empty canvas + composer always pinned to bottom.
+  // Mobile ChatGPT-style: empty prompt + composer pinned to bottom.
   if (mobile) {
     return (
       <section
@@ -75,7 +80,7 @@ export function ChatColumn() {
       >
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 touch-pan-y">
           {showLanding ? (
-            <div className="flex min-h-full flex-col justify-end pb-3" />
+            <MobileEmptyPrompt spaceId={spaceId} />
           ) : (
             <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-6">
               {thread?.sessionSummary ? (
@@ -146,6 +151,28 @@ export function ChatColumn() {
   );
 }
 
+function emptyCopy(spaceId: SpaceId | null) {
+  if (spaceId && spaceId in chatSpaceCopy) {
+    return chatSpaceCopy[spaceId as keyof typeof chatSpaceCopy];
+  }
+  return {
+    headline: "Leave the thinking to us.",
+    detail: "Describe what you need.",
+  };
+}
+
+function MobileEmptyPrompt({ spaceId }: { spaceId: SpaceId | null }) {
+  const copy = emptyCopy(spaceId);
+  return (
+    <div className="flex min-h-full flex-col items-center justify-center px-4 pb-6 text-center">
+      <p className="text-[17px] font-medium tracking-[-0.02em]">{copy.headline}</p>
+      <p className="mt-1.5 max-w-[18rem] text-[14px] leading-relaxed text-muted-foreground">
+        {copy.detail}
+      </p>
+    </div>
+  );
+}
+
 function EmptyChat({
   spaceId,
   onPrompt,
@@ -153,10 +180,7 @@ function EmptyChat({
   spaceId: SpaceId | null;
   onPrompt: (text: string) => void;
 }) {
-  const heading =
-    spaceId && spaceId in chatSpaceCopy
-      ? chatSpaceCopy[spaceId as keyof typeof chatSpaceCopy]
-      : null;
+  const copy = emptyCopy(spaceId);
   const shellRef = useRef<HTMLDivElement>(null);
   const clusterRef = useRef<HTMLDivElement>(null);
   const baseHeightRef = useRef(0);
@@ -196,7 +220,7 @@ function EmptyChat({
       ro.disconnect();
       window.removeEventListener("resize", place);
     };
-  }, [heading, spaceId]);
+  }, [copy.headline, spaceId]);
 
   return (
     <div
@@ -212,8 +236,11 @@ function EmptyChat({
       >
         <CourierMark className="landing-mark mb-4 !h-[35.64px] !w-[37.2px] -translate-y-[2px]" />
         <h1 className="landing-headline heading-display text-center text-[1.85rem] md:text-[2.15rem]">
-          {heading ?? "Leave the thinking to us."}
+          {copy.headline}
         </h1>
+        <p className="mt-2 max-w-md text-center text-[15px] leading-relaxed text-muted-foreground">
+          {copy.detail}
+        </p>
         <div className="mt-8 w-full">
           <Composer onSend={onPrompt} landing />
         </div>

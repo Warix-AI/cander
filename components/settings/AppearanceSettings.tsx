@@ -1,8 +1,6 @@
 "use client";
 
 import { AppearanceControls } from "@/components/settings/AppearanceControls";
-import { DashBtn } from "@/components/spaces/ItemSet";
-import { resetAppearance } from "@/lib/appearance";
 import {
   SettingsHeader,
   SettingsPage,
@@ -11,15 +9,9 @@ import {
 export function AppearanceSettings() {
   return (
     <SettingsPage>
-      <SettingsHeader
-        title="Appearance"
-        subtitle="Choose a color mode and shell layout. Changes apply immediately."
-        actions={
-          <DashBtn onClick={() => resetAppearance()}>Reset defaults</DashBtn>
-        }
-      />
+      <SettingsHeader title="Appearance" />
 
-      <div className="mt-10">
+      <div className="mt-2 lg:mt-10">
         <AppearanceControls />
       </div>
     </SettingsPage>

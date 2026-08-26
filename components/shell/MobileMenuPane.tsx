@@ -2,13 +2,11 @@
 
 import { useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
-import { LayoutGrid, Pin } from "lucide-react";
+import { LayoutGrid, Pin, Settings, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { AccountAvatar } from "@/components/shell/AccountAvatar";
 import { PinsSheet } from "@/components/shell/mobile/PinsSheet";
 import { WorkspaceSheet } from "@/components/shell/mobile/WorkspaceSheet";
 import { useMainNavItems } from "@/lib/use-main-nav-items";
-import { planLabel } from "@/lib/billing";
 import { isChatSpace, isExtraNavId, type SidebarNavId } from "@/lib/spaces";
 import { spaceIconTint } from "@/lib/space-icons";
 import type { SpaceId } from "@/lib/types";
@@ -19,18 +17,18 @@ const rowClass =
 
 /**
  * Full-screen menu pane for the mobile pager.
- * Pinned sits under Recents; Workspace opens a sub-screen; Account opens Settings.
+ * New chat + nav + pinned; Workspace and Settings at the bottom.
  */
 export function MobileMenuPane() {
   const {
     view,
     spaceId,
-    actor,
-    entitlements,
+    threadId,
     mobileSurface,
     setMobileSurface,
     mobileMenuScreen,
     setMobileMenuScreen,
+    newChat,
     openSpaceChat,
     openSpace,
     openRecents,
@@ -51,11 +49,7 @@ export function MobileMenuPane() {
     setMobileSurface("chat");
   };
 
-  const accountTag = entitlements.orgActive
-    ? entitlements.role
-    : entitlements.showInviteWall
-      ? `${planLabel(entitlements.plan)} · invite pending`
-      : planLabel(entitlements.plan);
+  const chatActive = view === "chat" && !threadId && !spaceId;
 
   const navActive = (id: SidebarNavId) => {
     if (id === "recents") return view === "recents";
@@ -75,6 +69,19 @@ export function MobileMenuPane() {
     }
     // Let openSpace / openSpaceChat own mobileSurface — don't force chat.
     closeMenuOnly();
+  };
+
+  const startNewChat = () => {
+    if (
+      spaceId &&
+      isChatSpace(spaceId) &&
+      (view === "space" || view === "chat")
+    ) {
+      newChat(spaceId);
+    } else {
+      newChat();
+    }
+    closeToChat();
   };
 
   const navRows: Array<
@@ -98,13 +105,7 @@ export function MobileMenuPane() {
           {mobileMenuScreen === "pinned" ? (
             <PinsSheet onSelect={closeToChat} hideHeading />
           ) : (
-            <WorkspaceSheet
-              onSelect={() => {}}
-              onCreate={() => {
-                setMobileMenuScreen("main");
-                setMobileSurface("chat");
-              }}
-            />
+            <WorkspaceSheet onSelect={() => {}} />
           )}
         </div>
       </aside>
@@ -115,6 +116,18 @@ export function MobileMenuPane() {
     <aside className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
       <div className="flex min-h-0 flex-1 flex-col px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
         <div>
+          <button
+            type="button"
+            onClick={startNewChat}
+            className={cn(rowClass, chatActive && "bg-muted/70 font-medium")}
+          >
+            <SquarePen
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              strokeWidth={2}
+            />
+            New chat
+          </button>
+
           {navRows.map((row) => {
             if (row.kind === "pinned") {
               return (
@@ -178,19 +191,11 @@ export function MobileMenuPane() {
             }}
             className={rowClass}
           >
-            <AccountAvatar
-              memberId={actor.id}
-              name={actor.name}
-              initials={actor.initials}
-              size="sm"
-              className="!rounded-full"
+            <Settings
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              strokeWidth={2}
             />
-            <span className="min-w-0 flex-1 text-left">
-              <span className="block truncate">{actor.name}</span>
-              <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">
-                {accountTag}
-              </span>
-            </span>
+            Settings
           </button>
         </div>
       </div>

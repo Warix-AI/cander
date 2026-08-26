@@ -459,15 +459,15 @@ function PinnedLeading({
   };
 }) {
   if (item.kind === "connector") {
-    return <ConnectorMark id={item.icon ?? "connector"} size="nav" />;
+    return <ConnectorMark id={item.icon ?? "connector"} size="xs" />;
   }
   if (item.kind === "project") {
     const Icon =
       (item.spaceId && spaceIcons[item.spaceId]) || FolderKanban;
     return (
       <Icon
-        className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-        strokeWidth={2}
+        className="h-5 w-5 shrink-0 text-muted-foreground"
+        strokeWidth={1.9}
       />
     );
   }
@@ -475,8 +475,8 @@ function PinnedLeading({
     (item.spaceId && spaceIcons[item.spaceId]) || MessageSquare;
   return (
     <Icon
-      className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-      strokeWidth={2}
+      className="h-5 w-5 shrink-0 text-muted-foreground"
+      strokeWidth={1.9}
     />
   );
 }
@@ -539,14 +539,14 @@ function PinnedRow({
           onOpen();
         }}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-2.5 truncate px-3 py-1.5 text-left text-[13.5px]",
+          "flex min-w-0 flex-1 items-center gap-3 truncate px-3 py-2 text-left text-[14.5px]",
           active && "font-medium",
         )}
       >
         {leading ?? (
           <MessageSquare
-            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-            strokeWidth={2}
+            className="h-5 w-5 shrink-0 text-muted-foreground"
+            strokeWidth={1.9}
           />
         )}
         {title}

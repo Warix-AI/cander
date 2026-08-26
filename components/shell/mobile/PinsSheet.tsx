@@ -14,15 +14,15 @@ function PinLeading({
   item: Pick<PinnedItem, "kind" | "icon" | "spaceId">;
 }) {
   if (item.kind === "connector") {
-    return <ConnectorMark id={item.icon ?? "connector"} size="nav" />;
+    return <ConnectorMark id={item.icon ?? "connector"} size="xs" />;
   }
   const Icon =
     (item.spaceId && spaceIcons[item.spaceId]) ||
     (item.kind === "project" ? FolderKanban : MessageSquare);
   return (
     <Icon
-      className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-      strokeWidth={2}
+      className="h-5 w-5 shrink-0 text-muted-foreground"
+      strokeWidth={1.9}
     />
   );
 }
@@ -76,7 +76,7 @@ export function PinsSheet({
               data-active={isActive(item) ? "true" : undefined}
               onClick={() => openItem(item)}
               className={cn(
-                "menu-row-hover flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[13.5px] transition-colors duration-200",
+                "menu-row-hover flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-left text-[15px] transition-colors duration-200",
                 isActive(item) && "font-medium",
               )}
             >

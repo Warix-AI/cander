@@ -67,14 +67,38 @@ export const chatSpaceCopy: Record<
   | "skills"
   | "finances"
   | "health",
-  string
+  { headline: string; detail: string }
 > = {
-  work: "What should we take care of?",
-  build: "What should we make?",
-  studio: "What should we create?",
-  research: "What should we explore?",
-  personal: "What's going on?",
-  skills: "What should this task do?",
-  finances: "What should we look at in the books?",
-  health: "What should we track?",
+  work: {
+    headline: "Starting something new?",
+    detail: "Describe what you want to take care of.",
+  },
+  build: {
+    headline: "Starting a new project?",
+    detail: "Describe what you want to build.",
+  },
+  studio: {
+    headline: "Starting something new?",
+    detail: "Describe what you want to create.",
+  },
+  research: {
+    headline: "Starting something new?",
+    detail: "Describe what you want to explore.",
+  },
+  personal: {
+    headline: "Starting something new?",
+    detail: "Describe what's going on.",
+  },
+  skills: {
+    headline: "Starting something new?",
+    detail: "Describe what this task should do.",
+  },
+  finances: {
+    headline: "Starting something new?",
+    detail: "Describe what you want to look at.",
+  },
+  health: {
+    headline: "Starting something new?",
+    detail: "Describe what you want to track.",
+  },
 };

@@ -138,16 +138,19 @@ export function SettingsSection({
 
 /**
  * Cursor-like bordered card. Children are typically SettingsRow items
- * separated by dividers; use `title` for an in-card group label.
+ * separated by Apple-style inset hairlines (start under the text column).
  */
 export function SettingsGroup({
   title,
   children,
   className,
+  /** `icon` insets past a leading 16px icon + gap (settings hub rows). */
+  dividerInset = "plain",
 }: {
   title?: string;
   children: ReactNode;
   className?: string;
+  dividerInset?: "plain" | "icon";
 }) {
   const mobile = useMobileShell();
   return (
@@ -165,7 +168,16 @@ export function SettingsGroup({
           </p>
         </div>
       ) : null}
-      <div className="divide-y divide-border">{children}</div>
+      <div
+        className={cn(
+          "[&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:top-0 [&>*+*]:before:right-0 [&>*+*]:before:h-px [&>*+*]:before:bg-border",
+          dividerInset === "icon"
+            ? "[&>*+*]:before:left-[2.75rem]"
+            : "[&>*+*]:before:left-4",
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -254,19 +266,22 @@ export function SettingsStatGrid({
 }) {
   const mobile = useMobileShell();
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div
+      className={cn(
+        "overflow-hidden border border-border bg-card",
+        mobile ? SHELL_G3_RADIUS : "rounded-[10px]",
+        "[&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:top-0 [&>*+*]:before:right-0 [&>*+*]:before:left-4 [&>*+*]:before:h-px [&>*+*]:before:bg-border",
+      )}
+    >
       {items.map((item) => (
         <div
           key={item.label}
-          className={cn(
-            "border border-border bg-card px-4 py-3.5",
-            mobile ? SHELL_G3_RADIUS : "rounded-[10px]",
-          )}
+          className="flex items-baseline justify-between gap-4 px-4 py-3.5"
         >
           <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
             {item.label}
           </p>
-          <p className="mt-1.5 text-[14.5px] font-medium tracking-[-0.02em]">
+          <p className="text-right text-[14.5px] font-medium tracking-[-0.02em]">
             {item.value}
           </p>
         </div>

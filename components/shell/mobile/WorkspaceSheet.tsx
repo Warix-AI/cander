@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Plus } from "lucide-react";
+import { Check } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
@@ -17,16 +17,12 @@ const rowClass =
 
 export function WorkspaceSheet({
   onSelect,
-  onCreate,
 }: {
   onSelect: () => void;
-  /** Called after opening the new-workspace flow (optional). */
-  onCreate?: () => void;
 }) {
   const {
     workspace,
     setWorkspace,
-    openOverlay,
     actor,
     entitlements,
   } = useApp();
@@ -70,25 +66,6 @@ export function WorkspaceSheet({
           </button>
         );
       })}
-      {entitlements.canCreatePersonalWorkspace ||
-      entitlements.canCreateBusinessWorkspace ? (
-        <button
-          type="button"
-          onClick={() => {
-            openOverlay("workspace");
-            (onCreate ?? onSelect)();
-          }}
-          className={cn(
-            rowClass,
-            "mt-1 text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-dashed border-border">
-            <Plus className="h-3.5 w-3.5" strokeWidth={1.7} />
-          </span>
-          New workspace
-        </button>
-      ) : null}
     </div>
   );
 }

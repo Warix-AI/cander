@@ -10,6 +10,7 @@ import {
   Globe,
   Menu,
   MousePointer2,
+  Plus,
   RotateCw,
   SquarePen,
   SquareStack,
@@ -18,10 +19,9 @@ import {
 import { useApp } from "@/components/app/AppProvider";
 import { previewAddress } from "@/components/panels/PreviewChrome";
 import { Dropdown } from "@/components/ui/Controls";
-import { setComposerSeed } from "@/lib/composer-seed";
 import { navLabel } from "@/lib/use-main-nav-items";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
-import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
+import { isChatSpace, PRIMARY_NAV_SPACES } from "@/lib/spaces";
 import {
   getWorkspaceCatalogServerSnapshot,
   getWorkspaceCatalogSnapshot,
@@ -44,8 +44,7 @@ const ADVANCED_TOOLS: { id: BuildTool; label: string }[] = [
 /**
  * ChatGPT-style mobile top bar.
  * Content: menu · Chat|{Space} · new chat
- * Menu main: New chat (leading) — swipe to leave
- * Menu / settings sub-screens: back · title
+ * Menu / settings sub-screens: back · title · (+ create workspace)
  */
 export function MobileAppChrome({ className }: { className?: string }) {
   const {
@@ -142,18 +141,23 @@ export function MobileAppChrome({ className }: { className?: string }) {
     !onMenuMain &&
     spaceId === "build" &&
     Boolean(projectId);
-  const isBuildHome =
-    !inChromeSub &&
-    !onMenuMain &&
-    spaceId === "build" &&
-    !projectId &&
-    (view === "space" || view === "chat");
-  const hideNewChat = onMenuMain || inChromeSub || showBuildTools;
+  const showCreateWorkspace =
+    inSettings &&
+    !settingsMobileHub &&
+    settingsTab === "workspaces" &&
+    !settingsWorkspaceId &&
+    (entitlements.canCreatePersonalWorkspace ||
+      entitlements.canCreateBusinessWorkspace);
+  const hideNewChat =
+    onMenuMain || inChromeSub || showBuildTools || showCreateWorkspace;
 
   const startNewChat = () => {
-    if (isBuildHome) {
-      setComposerSeed("Tell me what you want to build");
-      newChat("build");
+    if (
+      spaceId &&
+      isChatSpace(spaceId) &&
+      (view === "space" || view === "chat")
+    ) {
+      newChat(spaceId);
     } else {
       newChat();
     }
@@ -182,6 +186,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
       setMobileMenuScreen("main");
       return;
     }
+    if (onMenuMain) {
+      setMobileSurface("chat");
+      return;
+    }
     setMobileSurface("menu");
   };
 
@@ -207,32 +215,18 @@ export function MobileAppChrome({ className }: { className?: string }) {
       )}
     >
       <div className="flex h-12 items-center gap-2 px-3">
-        {onMenuMain ? (
-          <button
-            type="button"
-            aria-label="New chat"
-            onClick={startNewChat}
-            className="inline-flex h-11 max-w-full items-center gap-2 rounded-full bg-muted/70 px-3.5 text-foreground transition-colors hover:bg-muted"
-          >
-            <SquarePen className="h-5 w-5 shrink-0" strokeWidth={1.8} />
-            <span className="truncate text-[14px] font-medium tracking-[-0.01em]">
-              New chat
-            </span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            aria-label={inChromeSub ? "Back" : "Open menu"}
-            onClick={onLeadingClick}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
-          >
-            {inChromeSub ? (
-              <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
-            ) : (
-              <Menu className="h-5 w-5" strokeWidth={1.8} />
-            )}
-          </button>
-        )}
+        <button
+          type="button"
+          aria-label={inChromeSub ? "Back" : "Open menu"}
+          onClick={onLeadingClick}
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
+        >
+          {inChromeSub ? (
+            <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
+          ) : (
+            <Menu className="h-5 w-5" strokeWidth={1.8} />
+          )}
+        </button>
 
         <div className="flex min-w-0 flex-1 items-center justify-center">
           {onMenuMain ? null : inChromeSub ? (
@@ -340,12 +334,21 @@ export function MobileAppChrome({ className }: { className?: string }) {
             setMobileSurface={setMobileSurface}
             setPanelMode={setPanelMode}
           />
+        ) : showCreateWorkspace ? (
+          <button
+            type="button"
+            aria-label="Create workspace"
+            onClick={() => openOverlay("workspace")}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
+          >
+            <Plus className="h-5 w-5" strokeWidth={1.8} />
+          </button>
         ) : hideNewChat ? (
           <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
         ) : (
           <button
             type="button"
-            aria-label={isBuildHome ? "New build" : "New chat"}
+            aria-label="New chat"
             onClick={startNewChat}
             className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
           >

@@ -115,32 +115,30 @@ export function SettingsView() {
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {mobile && settingsMobileHub ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-2 lg:hidden">
-          <div className="overflow-hidden border border-border bg-card shell-g3-radius">
-            <div className="divide-y divide-border">
-              {settingsNav.map((tab) => {
-                const Icon = settingsIcons[tab.id];
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => {
-                      setSettingsTab(tab.id);
-                      setSettingsMobileHub(false);
-                    }}
-                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-muted/50"
-                  >
-                    <Icon
-                      className="h-4 w-4 shrink-0 text-muted-foreground"
-                      strokeWidth={2}
-                    />
-                    <span className="text-[14px] font-medium tracking-[-0.01em]">
-                      {tab.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <SettingsGroup dividerInset="icon">
+            {settingsNav.map((tab) => {
+              const Icon = settingsIcons[tab.id];
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setSettingsTab(tab.id);
+                    setSettingsMobileHub(false);
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-muted/50"
+                >
+                  <Icon
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    strokeWidth={2}
+                  />
+                  <span className="text-[14px] font-medium tracking-[-0.01em]">
+                    {tab.label}
+                  </span>
+                </button>
+              );
+            })}
+          </SettingsGroup>
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -458,10 +456,7 @@ function GeneralSettings({
 
   return (
     <SettingsPage>
-      <SettingsHeader
-        title="General"
-        subtitle="Account information for this login."
-      />
+      <SettingsHeader title="General" />
 
       {!entitlements.showOrgSettings ? (
         <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
@@ -469,7 +464,7 @@ function GeneralSettings({
         </p>
       ) : null}
 
-      <div className="mt-8 space-y-3">
+      <div className={cn(!entitlements.showOrgSettings ? "mt-4" : "mt-2", "space-y-3")}>
         <SettingsGroup title="Profile">
           <div className="flex flex-wrap items-center gap-4 px-4 py-4">
             <AccountAvatar

@@ -1,7 +1,13 @@
 "use client";
 
 import { useRef, useState, useSyncExternalStore } from "react";
-import { ChevronLeft, ChevronRight, ImagePlus, Upload } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ImagePlus,
+  Plus,
+  Upload,
+} from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import {
   SettingsGroup,
@@ -90,15 +96,15 @@ export function WorkspacesSettings({
     <SettingsPage>
       <SettingsHeader
         title="Workspaces"
-        subtitle="Personal and business workspaces share the same UI. Differences are permissions, invites, and admin tools — not a separate product."
         actions={
           canCreate ? (
             <button
               type="button"
+              aria-label="Create workspace"
               onClick={() => openOverlay("workspace")}
-              className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium tracking-[-0.01em] text-primary-foreground"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-foreground/15 text-foreground hover:bg-muted max-lg:hidden"
             >
-              Create workspace
+              <Plus className="h-4 w-4" strokeWidth={1.8} />
             </button>
           ) : null
         }
@@ -135,7 +141,7 @@ export function WorkspacesSettings({
           description="Open a workspace to manage people, connectors, and knowledge."
           className={entitlements.canManageWorkspaces ? undefined : "mt-8"}
         >
-          <SettingsGroup>
+          <SettingsGroup dividerInset="icon">
             {workspaceList.map((item) => {
               const policy = policyFor(item.id, workspacePolicies);
               const kind = workspaceKindOf(item);
@@ -559,12 +565,12 @@ function KnowledgeCard({
         </button>
       </div>
 
-      <div className="mt-3 rounded-[10px] border border-border/80">
+      <div className="mt-3 overflow-hidden rounded-[10px] border border-border/80 [&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:top-0 [&>*+*]:before:right-0 [&>*+*]:before:left-3 [&>*+*]:before:h-px [&>*+*]:before:bg-border">
         {item.files.length ? (
           item.files.map((entry) => (
             <div
               key={entry.id}
-              className="flex items-center justify-between gap-3 border-b border-border px-3 py-2 last:border-b-0"
+              className="flex items-center justify-between gap-3 px-3 py-2"
             >
               <div className="min-w-0">
                 <p className="truncate text-[13px]">{entry.name}</p>
