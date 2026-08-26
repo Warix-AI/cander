@@ -6,6 +6,11 @@ import { useApp } from "@/components/app/AppProvider";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { useSpaceRenderMode } from "@/components/spaces/SpaceRenderMode";
 import {
+  DESKTOP_TITLEBAR_PX,
+  DESKTOP_TRAFFIC_CLEAR_PX,
+  useDesktopShell,
+} from "@/lib/desktop-shell";
+import {
   BANNER_PRESETS,
   bannerClass,
   bannerFor,
@@ -19,6 +24,9 @@ import {
 import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
+/** Traffic-light clear + panel toggle (32) + 15px gap before banner content. */
+const FLOAT_BANNER_LEFT_CLEAR_PX = DESKTOP_TRAFFIC_CLEAR_PX + 32 + 15;
+
 export function SpaceBanner({
   space,
   children,
@@ -31,19 +39,33 @@ export function SpaceBanner({
   const inPanel = mode === "panel";
   const shellStyle = useShellStyle();
   const floating = shellStyle === "floating";
+  const desktop = useDesktopShell();
   const banners = useSyncExternalStore(
     subscribeSpaceBanners,
     getSpaceBannersSnapshot,
     getSpaceBannersServerSnapshot,
   );
   const choice = bannerFor(space, banners);
+  // Desktop chrome / dock owns the panel toggle — never stack a second one on the banner.
+  const showBannerToggle = !inPanel && !desktop;
+  const floatClearChrome =
+    floating && desktop && !sidebarOpen && !inPanel;
 
   return (
     <div
       className={cn(
         "relative shrink-0",
-        floating && "pt-3 pr-3 pl-3",
+        floating && !floatClearChrome && "pt-3 pr-3 pl-3",
+        floatClearChrome && "pr-3 pb-0",
       )}
+      style={
+        floatClearChrome
+          ? {
+              paddingTop: DESKTOP_TITLEBAR_PX,
+              paddingLeft: FLOAT_BANNER_LEFT_CLEAR_PX,
+            }
+          : undefined
+      }
     >
       <div
         className={cn(
@@ -66,7 +88,7 @@ export function SpaceBanner({
           <div className="panel-grain" />
           <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-black/15 to-transparent" />
         </div>
-        {inPanel ? null : (
+        {showBannerToggle ? (
           <NavToggle
             onBanner
             className={cn(
@@ -74,7 +96,7 @@ export function SpaceBanner({
               sidebarOpen && "lg:hidden",
             )}
           />
-        )}
+        ) : null}
         <div className="relative z-10 h-full">{children}</div>
       </div>
     </div>

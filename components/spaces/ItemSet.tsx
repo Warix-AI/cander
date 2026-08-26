@@ -6,6 +6,7 @@ import { useApp } from "@/components/app/AppProvider";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { SpaceBanner } from "@/components/spaces/SpaceBanner";
 import { useSpaceRenderMode } from "@/components/spaces/SpaceRenderMode";
+import { useDesktopShell } from "@/lib/desktop-shell";
 import type { SpaceId, SpaceLayout } from "@/lib/types";
 import type { BannerKey } from "@/lib/space-banners";
 import { cn } from "@/lib/utils";
@@ -303,11 +304,12 @@ export function DashFrame({
   const { spaceId, sidebarOpen, view } = useApp();
   const mode = useSpaceRenderMode();
   const inPanel = mode === "panel";
+  const desktop = useDesktopShell();
   const bannerSpace = banner ? (bannerKey ?? space ?? spaceId) : null;
 
   return (
     <div className="@container relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-background">
-      {(view === "space" && !bannerSpace && !inPanel) ? (
+      {view === "space" && !bannerSpace && !inPanel && !desktop ? (
         <NavToggle
           className={cn(
             "absolute top-1.5 left-2 z-20",
