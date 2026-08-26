@@ -81,6 +81,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
@@ -89,6 +91,8 @@ export const viewport: Viewport = {
 };
 
 const themeScript = `(function(){try{var a=localStorage.getItem('courier-appearance-v2');var theme=null;if(a){try{var j=JSON.parse(a);if(j.colorMode==='dark'||j.colorMode==='dark-charcoal'||j.colorMode==='dark-blue'){theme='dark'}else if(j.colorMode==='light'||j.colorMode==='light-blue'){theme='light'}else if(typeof j.color==='number'){theme=j.color<45?'light':'dark'}}catch(e){}}if(!theme){var t=localStorage.getItem('theme');theme=t==='dark'?'dark':t==='light'?'light':'light'}if(theme==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){document.documentElement.classList.remove('dark')}})();`;
+
+const mobileShellScript = `(function(){try{var ua=navigator.userAgent||'';if(/\\bCapacitor\\b/i.test(ua)||(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())){document.documentElement.classList.add('cander-mobile')}}catch(e){}})();`;
 
 export default function RootLayout({
   children,
@@ -106,6 +110,11 @@ export default function RootLayout({
           id="courier-theme-init"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{ __html: themeScript }}
+        />
+        <Script
+          id="cander-mobile-shell-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: mobileShellScript }}
         />
       </head>
       <body className="min-h-svh overflow-x-hidden overflow-y-auto bg-background font-sans text-foreground">

@@ -455,15 +455,18 @@ function OnboardingShell() {
         </div>
       </div>
 
-      {/* Right: panel flush to the top edge; logo top-right */}
-      <div className="hidden min-h-0 w-1/2 pr-[15px] pb-[15px] pl-[15px] lg:block">
+      {/* Right: 15px inset on all sides; white logo top-right (both themes) */}
+      <div className="hidden min-h-0 w-1/2 p-[15px] lg:block">
         <div
           className={cn(
             "relative h-full min-h-0 overflow-hidden rounded-[18px] border border-border",
           )}
           aria-hidden={!showAppearancePreview}
         >
-          <CourierMark className="absolute top-6 right-6 z-20 h-7 w-7" />
+          <CourierMark
+            tone="white"
+            className="absolute top-[15px] right-[15px] z-20 h-7 w-7"
+          />
           {showAppearancePreview ? (
             <div className="absolute inset-0 bg-gradient-to-br from-black/50 via-black/30 to-black/55">
               <div className="absolute inset-0 panel-wash-price opacity-60" />

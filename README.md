@@ -20,3 +20,16 @@ npm run desktop:dmg                      # build unsigned .dmg into desktop/rele
 ```
 
 See [`desktop/README.md`](./desktop/README.md) for signing notes.
+
+## iOS / Android
+
+A thin Capacitor shell lives in [`mobile/`](./mobile). Same pattern as desktop: native WebView loads the hosted (or local) web app.
+
+```bash
+cd mobile && npm install
+npm run mobile:ios:dev       # Xcode → localhost:3000
+npm run mobile:android:dev   # Android Studio → localhost:3000
+npm run mobile:ios           # production → https://cander.app
+```
+
+See [`mobile/README.md`](./mobile/README.md) for Xcode / emulator notes.

@@ -1,0 +1,27 @@
+{
+  "name": "cander-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cander iOS / Android Capacitor shell",
+  "author": "Warix AI",
+  "scripts": {
+    "sync": "npx cap sync",
+    "sync:dev": "CANDER_URL=http://localhost:3000 npx cap sync",
+    "sync:prod": "CANDER_URL=https://cander.app npx cap sync",
+    "ios": "npm run sync:prod && npx cap open ios",
+    "ios:dev": "npm run sync:dev && npx cap open ios",
+    "android": "npm run sync:prod && npx cap open android",
+    "android:dev": "npm run sync:dev && npx cap open android",
+    "add:ios": "npx cap add ios",
+    "add:android": "npx cap add android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "typescript": "^5.9.2"
+  }
+}

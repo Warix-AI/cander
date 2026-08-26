@@ -1,0 +1,14 @@
+node_modules/
+
+# Native projects are generated / synced — keep them tracked once created
+# so teammates can open Xcode / Android Studio without re-adding platforms.
+# Build artifacts:
+ios/App/Pods/
+ios/App/Podfile.lock
+ios/DerivedData/
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+*.keystore
+*.jks

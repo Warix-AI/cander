@@ -115,6 +115,59 @@ html.cander-desktop {
   --desktop-traffic-clear: 80px;
 }
 
+/* Capacitor iOS / Android — fixed app canvas; inner panels scroll only */
+html.cander-mobile {
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  touch-action: pan-x pan-y;
+}
+
+html.cander-mobile body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+}
+
+html.cander-mobile input,
+html.cander-mobile textarea,
+html.cander-mobile select {
+  font-size: 16px; /* avoid iOS focus zoom */
+}
+
+html.cander-mobile [data-app-shell],
+html.cander-mobile .h-svh {
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+/* Narrow phone / tablet shell (browser + Capacitor) — same fixed canvas */
+@media (max-width: 1023px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  html body {
+    overscroll-behavior: none;
+  }
+
+  html input,
+  html textarea,
+  html select {
+    font-size: 16px;
+  }
+}
+
 /* Header controls must never be in a drag region (whole row goes dead). */
 html.cander-desktop [data-desktop-no-drag],
 html.cander-desktop [data-desktop-no-drag] * {

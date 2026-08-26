@@ -713,10 +713,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ]);
 
   const toggleRightPanel = useCallback(() => {
-    if (!window.matchMedia("(min-width: 1024px)").matches) return;
+    const desktop = window.matchMedia("(min-width: 1024px)").matches;
+    if (!desktop) {
+      setPanelMode((mode) => {
+        if (mode === "collapsed") return "split";
+        return mode;
+      });
+      setMobileSurface((surface) => {
+        // Opening from collapsed always lands on panel.
+        if (panelMode === "collapsed") return "panel";
+        return surface === "panel" ? "chat" : "panel";
+      });
+      return;
+    }
     setPanelMode((mode) => (mode === "collapsed" ? "split" : "collapsed"));
     setMobileSurface("chat");
-  }, []);
+  }, [panelMode]);
 
   const openSpaceChat = useCallback(
     (space: SpaceId) => {

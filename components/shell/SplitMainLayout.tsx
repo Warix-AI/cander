@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, type ReactNode, type TransitionEvent } from "react";
 import { ContextPanel, ResizeHandle } from "@/components/shell/ContextPanel";
-import { MobileArmedPanelChrome } from "@/components/shell/MobileSurfaceChrome";
 import { TopRail } from "@/components/shell/TopRail";
 import { RightPanelToggleDock } from "@/components/shell/PanelToggle";
 import { useApp } from "@/components/app/AppProvider";
@@ -25,7 +24,6 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
     jobId,
     skillId,
     mobileSurface,
-    setPanelMode,
   } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
@@ -122,7 +120,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
         )}
         aria-hidden={mobileExclusive && !showChat}
       >
-        {hideTopRail ? null : <TopRail />}
+        {hideTopRail || mobile ? null : <TopRail />}
         {showChat || !mobileExclusive ? children : null}
       </div>
       {showPanelColumn ? (
@@ -157,11 +155,6 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
             }
             aria-hidden={mobileExclusive && !showPanel}
           >
-            {mobileExclusive && showPanel ? (
-              <MobileArmedPanelChrome
-                onClose={() => setPanelMode("collapsed")}
-              />
-            ) : null}
             {showPanelBody && (showPanel || !mobileExclusive) ? (
               <ContextPanel />
             ) : null}

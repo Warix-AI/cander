@@ -3,16 +3,21 @@
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { cn } from "@/lib/utils";
 
+/** White mark for dark / on-color surfaces; black mark for light surfaces. */
 export function CourierMark({
   className,
+  tone = "auto",
 }: {
   className?: string;
+  /** Force white or black; default follows theme. */
+  tone?: "auto" | "white" | "black";
 }) {
   const { theme } = useTheme();
-  const src =
-    theme === "light"
-      ? "/courier-mark-light.png?v=8"
-      : "/courier-mark-dark.png?v=8";
+  const useWhite =
+    tone === "white" || (tone === "auto" && theme !== "light");
+  const src = useWhite
+    ? "/courier-mark-dark.png?v=8"
+    : "/courier-mark-light.png?v=8";
 
   return (
     <img

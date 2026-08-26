@@ -6,7 +6,6 @@ import { ChatColumn } from "@/components/shell/ChatColumn";
 import { ResizeHandle } from "@/components/shell/ContextPanel";
 import { TopRail } from "@/components/shell/TopRail";
 import { SpaceDashboard } from "@/components/shell/SpaceDashboard";
-import { MobileArmedPanelChrome } from "@/components/shell/MobileSurfaceChrome";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useShellStyle } from "@/lib/shell-chrome";
@@ -25,7 +24,6 @@ export function SpaceChatLayout() {
     panelRatio,
     dragging,
     mobileSurface,
-    closeSpaceChat,
   } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
@@ -105,7 +103,7 @@ export function SpaceChatLayout() {
       >
         {chatArmed && chatReady ? (
           <>
-            <TopRail />
+            {mobile ? null : <TopRail />}
             <ChatColumn />
           </>
         ) : null}
@@ -125,9 +123,6 @@ export function SpaceChatLayout() {
         aria-hidden={liveSpacePct === 0}
       >
         <SpaceRenderModeProvider mode={spaceMode}>
-          {mobile && chatOpen && mobileSurface === "panel" ? (
-            <MobileArmedPanelChrome onClose={closeSpaceChat} />
-          ) : null}
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             <SpaceDashboard />
           </div>

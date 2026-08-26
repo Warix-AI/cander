@@ -20,6 +20,7 @@ import { useShellStyle } from "@/lib/shell-chrome";
 export function ChatColumn() {
   const { thread, spaceId, sendMessage, drafting, view } = useApp();
   const browserMode = view === "browser";
+  const mobile = useMobileShell();
   const showLanding = !browserMode && !thread && !drafting;
   const showSpacePrompts =
     !browserMode &&
@@ -42,6 +43,7 @@ export function ChatColumn() {
     if (
       showLanding &&
       !browserMode &&
+      !mobile &&
       typeof document.startViewTransition === "function"
     ) {
       document.startViewTransition(() => {
@@ -68,6 +70,56 @@ export function ChatColumn() {
           )}
         </div>
         <Composer onSend={send} hideSpaceTools />
+      </section>
+    );
+  }
+
+  // Mobile ChatGPT-style: empty canvas + composer always pinned to bottom.
+  if (mobile) {
+    const chips = showLanding && !spaceId ? homeSuggestions().slice(0, 1) : [];
+    return (
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+          {showLanding ? (
+            <div className="flex min-h-full flex-col justify-end pb-2">
+              {chips.length ? (
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {chips.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => send(item.label)}
+                      className="rounded-full border border-border bg-muted/40 px-3 py-1.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      {item.label.replace(/\.$/, "")}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-6">
+              {thread?.sessionSummary ? (
+                <SessionSummaryBubble
+                  threadId={thread.id}
+                  summary={thread.sessionSummary}
+                />
+              ) : null}
+              {thread
+                ? thread.messages.map((message) => (
+                    <ChatMessage key={message.id} message={message} />
+                  ))
+                : null}
+              <div ref={endRef} />
+            </div>
+          )}
+        </div>
+        {showSpacePrompts && spacePrompts.length && !showLanding ? (
+          <SuggestionPrompts items={spacePrompts} onSelect={send} />
+        ) : null}
+        <div className="shrink-0">
+          <Composer onSend={send} />
+        </div>
       </section>
     );
   }
@@ -138,8 +190,7 @@ function EmptyChat({
       ? chatSpaceCopy[spaceId as keyof typeof chatSpaceCopy]
       : null;
   const allVisible = inSpace ? [] : homeSuggestions();
-  const mobile = useMobileShell();
-  const visible = mobile ? allVisible.slice(0, 2) : allVisible;
+  const visible = allVisible;
   const shellRef = useRef<HTMLDivElement>(null);
   const clusterRef = useRef<HTMLDivElement>(null);
   const baseHeightRef = useRef(0);

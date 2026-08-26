@@ -3,7 +3,7 @@
 import { SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { useMainNavItems } from "@/lib/use-main-nav-items";
-import { isExtraNavId, type SidebarNavId } from "@/lib/spaces";
+import { isChatSpace, isExtraNavId, type SidebarNavId } from "@/lib/spaces";
 import { spaceIconTint } from "@/lib/space-icons";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,16 @@ const rowClass =
   "menu-row-hover flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[13.5px] transition-colors duration-200";
 
 export function SpacesSheet({ onSelect }: { onSelect: () => void }) {
-  const { view, spaceId, threadId, newChat, openSpace, openRecents, openBrowser } = useApp();
+  const {
+    view,
+    spaceId,
+    threadId,
+    newChat,
+    openSpace,
+    openSpaceChat,
+    openRecents,
+    openBrowser,
+  } = useApp();
   const items = useMainNavItems();
   const chatActive = view === "chat" && !threadId && !spaceId;
 
@@ -24,7 +33,10 @@ export function SpacesSheet({ onSelect }: { onSelect: () => void }) {
   const openNav = (id: SidebarNavId) => {
     if (id === "browser") openBrowser();
     else if (id === "recents") openRecents();
-    else if (!isExtraNavId(id)) openSpace(id);
+    else if (!isExtraNavId(id)) {
+      if (isChatSpace(id)) openSpaceChat(id);
+      else openSpace(id);
+    }
     onSelect();
   };
 

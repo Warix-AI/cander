@@ -4,7 +4,8 @@ import { useEffect } from "react";
 import { AppProvider, useApp } from "@/components/app/AppProvider";
 import { ChatColumn } from "@/components/shell/ChatColumn";
 import { Sidebar } from "@/components/shell/Sidebar";
-import { MobileBottomNav } from "@/components/shell/MobileBottomNav";
+import { MobileAppChrome } from "@/components/shell/MobileAppChrome";
+import { MobileMenuDrawer } from "@/components/shell/MobileMenuDrawer";
 import { SpaceChatLayout } from "@/components/shell/SpaceChatLayout";
 import { RecentsView } from "@/components/shell/RecentsView";
 import { SplitMainLayout } from "@/components/shell/SplitMainLayout";
@@ -27,6 +28,10 @@ import { BrowserLayout } from "@/components/browser/BrowserLayout";
 import { FloatingVoiceDock } from "@/components/shell/VoiceControl";
 import { AppearanceProvider } from "@/components/theme/AppearanceProvider";
 import { isDesktopShell } from "@/lib/desktop-shell";
+import { useMobileShell as useCapacitorMobileShell } from "@/lib/mobile-shell";
+import { useMobileShell } from "@/lib/use-media-query";
+import { useMobileSwipeGestures } from "@/lib/use-mobile-swipe";
+import { cn } from "@/lib/utils";
 
 export function AppShell() {
   return (
@@ -52,6 +57,9 @@ function Root() {
     getAuthSnapshot,
     getAuthServerSnapshot,
   );
+  useCapacitorMobileShell();
+  const mobile = useMobileShell();
+  const swipe = useMobileSwipeGestures();
 
   useEffect(() => {
     if (!isDesktopShell()) return;
@@ -99,10 +107,19 @@ function Root() {
     <AppearanceProvider>
       <div
         data-app-shell=""
-        className="relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background pb-[calc(68px+env(safe-area-inset-bottom))] text-foreground lg:pb-0"
+        onTouchStart={swipe.onTouchStart}
+        onTouchEnd={swipe.onTouchEnd}
+        className={cn(
+          "relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background text-foreground",
+          // Bottom tab bar removed — no reserved nav inset on mobile.
+        )}
       >
         <Sidebar />
-        <CourierMain />
+        <MobileMenuDrawer />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {mobile ? <MobileAppChrome /> : null}
+          <CourierMain />
+        </div>
         <SearchModal />
         <ConfigureModal />
         <SpaceSettingsModal />
@@ -110,7 +127,6 @@ function Root() {
         <InviteWall />
         <PublishSheet />
         <FloatingVoiceDock />
-        <MobileBottomNav />
       </div>
     </AppearanceProvider>
   );
@@ -146,8 +162,6 @@ function CourierMain() {
     const entityOpen = Boolean(
       projectId || skillId || jobId || connectorId || spaceLibraryOpen,
     );
-    // Project / connector tools use the normal context panel.
-    // Otherwise the space itself slides into the right pane.
     if (entityOpen && (drafting || thread)) {
       return (
         <SplitMainLayout>

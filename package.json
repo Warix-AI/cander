@@ -10,7 +10,13 @@
     "desktop": "npm --prefix desktop run dev",
     "desktop:prod": "npm --prefix desktop run start",
     "desktop:dev": "npm --prefix desktop run dev",
-    "desktop:dmg": "npm --prefix desktop run dist:unsigned"
+    "desktop:dmg": "npm --prefix desktop run dist:unsigned",
+    "mobile:sync": "npm --prefix mobile run sync:prod",
+    "mobile:sync:dev": "npm --prefix mobile run sync:dev",
+    "mobile:ios": "npm --prefix mobile run ios",
+    "mobile:ios:dev": "npm --prefix mobile run ios:dev",
+    "mobile:android": "npm --prefix mobile run android",
+    "mobile:android:dev": "npm --prefix mobile run android:dev"
   },
   "dependencies": {
     "lucide-react": "^1.31.0",
