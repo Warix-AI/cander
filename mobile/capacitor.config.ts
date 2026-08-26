@@ -1,13 +1,13 @@
-import type { CapacitorConfig } from "@capacitor/cli";
-
 /**
  * Thin native shell — loads the hosted (or local) Cander web app.
  * Same idea as desktop/ Electron: product UI stays in Next.js.
+ *
+ * Typed loosely so the root Next.js build never needs @capacitor/cli.
  */
 const START_URL = process.env.CANDER_URL || "https://cander.app";
 const isLocalHttp = /^http:\/\//i.test(START_URL);
 
-const config: CapacitorConfig = {
+const config = {
   appId: "ai.warix.cander",
   appName: "Cander",
   webDir: "www",
