@@ -4,7 +4,6 @@ import {
   createContext,
   useContext,
   useEffect,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -12,7 +11,6 @@ import { Check, Ellipsis, LayoutGrid, List, SquarePen } from "lucide-react";
 import { Dropdown } from "@/components/ui/Controls";
 import type { SpaceLayout } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { MOBILE_GLASS_SEGMENT } from "@/lib/mobile-menu-styles";
 
 export type MobilePanelScopeConfig = {
   value: string;
@@ -80,14 +78,6 @@ export function MobileFilterBar({
   extras?: MobilePanelExtraItem[];
 }) {
   const ctx = useMobilePanelActionsState();
-  const scopeRef = useRef(scope);
-  const layoutRef = useRef(layout);
-  const extrasRef = useRef(extras);
-  const onNewChatRef = useRef(onNewChat);
-  scopeRef.current = scope;
-  layoutRef.current = layout;
-  extrasRef.current = extras;
-  onNewChatRef.current = onNewChat;
 
   const scopeValue = scope?.value;
   const layoutValue = layout?.value;
@@ -101,17 +91,21 @@ export function MobileFilterBar({
       return;
     }
     ctx.setActions({
-      onNewChat: () => onNewChatRef.current?.(),
+      onNewChat: () => onNewChat?.(),
       newChatLabel,
-      scope: scopeRef.current,
-      layout: layoutRef.current,
-      extras: extrasRef.current,
+      scope,
+      layout,
+      extras,
     });
     return () => ctx.setActions(null);
   }, [
     active,
     ctx,
     newChatLabel,
+    onNewChat,
+    scope,
+    layout,
+    extras,
     scopeValue,
     layoutValue,
     scopeOptionsKey,
@@ -143,7 +137,7 @@ export function MobilePanelActionsCluster({
   const hasMenu = Boolean(scope || layout || extras.length);
 
   return (
-    <div className={cn("inline-flex max-w-full shrink-0 items-center rounded-full p-1", MOBILE_GLASS_SEGMENT)}>
+    <div className="inline-flex max-w-full shrink-0 items-center rounded-full bg-muted/70 p-1">
       <button
         type="button"
         aria-label={config.newChatLabel ?? "New chat"}

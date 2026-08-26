@@ -1,5 +1,11 @@
-/** Pure white menu canvas — contrasts with the frosted chat peek. */
-export const MOBILE_MENU_BG = "bg-white dark:bg-neutral-950";
+/** Off-white menu canvas — contrasts with the white chat peek. */
+export const MOBILE_MENU_BG = "bg-background dark:bg-neutral-950";
+
+/** Main app surfaces on mobile — pure white. */
+export const MOBILE_APP_BG = "bg-white dark:bg-neutral-950";
+
+/** ChatGPT-style peek strip radius when the menu drawer is open. */
+export const MOBILE_PEEK_RADIUS = "rounded-[48px]";
 
 /** Shared Apple-style glass material classes (see globals.css). */
 export const MOBILE_GLASS_BAR = "mobile-glass-bar";
@@ -12,7 +18,7 @@ export const MOBILE_GLASS_INSET = "mobile-glass-inset";
 export const MOBILE_GLASS_DOCK = "mobile-glass-dock";
 
 export const mobileMenuRowClass =
-  "flex w-full items-center gap-3.5 rounded-[12px] px-4 py-3.5 text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200 hover:bg-black/[0.06] dark:hover:bg-white/10";
+  "flex w-full items-center gap-3 rounded-[12px] px-4 py-3 text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200 hover:bg-black/[0.06] dark:hover:bg-white/10";
 
 export const mobileMenuRowActiveClass =
   "bg-black/[0.08] font-semibold dark:bg-white/12";
@@ -22,4 +28,4 @@ export const MOBILE_MENU_ICON_SIZE = "h-5 w-5";
 
 /** Chrome icon / pill button on mobile. */
 export const mobileChromeButtonClass =
-  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-foreground transition-colors duration-200 hover:bg-black/[0.06] dark:hover:bg-white/10";
+  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors duration-200 hover:bg-muted";

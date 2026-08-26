@@ -131,10 +131,7 @@ export function SettingsView() {
   const stackDirection = useMobileStackDirection(stackDepth);
 
   const settingsBody = settingsMobileHub ? (
-    <div
-      data-mobile-scroll=""
-      className="min-h-0 flex-1 overflow-y-auto bg-muted/30 px-4 pb-5 pt-2 lg:hidden"
-    >
+    <div className="min-h-0 flex-1 overflow-y-auto bg-white px-4 pb-5 pt-2 dark:bg-neutral-950 lg:hidden">
       <SettingsGroup dividerInset="icon">
         {settingsNav.map((tab) => {
           const Icon = settingsIcons[tab.id];
@@ -165,7 +162,7 @@ export function SettingsView() {
       </SettingsGroup>
     </div>
   ) : (
-    <div data-mobile-scroll="" className="min-h-0 flex-1 overflow-y-auto">
+    <div className="min-h-0 flex-1 overflow-y-auto bg-white dark:bg-neutral-950">
       {settingsTab === "organization" ? <OrganizationSettings /> : null}
 
       {settingsTab === "workspaces" ? (
@@ -201,7 +198,7 @@ export function SettingsView() {
         <MobileSlideStack
           activeKey={stackKey}
           direction={stackDirection}
-          frameClassName="bg-muted/30"
+          frameClassName="bg-white dark:bg-neutral-950"
         >
           {settingsBody}
         </MobileSlideStack>

@@ -16,17 +16,17 @@ export function CanderWordmark({
   const useWhite =
     tone === "white" || (tone === "auto" && theme !== "light");
   const src = useWhite
-    ? "/cander-wordmark-dark.png?v=1"
-    : "/cander-wordmark-light.png?v=1";
+    ? "/cander-wordmark-dark.png?v=2"
+    : "/cander-wordmark-light.png?v=2";
 
   return (
     <img
       src={src}
       alt="Cander"
-      width={856}
+      width={713}
       height={151}
       suppressHydrationWarning
-      className={cn("h-[22px] w-auto object-contain object-left", className)}
+      className={cn("h-[17px] w-auto object-contain object-left", className)}
     />
   );
 }

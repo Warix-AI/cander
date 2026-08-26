@@ -13,6 +13,7 @@ import { SkillsPanel } from "@/components/panels/SkillsPanel";
 import { StudioPanel } from "@/components/panels/StudioPanel";
 import { useApp } from "@/components/app/AppProvider";
 import { SplitHandle } from "@/components/shell/SplitHandle";
+import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
 import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
@@ -61,7 +62,7 @@ export function ContextPanel() {
         floatingChrome
           ? cn("light-surface my-3 mr-3 overflow-hidden", SHELL_G3_RADIUS)
           : mobile
-            ? "overflow-hidden bg-background"
+            ? cn("overflow-hidden", MOBILE_APP_BG)
             : "light-surface rounded-none border-0 border-l border-border shadow-none",
         !dragging &&
           !mobile &&

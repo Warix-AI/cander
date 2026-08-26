@@ -12,7 +12,6 @@ import {
 import { PinsSheet } from "@/components/shell/mobile/PinsSheet";
 import { WorkspaceSheet } from "@/components/shell/mobile/WorkspaceSheet";
 import {
-  MOBILE_GLASS_INSET,
   MOBILE_MENU_BG,
   MOBILE_MENU_ICON_SIZE,
   MOBILE_MENU_ICON_STROKE,
@@ -159,12 +158,12 @@ function MenuMain({
 
   return (
     <>
-      <div className="flex shrink-0 items-center px-5 pb-3 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
+      <div className="flex shrink-0 items-center px-5 pt-[calc(env(safe-area-inset-top,0px)+12px)]">
         <CanderWordmark />
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="space-y-0.5">
+      <div className="mt-[25px] flex min-h-0 flex-1 flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="space-y-px">
           <button
             type="button"
             onClick={onNewChat}
@@ -232,7 +231,7 @@ function MenuMain({
           })}
         </div>
 
-        <div className="mt-auto space-y-0.5 pt-4">
+        <div className="mt-auto space-y-px pt-3">
           <button
             type="button"
             onClick={() => onOpenScreen("workspace")}
@@ -293,7 +292,7 @@ function MenuSub({
           {title}
         </p>
       </div>
-      <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1", MOBILE_GLASS_INSET)}>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/30 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
         {screen === "pinned" ? (
           <PinsSheet onSelect={onSelect} hideHeading />
         ) : (

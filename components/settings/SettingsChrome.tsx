@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
-import { MOBILE_GLASS_CARD } from "@/lib/mobile-menu-styles";
+import { MOBILE_APP_BG, MOBILE_GLASS_CARD } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,7 @@ export function SettingsPage({
     <div
       className={cn(
         "min-h-0 flex-1 overflow-y-auto",
-        mobile ? "bg-muted/30" : "bg-background",
+        mobile ? MOBILE_APP_BG : "bg-background",
       )}
     >
       <div

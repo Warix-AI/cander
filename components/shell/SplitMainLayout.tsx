@@ -7,6 +7,7 @@ import { RightPanelToggleDock } from "@/components/shell/PanelToggle";
 import { MobileContentPager } from "@/components/shell/MobileContentPager";
 import { useApp } from "@/components/app/AppProvider";
 import { canUseRightPanel } from "@/lib/right-panel";
+import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
@@ -92,12 +93,12 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
         withPanel={withPanel}
         active={active}
         chatPane={
-          <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+          <div className={cn("flex h-full min-h-0 flex-col overflow-hidden", MOBILE_APP_BG)}>
             {children}
           </div>
         }
         panelPane={
-          <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+          <div className={cn("flex h-full min-h-0 flex-col overflow-hidden", MOBILE_APP_BG)}>
             <ContextPanel />
           </div>
         }

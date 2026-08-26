@@ -8,6 +8,7 @@ import { TopRail } from "@/components/shell/TopRail";
 import { SpaceDashboard } from "@/components/shell/SpaceDashboard";
 import { MobileContentPager } from "@/components/shell/MobileContentPager";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
+import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
@@ -75,12 +76,12 @@ export function SpaceChatLayout() {
         withPanel
         active={active}
         chatPane={
-          <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+          <div className={cn("flex h-full min-h-0 flex-col overflow-hidden", MOBILE_APP_BG)}>
             <ChatColumn />
           </div>
         }
         panelPane={
-          <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+          <div className={cn("flex h-full min-h-0 flex-col overflow-hidden", MOBILE_APP_BG)}>
             <SpaceRenderModeProvider mode="page">
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
                 <SpaceDashboard />

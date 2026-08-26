@@ -32,10 +32,7 @@ import {
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
 import {
-  MOBILE_GLASS_BAR,
-  MOBILE_GLASS_PILL,
-  MOBILE_GLASS_SEGMENT,
-  MOBILE_GLASS_SEGMENT_ACTIVE,
+  MOBILE_APP_BG,
   mobileChromeButtonClass,
 } from "@/lib/mobile-menu-styles";
 import type { BuildTool, MobileSurface, OverlayId, SpaceId } from "@/lib/types";
@@ -246,7 +243,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
         <div
           role="tablist"
           aria-label="Surface"
-          className="inline-flex max-w-full items-center rounded-full p-1 mobile-glass-segment"
+          className="inline-flex max-w-full items-center rounded-full bg-muted/70 p-1"
         >
           <button
             type="button"
@@ -256,7 +253,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
             className={cn(
               "rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
               surface === "chat"
-                ? cn(MOBILE_GLASS_SEGMENT_ACTIVE, "text-foreground")
+                ? "bg-white text-foreground shadow-sm dark:bg-neutral-900"
                 : "text-muted-foreground",
             )}
           >
@@ -280,7 +277,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
                   className={cn(
                     "inline-flex max-w-[9rem] items-center gap-1 truncate rounded-full px-3 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
                     surface === "panel"
-                      ? cn(MOBILE_GLASS_SEGMENT_ACTIVE, "text-foreground")
+                      ? "bg-white text-foreground shadow-sm dark:bg-neutral-900"
                       : "text-muted-foreground",
                   )}
                 >
@@ -318,7 +315,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
               className={cn(
                 "max-w-[9rem] truncate rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
                 surface === "panel"
-                  ? cn(MOBILE_GLASS_SEGMENT_ACTIVE, "text-foreground")
+                  ? "bg-white text-foreground shadow-sm dark:bg-neutral-900"
                   : "text-muted-foreground",
               )}
             >
@@ -335,13 +332,13 @@ export function MobileAppChrome({ className }: { className?: string }) {
       onTouchStart={stopSwipe}
       onTouchEnd={stopSwipe}
       className={cn(
-        "pointer-events-none shrink-0",
-        MOBILE_GLASS_BAR,
-        "pt-[env(safe-area-inset-top,0px)]",
+        "shrink-0",
+        MOBILE_APP_BG,
+        "pt-[calc(env(safe-area-inset-top,0px)+6px)]",
         className,
       )}
     >
-      <div className="pointer-events-auto grid h-12 grid-cols-[1fr_auto_1fr] items-center px-3">
+      <div className="grid h-12 grid-cols-[1fr_auto_1fr] items-center px-3">
         <div className="relative z-10 justify-self-start">
           <button
             type="button"
@@ -353,7 +350,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
                   : "Open menu"
             }
             onClick={onLeadingClick}
-            className={cn(mobileChromeButtonClass, MOBILE_GLASS_PILL)}
+            className={mobileChromeButtonClass}
           >
             {inChromeSub ? (
               <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
@@ -387,7 +384,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
             type="button"
             aria-label="Create workspace"
             onClick={() => openOverlay("workspace")}
-            className={cn(mobileChromeButtonClass, MOBILE_GLASS_PILL)}
+            className={mobileChromeButtonClass}
           >
             <Plus className="h-5 w-5" strokeWidth={1.8} />
           </button>
@@ -403,7 +400,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
             type="button"
             aria-label="New chat"
             onClick={startNewChat}
-            className={cn(mobileChromeButtonClass, MOBILE_GLASS_PILL)}
+            className={mobileChromeButtonClass}
           >
             <SquarePen className="h-5 w-5" strokeWidth={1.8} />
           </button>
@@ -460,7 +457,7 @@ function BuildToolsMenu({
           type="button"
           aria-label="Build tools"
           onClick={toggle}
-          className={cn(mobileChromeButtonClass, MOBILE_GLASS_PILL)}
+          className={mobileChromeButtonClass}
         >
           <Ellipsis className="h-5 w-5" strokeWidth={1.8} />
         </button>

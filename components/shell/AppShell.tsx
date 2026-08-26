@@ -38,6 +38,7 @@ import {
 import { setShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useMobileSwipeGestures } from "@/lib/use-mobile-swipe";
+import { MOBILE_APP_BG, MOBILE_MENU_BG } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 
 export function AppShell() {
@@ -141,7 +142,8 @@ function Root() {
           onTouchStart={swipe.onTouchStart}
           onTouchEnd={swipe.onTouchEnd}
           className={cn(
-            "relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background text-foreground",
+            "relative flex h-svh min-h-0 flex-1 overflow-hidden text-foreground",
+            mobile ? MOBILE_MENU_BG : "bg-background",
             // Bottom tab bar removed — no reserved nav inset on mobile.
           )}
         >
@@ -149,14 +151,14 @@ function Root() {
           <Sidebar />
           {mobile ? (
             <MobileMenuScaffold>
-              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                <MobileAppChrome className="absolute inset-x-0 top-0 z-30" />
-                <div
-                  data-mobile-main=""
-                  className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-                >
-                  <CourierMain />
-                </div>
+              <MobileAppChrome />
+              <div
+                className={cn(
+                  "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+                  MOBILE_APP_BG,
+                )}
+              >
+                <CourierMain />
               </div>
             </MobileMenuScaffold>
           ) : (

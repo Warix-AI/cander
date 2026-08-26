@@ -11,6 +11,7 @@ import { useDesktopShell } from "@/lib/desktop-shell";
 import { useMobileShell } from "@/lib/use-media-query";
 import type { SpaceId, SpaceLayout } from "@/lib/types";
 import type { BannerKey } from "@/lib/space-banners";
+import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 import {
   FLOAT_CONTROL_SHELL,
@@ -442,7 +443,12 @@ export function DashFrame({
   const hideMobileHero = mobile && Boolean(bannerSpace);
 
   return (
-    <div className="@container relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-background">
+    <div
+      className={cn(
+        "@container relative flex min-h-0 flex-1 flex-col overflow-y-auto",
+        mobile ? MOBILE_APP_BG : "bg-background",
+      )}
+    >
       {view === "space" && !bannerSpace && !inPanel && !desktop ? (
         <NavToggle
           className={cn(

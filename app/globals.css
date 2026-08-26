@@ -124,6 +124,7 @@ html.cander-narrow {
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
   touch-action: manipulation;
+  background-color: var(--background);
 }
 
 @keyframes mobile-slide-in-from-right {
@@ -341,11 +342,6 @@ html.cander-narrow .light-surface[class*="fixed"] {
   background-color: oklch(0.24 0.012 265 / 0.88) !important;
 }
 
-html.cander-mobile [data-mobile-scroll],
-html.cander-narrow [data-mobile-scroll] {
-  padding-top: calc(env(safe-area-inset-top, 0px) + 3rem);
-}
-
 html.cander-mobile body,
 html.cander-narrow body {
   /* Prefer absolute fill over position:fixed — fixed body was crashing WKWebView on boot. */
@@ -360,6 +356,7 @@ html.cander-narrow body {
   overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
   touch-action: manipulation;
+  background-color: var(--background);
 }
 
 html.cander-mobile input,
