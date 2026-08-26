@@ -6,13 +6,12 @@ import { ChatColumn } from "@/components/shell/ChatColumn";
 import { ResizeHandle } from "@/components/shell/ContextPanel";
 import { TopRail } from "@/components/shell/TopRail";
 import { SpaceDashboard } from "@/components/shell/SpaceDashboard";
-import { MobileMenuPane } from "@/components/shell/MobileMenuPane";
-import { MobilePager } from "@/components/shell/MobilePager";
+import { MobileContentPager } from "@/components/shell/MobileContentPager";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useShellStyle } from "@/lib/shell-chrome";
-import type { MobileSurface } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import type { MobileSurface } from "@/lib/types";
 
 /**
  * Space stays mounted. On desktop, chat grows while space shrinks to a panel.
@@ -68,28 +67,28 @@ export function SpaceChatLayout() {
   }, [chatOpen, immersive, panelPct, mobile]);
 
   if (mobile) {
-    const panes: MobileSurface[] = ["menu", "chat", "panel"];
     const active: MobileSurface =
-      mobileSurface === "menu"
-        ? "menu"
-        : mobileSurface === "panel"
-          ? "panel"
-          : "chat";
+      mobileSurface === "panel" ? "panel" : "chat";
 
     return (
-      <MobilePager panes={panes} active={active}>
-        <MobileMenuPane />
-        <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-          <ChatColumn />
-        </div>
-        <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-          <SpaceRenderModeProvider mode="page">
-            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
-              <SpaceDashboard />
-            </div>
-          </SpaceRenderModeProvider>
-        </div>
-      </MobilePager>
+      <MobileContentPager
+        withPanel
+        active={active}
+        chatPane={
+          <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+            <ChatColumn />
+          </div>
+        }
+        panelPane={
+          <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+            <SpaceRenderModeProvider mode="page">
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+                <SpaceDashboard />
+              </div>
+            </SpaceRenderModeProvider>
+          </div>
+        }
+      />
     );
   }
 

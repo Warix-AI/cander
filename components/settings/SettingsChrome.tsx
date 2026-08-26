@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -18,7 +19,12 @@ export function SettingsPage({
 }) {
   const mobile = useMobileShell();
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-background">
+    <div
+      className={cn(
+        "min-h-0 flex-1 overflow-y-auto",
+        mobile ? "bg-muted/30" : "bg-background",
+      )}
+    >
       <div
         className={cn(
           "mx-auto w-full",
@@ -322,3 +328,134 @@ export const settingsInputClass =
 
 export const settingsSelectClass =
   "h-9 rounded-[10px] border border-border bg-background px-2.5 text-[13px] outline-none focus:border-foreground/20";
+
+/** Muted helper copy below a settings group (mobile footnotes). */
+export function SettingsFootnote({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <p
+      className={cn(
+        "mt-2 px-1 text-[12.5px] leading-relaxed text-muted-foreground",
+        className,
+      )}
+    >
+      {children}
+    </p>
+  );
+}
+
+/** iOS-style toggle for mobile settings rows. */
+export function SettingsSwitch({
+  checked,
+  onChange,
+  label,
+  disabled = false,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "relative inline-flex h-[31px] w-[51px] shrink-0 items-center rounded-full transition-colors duration-200",
+        checked ? "bg-[#34C759]" : "bg-muted",
+        disabled && "opacity-40",
+      )}
+    >
+      <span
+        className={cn(
+          "inline-block h-[27px] w-[27px] rounded-full bg-white shadow-sm transition-transform duration-200",
+          checked ? "translate-x-[22px]" : "translate-x-[2px]",
+        )}
+      />
+    </button>
+  );
+}
+
+/** Navigable row: label left, optional value + chevron right. */
+export function SettingsLinkRow({
+  label,
+  description,
+  value,
+  onClick,
+  destructive = false,
+  className,
+  children,
+}: {
+  label: string;
+  description?: string;
+  value?: string;
+  onClick?: () => void;
+  destructive?: boolean;
+  className?: string;
+  children?: ReactNode;
+}) {
+  const body = (
+    <>
+      <div className="min-w-0 flex-1">
+        <p
+          className={cn(
+            "text-[15px] font-medium tracking-[-0.01em] lg:text-[13.5px]",
+            destructive && "text-destructive",
+          )}
+        >
+          {label}
+        </p>
+        {description ? (
+          <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground lg:text-[12.5px]">
+            {description}
+          </p>
+        ) : null}
+      </div>
+      {children ?? (
+        <div className="flex shrink-0 items-center gap-1.5">
+          {value ? (
+            <span className="max-w-[9rem] truncate text-[15px] text-muted-foreground lg:text-[13px]">
+              {value}
+            </span>
+          ) : null}
+          {onClick ? (
+            <ChevronRight
+              className="h-4 w-4 shrink-0 text-muted-foreground/70"
+              strokeWidth={1.8}
+            />
+          ) : null}
+        </div>
+      )}
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-muted/50 lg:gap-4",
+          className,
+        )}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return (
+    <div className={cn("flex w-full items-center gap-3 px-4 py-3.5 lg:gap-4", className)}>
+      {body}
+    </div>
+  );
+}

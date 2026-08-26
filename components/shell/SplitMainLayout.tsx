@@ -4,14 +4,13 @@ import { useEffect, useRef, useState, type ReactNode, type TransitionEvent } fro
 import { ContextPanel, ResizeHandle } from "@/components/shell/ContextPanel";
 import { TopRail } from "@/components/shell/TopRail";
 import { RightPanelToggleDock } from "@/components/shell/PanelToggle";
-import { MobileMenuPane } from "@/components/shell/MobileMenuPane";
-import { MobilePager } from "@/components/shell/MobilePager";
+import { MobileContentPager } from "@/components/shell/MobileContentPager";
 import { useApp } from "@/components/app/AppProvider";
 import { canUseRightPanel } from "@/lib/right-panel";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useShellStyle } from "@/lib/shell-chrome";
-import type { MobileSurface } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import type { MobileSurface } from "@/lib/types";
 
 export function SplitMainLayout({ children }: { children: ReactNode }) {
   const {
@@ -85,37 +84,24 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
 
   if (mobile) {
     const withPanel = canPanel && panelOn;
-    const panes: MobileSurface[] = withPanel
-      ? ["menu", "chat", "panel"]
-      : ["menu", "chat"];
     const active: MobileSurface =
-      mobileSurface === "menu"
-        ? "menu"
-        : mobileSurface === "panel" && withPanel
-          ? "panel"
-          : "chat";
-
-    const kids = [
-      <MobileMenuPane key="menu" />,
-      <div key="chat" className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-        {children}
-      </div>,
-    ];
-    if (withPanel) {
-      kids.push(
-        <div
-          key="panel"
-          className="flex h-full min-h-0 flex-col overflow-hidden bg-background"
-        >
-          <ContextPanel />
-        </div>,
-      );
-    }
+      mobileSurface === "panel" && withPanel ? "panel" : "chat";
 
     return (
-      <MobilePager panes={panes} active={active}>
-        {kids}
-      </MobilePager>
+      <MobileContentPager
+        withPanel={withPanel}
+        active={active}
+        chatPane={
+          <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+            {children}
+          </div>
+        }
+        panelPane={
+          <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+            <ContextPanel />
+          </div>
+        }
+      />
     );
   }
 

@@ -2,6 +2,7 @@
 
 import { FolderKanban, MessageSquare } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
+import { SettingsGroup } from "@/components/settings/SettingsChrome";
 import { useApp } from "@/components/app/AppProvider";
 import { usePinnedItems, type PinnedItem } from "@/lib/use-pinned-items";
 import { spaceIcons } from "@/lib/space-icons";
@@ -64,12 +65,12 @@ export function PinsSheet({
 
   return (
     <div>
-      <section>
-        {hideHeading ? null : (
-          <p className="px-3 pb-1 pt-2 text-[12px] font-medium text-muted-foreground">
-            Pinned
-          </p>
-        )}
+      {hideHeading ? null : (
+        <p className="mb-2 px-1 text-[12px] font-medium tracking-[0.04em] text-muted-foreground uppercase">
+          Pinned
+        </p>
+      )}
+      <SettingsGroup dividerInset="icon">
         {pinnedItems.length ? (
           pinnedItems.map((item) => (
             <button
@@ -78,7 +79,7 @@ export function PinsSheet({
               data-active={isActive(item) ? "true" : undefined}
               onClick={() => openItem(item)}
               className={cn(
-                "menu-row-hover flex w-full items-center gap-3.5 rounded-[12px] px-3 py-3 text-left text-[16px] transition-colors duration-200",
+                "flex w-full items-center gap-3.5 px-4 py-3.5 text-left text-[16px] transition-colors duration-200 hover:bg-muted/50",
                 isActive(item) && "bg-muted/70 font-medium",
               )}
             >
@@ -87,11 +88,11 @@ export function PinsSheet({
             </button>
           ))
         ) : (
-          <p className="px-3 py-2 text-[13px] text-muted-foreground/70">
+          <p className="px-4 py-4 text-[13.5px] text-muted-foreground/70">
             No pinned items
           </p>
         )}
-      </section>
+      </SettingsGroup>
     </div>
   );
 }

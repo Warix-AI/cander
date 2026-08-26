@@ -8,6 +8,11 @@ import {
   swatchForMode,
   useAppearance,
 } from "@/lib/appearance";
+import {
+  SettingsFootnote,
+  SettingsGroup,
+  SettingsSection,
+} from "@/components/settings/SettingsChrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +28,34 @@ export function AppearanceControls({
   const mobile = useMobileShell();
 
   return (
-    <div className={cn(compact ? "space-y-8" : "space-y-10", className)}>
+    <div className={cn(compact ? "space-y-8" : mobile ? "space-y-6" : "space-y-10", className)}>
+      {mobile ? (
+        <SettingsSection title="Color mode">
+          <SettingsGroup>
+            <div className="grid grid-cols-2 gap-2 p-2">
+              {COLOR_MODE_PRESETS.map((preset) => (
+                <AppearanceOptionCard
+                  key={preset.id}
+                  label={preset.label}
+                  active={appearance.colorMode === preset.id}
+                  onSelect={() => setColorMode(preset.id)}
+                  mobile
+                  preview={
+                    <span
+                      aria-hidden
+                      className="block h-9 w-full rounded-[8px] border border-black/5"
+                      style={{ background: swatchForMode(preset.id) }}
+                    />
+                  }
+                />
+              ))}
+            </div>
+          </SettingsGroup>
+          <SettingsFootnote>
+            Matches system, light, or dark across the app.
+          </SettingsFootnote>
+        </SettingsSection>
+      ) : (
       <section>
         <h3 className="text-[14px] font-medium tracking-[-0.01em]">
           Color mode
@@ -51,6 +83,7 @@ export function AppearanceControls({
           ))}
         </div>
       </section>
+      )}
 
       {mobile ? null : (
       <section>
@@ -90,11 +123,13 @@ function AppearanceOptionCard({
   active,
   onSelect,
   preview,
+  mobile = false,
 }: {
   label: string;
   active: boolean;
   onSelect: () => void;
   preview: React.ReactNode;
+  mobile?: boolean;
 }) {
   return (
     <button
@@ -102,10 +137,15 @@ function AppearanceOptionCard({
       aria-pressed={active}
       onClick={onSelect}
       className={cn(
-        "flex flex-col gap-2 rounded-[10px] border px-3 py-3 text-left transition-colors duration-200",
-        active
-          ? "border-foreground/25 bg-muted ring-1 ring-foreground/10"
-          : "border-border hover:bg-muted/60",
+        "flex flex-col gap-2 bg-card px-3 py-3 text-left transition-colors duration-200",
+        mobile
+          ? "rounded-[12px] border border-border bg-card"
+          : cn(
+              "rounded-[10px] border",
+              active
+                ? "border-foreground/25 bg-muted ring-1 ring-foreground/10"
+                : "border-border hover:bg-muted/60",
+            ),
       )}
     >
       {preview}

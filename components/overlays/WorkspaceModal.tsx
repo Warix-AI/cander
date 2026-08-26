@@ -244,7 +244,7 @@ export function WorkspaceModal() {
               disabled={!canCreate}
               placeholder="Workspace name"
               autoFocus
-              className="h-10 w-full rounded-[10px] border border-border bg-card px-3 text-[13.5px] outline-none focus:border-foreground/20 disabled:opacity-40"
+              className="h-10 w-full rounded-[12px] border border-border bg-background px-3 text-[13.5px] outline-none focus:border-foreground/20 disabled:opacity-40"
             />
           </label>
 
@@ -267,14 +267,14 @@ export function WorkspaceModal() {
                 setStep("kind");
                 setError(null);
               }}
-              className="inline-flex h-9 items-center rounded-full px-3.5 text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="inline-flex h-10 items-center rounded-full border border-border bg-background px-4 text-[13px] font-medium tracking-[-0.01em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               Back
             </button>
             <button
               type="submit"
               disabled={!canCreate || !name.trim()}
-              className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium tracking-[-0.01em] text-primary-foreground disabled:opacity-40"
+              className="inline-flex h-10 items-center rounded-full bg-primary px-5 text-[13px] font-medium tracking-[-0.01em] text-primary-foreground disabled:opacity-40"
             >
               Create
             </button>
@@ -326,13 +326,12 @@ function KindCard({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "light-surface light-surface-interactive flex w-full items-start gap-3 rounded-[10px] px-3 py-3 text-left",
-        disabled
-          ? "cursor-not-allowed opacity-40"
-          : undefined,
+        "flex w-full items-start gap-3 rounded-[12px] border border-border bg-background px-4 py-3.5 text-left transition-colors duration-200",
+        !disabled && "hover:bg-muted/40",
+        disabled && "cursor-not-allowed opacity-40",
       )}
     >
-      <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-muted text-foreground">
+      <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-border bg-muted/40 text-foreground">
         <Icon className="h-4 w-4" strokeWidth={1.6} />
       </span>
       <span className="min-w-0">

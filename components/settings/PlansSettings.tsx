@@ -10,9 +10,13 @@ import { Check, Mail, Minus } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { PreviewAccount } from "@/components/settings/PreviewAccount";
 import {
+  SettingsGroup,
   SettingsHeader,
   SettingsPage,
+  SettingsPanel,
+  SettingsSection,
 } from "@/components/settings/SettingsChrome";
+import { useMobileShell } from "@/lib/use-media-query";
 import {
   appPlans,
   billingFor,
@@ -37,6 +41,7 @@ export function PlansSettings() {
     hostingMode,
     orgMembers,
   } = useApp();
+  const mobile = useMobileShell();
   const [cycle, setCycle] = useState<BillingCycle>("month");
   const roster = orgMembersOf(orgMembers);
   const seatMix = orgSeatMix(orgMembers);
@@ -67,6 +72,19 @@ export function PlansSettings() {
       </div>
 
       {entitlements.showInviteWall ? (
+        mobile ? (
+          <SettingsSection title="Acme invite" className="mt-6">
+            <SettingsGroup>
+              <div className="px-4 py-4">
+                <p className="text-[14px] leading-relaxed text-muted-foreground">
+                  Acme is a Max organization. A Max or Ultra seat is required to use
+                  shared workspaces. Ask an admin to add one, or stay on your personal{" "}
+                  {planLabel(entitlements.plan)} account.
+                </p>
+              </div>
+            </SettingsGroup>
+          </SettingsSection>
+        ) : (
         <div className="mt-6 rounded-[10px] border border-border bg-card p-5">
           <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
             Acme invite
@@ -77,6 +95,7 @@ export function PlansSettings() {
             {planLabel(entitlements.plan)} account.
           </p>
         </div>
+        )
       ) : null}
 
       {entitlements.isMember ? (

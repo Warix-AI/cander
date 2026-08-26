@@ -2,8 +2,9 @@
 
 import { useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
-import { LayoutGrid, Pin, Settings, SquarePen } from "lucide-react";
+import { ChevronLeft, LayoutGrid, Pin, Settings, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { CourierMark } from "@/components/brand/CourierMark";
 import { PinsSheet } from "@/components/shell/mobile/PinsSheet";
 import { WorkspaceSheet } from "@/components/shell/mobile/WorkspaceSheet";
 import { useMainNavItems } from "@/lib/use-main-nav-items";
@@ -13,11 +14,10 @@ import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const rowClass =
-  "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[13.5px] transition-colors duration-200 hover:bg-muted/70";
+  "flex w-full items-center gap-3.5 rounded-[12px] px-4 py-3.5 text-left text-[16px] tracking-[-0.02em] transition-colors duration-200 hover:bg-muted/70";
 
 /**
- * Full-screen menu pane for the mobile pager.
- * New chat + nav + pinned; Workspace and Settings at the bottom.
+ * Left drawer menu for mobile — slides over ~75% width; main screen peeks on the right.
  */
 export function MobileMenuPane() {
   const {
@@ -42,7 +42,6 @@ export function MobileMenuPane() {
   }, [mobileSurface, setMobileMenuScreen]);
 
   const onMenuMain = mobileSurface === "menu" && mobileMenuScreen === "main";
-  /** Only paint nav selection while the menu pane is visible — avoids highlight sliding away. */
   const showNavSelection = onMenuMain;
 
   const closeMenuOnly = () => {
@@ -71,7 +70,6 @@ export function MobileMenuPane() {
       if (isChatSpace(id)) openSpaceChat(id);
       else openSpace(id as SpaceId);
     }
-    // Let openSpace / openSpaceChat own mobileSurface — don't force chat.
     closeMenuOnly();
   };
 
@@ -103,9 +101,24 @@ export function MobileMenuPane() {
   if (!pinnedInserted) navRows.push({ kind: "pinned" });
 
   if (mobileMenuScreen === "pinned" || mobileMenuScreen === "workspace") {
+    const subTitle =
+      mobileMenuScreen === "pinned" ? "Pinned" : "Workspace";
     return (
       <aside className="flex h-full min-h-0 flex-col bg-background text-foreground">
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
+        <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+          <button
+            type="button"
+            aria-label="Back"
+            onClick={() => setMobileMenuScreen("main")}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted/70"
+          >
+            <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
+          </button>
+          <p className="truncate text-[17px] font-medium tracking-[-0.02em]">
+            {subTitle}
+          </p>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/30 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
           {mobileMenuScreen === "pinned" ? (
             <PinsSheet onSelect={closeToChat} hideHeading />
           ) : (
@@ -118,8 +131,12 @@ export function MobileMenuPane() {
 
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
-      <div className="flex min-h-0 flex-1 flex-col px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top,0px)+12px)]">
-        <div>
+      <div className="flex shrink-0 items-center px-5 pb-3 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
+        <CourierMark className="!h-[26px] !w-[27px]" />
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="space-y-0.5">
           <button
             type="button"
             onClick={startNewChat}
@@ -129,8 +146,8 @@ export function MobileMenuPane() {
             )}
           >
             <SquarePen
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-              strokeWidth={2}
+              className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
+              strokeWidth={1.9}
             />
             New chat
           </button>
@@ -145,8 +162,8 @@ export function MobileMenuPane() {
                   className={rowClass}
                 >
                   <Pin
-                    className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                    strokeWidth={2}
+                    className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
+                    strokeWidth={1.9}
                   />
                   Pinned
                 </button>
@@ -167,12 +184,12 @@ export function MobileMenuPane() {
               >
                 <row.Icon
                   className={cn(
-                    "h-3.5 w-3.5 shrink-0",
+                    "h-[18px] w-[18px] shrink-0",
                     tinted
                       ? spaceIconTint(row.id as SpaceId)
                       : "text-muted-foreground",
                   )}
-                  strokeWidth={2}
+                  strokeWidth={1.9}
                 />
                 {row.label}
               </button>
@@ -180,15 +197,15 @@ export function MobileMenuPane() {
           })}
         </div>
 
-        <div className="mt-auto space-y-0.5">
+        <div className="mt-auto space-y-0.5 pt-4">
           <button
             type="button"
             onClick={() => setMobileMenuScreen("workspace")}
             className={rowClass}
           >
             <LayoutGrid
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-              strokeWidth={2}
+              className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
+              strokeWidth={1.9}
             />
             Workspace
           </button>
@@ -202,8 +219,8 @@ export function MobileMenuPane() {
             className={rowClass}
           >
             <Settings
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-              strokeWidth={2}
+              className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
+              strokeWidth={1.9}
             />
             Settings
           </button>

@@ -5,6 +5,7 @@ import { AppProvider, useApp } from "@/components/app/AppProvider";
 import { ChatColumn } from "@/components/shell/ChatColumn";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { MobileAppChrome } from "@/components/shell/MobileAppChrome";
+import { MobileMenuScaffold } from "@/components/shell/MobileMenuScaffold";
 import { MobileBootSplash } from "@/components/shell/MobileBootSplash";
 import { SpaceChatLayout } from "@/components/shell/SpaceChatLayout";
 import { RecentsView } from "@/components/shell/RecentsView";
@@ -146,10 +147,18 @@ function Root() {
         >
           <MobileBootSplash />
           <Sidebar />
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            {mobile ? <MobileAppChrome /> : null}
-            <CourierMain />
-          </div>
+          {mobile ? (
+            <MobileMenuScaffold>
+              <MobileAppChrome />
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <CourierMain />
+              </div>
+            </MobileMenuScaffold>
+          ) : (
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              <CourierMain />
+            </div>
+          )}
           <SearchModal />
           <ConfigureModal />
           <SpaceSettingsModal />

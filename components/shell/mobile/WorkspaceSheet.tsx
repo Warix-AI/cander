@@ -3,6 +3,7 @@
 import { Check } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { useApp } from "@/components/app/AppProvider";
+import { SettingsGroup } from "@/components/settings/SettingsChrome";
 import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
 import { workspacesFor } from "@/lib/entitlements";
 import {
@@ -11,9 +12,6 @@ import {
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
 import { cn } from "@/lib/utils";
-
-const rowClass =
-  "menu-row-hover flex w-full items-center gap-3.5 rounded-[12px] px-3 py-3 text-left text-[16px] transition-colors duration-200";
 
 export function WorkspaceSheet({
   onSelect,
@@ -36,7 +34,7 @@ export function WorkspaceSheet({
   const allowed = workspacesFor(actor, entitlements);
 
   return (
-    <div>
+    <SettingsGroup dividerInset="icon">
       {allowed.map((item) => {
         const active = item.id === workspace.id;
         return (
@@ -48,7 +46,10 @@ export function WorkspaceSheet({
               setWorkspace(item.id);
               onSelect();
             }}
-            className={cn(rowClass, active && "bg-muted/70 font-medium")}
+            className={cn(
+              "flex w-full items-center gap-3.5 px-4 py-3.5 text-left text-[16px] transition-colors duration-200 hover:bg-muted/50",
+              active && "bg-muted/70 font-medium",
+            )}
           >
             <WorkspaceMark
               id={item.id}
@@ -66,6 +67,6 @@ export function WorkspaceSheet({
           </button>
         );
       })}
-    </div>
+    </SettingsGroup>
   );
 }

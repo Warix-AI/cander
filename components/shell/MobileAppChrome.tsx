@@ -211,6 +211,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
       setMobileMenuScreen("main");
       return;
     }
+    if (mobileSurface === "menu") {
+      setMobileSurface("chat");
+      return;
+    }
     setMobileSurface("menu");
   };
 
@@ -224,9 +228,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     event.stopPropagation();
   };
 
-  // Menu main: no chrome — only the menu list is visible.
-  if (onMenuMain) return null;
-
+  // Menu main: chrome stays on the peek strip; hamburger toggles the drawer closed.
   return (
     <header
       data-no-swipe=""
@@ -238,127 +240,140 @@ export function MobileAppChrome({ className }: { className?: string }) {
         className,
       )}
     >
-      <div className="flex h-12 items-center gap-2 px-3">
-        <button
-          type="button"
-          aria-label={inChromeSub ? "Back" : "Open menu"}
-          onClick={onLeadingClick}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
-        >
-          {inChromeSub ? (
-            <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
-          ) : (
-            <Menu className="h-5 w-5" strokeWidth={1.8} />
-          )}
-        </button>
+      <div className="relative grid h-12 grid-cols-[1fr_auto_1fr] items-center px-3">
+        <div className="justify-self-start">
+          <button
+            type="button"
+            aria-label={
+              inChromeSub
+                ? "Back"
+                : mobileSurface === "menu"
+                  ? "Close menu"
+                  : "Open menu"
+            }
+            onClick={onLeadingClick}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
+          >
+            {inChromeSub ? (
+              <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
+            ) : (
+              <Menu className="h-5 w-5" strokeWidth={1.8} />
+            )}
+          </button>
+        </div>
 
-        <div className="flex min-w-0 flex-1 items-center justify-center">
-          {onMenuMain ? null : inChromeSub ? (
-            <p className="truncate text-[15px] font-medium tracking-[-0.01em]">
-              {subTitle}
-            </p>
-          ) : showSpaceToggle ? (
-            <div
-              role="tablist"
-              aria-label="Surface"
-              className="inline-flex max-w-full items-center rounded-full bg-muted/70 p-1"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={surface === "chat"}
-                onClick={() => setChatOrPanel("chat")}
-                className={cn(
-                  "rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
-                  surface === "chat"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground",
-                )}
-              >
-                Chat
-              </button>
-              {entityOpen ? (
-                <Dropdown
-                  align="end"
-                  matchTrigger={false}
-                  menuClassName="min-w-[11rem]"
-                  trigger={({ open, toggle }) => (
+        {!onMenuMain && (inChromeSub || showSpaceToggle) ? (
+          <div className="pointer-events-none absolute inset-x-0 flex justify-center px-14">
+            <div className="pointer-events-auto min-w-0 max-w-full">
+              {inChromeSub ? (
+                <p className="truncate text-center text-[15px] font-medium tracking-[-0.01em]">
+                  {subTitle}
+                </p>
+              ) : showSpaceToggle ? (
+                <div
+                  role="tablist"
+                  aria-label="Surface"
+                  className="inline-flex max-w-full items-center rounded-full bg-muted/70 p-1"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={surface === "chat"}
+                    onClick={() => setChatOrPanel("chat")}
+                    className={cn(
+                      "rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
+                      surface === "chat"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    Chat
+                  </button>
+                  {entityOpen ? (
+                    <Dropdown
+                      align="end"
+                      matchTrigger={false}
+                      menuClassName="min-w-[11rem]"
+                      trigger={({ open, toggle }) => (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={surface === "panel"}
+                          aria-expanded={open}
+                          onClick={() => {
+                            if (surface !== "panel") setChatOrPanel("panel");
+                            else toggle();
+                          }}
+                          className={cn(
+                            "inline-flex max-w-[9rem] items-center gap-1 truncate rounded-full px-3 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
+                            surface === "panel"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          <span className="truncate">{panelTabLabel}</span>
+                          <ChevronDown
+                            className={cn(
+                              "h-3.5 w-3.5 shrink-0 transition-transform",
+                              open && "rotate-180",
+                            )}
+                            strokeWidth={1.8}
+                          />
+                        </button>
+                      )}
+                    >
+                      {(close) => (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            backToSpaceHome();
+                            close();
+                          }}
+                          className="menu-row-hover flex w-full items-center rounded-[8px] px-2.5 py-2 text-left text-[13px]"
+                        >
+                          Back to {backLabel}
+                        </button>
+                      )}
+                    </Dropdown>
+                  ) : (
                     <button
                       type="button"
                       role="tab"
                       aria-selected={surface === "panel"}
-                      aria-expanded={open}
-                      onClick={() => {
-                        if (surface !== "panel") setChatOrPanel("panel");
-                        else toggle();
-                      }}
+                      onClick={() => setChatOrPanel("panel")}
                       className={cn(
-                        "inline-flex max-w-[9rem] items-center gap-1 truncate rounded-full px-3 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
+                        "max-w-[9rem] truncate rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
                         surface === "panel"
                           ? "bg-background text-foreground shadow-sm"
                           : "text-muted-foreground",
                       )}
                     >
-                      <span className="truncate">{panelTabLabel}</span>
-                      <ChevronDown
-                        className={cn(
-                          "h-3.5 w-3.5 shrink-0 transition-transform",
-                          open && "rotate-180",
-                        )}
-                        strokeWidth={1.8}
-                      />
+                      {panelTabLabel}
                     </button>
                   )}
-                >
-                  {(close) => (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        backToSpaceHome();
-                        close();
-                      }}
-                      className="menu-row-hover flex w-full items-center rounded-[8px] px-2.5 py-2 text-left text-[13px]"
-                    >
-                      Back to {backLabel}
-                    </button>
-                  )}
-                </Dropdown>
-              ) : (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={surface === "panel"}
-                  onClick={() => setChatOrPanel("panel")}
-                  className={cn(
-                    "max-w-[9rem] truncate rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
-                    surface === "panel"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {panelTabLabel}
-                </button>
-              )}
+                </div>
+              ) : null}
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
-        {showBuildTools ? (
-          <BuildToolsMenu
-            address={address}
-            buildTool={buildTool}
-            setBuildTool={setBuildTool}
-            refreshPreview={refreshPreview}
-            openOverlay={openOverlay}
-            selectMode={selectMode}
-            setSelectMode={setSelectMode}
-            advancedMode={advancedMode}
-            setAdvancedMode={setAdvancedMode}
-            setMobileSurface={setMobileSurface}
-            setPanelMode={setPanelMode}
-          />
-        ) : showCreateWorkspace ? (
+        <div className="flex justify-self-end">
+          {showBuildTools ? (
+            <BuildToolsMenu
+              address={address}
+              buildTool={buildTool}
+              setBuildTool={setBuildTool}
+              refreshPreview={refreshPreview}
+              openOverlay={openOverlay}
+              selectMode={selectMode}
+              setSelectMode={setSelectMode}
+              advancedMode={advancedMode}
+              setAdvancedMode={setAdvancedMode}
+              setMobileSurface={setMobileSurface}
+              setPanelMode={setPanelMode}
+            />
+          ) : showCreateWorkspace ? (
           <button
             type="button"
             aria-label="Create workspace"
@@ -383,7 +398,8 @@ export function MobileAppChrome({ className }: { className?: string }) {
           >
             <SquarePen className="h-5 w-5" strokeWidth={1.8} />
           </button>
-        )}
+          )}
+        </div>
       </div>
     </header>
   );

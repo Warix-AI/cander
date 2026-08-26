@@ -134,7 +134,7 @@ export function SpaceSettingsModal() {
               </h2>
               <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
             </header>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/30 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               {panel}
             </div>
           </>
