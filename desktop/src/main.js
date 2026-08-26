@@ -1,9 +1,11 @@
-const { app, BrowserWindow, shell, Menu } = require("electron");
+const { app, BrowserWindow, shell, Menu, session } = require("electron");
 const path = require("path");
 
 const APP_NAME = "Cander";
 const DEFAULT_URL = "https://cander.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
+/** Bumped when the native shell changes — visible on <html data-cander-shell>. */
+const SHELL_BUILD = "2026-08-25-hidden-titlebar";
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
 /** Classic Mac titlebar / chrome row height (traffic-light axis). */
 const TITLEBAR_PX = 52;
@@ -17,12 +19,29 @@ function markDesktopShell() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   void mainWindow.webContents.executeJavaScript(`
     document.documentElement.classList.add("cander-desktop");
+    document.documentElement.dataset.canderShell = ${JSON.stringify(SHELL_BUILD)};
+    document.documentElement.dataset.canderUrl = ${JSON.stringify(START_URL)};
     document.documentElement.style.setProperty("--desktop-titlebar", "${TITLEBAR_PX}px");
     document.documentElement.style.setProperty("--desktop-traffic-clear", "${TRAFFIC_CLEAR_PX}px");
   `);
 }
 
-function createWindow() {
+async function clearWebCache() {
+  try {
+    const ses = session.defaultSession;
+    await ses.clearCache();
+    // Drop service workers / Cache Storage that can pin an old Next bundle.
+    await ses.clearStorageData({
+      storages: ["serviceworkers", "cachestorage"],
+    });
+  } catch (error) {
+    console.warn("[cander-desktop] cache clear failed", error);
+  }
+}
+
+async function createWindow() {
+  await clearWebCache();
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -55,8 +74,10 @@ function createWindow() {
 
   mainWindow.webContents.on("did-finish-load", () => {
     markDesktopShell();
-    // Keep regions opt-in via inline styles in the React shell. Neutralize any
-    // leftover drag overlays from older Electron sessions (insertCSS stacks).
+    console.log(
+      `[cander-desktop] loaded ${START_URL} (shell ${SHELL_BUILD}, titleBarStyle=hidden)`,
+    );
+    // Neutralize leftover drag overlays from older Electron sessions.
     void mainWindow?.webContents.insertCSS(`
       html.cander-desktop {
         --desktop-titlebar: ${TITLEBAR_PX}px !important;
@@ -88,7 +109,13 @@ function createWindow() {
     return { action: "deny" };
   });
 
-  void mainWindow.loadURL(START_URL);
+  if (process.env.CANDER_DEBUG === "1") {
+    mainWindow.webContents.openDevTools({ mode: "detach" });
+  }
+
+  void mainWindow.loadURL(START_URL, {
+    extraHeaders: "Cache-Control: no-cache\nPragma: no-cache\n",
+  });
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -133,6 +160,18 @@ function buildMenu() {
       submenu: [
         { role: "reload" },
         { role: "forceReload" },
+        {
+          label: "Clear Cache and Reload",
+          accelerator: "CmdOrCtrl+Shift+R",
+          click: () => {
+            void (async () => {
+              await clearWebCache();
+              mainWindow?.webContents.reloadIgnoringCache();
+            })();
+          },
+        },
+        { type: "separator" },
+        { role: "toggleDevTools" },
         { type: "separator" },
         { role: "resetZoom" },
         { role: "zoomIn" },
@@ -167,11 +206,11 @@ app.whenReady().then(() => {
     app.dock.setIcon(ICON_PATH);
   }
   buildMenu();
-  createWindow();
+  void createWindow();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      void createWindow();
     }
   });
 });
