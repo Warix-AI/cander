@@ -16,7 +16,7 @@ import {
 import { useApp } from "@/components/app/AppProvider";
 import { ComposerUsageBar } from "@/components/shell/ComposerUsageBar";
 import {
-  LANDING_USAGE_THRESHOLD,
+  USAGE_BAR_THRESHOLD,
 } from "@/lib/hourly-usage";
 import { useHourlyUsagePercent } from "@/lib/use-hourly-usage";
 import {
@@ -206,8 +206,7 @@ export function Composer({
         ? `Change the ${labelFor(selectedId)}…`
         : APP_MESSAGE_PLACEHOLDER);
 
-  const showUsageBar =
-    !compact && (!landing || usagePercent >= LANDING_USAGE_THRESHOLD);
+  const showUsageBar = !compact && usagePercent >= USAGE_BAR_THRESHOLD;
 
   return (
     <div className={cn(showUsageBar && "composer-dock-stack")}>
@@ -222,11 +221,11 @@ export function Composer({
                   centered
                     ? "px-4 sm:px-6"
                     : "pr-3 pl-2 sm:pr-4 sm:pl-2.5",
-                  showUsageBar ? "pb-0" : "pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4",
+                  showUsageBar ? "pb-0" : "pb-[max(1.25rem,calc(env(safe-area-inset-bottom)+0.5rem))] sm:pb-4",
                 )
               : cn(
                   "px-4 sm:px-6",
-                  showUsageBar ? "pb-0" : "pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4",
+                  showUsageBar ? "pb-0" : "pb-[max(1.25rem,calc(env(safe-area-inset-bottom)+0.5rem))] sm:pb-4",
                 )
       }
       onSubmit={(event) => {
@@ -323,7 +322,7 @@ export function Composer({
                     }
                   }}
                   className={cn(
-                    "min-w-0 flex-1 resize-none bg-transparent text-[14px] outline-none placeholder:text-muted-foreground",
+                    "min-w-0 flex-1 resize-none bg-transparent text-[16px] outline-none placeholder:text-muted-foreground sm:text-[14px]",
                     hasText ? "h-7 py-1 leading-5" : "h-7 py-0 leading-7",
                   )}
                 />
@@ -468,7 +467,7 @@ export function Composer({
                   }
                 }}
                 className={cn(
-                  "max-h-[212px] min-h-8 min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent text-[14px] outline-none placeholder:text-muted-foreground",
+                  "max-h-[212px] min-h-8 min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent text-[16px] outline-none placeholder:text-muted-foreground sm:text-[14px]",
                   hasText ? "h-auto py-1.5 leading-5" : "h-8 py-0 leading-8",
                 )}
               />

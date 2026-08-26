@@ -79,17 +79,17 @@ export function ChatColumn() {
     const chips = showLanding && !spaceId ? homeSuggestions().slice(0, 1) : [];
     return (
       <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 touch-pan-y">
           {showLanding ? (
-            <div className="flex min-h-full flex-col justify-end pb-2">
+            <div className="flex min-h-full flex-col justify-end pb-3">
               {chips.length ? (
-                <div className="mb-3 flex flex-wrap gap-2">
+                <div className="mb-4 flex flex-col items-start gap-2.5">
                   {chips.map((item) => (
                     <button
                       key={item.id}
                       type="button"
                       onClick={() => send(item.label)}
-                      className="rounded-full border border-border bg-muted/40 px-3 py-1.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      className="max-w-[90%] text-left text-[14px] leading-snug tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground"
                     >
                       {item.label.replace(/\.$/, "")}
                     </button>

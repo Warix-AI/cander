@@ -116,45 +116,53 @@ html.cander-desktop {
 }
 
 /* Capacitor iOS / Android — fixed app canvas; inner panels scroll only */
-html.cander-mobile {
+html.cander-mobile,
+html.cander-narrow {
   height: 100%;
   height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
-  touch-action: pan-x pan-y;
+  touch-action: manipulation;
 }
 
-html.cander-mobile body {
+html.cander-mobile body,
+html.cander-narrow body {
   position: fixed;
   inset: 0;
   width: 100%;
-  height: 100%;
-  height: 100dvh;
+  height: var(--vvh, 100dvh);
+  max-height: var(--vvh, 100dvh);
   min-height: 0;
   overflow: hidden;
   overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-x pan-y;
+  touch-action: manipulation;
 }
 
 html.cander-mobile input,
 html.cander-mobile textarea,
-html.cander-mobile select {
+html.cander-mobile select,
+html.cander-narrow input,
+html.cander-narrow textarea,
+html.cander-narrow select {
   font-size: 16px; /* avoid iOS focus zoom */
+  touch-action: manipulation;
 }
 
 html.cander-mobile [data-app-shell],
-html.cander-mobile .h-svh {
-  height: 100%;
-  height: 100dvh;
-  max-height: 100dvh;
+html.cander-mobile .h-svh,
+html.cander-narrow [data-app-shell],
+html.cander-narrow .h-svh {
+  height: var(--vvh, 100dvh);
+  max-height: var(--vvh, 100dvh);
 }
 
 /* Narrow phone / tablet shell (browser + Capacitor) — same fixed canvas */
 @media (max-width: 1023px) {
   html {
     -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
   }
 
   html body {
@@ -165,6 +173,7 @@ html.cander-mobile .h-svh {
   html textarea,
   html select {
     font-size: 16px;
+    touch-action: manipulation;
   }
 }
 

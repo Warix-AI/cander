@@ -4,8 +4,11 @@ export type HourlyUsage = {
   percent: number;
 };
 
-/** On new chat, hide the usage bar until this threshold is reached. */
-export const LANDING_USAGE_THRESHOLD = 90;
+/** Hide the composer usage bar until this % of hourly allowance is used. */
+export const USAGE_BAR_THRESHOLD = 90;
+
+/** @deprecated Use USAGE_BAR_THRESHOLD */
+export const LANDING_USAGE_THRESHOLD = USAGE_BAR_THRESHOLD;
 
 function seededPercent(hourKey: number) {
   const n = Math.abs(Math.sin(hourKey * 12.9898) * 43758.5453);

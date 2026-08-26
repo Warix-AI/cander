@@ -28,7 +28,10 @@ import { BrowserLayout } from "@/components/browser/BrowserLayout";
 import { FloatingVoiceDock } from "@/components/shell/VoiceControl";
 import { AppearanceProvider } from "@/components/theme/AppearanceProvider";
 import { isDesktopShell } from "@/lib/desktop-shell";
-import { useMobileShell as useCapacitorMobileShell } from "@/lib/mobile-shell";
+import {
+  lockMobileViewport,
+  useMobileShell as useCapacitorMobileShell,
+} from "@/lib/mobile-shell";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useMobileSwipeGestures } from "@/lib/use-mobile-swipe";
 import { cn } from "@/lib/utils";
@@ -68,6 +71,17 @@ function Root() {
       document.documentElement.classList.remove("cander-desktop");
     };
   }, []);
+
+  // Phone browser (non-Capacitor): same no-zoom / keyboard lock as the app.
+  useEffect(() => {
+    if (!mobile || isDesktopShell()) return;
+    document.documentElement.classList.add("cander-narrow");
+    const unlock = lockMobileViewport();
+    return () => {
+      unlock();
+      document.documentElement.classList.remove("cander-narrow");
+    };
+  }, [mobile]);
 
   useEffect(() => {
     if (!signedIn) return;

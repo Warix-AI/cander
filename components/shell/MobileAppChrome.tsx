@@ -1,26 +1,18 @@
 "use client";
 
-import { Menu, PanelRight, SquarePen } from "lucide-react";
+import { Menu, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { APP_NAME } from "@/lib/app-brand";
-import { navLabel } from "@/lib/use-main-nav-items";
-import { canUseRightPanel } from "@/lib/right-panel";
 import { cn } from "@/lib/utils";
 
 /**
- * ChatGPT-style mobile top bar: menu · title · panel / new chat.
- * Desktop / Electron never mounts this.
+ * ChatGPT-style mobile top bar.
+ * Home (new chat): menu · · new chat
+ * In a space: menu · Left/Right · new chat
  */
 export function MobileAppChrome({ className }: { className?: string }) {
   const {
     view,
     spaceId,
-    thread,
-    drafting,
-    connectorId,
-    projectId,
-    jobId,
-    skillId,
     sidebarOpen,
     setSidebarOpen,
     mobileSurface,
@@ -30,83 +22,84 @@ export function MobileAppChrome({ className }: { className?: string }) {
     newChat,
   } = useApp();
 
-  const title =
-    spaceId && view !== "settings"
-      ? navLabel(spaceId) ?? APP_NAME
-      : view === "settings"
-        ? "Settings"
-        : view === "recents"
-          ? "Recents"
-          : APP_NAME;
-
-  const canPanel = canUseRightPanel({
-    view,
-    thread,
-    drafting,
-    spaceId,
-    connectorId,
-    projectId,
-    jobId,
-    skillId,
-  });
-  // Spaces always have a right surface (dashboard / tools).
-  const panelAvailable = canPanel || view === "space";
+  const inSpace = view === "space" && Boolean(spaceId);
   const showingPanel = panelMode !== "collapsed" && mobileSurface === "panel";
+  const surface: "left" | "right" = showingPanel ? "right" : "left";
 
   const openMenu = () => setSidebarOpen(true);
-  const togglePanel = () => {
-    if (!panelAvailable) {
-      newChat();
-      return;
-    }
-    if (panelMode === "collapsed") {
-      setPanelMode("split");
-      setMobileSurface("panel");
-      return;
-    }
-    setMobileSurface(showingPanel ? "chat" : "panel");
+
+  const setSurface = (next: "left" | "right") => {
+    if (!inSpace) return;
+    if (panelMode === "collapsed") setPanelMode("split");
+    setMobileSurface(next === "right" ? "panel" : "chat");
   };
 
   return (
     <header
       className={cn(
-        "flex h-12 shrink-0 items-center gap-2 px-3 pt-[env(safe-area-inset-top)]",
+        "shrink-0 bg-background",
+        "pt-[env(safe-area-inset-top,0px)]",
         className,
       )}
     >
-      <button
-        type="button"
-        aria-label={sidebarOpen ? "Close menu" : "Open menu"}
-        onClick={openMenu}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
-      >
-        <Menu className="h-4 w-4" strokeWidth={1.8} />
-      </button>
+      <div className="flex h-11 items-center gap-2 px-3">
+        <button
+          type="button"
+          aria-label={sidebarOpen ? "Close menu" : "Open menu"}
+          onClick={openMenu}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
+        >
+          <Menu className="h-4 w-4" strokeWidth={1.8} />
+        </button>
 
-      <div className="min-w-0 flex-1 text-center">
-        <p className="truncate text-[15px] font-medium tracking-[-0.02em]">
-          {title}
-        </p>
-      </div>
+        <div className="flex min-w-0 flex-1 items-center justify-center">
+          {inSpace ? (
+            <div
+              role="tablist"
+              aria-label="Surface"
+              className="inline-flex items-center rounded-full bg-muted/70 p-0.5"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={surface === "left"}
+                onClick={() => setSurface("left")}
+                className={cn(
+                  "rounded-full px-3.5 py-1.5 text-[13px] font-medium tracking-[-0.01em] transition-colors",
+                  surface === "left"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground",
+                )}
+              >
+                Left
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={surface === "right"}
+                onClick={() => setSurface("right")}
+                className={cn(
+                  "rounded-full px-3.5 py-1.5 text-[13px] font-medium tracking-[-0.01em] transition-colors",
+                  surface === "right"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground",
+                )}
+              >
+                Right
+              </button>
+            </div>
+          ) : null}
+        </div>
 
-      <button
-        type="button"
-        aria-label={
-          panelAvailable
-            ? showingPanel
-              ? "Show chat"
-              : "Open panel"
-            : "New chat"
-        }
-        onClick={togglePanel}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
-      >
-        {panelAvailable ? (
-          <PanelRight className="h-4 w-4" strokeWidth={1.8} />
-        ) : (
+        <button
+          type="button"
+          aria-label="New chat"
+          onClick={() => newChat()}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
+        >
           <SquarePen className="h-4 w-4" strokeWidth={1.8} />
-        )}
-      </button>
+        </button>
+      </div>
     </header>
   );
 }
