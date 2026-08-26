@@ -3,30 +3,11 @@
 import { ArrowLeft, ArrowRight, Search } from "lucide-react";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { useApp } from "@/components/app/AppProvider";
-import { DESKTOP_TRAFFIC_CLEAR_PX } from "@/lib/desktop-shell";
 import { cn } from "@/lib/utils";
 
-export function WindowChrome({
-  clearTrafficLights = false,
-  className,
-}: {
-  /** Pad past macOS traffic lights when chrome shares their row. */
-  clearTrafficLights?: boolean;
-  className?: string;
-}) {
+export function WindowChrome() {
   return (
-    <div
-      className={cn(
-        "flex h-11 shrink-0 items-center gap-1 pr-3",
-        clearTrafficLights ? "pl-0" : "px-3",
-        className,
-      )}
-      style={
-        clearTrafficLights
-          ? { paddingLeft: DESKTOP_TRAFFIC_CLEAR_PX }
-          : undefined
-      }
-    >
+    <div className="flex h-11 shrink-0 items-center gap-1 px-3">
       <NavToggle />
       <HistoryButtons />
     </div>
