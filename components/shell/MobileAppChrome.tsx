@@ -42,14 +42,14 @@ export function MobileAppChrome({ className }: { className?: string }) {
         className,
       )}
     >
-      <div className="flex h-11 items-center gap-2 px-3">
+      <div className="flex h-12 items-center gap-2 px-3">
         <button
           type="button"
           aria-label={sidebarOpen ? "Close menu" : "Open menu"}
           onClick={openMenu}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
         >
-          <Menu className="h-4 w-4" strokeWidth={1.8} />
+          <Menu className="h-5 w-5" strokeWidth={1.8} />
         </button>
 
         <div className="flex min-w-0 flex-1 items-center justify-center">
@@ -57,7 +57,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
             <div
               role="tablist"
               aria-label="Surface"
-              className="inline-flex items-center rounded-full bg-muted/70 p-0.5"
+              className="inline-flex items-center rounded-full bg-muted/70 p-1"
             >
               <button
                 type="button"
@@ -65,7 +65,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
                 aria-selected={surface === "left"}
                 onClick={() => setSurface("left")}
                 className={cn(
-                  "rounded-full px-3.5 py-1.5 text-[13px] font-medium tracking-[-0.01em] transition-colors",
+                  "rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
                   surface === "left"
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground",
@@ -79,7 +79,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
                 aria-selected={surface === "right"}
                 onClick={() => setSurface("right")}
                 className={cn(
-                  "rounded-full px-3.5 py-1.5 text-[13px] font-medium tracking-[-0.01em] transition-colors",
+                  "rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
                   surface === "right"
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground",
@@ -95,9 +95,9 @@ export function MobileAppChrome({ className }: { className?: string }) {
           type="button"
           aria-label="New chat"
           onClick={() => newChat()}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
         >
-          <SquarePen className="h-4 w-4" strokeWidth={1.8} />
+          <SquarePen className="h-5 w-5" strokeWidth={1.8} />
         </button>
       </div>
     </header>

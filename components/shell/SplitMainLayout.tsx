@@ -50,15 +50,15 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
   const [panelMounted, setPanelMounted] = useState(false);
   const wasOpen = useRef(false);
 
-  const mobileExclusive = mobile && panelOn;
-  const showChat = !mobileExclusive || mobileSurface === "chat";
-  const showPanel = !mobileExclusive || mobileSurface === "panel";
+  // Mobile: both panes stay full-size and translate — no width expand/collapse.
+  const mobilePager = mobile && panelOn && canPanel;
+  const showChat = !mobilePager || mobileSurface === "chat";
+  const showPanel = !mobilePager || mobileSurface === "panel";
 
   useEffect(() => {
-    if (mobileExclusive) {
-      setSlideWidth(showPanel ? 100 : 0);
-      setPanelMounted(showPanel);
-      wasOpen.current = panelOn;
+    if (mobilePager) {
+      setPanelMounted(true);
+      wasOpen.current = true;
       return;
     }
     if (immersive) {
@@ -84,20 +84,48 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
       return () => window.cancelAnimationFrame(id);
     }
     setSlideWidth(panelPct);
-  }, [panelOn, immersive, panelPct, mobileExclusive, showPanel]);
+  }, [panelOn, immersive, panelPct, mobilePager]);
 
   const showPanelColumn = canPanel && (panelMounted || panelOn);
-  const showPanelBody = panelOn || slideWidth > 0;
+  const showPanelBody = panelOn || slideWidth > 0 || mobilePager;
   const showResize =
     showPanelColumn && slideWidth > 0 && !mobile && !immersive && panelOn;
   const livePanelWidth =
-    dragging && panelOn && !immersive && !mobileExclusive ? panelPct : slideWidth;
-  const animateLayout = !dragging && !mobileExclusive && !immersive;
+    dragging && panelOn && !immersive && !mobilePager ? panelPct : slideWidth;
+  const animateLayout = !dragging && !mobilePager && !immersive;
 
   const onPanelWidthTransitionEnd = (event: TransitionEvent<HTMLDivElement>) => {
     if (event.propertyName !== "width") return;
     if (!panelOn && slideWidth === 0) setPanelMounted(false);
   };
+
+  if (mobilePager) {
+    const onPanel = mobileSurface === "panel";
+    return (
+      <div
+        id="courier-main"
+        className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
+      >
+        <div
+          className="flex h-full w-[200%] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
+          style={{ transform: `translate3d(${onPanel ? "-50%" : "0"}, 0, 0)` }}
+        >
+          <div
+            className="flex h-full w-1/2 min-w-0 flex-col"
+            aria-hidden={onPanel}
+          >
+            {children}
+          </div>
+          <div
+            className="flex h-full w-1/2 min-w-0 flex-col overflow-hidden"
+            aria-hidden={!onPanel}
+          >
+            <ContextPanel />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div id="courier-main" className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -105,23 +133,15 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col",
-          mobileExclusive
-            ? showChat
-              ? "min-w-0 flex-1"
-              : "pointer-events-none w-0 overflow-hidden"
-            : immersive
-              ? "w-[22.5rem] shrink-0"
-              : "min-w-0 flex-1",
-          !mobileExclusive &&
-            !immersive &&
+          immersive ? "w-[22.5rem] shrink-0" : "min-w-0 flex-1",
+          !immersive &&
             showPanelColumn &&
             animateLayout &&
             "transition-[flex-basis] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
         )}
-        aria-hidden={mobileExclusive && !showChat}
       >
         {hideTopRail || mobile ? null : <TopRail />}
-        {showChat || !mobileExclusive ? children : null}
+        {children}
       </div>
       {showPanelColumn ? (
         <>
@@ -130,34 +150,20 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
             onTransitionEnd={onPanelWidthTransitionEnd}
             className={cn(
               "flex min-h-0 min-w-0 flex-col overflow-hidden",
-              mobileExclusive
-                ? showPanel
-                  ? "min-w-0 flex-1"
-                  : "pointer-events-none w-0 overflow-hidden"
-                : immersive
-                  ? "flex-1"
-                  : "shrink-0",
+              immersive ? "flex-1" : "shrink-0",
               !immersive &&
-                !mobileExclusive &&
                 animateLayout &&
                 "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
               livePanelWidth > 0 &&
                 showChat &&
-                !mobileExclusive &&
                 !floating &&
                 "border-l border-border",
               livePanelWidth === 0 && !panelOn && "pointer-events-none",
             )}
-            style={
-              immersive || mobileExclusive
-                ? undefined
-                : { width: `${livePanelWidth}%` }
-            }
-            aria-hidden={mobileExclusive && !showPanel}
+            style={immersive ? undefined : { width: `${livePanelWidth}%` }}
+            aria-hidden={!showPanel}
           >
-            {showPanelBody && (showPanel || !mobileExclusive) ? (
-              <ContextPanel />
-            ) : null}
+            {showPanelBody ? <ContextPanel /> : null}
           </div>
         </>
       ) : null}

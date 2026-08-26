@@ -131,8 +131,9 @@ html.cander-narrow body {
   position: fixed;
   inset: 0;
   width: 100%;
-  height: var(--vvh, 100dvh);
-  max-height: var(--vvh, 100dvh);
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
   min-height: 0;
   overflow: hidden;
   overscroll-behavior: none;
@@ -154,8 +155,30 @@ html.cander-mobile [data-app-shell],
 html.cander-mobile .h-svh,
 html.cander-narrow [data-app-shell],
 html.cander-narrow .h-svh {
-  height: var(--vvh, 100dvh);
-  max-height: var(--vvh, 100dvh);
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+/* No composer / landing morph animations on phone */
+html.cander-mobile .composer-dock,
+html.cander-narrow .composer-dock,
+html.cander-mobile .landing-mark,
+html.cander-narrow .landing-mark,
+html.cander-mobile .landing-suggestions,
+html.cander-narrow .landing-suggestions {
+  view-transition-name: none !important;
+}
+
+/* Composer docks above the soft keyboard; drop home-indicator pad while typing */
+html.cander-mobile[data-keyboard="1"] .composer-keyboard-pad,
+html.cander-narrow[data-keyboard="1"] .composer-keyboard-pad {
+  padding-bottom: 0 !important;
+}
+
+html.cander-mobile[data-keyboard="1"] [data-app-shell],
+html.cander-narrow[data-keyboard="1"] [data-app-shell] {
+  padding-bottom: var(--keyboard-inset, 0px);
 }
 
 /* Narrow phone / tablet shell (browser + Capacitor) — same fixed canvas */

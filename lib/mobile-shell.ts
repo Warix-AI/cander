@@ -28,18 +28,26 @@ export function getMobilePlatform(): "ios" | "android" | "web" {
 }
 
 /**
- * Lock the document against pinch-zoom / rubber-band scroll when the
- * soft keyboard opens. Keeps the composer docked above the keyboard.
+ * Keep the app canvas full-height. Track keyboard inset so the composer
+ * can sit just above the keyboard — no shrinking the whole screen.
  */
 export function lockMobileViewport() {
   const root = document.documentElement;
+
   const sync = () => {
     const vv = window.visualViewport;
-    const height = vv?.height ?? window.innerHeight;
-    const offset = vv?.offsetTop ?? 0;
-    root.style.setProperty("--vvh", `${height}px`);
-    root.style.setProperty("--vv-offset", `${offset}px`);
-    // Kill iOS scroll-into-view jitter when focusing inputs.
+    if (!vv) {
+      root.style.setProperty("--keyboard-inset", "0px");
+      root.dataset.keyboard = "0";
+      return;
+    }
+    // Visible gap between layout bottom and the visual viewport bottom.
+    const keyboard = Math.max(
+      0,
+      window.innerHeight - vv.height - vv.offsetTop,
+    );
+    root.style.setProperty("--keyboard-inset", `${Math.round(keyboard)}px`);
+    root.dataset.keyboard = keyboard > 40 ? "1" : "0";
     if (window.scrollY !== 0 || window.scrollX !== 0) {
       window.scrollTo(0, 0);
     }
@@ -50,24 +58,31 @@ export function lockMobileViewport() {
   vv?.addEventListener("resize", sync);
   vv?.addEventListener("scroll", sync);
   window.addEventListener("focusin", sync);
+  window.addEventListener("focusout", sync);
 
   const blockZoom = (event: Event) => {
     event.preventDefault();
   };
-  // Safari gesture events (non-standard)
-  document.addEventListener("gesturestart", blockZoom, { passive: false } as AddEventListenerOptions);
-  document.addEventListener("gesturechange", blockZoom, { passive: false } as AddEventListenerOptions);
-  document.addEventListener("gestureend", blockZoom, { passive: false } as AddEventListenerOptions);
+  document.addEventListener("gesturestart", blockZoom, {
+    passive: false,
+  } as AddEventListenerOptions);
+  document.addEventListener("gesturechange", blockZoom, {
+    passive: false,
+  } as AddEventListenerOptions);
+  document.addEventListener("gestureend", blockZoom, {
+    passive: false,
+  } as AddEventListenerOptions);
 
   return () => {
     vv?.removeEventListener("resize", sync);
     vv?.removeEventListener("scroll", sync);
     window.removeEventListener("focusin", sync);
+    window.removeEventListener("focusout", sync);
     document.removeEventListener("gesturestart", blockZoom);
     document.removeEventListener("gesturechange", blockZoom);
     document.removeEventListener("gestureend", blockZoom);
-    root.style.removeProperty("--vvh");
-    root.style.removeProperty("--vv-offset");
+    root.style.removeProperty("--keyboard-inset");
+    delete root.dataset.keyboard;
   };
 }
 

@@ -12,9 +12,8 @@ import { useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 /**
- * Space stays mounted. On new chat it shrinks from full width to the right
- * panel while chat grows in from the left — one continuous slide.
- * On mobile, chat and space are exclusive full-screen surfaces.
+ * Space stays mounted. On desktop, chat grows while space shrinks to a panel.
+ * On mobile, chat and space are full-size pages that translate left/right.
  */
 export function SpaceChatLayout() {
   const {
@@ -41,11 +40,7 @@ export function SpaceChatLayout() {
   const wasOpen = useRef(chatOpen);
 
   useEffect(() => {
-    if (mobile && chatOpen) {
-      setSpacePct(mobileSurface === "panel" ? 100 : 0);
-      wasOpen.current = true;
-      return;
-    }
+    if (mobile) return;
     if (immersive) {
       setSpacePct(chatOpen ? 100 : 100);
       wasOpen.current = chatOpen;
@@ -57,7 +52,6 @@ export function SpaceChatLayout() {
       return;
     }
     if (!wasOpen.current) {
-      // Start from full width, then slide to panel size on the next frame.
       setSpacePct(100);
       const id = window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
@@ -68,7 +62,40 @@ export function SpaceChatLayout() {
       return () => window.cancelAnimationFrame(id);
     }
     setSpacePct(panelPct);
-  }, [chatOpen, immersive, panelPct, mobile, mobileSurface]);
+  }, [chatOpen, immersive, panelPct, mobile]);
+
+  // Mobile pager: both surfaces always full width, slide with translate.
+  if (mobile) {
+    const onPanel = !chatOpen || mobileSurface === "panel";
+    return (
+      <div
+        id="courier-main"
+        className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
+      >
+        <div
+          className="flex h-full w-[200%] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
+          style={{ transform: `translate3d(${onPanel ? "-50%" : "0"}, 0, 0)` }}
+        >
+          <div
+            className="flex h-full w-1/2 min-w-0 flex-col overflow-hidden bg-background"
+            aria-hidden={onPanel}
+          >
+            {chatArmed ? <ChatColumn /> : null}
+          </div>
+          <div
+            className="flex h-full w-1/2 min-w-0 flex-col overflow-hidden bg-background"
+            aria-hidden={!onPanel}
+          >
+            <SpaceRenderModeProvider mode="page">
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+                <SpaceDashboard />
+              </div>
+            </SpaceRenderModeProvider>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const chatPct = chatOpen ? Math.max(0, 100 - spacePct) : 0;
   const liveSpacePct =
@@ -78,16 +105,9 @@ export function SpaceChatLayout() {
       ? Math.max(0, 100 - panelPct)
       : chatPct;
   const animateLayout = !dragging && !immersive;
-  // Don't mount the composer until the pane has real width — otherwise the
-  // textarea measures at ~0px and grows to max height from a wrapped placeholder.
   const chatReady = liveChatPct > 8;
-  const showResize = chatOpen && !mobile;
-  const spaceMode =
-    mobile && chatOpen && mobileSurface === "panel"
-      ? "page"
-      : chatOpen
-        ? "panel"
-        : "page";
+  const showResize = chatOpen;
+  const spaceMode = chatOpen ? "panel" : "page";
 
   return (
     <div id="courier-main" className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -103,7 +123,7 @@ export function SpaceChatLayout() {
       >
         {chatArmed && chatReady ? (
           <>
-            {mobile ? null : <TopRail />}
+            <TopRail />
             <ChatColumn />
           </>
         ) : null}

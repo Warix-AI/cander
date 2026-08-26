@@ -6,9 +6,12 @@ import Capacitor
 class CanderBridgeViewController: CAPBridgeViewController {
     private static let mobileShellCSS = """
     html.cander-mobile{height:100%;height:100dvh;overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%;touch-action:manipulation}
-    html.cander-mobile body{position:fixed;inset:0;width:100%;height:var(--vvh,100dvh);max-height:var(--vvh,100dvh);min-height:0;overflow:hidden;overscroll-behavior:none;touch-action:manipulation}
+    html.cander-mobile body{position:fixed;inset:0;width:100%;height:100%;height:100dvh;max-height:100dvh;min-height:0;overflow:hidden;overscroll-behavior:none;touch-action:manipulation}
     html.cander-mobile input,html.cander-mobile textarea,html.cander-mobile select{font-size:16px;touch-action:manipulation}
-    html.cander-mobile [data-app-shell],html.cander-mobile .h-svh{height:var(--vvh,100dvh);max-height:var(--vvh,100dvh)}
+    html.cander-mobile [data-app-shell],html.cander-mobile .h-svh{height:100%;height:100dvh;max-height:100dvh}
+    html.cander-mobile .composer-dock,html.cander-mobile .landing-mark,html.cander-mobile .landing-suggestions{view-transition-name:none!important}
+    html.cander-mobile[data-keyboard="1"] .composer-keyboard-pad{padding-bottom:0!important}
+    html.cander-mobile[data-keyboard="1"] [data-app-shell]{padding-bottom:var(--keyboard-inset,0px)}
     """
 
     private static let mobileShellScript = """
