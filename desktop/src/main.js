@@ -6,8 +6,12 @@ const DEFAULT_URL = "https://cander.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Clearance under traffic lights for left chrome only. */
 const TITLEBAR_PX = 47;
-/** Approx workspace rail + left menu width for the drag strip. */
-const LEFT_DRAG_WIDTH_PX = 320;
+/**
+ * Drag only over the traffic-light cluster. A wider strip (e.g. full left chrome)
+ * sits above the menu header and steals clicks from nav toggle / search.
+ * trafficLightPosition.x (16) + ~3×14px buttons + gaps ≈ 78px.
+ */
+const LEFT_DRAG_WIDTH_PX = 78;
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
