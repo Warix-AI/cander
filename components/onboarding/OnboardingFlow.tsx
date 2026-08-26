@@ -286,19 +286,18 @@ function OnboardingShell() {
 
   return (
     <AppearanceScope
-      className="flex h-svh w-full flex-col overflow-hidden bg-background pt-[var(--desktop-titlebar)] text-foreground lg:flex-row"
+      className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground lg:flex-row"
     >
-      {/* Left: auth / onboarding — 50% on desktop */}
-      <div className="relative flex min-h-0 w-full flex-1 flex-col lg:w-1/2 lg:flex-none">
-        <div className="flex items-center justify-between gap-3 px-6 pt-6 sm:px-10">
-          <div className="flex items-center gap-2.5">
-            <CourierMark className="h-7 w-7" />
-          </div>
+      {/* Left: auth / onboarding — 50% on desktop; clears traffic lights on Mac. */}
+      <div className="relative flex min-h-0 w-full flex-1 flex-col pt-[var(--desktop-titlebar)] lg:w-1/2 lg:flex-none">
+        <div className="flex items-center justify-end gap-3 px-6 pt-6 sm:px-10">
           {createProgress ? (
             <p className="font-mono text-[11px] tracking-[0.06em] text-muted-foreground uppercase">
               {createProgress}
             </p>
-          ) : null}
+          ) : (
+            <span className="h-7" aria-hidden />
+          )}
         </div>
 
         <div
@@ -456,14 +455,15 @@ function OnboardingShell() {
         </div>
       </div>
 
-      {/* Right: floating inset panel — wash or live preview */}
-      <div className="hidden min-h-0 w-1/2 p-[15px] lg:block">
+      {/* Right: panel flush to the top edge; logo top-right */}
+      <div className="hidden min-h-0 w-1/2 pr-[15px] pb-[15px] pl-[15px] lg:block">
         <div
           className={cn(
             "relative h-full min-h-0 overflow-hidden rounded-[18px] border border-border",
           )}
           aria-hidden={!showAppearancePreview}
         >
+          <CourierMark className="absolute top-6 right-6 z-20 h-7 w-7" />
           {showAppearancePreview ? (
             <div className="absolute inset-0 bg-gradient-to-br from-black/50 via-black/30 to-black/55">
               <div className="absolute inset-0 panel-wash-price opacity-60" />

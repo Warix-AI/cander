@@ -8,7 +8,6 @@ import { TopRail } from "@/components/shell/TopRail";
 import { SpaceDashboard } from "@/components/shell/SpaceDashboard";
 import { MobileArmedPanelChrome } from "@/components/shell/MobileSurfaceChrome";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
-import { InviteBanner } from "@/components/overlays/InviteWall";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
@@ -107,7 +106,6 @@ export function SpaceChatLayout() {
         {chatArmed && chatReady ? (
           <>
             <TopRail />
-            <InviteBanner />
             <ChatColumn />
           </>
         ) : null}
@@ -131,7 +129,6 @@ export function SpaceChatLayout() {
             <MobileArmedPanelChrome onClose={closeSpaceChat} />
           ) : null}
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-            {chatArmed && chatReady ? null : <InviteBanner />}
             <SpaceDashboard />
           </div>
         </SpaceRenderModeProvider>

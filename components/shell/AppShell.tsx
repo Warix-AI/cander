@@ -15,7 +15,7 @@ import { SearchModal } from "@/components/overlays/SearchModal";
 import { ConfigureModal } from "@/components/overlays/ConfigureModal";
 import { SpaceSettingsModal } from "@/components/overlays/SpaceSettingsModal";
 import { WorkspaceModal } from "@/components/overlays/WorkspaceModal";
-import { InviteBanner, InviteWall } from "@/components/overlays/InviteWall";
+import { InviteWall } from "@/components/overlays/InviteWall";
 import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import {
   getAuthServerSnapshot,
@@ -132,7 +132,6 @@ function CourierMain() {
     return (
       <SplitMainLayout>
         <div className="flex min-h-0 flex-1 flex-col">
-          <InviteBanner />
           <SettingsView />
         </div>
       </SplitMainLayout>
@@ -153,7 +152,6 @@ function CourierMain() {
       return (
         <SplitMainLayout>
           <div className="flex min-h-0 flex-1 flex-col">
-            <InviteBanner />
             <ChatColumn />
           </div>
         </SplitMainLayout>
@@ -166,7 +164,6 @@ function CourierMain() {
     return (
       <SplitMainLayout>
         <div className="flex min-h-0 flex-1 flex-col">
-          <InviteBanner />
           <RecentsView />
         </div>
       </SplitMainLayout>
@@ -186,7 +183,6 @@ function CourierMain() {
   return (
     <SplitMainLayout>
       <div className="flex min-h-0 flex-1 flex-col">
-        <InviteBanner />
         <ChatColumn />
       </div>
     </SplitMainLayout>

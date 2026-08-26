@@ -62,27 +62,6 @@ export function InviteWall() {
 }
 
 export function InviteBanner() {
-  const { entitlements, openOverlay, openSettings } = useApp();
-  if (!entitlements.showInviteWall) return null;
-
-  return (
-    <div className="border-b border-border bg-card px-4 py-2.5 text-[13px] leading-relaxed text-muted-foreground">
-      Acme invited you. A Max seat is required to use shared workspaces.{" "}
-      <button
-        type="button"
-        onClick={() => openOverlay("invite-wall")}
-        className="text-foreground underline-offset-2 hover:underline"
-      >
-        See why
-      </button>
-      {" · "}
-      <button
-        type="button"
-        onClick={() => openSettings("plans")}
-        className="text-foreground underline-offset-2 hover:underline"
-      >
-        Plans
-      </button>
-    </div>
-  );
+  // Invite strip temporarily retired from the shell chrome.
+  return null;
 }
