@@ -27,7 +27,13 @@ function PinLeading({
   );
 }
 
-export function PinsSheet({ onSelect }: { onSelect: () => void }) {
+export function PinsSheet({
+  onSelect,
+  hideHeading = false,
+}: {
+  onSelect: () => void;
+  hideHeading?: boolean;
+}) {
   const {
     threadId,
     projectId,
@@ -57,9 +63,11 @@ export function PinsSheet({ onSelect }: { onSelect: () => void }) {
   return (
     <div className="py-1">
       <section className="px-2 pb-2">
-        <p className="px-3 pb-1 pt-2 text-[12px] font-medium text-muted-foreground">
-          Pinned
-        </p>
+        {hideHeading ? null : (
+          <p className="px-3 pb-1 pt-2 text-[12px] font-medium text-muted-foreground">
+            Pinned
+          </p>
+        )}
         {pinnedItems.length ? (
           pinnedItems.map((item) => (
             <button

@@ -1,12 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { LayoutGrid, List, Pin, Settings } from "lucide-react";
+import { Check, ChevronDown, LayoutGrid, List, Pin, Settings } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { SpaceBanner } from "@/components/spaces/SpaceBanner";
 import { useSpaceRenderMode } from "@/components/spaces/SpaceRenderMode";
+import { Dropdown } from "@/components/ui/Controls";
 import { useDesktopShell } from "@/lib/desktop-shell";
+import { useMobileShell } from "@/lib/use-media-query";
 import type { SpaceId, SpaceLayout } from "@/lib/types";
 import type { BannerKey } from "@/lib/space-banners";
 import { cn } from "@/lib/utils";
@@ -24,6 +26,72 @@ export function LayoutToggle({
   onChange: (id: SpaceLayout) => void;
   compact?: boolean;
 }) {
+  const mobile = useMobileShell();
+
+  if (mobile) {
+    const Current = layout === "cards" ? LayoutGrid : List;
+    return (
+      <Dropdown
+        align="end"
+        matchTrigger={false}
+        menuClassName="min-w-[10.5rem]"
+        trigger={({ open, toggle }) => (
+          <button
+            type="button"
+            aria-label={layout === "cards" ? "Card view" : "List view"}
+            aria-expanded={open}
+            onClick={toggle}
+            className={cn(
+              "inline-flex items-center justify-center rounded-[10px] transition-colors duration-200",
+              compact ? "h-8 w-8" : "h-9 w-9",
+              FLOAT_CONTROL_SHELL,
+              "text-foreground",
+            )}
+          >
+            <Current className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </button>
+        )}
+      >
+        {(close) => (
+          <>
+            {(
+              [
+                { id: "cards" as const, label: "Cards", Icon: LayoutGrid },
+                { id: "list" as const, label: "List", Icon: List },
+              ] as const
+            ).map((item) => {
+              const active = layout === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    onChange(item.id);
+                    close();
+                  }}
+                  className={cn(
+                    "menu-row-hover flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-[13px] transition-colors",
+                    active && "font-medium",
+                  )}
+                >
+                  <item.Icon
+                    className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                    strokeWidth={1.6}
+                  />
+                  <span className="min-w-0 flex-1">{item.label}</span>
+                  {active ? (
+                    <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+                  ) : null}
+                </button>
+              );
+            })}
+          </>
+        )}
+      </Dropdown>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -251,6 +319,69 @@ export function ScopeToggle({
   compact?: boolean;
   wrap?: boolean;
 }) {
+  const mobile = useMobileShell();
+  const active = options.find((item) => item.id === value) ?? options[0];
+
+  if (mobile) {
+    return (
+      <Dropdown
+        align="start"
+        matchTrigger={false}
+        menuClassName="min-w-[11rem]"
+        trigger={({ open, toggle }) => (
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={toggle}
+            className={cn(
+              "inline-flex max-w-full items-center gap-1.5 rounded-[10px] px-3 font-medium tracking-[-0.01em] transition-colors duration-200",
+              compact ? "h-8 text-[12px]" : "h-9 text-[13px]",
+              FLOAT_CONTROL_SHELL,
+              "text-foreground",
+            )}
+          >
+            <span className="truncate">{active?.label ?? "Filter"}</span>
+            <ChevronDown
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
+                open && "rotate-180",
+              )}
+              strokeWidth={1.8}
+            />
+          </button>
+        )}
+      >
+        {(close) => (
+          <>
+            {options.map((item) => {
+              const selected = value === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    onChange(item.id);
+                    close();
+                  }}
+                  className={cn(
+                    "menu-row-hover flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-[13px] transition-colors",
+                    selected && "font-medium",
+                  )}
+                >
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {selected ? (
+                    <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+                  ) : null}
+                </button>
+              );
+            })}
+          </>
+        )}
+      </Dropdown>
+    );
+  }
+
   return (
     <div
       className={cn(

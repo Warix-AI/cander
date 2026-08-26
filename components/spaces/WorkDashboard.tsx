@@ -124,7 +124,7 @@ export function WorkDashboard() {
         </>
       }
     >
-      <div className="flex flex-col gap-3 @min-[420px]:flex-row @min-[420px]:flex-wrap @min-[420px]:items-center @min-[420px]:justify-between">
+      <div className="flex flex-row flex-wrap items-center justify-between gap-2 @min-[420px]:gap-3">
         <ScopeToggle
           wrap
           value={scope}
