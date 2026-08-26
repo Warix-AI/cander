@@ -88,16 +88,11 @@ export function LeftNavToggleDock({
   if (desktop && !floating) {
     return (
       <div
+        data-desktop-no-drag=""
         className="pointer-events-none fixed top-0 z-50 hidden h-[var(--desktop-titlebar,52px)] items-center lg:flex"
         style={{ left: DESKTOP_TRAFFIC_CLEAR_PX }}
       >
         <NavToggle docked className="pointer-events-auto" />
-        {/* Small drag handle so the window stays movable when the menu is closed. */}
-        <div
-          data-desktop-drag=""
-          className="pointer-events-auto ml-1 h-full w-16"
-          aria-hidden
-        />
       </div>
     );
   }

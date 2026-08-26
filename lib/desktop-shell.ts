@@ -25,7 +25,6 @@ export const DESKTOP_TITLEBAR_PX = 52;
 
 /**
  * Left inset so classic Mac header controls sit just past the traffic lights.
- * trafficLightPosition.x (16) + ~3×14px lights + gaps ≈ 68–70.
- * Keep tight — interactive controls use `-webkit-app-region: no-drag`.
+ * trafficLightPosition.x (16) + lights + a small gap (~80px).
  */
-export const DESKTOP_TRAFFIC_CLEAR_PX = 70;
+export const DESKTOP_TRAFFIC_CLEAR_PX = 80;

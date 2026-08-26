@@ -112,7 +112,13 @@
 /* Electron / macOS shell — classic chrome shares the traffic-light row */
 html.cander-desktop {
   --desktop-titlebar: 52px;
-  --desktop-traffic-clear: 70px;
+  --desktop-traffic-clear: 80px;
+}
+
+/* Header controls must never be in a drag region (whole row goes dead). */
+html.cander-desktop [data-desktop-no-drag],
+html.cander-desktop [data-desktop-no-drag] * {
+  -webkit-app-region: no-drag;
 }
 
 @theme inline {

@@ -8,7 +8,7 @@ const ICON_PATH = path.join(__dirname, "../assets/icon.png");
 /** Classic Mac titlebar / chrome row height (traffic-light axis). */
 const TITLEBAR_PX = 52;
 /** Left inset so header controls sit just past the traffic lights. */
-const TRAFFIC_CLEAR_PX = 70;
+const TRAFFIC_CLEAR_PX = 80;
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
@@ -52,24 +52,31 @@ function createWindow() {
 
   mainWindow.webContents.on("did-finish-load", () => {
     markDesktopShell();
-    // No full-width drag overlay — it steals clicks near the traffic lights.
-    // WindowChrome / dock use data-desktop-drag; buttons use data-desktop-no-drag.
+    // Kill any prior drag overlays (insertCSS accumulates across reloads) and
+    // keep the chrome row fully clickable. Only explicit empty handles drag.
     void mainWindow?.webContents.insertCSS(`
       html.cander-desktop {
         --desktop-titlebar: ${TITLEBAR_PX}px !important;
         --desktop-traffic-clear: ${TRAFFIC_CLEAR_PX}px !important;
       }
+      /* Neutralize stale full-width titlebar drag layers from older shells. */
+      html.cander-desktop::before,
+      html.cander-desktop::after {
+        content: none !important;
+        display: none !important;
+        -webkit-app-region: no-drag !important;
+        pointer-events: none !important;
+      }
+      html.cander-desktop,
       html.cander-desktop body {
-        -webkit-app-region: no-drag;
+        -webkit-app-region: no-drag !important;
+      }
+      html.cander-desktop [data-desktop-no-drag],
+      html.cander-desktop [data-desktop-no-drag] * {
+        -webkit-app-region: no-drag !important;
       }
       html.cander-desktop [data-desktop-drag] {
         -webkit-app-region: drag;
-      }
-      html.cander-desktop [data-desktop-no-drag],
-      html.cander-desktop [data-desktop-drag] button,
-      html.cander-desktop [data-desktop-drag] a,
-      html.cander-desktop [data-desktop-drag] input {
-        -webkit-app-region: no-drag;
       }
     `);
   });

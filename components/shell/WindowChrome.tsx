@@ -3,7 +3,6 @@
 import { ArrowLeft, ArrowRight, Search } from "lucide-react";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { useApp } from "@/components/app/AppProvider";
-import { DESKTOP_TRAFFIC_CLEAR_PX } from "@/lib/desktop-shell";
 import { cn } from "@/lib/utils";
 
 export function WindowChrome({
@@ -15,20 +14,17 @@ export function WindowChrome({
   className?: string;
 }) {
   return (
+    // Never mark this row as a drag region — drag parents steal clicks even when
+    // children set no-drag (and stale Electron overlays compound the problem).
     <div
-      data-desktop-drag={clearTrafficLights ? "" : undefined}
+      data-desktop-no-drag=""
       className={cn(
         "flex shrink-0 items-center gap-1 pr-3",
         clearTrafficLights
-          ? "h-[var(--desktop-titlebar,52px)] pl-0"
+          ? "h-[var(--desktop-titlebar,52px)] pl-[var(--desktop-traffic-clear,80px)]"
           : "h-11 px-3",
         className,
       )}
-      style={
-        clearTrafficLights
-          ? { paddingLeft: DESKTOP_TRAFFIC_CLEAR_PX }
-          : undefined
-      }
     >
       <NavToggle />
       <HistoryButtons />
@@ -44,7 +40,6 @@ function HistoryButtons() {
       <button
         type="button"
         aria-label="Search"
-        data-desktop-no-drag=""
         onClick={() => openOverlay("search")}
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/75 transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
       >
@@ -54,7 +49,6 @@ function HistoryButtons() {
         <button
           type="button"
           aria-label="Back"
-          data-desktop-no-drag=""
           disabled={!canGoBack}
           onClick={goBack}
           className={cn(
@@ -69,7 +63,6 @@ function HistoryButtons() {
         <button
           type="button"
           aria-label="Forward"
-          data-desktop-no-drag=""
           disabled={!canGoForward}
           onClick={goForward}
           className={cn(
