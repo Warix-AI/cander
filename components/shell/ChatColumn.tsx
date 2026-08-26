@@ -94,7 +94,10 @@ export function ChatColumn() {
         data-mobile-chat=""
         className="relative box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
       >
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 touch-pan-y">
+        <div
+          data-mobile-scroll=""
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 touch-pan-y"
+        >
           {showSpaceNewPrompt ? (
             <MobileEmptyPrompt spaceId={spaceId} />
           ) : hasChatTurns || thread ? (

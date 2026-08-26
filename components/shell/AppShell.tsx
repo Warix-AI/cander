@@ -149,9 +149,14 @@ function Root() {
           <Sidebar />
           {mobile ? (
             <MobileMenuScaffold>
-              <MobileAppChrome />
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                <CourierMain />
+              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <MobileAppChrome className="absolute inset-x-0 top-0 z-30" />
+                <div
+                  data-mobile-main=""
+                  className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                >
+                  <CourierMain />
+                </div>
               </div>
             </MobileMenuScaffold>
           ) : (

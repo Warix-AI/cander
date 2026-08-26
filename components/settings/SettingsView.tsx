@@ -12,6 +12,10 @@ import {
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { AccountAvatar } from "@/components/shell/AccountAvatar";
+import {
+  MobileSlideStack,
+  useMobileStackDirection,
+} from "@/components/shell/mobile/MobileSlideStack";
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { PlansSettings } from "@/components/settings/PlansSettings";
 import { DashBtn } from "@/components/spaces/ItemSet";
@@ -114,41 +118,95 @@ export function SettingsView() {
     else newChat();
   };
 
+  const stackKey = settingsMobileHub
+    ? "hub"
+    : settingsTab === "workspaces" && settingsWorkspaceId
+      ? `workspaces/${settingsWorkspaceId}`
+      : settingsTab;
+  const stackDepth = settingsMobileHub
+    ? 0
+    : settingsTab === "workspaces" && settingsWorkspaceId
+      ? 2
+      : 1;
+  const stackDirection = useMobileStackDirection(stackDepth);
+
+  const settingsBody = settingsMobileHub ? (
+    <div
+      data-mobile-scroll=""
+      className="min-h-0 flex-1 overflow-y-auto bg-muted/30 px-4 pb-5 pt-2 lg:hidden"
+    >
+      <SettingsGroup dividerInset="icon">
+        {settingsNav.map((tab) => {
+          const Icon = settingsIcons[tab.id];
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setSettingsTab(tab.id);
+                setSettingsMobileHub(false);
+              }}
+              className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-muted/50"
+            >
+              <Icon
+                className="h-5 w-5 shrink-0 text-muted-foreground"
+                strokeWidth={1.9}
+              />
+              <span className="min-w-0 flex-1 text-[15px] font-medium tracking-[-0.01em]">
+                {tab.label}
+              </span>
+              <ChevronRight
+                className="h-4 w-4 shrink-0 text-muted-foreground/70"
+                strokeWidth={1.8}
+              />
+            </button>
+          );
+        })}
+      </SettingsGroup>
+    </div>
+  ) : (
+    <div data-mobile-scroll="" className="min-h-0 flex-1 overflow-y-auto">
+      {settingsTab === "organization" ? <OrganizationSettings /> : null}
+
+      {settingsTab === "workspaces" ? (
+        <WorkspacesSettings
+          selectedId={settingsWorkspaceId}
+          onSelect={setSettingsWorkspaceId}
+        />
+      ) : null}
+
+      {settingsTab === "plans" ? <PlansSettings /> : null}
+
+      {settingsTab === "general" ? (
+        <GeneralSettings
+          onLogout={() => {
+            persistActor("m1");
+            persistSignedOut();
+            leave();
+          }}
+          onRestartOnboarding={() => {
+            persistActor("m1");
+            persistSignedOut();
+          }}
+        />
+      ) : null}
+
+      {settingsTab === "appearance" ? <AppearanceSettings /> : null}
+    </div>
+  );
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      {mobile && settingsMobileHub ? (
-        <div className="min-h-0 flex-1 overflow-y-auto bg-muted/30 px-4 pb-5 pt-2 lg:hidden">
-          <SettingsGroup dividerInset="icon">
-              {settingsNav.map((tab) => {
-                const Icon = settingsIcons[tab.id];
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => {
-                      setSettingsTab(tab.id);
-                      setSettingsMobileHub(false);
-                    }}
-                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-muted/50"
-                  >
-                    <Icon
-                      className="h-5 w-5 shrink-0 text-muted-foreground"
-                      strokeWidth={1.9}
-                    />
-                    <span className="min-w-0 flex-1 text-[15px] font-medium tracking-[-0.01em]">
-                      {tab.label}
-                    </span>
-                    <ChevronRight
-                      className="h-4 w-4 shrink-0 text-muted-foreground/70"
-                      strokeWidth={1.8}
-                    />
-                  </button>
-                );
-              })}
-          </SettingsGroup>
-        </div>
+      {mobile ? (
+        <MobileSlideStack
+          activeKey={stackKey}
+          direction={stackDirection}
+          frameClassName="bg-muted/30"
+        >
+          {settingsBody}
+        </MobileSlideStack>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <>
           {settingsTab === "organization" ? <OrganizationSettings /> : null}
 
           {settingsTab === "workspaces" ? (
@@ -175,7 +233,7 @@ export function SettingsView() {
           ) : null}
 
           {settingsTab === "appearance" ? <AppearanceSettings /> : null}
-        </div>
+        </>
       )}
     </div>
   );

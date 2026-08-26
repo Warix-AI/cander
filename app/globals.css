@@ -126,6 +126,226 @@ html.cander-narrow {
   touch-action: manipulation;
 }
 
+@keyframes mobile-slide-in-from-right {
+  from {
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes mobile-slide-in-from-left {
+  from {
+    transform: translate3d(-100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.mobile-slide-forward {
+  animation: mobile-slide-in-from-right 0.32s cubic-bezier(0.32, 0.72, 0, 1)
+    both;
+}
+
+.mobile-slide-back {
+  animation: mobile-slide-in-from-left 0.32s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+/* ── Mobile glass materials (Apple-style vibrancy) ── */
+html.cander-mobile,
+html.cander-narrow {
+  --mobile-glass-blur: 20px;
+  --mobile-glass-blur-strong: 28px;
+  --mobile-glass-saturate: 180%;
+}
+
+html.cander-mobile .mobile-glass-bar,
+html.cander-narrow .mobile-glass-bar {
+  background: oklch(0.985 0.003 265 / 0.78);
+  -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(var(--mobile-glass-saturate));
+  backdrop-filter: blur(var(--mobile-glass-blur)) saturate(var(--mobile-glass-saturate));
+  border-bottom: 0.5px solid oklch(0 0 0 / 0.06);
+}
+
+html.cander-mobile .mobile-glass-panel,
+html.cander-narrow .mobile-glass-panel {
+  background: oklch(0.965 0.004 265 / 0.82);
+  -webkit-backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
+  backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
+  box-shadow:
+    -6px 0 28px oklch(0 0 0 / 0.08),
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.45);
+}
+
+html.cander-mobile .mobile-glass-pill,
+html.cander-narrow .mobile-glass-pill {
+  background: oklch(1 0 0 / 0.58);
+  -webkit-backdrop-filter: blur(14px) saturate(var(--mobile-glass-saturate));
+  backdrop-filter: blur(14px) saturate(var(--mobile-glass-saturate));
+  box-shadow:
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.65),
+    0 1px 3px oklch(0 0 0 / 0.05);
+}
+
+html.cander-mobile .mobile-glass-segment,
+html.cander-narrow .mobile-glass-segment {
+  background: oklch(0 0 0 / 0.05);
+  -webkit-backdrop-filter: blur(12px) saturate(var(--mobile-glass-saturate));
+  backdrop-filter: blur(12px) saturate(var(--mobile-glass-saturate));
+  box-shadow: inset 0 0 0 0.5px oklch(0 0 0 / 0.04);
+}
+
+html.cander-mobile .mobile-glass-segment-active,
+html.cander-narrow .mobile-glass-segment-active {
+  background: oklch(1 0 0 / 0.88);
+  box-shadow:
+    0 1px 3px oklch(0 0 0 / 0.07),
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.8);
+}
+
+html.cander-mobile .mobile-glass-card,
+html.cander-narrow .mobile-glass-card {
+  background: oklch(1 0 0 / 0.68);
+  -webkit-backdrop-filter: blur(16px) saturate(var(--mobile-glass-saturate));
+  backdrop-filter: blur(16px) saturate(var(--mobile-glass-saturate));
+  border-color: oklch(0 0 0 / 0.06) !important;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.03),
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.55);
+}
+
+html.cander-mobile .mobile-glass-inset,
+html.cander-narrow .mobile-glass-inset {
+  background: oklch(0 0 0 / 0.035);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
+  backdrop-filter: blur(10px) saturate(160%);
+}
+
+html.cander-mobile .mobile-glass-dock::before,
+html.cander-narrow .mobile-glass-dock::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  left: -1rem;
+  right: -1rem;
+  bottom: 100%;
+  height: 1.75rem;
+  background: linear-gradient(
+    to top,
+    oklch(0.965 0.004 265 / 0.94),
+    oklch(0.965 0.004 265 / 0)
+  );
+}
+
+.dark html.cander-mobile .mobile-glass-dock::before,
+.dark html.cander-narrow .mobile-glass-dock::before {
+  background: linear-gradient(
+    to top,
+    oklch(0.2 0.01 265 / 0.94),
+    oklch(0.2 0.01 265 / 0)
+  );
+}
+
+html.cander-mobile .composer-shell,
+html.cander-narrow .composer-shell {
+  background-color: oklch(1 0 0 / 0.8) !important;
+  -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(var(--mobile-glass-saturate));
+  backdrop-filter: blur(var(--mobile-glass-blur)) saturate(var(--mobile-glass-saturate));
+  border-color: oklch(0 0 0 / 0.07) !important;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.04),
+    0 6px 20px oklch(0 0 0 / 0.05),
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.6) !important;
+}
+
+html.cander-mobile .composer-dock .light-surface,
+html.cander-narrow .composer-dock .light-surface {
+  background-color: oklch(1 0 0 / 0.86) !important;
+  -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(var(--mobile-glass-saturate));
+  backdrop-filter: blur(var(--mobile-glass-blur)) saturate(var(--mobile-glass-saturate));
+}
+
+html.cander-mobile .light-surface[class*="fixed"],
+html.cander-narrow .light-surface[class*="fixed"] {
+  background-color: oklch(1 0 0 / 0.88) !important;
+  -webkit-backdrop-filter: blur(var(--mobile-glass-blur)) saturate(var(--mobile-glass-saturate));
+  backdrop-filter: blur(var(--mobile-glass-blur)) saturate(var(--mobile-glass-saturate));
+}
+
+.dark html.cander-mobile .mobile-glass-bar,
+.dark html.cander-narrow .mobile-glass-bar {
+  background: oklch(0.17 0.008 265 / 0.78);
+  border-bottom-color: oklch(1 0 0 / 0.07);
+}
+
+.dark html.cander-mobile .mobile-glass-panel,
+.dark html.cander-narrow .mobile-glass-panel {
+  background: oklch(0.2 0.01 265 / 0.84);
+  box-shadow:
+    -6px 0 28px oklch(0 0 0 / 0.28),
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.08);
+}
+
+.dark html.cander-mobile .mobile-glass-pill,
+.dark html.cander-narrow .mobile-glass-pill {
+  background: oklch(1 0 0 / 0.1);
+  box-shadow:
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.12),
+    0 1px 3px oklch(0 0 0 / 0.2);
+}
+
+.dark html.cander-mobile .mobile-glass-segment,
+.dark html.cander-narrow .mobile-glass-segment {
+  background: oklch(1 0 0 / 0.08);
+  box-shadow: inset 0 0 0 0.5px oklch(1 0 0 / 0.06);
+}
+
+.dark html.cander-mobile .mobile-glass-segment-active,
+.dark html.cander-narrow .mobile-glass-segment-active {
+  background: oklch(0.28 0.012 265 / 0.92);
+  box-shadow:
+    0 1px 3px oklch(0 0 0 / 0.22),
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.1);
+}
+
+.dark html.cander-mobile .mobile-glass-card,
+.dark html.cander-narrow .mobile-glass-card {
+  background: oklch(0.24 0.012 265 / 0.72);
+  border-color: oklch(1 0 0 / 0.08) !important;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.18),
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.08);
+}
+
+.dark html.cander-mobile .mobile-glass-inset,
+.dark html.cander-narrow .mobile-glass-inset {
+  background: oklch(1 0 0 / 0.05);
+}
+
+.dark html.cander-mobile .composer-shell,
+.dark html.cander-narrow .composer-shell {
+  background-color: oklch(0.24 0.012 265 / 0.82) !important;
+  border-color: oklch(1 0 0 / 0.1) !important;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.22),
+    0 6px 20px oklch(0 0 0 / 0.18),
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.08) !important;
+}
+
+.dark html.cander-mobile .composer-dock .light-surface,
+.dark html.cander-narrow .composer-dock .light-surface,
+.dark html.cander-mobile .light-surface[class*="fixed"],
+.dark html.cander-narrow .light-surface[class*="fixed"] {
+  background-color: oklch(0.24 0.012 265 / 0.88) !important;
+}
+
+html.cander-mobile [data-mobile-scroll],
+html.cander-narrow [data-mobile-scroll] {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 3rem);
+}
+
 html.cander-mobile body,
 html.cander-narrow body {
   /* Prefer absolute fill over position:fixed — fixed body was crashing WKWebView on boot. */

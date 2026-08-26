@@ -12,6 +12,7 @@ import { Check, Ellipsis, LayoutGrid, List, SquarePen } from "lucide-react";
 import { Dropdown } from "@/components/ui/Controls";
 import type { SpaceLayout } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { MOBILE_GLASS_SEGMENT } from "@/lib/mobile-menu-styles";
 
 export type MobilePanelScopeConfig = {
   value: string;
@@ -142,12 +143,14 @@ export function MobilePanelActionsCluster({
   const hasMenu = Boolean(scope || layout || extras.length);
 
   return (
-    <div className="inline-flex max-w-full shrink-0 items-center rounded-full bg-muted/70 p-1">
+    <div className={cn("inline-flex max-w-full shrink-0 items-center rounded-full p-1", MOBILE_GLASS_SEGMENT)}>
       <button
         type="button"
         aria-label={config.newChatLabel ?? "New chat"}
         onClick={onNewChat}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted"
+        className={cn(
+          "inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground transition-colors duration-200 hover:bg-black/[0.06] dark:hover:bg-white/10",
+        )}
       >
         <SquarePen className="h-4 w-4 shrink-0" strokeWidth={1.8} />
       </button>

@@ -5,6 +5,7 @@ import { useApp } from "@/components/app/AppProvider";
 import { MobileMenuPane } from "@/components/shell/MobileMenuPane";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
+import { MOBILE_GLASS_PANEL, MOBILE_MENU_BG } from "@/lib/mobile-menu-styles";
 
 /** Menu width as a fraction of the viewport; the rest stays visible as a peek strip. */
 export const MOBILE_MENU_WIDTH = 0.75;
@@ -27,10 +28,10 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div
         className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background will-change-transform",
-          "transition-[transform,border-radius,box-shadow] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]",
-          menuOpen &&
-            "rounded-[20px] shadow-[-8px_0_32px_oklch(0_0_0/0.12)]",
+          "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden will-change-transform",
+          menuOpen ? MOBILE_GLASS_PANEL : "bg-background",
+          "transition-[transform,border-radius] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          menuOpen && "rounded-[20px]",
         )}
         style={{
           transform: menuOpen ? `translate3d(${shiftPct}%, 0, 0)` : undefined,
@@ -42,7 +43,8 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
       <div
         aria-hidden={!menuOpen}
         className={cn(
-          "absolute inset-y-0 left-0 z-20 flex flex-col overflow-hidden bg-background",
+          "absolute inset-y-0 left-0 z-20 flex flex-col overflow-hidden",
+          MOBILE_MENU_BG,
           "transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform",
           menuOpen ? "translate-x-0" : "-translate-x-full pointer-events-none",
         )}

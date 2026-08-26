@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
+import { MOBILE_GLASS_CARD } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
@@ -58,7 +59,12 @@ export function SettingsHeader({
   if (mobile) {
     if (!subtitle && !actions) return null;
     return (
-      <header className="flex flex-wrap items-start justify-between gap-3">
+      <header
+        className={cn(
+          "flex flex-wrap items-start gap-3",
+          subtitle ? "justify-between" : "justify-end",
+        )}
+      >
         {subtitle ? (
           <p className="min-w-0 max-w-xl text-[13.5px] leading-relaxed text-muted-foreground">
             {subtitle}
@@ -123,7 +129,7 @@ export function SettingsSection({
           <h3
             className={cn(
               mobile
-                ? "text-[12px] font-medium tracking-[0.04em] text-muted-foreground uppercase"
+                ? "text-[13px] font-medium tracking-[-0.01em] text-muted-foreground"
                 : "heading-section text-[1rem] tracking-[-0.02em]",
             )}
           >
@@ -163,6 +169,7 @@ export function SettingsGroup({
     <div
       className={cn(
         "overflow-hidden border border-border bg-card",
+        mobile && MOBILE_GLASS_CARD,
         mobile ? SHELL_G3_RADIUS : "rounded-[10px]",
         className,
       )}
@@ -255,6 +262,7 @@ export function SettingsPanel({
     <div
       className={cn(
         "border border-border bg-card",
+        mobile && MOBILE_GLASS_CARD,
         mobile ? SHELL_G3_RADIUS : "rounded-[10px]",
         padded && "p-4 sm:p-5",
         className,
@@ -275,6 +283,7 @@ export function SettingsStatGrid({
     <div
       className={cn(
         "overflow-hidden border border-border bg-card",
+        mobile && MOBILE_GLASS_CARD,
         mobile ? SHELL_G3_RADIUS : "rounded-[10px]",
         "[&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:top-0 [&>*+*]:before:right-0 [&>*+*]:before:left-4 [&>*+*]:before:h-px [&>*+*]:before:bg-border",
       )}
@@ -284,7 +293,14 @@ export function SettingsStatGrid({
           key={item.label}
           className="flex items-baseline justify-between gap-4 px-4 py-3.5"
         >
-          <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
+          <p
+            className={cn(
+              "text-muted-foreground",
+              mobile
+                ? "text-[13px] tracking-[-0.01em]"
+                : "font-mono text-[10.5px] tracking-[0.08em] uppercase",
+            )}
+          >
             {item.label}
           </p>
           <p className="text-right text-[14.5px] font-medium tracking-[-0.02em]">
