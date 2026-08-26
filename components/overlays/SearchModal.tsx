@@ -16,11 +16,15 @@ import { Modal } from "@/components/ui/Modal";
 import {
   assetFiles,
   connectors,
-  projects,
   skills,
   spaces,
   starterThreads,
 } from "@/lib/data";
+import {
+  openIndexEntry,
+  useSpaceIndex,
+} from "@/lib/hooks/use-space-index";
+import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
 import { LEGACY_SPACES, spaceAllowed } from "@/lib/spaces";
 import { memberSpaces } from "@/lib/workspace-policy";
 import { cn } from "@/lib/utils";
@@ -50,7 +54,7 @@ export function SearchModal() {
     view,
     browserPage,
     attachBrowserReference,
-    threads,
+    openSpaceEntity,
     billingPlan,
     personalSpaceEnabled,
     workspacePolicies,
@@ -62,6 +66,11 @@ export function SearchModal() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const needle = query.trim();
+
+  const { entries, loading } = useSpaceIndex({
+    query: needle.length >= 2 ? needle : undefined,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -74,9 +83,8 @@ export function SearchModal() {
   }, [open]);
 
   const hits = useMemo(() => {
-    const needle = query.trim().toLowerCase();
     const match = (value: string) =>
-      !needle || value.toLowerCase().includes(needle);
+      !needle || value.toLowerCase().includes(needle.toLowerCase());
     const items: Hit[] = [];
 
     const actions: Hit[] = [
@@ -186,16 +194,30 @@ export function SearchModal() {
         run: openRecents,
       });
     }
-    for (const project of projects.filter((item) => item.workspaceId === workspaceId)) {
-      if (!match(project.name) && !match(project.summary)) continue;
+
+    for (const entry of entries) {
+      const group =
+        entry.kind === "thread"
+          ? "Chats"
+          : entry.kind === "source"
+            ? "Sources"
+            : entry.kind === "briefing"
+              ? "Work"
+              : "Projects";
       items.push({
-        id: `project-${project.id}`,
-        title: project.name,
-        meta: project.space,
-        group: "Projects",
-        run: () => openProject(project.id),
+        id: `index-${entry.key}`,
+        title: entry.title,
+        meta: entry.meta,
+        group,
+        run: () =>
+          openIndexEntry(entry, {
+            openThread,
+            openProject,
+            openSpaceEntity,
+          }),
       });
     }
+
     for (const file of assetFiles.filter((item) => item.workspaceId === workspaceId)) {
       if (!match(file.name) && !match(file.ext)) continue;
       items.push({
@@ -240,7 +262,8 @@ export function SearchModal() {
     }
     return items;
   }, [
-    query,
+    needle,
+    entries,
     workspaceId,
     openSpace,
     openProject,
@@ -254,7 +277,7 @@ export function SearchModal() {
     view,
     browserPage,
     attachBrowserReference,
-    threads,
+    openSpaceEntity,
     billingPlan,
     personalSpaceEnabled,
     workspacePolicies,
@@ -307,7 +330,9 @@ export function SearchModal() {
         />
       </div>
       <div className="max-h-[min(28rem,60vh)] overflow-y-auto p-2">
-        {hits.length ? (
+        {loading && needle.length >= 2 ? (
+          <QuerySkeleton rows={3} />
+        ) : hits.length ? (
           hits.map((hit, index) => {
             const showGroup = hit.group !== hits[index - 1]?.group;
             return (
@@ -352,10 +377,13 @@ export function SearchModal() {
 function HitIcon({ group }: { group: string }) {
   const className = "h-3.5 w-3.5 shrink-0 text-muted-foreground";
   if (group === "Projects") return <Hammer className={className} strokeWidth={1.6} />;
+  if (group === "Sources") return <FileText className={className} strokeWidth={1.6} />;
   if (group === "Files") return <FileText className={className} strokeWidth={1.6} />;
   if (group === "Tasks") return <Sparkles className={className} strokeWidth={1.6} />;
   if (group === "Connectors") return <Blocks className={className} strokeWidth={1.6} />;
-  if (group === "Chats") return <History className={className} strokeWidth={1.6} />;
+  if (group === "Chats" || group === "Work") {
+    return <History className={className} strokeWidth={1.6} />;
+  }
   if (group === "Spaces") return <Files className={className} strokeWidth={1.6} />;
   if (group === "Actions") return <SquarePen className={className} strokeWidth={1.6} />;
   return <Search className={className} strokeWidth={1.6} />;

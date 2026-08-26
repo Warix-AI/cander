@@ -21,6 +21,8 @@ import {
 } from "@/lib/workspace-catalog";
 import { workspaceKindOf } from "@/lib/workspace-kind";
 import { inferIntent, nextId } from "@/lib/intent";
+import { localSpaceEntityStore } from "@/lib/api/space-entity-store";
+import type { EntityRef } from "@/lib/space-entities";
 import { latestThreadForProject } from "@/lib/selectors";
 import {
   buildCard,
@@ -253,8 +255,10 @@ type AppContextValue = {
   setBrowserPage: (page: PageReference) => void;
   browserSearch: string | null;
   pageReference: PageReference | null;
+  entityReference: EntityRef | null;
   setPageReference: (page: PageReference | null) => void;
   clearPageReference: () => void;
+  clearEntityReference: () => void;
   attachBrowserReference: () => void;
   referencePageInSpace: (space: SpaceId) => void;
   spaceLibraryOpen: boolean;
@@ -278,6 +282,13 @@ type AppContextValue = {
   setVoiceAnchor: (anchor: VoiceAnchor) => void;
   openProject: (id: string) => void;
   openProjectChat: (id: string) => void;
+  /** Navigate to a typed entity ref from any space dashboard. */
+  openSpaceEntity: (ref: EntityRef) => void;
+  attachReference: (ref: EntityRef) => void;
+  promoteToWork: (ref: EntityRef) => void;
+  promoteToBuild: (ref: EntityRef) => void;
+  /** Pop one level of entity / history navigation (mobile back). */
+  popEntityNavigation: () => void;
   /** Clear project/entity and return to the space directory on mobile/desktop. */
   backToSpaceHome: () => void;
   openThread: (id: string) => void;
@@ -414,6 +425,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
   const [browserSearch, setBrowserSearch] = useState<string | null>(null);
   const [pageReference, setPageReference] = useState<PageReference | null>(null);
+  const [entityReference, setEntityReference] = useState<EntityRef | null>(null);
   const [advancedMode, setAdvancedMode] = useState(false);
   const [viewport, setViewport] = useState<ViewportId>("desktop");
   const [selectMode, setSelectMode] = useState(false);
@@ -1807,14 +1819,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const openProject = useCallback((id: string) => {
-    const match = projects.find((item) => item.id === id);
+    const ctx = { workspaceId, actorId: actor.id };
+    const fromStore = localSpaceEntityStore.getProject(ctx, id);
+    const match = fromStore ?? projects.find((item) => item.id === id);
     if (!match) return;
+    const space = match.space;
+    const itemWorkspaceId = match.workspaceId;
     const chatActive = Boolean(threadId) || drafting;
     const keepChat = chatActive && projectId === id;
-    if (match.workspaceId !== workspaceId) persistWorkspace(match.workspaceId);
+    if (itemWorkspaceId !== workspaceId) persistWorkspace(itemWorkspaceId);
     setView("space");
     setProjectId(match.id);
-    setSpaceId(match.space);
+    setSpaceId(space);
     setConnectorId(null);
     setJobId(null);
     setSkillId(null);
@@ -1823,14 +1839,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setDrafting(true);
     }
     setPanelIntent("execute");
-    if (match.space === "build") setBuildTool("preview");
-    if (match.space === "studio") setStudioTool("canvas");
-    if (match.space === "research") setResearchTool("browser");
+    if (space === "build") setBuildTool("preview");
+    if (space === "studio") setStudioTool("canvas");
+    if (space === "research") setResearchTool("browser");
     setPanelMode("split");
     setMobileSurface("panel");
     pushTarget({
       view: "space",
-      spaceId: match.space,
+      spaceId: space,
       threadId: keepChat ? threadId : null,
       projectId: match.id,
       panelMode: "split",
@@ -1839,7 +1855,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       jobId: null,
       skillId: null,
     });
-  }, [workspaceId, pushTarget, threadId, drafting, projectId]);
+  }, [workspaceId, actor.id, pushTarget, threadId, drafting, projectId]);
 
   /** Leave a project/entity and return to the space directory on the panel. */
   const backToSpaceHome = useCallback(() => {
@@ -1907,16 +1923,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const openProjectChat = useCallback(
     (id: string) => {
-      const match = projects.find((item) => item.id === id);
+      const ctx = { workspaceId, actorId: actor.id };
+      const fromStore = localSpaceEntityStore.getProject(ctx, id);
+      const match = fromStore ?? projects.find((item) => item.id === id);
       if (!match) return;
-      const linked = latestThreadForProject(threads, match);
+      const legacy = projects.find((item) => item.id === id);
+      const linked = legacy
+        ? latestThreadForProject(threads, legacy)
+        : threads.find((item) => item.projectId === id);
       if (linked) {
         openThread(linked.id);
         return;
       }
       openProject(id);
     },
-    [threads, openThread, openProject],
+    [threads, openThread, openProject, workspaceId, actor.id],
   );
 
   const openShared = useCallback(() => {
@@ -2120,10 +2141,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [pushTarget]);
 
   const clearPageReference = useCallback(() => setPageReference(null), []);
+  const clearEntityReference = useCallback(() => setEntityReference(null), []);
 
   const attachBrowserReference = useCallback(() => {
     setPageReference(browserPage);
-  }, [browserPage]);
+    setEntityReference({
+      type: "page",
+      id: browserPage.url,
+      space: "research",
+      workspaceId,
+      label: browserPage.title,
+      snapshot: browserPage.url,
+    });
+  }, [browserPage, workspaceId]);
 
   const referencePageInSpace = useCallback(
     (target: SpaceId) => {
@@ -2142,6 +2172,105 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [browserPage],
   );
+
+  const openSpaceEntity = useCallback(
+    (ref: EntityRef) => {
+      if (ref.workspaceId !== workspaceId) persistWorkspace(ref.workspaceId);
+      if (ref.type === "project") {
+        openProject(ref.id);
+        return;
+      }
+      if (ref.type === "source") {
+        setView("space");
+        setSpaceId(ref.space);
+        setResearchTool("browser");
+        setPanelIntent("execute");
+        setPanelMode("split");
+        setMobileSurface("panel");
+        pushTarget({
+          view: "space",
+          spaceId: ref.space,
+          threadId,
+          projectId: null,
+          panelMode: "split",
+          panelIntent: "execute",
+          connectorId: null,
+          jobId: null,
+          skillId: null,
+        });
+        return;
+      }
+      if (ref.type === "briefing") {
+        newChat("work");
+        if (ref.snapshot) {
+          queueMicrotask(() => {
+            sendMessage(ref.snapshot!, { space: "work" });
+          });
+        }
+        return;
+      }
+      if (ref.type === "page") {
+        referencePageInSpace(ref.space);
+      }
+    },
+    [workspaceId, openProject, pushTarget, threadId, newChat, referencePageInSpace, sendMessage],
+  );
+
+  const attachReference = useCallback((ref: EntityRef) => {
+    setEntityReference(ref);
+    if (ref.type === "page" && ref.snapshot) {
+      setPageReference({
+        url: ref.snapshot,
+        title: ref.label ?? "Reference",
+      });
+    }
+  }, []);
+
+  const promoteToWork = useCallback(
+    (ref: EntityRef) => {
+      localSpaceEntityStore.attachToWork(
+        { workspaceId, actorId: actor.id },
+        ref,
+      );
+    },
+    [workspaceId, actor.id],
+  );
+
+  const promoteToBuild = useCallback(
+    (ref: EntityRef) => {
+      const ctx = { workspaceId, actorId: actor.id };
+      if (ref.type === "source") {
+        const project = localSpaceEntityStore.createProject(ctx, {
+          space: "build",
+          title: ref.label ?? "From Explore",
+          kind: "app",
+          summary: ref.snapshot ?? "",
+        });
+        localSpaceEntityStore.linkReference(ctx, ref, {
+          type: "project",
+          id: project.id,
+          space: "build",
+          workspaceId,
+          label: project.title,
+        });
+        attachReference(ref);
+        openProject(project.id);
+        return;
+      }
+      if (ref.type === "project") {
+        openProject(ref.id);
+      }
+    },
+    [workspaceId, actor.id, attachReference, openProject],
+  );
+
+  const popEntityNavigation = useCallback(() => {
+    if (projectId || connectorId || jobId || skillId) {
+      backToSpaceHome();
+      return;
+    }
+    if (hist.i > 0) goBack();
+  }, [projectId, connectorId, jobId, skillId, backToSpaceHome, goBack, hist.i]);
 
   const spaceLibraryOpen =
     panelMode !== "collapsed" &&
@@ -2372,8 +2501,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setBrowserPage,
       browserSearch,
       pageReference,
+      entityReference,
       setPageReference,
       clearPageReference,
+      clearEntityReference,
       attachBrowserReference,
       referencePageInSpace,
       spaceLibraryOpen,
@@ -2387,6 +2518,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       moveSidebarNav: moveNavItem,
       openProject,
       openProjectChat,
+      openSpaceEntity,
+      attachReference,
+      promoteToWork,
+      promoteToBuild,
+      popEntityNavigation,
       backToSpaceHome,
       openThread,
       openShared,
@@ -2505,8 +2641,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setBrowserPage,
       browserSearch,
       pageReference,
+      entityReference,
       setPageReference,
       clearPageReference,
+      clearEntityReference,
       attachBrowserReference,
       referencePageInSpace,
       spaceLibraryOpen,
@@ -2520,6 +2658,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       moveNavItem,
       openProject,
       openProjectChat,
+      openSpaceEntity,
+      attachReference,
+      promoteToWork,
+      promoteToBuild,
+      popEntityNavigation,
       backToSpaceHome,
       openThread,
       openShared,

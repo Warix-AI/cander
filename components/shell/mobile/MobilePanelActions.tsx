@@ -4,13 +4,18 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { Check, Ellipsis, LayoutGrid, List, SquarePen } from "lucide-react";
+import { Check, ChevronDown, Ellipsis, LayoutGrid, List, SquarePen } from "lucide-react";
 import { Dropdown } from "@/components/ui/Controls";
 import type { SpaceLayout } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const clusterBtnClass =
+  "inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--mobile-chrome-surface)] text-foreground transition-colors duration-200 hover:bg-muted";
 
 export type MobilePanelScopeConfig = {
   value: string;
@@ -43,11 +48,39 @@ const MobilePanelActionsContext =
 
 export function MobilePanelActionsProvider({ children }: { children: ReactNode }) {
   const [actions, setActions] = useState<MobilePanelActionsConfig | null>(null);
+  const setActionsIfChanged = useCallbackStableSetActions(setActions);
+  const value = useMemo(
+    () => ({ actions, setActions: setActionsIfChanged }),
+    [actions, setActionsIfChanged],
+  );
   return (
-    <MobilePanelActionsContext.Provider value={{ actions, setActions }}>
+    <MobilePanelActionsContext.Provider value={value}>
       {children}
     </MobilePanelActionsContext.Provider>
   );
+}
+
+/** Skip provider updates when hoisted chrome config is referentially new but equivalent. */
+function useCallbackStableSetActions(
+  setActions: (actions: MobilePanelActionsConfig | null) => void,
+) {
+  const lastKey = useRef<string | null>(null);
+  return useMemo(() => {
+    return (next: MobilePanelActionsConfig | null) => {
+      const key = next
+        ? JSON.stringify({
+            newChatLabel: next.newChatLabel,
+            scopeValue: next.scope?.value,
+            scopeOptions: next.scope?.options.map((o) => o.id).join(","),
+            layoutValue: next.layout?.value,
+            extras: next.extras?.map((e) => `${e.id}:${e.active ? 1 : 0}`).join(","),
+          })
+        : "";
+      if (key === lastKey.current) return;
+      lastKey.current = key;
+      setActions(next);
+    };
+  }, [setActions]);
 }
 
 export function useMobilePanelActionsState() {
@@ -77,7 +110,9 @@ export function MobileFilterBar({
   layout?: { value: SpaceLayout; onChange: (value: SpaceLayout) => void };
   extras?: MobilePanelExtraItem[];
 }) {
-  const ctx = useMobilePanelActionsState();
+  const setPanelActions = useMobilePanelActionsState()?.setActions;
+  const onNewChatRef = useRef(onNewChat);
+  onNewChatRef.current = onNewChat;
 
   const scopeValue = scope?.value;
   const layoutValue = layout?.value;
@@ -85,32 +120,31 @@ export function MobileFilterBar({
   const extrasKey = extras?.map((e) => `${e.id}:${e.active ? 1 : 0}`).join(",");
 
   useEffect(() => {
-    if (!ctx) return;
+    if (!setPanelActions) return;
     if (!active) {
-      ctx.setActions(null);
+      setPanelActions(null);
       return;
     }
-    ctx.setActions({
-      onNewChat: () => onNewChat?.(),
+    setPanelActions({
+      onNewChat: () => onNewChatRef.current?.(),
       newChatLabel,
       scope,
       layout,
       extras,
     });
-    return () => ctx.setActions(null);
   }, [
     active,
-    ctx,
+    setPanelActions,
     newChatLabel,
-    onNewChat,
-    scope,
-    layout,
-    extras,
     scopeValue,
     layoutValue,
     scopeOptionsKey,
     extrasKey,
   ]);
+
+  useEffect(() => {
+    return () => setPanelActions?.(null);
+  }, [setPanelActions]);
 
   return (
     <div
@@ -137,14 +171,12 @@ export function MobilePanelActionsCluster({
   const hasMenu = Boolean(scope || layout || extras.length);
 
   return (
-    <div className="inline-flex max-w-full shrink-0 items-center rounded-full bg-muted/70 p-1">
+    <div className="inline-flex max-w-full shrink-0 items-center rounded-full bg-[var(--mobile-chrome-surface)] p-1">
       <button
         type="button"
         aria-label={config.newChatLabel ?? "New chat"}
         onClick={onNewChat}
-        className={cn(
-          "inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground transition-colors duration-200 hover:bg-black/[0.06] dark:hover:bg-white/10",
-        )}
+        className={clusterBtnClass}
       >
         <SquarePen className="h-4 w-4 shrink-0" strokeWidth={1.8} />
       </button>
@@ -159,12 +191,13 @@ export function MobilePanelActionsCluster({
               aria-label="View options"
               aria-expanded={open}
               onClick={toggle}
-              className={cn(
-                "inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted",
-                open && "bg-muted",
-              )}
+              className={cn(clusterBtnClass, open && "bg-muted")}
             >
-              <Ellipsis className="h-4 w-4" strokeWidth={1.8} />
+              {open ? (
+                <ChevronDown className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+              ) : (
+                <Ellipsis className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+              )}
             </button>
           )}
         >
@@ -263,7 +296,7 @@ function PanelMenuItem({
       onClick={onClick}
       className={cn(
         "menu-row-hover flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-[13px] transition-colors",
-        selected && "font-medium",
+        selected && "bg-muted font-medium",
       )}
     >
       {Icon ? (

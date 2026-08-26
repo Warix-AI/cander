@@ -76,6 +76,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     backToSettingsHub,
     closeSettings,
     backToSpaceHome,
+    popEntityNavigation,
     buildTool,
     setBuildTool,
     liveUrl,
@@ -105,6 +106,11 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const inConnector =
     spaceId === "connectors" && Boolean(connectorId);
   const entityOpen = Boolean(projectId) || inConnector;
+  const entityTitle = inConnector
+    ? connectorId ?? "Connector"
+    : project?.name ?? null;
+  const showEntityBack =
+    entityOpen && !inChromeSub && !onMenuMain && mobileSurface !== "menu";
   const showSpaceToggle =
     !inChromeSub &&
     !onMenuMain &&
@@ -133,7 +139,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const spaceLabel = spaceId ? navLabel(spaceId as SpaceId) ?? "Space" : "Space";
   const panelTabLabel = inConnector
     ? "Connector"
-    : spaceLabel;
+    : entityTitle ?? spaceLabel;
   const backLabel = inConnector
     ? "Connectors"
     : spaceLabel;
@@ -183,6 +189,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const address = liveUrl ?? preview.url;
 
   const onLeadingClick = () => {
+    if (showEntityBack) {
+      popEntityNavigation();
+      return;
+    }
     if (inSettings) {
       if (settingsWorkspaceId) {
         setSettingsWorkspaceId(null);
@@ -336,16 +346,18 @@ export function MobileAppChrome({ className }: { className?: string }) {
           <button
             type="button"
             aria-label={
-              inChromeSub
+              showEntityBack
                 ? "Back"
-                : mobileSurface === "menu"
-                  ? "Close menu"
-                  : "Open menu"
+                : inChromeSub
+                  ? "Back"
+                  : mobileSurface === "menu"
+                    ? "Close menu"
+                    : "Open menu"
             }
             onClick={onLeadingClick}
             className={mobileChromeButtonClass}
           >
-            {inChromeSub ? (
+            {showEntityBack || inChromeSub ? (
               <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
             ) : (
               <Menu className="h-5 w-5" strokeWidth={1.8} />

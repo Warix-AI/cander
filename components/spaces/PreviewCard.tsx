@@ -1,19 +1,15 @@
 "use client";
 
 import { CalendarClock, Ellipsis, FileText, Folder, Link2, Sparkles } from "lucide-react";
-import { useSyncExternalStore } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { PinControl } from "@/components/shell/PinControl";
 import { BannerWash } from "@/components/spaces/BannerWash";
 import { Dropdown } from "@/components/ui/Controls";
 import {
-  attachWorkApp,
-  detachWorkApp,
-  getWorkAppsServerSnapshot,
-  getWorkAppsSnapshot,
-  isWorkApp,
-  subscribeWorkApps,
-} from "@/lib/work-apps";
+  useSpaceAttachments,
+  useSpaceMutation,
+} from "@/lib/hooks/use-space-query";
+import { useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
 import type { BannerKey } from "@/lib/space-banners";
 import type { SpaceLayout } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -395,15 +391,14 @@ function PreviewActions({
   kind: PreviewKind;
   onOpen: (projectId: string) => void;
 }) {
-  const { pinTier, setPin, clearPin, workspaceId } = useApp();
-  useSyncExternalStore(
-    subscribeWorkApps,
-    getWorkAppsSnapshot,
-    getWorkAppsServerSnapshot,
-  );
+  const { pinTier, setPin, clearPin, workspaceId, promoteToWork, promoteToBuild } =
+    useApp();
+  const ctx = useWorkspaceCtx();
+  const { attachToWork, detachFromWork } = useSpaceMutation();
+  const { data: attachments } = useSpaceAttachments();
   const tier = pinTier("project", item.projectId);
   const pinned = Boolean(tier);
-  const inWork = isWorkApp(workspaceId, item.projectId);
+  const inWork = attachments.some((row) => row.targetId === item.projectId);
 
   const copyLink = () => {
     const slug = item.name.toLowerCase().replace(/\s+/g, "-");
@@ -506,13 +501,60 @@ function PreviewActions({
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    if (inWork) detachWorkApp(workspaceId, item.projectId);
-                    else attachWorkApp(workspaceId, item.projectId);
+                    if (inWork) {
+                      void detachFromWork(`attach-${item.projectId}`);
+                    } else {
+                      void attachToWork(ctx, {
+                        type: "project",
+                        id: item.projectId,
+                        space: "build",
+                        workspaceId,
+                        label: item.name,
+                      });
+                    }
                     close();
                   }}
                   className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
                 >
                   {inWork ? "Remove from Work" : "Add to Work"}
+                </button>
+              </>
+            ) : kind === "paper" || kind === "file" ? (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    promoteToBuild({
+                      type: "source",
+                      id: item.projectId,
+                      space: "research",
+                      workspaceId,
+                      label: item.name,
+                      snapshot: item.meta,
+                    });
+                    close();
+                  }}
+                  className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                >
+                  Use in Build
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    promoteToWork({
+                      type: "source",
+                      id: item.projectId,
+                      space: "research",
+                      workspaceId,
+                      label: item.name,
+                    });
+                    close();
+                  }}
+                  className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                >
+                  Add to Work
                 </button>
               </>
             ) : null}

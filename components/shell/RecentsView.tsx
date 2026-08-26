@@ -12,132 +12,72 @@ import {
   type PreviewEntry,
   type PreviewKind,
 } from "@/components/spaces/PreviewCard";
+import { researchPaperPreviews } from "@/lib/data";
 import {
-  buildPreviews,
-  projects,
-  researchPaperPreviews,
-  spaces,
-} from "@/lib/data";
-import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
+  openIndexEntry,
+  PRIMARY_NAV_SPACES,
+  useSpaceIndex,
+} from "@/lib/hooks/use-space-index";
+import { QueryError, QuerySkeleton } from "@/lib/hooks/space-query-ui";
+import { navLabel } from "@/lib/use-main-nav-items";
 import type { SpaceId } from "@/lib/types";
 import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
 import { useMobileShell } from "@/lib/use-media-query";
 
-function recencyRank(updatedAt: string) {
-  const text = updatedAt.toLowerCase();
-  if (text.includes("just now")) return 0;
-  if (text.includes("this morning")) return 1;
-  const hours = text.match(/(\d+)\s*h/);
-  if (hours) return 10 + Number(hours[1]);
-  if (text.includes("yesterday")) return 40;
-  const days = text.match(/(\d+)\s*d/);
-  if (days) return 50 + Number(days[1]);
-  const weeks = text.match(/(\d+)\s*w/);
-  if (weeks) return 80 + Number(weeks[1]) * 7;
-  return 100;
-}
-
-function projectImage(projectId?: string) {
-  if (!projectId) return undefined;
-  const project = projects.find((item) => item.id === projectId);
-  if (project?.cover) return project.cover;
-  return buildPreviews.find((item) => item.projectId === projectId)?.image;
-}
-
 export function RecentsView() {
   const {
-    workspaceId,
-    threads,
     openThread,
     openProject,
+    openSpaceEntity,
     newChat,
     spaceLayout,
     setSpaceLayout,
   } = useApp();
   const mobile = useMobileShell();
-  const [scope, setScope] = useState("all");
+  const [scope, setScope] = useState<string>("all");
 
   const scopeOptions = [
     { id: "all", label: "All" },
     ...PRIMARY_NAV_SPACES.map((id) => ({
       id,
-      label: spaces.find((item) => item.id === id)?.label ?? id,
+      label: navLabel(id as SpaceId) ?? id,
     })),
   ];
 
+  const { entries, loading, error } = useSpaceIndex({
+    space: scope === "all" ? "all" : (scope as SpaceId),
+  });
+
   const items = useMemo(() => {
-    const productThreads = threads.filter(
-      (thread) => thread.workspaceId === workspaceId,
-    );
-
-    const entries: (PreviewEntry & { rank: number; space?: SpaceId })[] = [];
-    const usedProjects = new Set<string>();
-
-    for (const thread of productThreads) {
-      if (thread.projectId) usedProjects.add(thread.projectId);
-      const project = projects.find((item) => item.id === thread.projectId);
-      const spaceLabel = spaces.find((item) => item.id === thread.spaceId)?.label;
+    return entries.map((entry): PreviewEntry & { openKey: string } => {
       const research =
-        thread.spaceId === "research"
-          ? researchPaperPreviews[thread.projectId ?? thread.id]
+        entry.space === "research"
+          ? researchPaperPreviews[entry.entityId]
           : undefined;
-      const kind: PreviewKind = research ? "paper" : "product";
-
-      entries.push({
-        id: `t-${thread.id}`,
-        name: thread.title,
-        projectId: `t:${thread.id}`,
-        meta: [spaceLabel, "Chat", thread.updatedAt].filter(Boolean).join(" · "),
-        badge: "Chat",
-        image: projectImage(thread.projectId),
+      const kind: PreviewKind =
+        entry.kind === "source" || research ? "paper" : "product";
+      return {
+        id: entry.key,
+        openKey: entry.key,
+        name: entry.title,
+        projectId: entry.key,
+        meta: entry.meta,
+        badge: entry.badge,
+        image: entry.cover,
         kind,
         paperPreview: research ?? {
-          title: thread.title,
-          lines: thread.snippet ? [thread.snippet] : [],
+          title: entry.title,
+          lines: entry.snippet ? [entry.snippet] : [],
         },
-        bannerKey: thread.spaceId ?? undefined,
-        rank: recencyRank(thread.updatedAt),
-        space: thread.spaceId,
-      });
-    }
+        bannerKey: entry.space,
+      };
+    });
+  }, [entries]);
 
-    for (const project of projects.filter(
-      (item) => item.workspaceId === workspaceId && !usedProjects.has(item.id),
-    )) {
-      const spaceLabel = spaces.find((item) => item.id === project.space)?.label;
-      const research =
-        project.space === "research"
-          ? researchPaperPreviews[project.id]
-          : undefined;
-      entries.push({
-        id: `p-${project.id}`,
-        name: project.name,
-        projectId: `p:${project.id}`,
-        meta: [spaceLabel, "Project", project.updatedAt]
-          .filter(Boolean)
-          .join(" · "),
-        badge: spaceLabel,
-        image: projectImage(project.id),
-        kind: research ? "paper" : "product",
-        paperPreview: research ?? {
-          title: project.name,
-          lines: [project.summary],
-        },
-        bannerKey: project.space,
-        rank: recencyRank(project.updatedAt),
-        space: project.space,
-      });
-    }
-
-    return entries.sort((a, b) => a.rank - b.rank);
-  }, [threads, workspaceId]);
-
-  const visible =
-    scope === "all" ? items : items.filter((item) => item.space === scope);
-
-  const open = (id: string) => {
-    if (id.startsWith("t:")) openThread(id.slice(2));
-    else openProject(id.slice(2));
+  const open = (key: string) => {
+    const entry = entries.find((item) => item.key === key);
+    if (!entry) return;
+    openIndexEntry(entry, { openThread, openProject, openSpaceEntity });
   };
 
   return (
@@ -162,12 +102,18 @@ export function RecentsView() {
           <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
         </MobileFilterBar>
         <div className="mt-5">
-          <PreviewGrid
-            layout={spaceLayout}
-            items={visible}
-            onOpen={open}
-            empty="Nothing recent in this workspace yet."
-          />
+          {loading ? (
+            <QuerySkeleton rows={4} />
+          ) : error ? (
+            <QueryError message={error} />
+          ) : (
+            <PreviewGrid
+              layout={spaceLayout}
+              items={items}
+              onOpen={open}
+              empty="Nothing recent in this workspace yet."
+            />
+          )}
         </div>
       </DashFrame>
     </div>

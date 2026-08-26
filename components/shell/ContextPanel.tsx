@@ -8,6 +8,7 @@ import { PanelChoiceState } from "@/components/panels/PanelChoiceState";
 import { PanelEmptyState } from "@/components/panels/PanelEmptyState";
 import { ProjectsBrowser } from "@/components/panels/ProjectsBrowser";
 import { ResearchPanel } from "@/components/panels/ResearchPanel";
+import { WorkPanel } from "@/components/panels/WorkPanel";
 import { ScheduledPanel } from "@/components/panels/ScheduledPanel";
 import { SkillsPanel } from "@/components/panels/SkillsPanel";
 import { StudioPanel } from "@/components/panels/StudioPanel";
@@ -90,8 +91,9 @@ export function ContextPanel() {
           <ConnectorsPanel />
         ) : spaceId === "files" ? (
           <ProjectsBrowser />
-        ) : spaceId === "work" ||
-          spaceId === "personal" ||
+        ) : spaceId === "work" ? (
+          <WorkPanel />
+        ) : spaceId === "personal" ||
           spaceId === "finances" ||
           spaceId === "health" ? (
           <ProjectsBrowser />

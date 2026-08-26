@@ -15,6 +15,7 @@ import {
   Plus,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { ReferenceChip } from "@/components/shell/ReferenceChip";
 import { ComposerUsageBar } from "@/components/shell/ComposerUsageBar";
 import {
   USAGE_BAR_THRESHOLD,
@@ -77,7 +78,9 @@ export function Composer({
     spaceLibraryOpen,
     attachBrowserReference,
     pageReference,
+    entityReference,
     clearPageReference,
+    clearEntityReference,
     entitlements,
     voiceActive,
     toggleVoice,
@@ -245,6 +248,8 @@ export function Composer({
     }
     const refPrefix = pageReference
       ? `[ref: ${pageReference.title} — ${pageReference.url}] `
+      : entityReference
+        ? `[ref: ${entityReference.label ?? entityReference.type} — ${entityReference.snapshot ?? entityReference.id}] `
       : "";
     const payload = `${refPrefix}${value}`.trim();
     if (!payload) return;
@@ -253,6 +258,7 @@ export function Composer({
     setMenu(null);
     setDictating(false);
     clearPageReference();
+    clearEntityReference();
   };
 
   const startVoice = () => {
@@ -443,19 +449,30 @@ export function Composer({
                 )}
               </div>
             ) : null}
-            {pageReference ? (
+            {pageReference || entityReference ? (
               <div className="mb-1.5 flex items-center gap-1.5">
-                <span className="inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-lg bg-background px-2.5 py-1.5 text-[11.5px]">
-                  <Link2 className="h-3 w-3 shrink-0 text-muted-foreground" strokeWidth={1.6} />
-                  <span className="truncate font-medium">{pageReference.title}</span>
-                  <span className="truncate font-mono text-muted-foreground">
-                    {pageReference.url}
+                {entityReference ? (
+                  <ReferenceChip
+                    ref={entityReference}
+                    onRemove={clearEntityReference}
+                    className="min-w-0 flex-1"
+                  />
+                ) : pageReference ? (
+                  <span className="inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-lg bg-background px-2.5 py-1.5 text-[11.5px]">
+                    <Link2 className="h-3 w-3 shrink-0 text-muted-foreground" strokeWidth={1.6} />
+                    <span className="truncate font-medium">{pageReference.title}</span>
+                    <span className="truncate font-mono text-muted-foreground">
+                      {pageReference.url}
+                    </span>
                   </span>
-                </span>
+                ) : null}
                 <button
                   type="button"
                   aria-label="Remove reference"
-                  onClick={clearPageReference}
+                  onClick={() => {
+                    clearPageReference();
+                    clearEntityReference();
+                  }}
                   className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-background hover:text-foreground"
                 >
                   ×

@@ -1,0 +1,226 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useSpaceData } from "@/components/app/SpaceDataProvider";
+import type {
+  BriefingFilter,
+  Deployment,
+  ProjectFilter,
+  SourceFilter,
+  SpaceAttachment,
+  SpaceProject,
+  SpaceSource,
+} from "@/lib/space-entities";
+import type { SpaceId } from "@/lib/types";
+
+/** Stable dependency for optional filter objects passed inline from components. */
+function filterDepKey(filter: unknown) {
+  if (filter === undefined) return "";
+  try {
+    return JSON.stringify(filter);
+  } catch {
+    return String(filter);
+  }
+}
+
+function useAsyncQuery<T>(
+  fetcher: () => Promise<T>,
+  deps: unknown[],
+  initial: T,
+) {
+  const [data, setData] = useState<T>(initial);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetcher()
+      .then((result) => {
+        if (!cancelled) setData(result);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Something went wrong");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by deps array
+  }, deps);
+
+  return { data, loading, error };
+}
+
+export function useSpaceProjects(space: SpaceId, filter?: ProjectFilter) {
+  const { api, ctx, entityRevision } = useSpaceData();
+  const filterKey = filterDepKey(filter);
+  return useAsyncQuery(
+    () => api.entities.listProjects(ctx, space, filter),
+    [api.entities, ctx, space, filterKey, entityRevision],
+    [] as SpaceProject[],
+  );
+}
+
+export function useSpaceProject(id: string | null) {
+  const { api, ctx, entityRevision } = useSpaceData();
+  const { data, loading, error } = useAsyncQuery(
+    () => (id ? api.entities.getProject(ctx, id) : Promise.resolve(null)),
+    [api.entities, ctx, id, entityRevision],
+    null as SpaceProject | null,
+  );
+  return { project: data, loading, error };
+}
+
+export function useSpaceSources(filter?: SourceFilter) {
+  const { api, ctx, entityRevision } = useSpaceData();
+  const filterKey = filterDepKey(filter);
+  return useAsyncQuery(
+    () => api.entities.listSources(ctx, filter),
+    [api.entities, ctx, filterKey, entityRevision],
+    [] as SpaceSource[],
+  );
+}
+
+export function useSpaceBriefingItems(filter?: BriefingFilter) {
+  const { api, ctx, entityRevision } = useSpaceData();
+  const filterKey = filterDepKey(filter);
+  return useAsyncQuery(
+    () => api.connectors.syncBriefing(ctx, filter),
+    [api.connectors, ctx, filterKey, entityRevision],
+    [],
+  );
+}
+
+export function useSpaceAttachments() {
+  const { api, ctx, entityRevision } = useSpaceData();
+  return useAsyncQuery(
+    () => api.entities.listAttachments(ctx),
+    [api.entities, ctx, entityRevision],
+    [] as SpaceAttachment[],
+  );
+}
+
+export function useConnectedConnectors() {
+  const { api, ctx } = useSpaceData();
+  const [ids, setIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      api.connectors
+        .listConnected(ctx)
+        .then((result) => {
+          if (!cancelled) setIds(result);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    };
+    load();
+    const unsub = api.connectors.subscribe?.(() => load());
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, [api.connectors, ctx]);
+
+  return { connectorIds: ids, loading };
+}
+
+export function useProjectDeployments(projectId: string | null) {
+  const { api, ctx, entityRevision } = useSpaceData();
+  return useAsyncQuery(
+    () =>
+      projectId
+        ? api.entities.listDeployments(ctx, projectId)
+        : Promise.resolve([]),
+    [api.entities, ctx, projectId, entityRevision],
+    [] as Deployment[],
+  );
+}
+
+export function useSpaceMutation() {
+  const { api, ctx } = useSpaceData();
+
+  const createProject = useCallback(
+    (...args: Parameters<typeof api.entities.createProject>) =>
+      api.entities.createProject(...args),
+    [api.entities],
+  );
+
+  const updateProject = useCallback(
+    (...args: Parameters<typeof api.entities.updateProject>) =>
+      api.entities.updateProject(...args),
+    [api.entities],
+  );
+
+  const deleteProject = useCallback(
+    (...args: Parameters<typeof api.entities.deleteProject>) =>
+      api.entities.deleteProject(...args),
+    [api.entities],
+  );
+
+  const attachToWork = useCallback(
+    (...args: Parameters<typeof api.entities.attachToWork>) =>
+      api.entities.attachToWork(...args),
+    [api.entities],
+  );
+
+  const detachFromWork = useCallback(
+    (attachmentId: string) =>
+      api.entities.detachFromWork(ctx, attachmentId),
+    [api.entities, ctx],
+  );
+
+  const createSource = useCallback(
+    (...args: Parameters<typeof api.entities.createSource>) =>
+      api.entities.createSource(...args),
+    [api.entities],
+  );
+
+  const publishBuild = useCallback(
+    (projectId: string, url?: string) =>
+      api.build.publish(ctx, projectId, { url }),
+    [api.build, ctx],
+  );
+
+  const captureBrowserReference = useCallback(
+    (page: { url: string; title: string }, opts?: { projectId?: string }) =>
+      api.browser.captureReference(ctx, page, {
+        space: "research",
+        projectId: opts?.projectId,
+      }),
+    [api.browser, ctx],
+  );
+
+  const connectConnector = useCallback(
+    (connectorId: string) => api.connectors.connect(ctx, connectorId),
+    [api.connectors, ctx],
+  );
+
+  const mutateBriefing = useCallback(
+    (...args: Parameters<typeof api.entities.mutateBriefingItem>) =>
+      api.entities.mutateBriefingItem(...args),
+    [api.entities],
+  );
+
+  return {
+    createProject,
+    updateProject,
+    deleteProject,
+    attachToWork,
+    detachFromWork,
+    createSource,
+    publishBuild,
+    captureBrowserReference,
+    connectConnector,
+    mutateBriefing,
+  };
+}

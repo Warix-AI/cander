@@ -266,18 +266,37 @@ html:not(.dark).cander-narrow .light-surface[class*="fixed"] {
   backdrop-filter: blur(var(--mobile-glass-blur)) saturate(var(--mobile-glass-saturate));
 }
 
+html.cander-mobile,
+html.cander-narrow {
+  /* Matches Tailwind bg-muted/70 on the chrome pill buttons. */
+  --mobile-chrome-surface: color-mix(in oklch, var(--muted) 70%, var(--background));
+}
+
+html.dark.cander-mobile,
+html.dark.cander-narrow {
+  --mobile-chrome-surface: color-mix(
+    in oklch,
+    var(--muted) 70%,
+    var(--mobile-app-surface)
+  );
+}
+
 html:not(.dark).cander-mobile .mobile-dropdown-menu,
-html:not(.dark).cander-narrow .mobile-dropdown-menu {
-  background-color: oklch(1 0 0);
-  border: 0.75px solid oklch(0.91 0.003 265);
+html:not(.dark).cander-narrow .mobile-dropdown-menu,
+html.dark.cander-mobile .mobile-dropdown-menu,
+html.dark.cander-narrow .mobile-dropdown-menu,
+.dark html.cander-mobile .mobile-dropdown-menu,
+.dark html.cander-narrow .mobile-dropdown-menu {
+  background-color: var(--mobile-chrome-surface);
+  color: var(--foreground);
+  border: 0.75px solid var(--border);
   box-shadow: 0 12px 40px oklch(0 0 0 / 0.12);
 }
 
+html.dark.cander-mobile .mobile-dropdown-menu,
+html.dark.cander-narrow .mobile-dropdown-menu,
 .dark html.cander-mobile .mobile-dropdown-menu,
 .dark html.cander-narrow .mobile-dropdown-menu {
-  background-color: var(--mobile-menu-canvas);
-  color: var(--foreground);
-  border: 0.75px solid oklch(1 0 0 / 0.1);
   box-shadow: 0 12px 40px oklch(0 0 0 / 0.45);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;

@@ -9,6 +9,7 @@ import {
   ScopeToggle,
   SpaceSettingsButton,
 } from "@/components/spaces/ItemSet";
+import { NewBuildMenu } from "@/components/spaces/NewBuildMenu";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import {
   buildScopeOptions,
@@ -18,8 +19,9 @@ import {
   workspaceOneOffTasks,
   type BuildScope,
 } from "@/lib/build-catalog";
-import { buildPreviews, projects } from "@/lib/data";
-import { projectsInSpace } from "@/lib/selectors";
+import { buildPreviews } from "@/lib/data";
+import { useSpaceProjects } from "@/lib/hooks/use-space-query";
+import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
 import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
 import { useMobileShell } from "@/lib/use-media-query";
 
@@ -52,10 +54,8 @@ export function BuildDashboard() {
     [workspaceId],
   );
   const filteredPreviews = filterPreviews(previews, scope);
-  const spaceProjects = useMemo(
-    () => projectsInSpace(projects, { space: "build", workspaceId }),
-    [workspaceId],
-  );
+  const { data: spaceProjects, loading: projectsLoading } =
+    useSpaceProjects("build");
 
   const openTask = (id: string) => {
     const task =
@@ -72,9 +72,8 @@ export function BuildDashboard() {
       subtitle="Ship apps, websites, automations, and your recurring tasks."
       actions={
         <>
-          <DashBtn primary onClick={() => newChat("build")}>
-            Ask
-          </DashBtn>
+          <NewBuildMenu onCreated={openProject} />
+          <DashBtn onClick={() => newChat("build")}>Ask</DashBtn>
           <SpaceSettingsButton space="build" />
         </>
       }
@@ -100,18 +99,24 @@ export function BuildDashboard() {
 
       <div className="mt-5">
         {scope === "projects" ? (
-          <PreviewGrid
-            layout={spaceLayout}
-            items={spaceProjects.map((item) => ({
-              id: item.id,
-              name: item.name,
-              projectId: item.id,
-              meta: `Edited ${item.updatedAt}`,
-              image: item.cover,
-            }))}
-            onOpen={openProject}
-            empty="No projects yet."
-          />
+          projectsLoading ? (
+            <QuerySkeleton rows={3} />
+          ) : (
+            <PreviewGrid
+              layout={spaceLayout}
+              items={spaceProjects.map((item) => ({
+                id: item.id,
+                name: item.title,
+                projectId: item.id,
+                meta: `Edited ${item.updatedAt}`,
+                image: item.cover,
+                badge:
+                  item.status === "published" ? "Published" : undefined,
+              }))}
+              onOpen={openProject}
+              empty="No projects yet."
+            />
+          )
         ) : scope === "automations" ? (
           <PreviewGrid
             layout={spaceLayout}

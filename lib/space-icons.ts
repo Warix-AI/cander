@@ -47,14 +47,7 @@ export const extraNavLabels: Record<"browser" | "recents", string> = {
   recents: "Recents",
 };
 
-export const spaceIconColor: Partial<Record<SpaceId, string>> = {
-  work: "text-blue-600 dark:text-blue-400",
-  build: "text-orange-600 dark:text-orange-400",
-  research: "text-green-600 dark:text-green-400",
-};
-
-export function spaceIconTint(id?: SpaceId | null) {
-  if (id && spaceIconColor[id]) return spaceIconColor[id];
+export function spaceIconTint(_id?: SpaceId | null) {
   return "text-muted-foreground";
 }
 

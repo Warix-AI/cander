@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { AppProvider, useApp } from "@/components/app/AppProvider";
+import { SpaceDataProvider } from "@/components/app/SpaceDataProvider";
 import { ChatColumn } from "@/components/shell/ChatColumn";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { MobileAppChrome } from "@/components/shell/MobileAppChrome";
@@ -44,8 +45,19 @@ import { cn } from "@/lib/utils";
 export function AppShell() {
   return (
     <AppProvider>
-      <Root />
+      <SpaceDataBridge>
+        <Root />
+      </SpaceDataBridge>
     </AppProvider>
+  );
+}
+
+function SpaceDataBridge({ children }: { children: React.ReactNode }) {
+  const { workspaceId, actorId } = useApp();
+  return (
+    <SpaceDataProvider workspaceId={workspaceId} actorId={actorId}>
+      {children}
+    </SpaceDataProvider>
   );
 }
 

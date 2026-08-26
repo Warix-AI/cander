@@ -3,16 +3,26 @@
 import { useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import { cn } from "@/lib/utils";
 
 export function PublishSheet() {
-  const { overlay, closeOverlay, publishApp, liveUrl, project } = useApp();
-  const slug = (project?.name ?? "app").toLowerCase().replace(/\s+/g, "-");
-  const hostedUrl = `https://${slug}.app`;
-  const domains = project?.domains ?? [];
+  const { overlay, closeOverlay, publishApp, liveUrl, project, projectId } =
+    useApp();
+  const { project: entityProject } = useSpaceProject(projectId);
+  const { publishBuild } = useSpaceMutation();
+  const displayName = entityProject?.title ?? project?.name ?? "app";
+  const slug = displayName.toLowerCase().replace(/\s+/g, "-");
+  const hostedUrl = `https://${slug}.courier.app`;
+  const domains = entityProject?.domains ?? project?.domains ?? [];
   const options = useMemo(
     () => [
-      { id: "courier", url: hostedUrl, label: `${slug}.app`, hint: "Verified subdomain" },
+      {
+        id: "courier",
+        url: hostedUrl,
+        label: `${slug}.courier.app`,
+        hint: "Verified subdomain",
+      },
       ...domains.map((domain) => ({
         id: domain,
         url: domain.startsWith("http") ? domain : `https://${domain}`,
@@ -23,10 +33,22 @@ export function PublishSheet() {
     [hostedUrl, domains, slug],
   );
   const [selected, setSelected] = useState(options[0]?.id ?? "courier");
+  const [busy, setBusy] = useState(false);
 
   if (overlay !== "publish") return null;
   const chosen = options.find((item) => item.id === selected) ?? options[0];
   const url = liveUrl && selected === "courier" ? liveUrl : chosen.url;
+
+  const handlePublish = async () => {
+    if (!projectId || busy) return;
+    setBusy(true);
+    try {
+      const result = await publishBuild(projectId, url);
+      publishApp(result.url);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
@@ -85,10 +107,11 @@ export function PublishSheet() {
         <p className="mt-1 text-[13px] text-muted-foreground">Production</p>
         <button
           type="button"
-          onClick={() => publishApp(url)}
-          className="mt-6 inline-flex h-10 w-full items-center justify-center rounded-full bg-primary text-[13.5px] font-medium text-primary-foreground hover:bg-foreground"
+          disabled={busy || !projectId}
+          onClick={() => void handlePublish()}
+          className="mt-6 inline-flex h-10 w-full items-center justify-center rounded-full bg-primary text-[13.5px] font-medium text-primary-foreground hover:bg-foreground disabled:opacity-50"
         >
-          Publish
+          {busy ? "Publishing…" : "Publish"}
         </button>
       </div>
     </div>

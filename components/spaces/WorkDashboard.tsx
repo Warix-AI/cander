@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import {
@@ -11,29 +11,19 @@ import {
   SpaceSettingsButton,
 } from "@/components/spaces/ItemSet";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
-import { BannerWash } from "@/components/spaces/BannerWash";
-import { connectors, buildPreviews } from "@/lib/data";
-import { workspaceAutomations, taskMeta } from "@/lib/build-catalog";
+import { connectorName } from "@/lib/api/connector-api";
 import {
-  getWorkConnectorsServerSnapshot,
-  getWorkConnectorsSnapshot,
-  subscribeWorkConnectors,
-  workConnectorIds,
-  armWorkConnectorAttach,
-} from "@/lib/work-connectors";
+  useConnectedConnectors,
+  useSpaceAttachments,
+  useSpaceBriefingItems,
+  useSpaceProjects,
+} from "@/lib/hooks/use-space-query";
+import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
+import type { BriefingItem } from "@/lib/space-entities";
 import {
-  getWorkAppsServerSnapshot,
-  getWorkAppsSnapshot,
-  subscribeWorkApps,
-  workAppIds,
-} from "@/lib/work-apps";
-import {
-  workAppsFor,
   workEmptyCopy,
-  workItemsFor,
   workScopeOptions,
   workSectionTitle,
-  type WorkItem,
   type WorkScope,
   type WorkTone,
 } from "@/lib/work-catalog";
@@ -45,8 +35,10 @@ export function WorkDashboard() {
   const {
     workspaceId,
     newChat,
-    sendMessage,
     openJob,
+    openSpaceEntity,
+    openProject,
+    openConnector,
     spaceLayout,
     setSpaceLayout,
     mobileSurface,
@@ -58,66 +50,81 @@ export function WorkDashboard() {
   const hoistFilters =
     mobile && view === "space" && mobileSurface === "panel";
   const [scope, setScope] = useState<WorkScope>("today");
-  useSyncExternalStore(
-    subscribeWorkConnectors,
-    getWorkConnectorsSnapshot,
-    getWorkConnectorsServerSnapshot,
-  );
-  useSyncExternalStore(
-    subscribeWorkApps,
-    getWorkAppsSnapshot,
-    getWorkAppsServerSnapshot,
-  );
-  const attachedIds = workConnectorIds(workspaceId);
-  const attachedBuildIds = workAppIds(workspaceId);
 
-  const connectorNames = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const item of connectors) map[item.id] = item.name;
-    return map;
-  }, []);
+  const { data: briefingItems, loading: briefingLoading } =
+    useSpaceBriefingItems();
+  const { connectorIds } = useConnectedConnectors();
+  const { data: attachments } = useSpaceAttachments();
+  const { data: buildProjects } = useSpaceProjects("build");
 
   const buildNames = useMemo(() => {
     const map: Record<string, string> = {};
-    for (const item of buildPreviews) {
-      if (item.workspaceId === workspaceId) {
-        map[item.projectId] = item.name;
-      }
-    }
+    for (const item of buildProjects) map[item.id] = item.title;
     return map;
-  }, [workspaceId]);
+  }, [buildProjects]);
 
   const todayItems = useMemo(
-    () => workItemsFor(workspaceId, "today", attachedIds),
-    [workspaceId, attachedIds],
-  );
-
-  const appItems = useMemo(
     () =>
-      workAppsFor(
-        workspaceId,
-        attachedIds,
-        attachedBuildIds,
-        connectorNames,
-        buildNames,
-      ),
-    [
-      workspaceId,
-      attachedIds,
-      attachedBuildIds,
-      connectorNames,
-      buildNames,
-    ],
+      briefingItems.filter((item) => item.workspaceId === workspaceId),
+    [briefingItems, workspaceId],
   );
 
-  const automations = useMemo(
-    () => workspaceAutomations(workspaceId),
-    [workspaceId],
-  );
+  const appItems = useMemo(() => {
+    const items: {
+      id: string;
+      title: string;
+      summary: string;
+      meta: string;
+      badge?: string;
+      tone?: WorkTone;
+      kind: "connector" | "build";
+      targetId: string;
+    }[] = [];
+    for (const id of connectorIds) {
+      items.push({
+        id: `app-connector-${id}`,
+        title: connectorName(id),
+        summary: "Connected app available in Work.",
+        meta: "Connector · attached",
+        badge: "App",
+        tone: "ready",
+        kind: "connector",
+        targetId: id,
+      });
+    }
+    for (const item of attachments) {
+      items.push({
+        id: `app-build-${item.targetId}`,
+        title: buildNames[item.targetId] ?? item.label ?? item.targetId,
+        summary: "Built in Build and added to Work.",
+        meta: "Build · in Work",
+        badge: "App",
+        tone: "neutral",
+        kind: "build",
+        targetId: item.targetId,
+      });
+    }
+    return items;
+  }, [connectorIds, attachments, buildNames]);
 
-  const ask = (text: string) => {
-    newChat("work");
-    sendMessage(text, { space: "work" });
+  const { data: automations } = useSpaceProjects("build", {
+    kind: "automation",
+  });
+
+  const openBriefing = (item: BriefingItem) => {
+    openSpaceEntity({
+      type: "briefing",
+      id: item.id,
+      space: "work",
+      workspaceId: item.workspaceId,
+      label: item.title,
+      snapshot: item.prompt,
+    });
+  };
+
+  const openApp = (kind: "connector" | "build", targetId: string) => {
+    if (kind === "connector") openConnector(targetId);
+    else openProject(targetId);
   };
 
   return (
@@ -148,7 +155,6 @@ export function WorkDashboard() {
             id: "add-connector",
             label: "Add connector",
             onClick: () => {
-              armWorkConnectorAttach(workspaceId);
               openSpace("connectors");
             },
           },
@@ -180,10 +186,10 @@ export function WorkDashboard() {
               kind="schedule"
               items={automations.map((item) => ({
                 id: item.id,
-                name: item.name,
+                name: item.title,
                 projectId: item.id,
-                meta: taskMeta(item),
-                detail: item.nextRun ?? item.schedule,
+                meta: "Automation",
+                detail: "Scheduled",
                 badge: "Automation",
               }))}
               onOpen={(id) => openJob(id)}
@@ -198,16 +204,26 @@ export function WorkDashboard() {
           ) : spaceLayout === "cards" ? (
             <div className="mt-3 grid grid-cols-1 gap-x-3 gap-y-5 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3">
               {appItems.map((item) => (
-                <WorkCard key={item.id} item={item} onAsk={ask} />
+                <WorkAppCard
+                  key={item.id}
+                  item={item}
+                  onOpen={() => openApp(item.kind, item.targetId)}
+                />
               ))}
             </div>
           ) : (
             <div className="mt-3 divide-y divide-border rounded-[10px] border border-border">
               {appItems.map((item) => (
-                <WorkRow key={item.id} item={item} onAsk={ask} />
+                <WorkAppRow
+                  key={item.id}
+                  item={item}
+                  onOpen={() => openApp(item.kind, item.targetId)}
+                />
               ))}
             </div>
           )
+        ) : briefingLoading ? (
+          <QuerySkeleton rows={3} />
         ) : !todayItems.length ? (
           <p className="mt-3 px-3 py-4 text-[13px] text-muted-foreground">
             {workEmptyCopy("today")}
@@ -215,13 +231,21 @@ export function WorkDashboard() {
         ) : spaceLayout === "cards" ? (
           <div className="mt-3 grid grid-cols-1 gap-x-3 gap-y-5 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3">
             {todayItems.map((item) => (
-              <WorkCard key={item.id} item={item} onAsk={ask} />
+              <BriefingCard
+                key={item.id}
+                item={item}
+                onOpen={() => openBriefing(item)}
+              />
             ))}
           </div>
         ) : (
           <div className="mt-3 divide-y divide-border rounded-[10px] border border-border">
             {todayItems.map((item) => (
-              <WorkRow key={item.id} item={item} onAsk={ask} />
+              <BriefingRow
+                key={item.id}
+                item={item}
+                onOpen={() => openBriefing(item)}
+              />
             ))}
           </div>
         )}
@@ -230,58 +254,112 @@ export function WorkDashboard() {
   );
 }
 
-function WorkCard({
+function BriefingCard({
   item,
-  onAsk,
+  onOpen,
 }: {
-  item: WorkItem;
-  onAsk: (text: string) => void;
+  item: BriefingItem;
+  onOpen: () => void;
 }) {
   return (
     <button
       type="button"
-      onClick={() => onAsk(item.prompt)}
-      className="flex h-full min-w-0 flex-col text-left"
+      onClick={onOpen}
+      className="flex h-full min-w-0 flex-col rounded-[10px] border border-border p-4 text-left canvas-hover"
     >
-      <p className="mb-2 truncate text-[12px] text-muted-foreground">
-        {item.meta}
+      <ToneDot tone={item.tone} />
+      <p className="mt-2 line-clamp-2 text-[14px] font-medium tracking-[-0.02em]">
+        {item.title}
       </p>
-      <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[10px] max-lg:aspect-[16/11]">
-        <BannerWash space="work" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-3.5 pb-4 text-white">
-          <span className="flex flex-wrap items-center gap-2">
-            <ToneDot tone={item.tone} light />
-            {item.badge ? (
-              <span className="inline-flex items-center rounded-md bg-white/90 px-1.5 py-0.5 text-[11px] leading-none font-medium text-foreground">
-                {item.badge}
-              </span>
-            ) : null}
-          </span>
-          <p className="mt-2 line-clamp-2 min-h-[2.5rem] text-[14px] font-medium tracking-[-0.02em]">
-            {item.title}
-          </p>
-        </div>
-      </div>
-      <p className="mt-2.5 line-clamp-2 min-h-[2.5rem] text-[13px] leading-relaxed text-muted-foreground">
+      <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
         {item.summary}
       </p>
     </button>
   );
 }
 
-function WorkRow({
+function BriefingRow({
   item,
-  onAsk,
+  onOpen,
 }: {
-  item: WorkItem;
-  onAsk: (text: string) => void;
+  item: BriefingItem;
+  onOpen: () => void;
 }) {
   return (
     <button
       type="button"
-      onClick={() => onAsk(item.prompt)}
+      onClick={onOpen}
       className="canvas-hover flex w-full items-center gap-3 py-3.5 text-left transition-colors duration-200 first:rounded-t-[10px] last:rounded-b-[10px]"
+    >
+      <ToneDot tone={item.tone} />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[14px] font-medium tracking-[-0.02em]">
+          {item.title}
+        </span>
+        <span className="mt-0.5 block text-[13px] leading-relaxed text-muted-foreground">
+          {item.summary}
+        </span>
+      </span>
+      <ChevronRight
+        className="h-4 w-4 shrink-0 text-muted-foreground"
+        strokeWidth={1.6}
+      />
+    </button>
+  );
+}
+
+function WorkAppCard({
+  item,
+  onOpen,
+}: {
+  item: {
+    title: string;
+    summary: string;
+    meta: string;
+    badge?: string;
+    tone?: WorkTone;
+  };
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex h-full min-w-0 flex-col rounded-[10px] border border-border p-4 text-left canvas-hover"
+    >
+      <ToneDot tone={item.tone} />
+      {item.badge ? (
+        <span className="mt-2 inline-flex w-fit rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+          {item.badge}
+        </span>
+      ) : null}
+      <p className="mt-2 text-[14px] font-medium tracking-[-0.02em]">
+        {item.title}
+      </p>
+      <p className="mt-1 text-[13px] text-muted-foreground">{item.summary}</p>
+      <p className="mt-2 text-[12px] text-muted-foreground">{item.meta}</p>
+    </button>
+  );
+}
+
+function WorkAppRow({
+  item,
+  onOpen,
+}: {
+  item: {
+    title: string;
+    summary: string;
+    meta: string;
+    badge?: string;
+    tone?: WorkTone;
+  };
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="canvas-hover flex w-full items-center gap-3 py-3.5 text-left"
     >
       <ToneDot tone={item.tone} />
       <span className="min-w-0 flex-1">
@@ -299,9 +377,6 @@ function WorkRow({
           {item.summary}
         </span>
       </span>
-      <span className="hidden shrink-0 text-[12px] text-muted-foreground sm:block">
-        {item.meta}
-      </span>
       <ChevronRight
         className="h-4 w-4 shrink-0 text-muted-foreground"
         strokeWidth={1.6}
@@ -312,22 +387,18 @@ function WorkRow({
 
 function ToneDot({
   tone,
-  light = false,
 }: {
-  tone?: WorkTone;
-  light?: boolean;
+  tone?: WorkTone | BriefingItem["tone"];
 }) {
   return (
     <span
       aria-hidden
       className={cn(
-        "mt-1.5 h-2 w-2 shrink-0 rounded-full",
-        light && "mt-0 ring-2 ring-white/40",
+        "h-2 w-2 shrink-0 rounded-full",
         tone === "urgent" && "bg-rose-500",
         tone === "waiting" && "bg-amber-500",
         tone === "ready" && "bg-sky-500",
-        (!tone || tone === "neutral") &&
-          (light ? "bg-white/70" : "bg-muted-foreground/35"),
+        (!tone || tone === "neutral") && "bg-muted-foreground/35",
       )}
     />
   );

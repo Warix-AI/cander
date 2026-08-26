@@ -147,7 +147,7 @@ export function Dropdown({
                   : { top: 0, left: 0, visibility: "hidden" }
               }
               className={cn(
-                "fixed z-[200] rounded-[10px] p-1.5 text-popover-foreground",
+                "fixed z-[200] isolate rounded-[10px] p-1.5 text-popover-foreground",
                 mobile
                   ? "mobile-dropdown-menu"
                   : "light-surface bg-popover shadow-[0_12px_40px_oklch(0_0_0/0.12)] dark:bg-transparent dark:shadow-[0_12px_40px_oklch(0_0_0/0.22)]",

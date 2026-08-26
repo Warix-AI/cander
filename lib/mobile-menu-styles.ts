@@ -40,4 +40,4 @@ export const MOBILE_MENU_ICON_SIZE = "h-5 w-5";
 
 /** Chrome icon / pill button on mobile. */
 export const mobileChromeButtonClass =
-  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors duration-200 hover:bg-muted";
+  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--mobile-chrome-surface)] text-foreground transition-colors duration-200 hover:bg-muted";
