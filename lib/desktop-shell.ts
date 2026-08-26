@@ -8,5 +8,5 @@ export function isDesktopShell() {
  * Clearance under macOS traffic lights for the workspace rail + left menu only.
  * Main content stays full-bleed to the top of the window.
  */
-export const DESKTOP_TITLEBAR_PX = 22;
+export const DESKTOP_TITLEBAR_PX = 42;
 

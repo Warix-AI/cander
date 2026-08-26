@@ -4,8 +4,8 @@ const path = require("path");
 const APP_NAME = "Cander";
 const DEFAULT_URL = "https://cander.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
-/** Half the previous inset — only the left chrome sits under traffic lights. */
-const TITLEBAR_PX = 22;
+/** Clearance under traffic lights for left chrome only (~22 + 20). */
+const TITLEBAR_PX = 42;
 /** Approx workspace rail + left menu width for the drag strip. */
 const LEFT_DRAG_WIDTH_PX = 320;
 
@@ -30,7 +30,7 @@ function createWindow() {
     backgroundColor: "#ffffff",
     show: false,
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 10 },
+    trafficLightPosition: { x: 16, y: 14 },
     icon: path.join(__dirname, "../assets/icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
