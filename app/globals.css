@@ -206,8 +206,8 @@ html.cander-narrow .mobile-glass-segment-active {
     inset 0 0 0 0.5px oklch(1 0 0 / 0.8);
 }
 
-html.cander-mobile .mobile-glass-card,
-html.cander-narrow .mobile-glass-card {
+html:not(.dark).cander-mobile .mobile-glass-card,
+html:not(.dark).cander-narrow .mobile-glass-card {
   background: oklch(1 0 0 / 0.68);
   -webkit-backdrop-filter: blur(16px) saturate(var(--mobile-glass-saturate));
   backdrop-filter: blur(16px) saturate(var(--mobile-glass-saturate));
@@ -229,8 +229,8 @@ html.cander-narrow .mobile-glass-dock::before {
   content: none;
 }
 
-html.cander-mobile .composer-shell,
-html.cander-narrow .composer-shell {
+html:not(.dark).cander-mobile .composer-shell,
+html:not(.dark).cander-narrow .composer-shell {
   background-color: oklch(1 0 0) !important;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
@@ -240,13 +240,13 @@ html.cander-narrow .composer-shell {
     0 6px 20px oklch(0 0 0 / 0.05) !important;
 }
 
-html.cander-mobile .composer-dock,
-html.cander-narrow .composer-dock {
+html:not(.dark).cander-mobile .composer-dock,
+html:not(.dark).cander-narrow .composer-dock {
   background-color: oklch(1 0 0);
 }
 
-html.cander-mobile .composer-dock .light-surface,
-html.cander-narrow .composer-dock .light-surface {
+html:not(.dark).cander-mobile .composer-dock .light-surface,
+html:not(.dark).cander-narrow .composer-dock .light-surface {
   background-color: oklch(1 0 0) !important;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
@@ -311,19 +311,23 @@ html.cander-narrow .light-surface[class*="fixed"] {
 
 .dark html.cander-mobile .composer-shell,
 .dark html.cander-narrow .composer-shell {
-  background-color: oklch(0.24 0.012 265 / 0.82) !important;
+  background-color: oklch(0.17 0.008 265) !important;
   border-color: oklch(1 0 0 / 0.1) !important;
   box-shadow:
     0 1px 2px oklch(0 0 0 / 0.22),
-    0 6px 20px oklch(0 0 0 / 0.18),
-    inset 0 0 0 0.5px oklch(1 0 0 / 0.08) !important;
+    0 6px 20px oklch(0 0 0 / 0.18) !important;
+}
+
+.dark html.cander-mobile .composer-dock,
+.dark html.cander-narrow .composer-dock {
+  background-color: oklch(0.145 0 0);
 }
 
 .dark html.cander-mobile .composer-dock .light-surface,
 .dark html.cander-narrow .composer-dock .light-surface,
 .dark html.cander-mobile .light-surface[class*="fixed"],
 .dark html.cander-narrow .light-surface[class*="fixed"] {
-  background-color: oklch(0.24 0.012 265 / 0.88) !important;
+  background-color: oklch(0.17 0.008 265) !important;
 }
 
 html.cander-mobile body,
@@ -341,6 +345,11 @@ html.cander-narrow body {
   -webkit-overflow-scrolling: touch;
   touch-action: manipulation;
   background-color: var(--app-canvas);
+}
+
+.dark html.cander-mobile body,
+.dark html.cander-narrow body {
+  background-color: oklch(0.145 0 0);
 }
 
 html.cander-mobile input,

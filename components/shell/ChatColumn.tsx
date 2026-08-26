@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { useChatCanvasCentered } from "@/lib/chat-layout";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useShellStyle } from "@/lib/shell-chrome";
+import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 
 const homePromptIcons = {
   p0: Briefcase,
@@ -92,7 +93,10 @@ export function ChatColumn() {
     return (
       <section
         data-mobile-chat=""
-        className="relative box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white dark:bg-neutral-950"
+        className={cn(
+          "relative box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+          MOBILE_APP_BG,
+        )}
       >
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 touch-pan-y">
           {showSpaceNewPrompt ? (
@@ -116,7 +120,7 @@ export function ChatColumn() {
             <div ref={endRef} />
           )}
         </div>
-        <div className="shrink-0 bg-white dark:bg-neutral-950">
+        <div className={cn("shrink-0", MOBILE_APP_BG)}>
           <Composer onSend={send} />
         </div>
       </section>

@@ -119,6 +119,7 @@ import {
   startContinuousChat,
   summarizeSession,
 } from "@/lib/persistent-chat";
+import { markMobileInstantNav } from "@/lib/mobile-instant-nav";
 
 type Snapshot = {
   view: CourierView;
@@ -842,6 +843,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      if (view === "space") {
+        markMobileInstantNav();
+      }
+
       setThreadId(null);
       setSpaceId(null);
       setProjectId(null);
@@ -865,7 +870,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: null,
       });
     },
-    [pushTarget, workspaceId],
+    [pushTarget, workspaceId, view],
   );
 
   const openCourierHome = useCallback(() => {

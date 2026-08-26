@@ -3,8 +3,12 @@ import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 /** Off-white menu canvas — contrasts with the white chat peek. */
 export const MOBILE_MENU_BG = "mobile-menu-canvas";
 
-/** Main app surfaces on mobile — pure white. */
+/** Main app surfaces on mobile — theme-aware. */
 export const MOBILE_APP_BG = "bg-white dark:bg-neutral-950";
+
+/** Settings groups on mobile — flat surfaces that respect light/dark. */
+export const MOBILE_SETTINGS_SURFACE =
+  "border border-border/60 bg-muted/40 dark:border-white/10 dark:bg-neutral-900";
 
 /** ChatGPT-style peek strip radius when the menu drawer is open. */
 export const MOBILE_PEEK_RADIUS = "rounded-l-[48px]";

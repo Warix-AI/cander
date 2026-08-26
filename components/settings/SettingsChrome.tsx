@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
-import { MOBILE_APP_BG, MOBILE_GLASS_CARD } from "@/lib/mobile-menu-styles";
+import { MOBILE_APP_BG, MOBILE_SETTINGS_SURFACE } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
@@ -168,9 +168,11 @@ export function SettingsGroup({
   return (
     <div
       className={cn(
-        "overflow-hidden border border-border bg-card",
-        mobile && MOBILE_GLASS_CARD,
-        mobile ? SHELL_G3_RADIUS : "rounded-[10px]",
+        "overflow-hidden",
+        mobile
+          ? MOBILE_SETTINGS_SURFACE
+          : "border border-border bg-card rounded-[10px]",
+        mobile ? SHELL_G3_RADIUS : undefined,
         className,
       )}
     >
@@ -261,9 +263,10 @@ export function SettingsPanel({
   return (
     <div
       className={cn(
-        "border border-border bg-card",
-        mobile && MOBILE_GLASS_CARD,
-        mobile ? SHELL_G3_RADIUS : "rounded-[10px]",
+        mobile
+          ? MOBILE_SETTINGS_SURFACE
+          : "border border-border bg-card rounded-[10px]",
+        mobile ? SHELL_G3_RADIUS : undefined,
         padded && "p-4 sm:p-5",
         className,
       )}
@@ -282,9 +285,11 @@ export function SettingsStatGrid({
   return (
     <div
       className={cn(
-        "overflow-hidden border border-border bg-card",
-        mobile && MOBILE_GLASS_CARD,
-        mobile ? SHELL_G3_RADIUS : "rounded-[10px]",
+        "overflow-hidden",
+        mobile
+          ? MOBILE_SETTINGS_SURFACE
+          : "border border-border bg-card rounded-[10px]",
+        mobile ? SHELL_G3_RADIUS : undefined,
         "[&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:top-0 [&>*+*]:before:right-0 [&>*+*]:before:left-4 [&>*+*]:before:h-px [&>*+*]:before:bg-border",
       )}
     >

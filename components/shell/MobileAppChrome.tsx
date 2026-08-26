@@ -1,5 +1,6 @@
 "use client";
 
+import { flushSync } from "react-dom";
 import { useSyncExternalStore, type TouchEventHandler } from "react";
 import {
   ChevronDown,
@@ -172,13 +173,11 @@ export function MobileAppChrome({ className }: { className?: string }) {
   );
 
   const startNewChat = () => {
-    newChat();
-    setMobileSurface("chat");
+    flushSync(() => newChat());
   };
 
   const startPanelNewChat = () => {
-    newChat();
-    setMobileSurface("chat");
+    flushSync(() => newChat());
   };
 
   const preview = previewAddress(project?.name);

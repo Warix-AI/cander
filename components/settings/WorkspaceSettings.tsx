@@ -480,7 +480,7 @@ function WorkspacePage({
                   {open ? (
                     mobile ? (
                       <div className="border-t border-border bg-muted/20 px-4 py-3">
-                        <SettingsGroup className="border-0 bg-card">
+                        <SettingsGroup className="border-0">
                           {workspace.spaces
                             .filter(
                               (spaceId) =>
@@ -834,7 +834,7 @@ function KnowledgeMobileRow({
           <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
             {item.summary}
           </p>
-          <SettingsGroup className="border-0 bg-card">
+          <SettingsGroup className="border-0">
             {item.files.length ? (
               item.files.map((entry) => (
                 <div

@@ -51,6 +51,7 @@ import {
   subscribeUltraLicenses,
 } from "@/lib/ultra-licenses";
 import type { Role, SettingsTab } from "@/lib/types";
+import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 import { workspaceKindOf } from "@/lib/workspace-kind";
 import {
@@ -131,7 +132,7 @@ export function SettingsView() {
   const stackDirection = useMobileStackDirection(stackDepth);
 
   const settingsBody = settingsMobileHub ? (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-white px-4 pb-5 pt-2 dark:bg-neutral-950 lg:hidden">
+    <div className={cn("min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-2 lg:hidden", MOBILE_APP_BG)}>
       <SettingsGroup dividerInset="icon">
         {settingsNav.map((tab) => {
           const Icon = settingsIcons[tab.id];
@@ -162,7 +163,7 @@ export function SettingsView() {
       </SettingsGroup>
     </div>
   ) : (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-white dark:bg-neutral-950">
+    <div className={cn("min-h-0 flex-1 overflow-y-auto", MOBILE_APP_BG)}>
       {settingsTab === "organization" ? <OrganizationSettings /> : null}
 
       {settingsTab === "workspaces" ? (
@@ -198,7 +199,7 @@ export function SettingsView() {
         <MobileSlideStack
           activeKey={stackKey}
           direction={stackDirection}
-          frameClassName="bg-white dark:bg-neutral-950"
+          frameClassName={MOBILE_APP_BG}
         >
           {settingsBody}
         </MobileSlideStack>

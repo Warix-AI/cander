@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { flushSync } from "react-dom";
 import type { LucideIcon } from "lucide-react";
 import { ChevronLeft, LayoutGrid, Pin, Settings, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
@@ -68,7 +69,7 @@ export function MobileMenuPane() {
             spaceId={spaceId}
             threadId={threadId}
             onNewChat={() => {
-              newChat();
+              flushSync(() => newChat());
               setMobileMenuScreen("main");
               setMobileSurface("chat");
             }}
