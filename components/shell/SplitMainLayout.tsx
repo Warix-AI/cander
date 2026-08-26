@@ -4,10 +4,13 @@ import { useEffect, useRef, useState, type ReactNode, type TransitionEvent } fro
 import { ContextPanel, ResizeHandle } from "@/components/shell/ContextPanel";
 import { TopRail } from "@/components/shell/TopRail";
 import { RightPanelToggleDock } from "@/components/shell/PanelToggle";
+import { MobileMenuPane } from "@/components/shell/MobileMenuPane";
+import { MobilePager } from "@/components/shell/MobilePager";
 import { useApp } from "@/components/app/AppProvider";
 import { canUseRightPanel } from "@/lib/right-panel";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useShellStyle } from "@/lib/shell-chrome";
+import type { MobileSurface } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function SplitMainLayout({ children }: { children: ReactNode }) {
@@ -50,15 +53,9 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
   const [panelMounted, setPanelMounted] = useState(false);
   const wasOpen = useRef(false);
 
-  // Mobile: both panes stay full-size and translate — no width expand/collapse.
-  const mobilePager = mobile && panelOn && canPanel;
-  const showChat = !mobilePager || mobileSurface === "chat";
-  const showPanel = !mobilePager || mobileSurface === "panel";
-
   useEffect(() => {
-    if (mobilePager) {
-      setPanelMounted(true);
-      wasOpen.current = true;
+    if (mobile) {
+      setPanelMounted(canPanel && panelOn);
       return;
     }
     if (immersive) {
@@ -84,48 +81,56 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
       return () => window.cancelAnimationFrame(id);
     }
     setSlideWidth(panelPct);
-  }, [panelOn, immersive, panelPct, mobilePager]);
+  }, [panelOn, immersive, panelPct, mobile, canPanel]);
+
+  if (mobile) {
+    const withPanel = canPanel && panelOn;
+    const panes: MobileSurface[] = withPanel
+      ? ["menu", "chat", "panel"]
+      : ["menu", "chat"];
+    const active: MobileSurface =
+      mobileSurface === "menu"
+        ? "menu"
+        : mobileSurface === "panel" && withPanel
+          ? "panel"
+          : "chat";
+
+    const kids = [
+      <MobileMenuPane key="menu" />,
+      <div key="chat" className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+        {children}
+      </div>,
+    ];
+    if (withPanel) {
+      kids.push(
+        <div
+          key="panel"
+          className="flex h-full min-h-0 flex-col overflow-hidden bg-background"
+        >
+          <ContextPanel />
+        </div>,
+      );
+    }
+
+    return (
+      <MobilePager panes={panes} active={active}>
+        {kids}
+      </MobilePager>
+    );
+  }
 
   const showPanelColumn = canPanel && (panelMounted || panelOn);
-  const showPanelBody = panelOn || slideWidth > 0 || mobilePager;
+  const showPanelBody = panelOn || slideWidth > 0;
   const showResize =
-    showPanelColumn && slideWidth > 0 && !mobile && !immersive && panelOn;
+    showPanelColumn && slideWidth > 0 && !immersive && panelOn;
   const livePanelWidth =
-    dragging && panelOn && !immersive && !mobilePager ? panelPct : slideWidth;
-  const animateLayout = !dragging && !mobilePager && !immersive;
+    dragging && panelOn && !immersive ? panelPct : slideWidth;
+  const animateLayout = !dragging && !immersive;
 
   const onPanelWidthTransitionEnd = (event: TransitionEvent<HTMLDivElement>) => {
     if (event.propertyName !== "width") return;
     if (!panelOn && slideWidth === 0) setPanelMounted(false);
   };
-
-  if (mobilePager) {
-    const onPanel = mobileSurface === "panel";
-    return (
-      <div
-        id="courier-main"
-        className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
-      >
-        <div
-          className="flex h-full w-[200%] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
-          style={{ transform: `translate3d(${onPanel ? "-50%" : "0"}, 0, 0)` }}
-        >
-          <div
-            className="flex h-full w-1/2 min-w-0 flex-col"
-            aria-hidden={onPanel}
-          >
-            {children}
-          </div>
-          <div
-            className="flex h-full w-1/2 min-w-0 flex-col overflow-hidden"
-            aria-hidden={!onPanel}
-          >
-            <ContextPanel />
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div id="courier-main" className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -140,7 +145,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
             "transition-[flex-basis] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
         )}
       >
-        {hideTopRail || mobile ? null : <TopRail />}
+        {hideTopRail ? null : <TopRail />}
         {children}
       </div>
       {showPanelColumn ? (
@@ -154,14 +159,10 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
               !immersive &&
                 animateLayout &&
                 "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
-              livePanelWidth > 0 &&
-                showChat &&
-                !floating &&
-                "border-l border-border",
+              livePanelWidth > 0 && !floating && "border-l border-border",
               livePanelWidth === 0 && !panelOn && "pointer-events-none",
             )}
             style={immersive ? undefined : { width: `${livePanelWidth}%` }}
-            aria-hidden={!showPanel}
           >
             {showPanelBody ? <ContextPanel /> : null}
           </div>

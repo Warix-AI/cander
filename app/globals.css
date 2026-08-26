@@ -170,6 +170,23 @@ html.cander-narrow .landing-suggestions {
   view-transition-name: none !important;
 }
 
+/*
+ * Composer slides up with the keyboard, down when it hides.
+ * --keyboard-inset is set by Capacitor Keyboard / visualViewport / native bridge.
+ */
+html.cander-mobile [data-mobile-chat],
+html.cander-narrow [data-mobile-chat] {
+  padding-bottom: var(--keyboard-inset, 0px);
+  transition: padding-bottom 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: padding-bottom;
+}
+
+html.cander-mobile[data-keyboard="1"] .composer-keyboard-pad,
+html.cander-narrow[data-keyboard="1"] .composer-keyboard-pad {
+  padding-bottom: 0.35rem !important;
+  transition: padding-bottom 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* Narrow phone / tablet shell (browser + Capacitor) — same fixed canvas */
 @media (max-width: 1023px) {
   html {

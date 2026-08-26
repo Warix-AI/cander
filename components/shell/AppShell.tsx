@@ -5,7 +5,6 @@ import { AppProvider, useApp } from "@/components/app/AppProvider";
 import { ChatColumn } from "@/components/shell/ChatColumn";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { MobileAppChrome } from "@/components/shell/MobileAppChrome";
-import { MobileMenuDrawer } from "@/components/shell/MobileMenuDrawer";
 import { SpaceChatLayout } from "@/components/shell/SpaceChatLayout";
 import { RecentsView } from "@/components/shell/RecentsView";
 import { SplitMainLayout } from "@/components/shell/SplitMainLayout";
@@ -29,6 +28,7 @@ import { FloatingVoiceDock } from "@/components/shell/VoiceControl";
 import { AppearanceProvider } from "@/components/theme/AppearanceProvider";
 import { isDesktopShell } from "@/lib/desktop-shell";
 import {
+  isMobileShell,
   lockMobileViewport,
   useMobileShell as useCapacitorMobileShell,
 } from "@/lib/mobile-shell";
@@ -74,9 +74,15 @@ function Root() {
   }, []);
 
   // Phone browser (non-Capacitor): same no-zoom / keyboard lock as the app.
+  // Capacitor already locks via useCapacitorMobileShell — don't double-bind.
   useEffect(() => {
     if (!mobile || isDesktopShell()) return;
     document.documentElement.classList.add("cander-narrow");
+    if (isMobileShell()) {
+      return () => {
+        document.documentElement.classList.remove("cander-narrow");
+      };
+    }
     const unlock = lockMobileViewport();
     return () => {
       unlock();
@@ -136,7 +142,6 @@ function Root() {
         )}
       >
         <Sidebar />
-        <MobileMenuDrawer />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {mobile ? <MobileAppChrome /> : null}
           <CourierMain />

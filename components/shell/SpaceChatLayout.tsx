@@ -6,14 +6,17 @@ import { ChatColumn } from "@/components/shell/ChatColumn";
 import { ResizeHandle } from "@/components/shell/ContextPanel";
 import { TopRail } from "@/components/shell/TopRail";
 import { SpaceDashboard } from "@/components/shell/SpaceDashboard";
+import { MobileMenuPane } from "@/components/shell/MobileMenuPane";
+import { MobilePager } from "@/components/shell/MobilePager";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useShellStyle } from "@/lib/shell-chrome";
+import type { MobileSurface } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /**
  * Space stays mounted. On desktop, chat grows while space shrinks to a panel.
- * On mobile, chat and space are full-size pages that translate left/right.
+ * On mobile: menu · chat · space — three full screens that translate.
  */
 export function SpaceChatLayout() {
   const {
@@ -42,7 +45,7 @@ export function SpaceChatLayout() {
   useEffect(() => {
     if (mobile) return;
     if (immersive) {
-      setSpacePct(chatOpen ? 100 : 100);
+      setSpacePct(100);
       wasOpen.current = chatOpen;
       return;
     }
@@ -64,36 +67,32 @@ export function SpaceChatLayout() {
     setSpacePct(panelPct);
   }, [chatOpen, immersive, panelPct, mobile]);
 
-  // Mobile pager: both surfaces always full width, slide with translate.
   if (mobile) {
-    const onPanel = !chatOpen || mobileSurface === "panel";
+    const panes: MobileSurface[] = ["menu", "chat", "panel"];
+    // Prefer explicit surface; when browsing a space with no chat armed, show panel.
+    const active: MobileSurface =
+      mobileSurface === "menu"
+        ? "menu"
+        : mobileSurface === "chat" && chatArmed
+          ? "chat"
+          : mobileSurface === "panel" || !chatArmed
+            ? "panel"
+            : "chat";
+
     return (
-      <div
-        id="courier-main"
-        className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
-      >
-        <div
-          className="flex h-full w-[200%] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
-          style={{ transform: `translate3d(${onPanel ? "-50%" : "0"}, 0, 0)` }}
-        >
-          <div
-            className="flex h-full w-1/2 min-w-0 flex-col overflow-hidden bg-background"
-            aria-hidden={onPanel}
-          >
-            {chatArmed ? <ChatColumn /> : null}
-          </div>
-          <div
-            className="flex h-full w-1/2 min-w-0 flex-col overflow-hidden bg-background"
-            aria-hidden={!onPanel}
-          >
-            <SpaceRenderModeProvider mode="page">
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
-                <SpaceDashboard />
-              </div>
-            </SpaceRenderModeProvider>
-          </div>
+      <MobilePager panes={panes} active={active}>
+        <MobileMenuPane />
+        <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+          <ChatColumn />
         </div>
-      </div>
+        <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+          <SpaceRenderModeProvider mode="page">
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+              <SpaceDashboard />
+            </div>
+          </SpaceRenderModeProvider>
+        </div>
+      </MobilePager>
     );
   }
 

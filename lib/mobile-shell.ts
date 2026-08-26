@@ -2,15 +2,23 @@
 
 import { useEffect, useState } from "react";
 
+type KeyboardPlugin = {
+  setAccessoryBarVisible?: (opts: { isVisible: boolean }) => Promise<void>;
+  setScroll?: (opts: { isDisabled: boolean }) => Promise<void>;
+  addListener?: (
+    event:
+      | "keyboardWillShow"
+      | "keyboardDidShow"
+      | "keyboardWillHide"
+      | "keyboardDidHide",
+    cb: (info: { keyboardHeight: number }) => void,
+  ) => Promise<{ remove: () => void }>;
+};
+
 type CapacitorBridge = {
   isNativePlatform?: () => boolean;
   getPlatform?: () => string;
-  Plugins?: {
-    Keyboard?: {
-      setAccessoryBarVisible?: (opts: { isVisible: boolean }) => Promise<void>;
-      setScroll?: (opts: { isDisabled: boolean }) => Promise<void>;
-    };
-  };
+  Plugins?: { Keyboard?: KeyboardPlugin };
 };
 
 function getCapacitor(): CapacitorBridge | undefined {
@@ -33,36 +41,75 @@ export function getMobilePlatform(): "ios" | "android" | "web" {
   return "web";
 }
 
-/** Hide iOS form accessory (↑↓ / Done) when Capacitor Keyboard is available. */
-async function hideKeyboardAccessory() {
-  try {
-    const keyboard = getCapacitor()?.Plugins?.Keyboard;
-    await keyboard?.setAccessoryBarVisible?.({ isVisible: false });
-    await keyboard?.setScroll?.({ isDisabled: true });
-  } catch {
-    // Plugin optional — accessory also fixed by keeping file inputs out of <form>.
-  }
+/** Shared across duplicate lock calls so one listener can't zero out another. */
+let pluginHeight = 0;
+let lockCount = 0;
+let sharedCleanups: Array<() => void> = [];
+
+function writeKeyboardInset(px: number) {
+  const root = document.documentElement;
+  const value = Math.max(0, Math.round(px));
+  root.style.setProperty("--keyboard-inset", `${value}px`);
+  root.dataset.keyboard = value > 24 ? "1" : "0";
 }
 
-/**
- * Prevent pinch-zoom / document scroll. Do NOT resize the shell around the
- * keyboard — that shoved the composer off-screen.
- */
-export function lockMobileViewport() {
-  const root = document.documentElement;
-  void hideKeyboardAccessory();
-
-  const keepTop = () => {
-    if (window.scrollY !== 0 || window.scrollX !== 0) {
-      window.scrollTo(0, 0);
-    }
-  };
-
-  keepTop();
+function applyKeyboardInset() {
   const vv = window.visualViewport;
-  vv?.addEventListener("resize", keepTop);
-  vv?.addEventListener("scroll", keepTop);
-  window.addEventListener("focusin", keepTop);
+  let viewportKb = 0;
+  if (vv) {
+    viewportKb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+  }
+  writeKeyboardInset(Math.max(pluginHeight, viewportKb));
+  if (window.scrollY !== 0 || window.scrollX !== 0) window.scrollTo(0, 0);
+}
+
+function ensureSharedListeners() {
+  if (sharedCleanups.length > 0) return;
+
+  const keyboard = getCapacitor()?.Plugins?.Keyboard;
+  void keyboard?.setAccessoryBarVisible?.({ isVisible: false });
+  void keyboard?.setScroll?.({ isDisabled: true });
+
+  if (keyboard?.addListener) {
+    const onShow = (info: { keyboardHeight: number }) => {
+      pluginHeight = Math.max(0, info.keyboardHeight || 0);
+      applyKeyboardInset();
+    };
+    const onHide = () => {
+      pluginHeight = 0;
+      applyKeyboardInset();
+    };
+    void keyboard.addListener("keyboardWillShow", onShow).then((handle) =>
+      sharedCleanups.push(() => handle.remove()),
+    );
+    void keyboard.addListener("keyboardDidShow", onShow).then((handle) =>
+      sharedCleanups.push(() => handle.remove()),
+    );
+    void keyboard.addListener("keyboardWillHide", onHide).then((handle) =>
+      sharedCleanups.push(() => handle.remove()),
+    );
+    void keyboard.addListener("keyboardDidHide", onHide).then((handle) =>
+      sharedCleanups.push(() => handle.remove()),
+    );
+  }
+
+  const vv = window.visualViewport;
+  vv?.addEventListener("resize", applyKeyboardInset);
+  vv?.addEventListener("scroll", applyKeyboardInset);
+  window.addEventListener("resize", applyKeyboardInset);
+  const onFocusIn = () => applyKeyboardInset();
+  const onFocusOut = () => {
+    window.setTimeout(applyKeyboardInset, 120);
+  };
+  window.addEventListener("focusin", onFocusIn);
+  window.addEventListener("focusout", onFocusOut);
+  sharedCleanups.push(() => {
+    vv?.removeEventListener("resize", applyKeyboardInset);
+    vv?.removeEventListener("scroll", applyKeyboardInset);
+    window.removeEventListener("resize", applyKeyboardInset);
+    window.removeEventListener("focusin", onFocusIn);
+    window.removeEventListener("focusout", onFocusOut);
+  });
 
   const blockZoom = (event: Event) => {
     event.preventDefault();
@@ -76,16 +123,36 @@ export function lockMobileViewport() {
   document.addEventListener("gestureend", blockZoom, {
     passive: false,
   } as AddEventListenerOptions);
-
-  return () => {
-    vv?.removeEventListener("resize", keepTop);
-    vv?.removeEventListener("scroll", keepTop);
-    window.removeEventListener("focusin", keepTop);
+  sharedCleanups.push(() => {
     document.removeEventListener("gesturestart", blockZoom);
     document.removeEventListener("gesturechange", blockZoom);
     document.removeEventListener("gestureend", blockZoom);
-    root.style.removeProperty("--keyboard-inset");
-    delete root.dataset.keyboard;
+  });
+
+  applyKeyboardInset();
+}
+
+/**
+ * Lift the composer with the keyboard (padding-bottom = keyboard height).
+ * Hide iOS form accessory when Capacitor Keyboard is present.
+ *
+ * With Capacitor `Keyboard.resize: none`, the WebView often does not shrink, so
+ * visualViewport alone is unreliable — merge plugin events + viewport. Native
+ * iOS/Android bridges may also write `--keyboard-inset` directly.
+ */
+export function lockMobileViewport() {
+  lockCount += 1;
+  ensureSharedListeners();
+
+  return () => {
+    lockCount = Math.max(0, lockCount - 1);
+    if (lockCount > 0) return;
+    sharedCleanups.forEach((fn) => fn());
+    sharedCleanups = [];
+    pluginHeight = 0;
+    writeKeyboardInset(0);
+    document.documentElement.style.removeProperty("--keyboard-inset");
+    delete document.documentElement.dataset.keyboard;
   };
 }
 

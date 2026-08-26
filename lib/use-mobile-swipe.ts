@@ -5,14 +5,10 @@ import { useApp } from "@/components/app/AppProvider";
 import { canUseRightPanel } from "@/lib/right-panel";
 import { useMobileShell } from "@/lib/use-media-query";
 
-const EDGE_PX = 28;
 const SWIPE_MIN = 56;
 
 /**
- * Horizontal swipe for mobile shell:
- * - swipe right from left edge / on chat → open menu
- * - swipe left on chat → open right panel (when available)
- * - swipe right on panel → back to chat
+ * Horizontal swipe across menu · chat · panel.
  */
 export function useMobileSwipeGestures() {
   const mobile = useMobileShell();
@@ -25,8 +21,6 @@ export function useMobileSwipeGestures() {
     projectId,
     jobId,
     skillId,
-    sidebarOpen,
-    setSidebarOpen,
     mobileSurface,
     setMobileSurface,
     panelMode,
@@ -36,7 +30,6 @@ export function useMobileSwipeGestures() {
   const startX = useRef(0);
   const startY = useRef(0);
   const tracking = useRef(false);
-  const fromEdge = useRef(false);
 
   const panelAvailable =
     canUseRightPanel({
@@ -52,15 +45,14 @@ export function useMobileSwipeGestures() {
 
   const onTouchStart = useCallback(
     (event: TouchEvent) => {
-      if (!mobile || sidebarOpen) return;
+      if (!mobile) return;
       const touch = event.touches[0];
       if (!touch) return;
       startX.current = touch.clientX;
       startY.current = touch.clientY;
-      fromEdge.current = touch.clientX <= EDGE_PX;
       tracking.current = true;
     },
-    [mobile, sidebarOpen],
+    [mobile],
   );
 
   const onTouchEnd = useCallback(
@@ -75,34 +67,48 @@ export function useMobileSwipeGestures() {
         return;
       }
 
-      const showingPanel =
-        panelMode !== "collapsed" && mobileSurface === "panel";
+      const withPanel =
+        panelAvailable &&
+        (panelMode !== "collapsed" || view === "space");
 
-      // Swipe right → menu (from edge or chat) or back to chat from panel
+      // Swipe right → toward menu
       if (dx > 0) {
-        if (showingPanel) {
+        if (mobileSurface === "panel") {
           setMobileSurface("chat");
           return;
         }
-        if (fromEdge.current || mobileSurface === "chat") {
-          setSidebarOpen(true);
+        if (mobileSurface === "chat") {
+          setMobileSurface("menu");
         }
         return;
       }
 
-      // Swipe left → open / show panel
-      if (dx < 0 && panelAvailable) {
-        if (panelMode === "collapsed") setPanelMode("split");
-        setMobileSurface("panel");
+      // Swipe left → toward panel / chat from menu
+      if (dx < 0) {
+        if (mobileSurface === "menu") {
+          // Space browse with no chat → land on right panel, not empty chat.
+          if (view === "space" && !drafting && !thread) {
+            setMobileSurface("panel");
+          } else {
+            setMobileSurface("chat");
+          }
+          return;
+        }
+        if (mobileSurface === "chat" && withPanel) {
+          if (panelMode === "collapsed") setPanelMode("split");
+          setMobileSurface("panel");
+        }
       }
     },
     [
+      drafting,
       mobileSurface,
       panelAvailable,
       panelMode,
       setMobileSurface,
       setPanelMode,
-      setSidebarOpen,
+      thread,
+      view,
     ],
   );
 

@@ -24,7 +24,8 @@ const config = {
   },
   plugins: {
     Keyboard: {
-      resize: "body",
+      // WebView stays full-height; we lift the composer via --keyboard-inset.
+      resize: "none",
       resizeOnFullScreen: true,
     },
   },

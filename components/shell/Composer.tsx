@@ -223,13 +223,13 @@ export function Composer({
                     : "pr-3 pl-2 sm:pr-4 sm:pl-2.5",
                   showUsageBar
                     ? "pb-0"
-                    : "pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.35rem))] sm:pb-4",
+                    : "composer-keyboard-pad pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.35rem))] sm:pb-4",
                 )
               : cn(
                   "px-4 sm:px-6",
                   showUsageBar
                     ? "pb-0"
-                    : "pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.35rem))] sm:pb-4",
+                    : "composer-keyboard-pad pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.35rem))] sm:pb-4",
                 )
       }
       onSubmit={(event) => {

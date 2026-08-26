@@ -55,8 +55,8 @@ export type OverlayId =
 export type SpaceLayout = "cards" | "list";
 export type PanelMode = "collapsed" | "split" | "wide" | "immersive";
 export type PanelIntent = "browse" | "execute";
-/** Mobile exclusive surface: chat vs space/preview panel. */
-export type MobileSurface = "chat" | "panel";
+/** Mobile exclusive surface: menu · chat · right panel (swipeable). */
+export type MobileSurface = "menu" | "chat" | "panel";
 
 export type PageReference = {
   url: string;

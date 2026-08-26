@@ -11,7 +11,7 @@ export function MobileSurfaceToggle({
   className?: string;
 }) {
   const { mobileSurface, setMobileSurface } = useApp();
-  const showingChat = mobileSurface === "chat";
+  const showingChat = mobileSurface !== "panel";
 
   return (
     <button

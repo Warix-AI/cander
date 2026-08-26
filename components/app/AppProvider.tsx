@@ -1522,7 +1522,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setJobId(null);
       setSkillId(null);
       setPanelMode("collapsed");
-      setMobileSurface("chat");
+      setMobileSurface("panel");
       setThreadId(null);
       pushTarget({
         view: "space",
