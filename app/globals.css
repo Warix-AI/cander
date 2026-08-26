@@ -124,7 +124,7 @@ html.cander-narrow {
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
   touch-action: manipulation;
-  background-color: var(--background);
+  background-color: var(--app-canvas);
 }
 
 @keyframes mobile-slide-in-from-right {
@@ -356,7 +356,7 @@ html.cander-narrow body {
   overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
   touch-action: manipulation;
-  background-color: var(--background);
+  background-color: var(--app-canvas);
 }
 
 html.cander-mobile input,
@@ -491,6 +491,15 @@ html {
 
 html.dark {
   color-scheme: dark;
+}
+
+/* Mobile menu drawer + peek backdrop — one exact canvas color everywhere. */
+.mobile-menu-canvas {
+  background-color: var(--app-canvas);
+}
+
+.dark .mobile-menu-canvas {
+  background-color: oklch(0.145 0 0);
 }
 
 body {

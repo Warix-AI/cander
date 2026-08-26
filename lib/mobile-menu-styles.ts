@@ -1,11 +1,11 @@
 /** Off-white menu canvas — contrasts with the white chat peek. */
-export const MOBILE_MENU_BG = "bg-background dark:bg-neutral-950";
+export const MOBILE_MENU_BG = "mobile-menu-canvas";
 
 /** Main app surfaces on mobile — pure white. */
 export const MOBILE_APP_BG = "bg-white dark:bg-neutral-950";
 
 /** ChatGPT-style peek strip radius when the menu drawer is open. */
-export const MOBILE_PEEK_RADIUS = "rounded-[48px]";
+export const MOBILE_PEEK_RADIUS = "rounded-l-[48px]";
 
 /** Shared Apple-style glass material classes (see globals.css). */
 export const MOBILE_GLASS_BAR = "mobile-glass-bar";

@@ -35,16 +35,17 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
         MOBILE_MENU_BG,
       )}
     >
+      {/* Menu canvas fills the rounded-corner gaps behind the peek strip. */}
+      <div
+        aria-hidden
+        className={cn("pointer-events-none absolute inset-0", MOBILE_MENU_BG)}
+      />
       <div
         className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden will-change-transform",
+          "relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden will-change-transform",
           MOBILE_APP_BG,
-          "transition-[transform,border-radius,box-shadow] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]",
-          menuOpen &&
-            cn(
-              MOBILE_PEEK_RADIUS,
-              "shadow-[-8px_0_32px_oklch(0_0_0/0.1)]",
-            ),
+          "transition-[transform,border-radius] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          menuOpen && MOBILE_PEEK_RADIUS,
         )}
         style={{
           transform: menuOpen ? `translate3d(${shiftPct}%, 0, 0)` : undefined,
