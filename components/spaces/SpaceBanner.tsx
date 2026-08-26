@@ -6,7 +6,6 @@ import { useApp } from "@/components/app/AppProvider";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { useSpaceRenderMode } from "@/components/spaces/SpaceRenderMode";
 import {
-  DESKTOP_TITLEBAR_PX,
   DESKTOP_TRAFFIC_CLEAR_PX,
   useDesktopShell,
 } from "@/lib/desktop-shell";
@@ -56,14 +55,11 @@ export function SpaceBanner({
       className={cn(
         "relative shrink-0",
         floating && !floatClearChrome && "pt-3 pr-3 pl-3",
-        floatClearChrome && "pr-3 pb-0",
+        floatClearChrome && "pt-3 pr-3",
       )}
       style={
         floatClearChrome
-          ? {
-              paddingTop: DESKTOP_TITLEBAR_PX,
-              paddingLeft: FLOAT_BANNER_LEFT_CLEAR_PX,
-            }
+          ? { paddingLeft: FLOAT_BANNER_LEFT_CLEAR_PX }
           : undefined
       }
     >
