@@ -103,38 +103,12 @@ export function emptyContinuousChat(
 }
 
 export function withSpaceSwitch(thread: Thread, nextSpace: SpaceId): Thread {
-  const from = thread.spaceId;
-  if (!from || from === nextSpace) {
-    return thread.spaceId === nextSpace ? thread : { ...thread, spaceId: nextSpace };
-  }
-  const hasChat = thread.messages.some(
-    (item) => item.role === "user" || item.role === "assistant",
-  );
-  if (!hasChat) {
-    return { ...thread, spaceId: nextSpace };
-  }
-  const last = thread.messages.at(-1);
-  if (last?.spaceSwitch?.to === nextSpace) {
-    return { ...thread, spaceId: nextSpace };
-  }
-  const marker: Message = {
-    id: `sw-${Date.now().toString(36)}`,
-    role: "system",
-    content: "",
-    at: new Date().toISOString(),
-    spaceSwitch: { from, to: nextSpace },
-  };
-  return {
-    ...thread,
-    spaceId: nextSpace,
-    updatedAt: "Just now",
-    messages: [...thread.messages, marker],
-  };
+  if (thread.spaceId === nextSpace) return thread;
+  return { ...thread, spaceId: nextSpace };
 }
 
 /**
- * Resume (or create) one continuous workspace chat, appending a space-switch
- * divider when moving between spaces mid-conversation.
+ * Resume (or create) one continuous workspace chat when moving between spaces.
  */
 export function ensureContinuousChat(
   threads: Thread[],

@@ -7,6 +7,7 @@ type ListenerHandle = { remove: () => void };
 type KeyboardPlugin = {
   setAccessoryBarVisible?: (opts: { isVisible: boolean }) => Promise<void>;
   setScroll?: (opts: { isDisabled: boolean }) => Promise<void>;
+  setStyle?: (opts: { style: "LIGHT" | "DARK" | "DEFAULT" }) => Promise<void>;
   addListener?: (
     event:
       | "keyboardWillShow"
@@ -126,6 +127,7 @@ function ensureSharedListeners() {
   const onShow = (info: { keyboardHeight: number }) => {
     pluginHeight = Math.max(0, info.keyboardHeight || 0);
     applyKeyboardInset();
+    syncNativeKeyboardStyle();
   };
   const onHide = () => {
     pluginHeight = 0;
@@ -193,6 +195,26 @@ function ensureSharedListeners() {
   });
 
   applyKeyboardInset();
+
+  const onTheme = () => syncNativeKeyboardStyle();
+  window.addEventListener("cander-theme", onTheme);
+  sharedCleanups.push(() => {
+    window.removeEventListener("cander-theme", onTheme);
+  });
+}
+
+/** Match native keyboard chrome to the app theme (not OS appearance). */
+export function syncNativeKeyboardStyle(theme?: "light" | "dark") {
+  const keyboard = getCapacitor()?.Plugins?.Keyboard;
+  if (!keyboard?.setStyle) return;
+  const resolved =
+    theme ??
+    (document.documentElement.classList.contains("dark") ? "dark" : "light");
+  void keyboard.setStyle({
+    style: resolved === "dark" ? "DARK" : "LIGHT",
+  }).catch(() => {
+    // Older Capacitor builds may not support setStyle.
+  });
 }
 
 /**
@@ -206,6 +228,7 @@ export function lockMobileViewport() {
   lockCount += 1;
   try {
     ensureSharedListeners();
+    syncNativeKeyboardStyle();
   } catch {
     // Keyboard wiring must never blank the app.
   }

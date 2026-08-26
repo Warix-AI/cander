@@ -10,19 +10,13 @@ import {
   Undo2,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { spaceIcons, spaceIconTint } from "@/lib/space-icons";
-import type { ChatBlock, Message, SpaceId } from "@/lib/types";
+import type { ChatBlock, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function ChatMessage({ message }: { message: Message }) {
-  if (message.spaceSwitch) {
-    return (
-      <SpaceSwitchDivider
-        from={message.spaceSwitch.from}
-        to={message.spaceSwitch.to}
-      />
-    );
-  }
+  // Space-switch markers stay in history for routing, but no longer render
+  // the icon arrow diagram in the transcript.
+  if (message.spaceSwitch) return null;
   const isUser = message.role === "user";
   return (
     <div className={cn("flex flex-col", isUser ? "items-end" : "items-start")}>
@@ -45,38 +39,6 @@ export function ChatMessage({ message }: { message: Message }) {
           <MessageActions message={message} />
         </div>
       )}
-    </div>
-  );
-}
-
-function SpaceSwitchDivider({
-  from,
-  to,
-}: {
-  from: SpaceId;
-  to: SpaceId;
-}) {
-  const FromIcon = spaceIcons[from];
-  const ToIcon = spaceIcons[to];
-  return (
-    <div
-      className="flex items-center gap-3 py-3"
-      role="separator"
-      aria-label={`Switched from ${from} to ${to}`}
-    >
-      <div className="h-px min-w-0 flex-1 bg-border/60" />
-      <div className="flex shrink-0 items-center gap-1.5 text-muted-foreground/70">
-        <FromIcon
-          className={cn("h-3.5 w-3.5", spaceIconTint(from))}
-          strokeWidth={1.8}
-        />
-        <span className="text-[11px] tracking-[-0.01em]">→</span>
-        <ToIcon
-          className={cn("h-3.5 w-3.5", spaceIconTint(to))}
-          strokeWidth={1.8}
-        />
-      </div>
-      <div className="h-px min-w-0 flex-1 bg-border/60" />
     </div>
   );
 }

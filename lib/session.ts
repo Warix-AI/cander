@@ -77,9 +77,42 @@ export function getThemeServerSnapshot(): Theme {
   return "light";
 }
 
+function syncColorSchemeMeta(next: Theme) {
+  let meta = document.querySelector('meta[name="color-scheme"]');
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.setAttribute("name", "color-scheme");
+    document.head.appendChild(meta);
+  }
+  meta.setAttribute("content", next);
+
+  // Prefer a single theme-color that matches the app, not OS prefers-color-scheme.
+  const color = next === "dark" ? "#0a0a0a" : "#ffffff";
+  const tags = document.querySelectorAll('meta[name="theme-color"]');
+  if (tags.length) {
+    tags.forEach((tag) => {
+      tag.removeAttribute("media");
+      tag.setAttribute("content", color);
+    });
+  } else {
+    const tag = document.createElement("meta");
+    tag.setAttribute("name", "theme-color");
+    tag.setAttribute("content", color);
+    document.head.appendChild(tag);
+  }
+}
+
 export function persistTheme(next: Theme) {
   document.documentElement.classList.toggle("dark", next === "dark");
+  document.documentElement.style.colorScheme = next;
+  syncColorSchemeMeta(next);
   window.localStorage.setItem("theme", next);
+  window.dispatchEvent(
+    new CustomEvent("cander-theme", { detail: { theme: next } }),
+  );
+  void import("@/lib/mobile-shell")
+    .then((mod) => mod.syncNativeKeyboardStyle(next))
+    .catch(() => {});
 }
 
 const authListeners = new Set<Listener>();

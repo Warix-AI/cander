@@ -380,6 +380,9 @@ export function syncAppearanceSideEffects(next: AppearanceState = getAppearanceS
     : "light";
   if (palette.theme !== current) {
     persistTheme(palette.theme);
+  } else {
+    // Still refresh color-scheme / keyboard when already in sync.
+    persistTheme(palette.theme);
   }
   const shell: ShellStyle = next.layout >= 50 ? "floating" : "classic";
   setShellStyle(shell);

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
-import { LayoutGrid, Pin, SquarePen } from "lucide-react";
+import { LayoutGrid, Pin } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { AccountAvatar } from "@/components/shell/AccountAvatar";
 import { PinsSheet } from "@/components/shell/mobile/PinsSheet";
@@ -25,14 +25,12 @@ export function MobileMenuPane() {
   const {
     view,
     spaceId,
-    threadId,
     actor,
     entitlements,
     mobileSurface,
     setMobileSurface,
     mobileMenuScreen,
     setMobileMenuScreen,
-    newChat,
     openSpaceChat,
     openSpace,
     openRecents,
@@ -52,7 +50,6 @@ export function MobileMenuPane() {
     setMobileMenuScreen("main");
     setMobileSurface("chat");
   };
-  const chatActive = view === "chat" && !threadId && !spaceId;
 
   const accountTag = entitlements.orgActive
     ? entitlements.role
@@ -116,23 +113,8 @@ export function MobileMenuPane() {
 
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
-      <div className="flex min-h-0 flex-1 flex-col px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-3">
-        <button
-          type="button"
-          onClick={() => {
-            newChat();
-            closeToChat();
-          }}
-          className={cn(rowClass, chatActive && "bg-muted/70 font-medium")}
-        >
-          <SquarePen
-            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-            strokeWidth={2}
-          />
-          New Chat
-        </button>
-
-        <div className="mt-1">
+      <div className="flex min-h-0 flex-1 flex-col px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
+        <div>
           {navRows.map((row) => {
             if (row.kind === "pinned") {
               return (

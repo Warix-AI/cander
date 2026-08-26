@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useSyncExternalStore, type TouchEventHandler } from "react";
+import { useSyncExternalStore, type TouchEventHandler } from "react";
 import {
   ChevronDown,
   ChevronLeft,
@@ -43,9 +43,9 @@ const ADVANCED_TOOLS: { id: BuildTool; label: string }[] = [
 
 /**
  * ChatGPT-style mobile top bar.
- * Home: menu · Chat|{Space} · new chat
- * Build project: menu · Chat|{Space} · tools ellipsis
- * Menu / settings screens: back · title · (no new chat)
+ * Content: menu · Chat|{Space} · new chat
+ * Menu main: New chat (leading) — swipe to leave
+ * Menu / settings sub-screens: back · title
  */
 export function MobileAppChrome({ className }: { className?: string }) {
   const {
@@ -79,11 +79,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
     advancedMode,
     setAdvancedMode,
   } = useApp();
-
-  const lastContent = useRef<Extract<MobileSurface, "chat" | "panel">>("chat");
-  if (mobileSurface === "chat" || mobileSurface === "panel") {
-    lastContent.current = mobileSurface;
-  }
 
   const catalog = useSyncExternalStore(
     subscribeWorkspaceCatalog,
@@ -155,6 +150,16 @@ export function MobileAppChrome({ className }: { className?: string }) {
     (view === "space" || view === "chat");
   const hideNewChat = onMenuMain || inChromeSub || showBuildTools;
 
+  const startNewChat = () => {
+    if (isBuildHome) {
+      setComposerSeed("Tell me what you want to build");
+      newChat("build");
+    } else {
+      newChat();
+    }
+    setMobileSurface("chat");
+  };
+
   const preview = previewAddress(project?.name);
   const address = liveUrl ?? preview.url;
 
@@ -175,10 +180,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
     }
     if (inMenuSub) {
       setMobileMenuScreen("main");
-      return;
-    }
-    if (mobileSurface === "menu") {
-      setMobileSurface(lastContent.current);
       return;
     }
     setMobileSurface("menu");
@@ -206,33 +207,35 @@ export function MobileAppChrome({ className }: { className?: string }) {
       )}
     >
       <div className="flex h-12 items-center gap-2 px-3">
-        <button
-          type="button"
-          aria-label={
-            inChromeSub
-              ? "Back"
-              : mobileSurface === "menu"
-                ? "Close menu"
-                : "Open menu"
-          }
-          aria-pressed={!inChromeSub && mobileSurface === "menu"}
-          onClick={onLeadingClick}
-          className={cn(
-            "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors",
-            !inChromeSub && mobileSurface === "menu"
-              ? "bg-foreground text-background"
-              : "bg-muted/70 text-foreground hover:bg-muted",
-          )}
-        >
-          {inChromeSub ? (
-            <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
-          ) : (
-            <Menu className="h-5 w-5" strokeWidth={1.8} />
-          )}
-        </button>
+        {onMenuMain ? (
+          <button
+            type="button"
+            aria-label="New chat"
+            onClick={startNewChat}
+            className="inline-flex h-11 max-w-full items-center gap-2 rounded-full bg-muted/70 px-3.5 text-foreground transition-colors hover:bg-muted"
+          >
+            <SquarePen className="h-5 w-5 shrink-0" strokeWidth={1.8} />
+            <span className="truncate text-[14px] font-medium tracking-[-0.01em]">
+              New chat
+            </span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            aria-label={inChromeSub ? "Back" : "Open menu"}
+            onClick={onLeadingClick}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
+          >
+            {inChromeSub ? (
+              <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
+            ) : (
+              <Menu className="h-5 w-5" strokeWidth={1.8} />
+            )}
+          </button>
+        )}
 
         <div className="flex min-w-0 flex-1 items-center justify-center">
-          {inChromeSub ? (
+          {onMenuMain ? null : inChromeSub ? (
             <p className="truncate text-[15px] font-medium tracking-[-0.01em]">
               {subTitle}
             </p>
@@ -343,15 +346,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
           <button
             type="button"
             aria-label={isBuildHome ? "New build" : "New chat"}
-            onClick={() => {
-              if (isBuildHome) {
-                setComposerSeed("Tell me what you want to build");
-                newChat("build");
-              } else {
-                newChat();
-              }
-              setMobileSurface("chat");
-            }}
+            onClick={startNewChat}
             className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors hover:bg-muted"
           >
             <SquarePen className="h-5 w-5" strokeWidth={1.8} />
