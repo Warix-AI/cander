@@ -283,14 +283,26 @@ export function Sidebar() {
                 !showRail && "ml-3",
               )
             : cn(
-                "h-full overflow-hidden border-r border-sidebar-border",
+                "h-full overflow-hidden",
                 peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
               ),
         )}
       >
-      <div className={cn(!floating && "pt-[var(--desktop-titlebar)]")}>
-        <WindowChrome />
-      </div>
+      {/* Classic: separator + menu chrome start below the traffic-light zone. */}
+      {!floating ? (
+        <div
+          className="w-full shrink-0"
+          style={{ height: "var(--desktop-titlebar)" }}
+          aria-hidden
+        />
+      ) : null}
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col",
+          !floating && "border-r border-sidebar-border",
+        )}
+      >
+      <WindowChrome />
 
       {inSettings ? (
         <nav
@@ -384,6 +396,7 @@ export function Sidebar() {
           </div>
         </>
       )}
+      </div>
     </aside>
     </div>
     </>

@@ -111,7 +111,7 @@
 
 /* Electron / macOS shell — clear traffic lights on left chrome only */
 html.cander-desktop {
-  --desktop-titlebar: 42px;
+  --desktop-titlebar: 47px;
 }
 
 @theme inline {

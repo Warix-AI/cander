@@ -4,8 +4,8 @@ const path = require("path");
 const APP_NAME = "Cander";
 const DEFAULT_URL = "https://cander.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
-/** Clearance under traffic lights for left chrome only (~22 + 20). */
-const TITLEBAR_PX = 42;
+/** Clearance under traffic lights for left chrome only. */
+const TITLEBAR_PX = 47;
 /** Approx workspace rail + left menu width for the drag strip. */
 const LEFT_DRAG_WIDTH_PX = 320;
 
