@@ -5,6 +5,10 @@ import { Plus } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
 import { workspacesFor } from "@/lib/entitlements";
+import {
+  DESKTOP_FOLDER_SHOULDER_PX,
+  useDesktopShell,
+} from "@/lib/desktop-shell";
 import { useShellStyle } from "@/lib/shell-chrome";
 import {
   getWorkspaceCatalogServerSnapshot,
@@ -24,6 +28,8 @@ export function WorkspaceRail() {
   } = useApp();
   const shellStyle = useShellStyle();
   const floating = shellStyle === "floating";
+  const desktop = useDesktopShell();
+  const macFloating = desktop && floating;
 
   useSyncExternalStore(
     subscribeWorkspaceCatalog,
@@ -67,7 +73,6 @@ export function WorkspaceRail() {
       )}
       aria-label="Workspaces"
     >
-      {/* Classic: keep traffic-light zone free of the rail/menu separator. */}
       {!floating ? (
         <div
           className="w-full shrink-0"
@@ -85,10 +90,16 @@ export function WorkspaceRail() {
         <div
           className={cn(
             "flex min-h-0 w-full flex-1 flex-col items-center gap-2.5 overflow-y-auto px-2 pb-3",
-            floating
-              ? "pt-[max(0.75rem,var(--desktop-titlebar))]"
-              : "pt-3",
+            !macFloating &&
+              (floating
+                ? "pt-[max(0.75rem,var(--desktop-titlebar))]"
+                : "pt-3"),
           )}
+          style={
+            macFloating
+              ? { paddingTop: DESKTOP_FOLDER_SHOULDER_PX }
+              : undefined
+          }
         >
           {allowed.map((item) => {
             const active = item.id === workspace.id;

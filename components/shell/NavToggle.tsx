@@ -2,6 +2,10 @@
 
 import { PanelLeft } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import {
+  DESKTOP_TRAFFIC_CLEAR_PX,
+  useDesktopShell,
+} from "@/lib/desktop-shell";
 import { SHELL_FLOAT_INSET_PX, useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -71,12 +75,28 @@ export function LeftNavToggleDock({
   const { sidebarOpen } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
+  const desktop = useDesktopShell();
 
   if (mobile || sidebarOpen || peeking) return null;
 
+  // Mac app: stay on the traffic-light axis, just right of the lights.
+  if (desktop) {
+    return (
+      <div
+        className="pointer-events-none fixed top-0 z-50 hidden h-11 items-center lg:flex"
+        style={{ left: DESKTOP_TRAFFIC_CLEAR_PX }}
+      >
+        <NavToggle docked className="pointer-events-auto" />
+      </div>
+    );
+  }
+
   const leftPx =
-    (showRail ? WORKSPACE_RAIL_WIDTH_PX : floating ? SHELL_FLOAT_INSET_PX : 0) +
-    CHROME_PAD_PX;
+    (showRail
+      ? WORKSPACE_RAIL_WIDTH_PX
+      : floating
+        ? SHELL_FLOAT_INSET_PX
+        : 0) + CHROME_PAD_PX;
 
   return (
     <div
