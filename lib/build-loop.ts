@@ -92,7 +92,7 @@ export function planFor(text: string, selected?: PreviewNodeId | null): ChatBloc
       steps: auth
         ? ["Add a sign-in screen", "Let people create an account", "Keep them signed in", "Refresh Preview"]
         : ["Sketch the main screens", "Put the first version in Preview", "Leave room to grow"],
-      details: "Courier will handle files, install, and Preview. You can ask to see details anytime.",
+      details: "We'll handle files, install, and Preview. You can ask to see details anytime.",
     },
   ];
 }
@@ -160,8 +160,8 @@ export function makeCheckpoint(text: string, selected?: PreviewNodeId | null): C
     at: now(),
     day: "Today",
     summary: selected
-      ? `Courier changed the ${labelFor(selected)} and refreshed Preview.`
-      : "Courier updated the product and refreshed Preview.",
+      ? `Updated the ${labelFor(selected)} and refreshed Preview.`
+      : "Updated the product and refreshed Preview.",
     files: selected
       ? [`preview/${selected}.tsx`]
       : ["app/page.tsx", "components/Hero.tsx"],

@@ -7,7 +7,7 @@ export function ToolsPage() {
       <div>
         <p className="text-[14px] font-medium">Gmail MCP tools</p>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          What Gmail exposes to Courier agents via MCP — search, read, draft,
+          What Gmail exposes to agents via MCP — search, read, draft,
           send, labels, and filters.
         </p>
       </div>

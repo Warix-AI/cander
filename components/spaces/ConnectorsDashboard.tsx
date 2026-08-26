@@ -5,6 +5,8 @@ import { MoreHorizontal, Search, X } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import { DashFrame, ScopeToggle } from "@/components/spaces/ItemSet";
+import { FLOAT_ICON_BUTTON } from "@/lib/shell-chrome";
+import { cn } from "@/lib/utils";
 import { Dropdown } from "@/components/ui/Controls";
 import {
   getInstalledConnectorsServerSnapshot,
@@ -15,7 +17,6 @@ import {
 } from "@/lib/connector-install";
 import { connectors as seed } from "@/lib/data";
 import type { Connector, PinTier } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
 import {
   attachWorkConnector,
@@ -188,7 +189,7 @@ export function ConnectorsDashboard() {
       space="connectors"
       banner={false}
       title="Connectors"
-      subtitle="Link apps so Courier can act across them."
+      subtitle="Link apps so the app can act across them."
     >
         {workAttachFor ? (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-border bg-muted/50 px-4 py-3">
@@ -257,7 +258,7 @@ export function ConnectorsDashboard() {
                 type="button"
                 aria-label="Search connectors"
                 onClick={() => setSearchOpen(true)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] border border-border text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+                className={cn(FLOAT_ICON_BUTTON, "text-muted-foreground hover:text-foreground")}
               >
                 <Search className="h-4 w-4" strokeWidth={1.6} />
               </button>
@@ -294,7 +295,7 @@ export function ConnectorsDashboard() {
                       onOpen={() => selectConnector(item.id)}
                       onInstall={() => install(item.id)}
                       onUninstall={() => uninstall(item.id)}
-                      onSetPin={(next) => setPin("connector", item.id, next)}
+                      onSetPin={() => setPin("connector", item.id, "primary")}
                       onClearPin={() => clearPin("connector", item.id)}
                       workAttach={Boolean(workAttachFor)}
                       catalog={view === "connectors"}
@@ -344,7 +345,7 @@ function DirectoryItem({
   onOpen: () => void;
   onInstall: () => void;
   onUninstall: () => void;
-  onSetPin: (tier: PinTier) => void;
+  onSetPin: () => void;
   onClearPin: () => void;
   workAttach?: boolean;
   catalog?: boolean;
@@ -352,10 +353,8 @@ function DirectoryItem({
   const pinned = Boolean(tier);
   return (
     <div
-      className={cn(
-        "flex items-start gap-2.5 rounded-[10px] px-1.5 py-2 transition-colors duration-200 hover:bg-muted/60",
-        active && "bg-muted",
-      )}
+      className="canvas-hover flex items-start gap-2.5 rounded-[10px] py-2"
+      data-active={active ? "true" : undefined}
     >
       <button type="button" onClick={onOpen} className="mt-0.5 shrink-0">
         <ConnectorMark id={item.icon} size="sm" />
@@ -412,70 +411,29 @@ function DirectoryItem({
                     Open
                   </button>
                   {!pinned ? (
-                    <>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          close();
-                          onSetPin("primary");
-                        }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                      >
-                        Pin to Primary
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          close();
-                          onSetPin("secondary");
-                        }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                      >
-                        Pin to Secondary
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        close();
+                        onSetPin();
+                      }}
+                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                    >
+                      Pin
+                    </button>
                   ) : (
-                    <>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          close();
-                          onClearPin();
-                        }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                      >
-                        Unpin
-                      </button>
-                      {tier !== "primary" ? (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => {
-                            close();
-                            onSetPin("primary");
-                          }}
-                          className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                        >
-                          Move to Primary
-                        </button>
-                      ) : null}
-                      {tier !== "secondary" ? (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => {
-                            close();
-                            onSetPin("secondary");
-                          }}
-                          className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                        >
-                          Move to Secondary
-                        </button>
-                      ) : null}
-                    </>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        close();
+                        onClearPin();
+                      }}
+                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                    >
+                      Unpin
+                    </button>
                   )}
                   <button
                     type="button"

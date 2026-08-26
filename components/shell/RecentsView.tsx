@@ -3,15 +3,6 @@
 import { useMemo, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import {
-  DataList,
-  DataRow,
-  EmptyHint,
-  PanelToolbar,
-  Section,
-  StatusPill,
-} from "@/components/platform/DevChrome";
-import { PlatformAskButton } from "@/components/platform/PlatformChatDock";
-import {
   DashBtn,
   DashFrame,
   LayoutToggle,
@@ -24,14 +15,12 @@ import {
 } from "@/components/spaces/PreviewCard";
 import {
   buildPreviews,
-  platformNavItems,
   projects,
   researchPaperPreviews,
   spaces,
 } from "@/lib/data";
-import { inferPlatformIntent } from "@/lib/platform-intent";
 import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
-import type { PlatformNav, SpaceId, Thread } from "@/lib/types";
+import type { SpaceId } from "@/lib/types";
 
 function recencyRank(updatedAt: string) {
   const text = updatedAt.toLowerCase();
@@ -54,113 +43,7 @@ function projectImage(projectId?: string) {
   return buildPreviews.find((item) => item.projectId === projectId)?.image;
 }
 
-const platformFilters = platformNavItems.filter((item) => item.id !== "recents");
-
-function platformSurface(thread: Thread): PlatformNav | undefined {
-  if (thread.platformNav && thread.platformNav !== "recents") {
-    return thread.platformNav;
-  }
-  const first = thread.messages.find((item) => item.role === "user");
-  const nav = first ? inferPlatformIntent(first.content).nav : undefined;
-  return nav === "recents" ? undefined : nav;
-}
-
 export function RecentsView() {
-  const { product } = useApp();
-  if (product === "platform") return <PlatformRecents />;
-  return <CourierRecents />;
-}
-
-function PlatformRecents() {
-  const { workspaceId, threads, openThread, entitlements } = useApp();
-  const [scope, setScope] = useState("all");
-  const filters = platformFilters.filter((item) =>
-    entitlements.platformNavAllowed(item.id),
-  );
-
-  const items = useMemo(() => {
-    return threads
-      .filter(
-        (thread) =>
-          thread.product === "platform" && thread.workspaceId === workspaceId,
-      )
-      .map((thread) => ({
-        thread,
-        surface: platformSurface(thread),
-        rank: recencyRank(thread.updatedAt),
-      }))
-      .sort((a, b) => a.rank - b.rank);
-  }, [threads, workspaceId]);
-
-  const visible =
-    scope === "all"
-      ? items
-      : items.filter((item) => item.surface === scope);
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <DashFrame
-        banner={false}
-        title="Recents"
-        subtitle="Recent development chats in this workspace, newest first."
-        actions={<PlatformAskButton />}
-      >
-        <PanelToolbar>
-          <ScopeToggle
-            wrap
-            value={scope}
-            onChange={setScope}
-            options={[
-              { id: "all", label: "All" },
-              ...filters.map((item) => ({
-                id: item.id,
-                label: item.label,
-              })),
-            ]}
-          />
-        </PanelToolbar>
-
-        <div className="mt-6">
-          <Section
-            title="Chats"
-            description="Newest first · filtered by surface when selected."
-          >
-            {visible.length ? (
-              <DataList>
-                {visible.map(({ thread, surface }) => {
-                  const label =
-                    platformFilters.find((item) => item.id === surface)
-                      ?.label ?? "Chat";
-                  return (
-                    <DataRow
-                      key={thread.id}
-                      onClick={() => openThread(thread.id)}
-                      label={
-                        <span className="flex flex-wrap items-center gap-2">
-                          {thread.title}
-                          <StatusPill tone="outline">{label}</StatusPill>
-                        </span>
-                      }
-                      meta={thread.snippet || undefined}
-                      value={thread.updatedAt}
-                    />
-                  );
-                })}
-              </DataList>
-            ) : (
-              <EmptyHint>
-                No platform chats
-                {scope === "all" ? " yet." : " in this filter."}
-              </EmptyHint>
-            )}
-          </Section>
-        </div>
-      </DashFrame>
-    </div>
-  );
-}
-
-function CourierRecents() {
   const {
     workspaceId,
     threads,
@@ -173,10 +56,9 @@ function CourierRecents() {
   const [scope, setScope] = useState("all");
 
   const items = useMemo(() => {
-    const productThreads = threads.filter((thread) => {
-      const threadProduct = thread.product ?? "courier";
-      return thread.workspaceId === workspaceId && threadProduct === "courier";
-    });
+    const productThreads = threads.filter(
+      (thread) => thread.workspaceId === workspaceId,
+    );
 
     const entries: (PreviewEntry & { rank: number; space?: SpaceId })[] = [];
     const usedProjects = new Set<string>();

@@ -13,7 +13,7 @@ export default function HostingPage() {
           <SectionHeader
             as="h1"
             kicker="Hosting"
-            title="Run Courier where you want."
+            title="Run it where you want."
             body="Hosting is not a subscription plan. Cloud, Local, and On-device are equal compute locations. Production serving is Ultra — not a fourth location."
           />
           <div className="mt-12">

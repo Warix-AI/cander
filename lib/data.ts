@@ -5,7 +5,6 @@ import type {
   ConnectorAccount,
   Member,
   PlatformDeployment,
-  PlatformNav,
   Project,
   ScheduledJob,
   Skill,
@@ -141,9 +140,6 @@ export const members: Member[] = [
   }),
 ];
 
-export const currentUser = members[0];
-export const currentUserId = currentUser.id;
-
 export const accountPresets: {
   id: AccountPresetId;
   label: string;
@@ -197,7 +193,7 @@ export const accountPresets: {
     id: "free",
     label: "Free",
     actorId: "p-free",
-    hint: "Cloud only · no Development",
+    hint: "Cloud only · limited runtime",
     group: "Personal",
   },
 ];
@@ -227,19 +223,6 @@ export const workspaceResources: WorkspaceResource[] = [
     authorizedMemberIds: ["m4", "m5"],
     status: "active",
   },
-];
-
-export const platformNavItems: { id: PlatformNav; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "hosting", label: "Hosting" },
-  { id: "models", label: "Models" },
-  { id: "api", label: "APIs" },
-  { id: "keys", label: "Keys" },
-  { id: "deployments", label: "Deployments" },
-  { id: "logs", label: "Logs" },
-  { id: "usage", label: "Usage" },
-  { id: "docs", label: "Docs" },
-  { id: "recents", label: "Recents" },
 ];
 
 export const spaces: { id: SpaceId; label: string }[] = [
@@ -1341,7 +1324,7 @@ export const connectors: Connector[] = [
     id: "stash",
     name: "Stash",
     category: "Internal",
-    description: "Private notes Courier can cite",
+    description: "Private notes the app can cite",
     icon: "notion",
     scope: "personal",
     actions: ["Notes", "Search"],
@@ -1786,102 +1769,6 @@ export const starterThreads: Thread[] = [
       },
     ],
   },
-  {
-    id: "t-plat-keys",
-    title: "Rotate production keys",
-    workspaceId: "marketing",
-    product: "platform",
-    platformNav: "keys",
-    updatedAt: "2h ago",
-    snippet: "Where do I rotate API keys?",
-    messages: [
-      {
-        id: "m1",
-        role: "user",
-        content: "Where do I rotate API keys?",
-        at: "11:04",
-      },
-      {
-        id: "m2",
-        role: "assistant",
-        content:
-          "Opened Keys. Create and rotate credentials here — keep them out of source.",
-        at: "11:04",
-      },
-    ],
-  },
-  {
-    id: "t-plat-hosting",
-    title: "Cloud vs on-device",
-    workspaceId: "marketing",
-    product: "platform",
-    platformNav: "hosting",
-    updatedAt: "Yesterday",
-    snippet: "Which hosting model should we use?",
-    messages: [
-      {
-        id: "m1",
-        role: "user",
-        content: "Which hosting model should we use?",
-        at: "16:22",
-      },
-      {
-        id: "m2",
-        role: "assistant",
-        content:
-          "Opened Hosting. Cloud, local, and on-device are the same product with different runtimes.",
-        at: "16:22",
-      },
-    ],
-  },
-  {
-    id: "t-plat-models",
-    title: "On-device Gemma 4",
-    workspaceId: "engineering",
-    product: "platform",
-    platformNav: "models",
-    updatedAt: "2d ago",
-    snippet: "What’s running on-device right now?",
-    messages: [
-      {
-        id: "m1",
-        role: "user",
-        content: "What’s running on-device right now?",
-        at: "08:10",
-      },
-      {
-        id: "m2",
-        role: "assistant",
-        content:
-          "Opened Models. Cloud, local, and on-device runtimes are listed with memory and status.",
-        at: "08:10",
-      },
-    ],
-  },
-  {
-    id: "t-plat-usage",
-    title: "This month’s API spend",
-    workspaceId: "marketing",
-    product: "platform",
-    platformNav: "usage",
-    updatedAt: "3d ago",
-    snippet: "Show me usage and billing for APIs.",
-    messages: [
-      {
-        id: "m1",
-        role: "user",
-        content: "Show me usage and billing for APIs.",
-        at: "14:41",
-      },
-      {
-        id: "m2",
-        role: "assistant",
-        content:
-          "Opened Usage. Requests, spend, and plan limits for this workspace are on this page.",
-        at: "14:41",
-      },
-    ],
-  },
 ];
 
 export const canderFiles = [
@@ -1917,7 +1804,7 @@ export const starbaseFiles = [
 export const researchSources = [
   { title: "OpenAI API Pricing", url: "openai.com/api/pricing", tag: "Saved" },
   { title: "Anthropic plans", url: "anthropic.com/pricing", tag: "Saved" },
-  { title: "Courier vs token meters", url: "thinkrecursion.ai", tag: "Internal" },
+  { title: "One AI vs token meters", url: "thinkrecursion.ai", tag: "Internal" },
 ];
 
 export const platformModels = [
@@ -1988,8 +1875,8 @@ export const prompts: { id: string; label: string; space: SpaceId }[] = [
   { id: "p1", label: "Build me a CRM for landscaping companies.", space: "build" },
   {
     id: "p2",
-    label: "Edit this photo and remove the background.",
-    space: "studio",
+    label: "Research competitors and summarize the landscape.",
+    space: "research",
   },
   { id: "p3", label: "Research these competitors.", space: "research" },
   { id: "p4", label: "Write a skill for Recursion tone of voice.", space: "skills" },
@@ -2046,15 +1933,6 @@ export const researchPaperPreviews: Record<
   },
 };
 
-export const recentsStats = {
-  stats: [
-    { label: "Chats", value: "12" },
-    { label: "Projects", value: "8" },
-    { label: "Pinned", value: "3" },
-    { label: "This week", value: "6", delta: "+2" },
-  ],
-};
-
 export const spaceStats: Record<
   SpaceId,
   {
@@ -2099,7 +1977,7 @@ export const spaceStats: Record<
     ],
   },
   files: {
-    kicker: "Everything Courier made",
+    kicker: "Everything we made",
     stats: [
       { label: "Files", value: "9" },
       { label: "Images", value: "1" },
@@ -2126,7 +2004,7 @@ export const spaceStats: Record<
     ],
   },
   connectors: {
-    kicker: "Work with Courier across your tools",
+    kicker: "Work across your tools",
     stats: [
       { label: "Installed", value: "5" },
       { label: "Available", value: "7" },

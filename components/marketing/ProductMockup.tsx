@@ -10,8 +10,7 @@ type Variant =
   | "studio"
   | "research"
   | "work"
-  | "personal"
-  | "development";
+  | "personal";
 
 export function ProductMockup({
   variant = "home",
@@ -23,7 +22,7 @@ export function ProductMockup({
   if (variant === "hero") return <HeroMockup className={className} />;
 
   return (
-    <Shell className={className} view={variant === "development" ? "development" : "home"}>
+    <Shell className={className}>
       {variant === "build" ? (
         <BuildSplit />
       ) : variant === "studio" ? (
@@ -34,8 +33,6 @@ export function ProductMockup({
         <WorkPane />
       ) : variant === "personal" ? (
         <PersonalPane />
-      ) : variant === "development" ? (
-        <DevelopmentPane />
       ) : (
         <ChatPane
           user="What's on my plate today?"
@@ -68,7 +65,7 @@ function HeroMockup({ className }: { className?: string }) {
   }, []);
 
   return (
-    <Shell className={className} view="home" split={step >= 3}>
+    <Shell className={className} split={step >= 3}>
       <ChatPane
         user={step >= 1 ? "Build me a customer portal for Acme." : undefined}
         reply={step >= 2 ? "I'll use Build to make this." : undefined}
@@ -81,12 +78,10 @@ function HeroMockup({ className }: { className?: string }) {
 function Shell({
   children,
   className,
-  view,
   split,
 }: {
   children: React.ReactNode;
   className?: string;
-  view: "home" | "development";
   split?: boolean;
 }) {
   return (
@@ -98,17 +93,13 @@ function Shell({
     >
       <div className="flex min-h-[320px] md:min-h-[420px]">
         <aside className="hidden w-[168px] shrink-0 border-r border-border bg-sidebar p-3 md:block">
-          <p className="px-2 text-[11px] font-semibold tracking-[-0.02em]">Courier</p>
-          <div className="mt-3 space-y-0.5">
-            <NavRow active={view === "home"}>Home</NavRow>
-            <NavRow active={view === "development"}>Development</NavRow>
-          </div>
+          <p className="px-2 text-[11px] font-semibold tracking-[-0.02em]">One AI</p>
           <p className="mt-5 px-2 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
             Spaces
           </p>
           <div className="mt-1 space-y-0.5">
             {["Work", "Build", "Studio", "Research", "Personal"].map((space) => (
-              <NavRow key={space} active={view === "home" && space === "Build"}>
+              <NavRow key={space} active={space === "Build"}>
                 {space}
               </NavRow>
             ))}
@@ -161,7 +152,7 @@ function ChatPane({
         ) : null}
       </div>
       <div className="mt-4 h-10 rounded-full border border-border px-4 text-[12px] leading-10 text-muted-foreground">
-        Message Courier
+        Message
       </div>
     </div>
   );
@@ -203,7 +194,7 @@ function BuildSplit() {
     <>
       <ChatPane
         user="Ship the portal behind auth."
-        reply="Preview is live. Development already has the model, API, and keys for this project."
+        reply="Preview is live. Runtime already has the model, API, and keys for this project."
       />
       <PreviewPane />
     </>
@@ -285,56 +276,6 @@ function PersonalPane() {
           <p className="mt-1 text-[12px] text-muted-foreground">Separate from product work.</p>
         </div>
       ))}
-    </div>
-  );
-}
-
-function DevelopmentPane() {
-  const rows = [
-    { name: "Cloud · us-east-1", status: "Active", hint: "Metered" },
-    { name: "Local · office LAN", status: "Ready", hint: "Unlimited" },
-    { name: "On-device · this Mac", status: "Ready", hint: "Unlimited" },
-  ];
-  return (
-    <div className="flex flex-1 text-[12px]">
-      <div className="hidden w-[148px] shrink-0 border-r border-border bg-sidebar/50 p-2.5 md:block">
-        {["Overview", "Hosting", "Models", "APIs", "Keys", "Deployments", "Logs", "Docs"].map(
-          (item, i) => (
-            <NavRow key={item} active={i === 1}>
-              {item}
-            </NavRow>
-          ),
-        )}
-      </div>
-      <div className="min-w-0 flex-1 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="font-medium">Hosting</p>
-          <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-            Development
-          </span>
-        </div>
-        <div className="mt-3 space-y-1.5">
-          {rows.map((row) => (
-            <div
-              key={row.name}
-              className="flex items-center justify-between gap-2 rounded-[10px] border border-border px-3 py-2"
-            >
-              <div className="min-w-0">
-                <p className="truncate font-medium">{row.name}</p>
-                <p className="text-[10.5px] text-muted-foreground">{row.hint}</p>
-              </div>
-              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px]">
-                {row.status}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 rounded-[10px] border border-border bg-muted/30 p-2.5 font-mono text-[10.5px] leading-relaxed text-muted-foreground">
-          GET /v1/models · 200 · 12 ms
-          <br />
-          POST /v1/chat/completions · 200 · 840 ms
-        </div>
-      </div>
     </div>
   );
 }

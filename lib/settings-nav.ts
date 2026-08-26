@@ -4,7 +4,6 @@ import type { SettingsTab } from "./types";
 export const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: "organization", label: "Organization" },
   { id: "workspaces", label: "Workspaces" },
-  { id: "connectors", label: "Connectors" },
   { id: "plans", label: "Plans" },
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },

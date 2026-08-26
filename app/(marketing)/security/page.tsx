@@ -14,7 +14,7 @@ export default function SecurityPage() {
             as="h1"
             kicker="Security"
             title="Architecture, not badges."
-            body="This page describes how Courier isolates work today. We do not claim SOC 2, SSO, or residency as live product features."
+            body="This page describes how we isolate work today. We do not claim SOC 2, SSO, or residency as live product features."
           />
           <div className="mt-12">
             <FeatureGrid

@@ -6,21 +6,21 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 import { accountPresets, projects, starterThreads } from "@/lib/data";
 import {
+  deleteWorkspace as deleteCustomWorkspace,
   getWorkspaceCatalogServerSnapshot,
   getWorkspaceCatalogSnapshot,
+  isCustomWorkspace,
   subscribeWorkspaceCatalog,
   workspaceById,
 } from "@/lib/workspace-catalog";
 import { workspaceKindOf } from "@/lib/workspace-kind";
 import { inferIntent, nextId } from "@/lib/intent";
 import { latestThreadForProject } from "@/lib/selectors";
-import { inferPlatformIntent } from "@/lib/platform-intent";
 import {
   buildCard,
   classifyTurn,
@@ -40,14 +40,11 @@ import {
   getHostingSnapshot,
   getPersonalSpaceServerSnapshot,
   getPersonalSpaceSnapshot,
-  getProductServerSnapshot,
-  getProductSnapshot,
   getWorkspaceServerSnapshot,
   getWorkspaceSnapshot,
   persistActor,
   persistHosting,
   persistPersonalSpace,
-  persistProduct,
   persistWorkspace,
   getPinsServerSnapshot,
   getPinsSnapshot,
@@ -58,7 +55,6 @@ import {
   subscribeHosting,
   subscribePins,
   subscribePersonalSpace,
-  subscribeProduct,
   subscribeSidebar,
   subscribeWorkspace,
   removeStoredPin,
@@ -72,11 +68,15 @@ import {
   getPoliciesServerSnapshot,
   getPoliciesSnapshot,
   memberSpaces,
+  purgeWorkspace,
   subscribePolicies,
 } from "@/lib/workspace-policy";
+import { clearWorkspaceConnections } from "@/lib/workspace-connections";
+import { clearWorkspaceIcon } from "@/lib/workspace-icons";
 import {
   entitlementsFor,
   homeWorkspaceId,
+  workspacesFor,
   type Entitlements,
 } from "@/lib/entitlements";
 import { isChatSpace, PRIMARY_NAV_SPACES, spaceAllowed, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
@@ -97,9 +97,7 @@ import type {
   Pin,
   PinKind,
   PinTier,
-  PlatformNav,
   PreviewNodeId,
-  ProductId,
   Project,
   ProjectMemory,
   ResearchTool,
@@ -117,17 +115,14 @@ import type {
 import { isSpaceLibrarySpace } from "@/lib/space-library";
 import {
   summarizeSession,
-  upsertPersistentPlatformThread,
   upsertPersistentSpaceThread,
 } from "@/lib/persistent-chat";
 
 type Snapshot = {
-  product: ProductId;
   view: CourierView;
   spaceId: SpaceId | null;
   threadId: string | null;
   projectId: string | null;
-  platformNav: PlatformNav;
   panelMode: PanelMode;
   panelIntent: PanelIntent;
   connectorId: string | null;
@@ -137,12 +132,10 @@ type Snapshot = {
 
 function sameSnap(a: Snapshot, b: Snapshot) {
   return (
-    a.product === b.product &&
     a.view === b.view &&
     a.spaceId === b.spaceId &&
     a.threadId === b.threadId &&
-    a.projectId === b.projectId &&
-    a.platformNav === b.platformNav
+    a.projectId === b.projectId
   );
 }
 
@@ -152,8 +145,6 @@ type SendOpts = {
 };
 
 type AppContextValue = {
-  product: ProductId;
-  setProduct: (id: ProductId) => void;
   hostingMode: HostingMode;
   setHostingMode: (id: HostingMode) => void;
   actor: Member;
@@ -169,12 +160,12 @@ type AppContextValue = {
   orgMembers: Member[];
   workspaceId: string;
   setWorkspace: (id: string) => void;
+  removeWorkspace: (id: string) => boolean;
   workspace: Workspace;
   view: CourierView;
   threads: Thread[];
   threadId: string | null;
   thread: Thread | null;
-  platformThreadId: string | null;
   spaceId: SpaceId | null;
   projectId: string | null;
   project: Project | undefined;
@@ -191,8 +182,7 @@ type AppContextValue = {
   workspaceRailOpen: boolean;
   setWorkspaceRailOpen: (open: boolean) => void;
   toggleLeftPanel: () => void;
-  mobileNav: boolean;
-  setMobileNav: (open: boolean) => void;
+  toggleRightPanel: () => void;
   dragging: boolean;
   setDragging: (on: boolean) => void;
   drafting: boolean;
@@ -222,17 +212,18 @@ type AppContextValue = {
   openOverlay: (id: OverlayId) => void;
   openSpaceSettings: (space: SpaceId) => void;
   closeOverlay: () => void;
-  platformNav: PlatformNav;
-  setPlatformNav: (id: PlatformNav) => void;
   newChat: (space?: SpaceId) => void;
-  /** Courier home chat — switches from Development when needed. */
+  /** Courier home chat — empty chat home. */
   openCourierHome: () => void;
-  /** Development overview — switches from Courier when needed. */
-  openDevelopmentOverview: () => void;
   /** Resume (or create) the persistent dock chat for a space. */
   openSpaceChat: (space: SpaceId) => void;
   setChatSpace: (id: SpaceId | null) => void;
   armChatInterface: (id: SpaceId) => void;
+  /** Attach a space panel to the current chat without switching threads. */
+  selectChatSpace: (
+    id: SpaceId,
+    opts?: { researchTool?: ResearchTool },
+  ) => void;
   collapseDraft: () => void;
   /** Close space chat and restore the full workspace dashboard. */
   closeSpaceChat: () => void;
@@ -240,20 +231,8 @@ type AppContextValue = {
   updateSessionSummary: (text: string, threadId?: string | null) => void;
   clearPersistentChat: (threadId?: string | null) => void;
   sendMessage: (text: string, opts?: SendOpts) => void;
-  platformMessages: Message[];
-  sendPlatformMessage: (text: string) => void;
-  platformDockOpen: boolean;
-  setPlatformDockOpen: (open: boolean) => void;
   openSpace: (id: SpaceId) => void;
   openRecents: () => void;
-  openDiscovery: () => void;
-  openDiscoveryItem: (id: string) => void;
-  clearDiscoveryFocus: () => void;
-  discoveryFocusId: string | null;
-  runDiscoveryAction: (
-    action: import("@/lib/discovery-types").DiscoveryAction,
-    item?: import("@/lib/discovery-types").DiscoveryItem | null,
-  ) => void;
   openBrowser: (opts?: { chat?: boolean; query?: string }) => void;
   browserChatOpen: boolean;
   setBrowserChatOpen: (open: boolean) => void;
@@ -274,7 +253,7 @@ type AppContextValue = {
   pinTier: (kind: PinKind, id: string) => PinTier | null;
   setPin: (kind: PinKind, id: string, tier: PinTier) => void;
   clearPin: (kind: PinKind, id: string) => void;
-  /** Pins to primary or unpins. Prefer PinControl for tier choice. */
+  /** Pin or unpin. New pins use the single Pinned list. */
   togglePin: (kind: PinKind, id: string) => void;
   reorderPins: (
     from: { kind: PinKind; id: string },
@@ -325,11 +304,6 @@ const nowTime = () =>
   new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const product = useSyncExternalStore(
-    subscribeProduct,
-    getProductSnapshot,
-    getProductServerSnapshot,
-  );
   const hostingMode = useSyncExternalStore(
     subscribeHosting,
     getHostingSnapshot,
@@ -393,7 +367,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [mobileSurface, setMobileSurface] = useState<MobileSurface>("chat");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [workspaceRailOpen, setWorkspaceRailOpen] = useState(true);
-  const [mobileNav, setMobileNav] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [buildTool, setBuildTool] = useState<BuildTool>("preview");
@@ -407,29 +380,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [scheduledFilter, setScheduledFilter] = useState("upcoming");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("organization");
   const [settingsMobileHub, setSettingsMobileHub] = useState(true);
-  const [platformNav, setPlatformNavState] = useState<PlatformNav>("overview");
-  const [platformThreadId, setPlatformThreadId] = useState<string | null>(null);
-  const [platformDockOpen, setPlatformDockOpenState] = useState(false);
-  const productMemory = useRef({
-    courier: {
-      view: "chat" as CourierView,
-      spaceId: null as SpaceId | null,
-      threadId: null as string | null,
-      projectId: null as string | null,
-      panelMode: "collapsed" as PanelMode,
-      panelIntent: "browse" as PanelIntent,
-      connectorId: null as string | null,
-      jobId: null as string | null,
-      skillId: null as string | null,
-    },
-    platform: {
-      platformNav: "overview" as PlatformNav,
-      dockOpen: false,
-    },
-  });
   const [spaceLayout, setSpaceLayout] = useState<SpaceLayout>("cards");
   const [overlay, setOverlay] = useState<OverlayId>(null);
-  const [discoveryFocusId, setDiscoveryFocusId] = useState<string | null>(null);
   const [settingsSpaceId, setSettingsSpaceId] = useState<SpaceId | null>(null);
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceAnchor, setVoiceAnchor] = useState<VoiceAnchor>("bottom-right");
@@ -451,7 +403,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [liveUrl, setLiveUrl] = useState<string | null>(null);
   const [memory, setMemory] = useState<ProjectMemory>({
     purpose: "A calm product the customer can ship from chat.",
-    stack: "Next.js, TypeScript, Courier Preview",
+    stack: "Next.js, TypeScript, Live Preview",
     integrations: [],
     features: [],
     rejected: [],
@@ -459,12 +411,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [hist, setHist] = useState<{ stack: Snapshot[]; i: number }>({
     stack: [
       {
-        product: "courier",
         view: "chat",
         spaceId: null,
         threadId: null,
         projectId: null,
-        platformNav: "overview",
         panelMode: "collapsed",
         panelIntent: "browse",
         connectorId: null,
@@ -485,12 +435,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const applySnapshot = useCallback((snap: Snapshot) => {
-    persistProduct(snap.product);
     setView(snap.view);
     setSpaceId(snap.spaceId);
     setThreadId(snap.threadId);
     setProjectId(snap.projectId);
-    setPlatformNavState(snap.platformNav);
     setPanelMode(snap.panelMode);
     setPanelIntent(snap.panelIntent);
     setConnectorId(snap.connectorId);
@@ -514,101 +462,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const workspace = workspaceById(workspaceId, workspaceCatalog);
   const project = projects.find((item) => item.id === projectId);
   const thread = threads.find((item) => item.id === threadId) ?? null;
-  const platformThread =
-    threads.find(
-      (item) => item.id === platformThreadId && item.product === "platform",
-    ) ?? null;
-  const platformMessages = platformThread?.messages ?? [];
-
-  const setProduct = useCallback((id: ProductId) => {
-    if (id === "platform" && !entitlements.canAccessDevelopment) return;
-    if (id === product) {
-      setMobileNav(false);
-      setOverlay(null);
-      return;
-    }
-
-    if (product === "courier") {
-      productMemory.current.courier = {
-        view,
-        spaceId,
-        threadId,
-        projectId,
-        panelMode,
-        panelIntent,
-        connectorId,
-        jobId,
-        skillId,
-      };
-    } else {
-      productMemory.current.platform = {
-        platformNav,
-        dockOpen: platformDockOpen,
-      };
-    }
-
-    setMobileNav(false);
-    setOverlay(null);
-
-    if (id === "platform") {
-      const mem = productMemory.current.platform;
-      const nav = entitlements.platformNavAllowed(mem.platformNav)
-        ? mem.platformNav
-        : "overview";
-      setPlatformDockOpenState(mem.dockOpen);
-      const snap = {
-        product: id,
-        view: "chat" as const,
-        spaceId: null,
-        threadId: null,
-        projectId: null,
-        platformNav: nav,
-        panelMode: "collapsed" as const,
-        panelIntent: "browse" as const,
-        connectorId: null,
-        jobId: null,
-        skillId: null,
-      };
-      applySnapshot(snap);
-      pushTarget(snap);
-      return;
-    }
-
-    const mem = productMemory.current.courier;
-    setPlatformDockOpenState(false);
-    const snap = {
-      product: id,
-      view: mem.view,
-      spaceId: mem.spaceId,
-      threadId: mem.threadId,
-      projectId: mem.projectId,
-      platformNav,
-      panelMode: mem.panelMode,
-      panelIntent: mem.panelIntent,
-      connectorId: mem.connectorId,
-      jobId: mem.jobId,
-      skillId: mem.skillId,
-    };
-    applySnapshot(snap);
-    pushTarget(snap);
-  }, [
-    product,
-    view,
-    spaceId,
-    threadId,
-    projectId,
-    platformNav,
-    panelMode,
-    panelIntent,
-    connectorId,
-    jobId,
-    skillId,
-    platformDockOpen,
-    entitlements,
-    applySnapshot,
-    pushTarget,
-  ]);
-
   const setHostingMode = useCallback((id: HostingMode) => {
     if (!entitlements.hostingAllowed(id)) return;
     persistHosting(id);
@@ -642,66 +495,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     persistPersonalSpace(on);
   }, []);
 
-  const setPlatformNav = useCallback(
-    (id: PlatformNav) => {
-      if (!entitlements.platformNavAllowed(id)) return;
-      setPlatformNavState(id);
-      let nextThreadId = platformThreadId;
-      setThreads((current) => {
-        const { threads: next, id: tid } = upsertPersistentPlatformThread(
-          current,
-          workspaceId,
-          id,
-        );
-        nextThreadId = tid;
-        return next;
-      });
-      setPlatformThreadId(nextThreadId);
-      pushTarget({
-        product: "platform",
-        view,
-        spaceId,
-        threadId,
-        projectId,
-        platformNav: id,
-        panelMode,
-        panelIntent,
-        connectorId,
-        jobId,
-        skillId,
-      });
-    },
-    [
-      pushTarget,
-      view,
-      spaceId,
-      threadId,
-      projectId,
-      panelMode,
-      panelIntent,
-      connectorId,
-      jobId,
-      skillId,
-      entitlements,
-      platformThreadId,
-      workspaceId,
-    ],
-  );
-
   const setWorkspace = useCallback(
     (id: string) => {
       if (id === workspaceId) {
-        setMobileNav(false);
         return;
       }
 
-      const prevProduct = product;
       const prevView = view;
       const prevSpace = spaceId;
-      const prevPlatformNav = platformNav;
       const chatWasOpen =
-        panelMode !== "collapsed" &&
-        (drafting || Boolean(threadId) || platformDockOpen);
+        panelMode !== "collapsed" && (drafting || Boolean(threadId));
 
       persistWorkspace(id);
       setProjectId(null);
@@ -709,68 +512,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setJobId(null);
       setSkillId(null);
       setThreadId(null);
-      setPlatformThreadId(null);
       setOverlay(null);
-      setMobileNav(false);
       setMobileSurface("chat");
 
       const allowed = memberSpaces(id, actor.id, workspacePolicies);
       const opts = { billingPlan, personalEnabled: personalSpaceEnabled };
 
-      // Development product: keep the same nav surface when possible.
-      if (prevProduct === "platform") {
-        persistProduct("platform");
-        setView("chat");
-        setSpaceId(null);
-        setDrafting(false);
-        if (entitlements.platformNavAllowed(prevPlatformNav)) {
-          setPlatformNavState(prevPlatformNav);
-        }
-        if (chatWasOpen && platformDockOpen) {
-          let tid = "";
-          setThreads((current) => {
-            const { threads: next, id: tidNext } = upsertPersistentPlatformThread(
-              current,
-              id,
-              entitlements.platformNavAllowed(prevPlatformNav)
-                ? prevPlatformNav
-                : "overview",
-            );
-            tid = tidNext;
-            return next;
-          });
-          setPlatformThreadId(tid);
-          setPlatformDockOpenState(true);
-          setPanelMode("split");
-        } else {
-          setPlatformDockOpenState(false);
-          setPanelMode("collapsed");
-          setPanelIntent("browse");
-        }
-        pushTarget({
-          product: "platform",
-          view: "chat",
-          spaceId: null,
-          threadId: null,
-          projectId: null,
-          platformNav: entitlements.platformNavAllowed(prevPlatformNav)
-            ? prevPlatformNav
-            : "overview",
-          panelMode: chatWasOpen && platformDockOpen ? "split" : "collapsed",
-          panelIntent:
-            chatWasOpen && platformDockOpen ? "execute" : "browse",
-          connectorId: null,
-          jobId: null,
-          skillId: null,
-        });
-        return;
-      }
-
-      persistProduct("courier");
-
       // Global surfaces that aren't space-scoped — keep them.
       if (
-        prevView === "discovery" ||
         prevView === "recents" ||
         prevView === "browser" ||
         prevView === "shared" ||
@@ -781,14 +530,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setDrafting(false);
         setPanelMode("collapsed");
         setPanelIntent("browse");
-        setPlatformDockOpenState(false);
         pushTarget({
-          product: "courier",
           view: prevView,
           spaceId: null,
           threadId: null,
           projectId: null,
-          platformNav: prevPlatformNav,
           panelMode: "collapsed",
           panelIntent: "browse",
           connectorId: null,
@@ -829,12 +575,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setPanelMode("split");
           setPanelIntent("execute");
           pushTarget({
-            product: "courier",
             view: "space",
             spaceId: prevSpace,
             threadId: tid,
             projectId: null,
-            platformNav: prevPlatformNav,
             panelMode: "split",
             panelIntent: "execute",
             connectorId: null,
@@ -848,12 +592,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setPanelMode("collapsed");
         setPanelIntent("browse");
         pushTarget({
-          product: "courier",
           view: "space",
           spaceId: prevSpace,
           threadId: null,
           projectId: null,
-          platformNav: prevPlatformNav,
           panelMode: "collapsed",
           panelIntent: "browse",
           connectorId: null,
@@ -869,14 +611,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setDrafting(false);
       setPanelMode("collapsed");
       setPanelIntent("browse");
-      setPlatformDockOpenState(false);
       pushTarget({
-        product: "courier",
         view: "chat",
         spaceId: null,
         threadId: null,
         projectId: null,
-        platformNav: prevPlatformNav,
         panelMode: "collapsed",
         panelIntent: "browse",
         connectorId: null,
@@ -886,21 +625,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [
       workspaceId,
-      product,
       view,
       spaceId,
-      platformNav,
       panelMode,
       drafting,
       threadId,
-      platformDockOpen,
       actor.id,
       workspacePolicies,
       billingPlan,
       personalSpaceEnabled,
-      entitlements,
       pushTarget,
     ],
+  );
+
+  const removeWorkspace = useCallback(
+    (id: string) => {
+      if (!isCustomWorkspace(id)) return false;
+
+      const allowed = workspacesFor(actor, entitlements);
+      if (!allowed.some((item) => item.id === id)) return false;
+
+      const target = allowed.find((item) => item.id === id);
+      if (
+        target &&
+        workspaceKindOf(target) === "business" &&
+        !entitlements.canManageWorkspaces
+      ) {
+        return false;
+      }
+
+      if (!deleteCustomWorkspace(id)) return false;
+
+      purgeWorkspace(id);
+      clearWorkspaceConnections(id);
+      clearWorkspaceIcon(id);
+
+      if (workspaceId === id) {
+        const nextId = homeWorkspaceId(actor, entitlements);
+        setWorkspace(nextId);
+      }
+
+      return true;
+    },
+    [actor, entitlements, workspaceId, setWorkspace],
   );
 
   const summarizeThreadById = useCallback((id: string | null) => {
@@ -919,38 +686,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  const setPlatformDockOpen = useCallback(
-    (open: boolean) => {
-      if (!open) {
-        summarizeThreadById(platformThreadId);
-        setPlatformDockOpenState(false);
-        setPanelMode("collapsed");
-        return;
-      }
-      let tid = platformThreadId;
-      setThreads((current) => {
-        const { threads: next, id } = upsertPersistentPlatformThread(
-          current,
-          workspaceId,
-          platformNav,
-        );
-        tid = id;
-        return next;
-      });
-      setPlatformThreadId(tid);
-      setPlatformDockOpenState(true);
-      setPanelMode("split");
-      setMobileSurface("chat");
-    },
-    [platformThreadId, platformNav, workspaceId, summarizeThreadById],
-  );
-
   const toggleLeftPanel = useCallback(() => {
     const desktop = window.matchMedia("(min-width: 1024px)").matches;
     if (!desktop) return;
 
     const canRail =
-      entitlements.hasWorkspaces && !entitlements.showInviteWall;
+      entitlements.hasWorkspaces &&
+      !entitlements.showInviteWall &&
+      workspacesFor(actor, entitlements).length >= 2;
 
     if (!sidebarOpen) {
       setSidebarOpen(true);
@@ -965,9 +708,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [
     sidebarOpen,
     workspaceRailOpen,
-    entitlements.hasWorkspaces,
-    entitlements.showInviteWall,
+    actor,
+    entitlements,
   ]);
+
+  const toggleRightPanel = useCallback(() => {
+    if (!window.matchMedia("(min-width: 1024px)").matches) return;
+    setPanelMode((mode) => (mode === "collapsed" ? "split" : "collapsed"));
+    setMobileSurface("chat");
+  }, []);
 
   const openSpaceChat = useCallback(
     (space: SpaceId) => {
@@ -992,7 +741,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setConnectorId(null);
       setJobId(null);
       setSkillId(null);
-      setMobileNav(false);
       setView("space");
       setPanelIntent("execute");
       setPanelMode("split");
@@ -1003,12 +751,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (space === "research") setResearchTool("browser");
       if (space === "skills") setSkillsTool("editor");
       pushTarget({
-        product,
         view: "space",
         spaceId: space,
         threadId: tid,
         projectId: null,
-        platformNav,
         panelMode: "split",
         panelIntent: "execute",
         connectorId: null,
@@ -1016,16 +762,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: null,
       });
     },
-    [workspaceId, product, platformNav, pushTarget],
+    [workspaceId, pushTarget],
   );
 
   const newChat = useCallback(
     (space?: SpaceId) => {
-      if (product === "platform") {
-        setPlatformDockOpen(true);
-        setMobileNav(false);
-        return;
-      }
       if (space && isChatSpace(space)) {
         openSpaceChat(space);
         return;
@@ -1036,18 +777,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setConnectorId(null);
       setJobId(null);
       setSkillId(null);
-      setMobileNav(false);
       setView("chat");
       setDrafting(false);
       setPanelIntent("browse");
       setPanelMode("collapsed");
       pushTarget({
-        product,
         view: "chat",
         spaceId: null,
         threadId: null,
         projectId: null,
-        platformNav,
         panelMode: "collapsed",
         panelIntent: "browse",
         connectorId: null,
@@ -1055,65 +793,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: null,
       });
     },
-    [product, platformNav, pushTarget, setPlatformDockOpen, openSpaceChat],
+    [pushTarget, openSpaceChat],
   );
 
   const openCourierHome = useCallback(() => {
-    if (product === "courier") {
-      newChat();
-      return;
-    }
-    productMemory.current.platform = {
-      platformNav,
-      dockOpen: platformDockOpen,
-    };
-    setPlatformDockOpenState(false);
-    setMobileNav(false);
-    setOverlay(null);
-    setDrafting(false);
-    const snap = {
-      product: "courier" as const,
-      view: "chat" as const,
-      spaceId: null,
-      threadId: null,
-      projectId: null,
-      platformNav,
-      panelMode: "collapsed" as const,
-      panelIntent: "browse" as const,
-      connectorId: null,
-      jobId: null,
-      skillId: null,
-    };
-    applySnapshot(snap);
-    pushTarget(snap);
-  }, [
-    product,
-    platformNav,
-    platformDockOpen,
-    newChat,
-    applySnapshot,
-    pushTarget,
-  ]);
-
-  const openDevelopmentOverview = useCallback(() => {
-    if (product === "platform") {
-      setPlatformNav("overview");
-      setPlatformDockOpenState(false);
-      setMobileNav(false);
-      setOverlay(null);
-      return;
-    }
-    if (!entitlements.canAccessDevelopment) return;
-    setProduct("platform");
-    setPlatformNav("overview");
-    setPlatformDockOpenState(false);
-  }, [
-    product,
-    entitlements.canAccessDevelopment,
-    setProduct,
-    setPlatformNav,
-    setPlatformDockOpen,
-  ]);
+    newChat();
+  }, [newChat]);
 
   const setChatSpace = useCallback((id: SpaceId | null) => {
     setSpaceId(id);
@@ -1161,6 +846,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [workspaceId],
   );
 
+  const selectChatSpace = useCallback(
+    (id: SpaceId, opts?: { researchTool?: ResearchTool }) => {
+      if (!isChatSpace(id)) return;
+      setView("chat");
+      setSpaceId(id);
+      setPanelIntent("execute");
+      setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
+      setMobileSurface("chat");
+      if (id === "build") setBuildTool("preview");
+      if (id === "studio") setStudioTool("canvas");
+      if (id === "research")
+        setResearchTool(opts?.researchTool ?? "browser");
+      if (id === "skills") setSkillsTool("editor");
+      if (threadId) {
+        setThreads((current) =>
+          current.map((item) =>
+            item.id === threadId ? { ...item, spaceId: id } : item,
+          ),
+        );
+      }
+    },
+    [threadId],
+  );
+
   const collapseDraft = useCallback(() => {
     setDrafting(false);
     setPanelMode((mode) => (threadId ? mode : "collapsed"));
@@ -1180,12 +889,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setMobileSurface("chat");
     if (view === "space" && spaceId) {
       pushTarget({
-        product,
         view: "space",
         spaceId,
         threadId: null,
         projectId: null,
-        platformNav,
         panelMode: "collapsed",
         panelIntent: "browse",
         connectorId: null,
@@ -1196,8 +903,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [
     view,
     spaceId,
-    product,
-    platformNav,
     pushTarget,
     threadId,
     summarizeThreadById,
@@ -1205,7 +910,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const clearSessionSummary = useCallback(
     (id?: string | null) => {
-      const target = id ?? threadId ?? platformThreadId;
+      const target = id ?? threadId;
       if (!target) return;
       setThreads((current) =>
         current.map((item) =>
@@ -1213,12 +918,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ),
       );
     },
-    [threadId, platformThreadId],
+    [threadId],
   );
 
   const updateSessionSummary = useCallback(
     (text: string, id?: string | null) => {
-      const target = id ?? threadId ?? platformThreadId;
+      const target = id ?? threadId;
       if (!target) return;
       const next = text.trim();
       setThreads((current) =>
@@ -1229,12 +934,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ),
       );
     },
-    [threadId, platformThreadId],
+    [threadId],
   );
 
   const clearPersistentChat = useCallback(
     (id?: string | null) => {
-      const target = id ?? threadId ?? platformThreadId;
+      const target = id ?? threadId;
       if (!target) return;
       setThreads((current) =>
         current.map((item) =>
@@ -1251,7 +956,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
       setDrafting(true);
     },
-    [threadId, platformThreadId],
+    [threadId],
   );
 
   const sendMessage = useCallback(
@@ -1265,12 +970,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const allowed = memberSpaces(workspaceId, actor.id, workspacePolicies);
       const planOpts = { billingPlan, personalEnabled: personalSpaceEnabled };
       const inferredChat =
+        intent.resolved &&
         isChatSpace(intent.space) &&
         spaceAllowed(intent.space, allowed, planOpts)
           ? intent.space
           : null;
+      const entityContext =
+        Boolean(connectorId) ||
+        Boolean(projectId) ||
+        Boolean(jobId) ||
+        Boolean(skillId);
       const stayInChat =
-        kind !== "chat" || Boolean(currentChat) || Boolean(inferredChat);
+        kind !== "chat" ||
+        Boolean(currentChat) ||
+        Boolean(inferredChat) ||
+        !intent.resolved ||
+        entityContext ||
+        drafting ||
+        Boolean(threadId);
 
       if (!stayInChat) {
         const dest =
@@ -1285,12 +1002,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setJobId(intent.jobId ?? null);
         setPanelMode("collapsed");
         pushTarget({
-          product,
           view: "space",
           spaceId: dest,
           threadId: null,
           projectId: null,
-          platformNav,
           panelMode: "collapsed",
           panelIntent: "browse",
           connectorId: intent.connectorId ?? null,
@@ -1300,7 +1015,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const space = inferredChat ?? currentChat ?? "build";
+      const space =
+        inferredChat ??
+        currentChat ??
+        (connectorId
+          ? "connectors"
+          : jobId || skillId
+            ? "build"
+            : project
+              ? project.space
+              : null) ??
+        (intent.resolved ? intent.space : null);
       const matched = intent.projectId
         ? projects.find((item) => item.id === intent.projectId)
         : undefined;
@@ -1361,7 +1086,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           blocks: [
             {
               type: "error",
-              title: "Courier found a problem",
+              title: "Something went wrong",
               body: "The latest change caused the Preview to fail.",
               details: "Module not found: Can't resolve './auth'\nPreview exited with code 1",
             },
@@ -1410,11 +1135,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           .replace(/\s+/g, "-");
         assistantMsg = {
           ...assistantMsg,
-          content: "Courier can publish this for you. No build pipeline to manage.",
+          content: "We can publish this for you. No build pipeline to manage.",
           blocks: [
             {
               type: "deploy",
-              url: liveUrl ?? `https://${slug}.courier.app`,
+              url: liveUrl ?? `https://${slug}.app`,
               status: liveUrl ? "live" : "ready",
             },
           ],
@@ -1472,7 +1197,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   title: item.messages.length ? item.title : trimmed.slice(0, 48),
                   snippet: trimmed,
                   updatedAt: "Just now",
-                  spaceId: space,
+                  spaceId: space ?? undefined,
                   projectId: intent.projectId ?? item.projectId,
                   workspaceId: matched?.workspaceId ?? item.workspaceId,
                   persistent: usePersistent ? true : item.persistent,
@@ -1487,7 +1212,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           title: trimmed.slice(0, 52),
           workspaceId: matched?.workspaceId ?? workspaceId,
           projectId: intent.projectId,
-          spaceId: space,
+          spaceId: space ?? undefined,
           updatedAt: "Just now",
           snippet: trimmed,
           messages: [userMsg, assistantMsg],
@@ -1600,12 +1325,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setDrafting(false);
       if (view === "browser") {
         pushTarget({
-          product,
           view: "browser",
           spaceId: null,
           threadId: activeId,
           projectId: null,
-          platformNav,
           panelMode: "collapsed",
           panelIntent: "browse",
           connectorId: null,
@@ -1615,35 +1338,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       const keepSpace =
+        Boolean(space) &&
         (view === "space" || Boolean(opts?.space)) &&
-        (PRIMARY_NAV_SPACES as readonly string[]).includes(space);
-      setView(keepSpace ? "space" : "chat");
-      setSpaceId(space);
-      setProjectId(space === "skills" ? null : (intent.projectId ?? null));
-      setSkillId(opts?.skillId ?? (space === "skills" ? "sk-brand" : null));
+        (PRIMARY_NAV_SPACES as readonly string[]).includes(space as string) &&
+        !entityContext;
+      setView(entityContext || !keepSpace ? "chat" : "space");
+      setSpaceId(space ?? spaceId);
+      setProjectId(
+        projectId ??
+          (!space || space === "skills" ? null : (intent.projectId ?? null)),
+      );
+      setSkillId(
+        skillId ?? opts?.skillId ?? (space === "skills" ? "sk-brand" : null),
+      );
       setPanelIntent("execute");
-      setConnectorId(intent.connectorId ?? null);
-      setJobId(intent.jobId ?? null);
-      if (intent.buildTool) setBuildTool(intent.buildTool);
+      setConnectorId(intent.connectorId ?? connectorId);
+      setJobId(intent.jobId ?? jobId);
+      if (space && intent.buildTool) setBuildTool(intent.buildTool);
       if (space === "studio") setStudioTool("canvas");
       if (space === "research") setResearchTool("browser");
       if (space === "skills") setSkillsTool("editor");
-      if (kind === "build" || kind === "refine" || kind === "fix") setBuildTool("preview");
-      if (kind === "changes") setBuildTool("activity");
+      if (space && (kind === "build" || kind === "refine" || kind === "fix"))
+        setBuildTool("preview");
+      if (space && kind === "changes") setBuildTool("activity");
       setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
       setMobileSurface("chat");
       pushTarget({
-        product,
-        view: keepSpace ? "space" : "chat",
-        spaceId: space,
+        view: entityContext || !keepSpace ? "chat" : "space",
+        spaceId: space ?? spaceId,
         threadId: activeId,
-        projectId: space === "skills" ? null : (intent.projectId ?? null),
-        platformNav,
+        projectId:
+          projectId ??
+          (space === "skills" ? null : (intent.projectId ?? null)),
         panelMode: "split",
         panelIntent: "execute",
-        connectorId: intent.connectorId ?? null,
-        jobId: intent.jobId ?? null,
-        skillId: opts?.skillId ?? (space === "skills" ? "sk-brand" : null),
+        connectorId: intent.connectorId ?? connectorId,
+        jobId: intent.jobId ?? jobId,
+        skillId: skillId ?? opts?.skillId ?? (space === "skills" ? "sk-brand" : null),
       });
     },
     [
@@ -1651,9 +1382,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       workspaceId,
       spaceId,
       projectId,
+      project,
+      connectorId,
+      jobId,
+      skillId,
       view,
-      product,
-      platformNav,
+      drafting,
       pushTarget,
       selectedId,
       checkpoints,
@@ -1664,83 +1398,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       personalSpaceEnabled,
       workspacePolicies,
     ],
-  );
-
-  const sendPlatformMessage = useCallback(
-    (text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-      const intent = inferPlatformIntent(trimmed);
-      const nav =
-        intent.nav && entitlements.platformNavAllowed(intent.nav)
-          ? intent.nav
-          : undefined;
-      const reply =
-        intent.nav && !nav
-          ? "Models, docs, logs, and usage start on Max. Pro includes APIs, keys, and hosting on one model."
-          : intent.reply;
-      if (nav) setPlatformNav(nav);
-
-      const userMsg: Message = {
-        id: nextId("u"),
-        role: "user",
-        content: trimmed,
-        at: nowTime(),
-      };
-      const assistantMsg: Message = {
-        id: nextId("a"),
-        role: "assistant",
-        content: reply,
-        at: nowTime(),
-      };
-
-      const activeIdRef = { id: platformThreadId ?? "" };
-      const targetNav = nav ?? platformNav;
-
-      setThreads((current) => {
-        const { threads: list, id } = upsertPersistentPlatformThread(
-          current,
-          workspaceId,
-          targetNav,
-        );
-        activeIdRef.id = id;
-        const existing = list.find(
-          (item) => item.id === id && item.product === "platform",
-        );
-        if (existing) {
-          return list.map((item) =>
-            item.id === existing.id
-              ? {
-                  ...item,
-                  title: item.messages.length ? item.title : trimmed.slice(0, 52),
-                  snippet: trimmed,
-                  updatedAt: "Just now",
-                  platformNav: targetNav,
-                  persistent: true,
-                  sessionSummary: null,
-                  messages: [...item.messages, userMsg, assistantMsg],
-                }
-              : item,
-          );
-        }
-        const created: Thread = {
-          id,
-          title: trimmed.slice(0, 52),
-          workspaceId,
-          product: "platform",
-          platformNav: targetNav,
-          updatedAt: "Just now",
-          snippet: trimmed,
-          messages: [userMsg, assistantMsg],
-          persistent: true,
-          sessionSummary: null,
-        };
-        return [created, ...list];
-      });
-      setPlatformThreadId(activeIdRef.id);
-      setPlatformDockOpen(true);
-    },
-    [platformThreadId, workspaceId, setPlatformNav, entitlements, platformNav],
   );
 
   const selectElement = useCallback((id: PreviewNodeId) => {
@@ -1810,55 +1467,66 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const openSpace = useCallback((id: SpaceId) => {
     const allowed = memberSpaces(workspaceId, actor.id, workspacePolicies);
-    const opts = { billingPlan, personalEnabled: personalSpaceEnabled };
-    let target: SpaceId | null = id;
+    const planOpts = { billingPlan, personalEnabled: personalSpaceEnabled };
+    let target: SpaceId | null = id === "connectors" ? "connectors" : id;
     if (
-      (id === "personal" || id === "finances" || id === "health") &&
-      !spaceAllowed("personal", allowed, opts)
+      target &&
+      (target === "personal" || target === "finances" || target === "health") &&
+      !spaceAllowed("personal", allowed, planOpts)
     ) {
       target = null;
     }
-    if (target && !spaceAllowed(target, allowed, opts)) {
+    if (target && !spaceAllowed(target, allowed, planOpts)) {
       target = null;
     }
     if (!target) {
       const fallback = (
         ["build", "studio", "research", "personal", "work"] as const
-      ).find((space) => spaceAllowed(space, allowed, opts));
+      ).find((space) => spaceAllowed(space, allowed, planOpts));
       if (!fallback) {
         newChat();
         return;
       }
       target = fallback;
     }
-    setView("space");
-    setSpaceId(target);
-    setProjectId(null);
-    setDrafting(false);
-    setPanelIntent("browse");
-    setConnectorId(null);
-    setJobId(null);
-    setPanelMode("collapsed");
-    setMobileNav(false);
-    setMobileSurface("chat");
-    // Keep persistent space threads in memory; only detach the active pointer.
-    setThreadId(null);
-    pushTarget({
-      product,
-      view: "space",
-      spaceId: target,
-      threadId: null,
-      projectId: null,
-      platformNav,
-      panelMode: "collapsed",
-      panelIntent: "browse",
-      connectorId: null,
-      jobId: null,
-      skillId: null,
-    });
+
+    const chatActive = Boolean(threadId) || drafting;
+    if (chatActive && target === spaceId) {
+      setMobileSurface("chat");
+      if (panelMode === "collapsed") {
+        setPanelMode("split");
+        setPanelIntent("execute");
+      }
+      return;
+    }
+
+    const goToSpace = (dest: SpaceId) => {
+      setView("space");
+      setSpaceId(dest);
+      setProjectId(null);
+      setDrafting(false);
+      setPanelIntent("browse");
+      setConnectorId(null);
+      setJobId(null);
+      setSkillId(null);
+      setPanelMode("collapsed");
+      setMobileSurface("chat");
+      setThreadId(null);
+      pushTarget({
+        view: "space",
+        spaceId: dest,
+        threadId: null,
+        projectId: null,
+        panelMode: "collapsed",
+        panelIntent: "browse",
+        connectorId: null,
+        jobId: null,
+        skillId: null,
+      });
+    };
+
+    goToSpace(target);
   }, [
-    product,
-    platformNav,
     pushTarget,
     workspaceId,
     workspacePolicies,
@@ -1866,6 +1534,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     personalSpaceEnabled,
     newChat,
     actor.id,
+    threadId,
+    drafting,
+    spaceId,
+    panelMode,
   ]);
 
   const openRecents = useCallback(() => {
@@ -1876,57 +1548,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDrafting(false);
     setPanelIntent("browse");
     setPanelMode("collapsed");
-    setMobileNav(false);
     pushTarget({
-      product,
       view: "recents",
       spaceId: null,
       threadId: null,
       projectId: null,
-      platformNav,
       panelMode: "collapsed",
       panelIntent: "browse",
       connectorId: null,
       jobId: null,
       skillId: null,
     });
-  }, [product, platformNav, pushTarget]);
-
-  const openDiscovery = useCallback(() => {
-    setView("discovery");
-    setSpaceId(null);
-    setProjectId(null);
-    setThreadId(null);
-    setConnectorId(null);
-    setDrafting(false);
-    setPanelIntent("browse");
-    setPanelMode("collapsed");
-    setMobileNav(false);
-    setOverlay(null);
-    setDiscoveryFocusId(null);
-    pushTarget({
-      product: "courier",
-      view: "discovery",
-      spaceId: null,
-      threadId: null,
-      projectId: null,
-      platformNav,
-      panelMode: "collapsed",
-      panelIntent: "browse",
-      connectorId: null,
-      jobId: null,
-      skillId: null,
-    });
-  }, [platformNav, pushTarget]);
-
-  const clearDiscoveryFocus = useCallback(() => {
-    setDiscoveryFocusId(null);
-  }, []);
-
-  const openDiscoveryItem = useCallback((id: string) => {
-    setDiscoveryFocusId(id);
-    setOverlay("discovery");
-  }, []);
+  }, [pushTarget]);
 
   useEffect(() => {
     if (entitlements.hasVoice) return;
@@ -1941,20 +1574,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [panelMode, drafting, threadId]);
 
   useEffect(() => {
-    if (entitlements.canAccessDevelopment) return;
-    if (product === "platform") persistProduct("courier");
-  }, [entitlements.canAccessDevelopment, product]);
-
-  useEffect(() => {
     if (entitlements.hostingAllowed(hostingMode)) return;
     persistHosting("cloud");
   }, [entitlements, hostingMode]);
-
-  useEffect(() => {
-    if (product !== "platform") return;
-    if (entitlements.platformNavAllowed(platformNav)) return;
-    setPlatformNavState("overview");
-  }, [entitlements, product, platformNav]);
 
   useEffect(() => {
     const home = homeWorkspaceId(actor, entitlements);
@@ -1976,7 +1598,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [actor, entitlements, workspaceId, workspaceCatalog]);
 
   useEffect(() => {
-    if (product !== "courier") return;
     const gated =
       spaceId === "work" ||
       spaceId === "personal" ||
@@ -1993,13 +1614,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (spaceAllowed(check, allowed, opts)) return;
     openSpace(spaceId);
   }, [
-    product,
     spaceId,
     workspaceId,
     workspacePolicies,
     billingPlan,
     personalSpaceEnabled,
     openSpace,
+    actor.id,
   ]);
 
   const isPinned = useCallback(
@@ -2054,33 +1675,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const openProject = useCallback((id: string) => {
     const match = projects.find((item) => item.id === id);
     if (!match) return;
+    const chatActive = Boolean(threadId) || drafting;
+    const keepChat = chatActive && projectId === id;
     if (match.workspaceId !== workspaceId) persistWorkspace(match.workspaceId);
     setView("chat");
     setProjectId(match.id);
     setSpaceId(match.space);
-    setThreadId(null);
-    setDrafting(true);
+    setConnectorId(null);
+    setJobId(null);
+    setSkillId(null);
+    if (!keepChat) {
+      setThreadId(null);
+      setDrafting(true);
+    }
     setPanelIntent("execute");
     if (match.space === "build") setBuildTool("preview");
     if (match.space === "studio") setStudioTool("canvas");
     if (match.space === "research") setResearchTool("browser");
     setPanelMode("split");
     setMobileSurface("chat");
-    setMobileNav(false);
     pushTarget({
-      product,
       view: "chat",
       spaceId: match.space,
-      threadId: null,
+      threadId: keepChat ? threadId : null,
       projectId: match.id,
-      platformNav,
       panelMode: "split",
       panelIntent: "execute",
       connectorId: null,
       jobId: null,
       skillId: null,
     });
-  }, [workspaceId, product, platformNav, pushTarget]);
+  }, [workspaceId, pushTarget, threadId, drafting, projectId]);
 
   const openThread = useCallback(
     (id: string) => {
@@ -2089,28 +1714,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (found.workspaceId !== workspaceId) {
         persistWorkspace(found.workspaceId);
       }
-      if (found.product === "platform") {
-        if (!entitlements.canAccessDevelopment) return;
-        persistProduct("platform");
-        setPlatformThreadId(found.id);
-        setPlatformDockOpen(true);
-        setMobileNav(false);
-        pushTarget({
-          product: "platform",
-          view,
-          spaceId,
-          threadId,
-          projectId,
-          platformNav: product === "platform" ? platformNav : "recents",
-          panelMode: "split",
-          panelIntent,
-          connectorId,
-          jobId,
-          skillId,
-        });
-        return;
-      }
-      persistProduct("courier");
       setThreadId(found.id);
       setSpaceId(found.spaceId ?? null);
       setProjectId(found.projectId ?? null);
@@ -2123,14 +1726,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (found.spaceId === "build") setBuildTool("preview");
       setPanelMode("split");
       setMobileSurface("chat");
-      setMobileNav(false);
       pushTarget({
-        product: "courier",
         view: "chat",
         spaceId: found.spaceId ?? null,
         threadId: found.id,
         projectId: found.projectId ?? null,
-        platformNav,
         panelMode: "split",
         panelIntent: "execute",
         connectorId: null,
@@ -2138,23 +1738,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: found.spaceId === "skills" ? "sk-brand" : null,
       });
     },
-    [
-      threads,
-      workspaceId,
-      product,
-      view,
-      spaceId,
-      threadId,
-      projectId,
-      platformNav,
-      panelMode,
-      panelIntent,
-      connectorId,
-      jobId,
-      skillId,
-      pushTarget,
-      billingPlan,
-    ],
+    [threads, workspaceId, pushTarget],
   );
 
   const openProjectChat = useCallback(
@@ -2176,7 +1760,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPanelMode("collapsed");
     setPanelIntent("browse");
     setSpaceId(null);
-    setMobileNav(false);
   }, []);
 
   const openSettings = useCallback((tab?: SettingsTab, opts?: { hub?: boolean }) => {
@@ -2196,22 +1779,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDrafting(false);
     setPanelIntent("browse");
     setPanelMode("collapsed");
-    setMobileNav(false);
     setOverlay(null);
     pushTarget({
-      product,
       view: "settings",
       spaceId: null,
       threadId: null,
       projectId: null,
-      platformNav,
       panelMode: "collapsed",
       panelIntent: "browse",
       connectorId: null,
       jobId: null,
       skillId: null,
     });
-  }, [entitlements.showOrgSettings, product, platformNav, pushTarget]);
+  }, [entitlements.showOrgSettings, pushTarget]);
 
   const backToSettingsHub = useCallback(() => {
     setSettingsMobileHub(true);
@@ -2219,13 +1799,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const openOverlay = useCallback((id: OverlayId) => {
     setOverlay(id);
-    setMobileNav(false);
   }, []);
 
   const openSpaceSettings = useCallback((space: SpaceId) => {
     setSettingsSpaceId(space);
     setOverlay("space-settings");
-    setMobileNav(false);
   }, []);
 
   const closeOverlay = useCallback(() => {
@@ -2235,8 +1813,78 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const toggleVoice = useCallback(() => {
     if (!entitlements.hasVoice) return;
-    setVoiceActive((on) => !on);
-  }, [entitlements.hasVoice]);
+    if (voiceActive) {
+      setVoiceActive(false);
+      const activeThread = threadId
+        ? threads.find((item) => item.id === threadId)
+        : null;
+      const emptySession =
+        (!threadId && drafting) ||
+        (activeThread !== undefined &&
+          activeThread !== null &&
+          activeThread.messages.length === 0);
+      if (emptySession) {
+        newChat();
+        return;
+      }
+      if (threadId) {
+        summarizeThreadById(threadId);
+        setDrafting(false);
+        setPanelMode("collapsed");
+        setPanelIntent("browse");
+        return;
+      }
+      setDrafting(false);
+      return;
+    }
+
+    setVoiceActive(true);
+
+    if (view === "space" && spaceId && isChatSpace(spaceId) && !threadId) {
+      openSpaceChat(spaceId);
+      return;
+    }
+
+    if (!threadId) {
+      setView("chat");
+      setDrafting(true);
+      setPanelIntent("execute");
+      setPanelMode("split");
+      setMobileSurface("chat");
+      pushTarget({
+        view: "chat",
+        spaceId,
+        threadId: null,
+        projectId,
+        panelMode: "split",
+        panelIntent: "execute",
+        connectorId,
+        jobId,
+        skillId,
+      });
+      return;
+    }
+
+    if (!spaceId) {
+      setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
+    }
+  }, [
+    entitlements.hasVoice,
+    voiceActive,
+    threadId,
+    threads,
+    drafting,
+    view,
+    spaceId,
+    projectId,
+    connectorId,
+    jobId,
+    skillId,
+    newChat,
+    summarizeThreadById,
+    openSpaceChat,
+    pushTarget,
+  ]);
 
   const openBrowser = useCallback((opts?: { chat?: boolean; query?: string }) => {
     const query = opts?.query?.trim() || null;
@@ -2251,21 +1899,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBrowserChatOpen(Boolean(opts?.chat));
     setBrowserSearch(query);
     setPanelMode("collapsed");
-    setMobileNav(false);
     pushTarget({
-      product,
       view: "browser",
       spaceId: "research",
       threadId: null,
       projectId: null,
-      platformNav,
       panelMode: "collapsed",
       panelIntent: "browse",
       connectorId: null,
       jobId: null,
       skillId: null,
     });
-  }, [product, platformNav, pushTarget]);
+  }, [pushTarget]);
 
   const clearPageReference = useCallback(() => setPageReference(null), []);
 
@@ -2287,7 +1932,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (target === "build") setBuildTool("preview");
       if (target === "studio") setStudioTool("canvas");
       if (target === "research") setResearchTool("browser");
-      setMobileNav(false);
     },
     [browserPage],
   );
@@ -2310,151 +1954,95 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [spaceId, spaceLibraryOpen]);
 
   const openConnector = useCallback((id: string) => {
+    const chatActive = Boolean(threadId) || drafting;
+    const keepChat = chatActive && spaceId === "connectors" && connectorId === id;
+
     setView("chat");
     setSpaceId("connectors");
     setConnectorId(id);
-    setThreadId(null);
-    setDrafting(true);
+    setProjectId(null);
+    setJobId(null);
+    setSkillId(null);
+    if (!keepChat) {
+      setThreadId(null);
+      setDrafting(true);
+    }
     setPanelIntent("execute");
     setPanelMode("split");
     setMobileSurface("chat");
-    setMobileNav(false);
     pushTarget({
-      product,
       view: "chat",
       spaceId: "connectors",
-      threadId: null,
+      threadId: keepChat ? threadId : null,
       projectId: null,
-      platformNav,
       panelMode: "split",
       panelIntent: "execute",
       connectorId: id,
       jobId: null,
       skillId: null,
     });
-  }, [product, platformNav, pushTarget]);
-
-  const runDiscoveryAction = useCallback(
-    (
-      action: import("@/lib/discovery-types").DiscoveryAction,
-      _item?: import("@/lib/discovery-types").DiscoveryItem | null,
-    ) => {
-      void _item;
-      switch (action.kind) {
-        case "openSpace": {
-          const space = action.target as SpaceId | undefined;
-          if (!space) break;
-          if (space === "work" && !entitlements.canUseWorkSpace) {
-            openSettings("plans");
-            break;
-          }
-          openSpace(space);
-          break;
-        }
-        case "openConnector":
-          if (action.target) openConnector(action.target);
-          else openSpace("connectors");
-          break;
-        case "openBrowser":
-          openBrowser({ chat: true });
-          break;
-        case "openPlatform": {
-          if (!entitlements.canAccessDevelopment) {
-            openSettings("plans");
-            break;
-          }
-          const nav = (action.target as PlatformNav | undefined) ?? "overview";
-          persistProduct("platform");
-          if (entitlements.platformNavAllowed(nav)) {
-            setPlatformNav(nav);
-          } else {
-            setPlatformNav("overview");
-            openSettings("plans");
-          }
-          setPlatformDockOpen(false);
-          break;
-        }
-        case "newChat":
-          newChat();
-          break;
-        case "openDiscovery":
-          openDiscovery();
-          break;
-        case "prompt":
-          if (action.target) {
-            const text = action.target;
-            newChat();
-            window.setTimeout(() => sendMessage(text), 40);
-          }
-          break;
-        default:
-          break;
-      }
-    },
-    [
-      entitlements,
-      openSpace,
-      openConnector,
-      openBrowser,
-      openSettings,
-      setPlatformNav,
-      setPlatformDockOpen,
-      newChat,
-      openDiscovery,
-      sendMessage,
-    ],
-  );
+  }, [pushTarget, threadId, drafting, spaceId, connectorId]);
 
   const openJob = useCallback((id: string) => {
+    const chatActive = Boolean(threadId) || drafting;
+    const keepChat = chatActive && spaceId === "build" && jobId === id;
+
     setView("chat");
     setSpaceId("build");
     setJobId(id);
-    setThreadId(null);
-    setDrafting(true);
+    setConnectorId(null);
+    setProjectId(null);
+    setSkillId(null);
+    if (!keepChat) {
+      setThreadId(null);
+      setDrafting(true);
+    }
     setPanelIntent("execute");
     setPanelMode("split");
     setMobileSurface("chat");
-    setMobileNav(false);
     pushTarget({
-      product,
       view: "chat",
       spaceId: "build",
-      threadId: null,
+      threadId: keepChat ? threadId : null,
       projectId: null,
-      platformNav,
       panelMode: "split",
       panelIntent: "execute",
       connectorId: null,
       jobId: id,
       skillId: null,
     });
-  }, [product, platformNav, pushTarget]);
+  }, [pushTarget, threadId, drafting, spaceId, jobId]);
 
   const openSkill = useCallback((id: string) => {
+    const chatActive = Boolean(threadId) || drafting;
+    const keepChat = chatActive && spaceId === "build" && skillId === id;
+
     setView("chat");
     setSpaceId("build");
     setSkillId(id);
-    setThreadId(null);
-    setDrafting(true);
+    setConnectorId(null);
+    setProjectId(null);
+    setJobId(null);
+    if (!keepChat) {
+      setThreadId(null);
+      setDrafting(true);
+    }
     setPanelIntent("execute");
     setSkillsTool("editor");
     setPanelMode("split");
     setMobileSurface("chat");
-    setMobileNav(false);
     pushTarget({
-      product,
       view: "chat",
       spaceId: "build",
-      threadId: null,
+      threadId: keepChat ? threadId : null,
       projectId: null,
-      platformNav,
       panelMode: "split",
       panelIntent: "execute",
       connectorId: null,
       jobId: null,
       skillId: id,
     });
-  }, [product, platformNav, pushTarget]);
+  }, [pushTarget, threadId, drafting, spaceId, skillId]);
 
   const openFile = useCallback((id: string) => {
     setView("space");
@@ -2464,26 +2052,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDrafting(false);
     setPanelIntent("browse");
     setPanelMode("collapsed");
-    setMobileNav(false);
     pushTarget({
-      product,
       view: "space",
       spaceId: "studio",
       threadId: null,
       projectId: null,
-      platformNav,
       panelMode: "collapsed",
       panelIntent: "browse",
       connectorId: null,
       jobId: null,
       skillId: null,
     });
-  }, [product, platformNav, pushTarget]);
+  }, [pushTarget]);
 
   const value = useMemo(
     () => ({
-      product,
-      setProduct,
       hostingMode,
       setHostingMode,
       actor,
@@ -2499,12 +2082,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       orgMembers,
       workspaceId,
       setWorkspace,
+      removeWorkspace,
       workspace,
       view,
       threads,
       threadId,
       thread,
-      platformThreadId,
       spaceId,
       projectId,
       project,
@@ -2523,8 +2106,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       workspaceRailOpen,
       setWorkspaceRailOpen,
       toggleLeftPanel,
-      mobileNav,
-      setMobileNav,
+      toggleRightPanel,
       dragging,
       setDragging,
       drafting,
@@ -2547,8 +2129,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       settingsMobileHub,
       setSettingsMobileHub,
       backToSettingsHub,
-      platformNav,
-      setPlatformNav,
       spaceLayout,
       setSpaceLayout,
       overlay,
@@ -2558,27 +2138,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeOverlay,
       newChat,
       openCourierHome,
-      openDevelopmentOverview,
       openSpaceChat,
       setChatSpace,
       armChatInterface,
+      selectChatSpace,
       collapseDraft,
       closeSpaceChat,
       clearSessionSummary,
       updateSessionSummary,
       clearPersistentChat,
       sendMessage,
-      platformMessages,
-      sendPlatformMessage,
-      platformDockOpen,
-      setPlatformDockOpen,
       openSpace,
       openRecents,
-      openDiscovery,
-      openDiscoveryItem,
-      clearDiscoveryFocus,
-      discoveryFocusId,
-      runDiscoveryAction,
       openBrowser,
       browserChatOpen,
       setBrowserChatOpen,
@@ -2638,8 +2209,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       publishApp,
     }),
     [
-      product,
-      setProduct,
       hostingMode,
       setHostingMode,
       actor,
@@ -2655,12 +2224,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       orgMembers,
       workspaceId,
       setWorkspace,
+      removeWorkspace,
       workspace,
       view,
       threads,
       threadId,
       thread,
-      platformThreadId,
       spaceId,
       projectId,
       project,
@@ -2673,7 +2242,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       sidebarOpen,
       workspaceRailOpen,
       toggleLeftPanel,
-      mobileNav,
+      toggleRightPanel,
       dragging,
       drafting,
       buildTool,
@@ -2688,8 +2257,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       settingsTab,
       settingsMobileHub,
       backToSettingsHub,
-      platformNav,
-      setPlatformNav,
       spaceLayout,
       overlay,
       settingsSpaceId,
@@ -2698,26 +2265,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeOverlay,
       newChat,
       openCourierHome,
-      openDevelopmentOverview,
       openSpaceChat,
       setChatSpace,
       armChatInterface,
+      selectChatSpace,
       collapseDraft,
       closeSpaceChat,
       clearSessionSummary,
       updateSessionSummary,
       clearPersistentChat,
       sendMessage,
-      platformMessages,
-      sendPlatformMessage,
-      platformDockOpen,
       openSpace,
       openRecents,
-      openDiscovery,
-      openDiscoveryItem,
-      clearDiscoveryFocus,
-      discoveryFocusId,
-      runDiscoveryAction,
       openBrowser,
       browserChatOpen,
       setBrowserChatOpen,

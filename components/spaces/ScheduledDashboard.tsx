@@ -6,7 +6,7 @@ import {
   ChartCard,
   FunnelChart,
   Kpi,
-} from "@/components/platform/Charts";
+} from "@/components/ui/Charts";
 import { useApp } from "@/components/app/AppProvider";
 import { DashBtn, DashFrame, LayoutToggle, ScopeToggle, SpaceSettingsButton } from "@/components/spaces/ItemSet";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";

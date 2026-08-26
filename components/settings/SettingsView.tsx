@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   ArrowLeft,
-  Blocks,
   Building2,
   CreditCard,
   ImagePlus,
@@ -14,7 +13,6 @@ import {
 import { useApp } from "@/components/app/AppProvider";
 import { AccountAvatar } from "@/components/shell/AccountAvatar";
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
-import { ConnectorsSettings } from "@/components/settings/ConnectorsSettings";
 import { PlansSettings } from "@/components/settings/PlansSettings";
 import { DashBtn } from "@/components/spaces/ItemSet";
 import {
@@ -73,7 +71,6 @@ const roles: Role[] = ["Owner", "Admin", "Member"];
 const settingsIcons: Record<SettingsTab, typeof Building2> = {
   organization: Building2,
   workspaces: LayoutGrid,
-  connectors: Blocks,
   plans: CreditCard,
   general: UserRound,
   appearance: Palette,
@@ -177,8 +174,6 @@ export function SettingsView() {
                 onSelect={setWorkspacePage}
               />
             ) : null}
-
-            {settingsTab === "connectors" ? <ConnectorsSettings /> : null}
 
             {settingsTab === "plans" ? <PlansSettings /> : null}
 
@@ -581,7 +576,7 @@ function GeneralSettings({
                 className={settingsInputClass}
               />
             </SettingsField>
-            <SettingsField label="What should Courier call you?">
+            <SettingsField label="What should we call you?">
               <input
                 defaultValue={actor.short}
                 key={`${actor.id}-short`}
@@ -589,7 +584,7 @@ function GeneralSettings({
               />
             </SettingsField>
             <SettingsField
-              label="Instructions for Courier"
+              label="Custom instructions"
               hint={
                 entitlements.hasWorkspaces
                   ? "Optional. Applied across workspaces on this account."
@@ -615,7 +610,7 @@ function GeneralSettings({
           </SettingsRow>
           <SettingsRow
             label="Log out"
-            description="Sign out of Courier on this device."
+            description="Sign out on this device."
           >
             <DashBtn onClick={onLogout}>Log out</DashBtn>
           </SettingsRow>

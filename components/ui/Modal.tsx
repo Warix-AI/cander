@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { SHELL_FLOAT_RADIUS, useShellStyle } from "@/lib/shell-chrome";
+import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 export function Modal({
@@ -60,8 +60,8 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={labelledBy}
         className={cn(
-          "relative z-10 max-h-[calc(100vh-2rem)] overflow-hidden border border-border bg-background shadow-[0_16px_48px_rgba(0,0,0,0.18)]",
-          floating ? SHELL_FLOAT_RADIUS : "rounded-[10px]",
+          "relative z-10 max-h-[calc(100vh-2rem)] overflow-hidden light-surface bg-popover shadow-[0_16px_48px_rgba(0,0,0,0.12)] dark:border dark:border-border dark:bg-transparent dark:shadow-[0_16px_48px_rgba(0,0,0,0.18)]",
+          floating ? SHELL_G3_RADIUS : "rounded-[10px]",
           className,
         )}
       >

@@ -1,4 +1,4 @@
-import type { BillingPlan, PlatformNav } from "./types";
+import type { BillingPlan } from "./types";
 
 export type DevDepth = "none" | "build" | "collaborate" | "operate";
 
@@ -123,10 +123,6 @@ export function capabilitiesFor(plan: BillingPlan): PlanCapabilities {
   return PLAN_CAPABILITIES[plan];
 }
 
-export function canAccessDevelopment(plan: BillingPlan) {
-  return capabilitiesFor(plan).developmentAccess;
-}
-
 export function canManageInfrastructure(plan: BillingPlan) {
   return capabilitiesFor(plan).infrastructureManagement;
 }
@@ -144,34 +140,6 @@ export function runtimeLabel(plan: BillingPlan) {
   if (devDepth === "collaborate") return "Team · integrated";
   if (devDepth === "build") return "Integrated";
   return "Not included";
-}
-
-export function platformNavAllowed(plan: BillingPlan, nav: PlatformNav) {
-  const caps = capabilitiesFor(plan);
-  if (!caps.developmentAccess) return false;
-  switch (nav) {
-    case "overview":
-    case "recents":
-      return true;
-    case "docs":
-      return caps.docs;
-    case "hosting":
-      return true;
-    case "api":
-      return caps.apiAccess !== "none";
-    case "keys":
-      return caps.apiKeys !== "none";
-    case "deployments":
-      return caps.deployments !== "none";
-    case "models":
-      return caps.models !== "none";
-    case "logs":
-      return caps.logs !== "none";
-    case "usage":
-      return caps.usage !== "none";
-    default:
-      return true;
-  }
 }
 
 /** Plan permission to choose a compute location. Does not describe hardware. */

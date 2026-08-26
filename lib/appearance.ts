@@ -2,9 +2,79 @@ import { useSyncExternalStore } from "react";
 import { persistTheme } from "@/lib/session";
 import { setShellStyle, type ShellStyle } from "@/lib/shell-chrome";
 
+export type ColorModeId = "light" | "dark";
+
+export const COLOR_MODE_PRESETS: {
+  id: ColorModeId;
+  label: string;
+}[] = [
+  { id: "light", label: "Light" },
+  { id: "dark", label: "Dark" },
+];
+
+export function colorPaletteForMode(id: ColorModeId): ColorPalette {
+  switch (id) {
+    case "light":
+      return {
+        theme: "light",
+        chroma: 0,
+        accentChroma: 0.04,
+        hue: 260,
+        label: "Light",
+      };
+    case "dark":
+      return {
+        theme: "dark",
+        chroma: 0,
+        accentChroma: 0.05,
+        hue: 260,
+        label: "Dark",
+      };
+  }
+}
+
+/** Preview swatch — matches applied CSS vars closely. */
+export function swatchForMode(id: ColorModeId): string {
+  switch (id) {
+    case "light":
+      return "oklch(0.97 0.004 260)";
+    case "dark":
+      return "oklch(0.21 0.006 260)";
+  }
+}
+
+function isColorModeId(value: unknown): value is ColorModeId {
+  return COLOR_MODE_PRESETS.some((preset) => preset.id === value);
+}
+
+function migrateColorMode(value: unknown): ColorModeId {
+  if (value === "dark" || value === "dark-charcoal" || value === "dark-blue") {
+    return "dark";
+  }
+  if (value === "light" || value === "light-blue") {
+    return "light";
+  }
+  return DEFAULT_APPEARANCE.colorMode;
+}
+
+function migrateLegacyColor(color: number): ColorModeId {
+  return clamp(color) < 45 ? "light" : "dark";
+}
+
+export function setColorMode(id: ColorModeId) {
+  setAppearance({ colorMode: id });
+}
+
+export function setLayoutMode(mode: ShellStyle) {
+  setAppearance({ layout: mode === "floating" ? 100 : 0 });
+}
+
+export function layoutModeFor(value: number): ShellStyle {
+  return clamp(value) >= 50 ? "floating" : "classic";
+}
+
 export type AppearanceState = {
-  /** Palette continuum: mono/colored light → mono/colored dark (no gray middle). */
-  color: number;
+  colorMode: ColorModeId;
   /** Type continuum: size + many family stops. */
   typography: number;
   /** 0 dense → 100 comfortable. */
@@ -40,17 +110,17 @@ const STORAGE_KEY = "courier-appearance-v2";
 const listeners = new Set<Listener>();
 
 /**
- * Brand defaults: mono light + Classic layout.
+ * Brand defaults: light + floating layout.
  * Color continuum: left = light, center (~50) = mono dark, right = dark tints.
  * Typography 50 = DM Sans.
  */
 export const DEFAULT_APPEARANCE: AppearanceState = {
-  color: 8,
+  colorMode: "light",
   typography: 50,
   spacing: 50,
   shapes: 50,
   motion: 50,
-  layout: 0,
+  layout: 100,
 };
 
 const SERVER_SNAPSHOT: AppearanceState = { ...DEFAULT_APPEARANCE };
@@ -70,9 +140,15 @@ function clamp(value: number) {
 function parse(raw: string | null): AppearanceState {
   if (!raw) return { ...DEFAULT_APPEARANCE };
   try {
-    const data = JSON.parse(raw) as Partial<AppearanceState>;
+    const data = JSON.parse(raw) as Partial<AppearanceState> & { color?: number };
+    const colorMode =
+      data.colorMode !== undefined
+        ? migrateColorMode(data.colorMode)
+        : typeof data.color === "number"
+          ? migrateLegacyColor(data.color)
+          : DEFAULT_APPEARANCE.colorMode;
     return {
-      color: clamp(typeof data.color === "number" ? data.color : DEFAULT_APPEARANCE.color),
+      colorMode,
       typography: clamp(
         typeof data.typography === "number"
           ? data.typography
@@ -296,7 +372,7 @@ export function typePresetFor(value: number): TypePreset {
 /** Sync theme + shell chrome so existing hooks keep working. */
 export function syncAppearanceSideEffects(next: AppearanceState = getAppearanceSnapshot()) {
   if (typeof window === "undefined") return;
-  const palette = colorPaletteFor(next.color);
+  const palette = colorPaletteForMode(next.colorMode);
   const current: "light" | "dark" = document.documentElement.classList.contains(
     "dark",
   )
@@ -328,8 +404,12 @@ export function getAppearanceServerSnapshot(): AppearanceState {
 
 export function setAppearance(partial: Partial<AppearanceState>) {
   hydrate();
+  const colorMode =
+    partial.colorMode !== undefined && isColorModeId(partial.colorMode)
+      ? partial.colorMode
+      : state.colorMode;
   const next: AppearanceState = {
-    color: clamp(partial.color ?? state.color),
+    colorMode,
     typography: clamp(partial.typography ?? state.typography),
     spacing: clamp(partial.spacing ?? state.spacing),
     shapes: clamp(partial.shapes ?? state.shapes),
@@ -365,7 +445,7 @@ export function useAppearance() {
 
 /** Derived CSS values for the applicator. */
 export function appearanceToCss(a: AppearanceState) {
-  const palette = colorPaletteFor(a.color);
+  const palette = colorPaletteForMode(a.colorMode);
   const type = typePresetFor(a.typography);
 
   const density = 0.85 + (a.spacing / 100) * 0.35;
@@ -406,61 +486,3 @@ export function appearanceToCss(a: AppearanceState) {
     shell: (a.layout >= 50 ? "floating" : "classic") as ShellStyle,
   };
 }
-
-export const APPEARANCE_SLIDERS: {
-  key: keyof AppearanceState;
-  label: string;
-  description: string;
-  left: string;
-  right: string;
-  binary?: boolean;
-  showLiveLabel?: "color" | "typography";
-}[] = [
-  {
-    key: "color",
-    label: "Color & mode",
-    description:
-      "Default is mono light. Slide toward center for mono dark, further right for soft dark tints.",
-    left: "Light",
-    right: "Dark tint",
-    showLiveLabel: "color",
-  },
-  {
-    key: "typography",
-    label: "Typography",
-    description:
-      "Center is DM Sans — Courier’s original type. Explore other families on either side.",
-    left: "Compact",
-    right: "Display",
-    showLiveLabel: "typography",
-  },
-  {
-    key: "spacing",
-    label: "Spacing",
-    description: "Gaps, padding, and overall density.",
-    left: "Dense",
-    right: "Open",
-  },
-  {
-    key: "shapes",
-    label: "Shapes",
-    description: "Corner radii and control softness.",
-    left: "Sharp",
-    right: "Soft",
-  },
-  {
-    key: "motion",
-    label: "Motion",
-    description: "Transition speed — or off for a calmer feel.",
-    left: "Off",
-    right: "Snappy",
-  },
-  {
-    key: "layout",
-    label: "Layout",
-    description: "Edge-to-edge classic or inset floating chrome.",
-    left: "Classic",
-    right: "Floating",
-    binary: true,
-  },
-];

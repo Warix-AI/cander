@@ -12,17 +12,20 @@ import {
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import { projects, researchPaperPreviews } from "@/lib/data";
 import { projectsInSpace } from "@/lib/selectors";
+import type { Project } from "@/lib/types";
 
-type ResearchScope = "all" | "reports" | "papers";
+type ExploreScope = "all" | "projects" | "research" | "reports" | "sources";
 
-const paperIds = new Set([
+const sourceIds = new Set([
   "competitor-research",
   "pricing-landscape",
   "ai-infrastructure",
 ]);
 
-function researchKind(id: string): "papers" | "reports" {
-  return paperIds.has(id) ? "papers" : "reports";
+function exploreKind(project: Project): "research" | "reports" | "sources" {
+  if (sourceIds.has(project.id)) return "sources";
+  if (project.threadId) return "research";
+  return "reports";
 }
 
 export function ResearchDashboard() {
@@ -33,22 +36,22 @@ export function ResearchDashboard() {
     setSpaceLayout,
     newChat,
   } = useApp();
-  const [scope, setScope] = useState<ResearchScope>("all");
+  const [scope, setScope] = useState<ExploreScope>("all");
 
   const spaceProjects = useMemo(
     () => projectsInSpace(projects, { space: "research", workspaceId }),
     [workspaceId],
   );
   const visible = useMemo(() => {
-    if (scope === "all") return spaceProjects;
-    return spaceProjects.filter((item) => researchKind(item.id) === scope);
+    if (scope === "all" || scope === "projects") return spaceProjects;
+    return spaceProjects.filter((item) => exploreKind(item) === scope);
   }, [scope, spaceProjects]);
 
   return (
     <DashFrame
       space="research"
-      title="Research"
-      subtitle="Find sources, take notes, and cite your findings."
+      title="Explore"
+      subtitle="Research, browse, analyze, and discover."
       actions={
         <>
           <DashBtn primary onClick={() => newChat("research")}>
@@ -62,11 +65,13 @@ export function ResearchDashboard() {
         <ScopeToggle
           wrap
           value={scope}
-          onChange={(value) => setScope(value as ResearchScope)}
+          onChange={(value) => setScope(value as ExploreScope)}
           options={[
             { id: "all", label: "All" },
+            { id: "projects", label: "Projects" },
+            { id: "research", label: "Research" },
             { id: "reports", label: "Reports" },
-            { id: "papers", label: "Papers" },
+            { id: "sources", label: "Sources" },
           ]}
         />
         <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
@@ -75,20 +80,29 @@ export function ResearchDashboard() {
       <div className="mt-5">
         <PreviewGrid
           layout={spaceLayout}
-          kind="paper"
+          kind={scope === "projects" ? "product" : "paper"}
           items={visible.map((item) => ({
             id: item.id,
             name: item.name,
             projectId: item.id,
-            meta: `${researchKind(item.id) === "papers" ? "Paper" : "Report"} · edited ${item.updatedAt}`,
-            bannerKey: "research" as const,
-            paperPreview: researchPaperPreviews[item.id] ?? {
-              title: item.name,
-              lines: [item.summary],
-            },
+            meta:
+              scope === "projects"
+                ? `Edited ${item.updatedAt}`
+                : `${exploreKind(item) === "sources" ? "Source" : exploreKind(item) === "research" ? "Research" : "Report"} · edited ${item.updatedAt}`,
+            image: scope === "projects" ? item.cover : undefined,
+            bannerKey: scope === "projects" ? undefined : ("research" as const),
+            paperPreview:
+              scope === "projects"
+                ? undefined
+                : researchPaperPreviews[item.id] ?? {
+                    title: item.name,
+                    lines: [item.summary],
+                  },
           }))}
           onOpen={openProject}
-          empty="No research yet."
+          empty={
+            scope === "projects" ? "No projects yet." : "Nothing in Explore yet."
+          }
         />
       </div>
     </DashFrame>

@@ -10,6 +10,7 @@ import {
   Space_Grotesk,
 } from "next/font/google";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { APP_ORIGIN } from "@/lib/app-brand";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -53,25 +54,27 @@ const newsreader = Newsreader({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://getcourier.ai"),
+  metadataBase: new URL(APP_ORIGIN),
   title: {
-    default: "Courier",
-    template: "%s | Courier",
+    default: "Cander",
+    template: "%s | Cander",
   },
   description:
     "One AI product to chat, work, build, research, create, and run production AI — in the cloud, locally, or on your device.",
-  applicationName: "Courier",
+  applicationName: "Cander",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Courier",
+    title: "Cander",
   },
   icons: {
     icon: [
-      { url: "/courier-mark-light.png", media: "(prefers-color-scheme: light)" },
-      { url: "/courier-mark-dark.png", media: "(prefers-color-scheme: dark)" },
+      { url: "/favicon-32.png?v=7", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16.png?v=7", sizes: "16x16", type: "image/png" },
+      { url: "/cander-mark.png?v=7", type: "image/png" },
     ],
-    apple: "/courier-mark-light.png",
+    apple: [{ url: "/apple-touch-icon.png?v=7", sizes: "180x180", type: "image/png" }],
+    shortcut: "/favicon-32.png?v=7",
   },
 };
 
@@ -85,7 +88,7 @@ export const viewport: Viewport = {
   ],
 };
 
-const themeScript = `(function(){try{var a=localStorage.getItem('courier-appearance-v2');var theme=null;if(a){try{var j=JSON.parse(a);if(typeof j.color==='number'){theme=j.color<45?'light':'dark'}}catch(e){}}if(!theme){var t=localStorage.getItem('theme');theme=t==='dark'?'dark':t==='light'?'light':'light'}if(theme==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){document.documentElement.classList.remove('dark')}})();`;
+const themeScript = `(function(){try{var a=localStorage.getItem('courier-appearance-v2');var theme=null;if(a){try{var j=JSON.parse(a);if(j.colorMode==='dark'||j.colorMode==='dark-charcoal'||j.colorMode==='dark-blue'){theme='dark'}else if(j.colorMode==='light'||j.colorMode==='light-blue'){theme='light'}else if(typeof j.color==='number'){theme=j.color<45?'light':'dark'}}catch(e){}}if(!theme){var t=localStorage.getItem('theme');theme=t==='dark'?'dark':t==='light'?'light':'light'}if(theme==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){document.documentElement.classList.remove('dark')}})();`;
 
 export default function RootLayout({
   children,

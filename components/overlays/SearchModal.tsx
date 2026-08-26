@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Blocks,
-  Clapperboard,
   FileText,
   Files,
   Hammer,
@@ -17,7 +16,6 @@ import { Modal } from "@/components/ui/Modal";
 import {
   assetFiles,
   connectors,
-  platformNavItems,
   projects,
   skills,
   spaces,
@@ -39,7 +37,6 @@ export function SearchModal() {
   const {
     overlay,
     closeOverlay,
-    product,
     workspaceId,
     openSpace,
     openProject,
@@ -53,7 +50,6 @@ export function SearchModal() {
     view,
     browserPage,
     attachBrowserReference,
-    setPlatformNav,
     threads,
     billingPlan,
     personalSpaceEnabled,
@@ -80,43 +76,6 @@ export function SearchModal() {
     const match = (value: string) =>
       !needle || value.toLowerCase().includes(needle);
     const items: Hit[] = [];
-
-    if (product === "platform") {
-      for (const item of platformNavItems) {
-        if (!entitlements.platformNavAllowed(item.id)) continue;
-        if (!match(item.label)) continue;
-        items.push({
-          id: `nav-${item.id}`,
-          title: item.label,
-          meta: "Development",
-          group: "Development",
-          run: () => setPlatformNav(item.id),
-        });
-      }
-      for (const thread of threads.filter(
-        (item) =>
-          item.product === "platform" && item.workspaceId === workspaceId,
-      )) {
-        if (!match(thread.title) && !match(thread.snippet)) continue;
-        items.push({
-          id: `thread-${thread.id}`,
-          title: thread.title,
-          meta: thread.snippet,
-          group: "Chats",
-          run: () => openThread(thread.id),
-        });
-      }
-      if (match("plans") || match("pricing") || match("billing") || match("unlock")) {
-        items.push({
-          id: "plans",
-          title: "Plans",
-          meta: "Courier seats and Ultra",
-          group: "Actions",
-          run: () => openSettings("plans"),
-        });
-      }
-      return items;
-    }
 
     const actions: Hit[] = [
       {
@@ -147,7 +106,7 @@ export function SearchModal() {
       {
         id: "action-plans",
         title: "Plans",
-        meta: "Courier seats and Ultra",
+        meta: "Seats and Ultra",
         group: "Actions",
         run: () => openSettings("plans"),
       },
@@ -167,7 +126,7 @@ export function SearchModal() {
       },
       {
         id: "action-new-research",
-        title: "New Research",
+        title: "New Explore",
         meta: "Sources, findings, reports",
         group: "Actions",
         run: () => openBrowser({ chat: true }),
@@ -280,7 +239,6 @@ export function SearchModal() {
     return items;
   }, [
     query,
-    product,
     workspaceId,
     openSpace,
     openProject,
@@ -294,7 +252,6 @@ export function SearchModal() {
     view,
     browserPage,
     attachBrowserReference,
-    setPlatformNav,
     threads,
     billingPlan,
     personalSpaceEnabled,
@@ -344,7 +301,7 @@ export function SearchModal() {
               choose(hits[active]);
             }
           }}
-          placeholder="Search Courier"
+          placeholder="Search"
           className="h-12 w-full bg-transparent pr-4 pl-11 text-[15px] outline-none placeholder:text-muted-foreground"
         />
       </div>
@@ -398,7 +355,6 @@ function HitIcon({ group }: { group: string }) {
   if (group === "Tasks") return <Sparkles className={className} strokeWidth={1.6} />;
   if (group === "Connectors") return <Blocks className={className} strokeWidth={1.6} />;
   if (group === "Chats") return <History className={className} strokeWidth={1.6} />;
-  if (group === "Development") return <Clapperboard className={className} strokeWidth={1.6} />;
   if (group === "Spaces") return <Files className={className} strokeWidth={1.6} />;
   if (group === "Actions") return <SquarePen className={className} strokeWidth={1.6} />;
   return <Search className={className} strokeWidth={1.6} />;

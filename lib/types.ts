@@ -1,4 +1,3 @@
-export type ProductId = "courier" | "platform";
 /** Where inference runs. Independent of BillingPlan and device class. */
 export type HostingMode = "cloud" | "local" | "on-device";
 
@@ -32,8 +31,7 @@ export type CourierView =
   | "settings"
   | "shared"
   | "recents"
-  | "browser"
-  | "discovery";
+  | "browser";
 
 export type PinKind = "thread" | "project" | "connector";
 
@@ -53,7 +51,6 @@ export type OverlayId =
   | "configure"
   | "space-settings"
   | "invite-wall"
-  | "discovery"
   | null;
 export type SpaceLayout = "cards" | "list";
 export type PanelMode = "collapsed" | "split" | "wide" | "immersive";
@@ -113,22 +110,9 @@ export type ScheduledStatus =
 export type SettingsTab =
   | "organization"
   | "workspaces"
-  | "connectors"
   | "plans"
   | "general"
   | "appearance";
-
-export type PlatformNav =
-  | "overview"
-  | "hosting"
-  | "models"
-  | "api"
-  | "keys"
-  | "deployments"
-  | "logs"
-  | "usage"
-  | "docs"
-  | "recents";
 
 export type Role = "Owner" | "Admin" | "Member";
 export type SeatStatus = "active" | "pending";
@@ -234,16 +218,14 @@ export type Thread = {
   title: string;
   /** Tenancy boundary — objects do not cross workspaces. */
   workspaceId: string;
-  product?: ProductId;
   /** Cross-space link back to a project, when this chat belongs to one. */
   projectId?: string;
   spaceId?: SpaceId;
-  platformNav?: PlatformNav;
   updatedAt: string;
   snippet: string;
   messages: Message[];
   shared?: boolean;
-  /** Dock chat for a space or Development nav — resumes instead of minting new. */
+  /** Dock chat for a space — resumes instead of minting new. */
   persistent?: boolean;
   /** Short Cursor-style blurb written when the dock chat is closed. */
   sessionSummary?: string | null;

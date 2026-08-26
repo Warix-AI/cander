@@ -1,6 +1,6 @@
-import type { PlatformNav, SpaceId } from "./types";
+import type { SpaceId } from "./types";
 
-export type BannerKey = SpaceId | `plat-${PlatformNav}`;
+export type BannerKey = SpaceId;
 
 export type BannerPresetId = "host" | "price" | "spaces" | "dusk";
 
@@ -44,16 +44,6 @@ export const defaultBannerPreset: Record<BannerKey, BannerPresetId> = {
   scheduled: "spaces",
   finances: "price",
   health: "host",
-  "plat-overview": "price",
-  "plat-hosting": "host",
-  "plat-models": "dusk",
-  "plat-api": "spaces",
-  "plat-keys": "price",
-  "plat-deployments": "host",
-  "plat-logs": "dusk",
-  "plat-usage": "spaces",
-  "plat-docs": "price",
-  "plat-recents": "dusk",
 };
 
 export function emptyBannerChoice(space: BannerKey): SpaceBannerChoice {

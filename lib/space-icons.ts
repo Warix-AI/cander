@@ -1,29 +1,20 @@
 import {
-  BarChart3,
   Blocks,
-  BookOpen,
   Briefcase,
   CalendarClock,
   Clapperboard,
-  Cpu,
   Files,
   Globe,
   Hammer,
   HeartPulse,
   History,
-  KeyRound,
-  LayoutGrid,
-  Rocket,
-  ScrollText,
   Search,
-  Server,
   Sparkles,
   UserRound,
   Wallet,
-  Waypoints,
 } from "lucide-react";
 import { isExtraNavId, type SidebarNavId } from "./spaces";
-import type { PlatformNav, SpaceId } from "./types";
+import type { SpaceId } from "./types";
 
 export const spaceIcons: Record<SpaceId, typeof Hammer> = {
   work: Briefcase,
@@ -56,22 +47,14 @@ export const extraNavLabels: Record<"browser" | "recents", string> = {
   recents: "Recents",
 };
 
-export const platformNavIcons: Record<PlatformNav, typeof Hammer> = {
-  overview: LayoutGrid,
-  hosting: Server,
-  models: Cpu,
-  api: Waypoints,
-  keys: KeyRound,
-  deployments: Rocket,
-  logs: ScrollText,
-  usage: BarChart3,
-  docs: BookOpen,
-  recents: History,
+export const spaceIconColor: Partial<Record<SpaceId, string>> = {
+  work: "text-blue-600 dark:text-blue-400",
+  build: "text-orange-600 dark:text-orange-400",
+  research: "text-green-600 dark:text-green-400",
 };
 
-export const spaceIconColor: Partial<Record<SpaceId, string>> = {};
-
-export function spaceIconTint(_id?: SpaceId | null) {
+export function spaceIconTint(id?: SpaceId | null) {
+  if (id && spaceIconColor[id]) return spaceIconColor[id];
   return "text-muted-foreground";
 }
 
@@ -89,7 +72,7 @@ export const chatSpaceCopy: Record<
   work: "What should we take care of?",
   build: "What should we make?",
   studio: "What should we create?",
-  research: "What should we understand?",
+  research: "What should we explore?",
   personal: "What's going on?",
   skills: "What should this task do?",
   finances: "What should we look at in the books?",

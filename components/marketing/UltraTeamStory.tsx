@@ -41,7 +41,7 @@ export function UltraTeamStory() {
               {person.name}
             </h3>
             <p className="mt-3 text-[13.5px] leading-relaxed text-muted-foreground">
-              Uses authorized resources through Courier. No Ultra seat required
+              Uses authorized resources through the app. No Ultra seat required
               to consume.
             </p>
           </article>

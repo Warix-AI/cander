@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import { APP_NAME } from "@/lib/app-brand";
 
-export const SITE_URL = "https://getcourier.ai";
+export const SITE_URL = "https://thinkrecursion.ai";
 export const APP_HREF = "/";
 export const ENTERPRISE_MAILTO =
   "mailto:enterprise@thinkrecursion.ai?subject=Enterprise%20request";
@@ -15,7 +16,7 @@ export type MarketingPage = {
 export const marketingPages: Record<string, MarketingPage> = {
   "/home": {
     path: "/home",
-    title: "One AI for Everything",
+    title: `${APP_NAME} for Everything`,
     description:
       "One AI product to chat, work, build, research, create, and run production AI — in the cloud, locally, or on your device.",
   },
@@ -23,37 +24,37 @@ export const marketingPages: Record<string, MarketingPage> = {
     path: "/pricing",
     title: "Pricing — Free, Pro, Max & Ultra",
     description:
-      "Free to start. Pro $20, Max $50, Ultra $300 per user per month. Cloud on every plan. Development starts on Pro.",
+      "Free to start. Pro $20, Max $50, Ultra $300 per user per month. Cloud on every plan. Runtime and hosting deepen from Pro.",
   },
   "/spaces": {
     path: "/spaces",
     title: "Spaces — Work, Build, Studio, Research & Personal",
     description:
-      "Your work has different shapes. Enter Work, Build, Studio, Research, or Personal — or let Courier hand work into them from chat.",
+      "Your work has different shapes. Enter Work, Build, Studio, Research, or Personal — or route work into them from chat.",
   },
   "/work": {
     path: "/work",
     title: "Work — Inbox, Calendar & Customers",
     description:
-      "Work is Courier for day-to-day operations — inbox, calendar, and customers. Available on Max and Ultra.",
+      "Work is for day-to-day operations — inbox, calendar, and customers. Available on Max and Ultra.",
   },
   "/build": {
     path: "/build",
     title: "Build — Apps, Websites & Agents with AI",
     description:
-      "Software, sites, and agents with live preview, files, and Development wired in. No build pipeline to manage. Available on every plan.",
+      "Software, sites, and agents with live preview, files, and runtime wired in. No build pipeline to manage. Available on every plan.",
   },
   "/studio": {
     path: "/studio",
     title: "Studio — Images & Video",
     description:
-      "Create images and video without leaving Courier. Generate, canvas, library, and export — on every plan.",
+      "Create images and video in the app. Generate, canvas, library, and export — on every plan.",
   },
   "/research": {
     path: "/research",
     title: "Research — Sources, Browser & Reports",
     description:
-      "Research that becomes usable work — browser, sources, notes, and reports inside Courier. Available on every plan.",
+      "Research that becomes usable work — browser, sources, notes, and reports in the app. Available on every plan.",
   },
   "/personal": {
     path: "/personal",
@@ -61,17 +62,11 @@ export const marketingPages: Record<string, MarketingPage> = {
     description:
       "Today, money, health, goals, and the car — separate from product work. Available on every plan. Organizations can hide Personal.",
   },
-  "/development": {
-    path: "/development",
-    title: "Development — Build and Run AI",
-    description:
-      "Hosting, APIs, models, and deployments inside Courier. Pro to build, Max to collaborate, Ultra to operate production AI.",
-  },
   "/hosting": {
     path: "/hosting",
     title: "Hosting — Cloud, Local & On-device AI",
     description:
-      "Run Courier where you want. Cloud, Local, and On-device are compute locations — not plans. Production serving is Ultra.",
+      "Run it where you want. Cloud, Local, and On-device are compute locations — not plans. Production serving is Ultra.",
   },
   "/models": {
     path: "/models",
@@ -83,7 +78,7 @@ export const marketingPages: Record<string, MarketingPage> = {
     path: "/connectors",
     title: "Connectors — Gmail, Slack, GitHub & More",
     description:
-      "Courier works with what you already use. Featured connectors, categorized catalog, and policies on Max and Ultra.",
+      "Works with what you already use. Featured connectors, categorized catalog, and policies on Max and Ultra.",
   },
   "/enterprise": {
     path: "/enterprise",
@@ -95,13 +90,13 @@ export const marketingPages: Record<string, MarketingPage> = {
     path: "/security",
     title: "Security — Locations, Roles & Policies",
     description:
-      "How Courier isolates work: Cloud, Local, and On-device locations, workspace roles, connector policies, and audit.",
+      "How we isolate work: Cloud, Local, and On-device locations, workspace roles, connector policies, and audit.",
   },
   "/docs": {
     path: "/docs",
-    title: "Docs — Live in Development",
+    title: "Docs — Hosting, Models & APIs",
     description:
-      "Product docs live in Courier Development. Open Courier to read APIs, keys, models, and hosting in context.",
+      "Product docs for hosting, models, and APIs. Open the app to read them next to the work.",
   },
 };
 
@@ -112,15 +107,15 @@ export function marketingMetadata(path: keyof typeof marketingPages): Metadata {
     description: page.description,
     alternates: { canonical: page.path },
     openGraph: {
-      title: `${page.title} | Courier`,
+      title: `${page.title} | ${APP_NAME}`,
       description: page.description,
       url: page.path,
-      siteName: "Courier",
+      siteName: APP_NAME,
       type: "website",
     },
     twitter: {
       card: "summary_large_image",
-      title: `${page.title} | Courier`,
+      title: `${page.title} | ${APP_NAME}`,
       description: page.description,
     },
   };
@@ -138,14 +133,9 @@ export const spacesNav = [
 /** @deprecated use spacesNav */
 export const productNav = spacesNav;
 
-export const developmentNav = [
-  { href: "/development", title: "Overview", body: "Build through production." },
-  { href: "/hosting", title: "Hosting", body: "Cloud, Local, On-device." },
-  { href: "/models", title: "Models", body: "Catalog and runtimes." },
-] as const;
-
 export const headerLinks = [
   { href: "/hosting", title: "Hosting" },
+  { href: "/models", title: "Models" },
   { href: "/pricing", title: "Pricing" },
   { href: "/enterprise", title: "Enterprise" },
 ] as const;
@@ -155,14 +145,13 @@ export const footerGroups: {
   links: { href: string; title: string; external?: boolean }[];
 }[] = [
   {
-    label: "Courier",
+    label: "Product",
     links: [
       { href: "/home", title: "Home" },
       { href: "/spaces", title: "Spaces" },
       { href: "/build", title: "Build" },
       { href: "/studio", title: "Studio" },
       { href: "/research", title: "Research" },
-      { href: "/development", title: "Development" },
       { href: "/hosting", title: "Hosting" },
       { href: "/models", title: "Models" },
       { href: "/connectors", title: "Connectors" },
@@ -206,7 +195,7 @@ export const marketingSpaces = [
     href: "/studio",
     title: "Studio",
     kicker: "Every plan",
-    blurb: "Create images and video without leaving Courier.",
+    blurb: "Create images and video in the app.",
     media: "media-c",
   },
   {

@@ -35,7 +35,7 @@ export function MobileNavSheet({
           bottom: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom))`,
         }}
         className={cn(
-          "fixed inset-x-0 z-50 rounded-t-[14px] border border-b-0 border-border bg-popover text-popover-foreground shadow-[0_-8px_24px_oklch(0_0_0/0.08)] transition-transform duration-200 lg:hidden",
+          "fixed inset-x-0 z-50 light-surface rounded-t-[14px] border-b-0 bg-popover text-popover-foreground shadow-[0_-8px_24px_oklch(0_0_0/0.06)] dark:bg-transparent dark:shadow-[0_-8px_24px_oklch(0_0_0/0.08)] transition-transform duration-200 lg:hidden",
           className,
         )}
       >

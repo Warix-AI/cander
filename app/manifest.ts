@@ -1,9 +1,10 @@
 import type { MetadataRoute } from "next";
+import { APP_NAME } from "@/lib/app-brand";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Courier",
-    short_name: "Courier",
+    name: APP_NAME,
+    short_name: APP_NAME,
     description:
       "One AI product to chat, work, build, research, create, and run production AI.",
     start_url: "/",
@@ -13,13 +14,19 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "portrait-primary",
     icons: [
       {
-        src: "/courier-mark-light.png",
+        src: "/icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/icon-512.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/courier-mark-dark.png",
+        src: "/icon-512.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",

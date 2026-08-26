@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import {
   getWorkspaceCatalogServerSnapshot,
   getWorkspaceCatalogSnapshot,
+  isCustomWorkspace,
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
 import {
@@ -89,7 +90,7 @@ export function WorkspacesSettings({
     <SettingsPage>
       <SettingsHeader
         title="Workspaces"
-        subtitle="Personal and business workspaces share the same Courier UI. Differences are permissions, invites, and admin tools — not a separate product."
+        subtitle="Personal and business workspaces share the same UI. Differences are permissions, invites, and admin tools — not a separate product."
         actions={
           canCreate ? (
             <button
@@ -112,7 +113,7 @@ export function WorkspacesSettings({
           <SettingsGroup>
             <SettingsRow
               label="Allow Personal space"
-              description="Show Personal next to Research in business workspaces."
+              description="Let members open Personal from search and pins — not in primary navigation."
             >
               <button
                 type="button"
@@ -180,11 +181,29 @@ function WorkspacePage({
   policy: ReturnType<typeof policyFor>;
   onBack: () => void;
 }) {
-  const { orgMembers, workspacePolicies, entitlements } = useApp();
+  const { orgMembers, workspacePolicies, entitlements, removeWorkspace } =
+    useApp();
   const [kbName, setKbName] = useState("");
   const [openUser, setOpenUser] = useState<string | null>(
     policy.members[0]?.memberId ?? null,
   );
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const canDelete =
+    isCustomWorkspace(workspace.id) &&
+    (workspaceKindOf(workspace) === "personal" ||
+      entitlements.canManageWorkspaces);
+
+  const handleDelete = () => {
+    setDeleteError(null);
+    const ok = removeWorkspace(workspace.id);
+    if (!ok) {
+      setDeleteError("Could not delete this workspace.");
+      return;
+    }
+    onBack();
+  };
 
   return (
     <SettingsPage>
@@ -214,7 +233,7 @@ function WorkspacePage({
         title="Knowledge bases"
         description={
           entitlements.hasWorkspaceKnowledge
-            ? `Sources Courier can use inside ${workspace.name}.`
+            ? `Sources the app can use inside ${workspace.name}.`
             : "Knowledge bases start on Pro."
         }
       >
@@ -265,7 +284,7 @@ function WorkspacePage({
       {entitlements.hasConnectorPolicies ? (
         <SettingsSection
           title="Connector policies"
-          description="Turn a connector off for this workspace. Installed apps stay in Courier; they just can’t run here."
+          description="Turn a connector off for this workspace. Installed apps stay in the app; they just can’t run here."
         >
           <div className="flex flex-wrap gap-1.5">
             {connectors
@@ -379,6 +398,60 @@ function WorkspacePage({
                 Assign people to this workspace from Organization.
               </div>
             ) : null}
+          </SettingsGroup>
+        </SettingsSection>
+      ) : null}
+
+      {canDelete ? (
+        <SettingsSection
+          title="Delete workspace"
+          description="Removes this workspace from your account. Built-in demo workspaces cannot be deleted."
+          className="mt-8"
+        >
+          <SettingsGroup>
+            <div className="px-4 py-4">
+              {confirmDelete ? (
+                <div className="space-y-3">
+                  <p className="text-[13px] text-muted-foreground">
+                    Delete{" "}
+                    <span className="font-medium text-foreground">
+                      {workspace.name}
+                    </span>
+                    ? This cannot be undone.
+                  </p>
+                  {deleteError ? (
+                    <p className="text-[12.5px] text-destructive">{deleteError}</p>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      className="inline-flex h-9 items-center rounded-full bg-destructive px-4 text-[13px] font-medium tracking-[-0.01em] text-destructive-foreground"
+                    >
+                      Delete workspace
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmDelete(false);
+                        setDeleteError(null);
+                      }}
+                      className="inline-flex h-9 items-center rounded-full px-3.5 text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="inline-flex h-9 items-center rounded-full border border-destructive/30 px-4 text-[13px] font-medium tracking-[-0.01em] text-destructive transition-colors duration-200 hover:bg-destructive/10"
+                >
+                  Delete workspace
+                </button>
+              )}
+            </div>
           </SettingsGroup>
         </SettingsSection>
       ) : null}

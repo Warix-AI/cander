@@ -11,29 +11,25 @@ import {
   Sparkles,
   Waypoints,
 } from "lucide-react";
-import { AreaChart } from "@/components/platform/Charts";
-import { modelPreviews } from "@/components/platform/PlatformPreview";
+import { AreaChart } from "@/components/ui/Charts";
 import { useApp } from "@/components/app/AppProvider";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
+import type { PreviewEntry } from "@/components/spaces/PreviewCard";
 import {
   getBuildRuntimeServerSnapshot,
   getBuildRuntimeSnapshot,
   setBuildModel,
   subscribeBuildRuntime,
 } from "@/lib/build-runtime";
-import { connectors } from "@/lib/data";
+import { connectors, platformModels } from "@/lib/data";
 import { hostingLabel } from "@/lib/billing";
 import { runtimeLabel } from "@/lib/plan-entitlements";
 import { sharedResourcesFor } from "@/lib/entitlements";
-import {
-  developmentDeepView,
-  developmentIntegrated,
-  developmentView,
-} from "@/lib/product-copy";
+import { developmentIntegrated } from "@/lib/product-copy";
 import { cn } from "@/lib/utils";
 
 type MoreSection =
-  | "development"
+  | "runtime"
   | "analytics"
   | "database"
   | "ai"
@@ -47,7 +43,7 @@ const NAV: {
   label: string;
   icon: typeof BarChart3;
 }[] = [
-  { id: "development", label: "Development", icon: Server },
+  { id: "runtime", label: "Runtime", icon: Server },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "database", label: "Database", icon: Database },
   { id: "ai", label: "AI", icon: Sparkles },
@@ -56,6 +52,18 @@ const NAV: {
   { id: "security", label: "Security", icon: Shield },
   { id: "seo", label: "SEO & AI search", icon: Search },
 ];
+
+function modelPreviewItems(): PreviewEntry[] {
+  return platformModels.map((model) => ({
+    id: model.name,
+    name: model.name,
+    projectId: `${model.runtime.toLowerCase().replace(/\s+/g, "-")}:${model.name}`,
+    meta: `${model.runtime} · ${model.memory}`,
+    badge: model.status,
+    initial: model.name.charAt(0),
+    kind: "product" as const,
+  }));
+}
 
 const visitorSeries = [1, 2, 1, 3, 9, 2, 2];
 const viewSeries = [2, 3, 2, 4, 11, 3, 3];
@@ -69,12 +77,12 @@ const metrics = [
 ] as const;
 
 export function BuildMore() {
-  const [section, setSection] = useState<MoreSection>("development");
+  const [section, setSection] = useState<MoreSection>("runtime");
 
   return (
     <div className="flex h-full min-h-0">
       <nav
-        className="w-[13.5rem] shrink-0 overflow-y-auto border-r border-border bg-sidebar px-2 py-3"
+        className="w-[13.5rem] shrink-0 overflow-y-auto border-r border-border px-2 py-3"
         aria-label="Project"
       >
         {NAV.map((item) => {
@@ -98,8 +106,8 @@ export function BuildMore() {
           );
         })}
       </nav>
-      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-background px-8 py-8">
-        {section === "development" ? <DevelopmentPane /> : null}
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-8 py-8">
+        {section === "runtime" ? <RuntimePane /> : null}
         {section === "analytics" ? <AnalyticsPane /> : null}
         {section === "database" ? <DatabasePane /> : null}
         {section === "ai" ? <AiPane /> : null}
@@ -112,18 +120,18 @@ export function BuildMore() {
   );
 }
 
-function DevelopmentPane() {
+function RuntimePane() {
   const selectedModel = useSyncExternalStore(
     subscribeBuildRuntime,
     getBuildRuntimeSnapshot,
     getBuildRuntimeServerSnapshot,
   );
-  const { hostingMode, setProduct, entitlements, workspaceId, actor } = useApp();
+  const { hostingMode, entitlements, workspaceId, actor } = useApp();
   const shared = sharedResourcesFor(workspaceId, actor, entitlements);
   const usingShared = shared.find((item) => item.kind === "model");
 
   return (
-    <Section title="Development" body={developmentIntegrated}>
+    <Section title="Runtime" body={developmentIntegrated}>
       <Fact label="Hosting" value={hostingLabel(hostingMode)} />
       <Fact label="Model" value={selectedModel} />
       {usingShared ? (
@@ -133,23 +141,8 @@ function DevelopmentPane() {
         />
       ) : null}
       <Fact label="API routes" value="Provisioned" />
-      <Fact label="Keys" value="Managed by Courier" />
-      <Fact
-        label="Runtime"
-        value={runtimeLabel(entitlements.plan)}
-      />
-      <div className="border-t border-border px-4 py-4">
-        <p className="text-[13px] leading-relaxed text-muted-foreground">
-          {developmentDeepView}
-        </p>
-        <button
-          type="button"
-          onClick={() => setProduct("platform")}
-          className="mt-4 inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:bg-foreground"
-        >
-          Open {developmentView.label} view
-        </button>
-      </div>
+      <Fact label="Keys" value="Managed for you" />
+      <Fact label="Plan depth" value={runtimeLabel(entitlements.plan)} />
     </Section>
   );
 }
@@ -299,7 +292,7 @@ function AiPane() {
   );
   const { spaceLayout, entitlements } = useApp();
   const canChoose = entitlements.hasModelChoice;
-  const items = modelPreviews().map((item) => {
+  const items = modelPreviewItems().map((item) => {
     const name = item.projectId.includes(":")
       ? item.projectId.slice(item.projectId.indexOf(":") + 1)
       : item.name;
@@ -348,7 +341,7 @@ function AgentsPane() {
       body="Actions this app can take on behalf of a visitor."
     >
       <Fact label="Chat" value="Enabled" />
-      <Fact label="Publish" value="Courier" />
+      <Fact label="Publish" value="Hosted" />
       <Fact label="Scheduled jobs" value="2 attached" />
     </Section>
   );

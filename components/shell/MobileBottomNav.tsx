@@ -2,17 +2,16 @@
 
 import { useCallback, useState } from "react";
 import {
-  Code2,
-  Home,
   LayoutGrid,
+  MessageSquarePlus,
   Pin,
-  Settings,
+  UserRound,
   Users,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { developmentView } from "@/lib/product-copy";
+import { AccountAvatar } from "@/components/shell/AccountAvatar";
 import { MobileNavSheet } from "@/components/shell/MobileNavSheet";
-import { PlatformNavSheet } from "@/components/shell/mobile/PlatformNavSheet";
+import { AccountSheet } from "@/components/shell/mobile/AccountSheet";
 import { PinsSheet } from "@/components/shell/mobile/PinsSheet";
 import { SpacesSheet } from "@/components/shell/mobile/SpacesSheet";
 import { WorkspaceSheet } from "@/components/shell/mobile/WorkspaceSheet";
@@ -22,24 +21,19 @@ import {
   type MobileNavTabId,
   type MobileSheetId,
 } from "@/lib/mobile-nav";
-import {
-  platformTabForNav,
-  visiblePlatformMobileTabs,
-  type PlatformMobileTabId,
-} from "@/lib/platform-mobile-nav";
 import { cn } from "@/lib/utils";
 
 const courierTabs: {
   id: MobileNavTabId;
   label: string;
-  Icon: typeof Home;
+  Icon: typeof MessageSquarePlus;
   sheet?: MobileSheetId;
 }[] = [
-  { id: "home", label: "Home", Icon: Home },
+  { id: "chat", label: "Chat", Icon: MessageSquarePlus },
   { id: "spaces", label: "Spaces", Icon: LayoutGrid, sheet: "spaces" },
   { id: "pins", label: "Pins", Icon: Pin, sheet: "pins" },
   { id: "workspace", label: "Workspace", Icon: Users, sheet: "workspace" },
-  { id: "settings", label: "Settings", Icon: Settings },
+  { id: "account", label: "Account", Icon: UserRound },
 ];
 
 const navTabClass = (active: boolean) =>
@@ -52,158 +46,79 @@ const navTabClass = (active: boolean) =>
 
 export function MobileBottomNav() {
   const {
-    product,
     view,
     spaceId,
     threadId,
-    platformNav,
-    setPlatformNav,
-    openCourierHome,
-    openDevelopmentOverview,
-    openSettings,
-    entitlements,
+    newChat,
+    actor,
   } = useApp();
   const [sheet, setSheet] = useState<MobileSheetId | null>(null);
-  const [platformGroup, setPlatformGroup] =
-    useState<PlatformMobileTabId | null>(null);
 
   const closeSheet = useCallback(() => setSheet(null), []);
-  const closePlatformGroup = useCallback(() => setPlatformGroup(null), []);
 
-  const platformTabs = visiblePlatformMobileTabs(
-    entitlements.platformNavAllowed,
-  );
-  const activePlatformTab = platformTabForNav(platformNav);
-  const openPlatformTab = platformTabs.find((tab) => tab.id === platformGroup);
+  const isOnChat = view === "chat" && !threadId && !spaceId;
 
-  const isOnHome =
-    product === "courier" &&
-    view === "chat" &&
-    !threadId &&
-    !spaceId;
-
-  const isOnDevelopmentOverview =
-    product === "platform" && platformNav === "overview";
-
-  const homeActive =
-    product === "courier" &&
-    view !== "space" &&
-    view !== "recents" &&
-    view !== "settings";
+  const chatActive =
+    view !== "space" && view !== "recents" && view !== "settings";
   const spacesActive = view === "space" || view === "recents";
-  const settingsActive = view === "settings";
+  const accountActive = view === "settings" || sheet === "account";
 
   const isCourierActive = (id: MobileNavTabId) => {
-    if (id === "home") return homeActive;
+    if (id === "chat") return chatActive;
     if (id === "spaces") return spacesActive;
-    if (id === "settings") return settingsActive;
+    if (id === "account") return accountActive;
     if (id === "pins") return sheet === "pins";
     if (id === "workspace") return sheet === "workspace";
     return false;
   };
 
-  const goToCourierHome = () => {
-    openCourierHome();
-  };
-
-  const goToDevelopmentOverview = () => {
-    openDevelopmentOverview();
-  };
-
-  const handleCourierHomeTab = () => {
-    closePlatformGroup();
-    closeSheet();
-    if (isOnHome) {
-      if (entitlements.canAccessDevelopment) goToDevelopmentOverview();
-      return;
-    }
-    goToCourierHome();
-  };
-
-  const handleDevelopmentTab = () => {
-    closePlatformGroup();
-    closeSheet();
-    if (isOnDevelopmentOverview) {
-      goToCourierHome();
-      return;
-    }
-    goToDevelopmentOverview();
-  };
-
-  const handlePlatformTab = (tab: (typeof platformTabs)[number]) => {
-    closeSheet();
-    if (tab.nav) {
-      closePlatformGroup();
-      setPlatformNav(tab.nav);
-      return;
-    }
-    setPlatformGroup((current) => (current === tab.id ? null : tab.id));
-  };
-
   const handleCourierTab = (tab: (typeof courierTabs)[number]) => {
-    if (tab.id === "home") {
-      handleCourierHomeTab();
+    if (tab.id === "chat") {
+      closeSheet();
+      if (!isOnChat) newChat();
       return;
     }
-    if (tab.id === "settings") {
-      closeSheet();
-      openSettings(undefined, { hub: true });
+    if (tab.id === "account") {
+      setSheet((current) => (current === "account" ? null : "account"));
       return;
     }
     if (!tab.sheet) return;
     setSheet((current) => (current === tab.sheet ? null : tab.sheet!));
   };
 
-  const navColumnCount =
-    product === "platform" ? 1 + platformTabs.length : courierTabs.length;
-
   return (
     <>
-      {openPlatformTab ? (
-        <MobileNavSheet
-          open={platformGroup !== null}
-          sheetId="spaces"
-          onClose={closePlatformGroup}
-        >
-          <PlatformNavSheet
-            tab={openPlatformTab}
-            platformNav={platformNav}
-            allowed={entitlements.platformNavAllowed}
-            onSelect={(id) => {
-              setPlatformNav(id);
-              closePlatformGroup();
-            }}
-          />
-        </MobileNavSheet>
-      ) : null}
-      {product === "courier" ? (
-        <>
-          <MobileNavSheet
-            open={sheet === "spaces"}
-            sheetId="spaces"
-            onClose={closeSheet}
-          >
-            <SpacesSheet onSelect={closeSheet} />
-          </MobileNavSheet>
-          <MobileNavSheet
-            open={sheet === "pins"}
-            sheetId="pins"
-            onClose={closeSheet}
-          >
-            <PinsSheet onSelect={closeSheet} />
-          </MobileNavSheet>
-          <MobileNavSheet
-            open={sheet === "workspace"}
-            sheetId="workspace"
-            onClose={closeSheet}
-          >
-            <WorkspaceSheet onSelect={closeSheet} />
-          </MobileNavSheet>
-        </>
-      ) : null}
+      <MobileNavSheet
+        open={sheet === "spaces"}
+        sheetId="spaces"
+        onClose={closeSheet}
+      >
+        <SpacesSheet onSelect={closeSheet} />
+      </MobileNavSheet>
+      <MobileNavSheet
+        open={sheet === "pins"}
+        sheetId="pins"
+        onClose={closeSheet}
+      >
+        <PinsSheet onSelect={closeSheet} />
+      </MobileNavSheet>
+      <MobileNavSheet
+        open={sheet === "workspace"}
+        sheetId="workspace"
+        onClose={closeSheet}
+      >
+        <WorkspaceSheet onSelect={closeSheet} />
+      </MobileNavSheet>
+      <MobileNavSheet
+        open={sheet === "account"}
+        sheetId="account"
+        onClose={closeSheet}
+      >
+        <AccountSheet onSelect={closeSheet} />
+      </MobileNavSheet>
 
       <nav
-        aria-label={product === "platform" ? "Development" : "Main"}
+        aria-label="Main"
         style={{
           height: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom))`,
           paddingBottom: "env(safe-area-inset-bottom)",
@@ -214,76 +129,49 @@ export function MobileBottomNav() {
           className="grid h-full w-full items-stretch px-2"
           style={{
             minHeight: MOBILE_NAV_INNER_HEIGHT,
-            gridTemplateColumns: `repeat(${navColumnCount}, minmax(0, 1fr))`,
+            gridTemplateColumns: `repeat(${courierTabs.length}, minmax(0, 1fr))`,
           }}
         >
-          {product === "platform" ? (
-            <>
+          {courierTabs.map((tab) => {
+            const active = isCourierActive(tab.id);
+            return (
               <button
+                key={tab.id}
                 type="button"
-                aria-label={
-                  isOnDevelopmentOverview
-                    ? "Go to Home"
-                    : "Go to Development overview"
+                aria-current={active ? "page" : undefined}
+                aria-expanded={
+                  tab.id === "account"
+                    ? sheet === "account"
+                    : tab.sheet
+                      ? sheet === tab.sheet
+                      : undefined
                 }
-                aria-current={isOnDevelopmentOverview ? "page" : undefined}
-                onClick={handleDevelopmentTab}
-                className={navTabClass(isOnDevelopmentOverview)}
+                onClick={() => handleCourierTab(tab)}
+                className={navTabClass(active)}
               >
-                <Code2 className="h-5 w-5 shrink-0" strokeWidth={1.6} />
-                <span className="w-full truncate text-center text-[10px] font-medium tracking-[-0.01em]">
-                  {developmentView.label}
-                </span>
-              </button>
-              {platformTabs.map((tab) => {
-                const active =
-                  platformGroup === tab.id ||
-                  (platformGroup === null && activePlatformTab === tab.id);
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    aria-current={active ? "page" : undefined}
-                    aria-expanded={
-                      tab.items ? platformGroup === tab.id : undefined
-                    }
-                    onClick={() => handlePlatformTab(tab)}
-                    className={navTabClass(active)}
-                  >
-                    <tab.Icon
-                      className="h-5 w-5 shrink-0"
-                      strokeWidth={active ? 2 : 1.6}
-                    />
-                    <span className="w-full truncate text-center text-[10px] font-medium tracking-[-0.01em]">
-                      {tab.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </>
-          ) : (
-            courierTabs.map((tab) => {
-              const active = isCourierActive(tab.id);
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  aria-current={active ? "page" : undefined}
-                  aria-expanded={tab.sheet ? sheet === tab.sheet : undefined}
-                  onClick={() => handleCourierTab(tab)}
-                  className={navTabClass(active)}
-                >
+                {tab.id === "account" ? (
+                  <AccountAvatar
+                    memberId={actor.id}
+                    name={actor.name}
+                    initials={actor.initials}
+                    size="sm"
+                    className={cn(
+                      "rounded-full",
+                      active && "ring-2 ring-foreground/20",
+                    )}
+                  />
+                ) : (
                   <tab.Icon
                     className="h-5 w-5 shrink-0"
                     strokeWidth={active ? 2 : 1.6}
                   />
-                  <span className="w-full truncate text-center text-[10px] font-medium tracking-[-0.01em]">
-                    {tab.label}
-                  </span>
-                </button>
-              );
-            })
-          )}
+                )}
+                <span className="w-full truncate text-center text-[10px] font-medium tracking-[-0.01em]">
+                  {tab.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </nav>
     </>

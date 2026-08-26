@@ -1,6 +1,6 @@
-# Courier
+# Cander
 
-Desktop-first AI workspace. Chat is the command layer; Build, Studio, Research, Scheduled, and Connectors open as a contextual right panel. Courier Platform is a separate product behind the same account selector.
+Desktop-first AI workspace. Chat is the command layer; Build, Studio, Research, Scheduled, and Connectors open as a contextual right panel. Cander Platform is a separate product behind the same account selector.
 
 ```bash
 npm install

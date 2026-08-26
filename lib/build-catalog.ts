@@ -3,6 +3,7 @@ import type { ScheduledJob, Skill } from "./types";
 
 export type BuildScope =
   | "all"
+  | "projects"
   | "apps"
   | "websites"
   | "automations"
@@ -39,6 +40,7 @@ export function previewKind(item: BuildPreview): "app" | "website" {
 export function buildScopeOptions(): { id: BuildScope; label: string }[] {
   return [
     { id: "all", label: "All" },
+    { id: "projects", label: "Projects" },
     { id: "apps", label: "Apps" },
     { id: "websites", label: "Websites" },
     { id: "automations", label: "Automations" },
@@ -47,6 +49,7 @@ export function buildScopeOptions(): { id: BuildScope; label: string }[] {
 }
 
 export function buildCtaLabel(scope: BuildScope) {
+  if (scope === "projects") return "New project";
   if (scope === "apps") return "New app";
   if (scope === "websites") return "New website";
   if (scope === "automations") return "New automation";
@@ -62,7 +65,7 @@ export function filterPreviews(
   if (scope === "websites") {
     return items.filter((item) => previewKind(item) === "website");
   }
-  if (scope === "automations" || scope === "tasks") return [];
+  if (scope === "projects" || scope === "automations" || scope === "tasks") return [];
   return items;
 }
 

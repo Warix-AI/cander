@@ -1,11 +1,9 @@
 import type {
   AccountPresetId,
-  BillingPlan,
   HostingMode,
   Pin,
   PinKind,
   PinTier,
-  ProductId,
   SpaceId,
   Theme,
 } from "@/lib/types";
@@ -24,7 +22,7 @@ import {
 
 type Listener = () => void;
 
-const SIDEBAR_STORAGE_VERSION = 11;
+const SIDEBAR_STORAGE_VERSION = 12;
 
 const workspaceListeners = new Set<Listener>();
 let workspaceId = "marketing";
@@ -56,40 +54,6 @@ export function persistWorkspace(next: string) {
   workspaceId = next;
   window.localStorage.setItem("courier-workspace", next);
   emitWorkspace();
-}
-
-const productListeners = new Set<Listener>();
-let product: ProductId = "courier";
-
-function emitProduct() {
-  productListeners.forEach((listener) => listener());
-}
-
-export function subscribeProduct(listener: Listener) {
-  if (typeof window !== "undefined") {
-    const stored = window.localStorage.getItem("courier-product");
-    if (stored === "courier" || stored === "platform") {
-      product = stored;
-    }
-  }
-  productListeners.add(listener);
-  return () => {
-    productListeners.delete(listener);
-  };
-}
-
-export function getProductSnapshot() {
-  return product;
-}
-
-export function getProductServerSnapshot(): ProductId {
-  return "courier";
-}
-
-export function persistProduct(next: ProductId) {
-  product = next;
-  window.localStorage.setItem("courier-product", next);
-  emitProduct();
 }
 
 export function subscribeTheme(listener: Listener) {
@@ -236,57 +200,6 @@ export function presetIdForActor(id: string): AccountPresetId {
   );
 }
 
-const planListeners = new Set<Listener>();
-let billingPlan: BillingPlan = "max";
-
-function emitPlan() {
-  planListeners.forEach((listener) => listener());
-}
-
-const PLAN_STORAGE_VERSION = "4";
-
-export function subscribePlan(listener: Listener) {
-  if (typeof window !== "undefined") {
-    const version = window.localStorage.getItem("courier-plan-v");
-    const stored = window.localStorage.getItem("courier-plan");
-    if (version !== PLAN_STORAGE_VERSION) {
-      if (stored === "plus" || stored === "personal") billingPlan = "pro";
-      else if (stored === "pro" || stored === "business") billingPlan = "max";
-      else if (stored === "max" || stored === "ultra" || stored === "free") {
-        billingPlan = stored;
-      }
-      window.localStorage.setItem("courier-plan-v", PLAN_STORAGE_VERSION);
-      window.localStorage.setItem("courier-plan", billingPlan);
-    } else if (
-      stored === "free" ||
-      stored === "pro" ||
-      stored === "max" ||
-      stored === "ultra"
-    ) {
-      billingPlan = stored;
-    }
-  }
-  planListeners.add(listener);
-  return () => {
-    planListeners.delete(listener);
-  };
-}
-
-export function getPlanSnapshot() {
-  return billingPlan;
-}
-
-export function getPlanServerSnapshot(): BillingPlan {
-  return "max";
-}
-
-export function persistPlan(next: BillingPlan) {
-  billingPlan = next;
-  window.localStorage.setItem("courier-plan-v", PLAN_STORAGE_VERSION);
-  window.localStorage.setItem("courier-plan", next);
-  emitPlan();
-}
-
 const personalSpaceListeners = new Set<Listener>();
 let personalSpaceEnabled = true;
 
@@ -321,9 +234,10 @@ export function persistPersonalSpace(next: boolean) {
 }
 
 const pinListeners = new Set<Listener>();
-const emptyPins: Pin[] = [
+const DEFAULT_PINS: Pin[] = [
   { kind: "connector", id: "gmail", tier: "primary" },
 ];
+const emptyPins: Pin[] = [];
 let pins: Pin[] = emptyPins;
 let pinsHydrated = false;
 
@@ -336,11 +250,11 @@ function normalizePin(item: Pin): Pin {
 }
 
 function parsePins(raw: string | null): Pin[] {
-  if (!raw) return emptyPins;
+  if (!raw) return DEFAULT_PINS.map(normalizePin);
   try {
     const data = JSON.parse(raw) as unknown;
-    if (!Array.isArray(data)) return emptyPins;
-    const next = data
+    if (!Array.isArray(data)) return DEFAULT_PINS.map(normalizePin);
+    return data
       .filter(
         (item): item is Pin =>
           Boolean(item) &&
@@ -351,9 +265,8 @@ function parsePins(raw: string | null): Pin[] {
           typeof item.id === "string",
       )
       .map(normalizePin);
-    return next.length ? next : emptyPins;
   } catch {
-    return emptyPins;
+    return DEFAULT_PINS.map(normalizePin);
   }
 }
 
@@ -376,6 +289,7 @@ export function subscribePins(listener: Listener) {
 }
 
 export function getPinsSnapshot() {
+  hydratePins();
   return pins;
 }
 
@@ -543,10 +457,8 @@ function layoutNeedsPersist(
     if (!main.length && !more.length) return true;
     if (main.includes("browser") || more.includes("browser")) return true;
     if (main.includes("files") || more.includes("files")) return true;
-    if (main.includes("connectors") || more.includes("connectors")) return true;
-    const personalAt = main.indexOf("personal");
-    const recentsAt = main.indexOf("recents");
-    if (personalAt >= 0 && recentsAt >= 0 && recentsAt < personalAt) return true;
+    const retired = ["recents", "studio", "personal"] as const;
+    if (retired.some((id) => main.includes(id) || more.includes(id))) return true;
     return false;
   } catch {
     return true;

@@ -176,6 +176,24 @@ export function listCustomWorkspaces() {
   return custom;
 }
 
+export function isSeedWorkspace(id: string) {
+  return seedWorkspaces.some((item) => item.id === id);
+}
+
+/** Workspaces created in-session — safe to delete. Demo seed workspaces are not. */
+export function isCustomWorkspace(id: string) {
+  hydrate();
+  return custom.some((item) => item.id === id);
+}
+
+export function deleteWorkspace(id: string): boolean {
+  hydrate();
+  if (!isCustomWorkspace(id)) return false;
+  custom = custom.filter((item) => item.id !== id);
+  persist();
+  return true;
+}
+
 export function countWorkspacesByKind(kind: WorkspaceKind) {
   return getWorkspaceCatalogSnapshot().filter(
     (item) => workspaceKindOf(item) === kind,

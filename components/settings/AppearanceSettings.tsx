@@ -1,6 +1,6 @@
 "use client";
 
-import { AppearanceSliders } from "@/components/settings/AppearanceSliders";
+import { AppearanceControls } from "@/components/settings/AppearanceControls";
 import { DashBtn } from "@/components/spaces/ItemSet";
 import { resetAppearance } from "@/lib/appearance";
 import {
@@ -13,14 +13,14 @@ export function AppearanceSettings() {
     <SettingsPage>
       <SettingsHeader
         title="Appearance"
-        subtitle="Personalize color, type, spacing, shapes, motion, and shell layout. Changes apply immediately."
+        subtitle="Choose a color mode and shell layout. Changes apply immediately."
         actions={
           <DashBtn onClick={() => resetAppearance()}>Reset defaults</DashBtn>
         }
       />
 
       <div className="mt-10">
-        <AppearanceSliders />
+        <AppearanceControls />
       </div>
     </SettingsPage>
   );

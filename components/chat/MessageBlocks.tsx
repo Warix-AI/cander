@@ -41,7 +41,7 @@ export function ChatMessage({ message }: { message: Message }) {
 }
 
 function MessageActions({ message }: { message: Message }) {
-  const { product, sendMessage, sendPlatformMessage } = useApp();
+  const { sendMessage } = useApp();
   const [copied, setCopied] = useState(false);
   const [vote, setVote] = useState<"up" | "down" | null>(null);
 
@@ -64,11 +64,7 @@ function MessageActions({ message }: { message: Message }) {
     <div className="-ml-1.5 flex items-center gap-0.5 text-muted-foreground">
       <ActionBtn
         label="Revert"
-        onClick={() =>
-          product === "platform"
-            ? sendPlatformMessage("Undo what you just did")
-            : sendMessage("Undo what you just did")
-        }
+        onClick={() => sendMessage("Undo what you just did")}
       >
         <Undo2 className="h-3.5 w-3.5" strokeWidth={1.6} />
       </ActionBtn>
@@ -329,7 +325,7 @@ function ConnectBlock({
         Connect {block.service}
       </p>
       <p className="mt-1.5 text-[14.5px] leading-relaxed text-muted-foreground">
-        Courier will wire it in. You won’t paste secrets into source files.
+        We'll wire it in. You won't paste secrets into source files.
       </p>
       <button
         type="button"

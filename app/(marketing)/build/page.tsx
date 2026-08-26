@@ -17,12 +17,12 @@ export default function BuildPage() {
             as="h1"
             kicker="Every plan"
             title="Software, sites, and agents."
-            body="No build pipeline to manage. Publishing is Courier-hosted. Models follow your plan."
+            body="No build pipeline to manage. Publishing is hosted. Models follow your plan."
           />
           <div className="mt-8 flex flex-wrap gap-2">
             <Cta href={APP_HREF}>Start free</Cta>
-            <Cta href="/development" variant="secondary">
-              Development
+            <Cta href="/hosting" variant="secondary">
+              Hosting
             </Cta>
           </div>
           <div className="mt-10 hidden sm:block">
@@ -44,9 +44,9 @@ export default function BuildPage() {
                 { title: "Preview", body: "Live surface next to chat." },
                 { title: "Files & editor", body: "The project, not a zip of prompts." },
                 { title: "Terminal & git", body: "Same workspace as the model." },
-                { title: "Deployments", body: "Courier-hosted publishing." },
+                { title: "Deployments", body: "Hosted publishing." },
                 { title: "Database & env", body: "Provisioned with the project." },
-                { title: "Development", body: "Model, API, and keys already attached." },
+                { title: "Runtime", body: "Model, API, and keys already attached." },
               ]}
             />
           </div>

@@ -9,6 +9,8 @@ export type Intent = {
   connectorId?: string;
   jobId?: string;
   reply: string;
+  /** False when the message did not match a specific space category. */
+  resolved: boolean;
 };
 
 function includesAny(text: string, words: string[]) {
@@ -69,7 +71,8 @@ export function inferIntent(
     "install",
   ]);
 
-  const finish = (intent: Intent) => withHandoff(intent, currentSpace);
+  const finish = (intent: Omit<Intent, "resolved">): Intent =>
+    withHandoff({ ...intent, resolved: true }, currentSpace);
 
   if (includesAny(text, ["handshake", "ai readiness", "ai-ready"])) {
     return finish({
@@ -98,23 +101,23 @@ export function inferIntent(
       connectors.find((item) => text.includes(item.name.toLowerCase())) ??
       connectors.find((item) => item.id === "stripe") ??
       connectors[0];
-    return {
+    return finish({
       space: "connectors",
       connectorId: connector.id,
       projectId: mentioned?.id,
       reply: `Connectors is on the right — ${connector.name} accounts, permissions, and actions.`,
-    };
+    });
   }
 
   if (includesAny(text, ["connector", "connectors"]) && connecting) {
     const connector =
       connectors.find((item) => text.includes(item.name.toLowerCase())) ??
       connectors[0];
-    return {
+    return finish({
       space: "connectors",
       connectorId: connector.id,
       reply: `Connectors is on the right${connector ? ` — ${connector.name}` : ""}.`,
-    };
+    });
   }
 
   if (
@@ -128,11 +131,11 @@ export function inferIntent(
       includesAny(text, ["library", "upload", "uploads"]) &&
       !includesAny(text, ["image", "photo", "video", "studio"]))
   ) {
-    return {
+    return finish({
       space: "studio",
       reply:
         "Those files live in Studio → Assets — stills, briefs, exports, and uploads in one library.",
-    };
+    });
   }
 
   const workAsk =
@@ -439,6 +442,7 @@ export function inferIntent(
       space: currentSpace,
       projectId: mentioned?.id,
       reply: `I’ll stay in ${spaceNames[currentSpace] ?? "this Space"} and take it from here.`,
+      resolved: true,
     };
   }
 
@@ -453,7 +457,9 @@ export function inferIntent(
     space: "build",
     projectId: buildProject?.id,
     buildTool: includesAny(text, ["terminal", "log"]) ? "terminal" : "preview",
-    reply: `Opened Build${buildProject ? ` on ${buildProject.name}` : ""}. The working surface is on the right — chat stays the command layer.`,
+    reply:
+      "What would you like to do? Pick something on the right, or tell me more here.",
+    resolved: false,
   };
 }
 

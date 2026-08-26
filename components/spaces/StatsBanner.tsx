@@ -1,6 +1,6 @@
 "use client";
 
-import { Kpi } from "@/components/platform/Charts";
+import { Kpi } from "@/components/ui/Charts";
 
 export type StatItem = {
   label: string;

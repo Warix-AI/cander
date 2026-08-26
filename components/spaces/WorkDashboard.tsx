@@ -10,7 +10,10 @@ import {
   ScopeToggle,
   SpaceSettingsButton,
 } from "@/components/spaces/ItemSet";
+import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import { BannerWash } from "@/components/spaces/BannerWash";
+import { connectors, buildPreviews } from "@/lib/data";
+import { workspaceAutomations, taskMeta } from "@/lib/build-catalog";
 import {
   getWorkConnectorsServerSnapshot,
   getWorkConnectorsSnapshot,
@@ -18,6 +21,13 @@ import {
   workConnectorIds,
 } from "@/lib/work-connectors";
 import {
+  getWorkAppsServerSnapshot,
+  getWorkAppsSnapshot,
+  subscribeWorkApps,
+  workAppIds,
+} from "@/lib/work-apps";
+import {
+  workAppsFor,
   workEmptyCopy,
   workItemsFor,
   workScopeOptions,
@@ -29,18 +39,70 @@ import {
 import { cn } from "@/lib/utils";
 
 export function WorkDashboard() {
-  const { workspaceId, newChat, sendMessage, spaceLayout, setSpaceLayout } =
-    useApp();
+  const {
+    workspaceId,
+    newChat,
+    sendMessage,
+    openJob,
+    spaceLayout,
+    setSpaceLayout,
+  } = useApp();
   const [scope, setScope] = useState<WorkScope>("today");
   useSyncExternalStore(
     subscribeWorkConnectors,
     getWorkConnectorsSnapshot,
     getWorkConnectorsServerSnapshot,
   );
+  useSyncExternalStore(
+    subscribeWorkApps,
+    getWorkAppsSnapshot,
+    getWorkAppsServerSnapshot,
+  );
   const attachedIds = workConnectorIds(workspaceId);
-  const items = useMemo(
-    () => workItemsFor(workspaceId, scope, attachedIds),
-    [workspaceId, scope, attachedIds],
+  const attachedBuildIds = workAppIds(workspaceId);
+
+  const connectorNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const item of connectors) map[item.id] = item.name;
+    return map;
+  }, []);
+
+  const buildNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const item of buildPreviews) {
+      if (item.workspaceId === workspaceId) {
+        map[item.projectId] = item.name;
+      }
+    }
+    return map;
+  }, [workspaceId]);
+
+  const todayItems = useMemo(
+    () => workItemsFor(workspaceId, "today", attachedIds),
+    [workspaceId, attachedIds],
+  );
+
+  const appItems = useMemo(
+    () =>
+      workAppsFor(
+        workspaceId,
+        attachedIds,
+        attachedBuildIds,
+        connectorNames,
+        buildNames,
+      ),
+    [
+      workspaceId,
+      attachedIds,
+      attachedBuildIds,
+      connectorNames,
+      buildNames,
+    ],
+  );
+
+  const automations = useMemo(
+    () => workspaceAutomations(workspaceId),
+    [workspaceId],
   );
 
   const ask = (text: string) => {
@@ -52,7 +114,7 @@ export function WorkDashboard() {
     <DashFrame
       space="work"
       title="Work"
-      subtitle="Keep up and act on what needs you."
+      subtitle="Run your work from one place."
       actions={
         <>
           <DashBtn primary onClick={() => newChat("work")}>
@@ -76,31 +138,60 @@ export function WorkDashboard() {
         <h2 className="text-[13px] font-medium tracking-[-0.01em] text-muted-foreground">
           {workSectionTitle(scope)}
         </h2>
-        {!items.length ? (
+
+        {scope === "automations" ? (
+          <div className="mt-3">
+            <PreviewGrid
+              layout={spaceLayout}
+              kind="schedule"
+              items={automations.map((item) => ({
+                id: item.id,
+                name: item.name,
+                projectId: item.id,
+                meta: taskMeta(item),
+                detail: item.nextRun ?? item.schedule,
+                badge: "Automation",
+              }))}
+              onOpen={(id) => openJob(id)}
+              empty={workEmptyCopy("automations")}
+            />
+          </div>
+        ) : scope === "apps" ? (
+          !appItems.length ? (
+            <p className="mt-3 px-3 py-4 text-[13px] text-muted-foreground">
+              {workEmptyCopy("apps")}
+            </p>
+          ) : spaceLayout === "cards" ? (
+            <div className="mt-3 grid grid-cols-1 gap-x-3 gap-y-5 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3">
+              {appItems.map((item) => (
+                <WorkCard key={item.id} item={item} onAsk={ask} />
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3 divide-y divide-border rounded-[10px] border border-border">
+              {appItems.map((item) => (
+                <WorkRow key={item.id} item={item} onAsk={ask} />
+              ))}
+            </div>
+          )
+        ) : !todayItems.length ? (
           <p className="mt-3 px-3 py-4 text-[13px] text-muted-foreground">
-            {workEmptyCopy(scope)}
+            {workEmptyCopy("today")}
           </p>
         ) : spaceLayout === "cards" ? (
           <div className="mt-3 grid grid-cols-1 gap-x-3 gap-y-5 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3">
-            {items.map((item) => (
+            {todayItems.map((item) => (
               <WorkCard key={item.id} item={item} onAsk={ask} />
             ))}
           </div>
         ) : (
           <div className="mt-3 divide-y divide-border rounded-[10px] border border-border">
-            {items.map((item) => (
+            {todayItems.map((item) => (
               <WorkRow key={item.id} item={item} onAsk={ask} />
             ))}
           </div>
         )}
       </section>
-
-      {scope === "approvals" && items.length ? (
-        <p className="mt-3 text-[12.5px] text-muted-foreground">
-          Approvals open in chat so Courier can check policy, draft a note, and
-          log the decision.
-        </p>
-      ) : null}
     </DashFrame>
   );
 }
@@ -156,7 +247,7 @@ function WorkRow({
     <button
       type="button"
       onClick={() => onAsk(item.prompt)}
-      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 first:rounded-t-[10px] last:rounded-b-[10px] hover:bg-muted/60"
+      className="canvas-hover flex w-full items-center gap-3 py-3.5 text-left transition-colors duration-200 first:rounded-t-[10px] last:rounded-b-[10px]"
     >
       <ToneDot tone={item.tone} />
       <span className="min-w-0 flex-1">

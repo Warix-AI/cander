@@ -9,12 +9,6 @@ import {
 } from "@/lib/workspace-icons";
 import { cn } from "@/lib/utils";
 
-const workspaceTint: Record<string, string> = {
-  marketing: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
-  engineering: "bg-chart-2/15 text-foreground",
-  operations: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-};
-
 export function workspaceInitials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length >= 2) {
@@ -42,15 +36,17 @@ export function WorkspaceMark({
     getWorkspaceIconsServerSnapshot,
   );
   const icon = workspaceIconFor(id, icons);
-  const dim = size === "sm" ? "h-6 w-6 text-[10px]" : "h-8 w-8 text-[11px]";
+  const dim =
+    size === "sm"
+      ? "h-[26px] w-[26px] text-[11px]"
+      : "h-[35px] w-[35px] text-[12px]";
 
   if (icon) {
     return (
       <span
         className={cn(
-          "relative inline-flex shrink-0 overflow-hidden rounded-[10px]",
+          "relative inline-flex shrink-0 overflow-hidden rounded-[10px] border-[0.5px] border-foreground/15",
           dim,
-          active && "ring-2 ring-foreground/15 ring-offset-1 ring-offset-background",
           className,
         )}
       >
@@ -62,11 +58,11 @@ export function WorkspaceMark({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-[10px] font-semibold tracking-[-0.02em]",
+        "inline-flex shrink-0 items-center justify-center rounded-[10px] font-semibold tracking-[-0.02em] transition-colors duration-200",
         dim,
         active
-          ? "bg-sidebar-accent text-foreground ring-2 ring-foreground/15 ring-offset-1 ring-offset-background"
-          : workspaceTint[id] ?? "bg-muted text-muted-foreground",
+          ? "bg-foreground text-background"
+          : "light-surface text-foreground/75 dark:bg-muted dark:text-muted-foreground dark:shadow-none",
         className,
       )}
     >

@@ -1,6 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import {
+  FLOAT_CONTROL_SHELL,
+  FLOAT_TOGGLE_ACTIVE,
+} from "@/lib/shell-chrome";
+import { cn } from "@/lib/utils";
 import { Check, Mail, Minus } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { PreviewAccount } from "@/components/settings/PreviewAccount";
@@ -23,7 +28,6 @@ import {
   type CompareValue,
 } from "@/lib/billing";
 import { orgMembersOf } from "@/lib/entitlements";
-import { cn } from "@/lib/utils";
 
 export function PlansSettings() {
   const {
@@ -54,8 +58,8 @@ export function PlansSettings() {
     <SettingsPage wide>
       <SettingsHeader
         kicker="Plans"
-        title="Courier for people. Development for what they build."
-        subtitle="Pro, Max, and Ultra. Every paid tier includes Development — depth increases as you move up. Org billing is per seat by plan."
+        title="Plans for people and teams."
+        subtitle="Free, Pro, Max, and Ultra. Cloud on every plan. Org billing is per seat by plan."
       />
 
       <div className="mt-8">
@@ -82,7 +86,7 @@ export function PlansSettings() {
           </p>
           <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">
             You are on {planLabel(entitlements.plan)}, billed to Acme. Billing is
-            managed by the Owner. Development depth:{" "}
+            managed by the Owner. Runtime depth:{" "}
             {entitlements.devDepthLabel.toLowerCase()}.
           </p>
         </div>
@@ -126,8 +130,8 @@ export function PlansSettings() {
                 Your plan
               </p>
               <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">
-                You&apos;re on Free — chat and Spaces. Development starts on
-                Pro. Pick a plan below to upgrade.
+                You&apos;re on Free — chat and Spaces. Upgrade to Pro or higher
+                for hosting, models, and team features. Pick a plan below.
               </p>
             </div>
           ) : null}
@@ -303,7 +307,12 @@ function CycleToggle({
   onChange: (id: BillingCycle) => void;
 }) {
   return (
-    <div className="inline-flex h-10 items-center rounded-[10px] border border-foreground/12 p-0.5">
+    <div
+      className={cn(
+        "inline-flex h-10 items-center rounded-[10px] p-0.5",
+        FLOAT_CONTROL_SHELL,
+      )}
+    >
       {(
         [
           { id: "month", label: "Monthly" },
@@ -315,9 +324,9 @@ function CycleToggle({
           type="button"
           onClick={() => onChange(item.id)}
           className={cn(
-            "h-9 rounded-[10px] px-3 text-[12.5px] font-medium tracking-[-0.01em] transition-colors duration-200",
+            "h-9 rounded-[8px] px-3 text-[12.5px] font-medium tracking-[-0.01em] transition-colors duration-200",
             cycle === item.id
-              ? "bg-muted text-foreground"
+              ? FLOAT_TOGGLE_ACTIVE
               : "text-muted-foreground hover:text-foreground",
           )}
         >

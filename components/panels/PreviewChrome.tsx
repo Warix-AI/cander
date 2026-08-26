@@ -12,7 +12,6 @@ import {
   Minimize2,
   Monitor,
   MousePointer2,
-  PanelRight,
   RotateCw,
   Smartphone,
   SquareStack,
@@ -20,7 +19,9 @@ import {
   Upload,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { PanelToggle } from "@/components/shell/PanelToggle";
 import { Dropdown } from "@/components/ui/Controls";
+import { useMobileShell } from "@/lib/use-media-query";
 import type { BuildTool, ViewportId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -71,14 +72,15 @@ export function PreviewChrome({
     refreshPreview,
     openOverlay,
   } = useApp();
+  const mobile = useMobileShell();
   const previewing = tool === "preview";
   const changing = tool === "activity";
   const moreOpen = tool === "more";
   const address = liveUrl ?? url;
 
   return (
-    <div className="min-w-0 shrink-0 overflow-hidden bg-sidebar">
-      <div className="flex h-10 min-w-0 items-center gap-1 px-2">
+    <div className="min-w-0 shrink-0 overflow-hidden">
+      <div className="flex h-11 min-w-0 items-center gap-1 px-3">
         <RailBtn
           active={changing}
           label="Changes"
@@ -117,16 +119,11 @@ export function PreviewChrome({
               <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
             )}
           </RailBtn>
-          <RailBtn
-            label="Close preview"
-            onClick={() => setPanelMode("collapsed")}
-          >
-            <PanelRight className="h-3.5 w-3.5" strokeWidth={1.6} />
-          </RailBtn>
+          {!mobile ? <PanelToggle /> : null}
         </span>
       </div>
 
-      <div className="flex h-10 min-w-0 items-center gap-0.5 bg-sidebar px-2">
+      <div className="flex h-10 min-w-0 items-center gap-0.5 px-3">
         <RailBtn label="Back">
           <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
         </RailBtn>
@@ -137,7 +134,7 @@ export function PreviewChrome({
           <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
         </RailBtn>
 
-        <div className="mx-1 flex h-7 min-w-0 flex-1 items-center overflow-hidden rounded-lg bg-muted/60 px-2.5 font-mono text-[11.5px] text-muted-foreground">
+        <div className="mx-1 flex h-7 min-w-0 flex-1 items-center overflow-hidden rounded-lg border border-border bg-white px-2.5 font-mono text-[11.5px] text-muted-foreground dark:bg-muted/60 dark:border-transparent">
           <span className="truncate">{address}</span>
         </div>
 

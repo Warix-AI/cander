@@ -15,7 +15,7 @@ export default function PersonalPage() {
             as="h1"
             kicker="Every plan"
             title="Today, money, health, goals, and the car."
-            body="Separate from product work. Organizations can hide Personal. Courier still knows the difference."
+            body="Separate from product work. Organizations can hide Personal. The app still knows the difference."
           />
           <div className="mt-10 hidden sm:block">
             <ProductMockup variant="personal" />
@@ -28,7 +28,7 @@ export default function PersonalPage() {
                 { title: "Money", body: "Personal finances, not the workspace ledger." },
                 { title: "Health", body: "Routines that stay on your account." },
                 { title: "Goals", body: "Private lists, not org OKRs." },
-                { title: "Car", body: "The rest of life, still in Courier." },
+                { title: "Car", body: "The rest of life, still in the app." },
               ]}
             />
           </div>

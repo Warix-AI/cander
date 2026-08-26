@@ -11,6 +11,7 @@ import { ChangeTimeline } from "@/components/preview/ChangeTimeline";
 import { canderCode, canderFiles, scheduledJobs, starbaseFiles } from "@/lib/data";
 import { threadsForProject } from "@/lib/selectors";
 import type { BuildTool } from "@/lib/types";
+import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 const ADVANCED_TOOLS: BuildTool[] = [
@@ -58,7 +59,7 @@ export function BuildPanel() {
   const locked = ADVANCED_TOOLS.includes(tool) && !advancedMode;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-sidebar">
+    <div className={SHELL_PANEL_BODY}>
       <PreviewChrome
         tool={tool}
         onTool={(id) => setBuildTool(id)}
@@ -67,10 +68,10 @@ export function BuildPanel() {
       />
       <div
         className={cn(
-          "min-h-0 flex-1 bg-background",
+          SHELL_PANEL_SCROLL,
           (tool === "preview" || tool === "more") && !locked
             ? "overflow-hidden"
-            : "overflow-y-auto",
+            : undefined,
         )}
       >
         {locked ? (
@@ -100,7 +101,7 @@ export function BuildPanel() {
               <Row
                 title={
                   project?.summary ??
-                  "A new Build chat. Preview opens as soon as Courier has something to show."
+                  "A new Build chat. Preview opens as soon as there's something to show."
                 }
                 meta=""
               />
@@ -150,7 +151,7 @@ export function BuildPanel() {
               summary={
                 project
                   ? "Click anything to select it, then tell chat what to change."
-                  : "Keep typing. Courier will stand up a preview as soon as this chat has a project."
+                  : "Keep typing. A preview will stand up as soon as this chat has a project."
               }
             />
           </div>
@@ -209,7 +210,7 @@ export function BuildPanel() {
               Keys stay here — they never appear in chat after you save them.
             </p>
             <Row title="Stripe" meta="•••• saved" />
-            <Row title="Courier" meta="•••• saved" />
+            <Row title="Keys" meta="•••• saved" />
           </div>
         ) : null}
 

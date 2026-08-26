@@ -1,7 +1,10 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
-import { getAppearanceSnapshot, setAppearance } from "@/lib/appearance";
+import {
+  getAppearanceSnapshot,
+  setAppearance,
+} from "@/lib/appearance";
 import {
   getThemeServerSnapshot,
   getThemeSnapshot,
@@ -20,15 +23,16 @@ const ThemeContext = createContext<{
   toggleTheme: () => {},
 });
 
-/** Keep marketing toggle and app appearance sliders on the same theme. */
+/** Keep marketing toggle and app appearance on the same theme. */
 function applyTheme(next: Theme) {
   const appearance = getAppearanceSnapshot();
-  if (next === "light" && appearance.color >= 45) {
-    setAppearance({ color: 8 });
+
+  if (next === "light" && appearance.colorMode === "dark") {
+    setAppearance({ colorMode: "light" });
     return;
   }
-  if (next === "dark" && appearance.color < 45) {
-    setAppearance({ color: 50 });
+  if (next === "dark" && appearance.colorMode === "light") {
+    setAppearance({ colorMode: "dark" });
     return;
   }
   persistTheme(next);

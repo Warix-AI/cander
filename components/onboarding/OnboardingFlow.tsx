@@ -14,7 +14,7 @@ import {
   persistWorkspace,
   subscribeAuth,
 } from "@/lib/session";
-import { AppearanceSliders } from "@/components/settings/AppearanceSliders";
+import { AppearanceControls } from "@/components/settings/AppearanceControls";
 import { OnboardingCourierPreview } from "@/components/onboarding/OnboardingCourierPreview";
 import { AppearanceScope } from "@/components/theme/AppearanceProvider";
 import { resetAppearance } from "@/lib/appearance";
@@ -63,19 +63,19 @@ const PLANS: {
     id: "free",
     title: "Free",
     price: "$0",
-    body: "Chat, Build, Studio, Research, and Personal.",
+    body: "New Chat, Work, Build, Explore, Connectors, and Recents.",
   },
   {
     id: "pro",
     title: "Pro",
     price: "$20/mo",
-    body: "Full Courier for individuals — voice, workspaces, local.",
+    body: "Full product for individuals — voice, workspaces, local.",
   },
   {
     id: "max",
     title: "Max",
     price: "$50/mo",
-    body: "Teams and power users. Shared workspaces and Development.",
+    body: "Teams and power users. Shared workspaces and hosting.",
   },
   {
     id: "ultra",
@@ -90,40 +90,40 @@ const PANEL_COPY: Record<
   { title: string; body: string }
 > = {
   welcome: {
-    title: "Spaces, chat, and build — one place to get work done.",
-    body: "Connect apps, run recurring jobs, and keep every workspace in sync.",
+    title: "Operate, build, and explore — one place to get work done.",
+    body: "Connect apps, run automations, and keep every workspace in sync.",
   },
   "sign-in": {
     title: "Pick up where Matthew left off.",
     body: "This prototype signs you into the Acme Max Owner account we’ve been building.",
   },
   create: {
-    title: "Create an account, then set Courier up properly.",
-    body: "We’ll walk through profile, workspace, plan, appearance, and connectors — then open Courier on the plan you pick.",
+    title: "Create an account, then finish setup.",
+    body: "We’ll walk through profile, workspace, plan, appearance, and connectors — then open the app on the plan you pick.",
   },
   profile: {
-    title: "Courier should sound like it knows you.",
+    title: "It should sound like it knows you.",
     body: "A short name keeps replies personal without cluttering every thread.",
   },
   workspace: {
     title: "Start with the right kind of home.",
-    body: "Personal for solo work. Business when you’re setting up a team.",
+    body: "Personal or business — same Work, Build, and Explore layout either way.",
   },
   plan: {
     title: "Choose the depth you need.",
-    body: "Plans unlock Development, hosting, and team seats. The prototype still lands on Matthew’s Max account.",
+    body: "Plans unlock hosting, models, and team seats. The prototype still lands on Matthew’s Max account.",
   },
   "ultra-seat": {
     title: "Who is this Ultra seat for?",
     body: "Each Ultra seat licenses one production machine. Attach it to a person, or keep it as a machine-only seat you manage.",
   },
   appearance: {
-    title: "Make Courier feel like yours.",
-    body: "Color, type, spacing, shapes, and motion — watch the preview update as you go.",
+    title: "Make it feel like yours.",
+    body: "Pick a color mode and layout — watch the preview update as you go.",
   },
   connectors: {
     title: "Wire up the apps you already live in.",
-    body: "Gmail, Slack, calendar, docs — connect a few now, add more anytime in Settings.",
+    body: "Gmail, Slack, calendar, docs — connect a few now. Add more anytime from Connectors in the sidebar.",
   },
 };
 
@@ -293,9 +293,6 @@ function OnboardingShell() {
         <div className="flex items-center justify-between gap-3 px-6 pt-6 sm:px-10">
           <div className="flex items-center gap-2.5">
             <CourierMark className="h-7 w-7" />
-            <span className="text-[15px] font-semibold tracking-[-0.03em]">
-              Courier
-            </span>
           </div>
           {createProgress ? (
             <p className="font-mono text-[11px] tracking-[0.06em] text-muted-foreground uppercase">
@@ -459,32 +456,36 @@ function OnboardingShell() {
         </div>
       </div>
 
-      {/* Right: live preview on appearance; wash otherwise */}
-      <div
-        className="relative hidden min-h-0 w-1/2 overflow-hidden lg:block"
-        aria-hidden={!showAppearancePreview}
-      >
-        {showAppearancePreview ? (
-          <div className="absolute inset-0 bg-gradient-to-br from-black/50 via-black/30 to-black/55">
-            <div className="absolute inset-0 panel-wash-price opacity-60" />
-            <div className="panel-grain opacity-40" />
-            <OnboardingCourierPreview />
-          </div>
-        ) : (
-          <>
-            <div className="absolute inset-0 panel-wash-price" />
-            <div className="panel-grain" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
-            <div className="absolute inset-x-0 bottom-0 p-10 xl:p-14">
-              <p className="max-w-lg text-[1.75rem] font-medium tracking-[-0.03em] text-white xl:text-[2rem]">
-                {panel.title}
-              </p>
-              <p className="mt-3 max-w-md text-[14.5px] leading-relaxed text-white/75">
-                {panel.body}
-              </p>
+      {/* Right: floating inset panel — wash or live preview */}
+      <div className="hidden min-h-0 w-1/2 p-[15px] lg:block">
+        <div
+          className={cn(
+            "relative h-full min-h-0 overflow-hidden rounded-[18px] border border-border",
+          )}
+          aria-hidden={!showAppearancePreview}
+        >
+          {showAppearancePreview ? (
+            <div className="absolute inset-0 bg-gradient-to-br from-black/50 via-black/30 to-black/55">
+              <div className="absolute inset-0 panel-wash-price opacity-60" />
+              <div className="panel-grain opacity-40" />
+              <OnboardingCourierPreview />
             </div>
-          </>
-        )}
+          ) : (
+            <>
+              <div className="absolute inset-0 panel-wash-price" />
+              <div className="panel-grain" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
+              <div className="absolute inset-x-0 bottom-0 p-10 xl:p-14">
+                <p className="max-w-lg text-[1.75rem] font-medium tracking-[-0.03em] text-white xl:text-[2rem]">
+                  {panel.title}
+                </p>
+                <p className="mt-3 max-w-md text-[14.5px] leading-relaxed text-white/75">
+                  {panel.body}
+                </p>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </AppearanceScope>
   );
@@ -497,11 +498,11 @@ function AppearanceStep({ onSubmit }: { onSubmit: () => void }) {
         Make it yours
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Tune color, type, spacing, shapes, motion, and layout. The preview on
-        the right updates as you go — continue when it feels right.
+        Pick a color mode and layout. The preview on the right updates as you
+        go — continue when it feels right.
       </p>
       <div className="mt-8">
-        <AppearanceSliders compact />
+        <AppearanceControls compact />
       </div>
       <button
         type="button"
@@ -533,7 +534,7 @@ function WelcomeStep({
   return (
     <>
       <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        Welcome to Courier
+        Welcome
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
         Sign in as Matthew, or create an account to walk through setup. Either
@@ -721,7 +722,7 @@ function ProfileStep({
   return (
     <>
       <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        What should Courier call you?
+        What should we call you?
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
         Used in greetings and short replies. You can change this later in
@@ -798,7 +799,7 @@ function WorkspaceStep({
               {
                 id: "business" as const,
                 title: "Business",
-                body: "For a team with company email and shared spaces.",
+                body: "For a team with company email — Work, Build, Explore, and shared connectors.",
               },
             ] as const
           ).map((item) => {
@@ -1057,7 +1058,7 @@ function ConnectorsStep({
           onClick={onSubmit}
           className="inline-flex h-11 w-full items-center justify-center rounded-full bg-primary text-[14px] font-medium tracking-[-0.01em] text-primary-foreground hover:bg-foreground"
         >
-          Enter Courier as Matthew
+          Get started
         </button>
         <button
           type="button"

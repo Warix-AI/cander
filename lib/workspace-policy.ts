@@ -433,6 +433,18 @@ export function ensurePolicy(
   persist();
 }
 
+/** Remove stored policy and member assignments when a workspace is deleted. */
+export function purgeWorkspace(workspaceId: string) {
+  const nextPolicies = { ...policies };
+  delete nextPolicies[workspaceId];
+  policies = nextPolicies;
+  orgMembers = orgMembers.map((member) => ({
+    ...member,
+    workspaceIds: member.workspaceIds.filter((id) => id !== workspaceId),
+  }));
+  persist();
+}
+
 export function setMemberRole(memberId: string, role: Role, actorId?: string) {
   const target = orgMembers.find((item) => item.id === memberId);
   if (!target) return;

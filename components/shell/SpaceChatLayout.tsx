@@ -74,9 +74,16 @@ export function SpaceChatLayout() {
   }, [chatOpen, immersive, panelPct, mobile, mobileSurface]);
 
   const chatPct = chatOpen ? Math.max(0, 100 - spacePct) : 0;
+  const liveSpacePct =
+    dragging && chatOpen && !immersive ? panelPct : spacePct;
+  const liveChatPct =
+    dragging && chatOpen && !immersive
+      ? Math.max(0, 100 - panelPct)
+      : chatPct;
+  const animateLayout = !dragging && !immersive;
   // Don't mount the composer until the pane has real width — otherwise the
   // textarea measures at ~0px and grows to max height from a wrapped placeholder.
-  const chatReady = chatPct > 8;
+  const chatReady = liveChatPct > 8;
   const showResize = chatOpen && !mobile;
   const spaceMode =
     mobile && chatOpen && mobileSurface === "panel"
@@ -90,12 +97,12 @@ export function SpaceChatLayout() {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
-          !dragging &&
+          animateLayout &&
             "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
-          chatPct === 0 && "pointer-events-none",
+          liveChatPct === 0 && "pointer-events-none",
         )}
-        style={{ width: `${chatPct}%` }}
-        aria-hidden={chatPct === 0}
+        style={{ width: `${liveChatPct}%` }}
+        aria-hidden={liveChatPct === 0}
       >
         {chatArmed && chatReady ? (
           <>
@@ -111,13 +118,13 @@ export function SpaceChatLayout() {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
-          chatOpen && chatPct > 0 && !floating && "border-l border-border",
-          !dragging &&
+          chatOpen && liveChatPct > 0 && !floating && "border-l border-border",
+          animateLayout &&
             "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
-          spacePct === 0 && "pointer-events-none",
+          liveSpacePct === 0 && "pointer-events-none",
         )}
-        style={{ width: `${spacePct}%` }}
-        aria-hidden={spacePct === 0}
+        style={{ width: `${liveSpacePct}%` }}
+        aria-hidden={liveSpacePct === 0}
       >
         <SpaceRenderModeProvider mode={spaceMode}>
           {mobile && chatOpen && mobileSurface === "panel" ? (

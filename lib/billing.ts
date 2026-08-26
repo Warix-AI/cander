@@ -1,7 +1,6 @@
 import { account } from "./data";
 import {
   capabilitiesFor,
-  canAccessDevelopment as planCanAccessDevelopment,
   hasConnectorPolicies as planHasConnectorPolicies,
   hasModelChoice as planHasModelChoice,
   hasVoice as planHasVoice,
@@ -10,10 +9,9 @@ import {
   hasWorkspaces as planHasWorkspaces,
   hostingAllowed as planHostingAllowed,
   isTeamPlan as planIsTeamPlan,
-  platformNavAllowed as planPlatformNavAllowed,
   workspaceCap as planWorkspaceCap,
 } from "./plan-entitlements";
-import type { BillingPlan, HostingMode, Member, PlatformNav } from "./types";
+import type { BillingPlan, HostingMode, Member } from "./types";
 
 export type BillingCycle = "month" | "year";
 export type CompareValue = boolean | string;
@@ -43,7 +41,7 @@ export const courierPlans: {
     name: "Free",
     price: 0,
     audience: "Get started",
-    blurb: "Get started with Courier.",
+    blurb: "Get started free.",
     cta: "Start free",
     points: [
       "Chat",
@@ -58,7 +56,7 @@ export const courierPlans: {
     name: "Pro",
     price: 20,
     audience: "Everyday use",
-    blurb: "Full Courier for individuals.",
+    blurb: "Full product for individuals.",
     cta: "Choose Pro",
     popular: true,
     includes: "Everything in Free, plus",
@@ -76,7 +74,7 @@ export const courierPlans: {
     name: "Max",
     price: 50,
     audience: "Teams & power users",
-    blurb: "Courier for professionals and teams.",
+    blurb: "For professionals and teams.",
     cta: "Choose Max",
     includes: "Everything in Pro, plus",
     points: [
@@ -93,7 +91,7 @@ export const courierPlans: {
     name: "Ultra",
     price: 300,
     audience: "Production AI",
-    blurb: "Build and run production AI with Courier.",
+    blurb: "Build and run production AI.",
     cta: "Choose Ultra",
     includes: "Everything in Max, plus",
     points: [
@@ -160,7 +158,7 @@ export const comparisonGroups: {
   },
   {
     id: "courier",
-    label: "Courier",
+    label: "Platform",
     rows: [
       {
         label: "Connectors",
@@ -210,12 +208,8 @@ export const comparisonGroups: {
   },
   {
     id: "platform",
-    label: "Development",
+    label: "Runtime",
     rows: [
-      {
-        label: "Development view",
-        values: allPlans({ free: false, pro: true, max: true, ultra: true }),
-      },
       {
         label: "APIs",
         values: allPlans({ free: false, pro: true, max: true, ultra: true }),
@@ -325,7 +319,7 @@ export const pricingFaqs: { q: string; a: string }[] = [
   },
   {
     q: "What’s development on each plan?",
-    a: "Development starts on Pro — APIs, keys, and local or on-device hosting, on one shared model. Max adds the model catalog, team deploys, docs, and logs. Ultra unlocks test and production deploys, production APIs, and infrastructure management. Free has no Development.",
+    a: "Pro adds APIs, keys, and local or on-device hosting on one shared model. Max adds the model catalog, team deploys, docs, and logs. Ultra unlocks test and production deploys, production APIs, and infrastructure management. Free stays cloud chat and Build.",
   },
   {
     q: "When can we share workspaces?",
@@ -425,20 +419,8 @@ export function hasVoice(plan: BillingPlan) {
   return planHasVoice(plan);
 }
 
-export function hasLimitedPlatform(plan: BillingPlan) {
-  return planCanAccessDevelopment(plan);
-}
-
 export function hostingAllowed(plan: BillingPlan, mode: HostingMode) {
   return planHostingAllowed(plan, mode);
-}
-
-export function platformNavAllowed(
-  plan: BillingPlan,
-  nav: PlatformNav,
-  _ultra = false,
-) {
-  return planPlatformNavAllowed(plan, nav);
 }
 
 export function hasModelChoice(plan: BillingPlan) {

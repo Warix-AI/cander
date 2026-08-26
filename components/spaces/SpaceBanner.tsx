@@ -16,7 +16,7 @@ import {
   subscribeSpaceBanners,
   type BannerKey,
 } from "@/lib/space-banners";
-import { SHELL_FLOAT_RADIUS, useShellStyle } from "@/lib/shell-chrome";
+import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 export function SpaceBanner({
@@ -26,7 +26,7 @@ export function SpaceBanner({
   space: BannerKey;
   children: React.ReactNode;
 }) {
-  const { sidebarOpen, mobileNav } = useApp();
+  const { sidebarOpen } = useApp();
   const mode = useSpaceRenderMode();
   const inPanel = mode === "panel";
   const shellStyle = useShellStyle();
@@ -48,7 +48,7 @@ export function SpaceBanner({
       <div
         className={cn(
           "relative h-[11.5rem] overflow-hidden max-lg:h-[13rem] sm:h-40 lg:h-36",
-          floating && SHELL_FLOAT_RADIUS,
+          floating && SHELL_G3_RADIUS,
         )}
       >
         <div className="absolute inset-0 overflow-hidden">
@@ -72,7 +72,6 @@ export function SpaceBanner({
             className={cn(
               "absolute top-2.5 left-2 z-20 max-lg:top-3",
               sidebarOpen && "lg:hidden",
-              mobileNav && "max-lg:hidden",
             )}
           />
         )}

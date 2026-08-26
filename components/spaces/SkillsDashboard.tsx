@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Kpi } from "@/components/platform/Charts";
+import { Kpi } from "@/components/ui/Charts";
 import { useApp } from "@/components/app/AppProvider";
 import { DashBtn, DashFrame, LayoutToggle, ScopeToggle, SpaceSettingsButton } from "@/components/spaces/ItemSet";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
@@ -42,7 +42,7 @@ export function SkillsDashboard() {
     const next: Skill = {
       id,
       name: "Untitled skill",
-      summary: "Describe what Courier should do.",
+      summary: "Describe what it should do.",
       when: "When this skill applies",
       workspaceId,
       source: "custom",

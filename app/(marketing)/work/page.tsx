@@ -15,7 +15,7 @@ export default function WorkPage() {
             as="h1"
             kicker="Max & Ultra"
             title="Inbox, calendar, customers."
-            body="Work is Courier for day-to-day operations — not another app. Connected mail, Slack, calendar, and accounts, operated from chat."
+            body="Work is for day-to-day operations — not another app. Connected mail, Slack, calendar, and accounts, operated from chat."
           />
           <div className="mt-10 hidden sm:block">
             <ProductMockup variant="work" />
@@ -24,7 +24,7 @@ export default function WorkPage() {
             <FeatureGrid
               columns={3}
               items={[
-                { title: "Inbox", body: "Mail and Slack in one place. Draft replies in Courier." },
+                { title: "Inbox", body: "Mail and Slack in one place. Draft replies in chat." },
                 { title: "Calendar", body: "Meetings next to the work they belong to." },
                 { title: "Customers", body: "Accounts and context without leaving the thread." },
               ]}

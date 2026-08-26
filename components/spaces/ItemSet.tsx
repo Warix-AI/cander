@@ -9,6 +9,10 @@ import { useSpaceRenderMode } from "@/components/spaces/SpaceRenderMode";
 import type { SpaceId, SpaceLayout } from "@/lib/types";
 import type { BannerKey } from "@/lib/space-banners";
 import { cn } from "@/lib/utils";
+import {
+  FLOAT_CONTROL_SHELL,
+  FLOAT_TOGGLE_ACTIVE,
+} from "@/lib/shell-chrome";
 
 export function LayoutToggle({
   layout,
@@ -20,7 +24,12 @@ export function LayoutToggle({
   compact?: boolean;
 }) {
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-[10px] border border-foreground/12 p-1">
+    <div
+      className={cn(
+        "inline-flex items-center gap-0.5 rounded-[10px] p-1",
+        FLOAT_CONTROL_SHELL,
+      )}
+    >
       <button
         type="button"
         aria-label="Card view"
@@ -30,7 +39,7 @@ export function LayoutToggle({
           "inline-flex items-center justify-center rounded-[8px] transition-colors duration-200",
           compact ? "h-6 w-6" : "h-8 w-8",
           layout === "cards"
-            ? "bg-muted text-foreground"
+            ? FLOAT_TOGGLE_ACTIVE
             : "text-muted-foreground hover:text-foreground",
         )}
       >
@@ -45,7 +54,7 @@ export function LayoutToggle({
           "inline-flex items-center justify-center rounded-[8px] transition-colors duration-200",
           compact ? "h-6 w-6" : "h-8 w-8",
           layout === "list"
-            ? "bg-muted text-foreground"
+            ? FLOAT_TOGGLE_ACTIVE
             : "text-muted-foreground hover:text-foreground",
         )}
       >
@@ -86,10 +95,9 @@ export function ItemSet({
           <div
             key={item.id}
             className={cn(
-              "group flex w-full items-center gap-2 rounded-[10px] px-3 py-2.5 transition-colors duration-200",
-              item.onClick && "hover:bg-muted",
-              item.active && "bg-muted",
+              "group flex w-full items-center gap-2 rounded-[10px] canvas-hover py-2.5",
             )}
+            data-active={item.active ? "true" : undefined}
           >
             {item.onClick ? (
               <button
@@ -127,9 +135,8 @@ export function ItemSet({
         <div
           key={item.id}
           className={cn(
-            "group relative rounded-[10px] border border-border bg-card p-4 text-left transition-colors duration-200",
-            item.onClick && "hover:bg-muted",
-            item.active && "border-foreground/20 bg-muted",
+            "group relative rounded-[10px] border border-border bg-card p-4 text-left canvas-hover",
+            item.active && "border-foreground/20 bg-canvas-active",
           )}
         >
           {item.onClick ? (
@@ -218,7 +225,7 @@ function PinToggle({
         onPin();
       }}
       className={cn(
-        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] transition-colors duration-200 hover:bg-muted hover:text-foreground",
+        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] transition-colors duration-200 hover:bg-canvas-hover hover:text-foreground",
         pinned ? "text-foreground" : "text-muted-foreground",
       )}
     >
@@ -246,7 +253,8 @@ export function ScopeToggle({
   return (
     <div
       className={cn(
-        "inline-flex max-w-full items-center gap-0.5 rounded-[10px] border border-foreground/12 p-1",
+        "inline-flex max-w-full items-center gap-0.5 rounded-[10px] p-1",
+        FLOAT_CONTROL_SHELL,
         wrap ? "flex-wrap" : null,
       )}
     >
@@ -260,7 +268,7 @@ export function ScopeToggle({
             "inline-flex items-center rounded-[8px] font-medium tracking-[-0.01em] transition-colors duration-200",
             compact ? "h-6 px-2.5 text-[12px]" : "h-8 px-3 text-[13px]",
             value === item.id
-              ? "bg-muted text-foreground"
+              ? FLOAT_TOGGLE_ACTIVE
               : "text-muted-foreground hover:text-foreground",
           )}
         >
@@ -292,23 +300,18 @@ export function DashFrame({
   banner?: boolean;
   children: ReactNode;
 }) {
-  const { spaceId, sidebarOpen, mobileNav, view, product } = useApp();
+  const { spaceId, sidebarOpen, view } = useApp();
   const mode = useSpaceRenderMode();
   const inPanel = mode === "panel";
-  const bannerSpace = banner
-    ? (bannerKey ?? space ?? (product === "platform" ? null : spaceId))
-    : null;
+  const bannerSpace = banner ? (bannerKey ?? space ?? spaceId) : null;
 
   return (
     <div className="@container relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-background">
-      {((view === "space" || product === "platform") &&
-      !bannerSpace &&
-      !inPanel) ? (
+      {(view === "space" && !bannerSpace && !inPanel) ? (
         <NavToggle
           className={cn(
             "absolute top-1.5 left-2 z-20",
             sidebarOpen && "lg:hidden",
-            mobileNav && "max-lg:hidden",
           )}
         />
       ) : null}
@@ -453,7 +456,7 @@ export function Pill({
       className={
         primary
           ? "inline-flex h-10 items-center rounded-full bg-primary px-4 text-[13.5px] font-medium tracking-[-0.01em] text-primary-foreground transition-colors duration-200 hover:bg-foreground"
-          : "inline-flex h-10 items-center rounded-full border border-foreground/15 px-4 text-[13.5px] font-medium tracking-[-0.01em] transition-colors duration-200 hover:bg-muted"
+          : "inline-flex h-10 items-center rounded-full border border-foreground/15 px-4 text-[13.5px] font-medium tracking-[-0.01em] transition-colors duration-200 hover:bg-canvas-hover"
       }
     >
       {children}
@@ -484,7 +487,7 @@ export function DashBtn({
         icon ? "w-10 justify-center px-0" : "px-4",
         primary
           ? "bg-primary text-primary-foreground hover:bg-foreground"
-          : "border border-foreground/15 hover:bg-muted",
+          : "border border-foreground/15 hover:bg-canvas-hover",
       )}
     >
       {children}

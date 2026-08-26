@@ -16,7 +16,7 @@ export default function PricingPage() {
         <PageWidth>
           <SectionHeader
             as="h1"
-            kicker="Courier"
+            kicker="One AI"
             title="Pricing"
             body="Free, Pro, Max, and Ultra. Cloud on every plan. Unlimited Local and On-device on your hardware from Pro."
             center

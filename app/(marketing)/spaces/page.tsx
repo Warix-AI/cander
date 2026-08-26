@@ -13,7 +13,7 @@ export default function SpacesPage() {
         <PageWidth>
           <SectionHeader
             as="h1"
-            kicker="Courier"
+            kicker="One AI"
             title="Spaces"
             body="Work, Build, Studio, Research, and Personal — one product, different shapes."
           />

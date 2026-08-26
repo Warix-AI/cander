@@ -1,21 +1,22 @@
 import type { BillingPlan, SpaceId } from "./types";
 
-/** Chat Spaces in the primary sidebar group. */
+/** Primary sidebar destinations — same for personal and business workspaces. */
 export const PRIMARY_NAV_SPACES: SpaceId[] = [
   "work",
   "build",
-  "studio",
   "research",
+];
+
+/** Navigable product destinations (permissions / workspace catalog). */
+export const NAV_SPACES: SpaceId[] = [
+  ...PRIMARY_NAV_SPACES,
+  "connectors",
+  "studio",
   "personal",
 ];
 
-/** Navigable product destinations (Spaces + Connectors for permissions). */
-export const NAV_SPACES: SpaceId[] = [...PRIMARY_NAV_SPACES, "connectors"];
-
 /**
  * Legacy spaces: reachable via pins/deep links/panels, not primary sidebar.
- * Strategy: keep data routing; surface via Discovery or space tools —
- * do not re-add to PRIMARY_NAV without a product decision.
  */
 export const LEGACY_SPACES: SpaceId[] = [
   "files",
@@ -27,7 +28,7 @@ export const LEGACY_SPACES: SpaceId[] = [
 
 export const ALL_SPACE_IDS: SpaceId[] = [...NAV_SPACES, ...LEGACY_SPACES];
 
-/** Extra ids — Recents stays in primary nav; Browser is not a sidebar link. */
+/** Extra ids — Recents in primary nav; Browser is not a sidebar link. */
 export const EXTRA_NAV_IDS = ["browser", "recents"] as const;
 
 export type ExtraNavId = (typeof EXTRA_NAV_IDS)[number];
@@ -65,9 +66,10 @@ export function isSidebarNavId(id: string): id is SidebarNavId {
   return isExtraNavId(id) || ALL_SPACE_IDS.includes(id as SpaceId);
 }
 
-/** Default sidebar — five Spaces, then Recents. */
+/** Default sidebar — Work, Build, Explore, Connectors, Recents. */
 export const DEFAULT_SIDEBAR_MAIN: SidebarNavId[] = [
   ...PRIMARY_NAV_SPACES,
+  "connectors",
   "recents",
 ];
 
@@ -104,19 +106,10 @@ export function spaceAllowed(
   opts?: SidebarNavOpts,
 ): boolean {
   if (id === "browser") return false;
-  if (id === "connectors") return false;
+  if (id === "connectors") return allowed.includes("connectors");
   if (id === "files") return false;
   if (id === "recents") return true;
-  if (id === "work") {
-    if (
-      opts?.billingPlan &&
-      opts.billingPlan !== "max" &&
-      opts.billingPlan !== "ultra"
-    ) {
-      return false;
-    }
-    return allowed.includes("work");
-  }
+  if (id === "work") return allowed.includes("work");
   if (id === "personal") {
     const inCatalog =
       allowed.includes("personal") ||
@@ -132,7 +125,7 @@ export function spaceAllowed(
     }
     return Boolean(opts?.personalEnabled);
   }
-  if (isExtraNavId(id)) return true;
+  if (isExtraNavId(id)) return false;
   return allowed.includes(id as SpaceId);
 }
 
@@ -150,13 +143,15 @@ export function migrateSidebarId(id: SidebarNavId): SidebarNavId | null {
   if (
     id === "browser" ||
     id === "files" ||
-    id === "connectors" ||
     id === "skills" ||
-    id === "scheduled"
+    id === "scheduled" ||
+    id === "studio" ||
+    id === "personal" ||
+    id === "finances" ||
+    id === "health"
   ) {
     return null;
   }
-  if (id === "finances" || id === "health") return "personal";
   return id;
 }
 
@@ -179,7 +174,6 @@ export function resolveSidebarNav(
 
   const useDefaults = !layout.main.length && !layout.more.length;
 
-  // Fold any legacy "more" entries into main, then drop unsupported ids.
   let main = useDefaults
     ? defaultMain
     : migrateList([...layout.main, ...layout.more]);
@@ -192,13 +186,6 @@ export function resolveSidebarNav(
     const extraRest = rest.filter((id) => !DEFAULT_SIDEBAR_MAIN.includes(id));
     main = dedupeNav([...main, ...rankedRest, ...extraRest]);
   }
-
-  const core = main.filter((id) => id !== "personal" && id !== "recents");
-  main = [
-    ...core,
-    ...(main.includes("personal") ? (["personal"] as SidebarNavId[]) : []),
-    ...(main.includes("recents") ? (["recents"] as SidebarNavId[]) : []),
-  ];
 
   return { main, more: [] };
 }

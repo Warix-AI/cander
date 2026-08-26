@@ -14,7 +14,7 @@ export default function ConnectorsPage() {
           <SectionHeader
             as="h1"
             kicker="Connectors"
-            title="Courier works with what you already use."
+            title="Works with what you already use."
             body="Featured first, then the catalog. Connector policies on Max and Ultra. This machine and Stash stay on your account."
           />
           <div className="mt-10">
@@ -26,11 +26,11 @@ export default function ConnectorsPage() {
               items={[
                 {
                   title: "This machine",
-                  body: "Local folders Courier can list and open — private to the device.",
+                  body: "Local folders the app can list and open — private to the device.",
                 },
                 {
                   title: "Stash",
-                  body: "Private notes Courier can cite. Not an org wiki.",
+                  body: "Private notes the app can cite. Not an org wiki.",
                 },
               ]}
             />

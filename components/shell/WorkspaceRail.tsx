@@ -17,7 +17,6 @@ export function WorkspaceRail() {
   const {
     workspace,
     setWorkspace,
-    setMobileNav,
     openOverlay,
     actor,
     entitlements,
@@ -32,15 +31,16 @@ export function WorkspaceRail() {
     getWorkspaceCatalogServerSnapshot,
   );
 
+  const allowed = workspacesFor(actor, entitlements);
+
   if (
     !entitlements.hasWorkspaces ||
     entitlements.showInviteWall ||
-    !workspaceRailOpen
+    !workspaceRailOpen ||
+    allowed.length < 2
   ) {
     return null;
   }
-
-  const allowed = workspacesFor(actor, entitlements);
 
   return (
     <div
@@ -64,31 +64,13 @@ export function WorkspaceRail() {
               aria-current={active ? "page" : undefined}
               onClick={() => {
                 setWorkspace(item.id);
-                setMobileNav(false);
               }}
-              className="group relative flex h-9 w-9 shrink-0 items-center justify-center"
+              className="relative flex h-9 w-9 shrink-0 items-center justify-center"
             >
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute top-1/2 -left-2 w-1 -translate-y-1/2 rounded-full bg-foreground transition-all duration-200",
-                  active ? "h-5" : "h-0 group-hover:h-2.5",
-                )}
-              />
               <WorkspaceMark
                 id={item.id}
                 name={item.name}
                 active={active}
-                className={
-                  !active
-                    ? cn(
-                        "transition-colors duration-200",
-                        floating
-                          ? "group-hover:bg-muted"
-                          : "group-hover:bg-sidebar-accent",
-                      )
-                    : undefined
-                }
               />
             </button>
           );

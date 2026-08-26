@@ -7,6 +7,7 @@ import { ProjectsBrowser } from "@/components/panels/ProjectsBrowser";
 import { Pill } from "@/components/spaces/ItemSet";
 import { projects, scheduledJobs as seed } from "@/lib/data";
 import type { ScheduledJob, ScheduledStatus } from "@/lib/types";
+import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
 
 const cadences = [
   "Every weekday 09:00",
@@ -43,9 +44,9 @@ export function ScheduledPanel() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-sidebar">
+    <div className={SHELL_PANEL_BODY}>
       <PanelChrome kicker="Scheduled" title={selected.name} />
-      <div className="min-h-0 flex-1 overflow-y-auto bg-background">
+      <div className={SHELL_PANEL_SCROLL}>
         <div className="relative h-40 overflow-hidden media-c">
           <div className="grain-layer" />
           <div className="absolute inset-x-0 bottom-0 p-5 text-white">

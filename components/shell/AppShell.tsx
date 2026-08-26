@@ -11,7 +11,6 @@ import { SplitMainLayout } from "@/components/shell/SplitMainLayout";
 import { SettingsView } from "@/components/settings/SettingsView";
 import { SharedPanel } from "@/components/panels/SharedPanel";
 import { PublishSheet } from "@/components/preview/PublishSheet";
-import { PlatformChatLayout } from "@/components/platform/PlatformChatLayout";
 import { SearchModal } from "@/components/overlays/SearchModal";
 import { ConfigureModal } from "@/components/overlays/ConfigureModal";
 import { SpaceSettingsModal } from "@/components/overlays/SpaceSettingsModal";
@@ -26,12 +25,7 @@ import {
 import { useSyncExternalStore } from "react";
 import { BrowserLayout } from "@/components/browser/BrowserLayout";
 import { FloatingVoiceDock } from "@/components/shell/VoiceControl";
-import { DiscoveryView } from "@/components/discovery/DiscoveryView";
 import { AppearanceProvider } from "@/components/theme/AppearanceProvider";
-import {
-  DiscoveryAutoOpenListener,
-  DiscoveryModal,
-} from "@/components/discovery/DiscoveryModal";
 
 export function AppShell() {
   return (
@@ -94,7 +88,9 @@ function Root() {
 
   return (
     <AppearanceProvider>
-      <div className="relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background pb-[calc(68px+env(safe-area-inset-bottom))] text-foreground lg:pb-0">
+      <div
+        className="relative flex h-svh min-h-0 flex-1 overflow-hidden bg-background pb-[calc(68px+env(safe-area-inset-bottom))] text-foreground lg:pb-0"
+      >
         <Sidebar />
         <CourierMain />
         <SearchModal />
@@ -103,8 +99,6 @@ function Root() {
         <WorkspaceModal />
         <InviteWall />
         <PublishSheet />
-        <DiscoveryModal />
-        <DiscoveryAutoOpenListener />
         <FloatingVoiceDock />
         <MobileBottomNav />
       </div>
@@ -114,7 +108,6 @@ function Root() {
 
 function CourierMain() {
   const {
-    product,
     view,
     drafting,
     thread,
@@ -134,10 +127,6 @@ function CourierMain() {
         </div>
       </SplitMainLayout>
     );
-  }
-
-  if (product === "platform") {
-    return <PlatformChatLayout />;
   }
 
   if (view === "browser") {
@@ -169,17 +158,6 @@ function CourierMain() {
         <div className="flex min-h-0 flex-1 flex-col">
           <InviteBanner />
           <RecentsView />
-        </div>
-      </SplitMainLayout>
-    );
-  }
-
-  if (view === "discovery") {
-    return (
-      <SplitMainLayout>
-        <div className="flex min-h-0 flex-1 flex-col">
-          <InviteBanner />
-          <DiscoveryView />
         </div>
       </SplitMainLayout>
     );

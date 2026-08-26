@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { LayoutToggle, ScopeToggle } from "@/components/spaces/ItemSet";
+import { PanelToggle } from "@/components/shell/PanelToggle";
+import { useMobileShell } from "@/lib/use-media-query";
 import {
   PreviewGrid,
   type PreviewEntry,
@@ -18,6 +20,7 @@ import {
 } from "@/lib/data";
 import type { SpaceId } from "@/lib/types";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
+import { SHELL_PANEL_BODY } from "@/lib/shell-chrome";
 
 export function ProjectsBrowser({
   title: titleOverride,
@@ -39,6 +42,7 @@ export function ProjectsBrowser({
     openConnector,
     billingPlan,
   } = useApp();
+  const mobile = useMobileShell();
   const [scope, setScope] = useState("all");
   const space: SpaceId = spaceId ?? "build";
 
@@ -313,9 +317,12 @@ export function ProjectsBrowser({
   const handleOpen = onOpenOverride ?? onOpen;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="px-3 pt-3 pb-2">
-        <p className="text-[14px] font-medium tracking-[-0.02em]">{projectLabel}</p>
+    <div className={SHELL_PANEL_BODY}>
+      <div className="flex h-11 shrink-0 items-center gap-2 px-3">
+        <p className="min-w-0 flex-1 truncate text-[14px] font-medium tracking-[-0.02em]">
+          {projectLabel}
+        </p>
+        {!mobile ? <PanelToggle /> : null}
       </div>
       <div className="flex items-center justify-between gap-2 px-3 pb-3">
         <ScopeToggle

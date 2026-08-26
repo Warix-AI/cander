@@ -1,7 +1,7 @@
-/** Handshake panel — distinct from chat `bg-background`. */
+/** Handshake panel — inherits ContextPanel light-surface chrome. */
 export const hs = {
-  /** Slightly off-gray vs chat canvas; uses sidebar token. */
-  panel: "bg-sidebar",
+  /** Transparent; parent shell provides menu-matched surface. */
+  panel: "",
   card: "rounded-[10px] border border-border bg-card",
   cardMuted: "rounded-[10px] border border-border bg-muted/40",
   callout:

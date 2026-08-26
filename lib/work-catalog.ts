@@ -1,10 +1,4 @@
-export type WorkScope =
-  | "today"
-  | "inbox"
-  | "calendar"
-  | "customers"
-  | "followups"
-  | "approvals";
+export type WorkScope = "today" | "apps" | "automations";
 
 export type WorkTone = "urgent" | "waiting" | "ready" | "neutral";
 
@@ -26,11 +20,8 @@ export type WorkItem = {
 export function workScopeOptions(): { id: WorkScope; label: string }[] {
   return [
     { id: "today", label: "Today" },
-    { id: "inbox", label: "Inbox" },
-    { id: "calendar", label: "Calendar" },
-    { id: "customers", label: "Customers" },
-    { id: "followups", label: "Follow-ups" },
-    { id: "approvals", label: "Approvals" },
+    { id: "apps", label: "Apps" },
+    { id: "automations", label: "Automations" },
   ];
 }
 
@@ -89,7 +80,7 @@ const connectorWorkTemplates: Record<string, WorkItemTemplate[]> = {
   notion: [
     {
       key: "shared",
-      lanes: ["today", "inbox"],
+      lanes: ["today"],
       title: "Notion — pages shared with you",
       summary: "Two docs need a review before the launch sync.",
       meta: "Notion · just now",
@@ -101,7 +92,7 @@ const connectorWorkTemplates: Record<string, WorkItemTemplate[]> = {
   linear: [
     {
       key: "issues",
-      lanes: ["today", "inbox"],
+      lanes: ["today"],
       title: "Linear — assigned issues",
       summary: "Three issues tagged to you this morning.",
       meta: "Linear · just now",
@@ -113,7 +104,7 @@ const connectorWorkTemplates: Record<string, WorkItemTemplate[]> = {
   figma: [
     {
       key: "comments",
-      lanes: ["today", "followups"],
+      lanes: ["today"],
       title: "Figma — comments waiting",
       summary: "Design left two comments on the hero frame.",
       meta: "Figma · just now",
@@ -125,7 +116,7 @@ const connectorWorkTemplates: Record<string, WorkItemTemplate[]> = {
   gdrive: [
     {
       key: "shared",
-      lanes: ["today", "inbox"],
+      lanes: ["today"],
       title: "Drive — shared with me",
       summary: "A proposal draft landed in Shared drives.",
       meta: "Drive · just now",
@@ -138,20 +129,52 @@ const connectorWorkTemplates: Record<string, WorkItemTemplate[]> = {
 
 export function workSectionTitle(scope: WorkScope) {
   if (scope === "today") return "Your day";
-  if (scope === "inbox") return "Needs you";
-  if (scope === "calendar") return "Meetings";
-  if (scope === "customers") return "Accounts";
-  if (scope === "followups") return "Waiting on";
-  return "Needs a decision";
+  if (scope === "apps") return "Apps in Work";
+  return "Automations";
 }
 
 export function workEmptyCopy(scope: WorkScope) {
   if (scope === "today") return "Nothing on today yet.";
-  if (scope === "inbox") return "No messages waiting.";
-  if (scope === "calendar") return "No meetings in view.";
-  if (scope === "customers") return "No customer threads open.";
-  if (scope === "followups") return "Nothing waiting.";
-  return "No approvals queued.";
+  if (scope === "apps") return "No apps in Work yet. Attach connectors or add builds from Build.";
+  return "No automations running yet.";
+}
+
+export function workAppsFor(
+  workspaceId: string,
+  attachedConnectorIds: string[],
+  attachedBuildIds: string[],
+  connectorNames: Record<string, string>,
+  buildNames: Record<string, string>,
+): WorkItem[] {
+  const items: WorkItem[] = [];
+  for (const id of attachedConnectorIds) {
+    items.push({
+      id: `app-connector-${id}`,
+      workspaceId,
+      lanes: ["apps"],
+      title: connectorNames[id] ?? id,
+      summary: "Connected app available in Work.",
+      meta: "Connector · attached",
+      badge: "App",
+      tone: "ready",
+      prompt: `What should I do in ${connectorNames[id] ?? id} for Work today?`,
+      connectorId: id,
+    });
+  }
+  for (const id of attachedBuildIds) {
+    items.push({
+      id: `app-build-${id}`,
+      workspaceId,
+      lanes: ["apps"],
+      title: buildNames[id] ?? id,
+      summary: "Built in Build and added to Work.",
+      meta: "Build · in Work",
+      badge: "App",
+      tone: "neutral",
+      prompt: `Open and help me use ${buildNames[id] ?? id} in Work.`,
+    });
+  }
+  return items;
 }
 
 export const workBriefActions = [
@@ -181,7 +204,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-northwind-reply",
     workspaceId: "marketing",
-    lanes: ["today", "inbox"],
+    lanes: ["today"],
     title: "Northwind — pricing note",
     summary: "They asked for seat vs usage clarity before tomorrow’s call.",
     meta: "Email · 42m ago",
@@ -193,7 +216,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-slack-threads",
     workspaceId: "marketing",
-    lanes: ["today", "inbox"],
+    lanes: ["today"],
     title: "Two Slack threads waiting",
     summary: "#launch and #design need your take on the hero cut.",
     meta: "Slack · 1h ago",
@@ -205,7 +228,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-launch-sync",
     workspaceId: "marketing",
-    lanes: ["today", "calendar"],
+    lanes: ["today"],
     title: "2:00 PM — Launch sync",
     summary: "Open questions from last week and the Cander publish checklist.",
     meta: "In 3h · Zoom",
@@ -217,7 +240,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-acme-call",
     workspaceId: "marketing",
-    lanes: ["calendar", "customers"],
+    lanes: ["today"],
     title: "Thu — Acme renewal call",
     summary: "Proposal still draft; they want numbers before Friday.",
     meta: "Thu 10:30 · Google Meet",
@@ -229,7 +252,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-acme-renewal",
     workspaceId: "marketing",
-    lanes: ["today", "customers", "followups"],
+    lanes: ["today"],
     title: "Acme renewal",
     summary: "Customer needs a proposal before Friday. Owner: you.",
     meta: "Due Fri",
@@ -240,7 +263,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-vendor-invoice",
     workspaceId: "marketing",
-    lanes: ["followups", "inbox"],
+    lanes: ["today"],
     title: "Vendor invoice — Figma",
     summary: "You asked finance for a PO; no reply since Monday.",
     meta: "Waiting 3d",
@@ -252,7 +275,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-design-feedback",
     workspaceId: "marketing",
-    lanes: ["today", "followups"],
+    lanes: ["today"],
     title: "Design feedback on hero",
     summary: "You promised Maya a decision by EOD.",
     meta: "Due today",
@@ -264,7 +287,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-partner-deck",
     workspaceId: "marketing",
-    lanes: ["followups"],
+    lanes: ["today"],
     title: "Partner deck from Recursion",
     summary: "Sent Monday — no open yet. Soft follow-up ready.",
     meta: "Sent 2d ago",
@@ -276,7 +299,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-expense-travel",
     workspaceId: "marketing",
-    lanes: ["today", "approvals"],
+    lanes: ["today"],
     title: "Travel expense — Austin offsite",
     summary: "Jordan submitted $428 · flights + rideshare.",
     meta: "Needs you",
@@ -287,7 +310,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-access-figma",
     workspaceId: "marketing",
-    lanes: ["approvals"],
+    lanes: ["today"],
     title: "Figma access — contractor",
     summary: "Priya requested Editor on the Cander file for two weeks.",
     meta: "Queued",
@@ -298,7 +321,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-time-off",
     workspaceId: "marketing",
-    lanes: ["approvals"],
+    lanes: ["today"],
     title: "Time off — Sam · Thu–Fri",
     summary: "Coverage noted for launch Slack; no calendar conflicts.",
     meta: "Pending",
@@ -309,7 +332,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-eng-standup",
     workspaceId: "engineering",
-    lanes: ["today", "calendar"],
+    lanes: ["today"],
     title: "Engineering standup",
     summary: "Overnight deploy blockers and on-call handoff.",
     meta: "In 25m",
@@ -321,7 +344,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-eng-pr",
     workspaceId: "engineering",
-    lanes: ["today", "inbox", "approvals"],
+    lanes: ["today"],
     title: "PR review — preview chrome",
     summary: "Alex asked for a look before merge.",
     meta: "GitHub · 1h ago",
@@ -333,7 +356,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-ops-vendors",
     workspaceId: "operations",
-    lanes: ["today", "inbox", "followups"],
+    lanes: ["today"],
     title: "Vendor follow-ups",
     summary: "Three invoices and a contract sitting in email.",
     meta: "Email · 4h ago",
@@ -345,7 +368,7 @@ export const workItems: WorkItem[] = [
   {
     id: "w-ops-po",
     workspaceId: "operations",
-    lanes: ["approvals"],
+    lanes: ["today"],
     title: "PO approval — warehouse sensors",
     summary: "$12.4k · under budget, needs Ops lead sign-off.",
     meta: "Needs you",

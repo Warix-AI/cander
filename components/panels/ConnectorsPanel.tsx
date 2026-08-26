@@ -8,6 +8,7 @@ import { ProjectsBrowser } from "@/components/panels/ProjectsBrowser";
 import { Row, SectionLabel } from "@/components/panels/Bits";
 import { connectors } from "@/lib/data";
 import { cn } from "@/lib/utils";
+import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
 import {
   connectionsForConnector,
@@ -54,9 +55,9 @@ export function ConnectorsPanel() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-sidebar">
+    <div className={SHELL_PANEL_BODY}>
       <PanelChrome kicker="Connector" title={selected.name} />
-      <div className="min-h-0 flex-1 overflow-hidden bg-sidebar">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <div className="flex h-full">
           <div className="w-[42%] min-w-[10rem] border-r border-border py-3">
             <SectionLabel>Apps</SectionLabel>

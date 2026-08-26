@@ -4,6 +4,7 @@ import { BuildPanel } from "@/components/panels/BuildPanel";
 import { ConnectorsPanel } from "@/components/panels/ConnectorsPanel";
 import { GmailPanel } from "@/components/panels/gmail/GmailPanel";
 import { HandshakePanel } from "@/components/panels/handshake/HandshakePanel";
+import { PanelChoiceState } from "@/components/panels/PanelChoiceState";
 import { PanelEmptyState } from "@/components/panels/PanelEmptyState";
 import { ProjectsBrowser } from "@/components/panels/ProjectsBrowser";
 import { ResearchPanel } from "@/components/panels/ResearchPanel";
@@ -13,7 +14,7 @@ import { StudioPanel } from "@/components/panels/StudioPanel";
 import { useApp } from "@/components/app/AppProvider";
 import { SplitHandle } from "@/components/shell/SplitHandle";
 import { useMobileShell } from "@/lib/use-media-query";
-import { SHELL_FLOAT_RADIUS, useShellStyle } from "@/lib/shell-chrome";
+import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 export function ContextPanel() {
@@ -28,9 +29,17 @@ export function ContextPanel() {
     spaceLibraryOpen,
     skillId,
     jobId,
+    panelMode,
   } = useApp();
   const shell = useShellStyle();
   const floating = shell === "floating";
+
+  const showChoice =
+    view === "chat" &&
+    !spaceId &&
+    !projectId &&
+    panelMode !== "collapsed" &&
+    (drafting || Boolean(thread));
 
   const showEmpty =
     view === "chat" &&
@@ -38,24 +47,27 @@ export function ContextPanel() {
     !drafting &&
     !projectId &&
     !spaceId &&
-    !spaceLibraryOpen;
+    !spaceLibraryOpen &&
+    !showChoice;
 
   const showRecentsEmpty = view === "recents" && !spaceId && !projectId;
 
   return (
     <aside
       className={cn(
-        "@container flex h-full min-h-0 min-w-0 flex-col bg-background",
+        "@container light-surface flex h-full min-h-0 min-w-0 flex-col",
         floating
-          ? cn("my-3 mr-3 overflow-hidden border border-border", SHELL_FLOAT_RADIUS)
-          : "border-l border-border",
+          ? cn("my-3 mr-3 overflow-hidden", SHELL_G3_RADIUS)
+          : "rounded-none border-0 border-l border-border shadow-none",
         !dragging &&
           "transition-[width] duration-[550ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
       )}
     >
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="shell-panel flex min-h-0 flex-1 flex-col overflow-hidden">
         {showEmpty || showRecentsEmpty ? (
           <PanelEmptyState />
+        ) : showChoice ? (
+          <PanelChoiceState />
         ) : spaceId === "studio" ? (
           <StudioPanel />
         ) : spaceId === "research" ? (
@@ -86,14 +98,10 @@ export function ContextPanel() {
 }
 
 export function ResizeHandle() {
-  const { setPanelRatio, panelMode, product, platformDockOpen } = useApp();
+  const { setPanelRatio, panelMode } = useApp();
   const mobile = useMobileShell();
-  const platformChat = product === "platform" && platformDockOpen;
   if (mobile) return null;
-  if (
-    !platformChat &&
-    (panelMode === "collapsed" || panelMode === "immersive")
-  ) {
+  if (panelMode === "collapsed" || panelMode === "immersive") {
     return null;
   }
 

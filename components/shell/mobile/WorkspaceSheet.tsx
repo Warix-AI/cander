@@ -12,6 +12,9 @@ import {
 } from "@/lib/workspace-catalog";
 import { cn } from "@/lib/utils";
 
+const rowClass =
+  "menu-row-hover flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[13.5px] transition-colors duration-200";
+
 export function WorkspaceSheet({ onSelect }: { onSelect: () => void }) {
   const {
     workspace,
@@ -37,14 +40,12 @@ export function WorkspaceSheet({ onSelect }: { onSelect: () => void }) {
           <button
             key={item.id}
             type="button"
+            data-active={active ? "true" : undefined}
             onClick={() => {
               setWorkspace(item.id);
               onSelect();
             }}
-            className={cn(
-              "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[13.5px] transition-colors duration-200",
-              active ? "bg-muted font-medium" : "hover:bg-muted",
-            )}
+            className={cn(rowClass, active && "font-medium")}
           >
             <WorkspaceMark id={item.id} name={item.name} active={active} />
             <span className="truncate">{item.name}</span>
@@ -59,7 +60,10 @@ export function WorkspaceSheet({ onSelect }: { onSelect: () => void }) {
             openOverlay("workspace");
             onSelect();
           }}
-          className="mt-1 flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[13.5px] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+          className={cn(
+            rowClass,
+            "mt-1 text-muted-foreground hover:text-foreground",
+          )}
         >
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-dashed border-border">
             <Plus className="h-3.5 w-3.5" strokeWidth={1.7} />

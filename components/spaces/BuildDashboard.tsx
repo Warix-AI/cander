@@ -18,7 +18,8 @@ import {
   workspaceOneOffTasks,
   type BuildScope,
 } from "@/lib/build-catalog";
-import { buildPreviews } from "@/lib/data";
+import { buildPreviews, projects } from "@/lib/data";
+import { projectsInSpace } from "@/lib/selectors";
 
 export function BuildDashboard() {
   const {
@@ -44,6 +45,10 @@ export function BuildDashboard() {
     [workspaceId],
   );
   const filteredPreviews = filterPreviews(previews, scope);
+  const spaceProjects = useMemo(
+    () => projectsInSpace(projects, { space: "build", workspaceId }),
+    [workspaceId],
+  );
 
   const openTask = (id: string) => {
     const task =
@@ -78,7 +83,20 @@ export function BuildDashboard() {
       </div>
 
       <div className="mt-5">
-        {scope === "automations" ? (
+        {scope === "projects" ? (
+          <PreviewGrid
+            layout={spaceLayout}
+            items={spaceProjects.map((item) => ({
+              id: item.id,
+              name: item.name,
+              projectId: item.id,
+              meta: `Edited ${item.updatedAt}`,
+              image: item.cover,
+            }))}
+            onOpen={openProject}
+            empty="No projects yet."
+          />
+        ) : scope === "automations" ? (
           <PreviewGrid
             layout={spaceLayout}
             kind="schedule"

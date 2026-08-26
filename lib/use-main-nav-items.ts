@@ -10,7 +10,12 @@ import {
 } from "@/lib/spaces";
 import { memberSpaces } from "@/lib/workspace-policy";
 
+const PRIMARY_NAV_LABELS: Partial<Record<SidebarNavId, string>> = {
+  research: "Explore",
+};
+
 export function navLabel(id: SidebarNavId) {
+  if (PRIMARY_NAV_LABELS[id]) return PRIMARY_NAV_LABELS[id];
   if (isExtraNavId(id)) return extraNavLabels[id];
   return spaces.find((item) => item.id === id)?.label;
 }

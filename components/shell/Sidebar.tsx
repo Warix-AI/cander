@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
-  Blocks,
+  ArrowLeft,
   Building2,
   CreditCard,
   FolderKanban,
@@ -12,30 +12,32 @@ import {
   Palette,
   SquarePen,
   UserRound,
-  X,
 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
+import { AccountMenu } from "@/components/shell/AccountMenu";
 import { PinControl } from "@/components/shell/PinControl";
-import { ProductSwitcher } from "@/components/shell/ProductSwitcher";
 import { WindowChrome } from "@/components/shell/WindowChrome";
+import { LeftNavToggleDock } from "@/components/shell/NavToggle";
 import { WorkspaceRail } from "@/components/shell/WorkspaceRail";
 import { useApp } from "@/components/app/AppProvider";
-import { platformNavItems } from "@/lib/data";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
-import {
-  platformNavIcons,
-  spaceIcons,
-} from "@/lib/space-icons";
-import { type SidebarNavId } from "@/lib/spaces";
+import { workspacesFor } from "@/lib/entitlements";
+import { spaceIcons, spaceIconTint } from "@/lib/space-icons";
+import { type SidebarNavId, isExtraNavId } from "@/lib/spaces";
 import {
   subscribeSidebarPeekHold,
   subscribeSidebarPeekRelease,
 } from "@/lib/sidebar-peek";
 import { useMainNavItems } from "@/lib/use-main-nav-items";
 import { usePinnedItems, type PinnedItem } from "@/lib/use-pinned-items";
+import {
+  getWorkspaceCatalogServerSnapshot,
+  getWorkspaceCatalogSnapshot,
+  subscribeWorkspaceCatalog,
+} from "@/lib/workspace-catalog";
 import type { PinKind, SettingsTab, SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { SHELL_FLOAT_RADIUS, useShellStyle } from "@/lib/shell-chrome";
+import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 
 const PEEK_CLOSE_MS = 160;
 const PEEK_EXIT_MS = 420;
@@ -43,7 +45,6 @@ const PEEK_EXIT_MS = 420;
 const settingsIcons: Record<SettingsTab, typeof Building2> = {
   organization: Building2,
   workspaces: LayoutGrid,
-  connectors: Blocks,
   plans: CreditCard,
   general: UserRound,
   appearance: Palette,
@@ -51,14 +52,11 @@ const settingsIcons: Record<SettingsTab, typeof Building2> = {
 
 export function Sidebar() {
   const {
-    product,
     view,
     spaceId,
     threadId,
     projectId,
     sidebarOpen,
-    platformNav,
-    setPlatformNav,
     newChat,
     openSpace,
     openRecents,
@@ -69,25 +67,28 @@ export function Sidebar() {
     openConnector,
     connectorId,
     entitlements,
+    actor,
     settingsTab,
     setSettingsTab,
     workspaceRailOpen,
+    canGoBack,
+    goBack,
   } = useApp();
 
   const mainNavItems = useMainNavItems();
-  const { primaryItems, secondaryItems } = usePinnedItems();
+  const { pinnedItems } = usePinnedItems();
+  useSyncExternalStore(
+    subscribeWorkspaceCatalog,
+    getWorkspaceCatalogSnapshot,
+    getWorkspaceCatalogServerSnapshot,
+  );
   const inSettings = view === "settings";
-  const [secondaryOpen, setSecondaryOpen] = useState(false);
   const [peek, setPeek] = useState(false);
   const [peekVisible, setPeekVisible] = useState(false);
   const peekCloseTimer = useRef<number | null>(null);
   const peekExitTimer = useRef<number | null>(null);
   const edgeRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (inSettings || product !== "courier") setSecondaryOpen(false);
-  }, [inSettings, product]);
 
   useEffect(() => {
     if (sidebarOpen) {
@@ -163,14 +164,15 @@ export function Sidebar() {
   const shellStyle = useShellStyle();
   const floating = shellStyle === "floating";
   const peeking = peek && !sidebarOpen;
+  const workspaceCount = workspacesFor(actor, entitlements).length;
   const showRail =
     entitlements.hasWorkspaces &&
     !entitlements.showInviteWall &&
-    workspaceRailOpen;
+    workspaceRailOpen &&
+    workspaceCount >= 2;
 
   const settingsNav = visibleSettingsTabs(entitlements);
-  const chatActive =
-    view === "chat" && !threadId && !spaceId && product === "courier";
+  const chatActive = view === "chat" && !threadId && !spaceId;
 
   const navActive = (id: SidebarNavId) => {
     if (id === "recents") return view === "recents";
@@ -181,7 +183,7 @@ export function Sidebar() {
   const openNav = (id: SidebarNavId) => {
     if (id === "browser") openBrowser();
     else if (id === "recents") openRecents();
-    else openSpace(id);
+    else if (!isExtraNavId(id)) openSpace(id);
   };
 
   const NavBtn = ({ id }: { id: SidebarNavId }) => {
@@ -189,6 +191,8 @@ export function Sidebar() {
     if (!item) return null;
     const { Icon, label } = item;
     const active = navActive(id);
+    const tinted =
+      id === "work" || id === "build" || id === "research";
     return (
       <button
         type="button"
@@ -199,7 +203,10 @@ export function Sidebar() {
         )}
       >
         <Icon
-          className="h-3.5 w-3.5 text-muted-foreground"
+          className={cn(
+            "h-3.5 w-3.5",
+            tinted ? spaceIconTint(id) : "text-muted-foreground",
+          )}
           strokeWidth={2}
         />
         {label}
@@ -232,6 +239,7 @@ export function Sidebar() {
 
   return (
     <>
+      <LeftNavToggleDock showRail={showRail} peeking={peeking} />
       {!sidebarOpen ? (
         <div
           ref={edgeRef}
@@ -268,9 +276,9 @@ export function Sidebar() {
           "flex w-[min(244px,calc(100vw-3.5rem))] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:w-[244px]",
           floating
             ? cn(
-                "overflow-hidden border border-sidebar-border shadow-[0_1px_2px_oklch(0_0_0/0.04)]",
-                SHELL_FLOAT_RADIUS,
-                "my-3 mr-3 h-[calc(100%-1.5rem)]",
+                "light-surface overflow-hidden",
+                SHELL_G3_RADIUS,
+                "my-3 mr-2 h-[calc(100%-1.5rem)]",
                 !showRail && "ml-3",
               )
             : cn(
@@ -281,15 +289,26 @@ export function Sidebar() {
       >
       <WindowChrome />
 
-      <div className="px-2">
-        <ProductSwitcher />
-      </div>
-
       {inSettings ? (
         <nav
-          className="mt-1 min-h-0 flex-1 overflow-y-auto px-2"
+          className="mt-3.5 min-h-0 flex-1 overflow-y-auto px-2"
           aria-label="Settings"
         >
+          <button
+            type="button"
+            onClick={() => {
+              if (canGoBack) goBack();
+              else newChat();
+            }}
+            className="mb-0.5 flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200 hover:bg-sidebar-accent"
+            aria-label="Back"
+          >
+            <ArrowLeft
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              strokeWidth={2}
+            />
+            <span className="font-medium tracking-[-0.01em]">Back</span>
+          </button>
           {settingsNav.map((tab) => {
             const Icon = settingsIcons[tab.id];
             return (
@@ -313,38 +332,11 @@ export function Sidebar() {
             );
           })}
         </nav>
-      ) : product === "platform" ? (
-        <nav className="mt-1 min-h-0 flex-1 overflow-y-auto px-2" aria-label="Development">
-          {platformNavItems
-            .filter((item) => entitlements.platformNavAllowed(item.id))
-            .map((item) => {
-            const Icon = platformNavIcons[item.id];
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setPlatformNav(item.id)}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
-                  platformNav === item.id
-                    ? "bg-sidebar-accent font-medium"
-                    : "hover:bg-sidebar-accent",
-                )}
-              >
-                <Icon
-                  className="h-3.5 w-3.5 text-muted-foreground"
-                  strokeWidth={2}
-                />
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
       ) : (
         <>
           <nav
-            className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden px-2"
-            aria-label="Home"
+            className="mt-3.5 flex min-h-0 flex-1 flex-col overflow-hidden px-2"
+            aria-label="Main"
           >
             <div className="min-h-0 shrink overflow-y-auto">
               <button
@@ -361,7 +353,7 @@ export function Sidebar() {
                   className="h-3.5 w-3.5 text-muted-foreground"
                   strokeWidth={2}
                 />
-                New chat
+                New Chat
               </button>
               {mainNavItems.map(({ id }) => (
                 <NavBtn key={id} id={id} />
@@ -371,65 +363,22 @@ export function Sidebar() {
             <div className="relative mt-3 min-h-0 flex-1 overflow-hidden">
               <div className="h-full overflow-y-auto">
                 <p className="px-3 pb-1 text-[12px] text-muted-foreground">
-                  Primary
+                  Pinned
                 </p>
-                {primaryItems.length ? (
-                  primaryItems.map(renderPinnedRow)
+                {pinnedItems.length ? (
+                  pinnedItems.map(renderPinnedRow)
                 ) : (
                   <p className="px-3 py-1.5 text-[12px] text-muted-foreground/70">
-                    No primary pins
+                    No pinned items
                   </p>
                 )}
-              </div>
-
-              <div
-                className={cn(
-                  "absolute inset-0 z-20 flex flex-col overflow-hidden rounded-t-[14px] border border-b-0 border-sidebar-border bg-sidebar transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                  secondaryOpen
-                    ? "translate-y-0 shadow-[0_-8px_24px_oklch(0_0_0/0.08)]"
-                    : "pointer-events-none translate-y-full",
-                )}
-                aria-hidden={!secondaryOpen}
-              >
-                <div className="flex shrink-0 items-center gap-2 px-3 pt-2.5 pb-1">
-                  <p className="min-w-0 flex-1 text-[12px] text-muted-foreground">
-                    Secondary
-                  </p>
-                  <button
-                    type="button"
-                    aria-label="Close secondary"
-                    onClick={() => setSecondaryOpen(false)}
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
-                  >
-                    <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-                  </button>
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-                  {secondaryItems.length ? (
-                    secondaryItems.map(renderPinnedRow)
-                  ) : (
-                    <p className="px-1 py-1.5 text-[12px] text-muted-foreground/70">
-                      Pin secondary items here
-                    </p>
-                  )}
-                </div>
               </div>
             </div>
           </nav>
 
-          {!secondaryOpen ? (
-            <div className="relative z-30 flex shrink-0 justify-center px-2 pb-2">
-              <button
-                type="button"
-                aria-expanded={false}
-                aria-label="Show secondary pins"
-                onClick={() => setSecondaryOpen(true)}
-                className="h-8 w-full rounded-[10px] border border-sidebar-border bg-transparent text-[12.5px] font-medium tracking-[-0.01em] text-sidebar-foreground/80 transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
-              >
-                Secondary
-              </button>
-            </div>
-          ) : null}
+          <div className="shrink-0 px-2 pb-2">
+            <AccountMenu />
+          </div>
         </>
       )}
     </aside>

@@ -7,6 +7,7 @@ import { Row, SectionLabel } from "@/components/panels/Bits";
 import { SegTabs } from "@/components/ui/Controls";
 import { researchSources } from "@/lib/data";
 import type { ResearchTool } from "@/lib/types";
+import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
 
 const tools: { id: ResearchTool; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -32,16 +33,16 @@ export function ResearchPanel() {
   const tool = execute && (researchTool === "overview" || !researchTool) ? "browser" : researchTool;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-sidebar">
+    <div className={SHELL_PANEL_BODY}>
       <PanelChrome kicker="Research" title={project?.name ?? "New brief"} />
-      <div className="border-b border-sidebar-border bg-sidebar px-2 py-1.5">
+      <div className="border-b border-border px-2 py-1.5">
         <SegTabs
           items={tools}
           value={tool}
           onChange={(id) => setResearchTool(id as ResearchTool)}
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto bg-background">
+      <div className={SHELL_PANEL_SCROLL}>
       {tool === "overview" || tool === "sources" ? (
         <div className="py-2">
           {researchSources.map((source) => (
@@ -63,7 +64,7 @@ export function ResearchPanel() {
               </p>
               <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
                 {project
-                  ? `Notes attached to ${project.name}. Courier can fold this into Cander’s pricing page without leaving the project.`
+                  ? `Notes attached to ${project.name}. You can fold this into Cander’s pricing page without leaving the project.`
                   : "Research will open pages here as soon as you ask."}
               </p>
             </div>
@@ -84,7 +85,7 @@ export function ResearchPanel() {
           <p className="mt-2 font-mono text-[12px] text-muted-foreground">
             OpenAI · usage
             <br />
-            Courier Cloud · flat
+            Cloud · flat
             <br />
             Cander Studio · $79
           </p>

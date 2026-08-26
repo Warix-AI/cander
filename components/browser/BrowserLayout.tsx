@@ -47,7 +47,6 @@ export function BrowserLayout() {
     browserChatRatio,
     setBrowserChatRatio,
     sidebarOpen,
-    mobileNav,
     setBrowserPage,
     newChat,
   } = useApp();
@@ -107,10 +106,7 @@ export function BrowserLayout() {
           >
             <header className="flex h-11 shrink-0 items-center gap-1 bg-background px-2">
               <NavToggle
-                className={cn(
-                  sidebarOpen && "lg:hidden",
-                  mobileNav && "max-lg:hidden",
-                )}
+                className={cn(sidebarOpen && "lg:hidden")}
               />
               <button
                 type="button"
@@ -132,10 +128,7 @@ export function BrowserLayout() {
           {!browserChatOpen ? (
             <>
               <NavToggle
-                className={cn(
-                  sidebarOpen && "lg:hidden",
-                  mobileNav && "max-lg:hidden",
-                )}
+                className={cn(sidebarOpen && "lg:hidden")}
               />
               <RailBtn
                 label="Open chat"

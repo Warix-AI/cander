@@ -10,13 +10,13 @@ export function MarketingFooter() {
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-xl font-medium tracking-[-0.03em]">
-              Try Courier today
+              Get started
             </h2>
             <p className="mt-1 text-[14px] text-muted-foreground">
               Open the product at the root domain.
             </p>
           </div>
-          <Cta href={APP_HREF}>Open Courier</Cta>
+          <Cta href={APP_HREF}>Open app</Cta>
         </div>
 
         <div className="mt-10 grid gap-8 sm:grid-cols-3">
@@ -55,7 +55,6 @@ export function MarketingFooter() {
 
         <div className="mt-10 flex items-center gap-2 border-t border-border pt-6">
           <CourierMark className="h-5 w-5" />
-          <span className="text-[13px] text-muted-foreground">Courier</span>
         </div>
       </div>
     </footer>

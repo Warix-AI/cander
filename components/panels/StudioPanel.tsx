@@ -7,6 +7,7 @@ import { SpaceLibraryPanel } from "@/components/panels/SpaceLibraryPanel";
 import { Row, SectionLabel } from "@/components/panels/Bits";
 import { SegTabs } from "@/components/ui/Controls";
 import type { StudioTool } from "@/lib/types";
+import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
 
 const tools: { id: StudioTool; label: string }[] = [
   { id: "canvas", label: "Canvas" },
@@ -33,16 +34,16 @@ export function StudioPanel() {
   const tool = execute && (studioTool === "overview" || !studioTool) ? "canvas" : studioTool;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-sidebar">
+    <div className={SHELL_PANEL_BODY}>
       <PanelChrome kicker="Studio" title={project?.name ?? "New canvas"} />
-      <div className="border-b border-sidebar-border bg-sidebar px-2 py-1.5">
+      <div className="border-b border-border px-2 py-1.5">
         <SegTabs
           items={tools}
           value={tool}
           onChange={(id) => setStudioTool(id as StudioTool)}
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto bg-background">
+      <div className={SHELL_PANEL_SCROLL}>
       {tool === "overview" ? (
         <div className="py-2">
           <Row title="12 stills" meta="Library" />
@@ -54,7 +55,7 @@ export function StudioPanel() {
           <div className="relative flex min-h-[12rem] items-end overflow-hidden rounded-[10px] p-4 text-white">
             <BannerWash space="studio" />
             <p className="relative text-[13px] text-white/80">
-              Describe a still. Courier will drop it on the canvas.
+              Describe a still. It will drop it on the canvas.
             </p>
           </div>
         </div>

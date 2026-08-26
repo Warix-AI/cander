@@ -8,11 +8,11 @@ import { cn } from "@/lib/utils";
 export function PublishSheet() {
   const { overlay, closeOverlay, publishApp, liveUrl, project } = useApp();
   const slug = (project?.name ?? "app").toLowerCase().replace(/\s+/g, "-");
-  const courierUrl = `https://${slug}.courier.app`;
+  const hostedUrl = `https://${slug}.app`;
   const domains = project?.domains ?? [];
   const options = useMemo(
     () => [
-      { id: "courier", url: courierUrl, label: `${slug}.courier.app`, hint: "Verified Courier subdomain" },
+      { id: "courier", url: hostedUrl, label: `${slug}.app`, hint: "Verified subdomain" },
       ...domains.map((domain) => ({
         id: domain,
         url: domain.startsWith("http") ? domain : `https://${domain}`,
@@ -20,7 +20,7 @@ export function PublishSheet() {
         hint: "From this Build project",
       })),
     ],
-    [courierUrl, domains, slug],
+    [hostedUrl, domains, slug],
   );
   const [selected, setSelected] = useState(options[0]?.id ?? "courier");
 

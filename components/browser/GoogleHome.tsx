@@ -29,7 +29,7 @@ const results = [
       "Discover a selection of Google products across Search, Maps, Play, Gmail, YouTube, Drive, and more.",
   },
   {
-    url: "https://www.google.com/search?q=courier",
+    url: "https://www.google.com/search?q=one+ai",
     crumb: "support.google.com › search",
     title: "How Search works",
     snippet:

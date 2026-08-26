@@ -14,7 +14,7 @@ export default function StudioPage() {
           <SectionHeader
             as="h1"
             kicker="Every plan"
-            title="Create images and video without leaving Courier."
+            title="Create images and video in the app."
             body="Generate, canvas, retouch, timeline, library, and export — in the same product as chat and Build."
           />
           <div className="mt-10 hidden sm:block">

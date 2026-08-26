@@ -8,14 +8,24 @@ import {
 } from "react";
 import {
   Link2,
-  ArrowUp,
   ImageIcon,
-  Mic,
   Paperclip,
+  Pin,
   Plus,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { ComposerUsageBar } from "@/components/shell/ComposerUsageBar";
+import {
+  LANDING_USAGE_THRESHOLD,
+} from "@/lib/hourly-usage";
+import { useHourlyUsagePercent } from "@/lib/use-hourly-usage";
+import {
+  ComposerRecordingView,
+  ComposerTrailingActions,
+  ComposerVoiceOrb,
+} from "@/components/shell/ComposerVoice";
 import { connectors } from "@/lib/data";
+import { APP_MESSAGE_PLACEHOLDER } from "@/lib/app-brand";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import {
   isSpaceLibrarySpace,
@@ -23,6 +33,7 @@ import {
 } from "@/lib/space-library";
 import { isChatSpace } from "@/lib/spaces";
 import { labelFor } from "@/lib/build-loop";
+import { useChatCanvasCentered } from "@/lib/chat-layout";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +60,7 @@ export function Composer({
     spaceId,
     connectorId,
     view,
+    projectId,
     armChatInterface,
     collapseDraft,
     thread,
@@ -60,13 +72,19 @@ export function Composer({
     pageReference,
     clearPageReference,
     entitlements,
+    voiceActive,
+    toggleVoice,
+    pinTier,
+    setPin,
+    clearPin,
   } = useApp();
   const floating = useShellStyle() === "floating";
+  const { centered } = useChatCanvasCentered();
+  const usagePercent = useHourlyUsagePercent();
   const [value, setValue] = useState("");
+  const [dictating, setDictating] = useState(false);
   const [menu, setMenu] = useState<MenuId>(null);
   const [files, setFiles] = useState<string[]>([]);
-  const [listening, setListening] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -135,57 +153,81 @@ export function Composer({
     !compact &&
     !hideSpaceTools;
 
-  useEffect(() => {
-    if (!listening) return;
-    const id = window.setInterval(() => setElapsed((n) => n + 1), 1000);
-    return () => window.clearInterval(id);
-  }, [listening]);
+  const stayInPlace = compact || hideSpaceTools;
+  const dictatingActive = dictating;
+  const hasText = value.trim().length > 0;
+  const pinTarget = thread
+    ? ({ kind: "thread" as const, id: thread.id })
+    : projectId
+      ? ({ kind: "project" as const, id: projectId })
+      : spaceId === "connectors" && connectorId
+        ? ({ kind: "connector" as const, id: connectorId })
+        : null;
+  const pinned = pinTarget ? Boolean(pinTier(pinTarget.kind, pinTarget.id)) : false;
 
-  useEffect(() => {
-    if (entitlements.hasVoice) return;
-    setListening(false);
-    setElapsed(0);
-  }, [entitlements.hasVoice]);
+  const endDictation = () => {
+    setDictating(false);
+  };
+
+  const stopVoice = () => {
+    if (voiceActive) toggleVoice();
+  };
 
   const submit = () => {
+    if (dictatingActive && !hasText) {
+      endDictation();
+      return;
+    }
     const refPrefix = pageReference
       ? `[ref: ${pageReference.title} — ${pageReference.url}] `
       : "";
-    onSend(`${refPrefix}${value}`);
+    const payload = `${refPrefix}${value}`.trim();
+    if (!payload) return;
+    onSend(payload);
     setValue("");
-    setListening(false);
-    setElapsed(0);
     setMenu(null);
+    setDictating(false);
     clearPageReference();
   };
 
-  const clock =
-    `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
+  const startVoice = () => {
+    if (!voiceActive) toggleVoice();
+  };
 
-  const stayInPlace = compact || hideSpaceTools;
+  const startDictation = () => {
+    setDictating(true);
+  };
+
   const hint =
     placeholder ??
     (activeConnector
       ? `Ask about ${activeConnector.name}…`
       : selectedId && !stayInPlace
         ? `Change the ${labelFor(selectedId)}…`
-        : "Describe what you want…");
+        : APP_MESSAGE_PLACEHOLDER);
 
-  const toggleListening = () => {
-    setListening((on) => {
-      if (on) setElapsed(0);
-      return !on;
-    });
-  };
+  const showUsageBar =
+    !compact && (!landing || usagePercent >= LANDING_USAGE_THRESHOLD);
 
   return (
+    <div className={cn(showUsageBar && "composer-dock-stack")}>
     <form
       className={
-        compact || landing
+        compact
           ? "w-full"
-          : floating
-            ? "pr-3 pb-[max(1rem,env(safe-area-inset-bottom))] pl-1 sm:pr-4 sm:pb-4 sm:pl-1"
-            : "px-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-4 sm:pb-4"
+          : landing
+            ? "w-full"
+            : floating
+              ? cn(
+                  centered
+                    ? "px-4 sm:px-6"
+                    : "pr-3 pl-2 sm:pr-4 sm:pl-2.5",
+                  showUsageBar ? "pb-0" : "pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4",
+                )
+              : cn(
+                  "px-4 sm:px-6",
+                  showUsageBar ? "pb-0" : "pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4",
+                )
       }
       onSubmit={(event) => {
         event.preventDefault();
@@ -195,13 +237,32 @@ export function Composer({
       <div
         ref={wrapRef}
         className={cn(
-          "relative mx-auto",
+          "relative w-full",
           landing || compact ? "max-w-none" : "max-w-[38rem]",
+          !landing && !compact && (!floating || centered) && "mx-auto",
           !stayInPlace && "composer-dock",
         )}
       >
         {menu === "plus" && !compact ? (
           <ComposerMenu>
+            {pinTarget ? (
+              <MenuBtn
+                onClick={() => {
+                  if (pinned) clearPin(pinTarget.kind, pinTarget.id);
+                  else setPin(pinTarget.kind, pinTarget.id, "primary");
+                  setMenu(null);
+                }}
+              >
+                <Pin
+                  className={cn(
+                    "h-3.5 w-3.5 text-muted-foreground",
+                    pinned && "fill-current",
+                  )}
+                  strokeWidth={1.6}
+                />
+                {pinned ? "Unpin" : "Pin"}
+              </MenuBtn>
+            ) : null}
             <MenuBtn
               onClick={() => {
                 fileRef.current?.click();
@@ -220,24 +281,6 @@ export function Composer({
               <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.6} />
               Add image
             </MenuBtn>
-            {entitlements.hasVoice ? (
-              <MenuBtn
-                active={listening}
-                onClick={() => {
-                  toggleListening();
-                  setMenu(null);
-                }}
-              >
-                <Mic
-                  className={cn(
-                    "h-3.5 w-3.5",
-                    listening ? "text-foreground" : "text-muted-foreground",
-                  )}
-                  strokeWidth={1.6}
-                />
-                {listening ? "Stop dictation" : "Voice dictation"}
-              </MenuBtn>
-            ) : null}
             {browserMode ? (
               <MenuBtn
                 onClick={() => {
@@ -252,43 +295,57 @@ export function Composer({
           </ComposerMenu>
         ) : null}
 
+        {voiceActive && !dictatingActive ? (
+          <ComposerVoiceOrb compact={compact} />
+        ) : null}
+
         {compact ? (
-          <div className="flex h-9 items-center gap-1 rounded-[20px] border border-border bg-muted py-0 pr-1 pl-3">
-            <textarea
-              value={value}
-              rows={1}
-              placeholder={hint}
-              autoFocus={autoFocus}
-              onFocus={onFocus}
-              onChange={(event) => setValue(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  submit();
-                }
-              }}
-              className="h-7 min-w-0 flex-1 resize-none bg-transparent py-1 text-[14px] leading-5 outline-none placeholder:text-muted-foreground"
-            />
-            {entitlements.hasVoice ? (
-              <ToolBtn
-                size="sm"
-                label={listening ? "Stop dictation" : "Voice dictation"}
-                active={listening}
-                onClick={toggleListening}
-              >
-                <Mic className="h-3.5 w-3.5" strokeWidth={1.6} />
-              </ToolBtn>
-            ) : null}
-            <button
-              type="submit"
-              aria-label="Send"
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors duration-200 hover:bg-foreground"
-            >
-              <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.25} />
-            </button>
+          <div className="composer-shell py-1.5 pr-1.5 pl-3">
+            {dictatingActive ? (
+              <ComposerRecordingView
+                compact
+                onCancel={endDictation}
+                onStop={endDictation}
+              />
+            ) : (
+              <div className="flex h-9 items-center gap-0.5">
+                <textarea
+                  value={value}
+                  rows={1}
+                  placeholder={hint}
+                  autoFocus={autoFocus}
+                  onFocus={onFocus}
+                  onChange={(event) => setValue(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      submit();
+                    }
+                  }}
+                  className={cn(
+                    "min-w-0 flex-1 resize-none bg-transparent text-[14px] outline-none placeholder:text-muted-foreground",
+                    hasText ? "h-7 py-1 leading-5" : "h-7 py-0 leading-7",
+                  )}
+                />
+                <ComposerTrailingActions
+                  compact
+                  hasText={hasText}
+                  hasVoice={entitlements.hasVoice}
+                  voiceActive={voiceActive}
+                  onStartVoice={startVoice}
+                  onStopVoice={stopVoice}
+                  onStartDictation={startDictation}
+                />
+              </div>
+            )}
           </div>
         ) : (
-          <div className="rounded-[20px] border border-border bg-muted py-1.5 pr-[18px] pl-3">
+          <div
+            className={cn(
+              "composer-shell px-3 py-2 pr-4",
+              showUsageBar && "mb-2.5",
+            )}
+          >
             {files.length ? (
               <div className="mb-1.5 flex flex-wrap gap-1.5">
                 {files.map((name) => (
@@ -366,21 +423,18 @@ export function Composer({
                 ) : null}
               </div>
             ) : null}
+            {dictatingActive ? (
+              <ComposerRecordingView onCancel={endDictation} onStop={endDictation} />
+            ) : (
             <div
               className={cn(
-                "flex gap-1",
-                // Desktop landing: grow down with + / send fixed at the top.
-                // Mobile + docked chat: center on one line; lock to bottom when taller.
-                landing
-                  ? "items-start max-md:items-end"
-                  : value
-                    ? "items-end"
-                    : "items-center",
+                "flex min-h-8 gap-1",
+                !hasText ? "items-center" : "items-end md:items-start",
               )}
             >
               <ToolBtn
                 label="Add"
-                active={menu === "plus" || listening}
+                active={menu === "plus"}
                 onClick={() => toggleMenu("plus")}
               >
                 <Plus className="h-4 w-4" strokeWidth={1.7} />
@@ -413,40 +467,23 @@ export function Composer({
                     submit();
                   }
                 }}
-                className="h-8 max-h-[212px] min-h-8 min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent py-1.5 text-[14px] leading-5 outline-none placeholder:text-muted-foreground"
+                className={cn(
+                  "max-h-[212px] min-h-8 min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent text-[14px] outline-none placeholder:text-muted-foreground",
+                  hasText ? "h-auto py-1.5 leading-5" : "h-8 py-0 leading-8",
+                )}
               />
-              {listening ? (
-                <div
-                  className={cn(
-                    "mr-0.5 flex shrink-0 items-center gap-2",
-                    landing ? "mt-1.5 max-md:mt-0 max-md:mb-1.5" : null,
-                  )}
-                >
-                  <div className="flex h-4 items-end gap-[2px]">
-                    {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-                      <span
-                        key={i}
-                        className="voice-bar w-[2px] rounded-full bg-foreground"
-                        style={{
-                          height: 14,
-                          animationDelay: `${i * 90}ms`,
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                    {clock}
-                  </span>
-                </div>
-              ) : null}
-              <button
-                type="submit"
-                aria-label="Send"
-                className="inline-flex h-[28.5px] w-[28.5px] shrink-0 self-center items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors duration-200 hover:bg-foreground"
-              >
-                <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.25} />
-              </button>
+              <div className="flex shrink-0 items-center gap-0.5 self-end md:self-start">
+              <ComposerTrailingActions
+                hasText={hasText}
+                hasVoice={entitlements.hasVoice}
+                voiceActive={voiceActive}
+                onStartVoice={startVoice}
+                onStopVoice={stopVoice}
+                onStartDictation={startDictation}
+              />
+              </div>
             </div>
+            )}
           </div>
         )}
 
@@ -473,8 +510,12 @@ export function Composer({
             event.target.value = "";
           }}
         />
+        {showUsageBar ? (
+          <ComposerUsageBar floating={floating} percent={usagePercent} />
+        ) : null}
       </div>
     </form>
+    </div>
   );
 }
 
@@ -482,7 +523,7 @@ function ComposerMenu({ children }: { children: ReactNode }) {
   return (
     <div
       role="menu"
-      className="absolute inset-x-0 bottom-[calc(100%+8px)] z-40 max-h-[min(24rem,50vh)] overflow-y-auto rounded-[20px] border border-border bg-muted p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.12)]"
+      className="absolute inset-x-0 bottom-[calc(100%+8px)] z-40 max-h-[min(24rem,50vh)] overflow-y-auto light-surface shell-g3-radius bg-popover p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.08)] dark:bg-transparent"
     >
       {children}
     </div>
@@ -503,9 +544,10 @@ function MenuBtn({
       type="button"
       role="menuitem"
       onClick={onClick}
+      data-active={active ? "true" : undefined}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-[14px] px-2.5 py-2 text-left text-[13.5px] transition-colors duration-200 hover:bg-background",
-        active && "bg-background",
+        "menu-row-hover flex w-full items-center gap-2.5 rounded-[14px] px-2.5 py-2 text-left text-[13.5px] transition-colors duration-200",
+        active && "font-medium",
       )}
     >
       {children}
@@ -532,9 +574,9 @@ function ToolBtn({
       aria-label={label}
       onClick={onClick}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-background hover:text-foreground",
+        "inline-flex shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground dark:hover:bg-background",
         size === "sm" ? "h-7 w-7" : "h-8 w-8",
-        active && "bg-background text-foreground",
+        active && "bg-muted text-foreground dark:bg-background",
       )}
     >
       {children}

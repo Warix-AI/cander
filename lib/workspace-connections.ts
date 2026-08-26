@@ -192,6 +192,15 @@ export function removeWorkspaceConnection(
   persist();
 }
 
+export function clearWorkspaceConnections(workspaceId: string) {
+  hydrate();
+  if (!byWorkspace[workspaceId]) return;
+  const next = { ...byWorkspace };
+  delete next[workspaceId];
+  byWorkspace = next;
+  persist();
+}
+
 /** Catalog connectors relevant to this workspace kind. */
 export function connectorsAvailableForKind(kind: WorkspaceKind) {
   const base =

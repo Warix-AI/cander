@@ -1,11 +1,7 @@
-import type { Message, PlatformNav, SpaceId, Thread } from "./types";
+import type { Message, SpaceId, Thread } from "./types";
 
 export function spaceChatId(workspaceId: string, spaceId: SpaceId) {
   return `t-space-${workspaceId}-${spaceId}`;
-}
-
-export function platformChatId(workspaceId: string, nav: PlatformNav) {
-  return `t-plat-${workspaceId}-${nav}`;
 }
 
 export function findPersistentSpaceThread(
@@ -19,29 +15,9 @@ export function findPersistentSpaceThread(
     threads.find(
       (item) =>
         item.persistent &&
-        item.product !== "platform" &&
         item.workspaceId === workspaceId &&
         item.spaceId === spaceId &&
         !item.projectId,
-    ) ??
-    null
-  );
-}
-
-export function findPersistentPlatformThread(
-  threads: Thread[],
-  workspaceId: string,
-  nav: PlatformNav,
-) {
-  const id = platformChatId(workspaceId, nav);
-  return (
-    threads.find((item) => item.id === id) ??
-    threads.find(
-      (item) =>
-        item.persistent &&
-        item.product === "platform" &&
-        item.workspaceId === workspaceId &&
-        item.platformNav === nav,
     ) ??
     null
   );
@@ -55,26 +31,7 @@ export function emptyPersistentSpaceThread(
     id: spaceChatId(workspaceId, spaceId),
     title: "Chat",
     workspaceId,
-    product: "courier",
     spaceId,
-    updatedAt: "Just now",
-    snippet: "",
-    messages: [],
-    persistent: true,
-    sessionSummary: null,
-  };
-}
-
-export function emptyPersistentPlatformThread(
-  workspaceId: string,
-  nav: PlatformNav,
-): Thread {
-  return {
-    id: platformChatId(workspaceId, nav),
-    title: "Chat",
-    workspaceId,
-    product: "platform",
-    platformNav: nav,
     updatedAt: "Just now",
     snippet: "",
     messages: [],
@@ -91,17 +48,6 @@ export function upsertPersistentSpaceThread(
   const found = findPersistentSpaceThread(threads, workspaceId, spaceId);
   if (found) return { threads, id: found.id };
   const created = emptyPersistentSpaceThread(workspaceId, spaceId);
-  return { threads: [created, ...threads], id: created.id };
-}
-
-export function upsertPersistentPlatformThread(
-  threads: Thread[],
-  workspaceId: string,
-  nav: PlatformNav,
-): { threads: Thread[]; id: string } {
-  const found = findPersistentPlatformThread(threads, workspaceId, nav);
-  if (found) return { threads, id: found.id };
-  const created = emptyPersistentPlatformThread(workspaceId, nav);
   return { threads: [created, ...threads], id: created.id };
 }
 

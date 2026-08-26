@@ -1,10 +1,19 @@
 "use client";
 
 import { CalendarClock, Ellipsis, FileText, Folder, Link2, Sparkles } from "lucide-react";
+import { useSyncExternalStore } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { PinControl } from "@/components/shell/PinControl";
 import { BannerWash } from "@/components/spaces/BannerWash";
 import { Dropdown } from "@/components/ui/Controls";
+import {
+  attachWorkApp,
+  detachWorkApp,
+  getWorkAppsServerSnapshot,
+  getWorkAppsSnapshot,
+  isWorkApp,
+  subscribeWorkApps,
+} from "@/lib/work-apps";
 import type { BannerKey } from "@/lib/space-banners";
 import type { SpaceLayout } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -322,7 +331,7 @@ function PreviewListRow({
   onOpen: (projectId: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-[10px] px-1 py-2 hover:bg-muted">
+    <div className="flex items-center gap-3 rounded-[10px] py-2 canvas-hover">
       <button
         type="button"
         onClick={() => onOpen(item.projectId)}
@@ -386,13 +395,19 @@ function PreviewActions({
   kind: PreviewKind;
   onOpen: (projectId: string) => void;
 }) {
-  const { pinTier, setPin, clearPin } = useApp();
+  const { pinTier, setPin, clearPin, workspaceId } = useApp();
+  useSyncExternalStore(
+    subscribeWorkApps,
+    getWorkAppsSnapshot,
+    getWorkAppsServerSnapshot,
+  );
   const tier = pinTier("project", item.projectId);
   const pinned = Boolean(tier);
+  const inWork = isWorkApp(workspaceId, item.projectId);
 
   const copyLink = () => {
     const slug = item.name.toLowerCase().replace(/\s+/g, "-");
-    void navigator.clipboard.writeText(`https://${slug}.courier.app`);
+    void navigator.clipboard.writeText(`https://${slug}.app`);
   };
 
   return (
@@ -412,7 +427,7 @@ function PreviewActions({
               event.stopPropagation();
               copyLink();
             }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground @max-[520px]:hidden"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-canvas-hover hover:text-foreground @max-[520px]:hidden"
           >
             <Link2 className="h-3.5 w-3.5" strokeWidth={1.6} />
           </button>
@@ -430,7 +445,7 @@ function PreviewActions({
               event.stopPropagation();
               toggle();
             }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-canvas-hover hover:text-foreground"
           >
             <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
           </button>
@@ -452,70 +467,29 @@ function PreviewActions({
             {kind === "product" ? (
               <>
                 {!pinned ? (
-                  <>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setPin("project", item.projectId, "primary");
-                        close();
-                      }}
-                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                    >
-                      Pin to Primary
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setPin("project", item.projectId, "secondary");
-                        close();
-                      }}
-                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                    >
-                      Pin to Secondary
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setPin("project", item.projectId, "primary");
+                      close();
+                    }}
+                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                  >
+                    Pin
+                  </button>
                 ) : (
-                  <>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        clearPin("project", item.projectId);
-                        close();
-                      }}
-                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                    >
-                      Unpin
-                    </button>
-                    {tier !== "primary" ? (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          setPin("project", item.projectId, "primary");
-                          close();
-                        }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                      >
-                        Move to Primary
-                      </button>
-                    ) : null}
-                    {tier !== "secondary" ? (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          setPin("project", item.projectId, "secondary");
-                          close();
-                        }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                      >
-                        Move to Secondary
-                      </button>
-                    ) : null}
-                  </>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      clearPin("project", item.projectId);
+                      close();
+                    }}
+                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                  >
+                    Unpin
+                  </button>
                 )}
                 <button
                   type="button"
@@ -527,6 +501,18 @@ function PreviewActions({
                   className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
                 >
                   Copy link
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    if (inWork) detachWorkApp(workspaceId, item.projectId);
+                    else attachWorkApp(workspaceId, item.projectId);
+                    close();
+                  }}
+                  className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                >
+                  {inWork ? "Remove from Work" : "Add to Work"}
                 </button>
               </>
             ) : null}

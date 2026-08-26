@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Kpi } from "@/components/platform/Charts";
+import { Kpi } from "@/components/ui/Charts";
 import { useApp } from "@/components/app/AppProvider";
 import { DashBtn, DashFrame, LayoutToggle, ScopeToggle, SpaceSettingsButton } from "@/components/spaces/ItemSet";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";

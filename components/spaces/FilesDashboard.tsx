@@ -139,7 +139,7 @@ export function FilesDashboard() {
     >
       <StatsBanner stats={meta.stats} />
       <p className="mt-3 max-w-xl text-[13.5px] leading-relaxed text-muted-foreground">
-        Previews, stills, briefs, and code Courier generated across Build,
+        Previews, stills, briefs, and code generated across Build,
         Studio, and Research — one library.
       </p>
       <FilesLibrary />

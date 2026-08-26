@@ -13,7 +13,7 @@ export function HomePage() {
       <Section className="pb-4 pt-10 md:pt-14">
         <PageWidth>
           <div className="max-w-3xl">
-            <p className="text-[13px] text-muted-foreground">Courier</p>
+            <p className="text-[13px] text-muted-foreground">One AI</p>
             <h1 className="heading-display mt-2 text-[2.5rem] leading-[1.08] tracking-[-0.03em] md:text-[3.5rem]">
               Now you can chat, work, and build — all in one place.
             </h1>
@@ -37,7 +37,7 @@ export function HomePage() {
         <PageWidth>
           <SectionHeader
             title="Spaces for every kind of work"
-            body="Enter directly or let Courier route from chat."
+            body="Enter directly or route from chat."
           />
           <div className="mt-8">
             <SpaceLinks />

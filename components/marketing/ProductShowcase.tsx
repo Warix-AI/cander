@@ -16,15 +16,8 @@ const modes = [
     id: "build",
     label: "Build",
     title: "Build",
-    body: "Software, sites, and agents with live preview and Development wired in.",
+    body: "Software, sites, and agents with live preview and runtime wired in.",
     variant: "build" as const,
-  },
-  {
-    id: "development",
-    label: "Development",
-    title: "Development",
-    body: "Hosting, models, APIs, and production — inside the same app.",
-    variant: "development" as const,
   },
 ];
 
@@ -36,7 +29,7 @@ export function ProductShowcase() {
     <div className="mt-10">
       <div
         role="tablist"
-        aria-label="Courier modes"
+        aria-label="Product modes"
         className="inline-flex rounded-full border border-border bg-muted/40 p-1"
       >
         {modes.map((item) => (

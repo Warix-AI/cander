@@ -8,6 +8,7 @@ import { SegTabs } from "@/components/ui/Controls";
 import { skills } from "@/lib/data";
 import type { SkillsTool } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
 
 const tools: { id: SkillsTool; label: string }[] = [
   { id: "editor", label: "Editor" },
@@ -33,16 +34,16 @@ export function SkillsPanel() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-sidebar">
+    <div className={SHELL_PANEL_BODY}>
       <PanelChrome kicker="Task" title={skill?.name ?? "Untitled task"} />
-      <div className="border-b border-sidebar-border bg-sidebar px-2 py-1.5">
+      <div className="border-b border-border px-2 py-1.5">
         <SegTabs
           items={tools}
           value={tool}
           onChange={(id) => setSkillsTool(id as SkillsTool)}
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto bg-background">
+      <div className={SHELL_PANEL_SCROLL}>
         {tool === "editor" ? (
           <div className="flex h-full min-h-0 flex-col">
             <div className="relative h-40 shrink-0 overflow-hidden media-b">
@@ -69,7 +70,7 @@ export function SkillsPanel() {
                 <textarea
                   defaultValue={
                     skill?.summary ??
-                    "Write the steps Courier should follow. Keep it short."
+                    "Write the steps it should follow. Keep it short."
                   }
                   rows={8}
                   className="mt-1 w-full resize-none rounded-[10px] border border-foreground/10 bg-background px-3 py-2 text-[13.5px] leading-relaxed outline-none"

@@ -9,7 +9,6 @@ import { Cta } from "@/components/marketing/Cta";
 import { MarketingThemeToggle } from "@/components/marketing/MarketingThemeToggle";
 import {
   APP_HREF,
-  developmentNav,
   headerLinks,
   spacesNav,
 } from "@/lib/marketing";
@@ -23,14 +22,10 @@ export function MarketingHeader() {
       <div className="mx-auto flex h-[52px] max-w-[1080px] items-center gap-4 px-5 md:px-6">
         <Link href="/home" className="flex items-center gap-2">
           <CourierMark />
-          <span className="text-[14px] font-semibold tracking-[-0.02em]">
-            Courier
-          </span>
         </Link>
 
         <nav className="ml-2 hidden flex-1 items-center gap-1 lg:flex">
           <NavDropdown label="Spaces" items={spacesNav} />
-          <NavDropdown label="Development" items={developmentNav} />
           {headerLinks.map((link) => (
             <NavLink key={link.href} href={link.href}>
               {link.title}
@@ -68,11 +63,6 @@ export function MarketingHeader() {
         <div className="border-t border-border bg-background px-5 py-4 lg:hidden">
           <div className="flex flex-col gap-1">
             <MobileGroup label="Spaces" items={spacesNav} onNavigate={() => setOpen(false)} />
-            <MobileGroup
-              label="Development"
-              items={developmentNav}
-              onNavigate={() => setOpen(false)}
-            />
             {headerLinks.map((link) => (
               <MobileLink key={link.href} href={link.href} onClick={() => setOpen(false)}>
                 {link.title}

@@ -4,7 +4,16 @@ import { CourierMark } from "@/components/brand/CourierMark";
 import { appearanceToCss, useAppearance } from "@/lib/appearance";
 import { cn } from "@/lib/utils";
 
-/** Live mini Courier shell that mirrors appearance sliders. */
+const PREVIEW_NAV = [
+  { label: "New Chat", active: true },
+  { label: "Work", dot: "bg-blue-500" },
+  { label: "Build", dot: "bg-orange-500" },
+  { label: "Explore", dot: "bg-green-500" },
+  { label: "Connectors" },
+  { label: "Recents" },
+] as const;
+
+/** Live mini Cander shell that mirrors appearance sliders. */
 export function OnboardingCourierPreview() {
   const appearance = useAppearance();
   const css = appearanceToCss(appearance);
@@ -19,7 +28,7 @@ export function OnboardingCourierPreview() {
     : "0px";
 
   return (
-    <div className="flex h-full w-full items-center justify-center p-8 xl:p-12">
+    <div className="flex h-full w-full items-center justify-center p-4 xl:p-6">
       <div
         className={cn(
           "relative w-full max-w-[34rem] overflow-hidden border border-white/15 bg-background text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.35)]",
@@ -101,29 +110,46 @@ export function OnboardingCourierPreview() {
               Search
             </div>
             <div className="mt-1 space-y-1">
-              {["Home", "Work", "Build", "Research"].map((item, index) => (
+              {PREVIEW_NAV.map((item) => (
                 <div
-                  key={item}
+                  key={item.label}
                   className={cn(
-                    "px-2 py-1.5 text-[11.5px]",
-                    index === 0
+                    "flex items-center gap-2 px-2 py-1.5 text-[11.5px]",
+                    "active" in item && item.active
                       ? "bg-sidebar-accent font-medium"
                       : "text-muted-foreground",
                   )}
                   style={{ borderRadius: radius }}
                 >
-                  {item}
+                  {"dot" in item && item.dot ? (
+                    <span
+                      className={cn("h-2 w-2 shrink-0 rounded-full", item.dot)}
+                      aria-hidden
+                    />
+                  ) : (
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full bg-foreground/20"
+                      aria-hidden
+                    />
+                  )}
+                  {item.label}
                 </div>
               ))}
             </div>
+            <p className="px-2 pt-1 text-[10px] text-muted-foreground/80">
+              Pinned
+            </p>
             <div
-              className="mt-auto border border-border bg-card p-2"
+              className="mt-auto flex items-center gap-2 px-2 py-1.5"
               style={{ borderRadius: radius }}
             >
-              <p className="text-[11px] font-medium">Discovery</p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                Tactics & capabilities
-              </p>
+              <span
+                className="h-5 w-5 shrink-0 rounded-full bg-foreground/15"
+                aria-hidden
+              />
+              <span className="truncate text-[11px] text-muted-foreground">
+                Account
+              </span>
             </div>
           </div>
 
@@ -146,7 +172,7 @@ export function OnboardingCourierPreview() {
               }}
             >
               <div
-                className="h-10 w-full bg-chart-2/40"
+                className="h-10 w-full bg-blue-500/25"
                 style={{ borderRadius: radius }}
               />
             </div>
@@ -172,7 +198,7 @@ export function OnboardingCourierPreview() {
                 style={{ borderRadius: radius }}
               >
                 <span className="flex-1 text-[11px] text-muted-foreground">
-                  Message Courier…
+                  Message…
                 </span>
                 <span
                   className="h-6 w-6 bg-foreground"

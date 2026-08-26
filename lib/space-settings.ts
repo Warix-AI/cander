@@ -80,7 +80,7 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
       {
         id: "templates",
         label: "Templates",
-        description: "Full app shells Courier can scaffold into a live preview.",
+        description: "Full app shells we can scaffold into a live preview.",
         items: [
           {
             id: "saas",
@@ -124,7 +124,7 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
           {
             id: "graphite",
             name: "Graphite",
-            detail: "Courier default — light canvas, dark chrome, blue mesh.",
+            detail: "Default — light canvas, dark chrome, blue mesh.",
             preview: "theme",
             themeClass: "media-a",
             colors: ["#6B9FFF", "#1E293B", "#F8FAFC"],
@@ -159,7 +159,7 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
       {
         id: "components",
         label: "Components",
-        description: "Reusable blocks Courier drops into the next build.",
+        description: "Reusable blocks dropped into the next build.",
         items: [
           {
             id: "auth",
@@ -198,7 +198,7 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
       {
         id: "stack",
         label: "Stack",
-        description: "Runtime Courier uses when scaffolding.",
+        description: "Runtime used when scaffolding.",
         items: [
           {
             id: "next",
@@ -301,7 +301,7 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
       {
         id: "pipelines",
         label: "Pipelines",
-        description: "Multi-step flows Courier runs automatically.",
+        description: "Multi-step flows that run automatically.",
         items: [
           {
             id: "batch-export",
@@ -403,7 +403,7 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
       {
         id: "sources",
         label: "Source types",
-        description: "What Courier pulls in by default.",
+        description: "What gets pulled in by default.",
         items: [
           {
             id: "web",
@@ -545,7 +545,7 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
       {
         id: "triggers",
         label: "Triggers",
-        description: "When Courier should run a task.",
+        description: "When a task should run.",
         items: [
           {
             id: "manual",
@@ -622,7 +622,7 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
           {
             id: "webhook",
             name: "Webhook",
-            detail: "External systems ping Courier to run.",
+            detail: "External systems ping the app to run.",
             preview: "component",
             colors: ["#14B8A6", "#99F6E4"],
           },

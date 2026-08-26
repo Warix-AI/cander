@@ -3,7 +3,7 @@ import { PageWidth, Section } from "@/components/marketing/Section";
 import { APP_HREF } from "@/lib/marketing";
 
 export function FinalCta({
-  title = "Try Courier today",
+  title = "Get started",
   body = "Start free at the root domain — the product, not a separate site.",
 }: {
   title?: string;

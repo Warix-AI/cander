@@ -161,7 +161,7 @@ export const gmailInbox: GmailMessage[] = [
     threadId: "thr-8742",
     from: "GitHub <noreply@github.com>",
     to: "matthew@acme.com",
-    subject: "[acme-inc/courier] PR #412 ready for review",
+    subject: "[acme-inc/product] PR #412 ready for review",
     snippet: "mattxgross requested your review on pull request #412.",
     body: "mattxgross requested your review on pull request #412:\n\nfeat: Handshake control center\n\nView pull request on GitHub.",
     time: "Yesterday",

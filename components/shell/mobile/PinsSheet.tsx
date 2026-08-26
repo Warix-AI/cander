@@ -27,46 +27,6 @@ function PinLeading({
   );
 }
 
-function PinSection({
-  title,
-  items,
-  isActive,
-  onOpen,
-}: {
-  title: string;
-  items: PinnedItem[];
-  isActive: (item: PinnedItem) => boolean;
-  onOpen: (item: PinnedItem) => void;
-}) {
-  return (
-    <section className="px-2 pb-2">
-      <p className="px-3 pb-1 pt-2 text-[12px] font-medium text-muted-foreground">
-        {title}
-      </p>
-      {items.length ? (
-        items.map((item) => (
-          <button
-            key={`${item.kind}-${item.id}`}
-            type="button"
-            onClick={() => onOpen(item)}
-            className={cn(
-              "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[13.5px] transition-colors duration-200",
-              isActive(item) ? "bg-muted font-medium" : "hover:bg-muted",
-            )}
-          >
-            <PinLeading item={item} />
-            <span className="truncate">{item.title}</span>
-          </button>
-        ))
-      ) : (
-        <p className="px-3 py-1.5 text-[12px] text-muted-foreground/70">
-          No {title.toLowerCase()} pins
-        </p>
-      )}
-    </section>
-  );
-}
-
 export function PinsSheet({ onSelect }: { onSelect: () => void }) {
   const {
     threadId,
@@ -77,7 +37,7 @@ export function PinsSheet({ onSelect }: { onSelect: () => void }) {
     openProject,
     openConnector,
   } = useApp();
-  const { primaryItems, secondaryItems } = usePinnedItems();
+  const { pinnedItems } = usePinnedItems();
 
   const openItem = (item: PinnedItem) => {
     if (item.kind === "thread") openThread(item.id);
@@ -96,18 +56,32 @@ export function PinsSheet({ onSelect }: { onSelect: () => void }) {
 
   return (
     <div className="py-1">
-      <PinSection
-        title="Primary"
-        items={primaryItems}
-        isActive={isActive}
-        onOpen={openItem}
-      />
-      <PinSection
-        title="Secondary"
-        items={secondaryItems}
-        isActive={isActive}
-        onOpen={openItem}
-      />
+      <section className="px-2 pb-2">
+        <p className="px-3 pb-1 pt-2 text-[12px] font-medium text-muted-foreground">
+          Pinned
+        </p>
+        {pinnedItems.length ? (
+          pinnedItems.map((item) => (
+            <button
+              key={`${item.kind}-${item.id}`}
+              type="button"
+              data-active={isActive(item) ? "true" : undefined}
+              onClick={() => openItem(item)}
+              className={cn(
+                "menu-row-hover flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[13.5px] transition-colors duration-200",
+                isActive(item) && "font-medium",
+              )}
+            >
+              <PinLeading item={item} />
+              <span className="truncate">{item.title}</span>
+            </button>
+          ))
+        ) : (
+          <p className="px-3 py-1.5 text-[12px] text-muted-foreground/70">
+            No pinned items
+          </p>
+        )}
+      </section>
     </div>
   );
 }

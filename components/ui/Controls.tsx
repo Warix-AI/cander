@@ -13,6 +13,10 @@ import {
   releaseSidebarPeek,
 } from "@/lib/sidebar-peek";
 import { cn } from "@/lib/utils";
+import {
+  FLOAT_CONTROL_SHELL,
+  FLOAT_TOGGLE_ACTIVE,
+} from "@/lib/shell-chrome";
 
 export function Dropdown({
   trigger,
@@ -143,7 +147,7 @@ export function Dropdown({
                   : { top: 0, left: 0, visibility: "hidden" }
               }
               className={cn(
-                "fixed z-[200] rounded-[10px] border border-border bg-popover p-1.5 text-popover-foreground shadow-[0_12px_40px_oklch(0_0_0/0.22)]",
+                "fixed z-[200] light-surface rounded-[10px] bg-popover p-1.5 text-popover-foreground shadow-[0_12px_40px_oklch(0_0_0/0.12)] dark:bg-transparent dark:shadow-[0_12px_40px_oklch(0_0_0/0.22)]",
                 menuClassName,
               )}
             >
@@ -172,9 +176,10 @@ export function MenuRow({
       type="button"
       role="menuitem"
       onClick={onClick}
+      data-active={active ? "true" : undefined}
       className={cn(
-        "flex w-full flex-col rounded-lg px-3 py-2.5 text-left transition-colors duration-200",
-        active ? "bg-muted" : "hover:bg-muted",
+        "menu-row-hover flex w-full flex-col rounded-lg px-3 py-2.5 text-left transition-colors duration-200",
+        active && "font-medium",
       )}
     >
       <span className="text-[13.5px] leading-5 font-medium tracking-[-0.01em]">
@@ -199,17 +204,22 @@ export function SegTabs({
   onChange: (id: string) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-0.5">
+    <div
+      className={cn(
+        "inline-flex items-center gap-0.5 rounded-[10px] p-1",
+        FLOAT_CONTROL_SHELL,
+      )}
+    >
       {items.map((item) => (
         <button
           key={item.id}
           type="button"
           onClick={() => onChange(item.id)}
           className={cn(
-            "h-8 rounded-lg px-2.5 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
+            "h-8 rounded-[8px] px-2.5 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
             value === item.id
-              ? "bg-muted text-foreground"
-              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              ? FLOAT_TOGGLE_ACTIVE
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           {item.label}

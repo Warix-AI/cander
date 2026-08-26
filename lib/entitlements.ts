@@ -7,11 +7,9 @@ import {
   hasWorkspaceKnowledge,
   hasWorkspaces,
   hostingAllowed,
-  platformNavAllowed,
   workspaceCap,
 } from "./billing";
 import {
-  canAccessDevelopment,
   canManageInfrastructure,
   capabilitiesFor,
   devDepthLabel,
@@ -22,7 +20,6 @@ import type {
   BillingPlan,
   HostingMode,
   Member,
-  PlatformNav,
   Workspace,
   WorkspaceResource,
 } from "./types";
@@ -48,7 +45,6 @@ export type Entitlements = {
   canCreateBusinessWorkspace: boolean;
   canUseSharedWorkspaces: boolean;
   canUseWorkSpace: boolean;
-  canAccessDevelopment: boolean;
   canManageInfrastructure: boolean;
   devDepth: DevDepth;
   devDepthLabel: string;
@@ -63,7 +59,6 @@ export type Entitlements = {
   showPlansBilling: boolean;
   showInviteWall: boolean;
   hostingAllowed: (mode: HostingMode) => boolean;
-  platformNavAllowed: (nav: PlatformNav) => boolean;
   canUseSharedResource: (resourceId: string) => boolean;
 };
 
@@ -102,7 +97,6 @@ export function entitlementsFor(actor: Member): Entitlements {
     canCreateBusinessWorkspace: isOwner || isAdmin,
     canUseSharedWorkspaces: orgActive,
     canUseWorkSpace: orgActive && hasWorkSpace(plan),
-    canAccessDevelopment: canAccessDevelopment(plan),
     canManageInfrastructure: canManageInfrastructure(plan),
     devDepth: caps.devDepth,
     devDepthLabel: devDepthLabel(caps.devDepth),
@@ -117,13 +111,12 @@ export function entitlementsFor(actor: Member): Entitlements {
     showPlansBilling: isOwner || isAdmin,
     showInviteWall: pendingInvite,
     hostingAllowed: (mode) => hostingAllowed(plan, mode),
-    platformNavAllowed: (nav) => platformNavAllowed(plan, nav),
     canUseSharedResource: (resourceId) => {
       const resource = workspaceResources.find((item) => item.id === resourceId);
       if (!resource) return false;
       if (resource.ownerId === actor.id) return true;
       if (!resource.authorizedMemberIds.includes(actor.id)) return false;
-      return canAccessDevelopment(plan);
+      return caps.sharedResources;
     },
   };
 }

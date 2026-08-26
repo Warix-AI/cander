@@ -141,7 +141,7 @@ export function WorkspaceModal() {
           </h2>
           <p className="mt-1 text-[13px] text-muted-foreground">
             {step === "kind"
-              ? "Choose personal or business. Same Courier UI either way."
+              ? "Choose personal or business. Same UI either way."
               : "Name it and optionally add an icon for the rail."}
           </p>
         </div>
@@ -249,8 +249,8 @@ export function WorkspaceModal() {
           </label>
 
           <p className="text-[12.5px] text-muted-foreground">
-            Includes Work, Build, Studio, Research, and Personal — same layout
-            as every other workspace.
+            Includes Work, Build, and Explore — same layout for personal and
+            business workspaces.
             {kind === "personal"
               ? " Roles are Owner and Member."
               : " Full business roles, seats, and admin tools apply."}
@@ -326,10 +326,10 @@ function KindCard({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex w-full items-start gap-3 rounded-[10px] border border-border px-3 py-3 text-left transition-colors duration-200",
+        "light-surface light-surface-interactive flex w-full items-start gap-3 rounded-[10px] px-3 py-3 text-left",
         disabled
           ? "cursor-not-allowed opacity-40"
-          : "hover:border-foreground/20 hover:bg-muted/40",
+          : undefined,
       )}
     >
       <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-muted text-foreground">

@@ -2,43 +2,20 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import {
-  Briefcase,
-  Clapperboard,
-  Globe,
-  Hammer,
-  HeartPulse,
-  ImageIcon,
-  Mic,
-  Search,
-  Sparkles,
-  Telescope,
-  Wallet,
-} from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { CourierMark } from "@/components/brand/CourierMark";
 import { ChatMessage } from "@/components/chat/MessageBlocks";
 import { SessionSummaryBubble } from "@/components/chat/SessionSummaryBubble";
 import { Composer } from "@/components/shell/Composer";
 import { SuggestionPrompts } from "@/components/shell/SuggestionPrompts";
-import { VoiceOrb } from "@/components/shell/VoiceOrb";
 import { homeSuggestions } from "@/lib/suggestions";
 import { spaceChatSuggestions } from "@/lib/space-suggestions";
-import { chatSpaceCopy, spaceIconTint } from "@/lib/space-icons";
+import { chatSpaceCopy, navIcon, spaceIconTint } from "@/lib/space-icons";
 import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useChatCanvasCentered } from "@/lib/chat-layout";
 import { useMobileShell } from "@/lib/use-media-query";
-
-const promptIcons = {
-  p0: Briefcase,
-  p1: Hammer,
-  p2: ImageIcon,
-  p3: Telescope,
-  p4: Sparkles,
-  p5: Clapperboard,
-  p6: Wallet,
-  p7: HeartPulse,
-} as const;
+import { useShellStyle } from "@/lib/shell-chrome";
 
 export function ChatColumn() {
   const { thread, spaceId, sendMessage, drafting, view } = useApp();
@@ -51,13 +28,17 @@ export function ChatColumn() {
   const spacePrompts = spaceChatSuggestions(spaceId);
   const endRef = useRef<HTMLDivElement>(null);
   const last = thread?.messages.at(-1);
+  const floating = useShellStyle() === "floating";
+  const { centered } = useChatCanvasCentered();
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [last?.id, last?.content, last?.blocks]);
 
   const send = (text: string) => {
-    const go = () => sendMessage(text);
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const go = () => sendMessage(trimmed);
     if (
       showLanding &&
       !browserMode &&
@@ -74,7 +55,7 @@ export function ChatColumn() {
   if (browserMode) {
     return (
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-        <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-5 sm:py-6">
+        <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
           {thread ? (
             <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-6">
               {thread.messages.map((message) => (
@@ -92,12 +73,30 @@ export function ChatColumn() {
   }
 
   return (
-    <section className="@container relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+    <section
+      className={cn(
+        "@container relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background",
+      )}
+    >
       {showLanding ? (
         <EmptyChat spaceId={spaceId} onPrompt={send} />
       ) : (
-        <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-5 sm:py-6">
-          <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-6">
+        <div
+          className={cn(
+            "flex-1 overflow-y-auto py-5",
+            floating
+              ? centered
+                ? "px-4 sm:px-6"
+                : "pl-2 pr-3 sm:pl-2.5 sm:pr-4"
+              : "px-4 sm:px-6",
+          )}
+        >
+          <div
+            className={cn(
+              "flex w-full max-w-[38rem] flex-col gap-6",
+              (!floating || centered) && "mx-auto",
+            )}
+          >
             {thread?.sessionSummary ? (
               <SessionSummaryBubble
                 threadId={thread.id}
@@ -123,59 +122,6 @@ export function ChatColumn() {
         </>
       )}
     </section>
-  );
-}
-
-function NewChatTabBar() {
-  const { openBrowser, toggleVoice, openOverlay, voiceActive } = useApp();
-
-  return (
-    <div className="pointer-events-none absolute inset-x-0 top-[50px] z-10 flex justify-center px-4">
-      <nav
-        aria-label="New chat"
-        className="pointer-events-auto inline-flex h-10 items-center gap-0.5 rounded-[12px] border border-border bg-transparent p-1"
-      >
-        <button
-          type="button"
-          onClick={() => openBrowser({ chat: true })}
-          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-[12.5px] font-medium tracking-[-0.01em] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-        >
-          <Globe className="h-3.5 w-3.5" strokeWidth={1.7} />
-          Browser
-        </button>
-
-        {voiceActive ? (
-          <button
-            type="button"
-            aria-label="Stop voice"
-            aria-pressed
-            onClick={() => toggleVoice()}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-[10px]"
-          >
-            <VoiceOrb active as="div" size={22} label="Stop voice" />
-          </button>
-        ) : (
-          <button
-            type="button"
-            aria-label="Start voice"
-            onClick={() => toggleVoice()}
-            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-[12.5px] font-medium tracking-[-0.01em] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-          >
-            <Mic className="h-3.5 w-3.5" strokeWidth={1.7} />
-            Voice
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={() => openOverlay("search")}
-          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-[12.5px] font-medium tracking-[-0.01em] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-        >
-          <Search className="h-3.5 w-3.5" strokeWidth={1.7} />
-          Search
-        </button>
-      </nav>
-    </div>
   );
 }
 
@@ -238,9 +184,10 @@ function EmptyChat({
   return (
     <div
       ref={shellRef}
-      className="relative flex flex-1 flex-col items-center justify-center px-8 py-10 md:justify-start"
+      className={cn(
+        "relative flex flex-1 flex-col items-center justify-center px-8 py-10 md:justify-start",
+      )}
     >
-      <NewChatTabBar />
       <div
         ref={clusterRef}
         className="flex w-full max-w-[44rem] flex-col items-center max-md:!mt-0"
@@ -263,14 +210,13 @@ function EmptyChat({
             )}
           >
             {visible.map((item) => {
-              const Icon =
-                promptIcons[item.id as keyof typeof promptIcons] ?? Hammer;
+              const Icon = navIcon(item.space);
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => onPrompt(item.label)}
-                  className="flex min-h-[6.25rem] flex-col justify-between rounded-[15px] border border-border bg-transparent p-3 text-left transition-colors duration-200 hover:bg-muted"
+                  className="light-surface light-surface-interactive flex min-h-[6.25rem] flex-col justify-between rounded-[15px] p-3 text-left"
                 >
                   <Icon
                     className={cn("h-3.5 w-3.5", spaceIconTint(item.space))}

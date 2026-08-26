@@ -50,7 +50,7 @@ export const handshakeArchitectureLayers: {
     id: "customer-agent",
     label: "Customer AI Agent",
     details: [
-      { label: "Provider", value: "Courier" },
+      { label: "Provider", value: "One AI" },
       { label: "Identity", value: "Verified · Agent ID #A-20491" },
       { label: "Permissions", value: "Context read · Action request" },
     ],
@@ -66,9 +66,9 @@ export const handshakeArchitectureLayers: {
   },
   {
     id: "business-agent",
-    label: "Courier Business Agent",
+    label: "Business Agent",
     details: [
-      { label: "Model", value: "Courier Business v2" },
+      { label: "Model", value: "Business v2" },
       { label: "Knowledge", value: "Products · Policies · Brand voice" },
       { label: "Tools", value: "12 connected capabilities" },
     ],
@@ -86,7 +86,7 @@ export const handshakeArchitectureLayers: {
 
 export const handshakeProviders = [
   {
-    name: "Courier",
+    name: "One AI",
     status: "Verified" as const,
     trust: "Active",
     requests: "12,450",
@@ -315,7 +315,7 @@ export const handshakeTransactions = {
 
 export const handshakeSecurity = {
   verification: [
-    { provider: "Courier", status: "Verified", level: "Full trust" },
+    { provider: "One AI", status: "Verified", level: "Full trust" },
     { provider: "ChatGPT", status: "Pending", level: "Under review" },
   ],
   permissions: {
@@ -341,7 +341,7 @@ export const handshakeSecurity = {
   auditLogs: [
     { time: "8:45 PM", event: "Customer approved purchase action" },
     { time: "8:43 PM", event: "Business agent responded to capability request" },
-    { time: "7:18 PM", event: "Courier agent identity verified" },
+    { time: "7:18 PM", event: "Agent identity verified" },
   ],
   apiKeys: [{ name: "Production", prefix: "hs_live_••••••••", lastUsed: "2 min ago" }],
   encryption: "AES-256 at rest · TLS 1.3 in transit",

@@ -20,12 +20,15 @@
   --chart-5: oklch(0.42 0.18 266);
   --popover: oklch(1 0 0);
   --primary: oklch(0.205 0 0);
-  --sidebar: oklch(0.955 0 0);
+  --sidebar: oklch(0.975 0 0);
   --spacing: 0.25rem;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-sans: var(--font-dm-sans), ui-sans-serif, sans-serif, system-ui;
   --secondary: oklch(0.87 0 0);
-  --background: oklch(1 0 0);
+  --app-canvas: oklch(0.965 0.004 265);
+  --background: var(--app-canvas);
+  --canvas-hover: oklch(1 0 0);
+  --canvas-active: oklch(1 0 0);
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --foreground: oklch(0.145 0 0);
   --destructive: oklch(0.577 0.245 27.325);
@@ -35,8 +38,8 @@
   --shadow-spread: 0px;
   --letter-spacing: 0.008em;
   --shadow-opacity: 0.1;
-  --sidebar-accent: oklch(0.90 0 0);
-  --sidebar-border: oklch(0.90 0 0);
+  --sidebar-accent: var(--app-canvas);
+  --sidebar-border: oklch(0.935 0 0);
   --card-foreground: oklch(0.145 0 0);
   --shadow-offset-x: 0;
   --shadow-offset-y: 1px;
@@ -75,6 +78,8 @@
   --font-sans: var(--font-dm-sans), ui-sans-serif, sans-serif, system-ui;
   --secondary: oklch(0.269 0 0);
   --background: oklch(0.205 0 0);
+  --canvas-hover: var(--muted);
+  --canvas-active: var(--muted);
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
@@ -127,6 +132,8 @@
   --color-sidebar: var(--sidebar);
   --color-secondary: var(--secondary);
   --color-background: var(--background);
+  --color-canvas-hover: var(--canvas-hover);
+  --color-canvas-active: var(--canvas-active);
   --color-foreground: var(--foreground);
   --color-destructive: var(--destructive);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -190,15 +197,15 @@ body {
 /* Light tinted / mono surfaces */
 html:not(.dark) .courier-app-appearance[data-palette="tint"],
 html:not(.dark) .courier-app-appearance[data-palette="mono"] {
-  --background: oklch(0.995 var(--app-chroma) var(--app-hue));
+  --background: var(--app-canvas);
   --card: oklch(0.992 calc(var(--app-chroma) * 0.7) var(--app-hue));
   --muted: oklch(0.95 calc(var(--app-chroma) * 0.85) var(--app-hue));
   --accent: oklch(0.94 calc(var(--app-chroma) * 0.9) var(--app-hue));
   --border: oklch(0.92 calc(var(--app-chroma) * 0.6) var(--app-hue));
   --input: oklch(0.96 calc(var(--app-chroma) * 0.5) var(--app-hue));
-  --sidebar: oklch(0.955 calc(var(--app-chroma) * 0.8) var(--app-hue));
-  --sidebar-accent: oklch(0.91 calc(var(--app-chroma) * 0.9) var(--app-hue));
-  --sidebar-border: oklch(0.9 calc(var(--app-chroma) * 0.55) var(--app-hue));
+  --sidebar: oklch(0.975 calc(var(--app-chroma) * 0.8) var(--app-hue));
+  --sidebar-accent: var(--app-canvas);
+  --sidebar-border: oklch(0.935 calc(var(--app-chroma) * 0.55) var(--app-hue));
   --secondary: oklch(0.88 calc(var(--app-chroma) * 0.5) var(--app-hue));
 }
 
@@ -231,8 +238,15 @@ html.dark .courier-app-appearance[data-palette="mono"] {
   border-radius: var(--radius) !important;
 }
 
-.courier-app-appearance :is([class*="rounded-[18px]"]) {
+.courier-app-appearance
+  :is([class*="rounded-[18px]"], [class*="rounded-[20px]"]):not(.shell-g3-radius) {
   border-radius: max(var(--radius), 14px) !important;
+}
+
+/* G3 curves — composer + floating shell cards (fixed 20px, not shape-slider) */
+.shell-g3-radius,
+.composer-shell {
+  border-radius: 20px !important;
 }
 
 /* Density shows up on common padding/gap utilities */
@@ -490,7 +504,24 @@ select:focus-visible {
 
 .voice-bar {
   transform-origin: center;
+}
+
+.voice-bar-live {
   animation: voice-pulse 0.9s ease-in-out infinite;
+}
+
+.voice-bar-idle {
+  animation: voice-idle 2.4s ease-in-out infinite;
+}
+
+@keyframes voice-idle {
+  0%,
+  100% {
+    transform: scaleY(0.22);
+  }
+  50% {
+    transform: scaleY(0.55);
+  }
 }
 
 .voice-orb {
@@ -511,6 +542,90 @@ select:focus-visible {
   50% {
     transform: scaleY(1);
   }
+}
+
+.new-chat-canvas {
+  background-color: var(--background);
+}
+
+html:not(.dark) .composer-shell,
+html:not(.dark) .light-surface {
+  background-color: oklch(1 0 0);
+  border: 0.75px solid oklch(0.91 0.003 265);
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.04),
+    0 4px 12px oklch(0 0 0 / 0.03);
+}
+
+.light-surface-interactive {
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+html:not(.dark) .light-surface-interactive:hover {
+  background-color: var(--canvas-hover);
+  border-color: oklch(0.88 0.004 265);
+  box-shadow:
+    0 2px 4px oklch(0 0 0 / 0.05),
+    0 6px 16px oklch(0 0 0 / 0.04);
+}
+
+.canvas-hover {
+  transition: background-color 200ms ease;
+  padding-left: 16px;
+  padding-right: 10px;
+}
+
+html:not(.dark) .canvas-hover:hover,
+html:not(.dark) .canvas-hover[data-active="true"] {
+  background-color: var(--canvas-hover);
+}
+
+.menu-row-hover {
+  transition: background-color 200ms ease;
+}
+
+html:not(.dark) .menu-row-hover:hover,
+html:not(.dark) .menu-row-hover[data-active="true"] {
+  background-color: var(--app-canvas);
+}
+
+.dark .canvas-hover:hover,
+.dark .canvas-hover[data-active="true"] {
+  background-color: var(--muted);
+}
+
+.dark .composer-shell,
+.dark .light-surface {
+  background: var(--muted);
+  border: 0.75px solid var(--border);
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.22),
+    0 4px 12px oklch(0 0 0 / 0.16);
+}
+
+.dark .light-surface-interactive:hover {
+  background: var(--accent);
+  border-color: var(--border);
+  box-shadow:
+    0 2px 4px oklch(0 0 0 / 0.26),
+    0 6px 16px oklch(0 0 0 / 0.2);
+}
+
+.dark .menu-row-hover:hover,
+.dark .menu-row-hover[data-active="true"] {
+  background: var(--muted);
+}
+
+/* Right panel interiors — match white shell (light) / muted shell (dark) */
+html:not(.dark) .shell-panel :is(.bg-sidebar, .bg-background) {
+  background-color: oklch(1 0 0);
+}
+
+.dark .shell-panel :is(.bg-sidebar, .bg-background) {
+  background-color: transparent;
 }
 
 .composer-dock {

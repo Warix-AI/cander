@@ -29,7 +29,9 @@ import {
   Waypoints,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useChatCanvasCentered } from "@/lib/chat-layout";
 import { useMobileShell } from "@/lib/use-media-query";
+import { useShellStyle } from "@/lib/shell-chrome";
 
 const ICONS: Record<string, LucideIcon> = {
   "brief-inbox": MessageSquare,
@@ -101,13 +103,20 @@ export function SuggestionPrompts({
   className?: string;
 }) {
   const mobile = useMobileShell();
+  const floating = useShellStyle() === "floating";
+  const { centered } = useChatCanvasCentered();
   const visible = mobile ? items.slice(0, 2) : items;
   if (!visible.length) return null;
 
   return (
     <div
       className={cn(
-        "mx-auto w-full min-w-0 max-w-[38rem] px-4 pb-1",
+        "w-full min-w-0 max-w-[38rem] pb-1",
+        floating
+          ? centered
+            ? "mx-auto px-4 sm:px-6"
+            : "pl-2 pr-3 sm:pl-2.5 sm:pr-4"
+          : "mx-auto px-4",
         className,
       )}
     >
@@ -120,17 +129,20 @@ export function SuggestionPrompts({
               type="button"
               title={item.prompt}
               onClick={() => onSelect(item.prompt)}
-              className="flex min-w-0 items-center gap-3 rounded-[10px] px-1.5 py-2.5 text-left transition-colors duration-200 hover:bg-muted"
+              className="group flex min-w-0 items-center gap-3 rounded-[10px] px-1.5 py-2.5 text-left transition-colors duration-200"
             >
               <Icon
-                className="h-4 w-4 shrink-0 text-muted-foreground"
+                className="h-4 w-4 shrink-0 text-muted-foreground transition-colors duration-200 group-hover:text-foreground"
                 strokeWidth={1.6}
                 aria-hidden
               />
-              <span className="min-w-0 truncate text-[13px] tracking-[-0.01em] text-foreground">
+              <span className="min-w-0 truncate text-[13px] tracking-[-0.01em] text-muted-foreground transition-colors duration-200 group-hover:text-foreground">
                 {item.label}
                 {item.hint ? (
-                  <span className="text-muted-foreground"> · {item.hint}</span>
+                  <span className="transition-colors duration-200 group-hover:text-foreground/70">
+                    {" "}
+                    · {item.hint}
+                  </span>
                 ) : null}
               </span>
             </button>

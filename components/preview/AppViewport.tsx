@@ -38,7 +38,7 @@ export function AppViewport({
     <div
       className={cn(
         "flex h-full min-h-0 justify-center",
-        framed ? "items-center bg-muted/40 p-4" : "items-stretch",
+        framed ? "items-center bg-white p-4 dark:bg-muted/40" : "items-stretch",
       )}
     >
       <div

@@ -35,7 +35,7 @@ const scopes: { id: PersonalScope; label: string; empty: string }[] = [
   {
     id: "goals",
     label: "Goals",
-    empty: "No goals yet. Ask Courier to set one or recap the year.",
+    empty: "No goals yet. Ask to set one or recap the year.",
   },
   {
     id: "car",
