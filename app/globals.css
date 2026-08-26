@@ -60,6 +60,8 @@
 
 .dark {
   --card: oklch(0.165 0 0);
+  --mobile-menu-canvas: oklch(0.145 0.004 265);
+  --mobile-app-surface: oklch(0 0 0);
   --ring: oklch(0.556 0 0);
   --input: oklch(0.269 0 0);
   --muted: oklch(0.269 0 0);
@@ -125,6 +127,11 @@ html.cander-narrow {
   -webkit-text-size-adjust: 100%;
   touch-action: manipulation;
   background-color: var(--app-canvas);
+}
+
+.dark html.cander-mobile,
+.dark html.cander-narrow {
+  background-color: var(--mobile-menu-canvas);
 }
 
 @keyframes mobile-slide-in-from-right {
@@ -320,7 +327,7 @@ html.cander-narrow .light-surface[class*="fixed"] {
 
 .dark html.cander-mobile .composer-dock,
 .dark html.cander-narrow .composer-dock {
-  background-color: oklch(0.145 0 0);
+  background-color: oklch(0 0 0);
 }
 
 .dark html.cander-mobile .composer-dock .light-surface,
@@ -349,7 +356,7 @@ html.cander-narrow body {
 
 .dark html.cander-mobile body,
 .dark html.cander-narrow body {
-  background-color: oklch(0.145 0 0);
+  background-color: var(--mobile-menu-canvas);
 }
 
 html.cander-mobile input,
@@ -492,7 +499,12 @@ html.dark {
 }
 
 .dark .mobile-menu-canvas {
-  background-color: oklch(0.145 0 0);
+  background-color: var(--mobile-menu-canvas);
+}
+
+/* Chat peek / app column — true black in dark mode. */
+.dark .mobile-app-surface {
+  background-color: var(--mobile-app-surface);
 }
 
 body {

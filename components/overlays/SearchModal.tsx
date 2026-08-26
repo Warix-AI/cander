@@ -65,8 +65,10 @@ export function SearchModal() {
 
   useEffect(() => {
     if (!open) return;
-    setQuery("");
-    setActive(0);
+    queueMicrotask(() => {
+      setQuery("");
+      setActive(0);
+    });
     const id = window.setTimeout(() => inputRef.current?.focus(), 0);
     return () => window.clearTimeout(id);
   }, [open]);
@@ -261,10 +263,6 @@ export function SearchModal() {
     entitlements,
   ]);
 
-  useEffect(() => {
-    setActive(0);
-  }, [query]);
-
   const choose = (hit: Hit) => {
     hit.run();
     closeOverlay();
@@ -286,7 +284,10 @@ export function SearchModal() {
           ref={inputRef}
           id="search-title"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setActive(0);
+          }}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown") {
               event.preventDefault();

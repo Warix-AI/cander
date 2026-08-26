@@ -92,10 +92,7 @@ export function Dropdown({
   };
 
   useLayoutEffect(() => {
-    if (!open) {
-      setPos(null);
-      return;
-    }
+    if (!open) return;
     place();
   }, [open, placement, align, matchTrigger]);
 

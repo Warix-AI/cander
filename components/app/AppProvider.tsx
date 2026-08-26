@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -119,7 +120,8 @@ import {
   startContinuousChat,
   summarizeSession,
 } from "@/lib/persistent-chat";
-import { markMobileInstantNav } from "@/lib/mobile-instant-nav";
+import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
+import { useMobileShell } from "@/lib/use-media-query";
 
 type Snapshot = {
   view: CourierView;
@@ -443,6 +445,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ],
     i: 0,
   });
+
+  const mobile = useMobileShell();
+  const mobileNavTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (mobileNavTimer.current) clearTimeout(mobileNavTimer.current);
+    };
+  }, []);
 
   const pushTarget = useCallback((snap: Snapshot) => {
     setHist((h) => {
@@ -805,6 +816,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [workspaceId, threadId, pushTarget],
   );
 
+  const applyHomeNewChat = useCallback(() => {
+    setThreadId(null);
+    setSpaceId(null);
+    setProjectId(null);
+    setConnectorId(null);
+    setJobId(null);
+    setSkillId(null);
+    setView("chat");
+    setDrafting(false);
+    setPanelIntent("browse");
+    setPanelMode("collapsed");
+    setMobileSurface("chat");
+    pushTarget({
+      view: "chat",
+      spaceId: null,
+      threadId: null,
+      projectId: null,
+      panelMode: "collapsed",
+      panelIntent: "browse",
+      connectorId: null,
+      jobId: null,
+      skillId: null,
+    });
+  }, [pushTarget]);
+
   const newChat = useCallback(
     (space?: SpaceId) => {
       if (space && isChatSpace(space)) {
@@ -843,34 +879,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      if (view === "space") {
-        markMobileInstantNav();
+      if (mobileNavTimer.current) {
+        clearTimeout(mobileNavTimer.current);
+        mobileNavTimer.current = null;
       }
 
-      setThreadId(null);
-      setSpaceId(null);
-      setProjectId(null);
-      setConnectorId(null);
-      setJobId(null);
-      setSkillId(null);
-      setView("chat");
-      setDrafting(false);
-      setPanelIntent("browse");
-      setPanelMode("collapsed");
-      setMobileSurface("chat");
-      pushTarget({
-        view: "chat",
-        spaceId: null,
-        threadId: null,
-        projectId: null,
-        panelMode: "collapsed",
-        panelIntent: "browse",
-        connectorId: null,
-        jobId: null,
-        skillId: null,
-      });
+      const slideFirst =
+        mobile &&
+        (mobileSurface === "panel" || mobileSurface === "menu");
+
+      if (slideFirst) {
+        setMobileSurface("chat");
+        if (mobileSurface === "menu") {
+          setMobileMenuScreen("main");
+        }
+        mobileNavTimer.current = window.setTimeout(() => {
+          mobileNavTimer.current = null;
+          applyHomeNewChat();
+        }, MOBILE_PAGER_MS);
+        return;
+      }
+
+      applyHomeNewChat();
     },
-    [pushTarget, workspaceId, view],
+    [mobile, mobileSurface, applyHomeNewChat, pushTarget, workspaceId],
   );
 
   const openCourierHome = useCallback(() => {

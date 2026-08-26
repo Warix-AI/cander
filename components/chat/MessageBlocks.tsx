@@ -328,7 +328,7 @@ function ConnectBlock({
         Connect {block.service}
       </p>
       <p className="mt-1.5 text-[14.5px] leading-relaxed text-muted-foreground">
-        We'll wire it in. You won't paste secrets into source files.
+        {"We'll wire it in. You won't paste secrets into source files."}
       </p>
       <button
         type="button"

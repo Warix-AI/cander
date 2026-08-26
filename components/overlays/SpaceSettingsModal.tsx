@@ -25,8 +25,10 @@ export function SpaceSettingsModal() {
   const [query, setQuery] = useState("");
 
   useEffect(() => {
-    setTab(settingsSpaceInitialTab ?? BACKGROUND_TAB);
-    setQuery("");
+    queueMicrotask(() => {
+      setTab(settingsSpaceInitialTab ?? BACKGROUND_TAB);
+      setQuery("");
+    });
   }, [settingsSpaceId, config, settingsSpaceInitialTab]);
 
   const visible = useMemo(() => {

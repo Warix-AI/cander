@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react";
 import type { MobileSurface } from "@/lib/types";
-import { isMobileInstantNav } from "@/lib/mobile-instant-nav";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,16 +22,11 @@ export function MobilePager({
   const n = Math.max(panes.length, 1);
   const safeActive = panes.includes(active) ? active : panes[0]!;
   const index = Math.max(0, panes.indexOf(safeActive));
-  const instant = isMobileInstantNav();
 
   return (
     <div className={cn("relative min-h-0 min-w-0 flex-1 overflow-hidden", className)}>
       <div
-        className={cn(
-          "flex h-full will-change-transform",
-          !instant &&
-            "transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]",
-        )}
+        className="flex h-full transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform"
         style={{
           width: `${n * 100}%`,
           transform: `translate3d(-${(index * 100) / n}%, 0, 0)`,

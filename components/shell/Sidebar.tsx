@@ -93,8 +93,10 @@ export function Sidebar() {
 
   useEffect(() => {
     if (sidebarOpen) {
-      setPeek(false);
-      setPeekVisible(false);
+      queueMicrotask(() => {
+        setPeek(false);
+        setPeekVisible(false);
+      });
     }
   }, [sidebarOpen]);
 
