@@ -155,7 +155,7 @@ export function WorkDashboard() {
           {
             id: "manage-connectors",
             label: "Manage connectors",
-            onClick: () => openSpaceSettings("work"),
+            onClick: () => openSpaceSettings("work", { tab: "connectors" }),
           },
         ]}
       >

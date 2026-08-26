@@ -216,8 +216,9 @@ type AppContextValue = {
   setSpaceLayout: (layout: SpaceLayout) => void;
   overlay: OverlayId;
   settingsSpaceId: SpaceId | null;
+  settingsSpaceInitialTab: string | null;
   openOverlay: (id: OverlayId) => void;
-  openSpaceSettings: (space: SpaceId) => void;
+  openSpaceSettings: (space: SpaceId, options?: { tab?: string }) => void;
   closeOverlay: () => void;
   newChat: (space?: SpaceId) => void;
   /** Courier home chat — empty chat home. */
@@ -397,6 +398,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [spaceLayout, setSpaceLayout] = useState<SpaceLayout>("list");
   const [overlay, setOverlay] = useState<OverlayId>(null);
   const [settingsSpaceId, setSettingsSpaceId] = useState<SpaceId | null>(null);
+  const [settingsSpaceInitialTab, setSettingsSpaceInitialTab] = useState<
+    string | null
+  >(null);
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceAnchor, setVoiceAnchor] = useState<VoiceAnchor>("bottom-right");
   const [browserChatOpen, setBrowserChatOpen] = useState(false);
@@ -1958,14 +1962,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setOverlay(id);
   }, []);
 
-  const openSpaceSettings = useCallback((space: SpaceId) => {
-    setSettingsSpaceId(space);
-    setOverlay("space-settings");
-  }, []);
+  const openSpaceSettings = useCallback(
+    (space: SpaceId, options?: { tab?: string }) => {
+      setSettingsSpaceId(space);
+      setSettingsSpaceInitialTab(options?.tab ?? null);
+      setOverlay("space-settings");
+    },
+    [],
+  );
 
   const closeOverlay = useCallback(() => {
     setOverlay(null);
     setSettingsSpaceId(null);
+    setSettingsSpaceInitialTab(null);
   }, []);
 
   const toggleVoice = useCallback(() => {
@@ -2295,6 +2304,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSpaceLayout,
       overlay,
       settingsSpaceId,
+      settingsSpaceInitialTab,
       openOverlay,
       openSpaceSettings,
       closeOverlay,
@@ -2427,6 +2437,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       spaceLayout,
       overlay,
       settingsSpaceId,
+      settingsSpaceInitialTab,
       openOverlay,
       openSpaceSettings,
       closeOverlay,

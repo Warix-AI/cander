@@ -27,7 +27,7 @@ export function WorkspaceMark({
   id: string;
   name: string;
   active?: boolean;
-  size?: "nav" | "sm" | "md";
+  size?: "nav" | "sm" | "md" | "lg";
   className?: string;
 }) {
   const icons = useSyncExternalStore(
@@ -41,7 +41,9 @@ export function WorkspaceMark({
       ? "h-3.5 w-3.5 text-[7px] rounded-[4px]"
       : size === "sm"
         ? "h-[26px] w-[26px] text-[11px] rounded-[10px]"
-        : "h-[35px] w-[35px] text-[12px] rounded-[10px]";
+        : size === "lg"
+          ? "h-10 w-10 text-[13px] rounded-[12px]"
+          : "h-[35px] w-[35px] text-[12px] rounded-[10px]";
 
   if (icon) {
     return (

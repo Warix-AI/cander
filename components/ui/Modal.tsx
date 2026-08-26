@@ -11,6 +11,7 @@ export function Modal({
   className,
   children,
   lockScroll = true,
+  edgeToEdge = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -18,6 +19,7 @@ export function Modal({
   className?: string;
   children: ReactNode;
   lockScroll?: boolean;
+  edgeToEdge?: boolean;
 }) {
   const shell = useShellStyle();
   const floating = shell === "floating";
@@ -45,8 +47,13 @@ export function Modal({
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[60] flex items-center justify-center",
-        floating ? "p-5 sm:p-8" : "p-4 sm:p-6",
+        "fixed inset-0 z-[60] flex",
+        edgeToEdge
+          ? "items-stretch justify-stretch p-0"
+          : cn(
+              "items-center justify-center",
+              floating ? "p-5 sm:p-8" : "p-4 sm:p-6",
+            ),
       )}
     >
       <button
@@ -60,8 +67,13 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={labelledBy}
         className={cn(
-          "relative z-10 max-h-[calc(100vh-2rem)] overflow-hidden light-surface bg-popover shadow-[0_16px_48px_rgba(0,0,0,0.12)] dark:border dark:border-border dark:bg-transparent dark:shadow-[0_16px_48px_rgba(0,0,0,0.18)]",
-          floating ? SHELL_G3_RADIUS : "rounded-[10px]",
+          "relative z-10 overflow-hidden light-surface bg-popover shadow-[0_16px_48px_rgba(0,0,0,0.12)] dark:border dark:border-border dark:bg-transparent dark:shadow-[0_16px_48px_rgba(0,0,0,0.18)]",
+          edgeToEdge
+            ? "h-full max-h-none w-full rounded-none"
+            : cn(
+                "max-h-[calc(100vh-2rem)]",
+                floating ? SHELL_G3_RADIUS : "rounded-[10px]",
+              ),
           className,
         )}
       >

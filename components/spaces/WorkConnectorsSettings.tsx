@@ -5,6 +5,10 @@ import { Plus } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import {
+  SettingsGroup,
+  SettingsSection,
+} from "@/components/settings/SettingsChrome";
+import {
   getInstalledConnectorsServerSnapshot,
   getInstalledConnectorsSnapshot,
   mergeConnectorInstalled,
@@ -23,7 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 
 /** Manage which connectors feed Work — used in Work space settings. */
-export function WorkConnectorsSettings() {
+export function WorkConnectorsSettings({ compact = false }: { compact?: boolean }) {
   const { workspaceId, openSpace, openConnector, closeOverlay } = useApp();
   useSyncExternalStore(
     subscribeWorkConnectors,
@@ -57,6 +61,104 @@ export function WorkConnectorsSettings() {
     closeOverlay();
     openSpace("connectors");
   };
+
+  if (compact) {
+    return (
+      <div className="pb-2">
+        <p className="mb-5 text-[13.5px] leading-relaxed text-muted-foreground">
+          Attach mail, calendar, chat, and CRM so Work can surface what needs you.
+        </p>
+
+        <SettingsSection title="Attached to Work">
+          <SettingsGroup dividerInset="icon">
+            {attached.length ? (
+              attached.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 px-4 py-3.5"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeOverlay();
+                      openConnector(item.id);
+                    }}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  >
+                    <ConnectorMark id={item.icon} size="md" />
+                    <span className="min-w-0">
+                      <span className="block text-[15px] font-medium tracking-[-0.02em]">
+                        {item.name}
+                      </span>
+                      <span className="mt-0.5 block text-[13px] text-muted-foreground">
+                        {item.category}
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => detachWorkConnector(workspaceId, item.id)}
+                    className="shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))
+            ) : (
+              <p className="px-4 py-4 text-[13.5px] text-muted-foreground">
+                No connectors on Work yet. Add mail, calendar, or chat below.
+              </p>
+            )}
+          </SettingsGroup>
+        </SettingsSection>
+
+        <SettingsSection
+          title="Available"
+          actions={
+            <button
+              type="button"
+              onClick={goAdd}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={1.7} />
+              Browse all
+            </button>
+          }
+        >
+          <SettingsGroup dividerInset="icon">
+            {available.length ? (
+              available.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => attachWorkConnector(workspaceId, item.id)}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/40"
+                >
+                  <ConnectorMark id={item.icon} size="md" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-medium tracking-[-0.02em]">
+                      {item.name}
+                    </span>
+                    <span className="mt-0.5 block text-[13px] text-muted-foreground">
+                      {item.category}
+                    </span>
+                  </span>
+                  <Plus
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    strokeWidth={1.7}
+                  />
+                </button>
+              ))
+            ) : (
+              <p className="px-4 py-4 text-[13.5px] text-muted-foreground">
+                Every installed connector is already attached.
+              </p>
+            )}
+          </SettingsGroup>
+        </SettingsSection>
+      </div>
+    );
+  }
 
   return (
     <div>

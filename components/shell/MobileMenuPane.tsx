@@ -105,7 +105,7 @@ export function MobileMenuPane() {
   if (mobileMenuScreen === "pinned" || mobileMenuScreen === "workspace") {
     return (
       <aside className="flex h-full min-h-0 flex-col bg-background text-foreground">
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top,0px)+12px)]">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
           {mobileMenuScreen === "pinned" ? (
             <PinsSheet onSelect={closeToChat} hideHeading />
           ) : (

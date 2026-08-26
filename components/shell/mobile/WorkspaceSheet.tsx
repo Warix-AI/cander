@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const rowClass =
-  "menu-row-hover flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[13.5px] transition-colors duration-200";
+  "menu-row-hover flex w-full items-center gap-3.5 rounded-[12px] px-3 py-3 text-left text-[16px] transition-colors duration-200";
 
 export function WorkspaceSheet({
   onSelect,
@@ -36,7 +36,7 @@ export function WorkspaceSheet({
   const allowed = workspacesFor(actor, entitlements);
 
   return (
-    <div className="px-1 py-1">
+    <div>
       {allowed.map((item) => {
         const active = item.id === workspace.id;
         return (
@@ -54,12 +54,12 @@ export function WorkspaceSheet({
               id={item.id}
               name={item.name}
               active={active}
-              size="sm"
+              size="lg"
             />
             <span className="min-w-0 flex-1 truncate">{item.name}</span>
             {active ? (
               <Check
-                className="h-3.5 w-3.5 shrink-0 text-foreground"
+                className="h-4 w-4 shrink-0 text-foreground"
                 strokeWidth={2}
               />
             ) : null}

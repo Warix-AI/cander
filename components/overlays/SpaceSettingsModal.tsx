@@ -1,26 +1,33 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search, X } from "lucide-react";
+import { ChevronLeft, Search, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { Modal } from "@/components/ui/Modal";
 import { BannerSettingsPanel } from "@/components/spaces/SpaceBanner";
 import { WorkConnectorsSettings } from "@/components/spaces/WorkConnectorsSettings";
 import { spaceSettings, type SpaceSettingsItem } from "@/lib/space-settings";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 const BACKGROUND_TAB = "background";
 
 export function SpaceSettingsModal() {
-  const { overlay, settingsSpaceId, closeOverlay } = useApp();
+  const {
+    overlay,
+    settingsSpaceId,
+    settingsSpaceInitialTab,
+    closeOverlay,
+  } = useApp();
+  const mobile = useMobileShell();
   const config = settingsSpaceId ? spaceSettings[settingsSpaceId] : null;
   const [tab, setTab] = useState("");
   const [query, setQuery] = useState("");
 
   useEffect(() => {
-    setTab(BACKGROUND_TAB);
+    setTab(settingsSpaceInitialTab ?? BACKGROUND_TAB);
     setQuery("");
-  }, [settingsSpaceId, config]);
+  }, [settingsSpaceId, config, settingsSpaceInitialTab]);
 
   const visible = useMemo(() => {
     if (!config) return [];
@@ -47,127 +54,183 @@ export function SpaceSettingsModal() {
 
   const section = config?.sections.find((item) => item.id === tab);
 
+  const mobileTitle = useMemo(() => {
+    if (tab === BACKGROUND_TAB) return "Background";
+    if (tab === "connectors" && settingsSpaceId === "work") return "Connectors";
+    return section?.label ?? config?.title ?? "Settings";
+  }, [tab, section, settingsSpaceId, config]);
+
+  const panel = (
+    <>
+      {tab === BACKGROUND_TAB && settingsSpaceId ? (
+        <BannerSettingsPanel space={settingsSpaceId} />
+      ) : tab === "connectors" && settingsSpaceId === "work" ? (
+        <WorkConnectorsSettings compact={mobile} />
+      ) : section ? (
+        <>
+          {!mobile ? (
+            <>
+              <h2
+                id="space-settings-title"
+                className="text-[18px] font-semibold tracking-[-0.03em]"
+              >
+                {section.label}
+              </h2>
+              <p className="mt-2 max-w-xl text-[13.5px] leading-relaxed text-muted-foreground">
+                {section.description}
+              </p>
+              <p className="mt-1 max-w-xl text-[12.5px] text-muted-foreground/80">
+                {config?.subtitle}
+              </p>
+            </>
+          ) : null}
+          <div
+            className={cn(
+              "grid gap-3",
+              mobile ? "mt-0" : "mt-6",
+              section.items.some((item) => item.preview === "theme")
+                ? "sm:grid-cols-2"
+                : "sm:grid-cols-2 lg:grid-cols-2",
+            )}
+          >
+            {section.items.map((item) => (
+              <SettingsCard key={item.id} item={item} compact={mobile} />
+            ))}
+          </div>
+        </>
+      ) : null}
+    </>
+  );
+
   return (
     <Modal
       open={overlay === "space-settings" && !!config}
       onClose={closeOverlay}
       labelledBy="space-settings-title"
-      className="flex h-[min(52rem,calc(100vh-3rem))] w-[min(58rem,calc(100vw-2rem))]"
+      edgeToEdge={mobile}
+      className={cn(
+        mobile
+          ? "flex h-[100dvh] w-full flex-col"
+          : "flex h-[min(52rem,calc(100vh-3rem))] w-[min(58rem,calc(100vw-2rem))]",
+      )}
     >
       {config ? (
-        <>
-          <nav className="flex w-[14rem] shrink-0 flex-col border-r border-border bg-muted/40 p-3">
-            <div className="px-1 pb-2">
-              <p className="text-[11px] tracking-[0.06em] text-muted-foreground uppercase">
-                Library
-              </p>
-              <p className="mt-1 text-[14px] font-medium tracking-[-0.02em]">
-                {config.title}
-              </p>
+        mobile ? (
+          <>
+            <header className="flex shrink-0 items-center gap-2 border-b border-border px-2 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={closeOverlay}
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted"
+              >
+                <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
+              </button>
+              <h2
+                id="space-settings-title"
+                className="min-w-0 flex-1 truncate text-center text-[15px] font-medium tracking-[-0.01em]"
+              >
+                {mobileTitle}
+              </h2>
+              <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              {panel}
             </div>
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-                strokeWidth={1.6}
-              />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search"
-                className="h-9 w-full rounded-[10px] border border-border bg-background pr-3 pl-8 text-[13px] outline-none placeholder:text-muted-foreground focus:border-foreground/20"
-              />
-            </div>
-            <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
-              {showBackground ? (
-                <button
-                  type="button"
-                  onClick={() => setTab(BACKGROUND_TAB)}
-                  className={cn(
-                    "flex w-full rounded-[10px] px-2.5 py-2 text-left text-[13.5px] transition-colors duration-200",
-                    tab === BACKGROUND_TAB ? "bg-muted font-medium" : "hover:bg-muted",
-                  )}
-                >
-                  Background
-                </button>
-              ) : null}
-              {visible.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setTab(item.id)}
-                  className={cn(
-                    "flex w-full rounded-[10px] px-2.5 py-2 text-left text-[13.5px] transition-colors duration-200",
-                    tab === item.id ? "bg-muted font-medium" : "hover:bg-muted",
-                  )}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </nav>
-
-          <div className="relative min-w-0 flex-1 overflow-y-auto px-8 py-7">
-            <button
-              type="button"
-              aria-label="Close space settings"
-              onClick={closeOverlay}
-              className="absolute top-4 right-4 inline-flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-            >
-              <X className="h-4 w-4" strokeWidth={1.6} />
-            </button>
-
-            {tab === BACKGROUND_TAB && settingsSpaceId ? (
-              <BannerSettingsPanel space={settingsSpaceId} />
-            ) : tab === "connectors" && settingsSpaceId === "work" ? (
-              <WorkConnectorsSettings />
-            ) : section ? (
-              <>
-                <h2
-                  id="space-settings-title"
-                  className="text-[18px] font-semibold tracking-[-0.03em]"
-                >
-                  {section.label}
-                </h2>
-                <p className="mt-2 max-w-xl text-[13.5px] leading-relaxed text-muted-foreground">
-                  {section.description}
+          </>
+        ) : (
+          <>
+            <nav className="flex w-[14rem] shrink-0 flex-col border-r border-border bg-muted/40 p-3">
+              <div className="px-1 pb-2">
+                <p className="text-[11px] tracking-[0.06em] text-muted-foreground uppercase">
+                  Library
                 </p>
-                <p className="mt-1 max-w-xl text-[12.5px] text-muted-foreground/80">
-                  {config.subtitle}
+                <p className="mt-1 text-[14px] font-medium tracking-[-0.02em]">
+                  {config.title}
                 </p>
-                <div
-                  className={cn(
-                    "mt-6 grid gap-3",
-                    section.items.some((item) => item.preview === "theme")
-                      ? "sm:grid-cols-2"
-                      : "sm:grid-cols-2 lg:grid-cols-2",
-                  )}
-                >
-                  {section.items.map((item) => (
-                    <SettingsCard key={item.id} item={item} />
-                  ))}
-                </div>
-              </>
-            ) : null}
-          </div>
-        </>
+              </div>
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                  strokeWidth={1.6}
+                />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search"
+                  className="h-9 w-full rounded-[10px] border border-border bg-background pr-3 pl-8 text-[13px] outline-none placeholder:text-muted-foreground focus:border-foreground/20"
+                />
+              </div>
+              <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+                {showBackground ? (
+                  <button
+                    type="button"
+                    onClick={() => setTab(BACKGROUND_TAB)}
+                    className={cn(
+                      "flex w-full rounded-[10px] px-2.5 py-2 text-left text-[13.5px] transition-colors duration-200",
+                      tab === BACKGROUND_TAB ? "bg-muted font-medium" : "hover:bg-muted",
+                    )}
+                  >
+                    Background
+                  </button>
+                ) : null}
+                {visible.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setTab(item.id)}
+                    className={cn(
+                      "flex w-full rounded-[10px] px-2.5 py-2 text-left text-[13.5px] transition-colors duration-200",
+                      tab === item.id ? "bg-muted font-medium" : "hover:bg-muted",
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </nav>
+
+            <div className="relative min-w-0 flex-1 overflow-y-auto px-8 py-7">
+              <button
+                type="button"
+                aria-label="Close space settings"
+                onClick={closeOverlay}
+                className="absolute top-4 right-4 inline-flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-4 w-4" strokeWidth={1.6} />
+              </button>
+              {panel}
+            </div>
+          </>
+        )
       ) : null}
     </Modal>
   );
 }
 
-function SettingsCard({ item }: { item: SpaceSettingsItem }) {
+function SettingsCard({
+  item,
+  compact = false,
+}: {
+  item: SpaceSettingsItem;
+  compact?: boolean;
+}) {
   return (
     <button
       type="button"
       className={cn(
-        "group overflow-hidden rounded-[10px] border text-left transition-all duration-200 hover:border-foreground/20 hover:shadow-sm",
+        "group overflow-hidden border text-left transition-all duration-200 hover:border-foreground/20 hover:shadow-sm",
+        compact ? "rounded-[12px]" : "rounded-[10px]",
         item.active ? "border-foreground/20 ring-1 ring-foreground/10" : "border-border",
       )}
     >
-      <SettingsPreview item={item} />
-      <div className="bg-card px-3.5 py-3">
+      {!compact ? <SettingsPreview item={item} /> : null}
+      <div className={cn("bg-card", compact ? "px-4 py-3.5" : "px-3.5 py-3")}>
         <div className="flex items-start justify-between gap-2">
-          <p className="text-[14px] font-medium tracking-[-0.02em]">
+          <p className={cn(
+            "font-medium tracking-[-0.02em]",
+            compact ? "text-[15px]" : "text-[14px]",
+          )}>
             {item.name}
           </p>
           {item.active ? (
@@ -176,7 +239,10 @@ function SettingsCard({ item }: { item: SpaceSettingsItem }) {
             </span>
           ) : null}
         </div>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+        <p className={cn(
+          "mt-1 leading-relaxed text-muted-foreground",
+          compact ? "text-[13px]" : "text-[12.5px]",
+        )}>
           {item.detail}
         </p>
         {item.tags?.length ? (

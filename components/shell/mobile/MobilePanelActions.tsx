@@ -147,10 +147,9 @@ export function MobilePanelActionsCluster({
         type="button"
         aria-label={config.newChatLabel ?? "New chat"}
         onClick={onNewChat}
-        className="inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium tracking-[-0.01em] text-foreground transition-colors hover:bg-muted"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted"
       >
         <SquarePen className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-        <span className="truncate">{config.newChatLabel ?? "New chat"}</span>
       </button>
       {hasMenu ? (
         <Dropdown

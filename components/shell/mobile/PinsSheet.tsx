@@ -14,16 +14,18 @@ function PinLeading({
   item: Pick<PinnedItem, "kind" | "icon" | "spaceId">;
 }) {
   if (item.kind === "connector") {
-    return <ConnectorMark id={item.icon ?? "connector"} size="xs" />;
+    return <ConnectorMark id={item.icon ?? "connector"} size="md" />;
   }
   const Icon =
     (item.spaceId && spaceIcons[item.spaceId]) ||
     (item.kind === "project" ? FolderKanban : MessageSquare);
   return (
-    <Icon
-      className="h-5 w-5 shrink-0 text-muted-foreground"
-      strokeWidth={1.9}
-    />
+    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-muted/70">
+      <Icon
+        className="h-5 w-5 text-muted-foreground"
+        strokeWidth={1.9}
+      />
+    </span>
   );
 }
 
@@ -61,8 +63,8 @@ export function PinsSheet({
   };
 
   return (
-    <div className="py-1">
-      <section className="px-2 pb-2">
+    <div>
+      <section>
         {hideHeading ? null : (
           <p className="px-3 pb-1 pt-2 text-[12px] font-medium text-muted-foreground">
             Pinned
@@ -76,8 +78,8 @@ export function PinsSheet({
               data-active={isActive(item) ? "true" : undefined}
               onClick={() => openItem(item)}
               className={cn(
-                "menu-row-hover flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-left text-[15px] transition-colors duration-200",
-                isActive(item) && "font-medium",
+                "menu-row-hover flex w-full items-center gap-3.5 rounded-[12px] px-3 py-3 text-left text-[16px] transition-colors duration-200",
+                isActive(item) && "bg-muted/70 font-medium",
               )}
             >
               <PinLeading item={item} />
@@ -85,7 +87,7 @@ export function PinsSheet({
             </button>
           ))
         ) : (
-          <p className="px-3 py-1.5 text-[12px] text-muted-foreground/70">
+          <p className="px-3 py-2 text-[13px] text-muted-foreground/70">
             No pinned items
           </p>
         )}
