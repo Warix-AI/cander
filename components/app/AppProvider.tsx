@@ -783,7 +783,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setView("space");
       setPanelIntent("execute");
       setPanelMode("split");
-      setMobileSurface((surface) => (surface === "menu" ? "chat" : surface));
+      setMobileSurface("chat");
       setDrafting(!hasMessages);
       if (space === "build") setBuildTool("preview");
       if (space === "studio") setStudioTool("canvas");
@@ -852,6 +852,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setDrafting(false);
       setPanelIntent("browse");
       setPanelMode("collapsed");
+      setMobileSurface("chat");
       pushTarget({
         view: "chat",
         spaceId: null,
@@ -1657,14 +1658,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (entitlements.hasVoice) return;
-    setVoiceActive(false);
+    queueMicrotask(() => setVoiceActive(false));
   }, [entitlements.hasVoice]);
 
   useEffect(() => {
     if (panelMode !== "collapsed") return;
     if (!drafting || threadId) return;
-    setDrafting(false);
-    setPanelIntent("browse");
+    queueMicrotask(() => {
+      setDrafting(false);
+      setPanelIntent("browse");
+    });
   }, [panelMode, drafting, threadId]);
 
   useEffect(() => {
@@ -1706,7 +1709,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const opts = { billingPlan, personalEnabled: personalSpaceEnabled };
     const check = spaceId === "work" ? "work" : "personal";
     if (spaceAllowed(check, allowed, opts)) return;
-    openSpace(spaceId);
+    queueMicrotask(() => openSpace(spaceId));
   }, [
     spaceId,
     workspaceId,
@@ -2065,6 +2068,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBrowserChatOpen(Boolean(opts?.chat));
     setBrowserSearch(query);
     setPanelMode("collapsed");
+    setMobileSurface("chat");
     pushTarget({
       view: "browser",
       spaceId: "research",

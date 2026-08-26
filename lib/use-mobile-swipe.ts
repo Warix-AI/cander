@@ -3,6 +3,7 @@
 import { useCallback, useRef, type TouchEvent } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { canUseRightPanel } from "@/lib/right-panel";
+import { isChatSpace } from "@/lib/spaces";
 import { useMobileShell } from "@/lib/use-media-query";
 
 const SWIPE_MIN = 56;
@@ -34,6 +35,7 @@ export function useMobileSwipeGestures() {
     setMobileSurface,
     panelMode,
     setPanelMode,
+    openSpaceChat,
   } = useApp();
 
   const startX = useRef(0);
@@ -87,7 +89,11 @@ export function useMobileSwipeGestures() {
       // Swipe right → toward menu
       if (dx > 0) {
         if (mobileSurface === "panel") {
-          setMobileSurface("chat");
+          if (view === "space" && spaceId && isChatSpace(spaceId)) {
+            openSpaceChat(spaceId);
+          } else {
+            setMobileSurface("chat");
+          }
           return;
         }
         if (mobileSurface === "chat") {
@@ -116,10 +122,12 @@ export function useMobileSwipeGestures() {
     [
       drafting,
       mobileSurface,
+      openSpaceChat,
       panelAvailable,
       panelMode,
       setMobileSurface,
       setPanelMode,
+      spaceId,
       thread,
       view,
     ],

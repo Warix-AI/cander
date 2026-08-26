@@ -15,7 +15,7 @@ export function MobileBootSplash() {
 
   useEffect(() => {
     if (!isMobileShell()) return;
-    setVisible(true);
+    queueMicrotask(() => setVisible(true));
 
     let cancelled = false;
     let fadeTimer = 0;

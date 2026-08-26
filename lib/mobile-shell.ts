@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 type ListenerHandle = { remove: () => void };
 
@@ -253,11 +253,17 @@ export function lockMobileViewport() {
 
 /** Client hook — false on the server / in a normal browser. */
 export function useMobileShell() {
-  const [mobile, setMobile] = useState(false);
+  const mobile = useSyncExternalStore(
+    (callback) => {
+      callback();
+      return () => {};
+    },
+    () => isMobileShell(),
+    () => false,
+  );
+
   useEffect(() => {
-    const on = isMobileShell();
-    setMobile(on);
-    if (!on) return;
+    if (!mobile) return;
     document.documentElement.classList.add("cander-mobile");
     document.documentElement.dataset.canderMobile = getMobilePlatform();
     const unlock = lockMobileViewport();
@@ -266,6 +272,7 @@ export function useMobileShell() {
       document.documentElement.classList.remove("cander-mobile");
       delete document.documentElement.dataset.canderMobile;
     };
-  }, []);
+  }, [mobile]);
+
   return mobile;
 }

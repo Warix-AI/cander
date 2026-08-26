@@ -66,9 +66,9 @@ export function MobileAppChrome({ className }: { className?: string }) {
     setMobileSurface,
     mobileMenuScreen,
     setMobileMenuScreen,
-    panelMode,
     setPanelMode,
     newChat,
+    openSpaceChat,
     settingsMobileHub,
     settingsTab,
     settingsWorkspaceId,
@@ -172,24 +172,12 @@ export function MobileAppChrome({ className }: { className?: string }) {
   );
 
   const startNewChat = () => {
-    if (
-      spaceId &&
-      isChatSpace(spaceId) &&
-      (view === "space" || view === "chat")
-    ) {
-      newChat(spaceId);
-    } else {
-      newChat();
-    }
+    newChat();
     setMobileSurface("chat");
   };
 
   const startPanelNewChat = () => {
-    if (panelActions?.onNewChat) {
-      panelActions.onNewChat();
-    } else {
-      startNewChat();
-    }
+    newChat();
     setMobileSurface("chat");
   };
 
@@ -224,8 +212,15 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
   const setChatOrPanel = (next: "chat" | "panel") => {
     if (!showSpaceToggle) return;
-    if (panelMode === "collapsed") setPanelMode("split");
-    setMobileSurface(next);
+    if (next === "panel") {
+      setMobileSurface("panel");
+      return;
+    }
+    if (spaceId && isChatSpace(spaceId)) {
+      openSpaceChat(spaceId);
+      return;
+    }
+    setMobileSurface("chat");
   };
 
   const stopSwipe: TouchEventHandler = (event) => {

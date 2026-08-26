@@ -55,23 +55,25 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (mobile) {
-      setPanelMounted(canPanel && panelOn);
+      queueMicrotask(() => setPanelMounted(canPanel && panelOn));
       return;
     }
     if (immersive) {
-      setSlideWidth(panelOn ? 100 : 0);
-      setPanelMounted(panelOn);
+      queueMicrotask(() => {
+        setSlideWidth(panelOn ? 100 : 0);
+        setPanelMounted(panelOn);
+      });
       wasOpen.current = panelOn;
       return;
     }
     if (!panelOn) {
-      setSlideWidth(0);
+      queueMicrotask(() => setSlideWidth(0));
       wasOpen.current = false;
       return;
     }
-    setPanelMounted(true);
+    queueMicrotask(() => setPanelMounted(true));
     if (!wasOpen.current) {
-      setSlideWidth(0);
+      queueMicrotask(() => setSlideWidth(0));
       const id = window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
           setSlideWidth(panelPct);
@@ -80,7 +82,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
       });
       return () => window.cancelAnimationFrame(id);
     }
-    setSlideWidth(panelPct);
+    queueMicrotask(() => setSlideWidth(panelPct));
   }, [panelOn, immersive, panelPct, mobile, canPanel]);
 
   if (mobile) {

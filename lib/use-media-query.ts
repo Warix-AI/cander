@@ -1,20 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+
+function subscribeMediaQuery(query: string, callback: () => void) {
+  const media = window.matchMedia(query);
+  media.addEventListener("change", callback);
+  return () => media.removeEventListener("change", callback);
+}
+
+function getMediaQuerySnapshot(query: string) {
+  return window.matchMedia(query).matches;
+}
 
 /** SSR-safe matchMedia; defaults to `false` until hydrated. */
 export function useMediaQuery(query: string) {
-  const [matches, setMatches] = useState(false);
-
-  useEffect(() => {
-    const media = window.matchMedia(query);
-    const update = () => setMatches(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, [query]);
-
-  return matches;
+  return useSyncExternalStore(
+    (callback) => subscribeMediaQuery(query, callback),
+    () => getMediaQuerySnapshot(query),
+    () => false,
+  );
 }
 
 /** Shell mobile breakpoint — matches Tailwind `max-lg` / below 1024px. */

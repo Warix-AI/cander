@@ -18,7 +18,7 @@ export function useChatCanvasCentered() {
 
   useEffect(() => {
     if (mobile || panelMode === "collapsed") {
-      setCentered(true);
+      queueMicrotask(() => setCentered(true));
       return;
     }
     const id = window.setTimeout(() => setCentered(false), PANEL_SLIDE_MS);

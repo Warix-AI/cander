@@ -1,5 +1,6 @@
 "use client";
 
+import { createElement } from "react";
 import { ChevronDown, ChevronUp, Lock, SquarePen, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { Modal } from "@/components/ui/Modal";
@@ -121,10 +122,10 @@ function NavRow({
 
   return (
     <div className="flex items-center gap-1 rounded-[10px] px-1 py-1">
-      <Icon
-        className="ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground"
-        strokeWidth={1.6}
-      />
+      {createElement(Icon, {
+        className: "ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground",
+        strokeWidth: 1.6,
+      })}
       <span className="min-w-0 flex-1 truncate px-1.5 text-[13.5px]">
         {label}
       </span>

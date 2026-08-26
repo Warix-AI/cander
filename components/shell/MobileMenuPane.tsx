@@ -19,7 +19,7 @@ import {
   mobileMenuRowClass,
 } from "@/lib/mobile-menu-styles";
 import { useMainNavItems } from "@/lib/use-main-nav-items";
-import { isChatSpace, isExtraNavId, type SidebarNavId } from "@/lib/spaces";
+import { isExtraNavId, type SidebarNavId } from "@/lib/spaces";
 import { spaceIconTint } from "@/lib/space-icons";
 import type { MobileMenuScreen, SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -37,7 +37,6 @@ export function MobileMenuPane() {
     mobileMenuScreen,
     setMobileMenuScreen,
     newChat,
-    openSpaceChat,
     openSpace,
     openRecents,
     openBrowser,
@@ -69,29 +68,18 @@ export function MobileMenuPane() {
             spaceId={spaceId}
             threadId={threadId}
             onNewChat={() => {
-              if (
-                spaceId &&
-                isChatSpace(spaceId) &&
-                (view === "space" || view === "chat")
-              ) {
-                newChat(spaceId);
-              } else {
-                newChat();
-              }
+              newChat();
               setMobileMenuScreen("main");
               setMobileSurface("chat");
             }}
             onOpenScreen={setMobileMenuScreen}
             onOpenNav={(id) => {
-              if (id === "browser") openBrowser();
-              else if (id === "recents") {
+              if (id === "browser") {
+                openBrowser();
+              } else if (id === "recents") {
                 openRecents();
-                setMobileMenuScreen("main");
-                setMobileSurface("chat");
-                return;
               } else if (!isExtraNavId(id)) {
-                if (isChatSpace(id)) openSpaceChat(id);
-                else openSpace(id as SpaceId);
+                openSpace(id as SpaceId);
               }
               setMobileMenuScreen("main");
             }}

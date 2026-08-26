@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useSyncExternalStore, type CSSProperties } from "react";
 
 export type CanderDesktopBridge = {
   platform: string;
@@ -35,11 +35,14 @@ export function isMacDesktopShell() {
 
 /** Client hook — false on the server / in a normal browser. */
 export function useDesktopShell() {
-  const [desktop, setDesktop] = useState(false);
-  useEffect(() => {
-    setDesktop(isDesktopShell());
-  }, []);
-  return desktop;
+  return useSyncExternalStore(
+    (callback) => {
+      callback();
+      return () => {};
+    },
+    () => isDesktopShell(),
+    () => false,
+  );
 }
 
 /**

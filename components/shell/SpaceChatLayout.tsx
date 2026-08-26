@@ -45,17 +45,17 @@ export function SpaceChatLayout() {
   useEffect(() => {
     if (mobile) return;
     if (immersive) {
-      setSpacePct(100);
+      queueMicrotask(() => setSpacePct(100));
       wasOpen.current = chatOpen;
       return;
     }
     if (!chatOpen) {
-      setSpacePct(100);
+      queueMicrotask(() => setSpacePct(100));
       wasOpen.current = false;
       return;
     }
     if (!wasOpen.current) {
-      setSpacePct(100);
+      queueMicrotask(() => setSpacePct(100));
       const id = window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
           setSpacePct(panelPct);
@@ -64,7 +64,7 @@ export function SpaceChatLayout() {
       });
       return () => window.cancelAnimationFrame(id);
     }
-    setSpacePct(panelPct);
+    queueMicrotask(() => setSpacePct(panelPct));
   }, [chatOpen, immersive, panelPct, mobile]);
 
   if (mobile) {
