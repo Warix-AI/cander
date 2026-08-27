@@ -74,17 +74,30 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
   if (profileResult.error) throw profileResult.error;
   if (membershipResult.error) throw membershipResult.error;
 
-  // Optional billing columns (010+) — ignore if migration not applied yet.
-  const { data: billing } = await supabase
-    .from("profiles")
-    .select(
-      "subscription_status, subscription_period_end, cancel_at_period_end",
-    )
-    .eq("id", user.id)
-    .maybeSingle();
+  // Optional columns (010+ / 013+) — ignore if migrations not applied yet.
+  const [{ data: billing }, { data: shortRow }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select(
+        "subscription_status, subscription_period_end, cancel_at_period_end",
+      )
+      .eq("id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("short_name")
+      .eq("id", user.id)
+      .maybeSingle(),
+  ]);
 
   const profile = profileResult.data
-    ? { ...profileResult.data, ...(billing ?? {}) }
+    ? {
+        ...profileResult.data,
+        ...(billing ?? {}),
+        ...(shortRow && typeof shortRow.short_name === "string"
+          ? { short_name: shortRow.short_name }
+          : {}),
+      }
     : profileResult.data;
   const memberships = membershipResult.data ?? [];
   const workspaceIds = memberships.map((row) => String(row.workspace_id));
@@ -113,10 +126,18 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
     }
   }
 
+  const displayName = String(profile?.name || base.name);
+  const shortFromProfile =
+    typeof profile?.short_name === "string" ? profile.short_name.trim() : "";
   const member: Member = {
     ...base,
-    name: String(profile?.name || base.name),
+    name: displayName,
     email: String(profile?.email || base.email),
+    short:
+      shortFromProfile ||
+      displayName.split(/\s+/)[0] ||
+      base.short ||
+      "You",
     plan,
     role: asRole(profile?.role ?? memberships[0]?.role),
     workspaceIds,
@@ -181,6 +202,7 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
 export async function applySignupPlanAndSpaces(opts: {
   userId: string;
   name: string;
+  shortName?: string;
   email: string;
   plan: BillingPlan;
   workspaceName?: string;
@@ -203,6 +225,7 @@ export async function applySignupPlanAndSpaces(opts: {
       },
       body: JSON.stringify({
         name: opts.name,
+        shortName: opts.shortName,
         email: opts.email,
         plan: opts.plan,
         workspaceName: opts.workspaceName,
@@ -214,7 +237,11 @@ export async function applySignupPlanAndSpaces(opts: {
       const ids: string[] = Array.isArray(data.workspaceIds)
         ? data.workspaceIds.map(String)
         : [];
-      finalizeLocalMember(opts, ids.length ? ids : [`ws-${opts.userId.replace(/-/g, "")}`], teamPlan);
+      finalizeLocalMember(
+        opts,
+        ids.length ? ids : [`ws-${opts.userId.replace(/-/g, "")}`],
+        teamPlan,
+      );
       return;
     }
 
@@ -250,6 +277,7 @@ function finalizeLocalMember(
   opts: {
     userId: string;
     name: string;
+    shortName?: string;
     email: string;
     plan: BillingPlan;
     workspaceName?: string;
@@ -264,12 +292,16 @@ function finalizeLocalMember(
     .join("")
     .slice(0, 2)
     .toUpperCase();
+  const short =
+    opts.shortName?.trim() ||
+    opts.name.trim().split(/\s+/)[0] ||
+    "You";
 
   upsertOrgMember({
     id: opts.userId,
     name: opts.name.trim(),
     email: opts.email.trim(),
-    short: opts.name.trim().split(/\s+/)[0] || "User",
+    short,
     initials: initials || "U",
     role: "Owner",
     plan: opts.plan,
@@ -299,6 +331,7 @@ function finalizeLocalMember(
 async function applySignupPlanAndSpacesClient(opts: {
   userId: string;
   name: string;
+  shortName?: string;
   email: string;
   plan: BillingPlan;
   workspaceName?: string;
@@ -307,15 +340,35 @@ async function applySignupPlanAndSpacesClient(opts: {
   const supabase = createSupabaseBrowserClient();
   const teamPlan = isTeamPlan(opts.plan);
   const navSpaces = [...NAV_SPACES];
+  const shortName =
+    opts.shortName?.trim() ||
+    opts.name.trim().split(/\s+/)[0] ||
+    "You";
 
-  const { error: profileError } = await supabase
-    .from("profiles")
-    .update({
-      name: opts.name.trim(),
-      role: "Owner",
-      ...(opts.plan === "free" ? { plan: "free" } : {}),
-    })
-    .eq("id", opts.userId);
+  let profileError = (
+    await supabase
+      .from("profiles")
+      .update({
+        name: opts.name.trim(),
+        short_name: shortName,
+        role: "Owner",
+        ...(opts.plan === "free" ? { plan: "free" } : {}),
+      })
+      .eq("id", opts.userId)
+  ).error;
+
+  if (profileError && /short_name|42703|column/i.test(profileError.message)) {
+    profileError = (
+      await supabase
+        .from("profiles")
+        .update({
+          name: opts.name.trim(),
+          role: "Owner",
+          ...(opts.plan === "free" ? { plan: "free" } : {}),
+        })
+        .eq("id", opts.userId)
+    ).error;
+  }
 
   if (profileError) {
     const denied = /permission denied|42501/i.test(profileError.message);

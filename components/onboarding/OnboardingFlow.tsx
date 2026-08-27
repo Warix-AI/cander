@@ -5,7 +5,6 @@ import { ArrowLeft, Check } from "lucide-react";
 import { CanderMark } from "@/components/brand/CanderMark";
 import { useApp } from "@/components/app/AppProvider";
 import { connectors } from "@/lib/data";
-import { installConnector } from "@/lib/connector-install";
 import {
   getAuthServerSnapshot,
   getAuthSnapshot,
@@ -35,10 +34,8 @@ import { tryEnterExistingAccount } from "@/lib/onboarding-recovery";
 import { clearLocalAuthState } from "@/lib/auth/sign-out";
 import { setupOrgOnSupabase } from "@/lib/supabase/setup-org-onboarding";
 import { AppearanceControls } from "@/components/settings/AppearanceControls";
-import { OnboardingCourierPreview } from "@/components/onboarding/OnboardingCourierPreview";
-import { OAuthButtons } from "@/components/onboarding/OAuthButtons";
+import { OnboardingAppPreview } from "@/components/onboarding/OnboardingAppPreview";
 import { VerifyCodeInput } from "@/components/onboarding/VerifyCodeInput";
-import type { OAuthProvider } from "@/lib/supabase/auth-actions";
 import { AppearanceScope } from "@/components/theme/AppearanceProvider";
 import { resetAppearance, setColorMode } from "@/lib/appearance";
 import type { AccountPresetId, BillingPlan, Member } from "@/lib/types";
@@ -69,6 +66,7 @@ import {
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
+const INVITE_SEND_WARNING_KEY = "cander-invite-send-warning";
 const supabaseMode = () => isSupabaseConfigured();
 
 function presetForPlan(plan: BillingPlan): AccountPresetId {
@@ -85,8 +83,6 @@ type Step =
   | "forgot"
   | "create"
   | "verify"
-  | "oauth-google"
-  | "oauth-apple"
   | "profile"
   | "plan"
   | "max-intent"
@@ -186,7 +182,7 @@ const PANEL_COPY: Record<
   },
   "sign-in": {
     title: "Pick up where you left off.",
-    body: "Sign in with email, or continue with Google or Apple.",
+    body: "Sign in with the email and password for your Cander account.",
   },
   forgot: {
     title: "Reset your password.",
@@ -200,21 +196,13 @@ const PANEL_COPY: Record<
     title: "Confirm it’s you.",
     body: "Enter the code we emailed to finish confirming your account.",
   },
-  "oauth-google": {
-    title: "Continue with Google.",
-    body: "Use your Google account to sign in to Cander when OAuth is connected.",
-  },
-  "oauth-apple": {
-    title: "Continue with Apple.",
-    body: "Use Apple to sign in to Cander when OAuth is connected.",
-  },
   profile: {
     title: "It should sound like it knows you.",
     body: "A short name keeps replies personal without cluttering every thread.",
   },
   plan: {
     title: "Choose the depth you need.",
-    body: "Free to start. Pro and Max unlock visible workspaces.",
+    body: "Free to start. Pro and Max unlock more capacity. Until billing is connected, paid plans unlock for testing without a charge.",
   },
   "max-intent": {
     title: "How will you use Max?",
@@ -222,15 +210,15 @@ const PANEL_COPY: Record<
   },
   "org-setup": {
     title: "Set up your organization.",
-    body: "Add teammates now or finish invites later in Settings.",
+    body: "Invite teammates now or later. Emails send when Resend is configured; otherwise you’ll get invite links.",
   },
   workspace: {
     title: "Name the place you’ll work from.",
     body: "Name the workspace you’ll land in.",
   },
   connectors: {
-    title: "Wire up the apps you already live in.",
-    body: "Gmail, Slack, calendar, docs — connect a few now. Add more anytime from Connectors in the sidebar.",
+    title: "Apps you’ll use.",
+    body: "Mark what you care about. Real connections happen later in Connectors — nothing is installed yet.",
   },
   appearance: {
     title: "Make it feel like yours.",
@@ -281,12 +269,7 @@ function OnboardingShell({
   const [maxIntent, setMaxIntent] = useState<MaxIntent | null>(null);
   const [orgName, setOrgName] = useState("");
   const [orgInvites, setOrgInvites] = useState<OrgInviteDraft[]>([]);
-  const [oauthFrom, setOauthFrom] = useState<Step>("welcome");
-  const [selectedConnectors, setSelectedConnectors] = useState<string[]>([
-    "gmail",
-    "slack",
-    "gcal",
-  ]);
+  const [selectedConnectors, setSelectedConnectors] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState("");
@@ -440,7 +423,7 @@ function OnboardingShell({
         throw new Error(data.error ?? "Checkout failed.");
       }
       if (data.bypass) {
-        // Stripe not configured — persist chosen plan so entitlements unlock.
+        // Stripe not configured — unlock plan for testing without charging.
         const paid = await supabase
           .from("profiles")
           .update({
@@ -455,6 +438,9 @@ function OnboardingShell({
             .eq("id", session.user.id);
         }
         setPlan(chosen);
+        setInfo(
+          `${chosen === "max" ? "Max" : "Pro"} unlocked for testing. Billing is not connected yet — nothing was charged.`,
+        );
         setStep(chosen === "max" ? "max-intent" : "workspace");
         return;
       }
@@ -560,10 +546,7 @@ function OnboardingShell({
   };
 
   const finishLocalAccount = async () => {
-    for (const id of selectedConnectors) {
-      installConnector(id);
-    }
-
+    // Connectors step only records interest — real OAuth installs happen later.
     const signupPlan = nativeShell ? "free" : (plan ?? "free");
     const isOrgNow = signupPlan === "max" && maxIntent === "org-now";
     const workspaceKind = isOrgNow ? "business" : "personal";
@@ -587,6 +570,7 @@ function OnboardingShell({
       await applySignupPlanAndSpaces({
         userId: user.id,
         name,
+        shortName,
         email,
         plan: signupPlan,
         workspaceName: finalWorkspaceName,
@@ -609,7 +593,7 @@ function OnboardingShell({
             } = await supabase.auth.getSession();
             if (!session?.access_token || !orgId) {
               inviteSendError =
-                "Could not send invites (missing session). Retry or invite from Settings → Organization.";
+                "Could not send invites (missing session). Retry from Settings → Organization.";
             } else {
               const inviteRes = await fetch("/api/org/invites/send", {
                 method: "POST",
@@ -623,12 +607,27 @@ function OnboardingShell({
                   invites: draftInvites,
                 }),
               });
+              const inviteData = await inviteRes.json().catch(() => ({}));
               if (!inviteRes.ok) {
-                const data = await inviteRes.json().catch(() => ({}));
                 inviteSendError =
-                  typeof data.error === "string" && data.error.trim()
-                    ? data.error
-                    : "Could not send invites. Retry or invite from Settings → Organization.";
+                  typeof inviteData.error === "string" && inviteData.error.trim()
+                    ? inviteData.error
+                    : "Could not create invites. Retry from Settings → Organization.";
+              } else {
+                const results = Array.isArray(inviteData.results)
+                  ? (inviteData.results as {
+                      email: string;
+                      inviteUrl: string;
+                      sent: boolean;
+                    }[])
+                  : [];
+                const unsent = results.filter((row) => !row.sent);
+                if (unsent.length) {
+                  const links = unsent
+                    .map((row) => `${row.email}: ${row.inviteUrl}`)
+                    .join(" · ");
+                  inviteSendError = `Invites saved, but email was not sent (Resend not configured). Share these links: ${links}`;
+                }
               }
             }
           }
@@ -642,10 +641,7 @@ function OnboardingShell({
         applyOrgOwnerMember(user.id, [wsId], orgId);
       }
       if (inviteSendError && typeof window !== "undefined") {
-        window.sessionStorage.setItem(
-          "courier-invite-send-warning",
-          inviteSendError,
-        );
+        window.sessionStorage.setItem(INVITE_SEND_WARNING_KEY, inviteSendError);
       }
       await enterWithPlan(signupPlan);
       return;
@@ -792,20 +788,9 @@ function OnboardingShell({
     }
   };
 
-  const bypassVerify = () => {
-    setError("");
-    setInfo("");
-    setVerifyCode("");
-    setPassedVerify(true);
-    if (!isSupabaseConfigured()) {
-      persistOnboardingPending(true);
-    }
-    setStep("profile");
-  };
-
   const confirmVerify = async () => {
     if (!isSupabaseConfigured()) {
-      bypassVerify();
+      setError("This session is not connected to the account service.");
       return;
     }
     const code = verifyCode.replace(/\s/g, "");
@@ -866,13 +851,6 @@ function OnboardingShell({
     } finally {
       setBusy(false);
     }
-  };
-
-  const openOAuth = (provider: OAuthProvider, from: Step) => {
-    setError("");
-    setInfo("");
-    setOauthFrom(from);
-    setStep(provider === "google" ? "oauth-google" : "oauth-apple");
   };
 
   const signIn = async () => {
@@ -1046,10 +1024,6 @@ function OnboardingShell({
   const goBack = () => {
     setError("");
     setInfo("");
-    if (step === "oauth-google" || step === "oauth-apple") {
-      setStep(oauthFrom);
-      return;
-    }
     if (step === "forgot") {
       setStep("sign-in");
       return;
@@ -1143,7 +1117,6 @@ function OnboardingShell({
                   resetAppearance();
                   setStep("create");
                 }}
-                onOAuth={(provider) => openOAuth(provider, "welcome")}
                 error={error}
               />
             ) : null}
@@ -1168,7 +1141,6 @@ function OnboardingShell({
                   setInfo("");
                   setStep("forgot");
                 }}
-                onOAuth={(provider) => openOAuth(provider, "sign-in")}
               />
             ) : null}
 
@@ -1210,12 +1182,6 @@ function OnboardingShell({
               />
             ) : null}
 
-            {step === "oauth-google" || step === "oauth-apple" ? (
-              <OAuthStubStep
-                provider={step === "oauth-google" ? "google" : "apple"}
-              />
-            ) : null}
-
             {step === "verify" ? (
               <VerifyStep
                 email={email}
@@ -1234,7 +1200,6 @@ function OnboardingShell({
                 }}
                 onSubmit={() => void confirmVerify()}
                 onResend={() => void resendVerify()}
-                onBypass={bypassVerify}
               />
             ) : null}
 
@@ -1254,9 +1219,11 @@ function OnboardingShell({
               <PlanStep
                 plan={plan}
                 error={error}
+                info={info}
                 onPlan={(value) => {
                   setPlan(value);
                   setError("");
+                  setInfo("");
                 }}
                 onSubmit={goCreateNext}
               />
@@ -1356,7 +1323,7 @@ function OnboardingShell({
             <div className="absolute inset-0 bg-gradient-to-br from-black/50 via-black/30 to-black/55">
               <div className="absolute inset-0 panel-wash-price opacity-60" />
               <div className="panel-grain opacity-40" />
-              <OnboardingCourierPreview />
+              <OnboardingAppPreview />
             </div>
           ) : (
             <>
@@ -1447,12 +1414,10 @@ function AppearanceStep({
 function WelcomeStep({
   onSignIn,
   onCreate,
-  onOAuth,
   error,
 }: {
   onSignIn: () => void;
   onCreate: () => void;
-  onOAuth: (provider: OAuthProvider) => void;
   error?: string;
 }) {
   return (
@@ -1479,19 +1444,9 @@ function WelcomeStep({
           Create account
         </button>
       </div>
-      <div className="mt-6 space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-border" />
-          <span className="text-[11px] tracking-[0.06em] text-muted-foreground uppercase">
-            Or
-          </span>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-        <OAuthButtons onSelect={onOAuth} />
-        {error ? (
-          <p className="text-[12.5px] text-destructive">{error}</p>
-        ) : null}
-      </div>
+      {error ? (
+        <p className="mt-4 text-[12.5px] text-destructive">{error}</p>
+      ) : null}
     </>
   );
 }
@@ -1505,7 +1460,6 @@ function SignInStep({
   onPassword,
   onSubmit,
   onForgot,
-  onOAuth,
 }: {
   email: string;
   password: string;
@@ -1515,7 +1469,6 @@ function SignInStep({
   onPassword: (value: string) => void;
   onSubmit: () => void;
   onForgot?: () => void;
-  onOAuth: (provider: OAuthProvider) => void;
 }) {
   return (
     <>
@@ -1573,17 +1526,6 @@ function SignInStep({
           Forgot password?
         </button>
       ) : null}
-
-      <div className="mt-8 space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-border" />
-          <span className="text-[11px] tracking-[0.06em] text-muted-foreground uppercase">
-            Or
-          </span>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-        <OAuthButtons disabled={busy} onSelect={onOAuth} />
-      </div>
     </>
   );
 }
@@ -1721,31 +1663,6 @@ function CreateStep({
   );
 }
 
-function OAuthStubStep({ provider }: { provider: OAuthProvider }) {
-  const label = provider === "google" ? "Google" : "Apple";
-  return (
-    <>
-      <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        Continue with {label}
-      </h1>
-      <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        {label} sign-in will connect here once OAuth credentials are ready. Use
-        email for now, or go back.
-      </p>
-      <button
-        type="button"
-        disabled
-        className={cn("mt-8", primaryBtnClass)}
-      >
-        Continue with {label}
-      </button>
-      <p className="mt-3 text-[12.5px] text-muted-foreground">
-        Coming soon — this screen is ready for when {label} is enabled.
-      </p>
-    </>
-  );
-}
-
 function VerifyStep({
   email,
   code,
@@ -1756,7 +1673,6 @@ function VerifyStep({
   onCode,
   onSubmit,
   onResend,
-  onBypass,
 }: {
   email: string;
   code: string;
@@ -1767,7 +1683,6 @@ function VerifyStep({
   onCode: (value: string) => void;
   onSubmit: () => void;
   onResend: () => void;
-  onBypass: () => void;
 }) {
   return (
     <>
@@ -1820,16 +1735,8 @@ function VerifyStep({
       <button
         type="button"
         disabled={busy}
-        onClick={onBypass}
-        className={cn("mt-3", ghostBtnClass)}
-      >
-        Continue
-      </button>
-      <button
-        type="button"
-        disabled={busy}
         onClick={onResend}
-        className={cn("mt-2", ghostBtnClass)}
+        className={cn("mt-3", ghostBtnClass)}
       >
         Resend code
       </button>
@@ -1937,11 +1844,13 @@ function WorkspaceStep({
 function PlanStep({
   plan,
   error,
+  info = "",
   onPlan,
   onSubmit,
 }: {
   plan: BillingPlan | null;
   error: string;
+  info?: string;
   onPlan: (value: BillingPlan) => void;
   onSubmit: () => void;
 }) {
@@ -1951,7 +1860,8 @@ function PlanStep({
         Choose a plan
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Pick Free, Pro, or Max to continue.
+        Pick Free, Pro, or Max to continue. Until billing is connected, Pro and
+        Max unlock for testing without a charge.
       </p>
       <form
         className="mt-8 space-y-5"
@@ -1993,6 +1903,9 @@ function PlanStep({
         </div>
         {error ? (
           <p className="text-[12.5px] text-destructive">{error}</p>
+        ) : null}
+        {info ? (
+          <p className="text-[12.5px] text-muted-foreground">{info}</p>
         ) : null}
         <button
           type="submit"
@@ -2307,8 +2220,9 @@ function OrgSetupStep({
             Skip for now
           </button>
           <p className="text-center text-[12px] leading-relaxed text-muted-foreground">
-            Teammates are saved to your org as drafts. No emails are sent and
-            nothing is charged during signup.
+            Invites are created in your org. Email is sent when Resend is
+            configured; otherwise you’ll get shareable invite links after setup.
+            Nothing is charged during signup until billing is connected.
           </p>
         </div>
       </form>
@@ -2336,10 +2250,11 @@ function ConnectorsStep({
   return (
     <>
       <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        Connect your apps
+        Apps you’ll use
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Select what to wire up now. You can add or remove connectors anytime.
+        Mark what you care about. Nothing is connected yet — you’ll authorize
+        apps later from Connectors.
       </p>
       <div className="mt-8 grid gap-2">
         {options.map((item) => {
@@ -2391,7 +2306,7 @@ function ConnectorsStep({
           onClick={onSubmit}
           className={primaryBtnClass}
         >
-          {busy ? "Creating account…" : "Get started"}
+          {busy ? "Creating account…" : "Continue"}
         </button>
         <button
           type="button"
@@ -2399,7 +2314,7 @@ function ConnectorsStep({
           onClick={onSkip}
           className={ghostBtnClass}
         >
-          Skip connectors
+          Skip for now
         </button>
       </div>
     </>

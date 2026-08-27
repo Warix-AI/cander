@@ -34,6 +34,10 @@ import {
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
 import {
+  deleteWorkspaceRemote,
+  renameWorkspaceRemote,
+} from "@/lib/supabase/workspace-actions";
+import {
   workspaceKindLabel,
   workspaceKindOf,
 } from "@/lib/workspace-kind";
@@ -194,20 +198,54 @@ function WorkspacePage({
   );
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState(workspace.name);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameSaved, setRenameSaved] = useState(false);
 
   const canDelete =
     isCustomWorkspace(workspace.id) &&
     (workspaceKindOf(workspace) === "personal" ||
       entitlements.canManageWorkspaces);
 
-  const handleDelete = () => {
-    setDeleteError(null);
-    const ok = removeWorkspace(workspace.id);
-    if (!ok) {
-      setDeleteError("Could not delete this workspace.");
-      return;
+  const handleRename = async () => {
+    const trimmed = workspaceName.trim();
+    if (!trimmed || trimmed === workspace.name) return;
+    setRenameBusy(true);
+    setRenameError(null);
+    setRenameSaved(false);
+    try {
+      await renameWorkspaceRemote(workspace.id, trimmed);
+      setRenameSaved(true);
+    } catch (err) {
+      setRenameError(
+        err instanceof Error ? err.message : "Could not rename workspace.",
+      );
+      setWorkspaceName(workspace.name);
+    } finally {
+      setRenameBusy(false);
     }
-    onBack();
+  };
+
+  const handleDelete = async () => {
+    setDeleteError(null);
+    setDeleteBusy(true);
+    try {
+      await deleteWorkspaceRemote(workspace.id);
+      const ok = removeWorkspace(workspace.id);
+      if (!ok) {
+        setDeleteError("Could not delete this workspace.");
+        return;
+      }
+      onBack();
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : "Could not delete this workspace.",
+      );
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   const workspaceSubtitle =
@@ -230,6 +268,43 @@ function WorkspacePage({
         title={workspace.name}
         subtitle={workspaceSubtitle}
       />
+
+      <SettingsSection title="Name" className="mt-6">
+        <SettingsGroup>
+          <div className="space-y-3 px-4 py-4">
+            <input
+              value={workspaceName}
+              onChange={(event) => {
+                setWorkspaceName(event.target.value);
+                setRenameError(null);
+                setRenameSaved(false);
+              }}
+              className={settingsInputClass}
+              aria-label="Workspace name"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={
+                  renameBusy ||
+                  !workspaceName.trim() ||
+                  workspaceName.trim() === workspace.name
+                }
+                onClick={() => void handleRename()}
+                className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground disabled:opacity-40"
+              >
+                {renameBusy ? "Saving…" : "Save name"}
+              </button>
+              {renameSaved ? (
+                <span className="text-[12.5px] text-muted-foreground">Saved</span>
+              ) : null}
+            </div>
+            {renameError ? (
+              <p className="text-[12.5px] text-destructive">{renameError}</p>
+            ) : null}
+          </div>
+        </SettingsGroup>
+      </SettingsSection>
 
       <div className={cn(mobile ? "mt-4" : "mt-8 max-lg:mt-4")}>
         <WorkspaceIconSection workspace={workspace} mobile={mobile} />
@@ -532,10 +607,11 @@ function WorkspacePage({
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={handleDelete}
-                    className="inline-flex h-10 items-center rounded-full bg-destructive px-4 text-[13px] font-medium tracking-[-0.01em] text-destructive-foreground"
+                    disabled={deleteBusy}
+                    onClick={() => void handleDelete()}
+                    className="inline-flex h-10 items-center rounded-full bg-destructive px-4 text-[13px] font-medium tracking-[-0.01em] text-destructive-foreground disabled:opacity-50"
                   >
-                    Delete workspace
+                    {deleteBusy ? "Deleting…" : "Delete workspace"}
                   </button>
                   <button
                     type="button"
@@ -575,10 +651,11 @@ function WorkspacePage({
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          onClick={handleDelete}
-                          className="inline-flex h-9 items-center rounded-full bg-destructive px-4 text-[13px] font-medium tracking-[-0.01em] text-destructive-foreground"
+                          disabled={deleteBusy}
+                          onClick={() => void handleDelete()}
+                          className="inline-flex h-9 items-center rounded-full bg-destructive px-4 text-[13px] font-medium tracking-[-0.01em] text-destructive-foreground disabled:opacity-50"
                         >
-                          Delete workspace
+                          {deleteBusy ? "Deleting…" : "Delete workspace"}
                         </button>
                         <button
                           type="button"
@@ -607,7 +684,7 @@ function WorkspacePage({
           )}
           {mobile ? (
             <SettingsFootnote>
-              Removes this workspace from your account. Built-in demo workspaces cannot be deleted.
+              Removes this workspace from your account.
             </SettingsFootnote>
           ) : null}
         </SettingsSection>

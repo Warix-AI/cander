@@ -108,7 +108,7 @@ export function BuildDashboard() {
                   item.status === "published" ? "Published" : undefined,
               }))}
               onOpen={openProject}
-              empty="No projects yet."
+              empty="No projects yet. Create one to start building."
             />
           )
         ) : scope === "automations" ? (

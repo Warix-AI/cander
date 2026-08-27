@@ -98,11 +98,30 @@ export function OrgTeammateInvitePanel({
       }
 
       setRows([emptyOrgInvite()]);
-      setMessage(
-        invites.length === 1
-          ? `Invite sent to ${invites[0]!.email.trim()}.`
-          : `${invites.length} invites sent.`,
-      );
+      const results = Array.isArray(data.results)
+        ? (data.results as { email: string; inviteUrl: string; sent: boolean }[])
+        : [];
+      const sentCount = results.filter((row) => row.sent).length;
+      const unsent = results.filter((row) => !row.sent);
+      if (unsent.length && !sentCount) {
+        setMessage(
+          `Invites saved, but email was not sent. Share: ${unsent
+            .map((row) => `${row.email} → ${row.inviteUrl}`)
+            .join(" · ")}`,
+        );
+      } else if (unsent.length) {
+        setMessage(
+          `${sentCount} emailed. ${unsent.length} saved without email — share: ${unsent
+            .map((row) => `${row.email} → ${row.inviteUrl}`)
+            .join(" · ")}`,
+        );
+      } else {
+        setMessage(
+          invites.length === 1
+            ? `Invite sent to ${invites[0]!.email.trim()}.`
+            : `${invites.length} invites sent.`,
+        );
+      }
       onInvited?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send invites.");

@@ -213,6 +213,17 @@ export function deleteWorkspace(id: string): boolean {
   return true;
 }
 
+export function renameWorkspace(id: string, name: string): boolean {
+  hydrate();
+  const trimmed = name.trim();
+  if (!trimmed || !isCustomWorkspace(id)) return false;
+  custom = custom.map((item) =>
+    item.id === id ? { ...item, name: trimmed } : item,
+  );
+  persist();
+  return true;
+}
+
 export function countWorkspacesByKind(kind: WorkspaceKind) {
   return getWorkspaceCatalogSnapshot().filter(
     (item) => workspaceKindOf(item) === kind,

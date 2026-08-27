@@ -5,10 +5,10 @@ import { ImagePlus, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
 import { Modal } from "@/components/ui/Modal";
-import {
-  createWorkspace,
-  getWorkspaceCatalogSnapshot,
-} from "@/lib/workspace-catalog";
+import { getWorkspaceCatalogSnapshot } from "@/lib/workspace-catalog";
+import { createWorkspaceRemote } from "@/lib/supabase/workspace-actions";
+import { isSupabaseConfigured } from "@/lib/data-backend";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   readWorkspaceIconFile,
   setWorkspaceIcon,
@@ -40,6 +40,7 @@ export function WorkspaceModal() {
   const [name, setName] = useState("");
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const open = overlay === "workspace" && entitlements.hasWorkspaces;
 
@@ -56,6 +57,7 @@ export function WorkspaceModal() {
     setName("");
     setIconPreview(null);
     setError(null);
+    setBusy(false);
   };
 
   const handleClose = () => {
@@ -63,8 +65,8 @@ export function WorkspaceModal() {
     closeOverlay();
   };
 
-  const submit = () => {
-    if (!kind || !canCreate) return;
+  const submit = async () => {
+    if (!kind || !canCreate || busy) return;
     const trimmed = name.trim();
     if (!trimmed) {
       setError("Give the workspace a name.");
@@ -83,16 +85,35 @@ export function WorkspaceModal() {
       setError(mismatch);
       return;
     }
-    const created = createWorkspace({ name: trimmed, kind });
-    if (!created) {
-      setError("Could not create workspace.");
-      return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      let userId = actor.id;
+      if (isSupabaseConfigured()) {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) throw new Error("Sign in to create a workspace.");
+        userId = user.id;
+      }
+      const created = await createWorkspaceRemote({
+        name: trimmed,
+        kind,
+        userId,
+      });
+      ensurePolicy(created.id, orgMembers[0]?.id ?? actor.id, created.spaces);
+      if (iconPreview) setWorkspaceIcon(created.id, iconPreview);
+      setWorkspace(created.id);
+      reset();
+      closeOverlay();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not create workspace.",
+      );
+      setBusy(false);
     }
-    ensurePolicy(created.id, orgMembers[0]?.id ?? actor.id, created.spaces);
-    if (iconPreview) setWorkspaceIcon(created.id, iconPreview);
-    setWorkspace(created.id);
-    reset();
-    closeOverlay();
   };
 
   return (
@@ -128,7 +149,7 @@ export function WorkspaceModal() {
         className="space-y-4 px-5 pb-5"
         onSubmit={(event) => {
           event.preventDefault();
-          submit();
+          void submit();
         }}
       >
         <div className="flex items-center gap-3">
@@ -202,10 +223,10 @@ export function WorkspaceModal() {
         <div className="flex justify-end gap-2 pt-1">
           <button
             type="submit"
-            disabled={!canCreate || !name.trim()}
+            disabled={!canCreate || !name.trim() || busy}
             className="inline-flex h-10 items-center rounded-full bg-primary px-5 text-[13px] font-medium tracking-[-0.01em] text-primary-foreground disabled:opacity-40"
           >
-            Create
+            {busy ? "Creating…" : "Create"}
           </button>
         </div>
       </form>

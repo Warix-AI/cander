@@ -84,9 +84,10 @@ export function getInstalledConnectorsRevision() {
   return revision;
 }
 
+/** Live installs only — seed catalog installed flags are ignored. */
 export function mergeConnectorInstalled(
   id: string,
-  seedInstalled: boolean,
+  _seedInstalled?: boolean,
 ): boolean {
-  return seedInstalled || isConnectorInstalled(id);
+  return isConnectorInstalled(id);
 }

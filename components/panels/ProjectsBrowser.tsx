@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { LayoutToggle, ScopeToggle } from "@/components/spaces/ItemSet";
 import { PanelToggle } from "@/components/shell/PanelToggle";
@@ -17,6 +17,12 @@ import {
   scheduledJobs,
   skills,
 } from "@/lib/data";
+import {
+  getInstalledConnectorsServerSnapshot,
+  getInstalledConnectorsSnapshot,
+  mergeConnectorInstalled,
+  subscribeInstalledConnectors,
+} from "@/lib/connector-install";
 import { projectsForWorkspace } from "@/lib/project-resolver";
 import type { NavDestinationId, SpaceId } from "@/lib/types";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
@@ -46,6 +52,11 @@ export function ProjectsBrowser({
   const mobile = useMobileShell();
   const [scope, setScope] = useState("all");
   const dest: NavDestinationId = spaceId ?? "build";
+  useSyncExternalStore(
+    subscribeInstalledConnectors,
+    getInstalledConnectorsSnapshot,
+    getInstalledConnectorsServerSnapshot,
+  );
 
   const { kind, title, empty, onOpen, entries, groups } = useMemo(() => {
     const projects = projectsForWorkspace(workspaceId);
@@ -61,7 +72,7 @@ export function ProjectsBrowser({
           item.id,
           item.name,
           item.id,
-          item.installed ? "Installed" : item.category,
+          mergeConnectorInstalled(item.id) ? "Installed" : item.category,
         ),
       );
       const grouped = new Map<string, PreviewEntry[]>();
@@ -73,7 +84,7 @@ export function ProjectsBrowser({
       return pack(
         "product",
         "Connectors",
-        "No connectors yet.",
+        "No connectors yet. Open a connector to connect an account.",
         openConnector,
         items,
         [...grouped.entries()].map(([name, groupItems]) => ({
@@ -92,7 +103,7 @@ export function ProjectsBrowser({
       const items = list.map((item) =>
         entry(item.id, item.name, item.id, `Edited ${item.updatedAt}`, "paper"),
       );
-      return pack("paper", "Projects", "No Research projects yet.", openProject, items, items.map((item) => ({
+      return pack("paper", "Projects", "No Explore projects yet. Create one to start researching.", openProject, items, items.map((item) => ({
         name: item.name,
         items: [item],
       })));
@@ -116,7 +127,7 @@ export function ProjectsBrowser({
       return pack(
         "product",
         "Work",
-        "Nothing open in Work yet.",
+        "Nothing open in Work yet. Create a project to get started.",
         openProject,
         items,
         items.map((item) => ({ name: item.name, items: [item] })),

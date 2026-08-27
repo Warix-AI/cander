@@ -15,7 +15,7 @@ const PREVIEW_NAV = [
 ] as const;
 
 /** Live mini Cander shell that mirrors appearance sliders. */
-export function OnboardingCourierPreview() {
+export function OnboardingAppPreview() {
   const appearance = useAppearance();
   const css = appearanceToCss(appearance);
   const floating = css.shell === "floating";

@@ -29,6 +29,7 @@ export async function POST(request: Request) {
 
   let body: {
     name?: string;
+    shortName?: string;
     email?: string;
     plan?: BillingPlan;
     workspaceName?: string;
@@ -58,6 +59,10 @@ export async function POST(request: Request) {
     const kind: WorkspaceKind =
       body.workspaceKind ?? (teamPlan ? "business" : "personal");
     const name = (body.name ?? "").trim() || "User";
+    const shortName =
+      (body.shortName ?? "").trim() ||
+      name.split(/\s+/)[0] ||
+      "You";
     const workspaceName =
       body.workspaceName?.trim() ||
       (kind === "personal" ? "Personal" : "Workspace");
@@ -71,6 +76,7 @@ export async function POST(request: Request) {
     // written by the checkout webhook after payment.
     const profilePatch: Record<string, unknown> = {
       name,
+      short_name: shortName,
       role: "Owner",
     };
     if (plan === "free") {
@@ -98,10 +104,14 @@ export async function POST(request: Request) {
           { status: 500 },
         );
       }
-      // Retry without billing columns if migration 010 is not applied.
+      // Retry without billing / short_name columns if migrations are not applied.
       const { error: fallbackError } = await admin
         .from("profiles")
-        .update({ name, role: "Owner", ...(plan === "free" ? { plan: "free" } : {}) })
+        .update({
+          name,
+          role: "Owner",
+          ...(plan === "free" ? { plan: "free" } : {}),
+        })
         .eq("id", user.id);
       if (fallbackError) {
         return NextResponse.json(
