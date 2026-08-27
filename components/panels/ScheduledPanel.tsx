@@ -5,7 +5,6 @@ import { useApp } from "@/components/app/AppProvider";
 import { PanelChrome } from "@/components/panels/PanelChrome";
 import { ProjectsBrowser } from "@/components/panels/ProjectsBrowser";
 import { Pill } from "@/components/spaces/ItemSet";
-import { projects, scheduledJobs as seed } from "@/lib/data";
 import type { ScheduledJob, ScheduledStatus } from "@/lib/types";
 import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
 
@@ -19,11 +18,10 @@ const cadences = [
 
 export function ScheduledPanel() {
   const { jobId, openThread, workspaceId, panelIntent } = useApp();
-  const [jobs, setJobs] = useState<ScheduledJob[]>(seed);
+  const [jobs, setJobs] = useState<ScheduledJob[]>([]);
   const list = jobs.filter((job) => job.workspaceId === workspaceId);
   const selected = list.find((job) => job.id === jobId) ?? list[0];
   const execute = panelIntent === "execute" || Boolean(jobId);
-  const project = projects.find((item) => item.id === selected?.projectId);
 
   const update = (id: string, patch: Partial<ScheduledJob>) => {
     setJobs((current) =>
@@ -63,7 +61,7 @@ export function ScheduledPanel() {
             {selected.snippet}
           </p>
           <p className="font-mono text-[11px] text-muted-foreground">
-            {project?.name ?? selected.space} · {selected.owner}
+            {selected.space} · {selected.owner}
           </p>
           <label className="block">
             <span className="font-mono text-[11px] text-muted-foreground">

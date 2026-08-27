@@ -11,8 +11,10 @@ export const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
 
 export function visibleSettingsTabs(entitlements: Entitlements) {
   return SETTINGS_TABS.filter((tab) => {
-    if (tab.id === "organization") return entitlements.showOrgSettings;
-    if (tab.id === "workspaces") return entitlements.showWorkspacesAdmin;
+    if (tab.id === "organization") {
+      return entitlements.showOrgAdmin || entitlements.showOrgManaged;
+    }
+    if (tab.id === "workspaces") return entitlements.hasWorkspaces;
     return true;
   });
 }

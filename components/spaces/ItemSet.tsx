@@ -438,7 +438,11 @@ export function DashFrame({
   const inPanel = mode === "panel";
   const desktop = useDesktopShell();
   const mobile = useMobileShell();
-  const bannerSpace = banner ? (bannerKey ?? space ?? spaceId) : null;
+  const rawBanner = bannerKey ?? space ?? spaceId;
+  const bannerSpace =
+    banner && rawBanner && rawBanner !== "connectors"
+      ? (rawBanner as BannerKey)
+      : null;
   // Mobile: skip space gradient + title — filters/projects sit under MobileAppChrome.
   const hideMobileHero = mobile && Boolean(bannerSpace);
 

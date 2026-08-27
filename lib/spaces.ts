@@ -1,61 +1,41 @@
-import type { BillingPlan, SpaceId } from "./types";
+import type { BillingPlan, NavDestinationId, SpaceId } from "./types";
 
-/** Primary sidebar destinations — same for personal and business workspaces. */
+/** Product spaces — Work, Build, Explore (research in code). */
 export const PRIMARY_NAV_SPACES: SpaceId[] = [
   "work",
   "build",
   "research",
 ];
 
-/** Navigable product destinations (permissions / workspace catalog). */
-export const NAV_SPACES: SpaceId[] = [
-  ...PRIMARY_NAV_SPACES,
-  "connectors",
-  "studio",
-  "personal",
-];
+export const NAV_SPACES: SpaceId[] = [...PRIMARY_NAV_SPACES];
+export const ALL_SPACE_IDS: SpaceId[] = [...PRIMARY_NAV_SPACES];
 
-/**
- * Legacy spaces: reachable via pins/deep links/panels, not primary sidebar.
- */
-export const LEGACY_SPACES: SpaceId[] = [
-  "files",
-  "skills",
-  "scheduled",
-  "finances",
-  "health",
-];
-
-export const ALL_SPACE_IDS: SpaceId[] = [...NAV_SPACES, ...LEGACY_SPACES];
-
-/** Extra ids — Recents in primary nav; Browser is not a sidebar link. */
-export const EXTRA_NAV_IDS = ["browser", "recents"] as const;
+/** Non-space sidebar destinations. */
+export const EXTRA_NAV_IDS = ["browser", "recents", "connectors"] as const;
 
 export type ExtraNavId = (typeof EXTRA_NAV_IDS)[number];
 export type SidebarNavId = SpaceId | ExtraNavId;
 
-export const CHAT_SPACES = [
-  "work",
-  "build",
-  "studio",
-  "research",
-  "personal",
-  "skills",
-  "finances",
-  "health",
-] as const;
+export const CHAT_SPACES = ["work", "build", "research"] as const;
 
 export type ChatSpaceId = (typeof CHAT_SPACES)[number];
 
 export type SidebarNavOpts = {
   billingPlan?: BillingPlan;
-  personalEnabled?: boolean;
 };
 
 export function isChatSpace(
-  id: SpaceId | null | undefined,
+  id: SpaceId | NavDestinationId | null | undefined,
 ): id is ChatSpaceId {
-  return Boolean(id && (CHAT_SPACES as readonly string[]).includes(id));
+  return Boolean(id && id !== "connectors" && (CHAT_SPACES as readonly string[]).includes(id));
+}
+
+/** Product space for chat persistence — excludes Connectors nav. */
+export function chatSpaceId(
+  id: NavDestinationId | null | undefined,
+): SpaceId | null {
+  if (!id || id === "connectors") return null;
+  return id;
 }
 
 export function isExtraNavId(id: string): id is ExtraNavId {
@@ -103,29 +83,11 @@ function sortMainNav(ids: SidebarNavId[]): SidebarNavId[] {
 export function spaceAllowed(
   id: SidebarNavId,
   allowed: SpaceId[],
-  opts?: SidebarNavOpts,
+  _opts?: SidebarNavOpts,
 ): boolean {
   if (id === "browser") return false;
-  if (id === "connectors") return allowed.includes("connectors");
-  if (id === "files") return false;
+  if (id === "connectors") return true;
   if (id === "recents") return true;
-  if (id === "work") return allowed.includes("work");
-  if (id === "personal") {
-    const inCatalog =
-      allowed.includes("personal") ||
-      allowed.includes("finances") ||
-      allowed.includes("health");
-    if (!inCatalog) return false;
-    if (
-      opts?.billingPlan &&
-      opts.billingPlan !== "max" &&
-      opts.billingPlan !== "ultra"
-    ) {
-      return true;
-    }
-    return Boolean(opts?.personalEnabled);
-  }
-  if (isExtraNavId(id)) return false;
   return allowed.includes(id as SpaceId);
 }
 
@@ -138,8 +100,7 @@ export function allowedNavItems(
   );
 }
 
-/** Map retired sidebar ids away from the nav. */
-export function migrateSidebarId(id: SidebarNavId): SidebarNavId | null {
+export function migrateSidebarId(id: string): SidebarNavId | null {
   if (
     id === "browser" ||
     id === "files" ||
@@ -152,7 +113,8 @@ export function migrateSidebarId(id: SidebarNavId): SidebarNavId | null {
   ) {
     return null;
   }
-  return id;
+  if (isSidebarNavId(id)) return id;
+  return null;
 }
 
 export function resolveSidebarNav(

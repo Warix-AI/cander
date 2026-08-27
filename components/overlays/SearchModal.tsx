@@ -18,14 +18,14 @@ import {
   connectors,
   skills,
   spaces,
-  starterThreads,
 } from "@/lib/data";
+import { getChatThreads } from "@/lib/api/chat-store";
 import {
   openIndexEntry,
   useSpaceIndex,
 } from "@/lib/hooks/use-space-index";
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
-import { LEGACY_SPACES, spaceAllowed } from "@/lib/spaces";
+import { spaceAllowed } from "@/lib/spaces";
 import { memberSpaces } from "@/lib/workspace-policy";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +56,6 @@ export function SearchModal() {
     attachBrowserReference,
     openSpaceEntity,
     billingPlan,
-    personalSpaceEnabled,
     workspacePolicies,
     openSettings,
     actor,
@@ -95,17 +94,13 @@ export function SearchModal() {
         group: "Actions",
         run: () => newChat(),
       },
-      ...(entitlements.canUseWorkSpace
-        ? [
-            {
-              id: "action-new-work",
-              title: "New Work",
-              meta: "Inbox, calendar, customers",
-              group: "Actions",
-              run: () => newChat("work"),
-            } satisfies Hit,
-          ]
-        : []),
+      {
+        id: "action-new-work",
+        title: "New Work",
+        meta: "Inbox, calendar, customers",
+        group: "Actions",
+        run: () => newChat("work"),
+      },
       {
         id: "action-browser",
         title: "Browser",
@@ -128,25 +123,11 @@ export function SearchModal() {
         run: () => newChat("build"),
       },
       {
-        id: "action-new-studio",
-        title: "New Studio",
-        meta: "Image, video, and design",
-        group: "Actions",
-        run: () => newChat("studio"),
-      },
-      {
         id: "action-new-research",
         title: "New Explore",
         meta: "Sources, findings, reports",
         group: "Actions",
-        run: () => openBrowser({ chat: true }),
-      },
-      {
-        id: "action-new-personal",
-        title: "New Personal",
-        meta: "Today, money, goals, the car",
-        group: "Actions",
-        run: () => newChat("personal"),
+        run: () => newChat("research"),
       },
     ];
     if (view === "browser") {
@@ -167,12 +148,11 @@ export function SearchModal() {
 
     for (const space of spaces) {
       if (!match(space.label)) continue;
-      if ((LEGACY_SPACES as readonly string[]).includes(space.id)) continue;
       if (
         !spaceAllowed(
           space.id,
           memberSpaces(workspaceId, actor.id, workspacePolicies),
-          { billingPlan, personalEnabled: personalSpaceEnabled },
+          { billingPlan },
         )
       ) {
         continue;
@@ -248,7 +228,7 @@ export function SearchModal() {
         run: () => openConnector(connector.id),
       });
     }
-    for (const thread of starterThreads.filter(
+    for (const thread of getChatThreads().filter(
       (item) => item.workspaceId === workspaceId,
     )) {
       if (!match(thread.title) && !match(thread.snippet)) continue;
@@ -279,7 +259,6 @@ export function SearchModal() {
     attachBrowserReference,
     openSpaceEntity,
     billingPlan,
-    personalSpaceEnabled,
     workspacePolicies,
     openSettings,
     actor,

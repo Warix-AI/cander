@@ -225,7 +225,7 @@ function BrowserToolbar({
         <ReferenceMenu
           onAttach={attachBrowserReference}
           onBuild={() => referencePageInSpace("build")}
-          onStudio={() => referencePageInSpace("studio")}
+          onStudio={() => referencePageInSpace("build")}
           onResearch={() => referencePageInSpace("research")}
         />
       </span>

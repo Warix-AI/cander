@@ -40,6 +40,7 @@ Apply in sequence:
 | `004_org_policy.sql` | Policy, pins, sidebar |
 | `005_connectors.sql` | Connector catalog + installs |
 | `006_build_browser.sql` | Project files + browser sessions |
+| `008_plans_three_tier.sql` | Retire Ultra; three plans only |
 
 ```bash
 supabase link --project-ref <ref>
@@ -73,9 +74,87 @@ npm run dev
 
 Sign up / sign in → first session imports localStorage into Postgres, then clears legacy auth keys.
 
+## Signup → plan → nav
+
+Onboarding writes `profiles.plan` and grants nav spaces on the personal workspace created by `handle_new_user`.
+
+| Plan | `Member.kind` | Default nav | Notes |
+|------|---------------|-------------|-------|
+| `free` | personal | Yes | Unlimited private usage; 1 workspace |
+| `pro` | personal | Yes | Voice, more workspaces, APIs |
+| `max` | org when team | Yes | Work space, shared workspaces, team admin |
+
+All plans support **personal and business** workspaces equally.
+
+**iOS:** Sign up in the app (starts on Free). Settings → Plan shows current plan only; **View subscription** opens `/pricing` in Safari for upgrades (no IAP).
+
+Nav visibility uses `memberSpaces(workspaceId, actorId)` — not plan alone.
+
+### Max organization onboarding (web)
+
+After choosing **Max**, onboarding forks: **Personal**, **Set up organization**, or **Set up later**. Org setup collects org name and optional Pro/Max invites; it is always skippable. Onboarding only writes `profiles.plan` — **no in-app checkout**. Seat billing is confirmed later on the web via `/pricing`.
+
+When org setup completes with Supabase configured, `setup_org_onboarding` (migration `009`) creates an `organizations` row, links the workspace, upserts the owner in `org_members`, and inserts pending invite rows.
+
+Apply `009_org_onboarding.sql` and `010_billing.sql` before testing org invites and paid onboarding:
+
+```bash
+supabase db push
+```
+
+### Paid onboarding (Stripe)
+
+| Plan | Checkout | Resume step |
+|------|----------|-------------|
+| Free | None | Connectors |
+| Pro | After plan Continue | First workspace |
+| Max | After plan Continue | How will you use Max |
+
+Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_MAX`. Optional: `RESEND_API_KEY` for org invite emails.
+
+Webhook endpoint: `POST /api/stripe/webhook`. Local: `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
+
+`profiles.subscription_status` gates Pro/Max entitlements until checkout completes. Org invitees accept at `/invite/{token}` — pre-filled name/email/plan, password only, then seat bills owner subscription (prorated).
+
+Managed org members (`org_members.role != Owner`) cannot delete their account — sign out only.
+
+| Path | `Member.kind` | Organization tab |
+|------|---------------|-------------------|
+| Max personal | personal | Hidden |
+| Max org now | org (Owner) | Admin — invites, seat mix |
+| Max org later | personal + `orgSetupDeferred` | Admin — finish setup CTA |
+| Pro/Max org member | org | Managed by — read-only |
+
+If Connectors / spaces are missing after sign-in: hard-refresh once after `007` is applied, or clear `courier-workspace` and reload so hydrate can switch to `ws-<userid>`.
+
+## Auth checklist
+
+- [ ] Sign up / sign in (email + password)
+- [ ] **Email verify (OTP):** Create account → Check your email → enter 6-digit code → continue onboarding
+- [ ] Email verify via **link** also works (`/auth/callback`) and resumes onboarding
+- [ ] Log out (Settings or account menu) clears Supabase session
+- [ ] Delete account requires `SUPABASE_SERVICE_ROLE_KEY` on the server (`/api/account/delete`)
+- [ ] Forgot password → email link → `/auth/callback?next=/auth/reset` → set password
+- [ ] Change email in Settings → confirm via email link
+- [ ] OAuth: enable Google / Apple in Supabase → Authentication → Providers (skips email verify)
+- [ ] Redirect URLs include `{APP_ORIGIN}/auth/callback` (and `/auth/reset` as needed)
+
+### Confirm signup email template (OTP)
+
+In Supabase → **Authentication → Email Templates → Confirm signup**, include the code so the in-app verify screen works:
+
+```html
+<p>Your Cander code is: <strong>{{ .Token }}</strong></p>
+<p>Or confirm here: <a href="{{ .ConfirmationURL }}">Verify email</a></p>
+```
+
+Enable **Confirm email** under Authentication → Providers → Email. Without `{{ .Token }}` in the template, users only get a link (still works; OTP field will fail until the template is updated).
+
 ## Verification checklist
 
-- [ ] Sign up creates profile + personal workspace (trigger in `001`)
+- [ ] Sign up creates profile + personal workspace (trigger in `001` / `007`)
+- [ ] Sidebar shows Work, Build, Explore, Connectors after signup
+- [ ] `profiles.plan` matches the plan chosen in onboarding
 - [ ] Work/Build dashboards load projects from Supabase
 - [ ] Chat threads persist across refresh
 - [ ] Settings: role/space toggles survive refresh
@@ -95,6 +174,8 @@ Every feature must work with `NEXT_PUBLIC_DATA_BACKEND=local` for offline demos.
 
 | Issue | Fix |
 |-------|-----|
+| Missing Connectors / space links | Apply `007`; confirm `workspace_members.spaces` includes `connectors`; hydrate must run (AuthProvider) |
+| Stuck on seed workspace (marketing, etc.) | Clear `courier-workspace` localStorage or re-sign-in so hydrate switches to `ws-*` |
 | RLS denied | Confirm user is `workspace_members` row for target workspace |
 | Empty data after login | Check import flags in localStorage (`courier-*-imported-v1`) |
 | Edge function 401 | Confirm session cookie; add Authorization header from client invoke |

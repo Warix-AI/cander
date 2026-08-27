@@ -75,10 +75,16 @@ export type SidebarLayoutRow = {
 };
 
 export function memberToRow(member: Member): OrgMemberRow {
+  const isInvite = member.id.startsWith("invite-");
+  const isProfileId =
+    !isInvite &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      member.id,
+    );
   return {
     id: member.id,
-    org_id: null,
-    profile_id: null,
+    org_id: member.orgId ?? null,
+    profile_id: isProfileId ? member.id : null,
     email: member.email,
     name: member.name,
     short_name: member.short,
@@ -104,6 +110,7 @@ export function memberRowToMember(row: OrgMemberRow): Member {
     seatStatus: row.seat_status,
     kind: row.kind,
     workspaceIds: row.workspace_ids ?? [],
+    ...(row.org_id ? { orgId: row.org_id } : {}),
   };
 }
 

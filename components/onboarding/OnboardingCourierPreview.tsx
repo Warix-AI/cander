@@ -2,6 +2,7 @@
 
 import { CourierMark } from "@/components/brand/CourierMark";
 import { appearanceToCss, useAppearance } from "@/lib/appearance";
+import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 const PREVIEW_NAV = [
@@ -32,7 +33,7 @@ export function OnboardingCourierPreview() {
       <div
         className={cn(
           "relative w-full max-w-[34rem] overflow-hidden border border-white/15 bg-background text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.35)]",
-          floating ? "rounded-[18px]" : "rounded-[12px]",
+          floating ? SHELL_G3_RADIUS : "rounded-[12px]",
         )}
         style={{
           fontFamily: css.fontSans,

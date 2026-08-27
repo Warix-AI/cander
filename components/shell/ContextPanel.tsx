@@ -6,12 +6,10 @@ import { GmailPanel } from "@/components/panels/gmail/GmailPanel";
 import { HandshakePanel } from "@/components/panels/handshake/HandshakePanel";
 import { PanelChoiceState } from "@/components/panels/PanelChoiceState";
 import { PanelEmptyState } from "@/components/panels/PanelEmptyState";
-import { ProjectsBrowser } from "@/components/panels/ProjectsBrowser";
 import { ResearchPanel } from "@/components/panels/ResearchPanel";
 import { WorkPanel } from "@/components/panels/WorkPanel";
 import { ScheduledPanel } from "@/components/panels/ScheduledPanel";
 import { SkillsPanel } from "@/components/panels/SkillsPanel";
-import { StudioPanel } from "@/components/panels/StudioPanel";
 import { useApp } from "@/components/app/AppProvider";
 import { SplitHandle } from "@/components/shell/SplitHandle";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
@@ -35,7 +33,6 @@ export function ContextPanel() {
   } = useApp();
   const shell = useShellStyle();
   const mobile = useMobileShell();
-  // Desktop floating card only — full-bleed under MobileAppChrome on phone.
   const floatingChrome = shell === "floating" && !mobile;
 
   const showChoice =
@@ -75,13 +72,11 @@ export function ContextPanel() {
           <PanelEmptyState />
         ) : showChoice ? (
           <PanelChoiceState />
-        ) : spaceId === "studio" ? (
-          <StudioPanel />
         ) : spaceId === "research" ? (
           <ResearchPanel />
-        ) : spaceId === "skills" || (spaceId === "build" && skillId) ? (
+        ) : spaceId === "build" && skillId ? (
           <SkillsPanel />
-        ) : spaceId === "scheduled" || (spaceId === "build" && jobId) ? (
+        ) : spaceId === "build" && jobId ? (
           <ScheduledPanel />
         ) : spaceId === "connectors" && connectorId === "handshake" ? (
           <HandshakePanel />
@@ -89,14 +84,8 @@ export function ContextPanel() {
           <GmailPanel />
         ) : spaceId === "connectors" ? (
           <ConnectorsPanel />
-        ) : spaceId === "files" ? (
-          <ProjectsBrowser />
         ) : spaceId === "work" ? (
           <WorkPanel />
-        ) : spaceId === "personal" ||
-          spaceId === "finances" ||
-          spaceId === "health" ? (
-          <ProjectsBrowser />
         ) : (
           <BuildPanel />
         )}
@@ -119,7 +108,6 @@ export function ResizeHandle() {
       from="right"
       min={0.28}
       max={0.72}
-      overlay
       onRatio={setPanelRatio}
     />
   );

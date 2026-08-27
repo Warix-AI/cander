@@ -1,5 +1,5 @@
-import { connectors as seed } from "./data";
 import type { ConnectorAccount, Workspace, WorkspaceKind } from "./types";
+import { connectors as catalogConnectors } from "./data";
 import { workspaceKindOf } from "./workspace-kind";
 
 type Listener = () => void;
@@ -102,56 +102,17 @@ function clone(account: ConnectorAccount): ConnectorAccount {
   return { ...account };
 }
 
-/** Seed labels differ for personal vs business workspaces. */
-function seedAccounts(
-  connectorId: string,
-  kind: WorkspaceKind,
-): ConnectorAccount[] {
-  const item = seed.find((c) => c.id === connectorId);
-  if (!item) return [];
-
-  if (kind === "personal") {
-    const personal: Record<string, ConnectorAccount[]> = {
-      gmail: [{ id: "p-g1", label: "me@gmail.com", status: "connected" }],
-      slack: [{ id: "p-sl1", label: "Personal Slack", status: "connected" }],
-      github: [{ id: "p-gh1", label: "personal-handle", status: "connected" }],
-      gcal: [{ id: "p-c1", label: "me@gmail.com", status: "connected" }],
-      "local-files": [{ id: "p-lf1", label: "This Mac", status: "connected" }],
-      stash: [{ id: "p-st1", label: "Private stash", status: "connected" }],
-    };
-    if (personal[connectorId]) return personal[connectorId].map(clone);
-    if (item.scope === "personal" && item.accounts.length) {
-      return item.accounts.map(clone);
-    }
-    return item.installed && item.accounts.length
-      ? [clone(item.accounts[0])]
-      : [];
-  }
-
-  return item.accounts.map(clone);
-}
-
-function defaultMap(kind: WorkspaceKind): Record<string, ConnectorAccount[]> {
-  const seeded: Record<string, ConnectorAccount[]> = {};
-  for (const item of seed) {
-    const accounts = seedAccounts(item.id, kind);
-    if (accounts.length) seeded[item.id] = accounts;
-  }
-  return seeded;
-}
-
 function kindOf(workspace?: Workspace | null): WorkspaceKind {
   return workspace ? workspaceKindOf(workspace) : "business";
 }
 
-/** Read path — never writes. */
+/** Read path — never writes. Empty until the user connects accounts. */
 export function connectionsForWorkspace(
   workspaceId: string,
-  workspace?: Workspace | null,
+  _workspace?: Workspace | null,
 ): Record<string, ConnectorAccount[]> {
   hydrate();
-  if (byWorkspace[workspaceId]) return byWorkspace[workspaceId];
-  return defaultMap(kindOf(workspace));
+  return byWorkspace[workspaceId] ?? {};
 }
 
 export function connectionsForConnector(
@@ -170,10 +131,9 @@ export function connectedConnectorIds(
   return Object.keys(map).filter((id) => (map[id]?.length ?? 0) > 0);
 }
 
-function materialize(workspaceId: string, workspace?: Workspace | null) {
+function materialize(workspaceId: string, _workspace?: Workspace | null) {
   hydrate();
-  if (byWorkspace[workspaceId]) return { ...byWorkspace[workspaceId] };
-  return defaultMap(kindOf(workspace));
+  return { ...(byWorkspace[workspaceId] ?? {}) };
 }
 
 export function addWorkspaceConnection(
@@ -222,10 +182,10 @@ export function clearWorkspaceConnections(workspaceId: string) {
 export function connectorsAvailableForKind(kind: WorkspaceKind) {
   const base =
     kind === "personal"
-      ? seed.filter(
+      ? catalogConnectors.filter(
           (item) => item.scope === "public" || item.scope === "personal",
         )
-      : seed.filter((item) => item.scope === "public");
+      : catalogConnectors.filter((item) => item.scope === "public");
   return base.filter(
     (item) => item.featured || item.installed || item.scope === "personal",
   );

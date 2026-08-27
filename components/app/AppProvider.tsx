@@ -10,7 +10,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { accountPresets, projects as seedProjects } from "@/lib/data";
+import { accountPresets } from "@/lib/data";
 import {
   getChatStoreServerSnapshot,
   getChatStoreSnapshot,
@@ -55,13 +55,10 @@ import {
   getActorSnapshot,
   getHostingServerSnapshot,
   getHostingSnapshot,
-  getPersonalSpaceServerSnapshot,
-  getPersonalSpaceSnapshot,
   getWorkspaceServerSnapshot,
   getWorkspaceSnapshot,
   persistActor,
   persistHosting,
-  persistPersonalSpace,
   persistWorkspace,
   getPinsServerSnapshot,
   getPinsSnapshot,
@@ -71,7 +68,6 @@ import {
   subscribeActor,
   subscribeHosting,
   subscribePins,
-  subscribePersonalSpace,
   subscribeSidebar,
   subscribeWorkspace,
   removeStoredPin,
@@ -96,7 +92,7 @@ import {
   workspacesFor,
   type Entitlements,
 } from "@/lib/entitlements";
-import { isChatSpace, PRIMARY_NAV_SPACES, spaceAllowed, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
+import { isChatSpace, chatSpaceId, PRIMARY_NAV_SPACES, spaceAllowed, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
 import type {
   AccountPresetId,
   BuildTool,
@@ -121,6 +117,7 @@ import type {
   ResearchTool,
   SettingsTab,
   SkillsTool,
+  NavDestinationId,
   SpaceId,
   SpaceLayout,
   StudioTool,
@@ -148,7 +145,7 @@ import { memberFromSupabaseUser } from "@/lib/supabase/member-from-user";
 
 type Snapshot = {
   view: CourierView;
-  spaceId: SpaceId | null;
+  spaceId: NavDestinationId | null;
   threadId: string | null;
   projectId: string | null;
   panelMode: PanelMode;
@@ -182,8 +179,6 @@ type AppContextValue = {
   entitlements: Entitlements;
   billingPlan: BillingPlan;
   setBillingPlan: (plan: BillingPlan) => void;
-  personalSpaceEnabled: boolean;
-  setPersonalSpaceEnabled: (on: boolean) => void;
   workspacePolicies: Record<string, WorkspacePolicy>;
   orgMembers: Member[];
   workspaceId: string;
@@ -194,7 +189,7 @@ type AppContextValue = {
   threads: Thread[];
   threadId: string | null;
   thread: Thread | null;
-  spaceId: SpaceId | null;
+  spaceId: NavDestinationId | null;
   projectId: string | null;
   project: Project | undefined;
   panelMode: PanelMode;
@@ -265,7 +260,7 @@ type AppContextValue = {
   updateSessionSummary: (text: string, threadId?: string | null) => void;
   clearPersistentChat: (threadId?: string | null) => void;
   sendMessage: (text: string, opts?: SendOpts) => void;
-  openSpace: (id: SpaceId) => void;
+  openSpace: (id: NavDestinationId) => void;
   openRecents: () => void;
   openBrowser: (opts?: { chat?: boolean; query?: string }) => void;
   browserChatOpen: boolean;
@@ -364,11 +359,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     getSupabaseUserSnapshot,
     getSupabaseUserServerSnapshot,
   );
-  const personalSpaceEnabled = useSyncExternalStore(
-    subscribePersonalSpace,
-    getPersonalSpaceSnapshot,
-    getPersonalSpaceServerSnapshot,
-  );
   const workspacePolicies = useSyncExternalStore(
     subscribePolicies,
     getPoliciesSnapshot,
@@ -385,7 +375,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (matched) return matched;
       return memberFromSupabaseUser(supabaseUser);
     }
-    return orgMembers.find((item) => item.id === actorId) ?? orgMembers[0];
+    const matched = orgMembers.find((item) => item.id === actorId);
+    if (matched) return matched;
+    if (orgMembers[0]) return orgMembers[0];
+    return {
+      id: actorId || "local-user",
+      name: "You",
+      email: "",
+      short: "You",
+      initials: "YO",
+      role: "Owner" as const,
+      workspaceIds: [] as string[],
+      plan: "free" as const,
+      seatStatus: "active" as const,
+      kind: "personal" as const,
+    };
   }, [orgMembers, actorId, supabaseUser]);
   const entitlements = useMemo(() => entitlementsFor(actor), [actor]);
   const billingPlan = entitlements.plan;
@@ -429,7 +433,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [],
   );
   const [threadId, setThreadId] = useState<string | null>(null);
-  const [spaceId, setSpaceId] = useState<SpaceId | null>(null);
+  const [spaceId, setSpaceId] = useState<NavDestinationId | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>("collapsed");
   const [panelIntent, setPanelIntent] = useState<PanelIntent>("browse");
@@ -550,16 +554,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const workspace = workspaceById(workspaceId, workspaceCatalog);
   const project = useMemo(() => {
     if (!projectId) return undefined;
-    return (
-      findProjectInWorkspace(workspaceId, projectId) ??
-      seedProjects.find((item) => item.id === projectId)
-    );
+    return findProjectInWorkspace(workspaceId, projectId);
   }, [projectId, workspaceId, entityRevision]);
   const thread = threads.find((item) => item.id === threadId) ?? null;
   const setHostingMode = useCallback((id: HostingMode) => {
-    if (!entitlements.hostingAllowed(id)) return;
     persistHosting(id);
-  }, [entitlements]);
+  }, []);
 
   const setActor = useCallback((id: string) => {
     persistActor(id);
@@ -574,19 +574,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const setBillingPlan = useCallback((plan: BillingPlan) => {
     const preset: AccountPresetId =
-      plan === "free"
-        ? "free"
-        : plan === "pro"
-          ? "pro"
-          : plan === "ultra"
-            ? "ultra"
-            : "max-owner";
+      plan === "free" ? "free" : plan === "pro" ? "pro" : "max-owner";
     const match = accountPresets.find((item) => item.id === preset);
     if (match) persistActor(match.actorId);
-  }, []);
-
-  const setPersonalSpaceEnabled = useCallback((on: boolean) => {
-    persistPersonalSpace(on);
   }, []);
 
   const setWorkspace = useCallback(
@@ -610,7 +600,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMobileSurface((surface) => (surface === "menu" ? surface : "chat"));
 
       const allowed = memberSpaces(id, actor.id, workspacePolicies);
-      const opts = { billingPlan, personalEnabled: personalSpaceEnabled };
+      const opts = { billingPlan };
 
       // Global surfaces that aren't space-scoped — keep them.
       if (
@@ -645,9 +635,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setView("space");
         setSpaceId(prevSpace);
         if (prevSpace === "build") setBuildTool("preview");
-        if (prevSpace === "studio") setStudioTool("canvas");
         if (prevSpace === "research") setResearchTool("browser");
-        if (prevSpace === "skills") setSkillsTool("editor");
 
         if (chatWasOpen && isChatSpace(prevSpace)) {
           let tid = "";
@@ -731,7 +719,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       actor.id,
       workspacePolicies,
       billingPlan,
-      personalSpaceEnabled,
       pushTarget,
     ],
   );
@@ -862,9 +849,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMobileSurface("chat");
       setDrafting(!hasMessages);
       if (space === "build") setBuildTool("preview");
-      if (space === "studio") setStudioTool("canvas");
       if (space === "research") setResearchTool("browser");
-      if (space === "skills") setSkillsTool("editor");
       pushTarget({
         view: "space",
         spaceId: space,
@@ -926,9 +911,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setPanelMode("split");
         setMobileSurface("chat");
         if (space === "build") setBuildTool("preview");
-        if (space === "studio") setStudioTool("canvas");
         if (space === "research") setResearchTool("browser");
-        if (space === "skills") setSkillsTool("editor");
         pushTarget({
           view: "space",
           spaceId: space,
@@ -976,9 +959,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setChatSpace = useCallback((id: SpaceId | null) => {
     setSpaceId(id);
     setView("chat");
-    if (id === "studio") setStudioTool("canvas");
     if (id === "research") setResearchTool("browser");
-    if (id === "skills") setSkillsTool("editor");
     if (id === "build") setBuildTool("preview");
     if (!id) {
       setDrafting(false);
@@ -1017,9 +998,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
       setMobileSurface((surface) => (surface === "menu" ? "chat" : surface));
       if (id === "build") setBuildTool("preview");
-      if (id === "studio") setStudioTool("canvas");
       if (id === "research") setResearchTool("browser");
-      if (id === "skills") setSkillsTool("editor");
     },
     [workspaceId, threadId],
   );
@@ -1033,10 +1012,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
       setMobileSurface((surface) => (surface === "menu" ? "chat" : surface));
       if (id === "build") setBuildTool("preview");
-      if (id === "studio") setStudioTool("canvas");
       if (id === "research")
         setResearchTool(opts?.researchTool ?? "browser");
-      if (id === "skills") setSkillsTool("editor");
       if (threadId) {
         setThreads((current) => {
           const existing = current.find((item) => item.id === threadId);
@@ -1159,7 +1136,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const currentChat =
         opts?.space ?? (isChatSpace(spaceId) ? spaceId : null);
       const allowed = memberSpaces(workspaceId, actor.id, workspacePolicies);
-      const planOpts = { billingPlan, personalEnabled: personalSpaceEnabled };
+      const planOpts = { billingPlan };
       const inferredChat =
         intent.resolved &&
         isChatSpace(intent.space) &&
@@ -1371,10 +1348,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setThreads((current) => {
         let list = current;
         if (usePersistent && space) {
+          const chatSpace = chatSpaceId(space);
+          if (!chatSpace) return list;
           const upserted = ensureContinuousChat(
             list,
             workspaceId,
-            space,
+            chatSpace,
             threadId,
           );
           list = upserted.threads;
@@ -1389,7 +1368,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   title: item.messages.length ? item.title : trimmed.slice(0, 48),
                   snippet: trimmed,
                   updatedAt: "Just now",
-                  spaceId: space ?? undefined,
+                  spaceId: chatSpaceId(space) ?? undefined,
                   projectId: intent.projectId ?? item.projectId,
                   workspaceId: matched?.workspaceId ?? item.workspaceId,
                   persistent: usePersistent ? true : item.persistent,
@@ -1404,7 +1383,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           title: trimmed.slice(0, 52),
           workspaceId: matched?.workspaceId ?? workspaceId,
           projectId: intent.projectId,
-          spaceId: space ?? undefined,
+          spaceId: chatSpaceId(space) ?? undefined,
           updatedAt: "Just now",
           snippet: trimmed,
           messages: [userMsg, assistantMsg],
@@ -1538,18 +1517,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSpaceId(space ?? spaceId);
       setProjectId(
         projectId ??
-          (!space || space === "skills" ? null : (intent.projectId ?? null)),
+          (intent.projectId ?? null),
       );
       setSkillId(
-        skillId ?? opts?.skillId ?? (space === "skills" ? "sk-brand" : null),
+        skillId ?? opts?.skillId ?? null,
       );
       setPanelIntent("execute");
       setConnectorId(intent.connectorId ?? connectorId);
       setJobId(intent.jobId ?? jobId);
       if (space && intent.buildTool) setBuildTool(intent.buildTool);
-      if (space === "studio") setStudioTool("canvas");
+      if (space === "build") setBuildTool("preview");
       if (space === "research") setResearchTool("browser");
-      if (space === "skills") setSkillsTool("editor");
       if (space && (kind === "build" || kind === "refine" || kind === "fix"))
         setBuildTool("preview");
       if (space && kind === "changes") setBuildTool("activity");
@@ -1561,12 +1539,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         threadId: activeId,
         projectId:
           projectId ??
-          (space === "skills" ? null : (intent.projectId ?? null)),
+          (intent.projectId ?? null),
         panelMode: "split",
         panelIntent: "execute",
         connectorId: intent.connectorId ?? connectorId,
         jobId: intent.jobId ?? jobId,
-        skillId: skillId ?? opts?.skillId ?? (space === "skills" ? "sk-brand" : null),
+        skillId: skillId ?? opts?.skillId ?? null,
       });
     },
     [
@@ -1587,7 +1565,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       liveUrl,
       project?.name,
       billingPlan,
-      personalSpaceEnabled,
       workspacePolicies,
     ],
   );
@@ -1657,24 +1634,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   }, [threadId]);
 
-  const openSpace = useCallback((id: SpaceId) => {
+  const openSpace = useCallback((id: NavDestinationId) => {
     const allowed = memberSpaces(workspaceId, actor.id, workspacePolicies);
-    const planOpts = { billingPlan, personalEnabled: personalSpaceEnabled };
-    let target: SpaceId | null = id === "connectors" ? "connectors" : id;
-    if (
-      target &&
-      (target === "personal" || target === "finances" || target === "health") &&
-      !spaceAllowed("personal", allowed, planOpts)
-    ) {
-      target = null;
-    }
+    const planOpts = { billingPlan };
+    let target: NavDestinationId | null = id;
     if (target && !spaceAllowed(target, allowed, planOpts)) {
       target = null;
     }
     if (!target) {
-      const fallback = (
-        ["build", "studio", "research", "personal", "work"] as const
-      ).find((space) => spaceAllowed(space, allowed, planOpts));
+      const fallback = (["build", "research", "work"] as const).find((space) =>
+        spaceAllowed(space, allowed, planOpts),
+      );
       if (!fallback) {
         newChat();
         return;
@@ -1692,7 +1662,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const goToSpace = (dest: SpaceId) => {
+    const goToSpace = (dest: NavDestinationId) => {
       setView("space");
       setSpaceId(dest);
       setProjectId(null);
@@ -1723,7 +1693,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     workspaceId,
     workspacePolicies,
     billingPlan,
-    personalSpaceEnabled,
     newChat,
     actor.id,
     threadId,
@@ -1771,10 +1740,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [panelMode, drafting, threadId]);
 
-  useEffect(() => {
-    if (entitlements.hostingAllowed(hostingMode)) return;
-    persistHosting("cloud");
-  }, [entitlements, hostingMode]);
 
   useEffect(() => {
     const home = homeWorkspaceId(actor, entitlements);
@@ -1796,30 +1761,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [actor, entitlements, workspaceId, workspaceCatalog]);
 
   useEffect(() => {
-    const gated =
-      spaceId === "work" ||
-      spaceId === "personal" ||
-      spaceId === "finances" ||
-      spaceId === "health";
-    if (!gated || !spaceId) return;
-    const allowed = memberSpaces(
-      workspaceId,
-      actor.id,
-      workspacePolicies,
-    );
-    const opts = { billingPlan, personalEnabled: personalSpaceEnabled };
-    const check = spaceId === "work" ? "work" : "personal";
-    if (spaceAllowed(check, allowed, opts)) return;
-    queueMicrotask(() => openSpace(spaceId));
-  }, [
-    spaceId,
-    workspaceId,
-    workspacePolicies,
-    billingPlan,
-    personalSpaceEnabled,
-    openSpace,
-    actor.id,
-  ]);
+    if (spaceId !== "work") return;
+    const allowed = memberSpaces(workspaceId, actor.id, workspacePolicies);
+    const opts = { billingPlan };
+    if (spaceAllowed("work", allowed, opts)) return;
+    queueMicrotask(() => openSpace("work"));
+  }, [spaceId, workspaceId, workspacePolicies, billingPlan, openSpace, actor.id]);
 
   const isPinned = useCallback(
     (kind: PinKind, id: string) =>
@@ -1864,19 +1811,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         id,
         memberSpaces(workspaceId, actor.id, workspacePolicies),
         dir,
-        { billingPlan, personalEnabled: personalSpaceEnabled },
+        { billingPlan },
       );
     },
-    [workspaceId, workspacePolicies, billingPlan, personalSpaceEnabled],
+    [workspaceId, workspacePolicies, billingPlan],
   );
 
   const openProject = useCallback((id: string) => {
     const ctx = { workspaceId, actorId: actor.id };
     const fromStore = localSpaceEntityStore.getProject(ctx, id);
     const match =
-      fromStore ??
-      findProjectInWorkspace(workspaceId, id) ??
-      seedProjects.find((item) => item.id === id);
+      fromStore ?? findProjectInWorkspace(workspaceId, id);
     if (!match) return;
     const space = match.space;
     const itemWorkspaceId = match.workspaceId;
@@ -1895,7 +1840,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     setPanelIntent("execute");
     if (space === "build") setBuildTool("preview");
-    if (space === "studio") setStudioTool("canvas");
     if (space === "research") setResearchTool("browser");
     setPanelMode("split");
     setMobileSurface("panel");
@@ -1955,8 +1899,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setDrafting(false);
       setPanelIntent("execute");
       setView("chat");
-      if (found.spaceId === "skills") setSkillsTool("editor");
-      if (found.spaceId === "studio") setStudioTool("canvas");
+      if (found.spaceId === "build") setBuildTool("preview");
       if (found.spaceId === "research") setResearchTool("browser");
       if (found.spaceId === "build") setBuildTool("preview");
       setPanelMode("split");
@@ -1970,7 +1913,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         panelIntent: "execute",
         connectorId: null,
         jobId: null,
-        skillId: found.spaceId === "skills" ? "sk-brand" : null,
+        skillId: null,
       });
     },
     [threads, workspaceId, pushTarget],
@@ -1980,9 +1923,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (id: string) => {
       const ctx = { workspaceId, actorId: actor.id };
       const fromStore = localSpaceEntityStore.getProject(ctx, id);
-      const legacy =
-        findProjectInWorkspace(workspaceId, id) ??
-        seedProjects.find((item) => item.id === id);
+      const legacy = findProjectInWorkspace(workspaceId, id);
       if (!fromStore && !legacy) return;
       const linked = legacy
         ? latestThreadForProject(threads, legacy)
@@ -2223,7 +2164,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPanelMode("split");
       setMobileSurface("chat");
       if (target === "build") setBuildTool("preview");
-      if (target === "studio") setStudioTool("canvas");
+      if (target === "build") setBuildTool("preview");
       if (target === "research") setResearchTool("browser");
     },
     [browserPage],
@@ -2438,7 +2379,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const openFile = useCallback((id: string) => {
     setView("space");
-    setSpaceId("studio");
+    setSpaceId("build");
     setFileId(id);
     setThreadId(null);
     setDrafting(false);
@@ -2446,7 +2387,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPanelMode("collapsed");
     pushTarget({
       view: "space",
-      spaceId: "studio",
+      spaceId: "build",
       threadId: null,
       projectId: null,
       panelMode: "collapsed",
@@ -2468,8 +2409,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       entitlements,
       billingPlan,
       setBillingPlan,
-      personalSpaceEnabled,
-      setPersonalSpaceEnabled,
       workspacePolicies,
       orgMembers,
       workspaceId,
@@ -2624,8 +2563,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       entitlements,
       billingPlan,
       setBillingPlan,
-      personalSpaceEnabled,
-      setPersonalSpaceEnabled,
       workspacePolicies,
       orgMembers,
       workspaceId,

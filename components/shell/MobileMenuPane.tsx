@@ -21,7 +21,7 @@ import {
 import { useMainNavItems } from "@/lib/use-main-nav-items";
 import { isExtraNavId, type SidebarNavId } from "@/lib/spaces";
 import { spaceIconTint } from "@/lib/space-icons";
-import type { MobileMenuScreen, SpaceId } from "@/lib/types";
+import type { MobileMenuScreen, NavDestinationId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -41,11 +41,18 @@ export function MobileMenuPane() {
     openRecents,
     openBrowser,
     openSettings,
+    entitlements,
   } = useApp();
 
   useEffect(() => {
     if (mobileSurface !== "menu") setMobileMenuScreen("main");
   }, [mobileSurface, setMobileMenuScreen]);
+
+  useEffect(() => {
+    if (!entitlements.hasWorkspaces && mobileMenuScreen === "workspace") {
+      setMobileMenuScreen("main");
+    }
+  }, [entitlements.hasWorkspaces, mobileMenuScreen, setMobileMenuScreen]);
 
   const stackDepth = mobileMenuScreen === "main" ? 0 : 1;
   const direction = useMobileStackDirection(stackDepth);
@@ -67,6 +74,7 @@ export function MobileMenuPane() {
             view={view}
             spaceId={spaceId}
             threadId={threadId}
+            showWorkspaces={entitlements.hasWorkspaces}
             onNewChat={() => {
               newChat();
             }}
@@ -76,8 +84,10 @@ export function MobileMenuPane() {
                 openBrowser();
               } else if (id === "recents") {
                 openRecents();
+              } else if (id === "connectors") {
+                openSpace("connectors");
               } else if (!isExtraNavId(id)) {
-                openSpace(id as SpaceId);
+                openSpace(id);
               }
               setMobileMenuScreen("main");
             }}
@@ -106,14 +116,16 @@ function MenuMain({
   view,
   spaceId,
   threadId,
+  showWorkspaces,
   onNewChat,
   onOpenScreen,
   onOpenNav,
   onOpenSettings,
 }: {
   view: string;
-  spaceId: SpaceId | null;
+  spaceId: NavDestinationId | null;
   threadId: string | null;
+  showWorkspaces: boolean;
   onNewChat: () => void;
   onOpenScreen: (screen: MobileMenuScreen) => void;
   onOpenNav: (id: SidebarNavId) => void;
@@ -206,7 +218,13 @@ function MenuMain({
                     MOBILE_MENU_ICON_SIZE,
                     "shrink-0",
                     tinted
-                      ? spaceIconTint(row.id as SpaceId)
+                      ? spaceIconTint(
+                          row.id === "work" ||
+                            row.id === "build" ||
+                            row.id === "research"
+                            ? row.id
+                            : null,
+                        )
                       : "text-muted-foreground",
                   )}
                   strokeWidth={MOBILE_MENU_ICON_STROKE}
@@ -218,20 +236,22 @@ function MenuMain({
         </div>
 
         <div className="mt-auto space-y-px pt-3">
-          <button
-            type="button"
-            onClick={() => onOpenScreen("workspace")}
-            className={mobileMenuRowClass}
-          >
-            <LayoutGrid
-              className={cn(
-                MOBILE_MENU_ICON_SIZE,
-                "shrink-0 text-muted-foreground",
-              )}
-              strokeWidth={MOBILE_MENU_ICON_STROKE}
-            />
-            Workspace
-          </button>
+          {showWorkspaces ? (
+            <button
+              type="button"
+              onClick={() => onOpenScreen("workspace")}
+              className={mobileMenuRowClass}
+            >
+              <LayoutGrid
+                className={cn(
+                  MOBILE_MENU_ICON_SIZE,
+                  "shrink-0 text-muted-foreground",
+                )}
+                strokeWidth={MOBILE_MENU_ICON_STROKE}
+              />
+              Workspace
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onOpenSettings}

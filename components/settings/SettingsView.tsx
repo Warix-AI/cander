@@ -18,6 +18,7 @@ import {
 } from "@/components/shell/mobile/MobileSlideStack";
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { PlansSettings } from "@/components/settings/PlansSettings";
+import { AccountSecuritySettings } from "@/components/settings/AccountSecuritySettings";
 import { DashBtn } from "@/components/spaces/ItemSet";
 import {
   SettingsField,
@@ -34,22 +35,20 @@ import {
   settingsSelectClass,
 } from "@/components/settings/SettingsChrome";
 import { WorkspacesSettings } from "@/components/settings/WorkspaceSettings";
-import { workspaces, workspaceResources } from "@/lib/data";
+import { MemberPlanToggle } from "@/components/settings/MemberPlanToggle";
+import { OrgTeammateInvitePanel } from "@/components/settings/OrgTeammateInvitePanel";
 import {
   memberName,
   orgMembersOf,
   orgMaxSeats,
-  orgUltraSeats,
 } from "@/lib/entitlements";
 import { orgSeatMix, planLabel, seatMixLabel } from "@/lib/billing";
-import {
-  addUltraLicense,
-  getUltraLicensesServerSnapshot,
-  getUltraLicensesSnapshot,
-  machineUltraSeats,
-  removeUltraLicense,
-  subscribeUltraLicenses,
-} from "@/lib/ultra-licenses";
+import { getOrgIdSnapshot, getOrgNameSnapshot } from "@/lib/org-onboarding";
+import { getWorkspaceCatalogSnapshot } from "@/lib/workspace-catalog";
+import { webAppOrgSettingsUrl } from "@/lib/plans";
+import { isSupabaseConfigured } from "@/lib/data-backend";
+import { isMobileShell, openExternalUrl } from "@/lib/mobile-shell";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Role, SettingsTab } from "@/lib/types";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
@@ -63,12 +62,13 @@ import {
   setProfilePhoto,
   subscribeProfilePhotos,
 } from "@/lib/profile-photos";
-import { persistSignedOut, persistActor } from "@/lib/session";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
   setMemberRole,
+  setMemberOrgPlan,
   toggleMemberWorkspace,
+  removeOrgMember,
 } from "@/lib/workspace-policy";
 
 const roles: Role[] = ["Owner", "Admin", "Member"];
@@ -99,7 +99,7 @@ export function SettingsView() {
   const settingsNav = visibleSettingsTabs(entitlements);
 
   useEffect(() => {
-    if (settingsTab === "workspaces" && !entitlements.showWorkspacesAdmin) {
+    if (settingsTab === "workspaces" && !entitlements.hasWorkspaces) {
       setSettingsTab("plans");
     }
     if (settingsTab === "organization" && !entitlements.showOrgSettings) {
@@ -107,7 +107,7 @@ export function SettingsView() {
     }
   }, [
     settingsTab,
-    entitlements.showWorkspacesAdmin,
+    entitlements.hasWorkspaces,
     entitlements.showOrgSettings,
     setSettingsTab,
   ]);
@@ -162,7 +162,13 @@ export function SettingsView() {
     </div>
   ) : (
     <div className={cn("min-h-0 flex-1 overflow-y-auto", MOBILE_APP_BG)}>
-      {settingsTab === "organization" ? <OrganizationSettings /> : null}
+      {settingsTab === "organization" ? (
+        entitlements.showOrgManaged ? (
+          <ManagedOrganizationSettings />
+        ) : (
+          <OrganizationSettings />
+        )
+      ) : null}
 
       {settingsTab === "workspaces" ? (
         <WorkspacesSettings
@@ -175,15 +181,7 @@ export function SettingsView() {
 
       {settingsTab === "general" ? (
         <GeneralSettings
-          onLogout={() => {
-            persistActor("m1");
-            persistSignedOut();
-            leave();
-          }}
-          onRestartOnboarding={() => {
-            persistActor("m1");
-            persistSignedOut();
-          }}
+          onAfterSignOut={() => leave()}
         />
       ) : null}
 
@@ -203,7 +201,13 @@ export function SettingsView() {
         </MobileSlideStack>
       ) : (
         <>
-          {settingsTab === "organization" ? <OrganizationSettings /> : null}
+          {settingsTab === "organization" ? (
+            entitlements.showOrgManaged ? (
+              <ManagedOrganizationSettings />
+            ) : (
+              <OrganizationSettings />
+            )
+          ) : null}
 
           {settingsTab === "workspaces" ? (
             <WorkspacesSettings
@@ -215,17 +219,7 @@ export function SettingsView() {
           {settingsTab === "plans" ? <PlansSettings /> : null}
 
           {settingsTab === "general" ? (
-            <GeneralSettings
-              onLogout={() => {
-                persistActor("m1");
-                persistSignedOut();
-                leave();
-              }}
-              onRestartOnboarding={() => {
-                persistActor("m1");
-                persistSignedOut();
-              }}
-            />
+            <GeneralSettings onAfterSignOut={() => leave()} />
           ) : null}
 
           {settingsTab === "appearance" ? <AppearanceSettings /> : null}
@@ -235,161 +229,261 @@ export function SettingsView() {
   );
 }
 
-function OrganizationSettings() {
-  const {
-    orgMembers,
-    personalSpaceEnabled,
-    setPersonalSpaceEnabled,
-    setSettingsTab,
-    actor,
-    entitlements,
-  } = useApp();
-  const mobile = useMobileShell();
-  const roster = orgMembersOf(orgMembers);
-  const orgWorkspaces = workspaces.filter(
-    (item) => workspaceKindOf(item) === "business",
+function ManagedOrganizationSettings() {
+  const { actor, orgMembers } = useApp();
+  const orgName =
+    actor.managedByOrgName || getOrgNameSnapshot() || "Your organization";
+  const admins = orgMembers.filter(
+    (member) =>
+      member.kind === "org" &&
+      member.seatStatus === "active" &&
+      (member.role === "Owner" || member.role === "Admin"),
   );
-  const maxSeats = orgMaxSeats(orgMembers);
-  const ultraSeats = orgUltraSeats(orgMembers);
-  const mixLabel = seatMixLabel(orgSeatMix(orgMembers)).join(" · ");
-  const managedResources = workspaceResources.filter(
-    (item) => item.status === "active",
-  );
-  const ultraLicenses = useSyncExternalStore(
-    subscribeUltraLicenses,
-    getUltraLicensesSnapshot,
-    getUltraLicensesServerSnapshot,
-  );
-  const machineSeats = machineUltraSeats(ultraLicenses);
+  const adminLabel =
+    admins.map((member) => member.name).join(", ") || "your admin";
 
   return (
     <SettingsPage>
       <SettingsHeader title="Organization" />
 
-      <SettingsSection title="Overview" className="mt-2 lg:mt-8">
+      <SettingsSection title="Managed by" className="mt-2 lg:mt-8">
+        <SettingsPanel>
+          <p className="text-[14px] font-medium tracking-[-0.02em]">
+            {orgName}
+          </p>
+          <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+            Your {planLabel(actor.plan)} seat is managed by {orgName}. Contact{" "}
+            {adminLabel} for invites, roles, workspace access, or billing.
+          </p>
+        </SettingsPanel>
+      </SettingsSection>
+
+      <SettingsSection title="Your seat">
         <SettingsStatGrid
           items={[
-            { label: "Legal name", value: "Acme Incorporated" },
-            { label: "Domain", value: "acme.com" },
-            { label: "Seat mix", value: mixLabel || "None" },
-            { label: "Max seats", value: `${maxSeats}` },
-            { label: "Ultra seats", value: `${ultraSeats}` },
+            { label: "Plan", value: planLabel(actor.plan) },
+            { label: "Role", value: actor.role },
             {
-              label: "Machine Ultra",
-              value: `${machineSeats.length}`,
+              label: "Status",
+              value: actor.seatStatus === "active" ? "Active" : "Pending",
             },
-            { label: "People", value: `${roster.length}` },
           ]}
         />
+        <SettingsFootnote className="mt-4">
+          {actor.plan === "pro"
+            ? "Pro members get personal workspaces and limited org access."
+            : "Max members get shared workspace features and org collaboration."}
+        </SettingsFootnote>
+      </SettingsSection>
+    </SettingsPage>
+  );
+}
+
+function OrganizationSettings() {
+  const {
+    orgMembers,
+    setSettingsTab,
+    actor,
+    entitlements,
+  } = useApp();
+  const nativeShell = isMobileShell();
+  const orgDisplayName = getOrgNameSnapshot() || actor.managedByOrgName || "Organization";
+  const orgId = actor.orgId || getOrgIdSnapshot();
+  const roster = orgMembersOf(orgMembers);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [planBusy, setPlanBusy] = useState<string | null>(null);
+  const [removeBusy, setRemoveBusy] = useState<string | null>(null);
+  const [inviteWarning, setInviteWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const warning = window.sessionStorage.getItem("courier-invite-send-warning");
+    if (!warning) return;
+    window.sessionStorage.removeItem("courier-invite-send-warning");
+    setInviteWarning(warning);
+  }, []);
+
+  const orgWorkspaces = getWorkspaceCatalogSnapshot().filter(
+    (item) => workspaceKindOf(item) === "business",
+  );
+  const maxSeats = orgMaxSeats(orgMembers);
+  const mixLabel = seatMixLabel(orgSeatMix(orgMembers)).join(" · ");
+  const domainGuess = (() => {
+    const email = actor.email.trim();
+    const at = email.lastIndexOf("@");
+    if (at < 0) return "";
+    const domain = email.slice(at + 1).toLowerCase();
+    if (!domain || domain.includes("gmail.") || domain.includes("yahoo.") || domain.includes("outlook.") || domain.includes("icloud.")) {
+      return "";
+    }
+    return domain;
+  })();
+
+  const overviewItems = [
+    { label: "Legal name", value: orgDisplayName },
+    ...(domainGuess ? [{ label: "Domain", value: domainGuess }] : []),
+    { label: "Seat mix", value: mixLabel || "None" },
+    { label: "Max seats", value: `${maxSeats}` },
+    { label: "People", value: `${roster.length}` },
+  ];
+
+  const changeMemberPlan = async (
+    memberId: string,
+    plan: "pro" | "max",
+    currentPlan: "pro" | "max",
+  ) => {
+    if (plan === currentPlan) return;
+    setPlanBusy(memberId);
+    setPlanError(null);
+    setMemberOrgPlan(memberId, plan);
+
+    if (!isSupabaseConfigured() || !orgId) {
+      setPlanBusy(null);
+      return;
+    }
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Sign in to update seats.");
+      }
+      const response = await fetch("/api/org/members/plan", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ memberId, orgId, plan }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setMemberOrgPlan(memberId, currentPlan);
+        throw new Error(data.error ?? "Could not update seat plan.");
+      }
+    } catch (err) {
+      setPlanError(
+        err instanceof Error ? err.message : "Could not update seat plan.",
+      );
+    } finally {
+      setPlanBusy(null);
+    }
+  };
+
+  const removeMember = async (memberId: string) => {
+    if (!orgId) return;
+    setRemoveBusy(memberId);
+    setPlanError(null);
+
+    if (!isSupabaseConfigured()) {
+      removeOrgMember(memberId);
+      setRemoveBusy(null);
+      return;
+    }
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Sign in to remove members.");
+      }
+      const response = await fetch("/api/org/members/remove", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ orgId, memberId }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error ?? "Could not remove member.");
+      }
+      removeOrgMember(memberId);
+    } catch (err) {
+      setPlanError(
+        err instanceof Error ? err.message : "Could not remove member.",
+      );
+    } finally {
+      setRemoveBusy(null);
+    }
+  };
+
+  return (
+    <SettingsPage>
+      <SettingsHeader title="Organization" />
+
+      {inviteWarning ? (
+        <p className="mt-4 text-[12.5px] leading-relaxed text-destructive">
+          {inviteWarning}
+        </p>
+      ) : null}
+
+      {actor.orgSetupDeferred ? (
+        <SettingsSection
+          title="Finish setup"
+          description="Complete organization setup to invite Pro and Max teammates."
+          className="mt-2 lg:mt-8"
+        >
+          <SettingsPanel>
+            <p className="text-[13px] leading-relaxed text-muted-foreground">
+              Seat billing is confirmed on the web after setup. Add your org
+              name and invites below, or anytime from this tab.
+            </p>
+            <div className="mt-4">
+              <DashBtn onClick={() => setSettingsTab("organization")}>
+                Continue setup
+              </DashBtn>
+            </div>
+          </SettingsPanel>
+        </SettingsSection>
+      ) : null}
+
+      <SettingsSection title="Overview" className={actor.orgSetupDeferred ? "mt-6" : "mt-2 lg:mt-8"}>
+        <SettingsStatGrid items={overviewItems} />
       </SettingsSection>
 
-      {entitlements.canManageInfrastructure ? (
+      {nativeShell && entitlements.canManageMembers ? (
         <SettingsSection
-          title="Ultra machine seats"
-          description="Each Ultra seat licenses one production machine. Machine-only seats don’t need a separate login — you manage them here."
+          title="Manage on the web"
+          description="Seat upgrades, downgrades, and billing run on cander.app in your browser — not in the mobile app."
         >
-          <div className="space-y-3">
-            {machineSeats.map((seat) => (
-              <SettingsGroup key={seat.id}>
-                <SettingsRow
-                  label={seat.label ?? "Machine seat"}
-                  description="Machine-only · no user attached"
-                >
-                  <button
-                    type="button"
-                    onClick={() => removeUltraLicense(seat.id)}
-                    className="inline-flex h-8 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-                  >
-                    Remove
-                  </button>
-                </SettingsRow>
-              </SettingsGroup>
-            ))}
-            {!machineSeats.length ? (
-              <p className="text-[13px] text-muted-foreground">
-                No machine-only Ultra seats yet.
-              </p>
-            ) : null}
+          <SettingsPanel>
             <button
               type="button"
-              onClick={() =>
-                addUltraLicense({
-                  kind: "machine",
-                  scope: "org",
-                  label: `Machine ${machineSeats.length + 1}`,
-                })
-              }
-              className="inline-flex h-9 items-center rounded-full border border-foreground/15 px-3.5 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
+              onClick={() => openExternalUrl(webAppOrgSettingsUrl())}
+              className="inline-flex h-10 items-center rounded-full border border-foreground/15 px-5 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-muted"
             >
-              Add machine Ultra seat
+              Open organization settings
             </button>
-          </div>
+          </SettingsPanel>
         </SettingsSection>
       ) : null}
 
-      {entitlements.canManageInfrastructure && managedResources.length ? (
+      {entitlements.canManageMembers && !nativeShell ? (
         <SettingsSection
-          title="Shared infrastructure"
-          description="Ultra-managed resources this organization can use."
+          title="Invite teammates"
+          description="Send Pro or Max invites — mixed rosters are supported."
         >
-          <div className="space-y-3">
-            {managedResources.map((item) => (
-              <SettingsPanel key={item.id}>
-                <p className="text-[14px] font-medium tracking-[-0.02em]">
-                  {item.name}
-                </p>
-                <p className="mt-1 text-[12.5px] text-muted-foreground">
-                  {item.kind} · {item.environment} · managed by{" "}
-                  {memberName(item.ownerId, orgMembers)}
-                </p>
-                <p className="mt-2 text-[12.5px] text-muted-foreground">
-                  Authorized:{" "}
-                  {item.authorizedMemberIds
-                    .map((id) => memberName(id, orgMembers))
-                    .join(", ") || "None"}
-                </p>
-              </SettingsPanel>
-            ))}
-          </div>
+          <OrgTeammateInvitePanel
+            orgId={orgId ?? ""}
+            workspaceIds={orgWorkspaces.map((item) => item.id)}
+            ownerEmail={actor.email}
+          />
         </SettingsSection>
       ) : null}
-
-      <SettingsSection title="Spaces">
-        <SettingsGroup>
-          <SettingsRow
-            label="Allow Personal space"
-            description={mobile ? undefined : "Show Personal in the sidebar for this organization."}
-          >
-            {mobile ? (
-              <SettingsSwitch
-                label="Allow Personal space"
-                checked={personalSpaceEnabled}
-                onChange={setPersonalSpaceEnabled}
-              />
-            ) : (
-              <button
-                type="button"
-                role="switch"
-                aria-checked={personalSpaceEnabled}
-                onClick={() => setPersonalSpaceEnabled(!personalSpaceEnabled)}
-                className="inline-flex h-8 shrink-0 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-              >
-                {personalSpaceEnabled ? "On" : "Off"}
-              </button>
-            )}
-          </SettingsRow>
-        </SettingsGroup>
-        {mobile ? (
-          <SettingsFootnote>
-            Show Personal in the sidebar for this organization.
-          </SettingsFootnote>
-        ) : null}
-      </SettingsSection>
 
       <SettingsSection
         title="Users"
-        description="Role is organization-wide. Only Max seats can use shared workspaces."
+        description="Invite Pro or Max seats — mixed rosters are supported. Change plans anytime; billing prorates on the owner’s subscription."
       >
+        {planError ? (
+          <p className="mb-3 text-[12.5px] text-destructive">{planError}</p>
+        ) : null}
         <div className="space-y-3">
           {roster.map((member) => {
             const pending = member.seatStatus === "pending";
@@ -398,7 +492,20 @@ function OrganizationSettings() {
               : roles.filter((role) => role !== "Owner");
             const canEditRole =
               entitlements.canManageMembers &&
+              !nativeShell &&
               (entitlements.isOwner || member.role !== "Owner") &&
+              !pending;
+            const seatPlan: "pro" | "max" =
+              member.plan === "max" ? "max" : "pro";
+            const canEditPlan =
+              entitlements.canManageMembers &&
+              !nativeShell &&
+              member.role !== "Owner";
+            const canRemove =
+              entitlements.canManageMembers &&
+              !nativeShell &&
+              member.id !== actor.id &&
+              member.role !== "Owner" &&
               !pending;
             return (
               <SettingsGroup key={member.id}>
@@ -408,7 +515,7 @@ function OrganizationSettings() {
                       ? `${member.name} (You)`
                       : member.name
                   }
-                  description={`${member.email} · ${planLabel(member.plan)}${pending ? " · Needs Max seat" : ""}`}
+                  description={`${member.email} · ${planLabel(member.plan)}${pending ? " · Pending invite" : ""}`}
                 >
                   {pending ? (
                     <span className="text-[12.5px] text-muted-foreground">
@@ -440,16 +547,45 @@ function OrganizationSettings() {
                 </SettingsRow>
                 {!pending ? (
                   <div className="px-4 py-2.5">
-                    <p className="text-[12px] text-muted-foreground">
-                      Plan:{" "}
-                      <span className="font-medium text-foreground">
-                        {planLabel(member.plan)}
-                      </span>
-                      {member.seatStatus === "active" ? " · Active" : ""}
-                    </p>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[12px] text-muted-foreground">
+                        Seat plan
+                        {member.seatStatus === "active" ? " · Active" : ""}
+                      </p>
+                      {canEditPlan ? (
+                        <MemberPlanToggle
+                          value={seatPlan}
+                          disabled={planBusy === member.id}
+                          label={`Plan for ${member.name}`}
+                          onChange={(plan) =>
+                            void changeMemberPlan(member.id, plan, seatPlan)
+                          }
+                        />
+                      ) : (
+                        <span className="text-[12.5px] font-medium text-foreground">
+                          {planLabel(member.plan)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : pending && canEditPlan ? (
+                  <div className="px-4 py-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[12px] text-muted-foreground">
+                        Invited as
+                      </p>
+                      <MemberPlanToggle
+                        value={seatPlan}
+                        disabled={planBusy === member.id}
+                        label={`Pending plan for ${member.name}`}
+                        onChange={(plan) =>
+                          void changeMemberPlan(member.id, plan, seatPlan)
+                        }
+                      />
+                    </div>
                   </div>
                 ) : null}
-                {!pending ? (
+                {!pending && !nativeShell ? (
                   <div className="px-4 py-3">
                     <p className="text-[12px] font-medium tracking-[-0.01em] text-muted-foreground">
                       Workspaces
@@ -478,6 +614,22 @@ function OrganizationSettings() {
                     </div>
                   </div>
                 ) : null}
+                {canRemove || (canEditPlan && pending) ? (
+                  <div className="border-t border-border px-4 py-3">
+                    <button
+                      type="button"
+                      disabled={removeBusy === member.id}
+                      onClick={() => void removeMember(member.id)}
+                      className="text-[12.5px] font-medium text-destructive hover:text-destructive/80 disabled:opacity-50"
+                    >
+                      {removeBusy === member.id
+                        ? "Removing…"
+                        : pending
+                          ? "Revoke invite"
+                          : "Remove member"}
+                    </button>
+                  </div>
+                ) : null}
               </SettingsGroup>
             );
           })}
@@ -488,13 +640,10 @@ function OrganizationSettings() {
 }
 
 function GeneralSettings({
-  onLogout,
-  onRestartOnboarding,
+  onAfterSignOut,
 }: {
-  onLogout: () => void;
-  onRestartOnboarding: () => void;
+  onAfterSignOut: () => void;
 }) {
-  const [gone, setGone] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const photoInput = useRef<HTMLInputElement>(null);
   const mobile = useMobileShell();
@@ -742,63 +891,7 @@ function GeneralSettings({
         </SettingsGroup>
         )}
 
-        {mobile ? (
-        <SettingsSection title="Account">
-        <SettingsGroup>
-          <SettingsRow
-            label="Restart onboarding"
-            description="Prototype — sign out and open the full-screen welcome flow."
-          >
-            <DashBtn onClick={onRestartOnboarding}>Start onboarding</DashBtn>
-          </SettingsRow>
-          <SettingsRow
-            label="Log out"
-            description="Sign out on this device."
-          >
-            <DashBtn onClick={onLogout}>Log out</DashBtn>
-          </SettingsRow>
-          <SettingsRow
-            label="Delete account"
-            description="Prototype only — toggles a local deleted state; nothing is removed from a server."
-          >
-            <button
-              type="button"
-              onClick={() => setGone(true)}
-              className="inline-flex h-10 items-center rounded-[10px] border border-destructive/30 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/10"
-            >
-              {gone ? "Deleted" : "Delete account"}
-            </button>
-          </SettingsRow>
-        </SettingsGroup>
-        </SettingsSection>
-        ) : (
-        <SettingsGroup title="Account">
-          <SettingsRow
-            label="Restart onboarding"
-            description="Prototype — sign out and open the full-screen welcome flow."
-          >
-            <DashBtn onClick={onRestartOnboarding}>Start onboarding</DashBtn>
-          </SettingsRow>
-          <SettingsRow
-            label="Log out"
-            description="Sign out on this device."
-          >
-            <DashBtn onClick={onLogout}>Log out</DashBtn>
-          </SettingsRow>
-          <SettingsRow
-            label="Delete account"
-            description="Prototype only — toggles a local deleted state; nothing is removed from a server."
-          >
-            <button
-              type="button"
-              onClick={() => setGone(true)}
-              className="inline-flex h-10 items-center rounded-[10px] border border-destructive/30 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/10"
-            >
-              {gone ? "Deleted" : "Delete account"}
-            </button>
-          </SettingsRow>
-        </SettingsGroup>
-        )}
+        <AccountSecuritySettings onAfterSignOut={onAfterSignOut} />
       </div>
     </SettingsPage>
   );

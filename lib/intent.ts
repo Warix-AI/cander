@@ -4,10 +4,10 @@ import {
   projectsForWorkspace,
 } from "./project-resolver";
 import { isChatSpace } from "./spaces";
-import type { BuildTool, SpaceId } from "./types";
+import type { BuildTool, NavDestinationId, SpaceId } from "./types";
 
 export type Intent = {
-  space: SpaceId;
+  space: NavDestinationId;
   projectId?: string;
   buildTool?: BuildTool;
   connectorId?: string;
@@ -21,25 +21,15 @@ function includesAny(text: string, words: string[]) {
   return words.some((word) => text.includes(word));
 }
 
-const spaceNames: Record<string, string> = {
-  work: "Work",
-  build: "Build",
-  studio: "Studio",
-  research: "Research",
-  personal: "Personal",
-};
-
 const handoffLead: Partial<Record<SpaceId, string>> = {
   work: "I’ll use Work for this.",
   build: "I’ll use Build to make this.",
-  studio: "I’ll use Studio to turn this into a presentation.",
-  research: "I’ll use Research to look into this.",
-  personal: "I’ll use Personal for this.",
+  research: "I’ll use Explore to look into this.",
 };
 
 function withHandoff(
   intent: Intent,
-  current: SpaceId | null | undefined,
+  current: NavDestinationId | null | undefined,
 ): Intent {
   if (
     !current ||
@@ -49,12 +39,7 @@ function withHandoff(
   ) {
     return intent;
   }
-  const lead =
-    intent.space === "studio" && includesAny(intent.reply.toLowerCase(), ["presentation", "deck"])
-      ? handoffLead.studio
-      : intent.space === "studio"
-        ? "I’ll use Studio for this."
-        : handoffLead[intent.space];
+  const lead = handoffLead[intent.space];
   if (!lead) return intent;
   return { ...intent, reply: `${lead} ${intent.reply}` };
 }
@@ -62,7 +47,7 @@ function withHandoff(
 export function inferIntent(
   raw: string,
   workspaceId: string,
-  currentSpace?: SpaceId | null,
+  currentSpace?: NavDestinationId | null,
 ): Intent {
   const text = raw.toLowerCase();
   const workspaceProjects = projectsForWorkspace(workspaceId);
@@ -133,13 +118,11 @@ export function inferIntent(
       "my files",
     ]) ||
     (includesAny(text, ["files"]) &&
-      includesAny(text, ["library", "upload", "uploads"]) &&
-      !includesAny(text, ["image", "photo", "video", "studio"]))
+      includesAny(text, ["library", "upload", "uploads"]))
   ) {
     return finish({
-      space: "studio",
-      reply:
-        "Those files live in Studio → Assets — stills, briefs, exports, and uploads in one library.",
+      space: "build",
+      reply: "Those files live in Build — projects, assets, and uploads in one library.",
     });
   }
 
@@ -149,323 +132,107 @@ export function inferIntent(
       "meeting",
       "follow up",
       "follow-up",
+      "calendar",
       "inbox",
-      "proposal",
-      "slack",
-      "respond to",
+      "reply",
+      "respond",
+      "approve",
+      "approval",
     ]) ||
-    (includesAny(text, ["customer", "customers", "crm"]) &&
-      !includesAny(text, [
-        "build",
-        "app",
-        "website",
-        "portal",
-        "make me",
-        "make a",
-      ]));
+    (includesAny(text, ["work"]) && !includesAny(text, ["network", "framework"]));
 
-  if (workAsk && !connecting) {
-    const project =
-      mentioned?.space === "work"
-        ? mentioned
-        : defaultProjectForSpace(workspaceId, "work");
+  if (workAsk) {
     return finish({
       space: "work",
-      projectId: project?.id ?? mentioned?.id,
-      reply: `Work is the right place for this${project ? ` — ${project.name}` : ""}. I’ll keep the open items with this chat.`,
+      projectId: mentioned?.id,
+      reply: mentioned
+        ? `Work is open on ${mentioned.name}.`
+        : "Work is open — inbox, meetings, and follow-ups.",
     });
   }
 
-  if (
-    includesAny(text, ["calendar"]) &&
-    !connecting &&
-    includesAny(text, ["meeting", "prep", "prepare", "today", "tomorrow", "schedule"])
-  ) {
-    const project =
-      mentioned?.space === "work"
-        ? mentioned
-        : workspaceProjects.find((item) => item.id === "launch-sync") ??
-          workspaceProjects.find(
-            (item) => item.space === "work" && item.workspaceId === workspaceId,
-          );
-    return finish({
-      space: "work",
-      projectId: project?.id ?? mentioned?.id,
-      reply: "I’ll use Work to get you ready — calendar and follow-ups stay with this chat.",
-    });
-  }
-
-  if (
+  const buildAsk =
     includesAny(text, [
-      "vacation",
-      "subscription",
-      "subscriptions",
-      "reservation",
-      "birthday",
-      "bills",
-      "this weekend",
-      "weekend",
-    ])
-  ) {
-    const project =
-      mentioned?.space === "personal"
-        ? mentioned
-        : workspaceProjects.find(
-            (item) =>
-              item.space === "personal" && item.workspaceId === workspaceId,
-          );
-    return finish({
-      space: "personal",
-      projectId: project?.id ?? mentioned?.id,
-      reply: `Personal is for life admin${project ? ` — ${project.name}` : ""}. I’ll keep it separate from product work.`,
-    });
-  }
-
-  if (
-    includesAny(text, [
-      "every monday",
-      "every week",
-      "schedule this",
-      "scheduled",
-      "recurring",
-      "remind",
-      "weekly",
-      "daily",
-      "monitor",
-    ]) &&
-    !includesAny(text, ["meeting", "calendar", "inbox"])
-  ) {
-    const job =
-      scheduledJobs.find((item) =>
-        mentioned ? item.projectId === mentioned.id : false,
-      ) ?? scheduledJobs[0];
-    return finish({
-      space: "build",
-      projectId: mentioned?.id ?? job.projectId,
-      jobId: job.id,
-      reply: `This will run on a schedule in Build. I attached it${mentioned ? ` to ${mentioned.name}` : ""} so it also shows on that project.`,
-    });
-  }
-
-  if (includesAny(text, ["skill", "skills", "tone of voice"])) {
-    return finish({
-      space: "build",
-      reply:
-        "Tasks live in Build. Name it, say when it should run, and I’ll keep the instructions with this chat.",
-    });
-  }
-
-  if (
-    includesAny(text, [
-      "invoice",
-      "invoices",
-      "runway",
-      "budget",
-      "spend",
-      "finance",
-      "finances",
-      "cash",
-    ])
-  ) {
-    const project =
-      mentioned?.space === "finances"
-        ? mentioned
-        : workspaceProjects.find(
-            (item) => item.space === "finances" && item.workspaceId === workspaceId,
-          );
-    return finish({
-      space: "personal",
-      projectId: project?.id ?? mentioned?.id,
-      reply: `Opened Personal → Money${project ? ` on ${project.name}` : ""}. Invoices, spend, and runway stay with this chat.`,
-    });
-  }
-
-  if (
-    includesAny(text, [
-      "health",
-      "benefits",
-      "care plan",
-      "wellness",
-      "lab results",
-    ])
-  ) {
-    const project =
-      mentioned?.space === "health"
-        ? mentioned
-        : workspaceProjects.find(
-            (item) => item.space === "health" && item.workspaceId === workspaceId,
-          );
-    return finish({
-      space: "personal",
-      projectId: project?.id ?? mentioned?.id,
-      reply: `Opened Personal → Health${project ? ` on ${project.name}` : ""}. Care plans and benefits stay with this chat.`,
-    });
-  }
-
-  if (
-    includesAny(text, [
-      "goal",
-      "goals",
-      "resolutions",
-    ])
-  ) {
-    const project =
-      mentioned?.id === "annual-goals"
-        ? mentioned
-        : workspaceProjects.find(
-            (item) =>
-              item.id === "annual-goals" && item.workspaceId === workspaceId,
-          );
-    return finish({
-      space: "personal",
-      projectId: project?.id ?? mentioned?.id,
-      reply: `Opened Personal → Goals${project ? ` on ${project.name}` : ""}. I’ll keep this with the rest of life admin.`,
-    });
-  }
-
-  if (
-    includesAny(text, [
-      "car",
-      "registration",
-      "oil change",
-      "loaner",
-      "dmv",
-    ])
-  ) {
-    const project =
-      mentioned?.id === "car-service"
-        ? mentioned
-        : workspaceProjects.find(
-            (item) =>
-              item.id === "car-service" && item.workspaceId === workspaceId,
-          );
-    return finish({
-      space: "personal",
-      projectId: project?.id ?? mentioned?.id,
-      reply: `Opened Personal → Car${project ? ` on ${project.name}` : ""}. Service, insurance, and registration stay with this chat.`,
-    });
-  }
-
-  if (
-    includesAny(text, [
-      "image",
-      "photo",
-      "video",
-      "logo",
-      "presentation",
-      "deck",
-      "ad",
-      "ads",
-      "background",
-      "canvas",
-      "studio",
-      "crop",
-      "timeline",
-      "text to video",
-      "retouch",
-    ])
-  ) {
-    const project =
-      mentioned ??
-      workspaceProjects.find(
-        (item) => item.space === "studio" && item.workspaceId === workspaceId,
-      ) ??
-      workspaceProjects.find((item) => item.space === "studio");
-    const presentation = includesAny(text, ["presentation", "deck"]);
-    return finish({
-      space: "studio",
-      projectId: project?.id,
-      reply: presentation
-        ? `Studio can turn this into a presentation${project ? ` — ${project.name}` : ""}. Canvas and export stay with this chat.`
-        : `Studio is on the right${project ? ` — ${project.name}` : ""}. Canvas, layers, and export stay with this project.`,
-    });
-  }
-
-  if (
-    includesAny(text, [
-      "research",
-      "competitor",
-      "competitors",
-      "pricing",
-      "sources",
-      "cite",
-      "compare",
-      "teach me",
-      "sourced report",
-    ]) &&
-    !includesAny(text, ["landing", "website", "page.tsx"])
-  ) {
-    const project =
-      mentioned?.space === "research"
-        ? mentioned
-        : (workspaceProjects.find((item) => item.id === "competitor-research") ??
-          mentioned);
-    return finish({
-      space: "research",
-      projectId: project?.id ?? mentioned?.id,
-      reply:
-        mentioned && mentioned.space === "build"
-          ? `Research is attached to ${mentioned.name}. Sources are on the right; Build stays in the same project history.`
-          : `Opened Research. Sources and notes are on the right.`,
-    });
-  }
-
-  if (
-    includesAny(text, [
+      "build",
       "website",
       "app",
-      "apps",
-      "automation",
-      "api",
-      "deploy",
-      "debug",
-      "preview",
-      "browser",
       "landing",
-    ])
-  ) {
-    const buildProject =
-      mentioned ??
-      workspaceProjects.find(
-        (item) => item.space === "build" && item.workspaceId === workspaceId,
-      ) ??
-      workspaceProjects.find((item) => item.space === "build");
+      "page",
+      "component",
+      "deploy",
+      "publish",
+      "preview",
+      "code",
+      "repo",
+      "crm",
+      "portal",
+      "dashboard",
+    ]) ||
+    includesAny(text, ["make me", "create a", "build me"]);
+
+  if (buildAsk) {
+    const projectId =
+      mentioned?.id ?? defaultProjectForSpace(workspaceId, "build")?.id;
     return finish({
       space: "build",
-      projectId: buildProject?.id,
-      buildTool: includesAny(text, ["terminal", "log", "debug"])
-        ? "terminal"
-        : "preview",
-      reply: `Opened Build${buildProject ? ` on ${buildProject.name}` : ""}. The working surface is on the right — chat stays the command layer.`,
+      projectId,
+      buildTool: "preview",
+      reply: mentioned
+        ? `Build is open on ${mentioned.name}. Preview is on the right.`
+        : "Build is open. Preview will appear as soon as there’s something to show.",
     });
   }
 
-  if (isChatSpace(currentSpace)) {
-    return {
-      space: currentSpace,
-      projectId: mentioned?.id,
-      reply: `I’ll stay in ${spaceNames[currentSpace] ?? "this Space"} and take it from here.`,
-      resolved: true,
-    };
+  const researchAsk =
+    includesAny(text, [
+      "research",
+      "explore",
+      "competitor",
+      "competitors",
+      "market",
+      "landscape",
+      "summarize",
+      "sources",
+      "report",
+    ]) || includesAny(text, ["look into", "find out"]);
+
+  if (researchAsk) {
+    const projectId =
+      mentioned?.id ?? defaultProjectForSpace(workspaceId, "research")?.id;
+    return finish({
+      space: "research",
+      projectId,
+      reply: mentioned
+        ? `Explore is open on ${mentioned.name}.`
+        : "Explore is open — sources, notes, and reports.",
+    });
   }
 
-  const buildProject =
-    mentioned ??
-    workspaceProjects.find(
-      (item) => item.space === "build" && item.workspaceId === workspaceId,
-    ) ??
-    workspaceProjects.find((item) => item.space === "build");
+  const scheduled = scheduledJobs.find((job) =>
+    text.includes(job.name.toLowerCase()),
+  );
+  if (scheduled) {
+    return finish({
+      space: "build",
+      jobId: scheduled.id,
+      projectId: scheduled.projectId,
+      reply: `Scheduled job “${scheduled.name}” is in Build.`,
+    });
+  }
 
   return {
-    space: "build",
-    projectId: buildProject?.id,
-    buildTool: includesAny(text, ["terminal", "log"]) ? "terminal" : "preview",
-    reply:
-      "What would you like to do? Pick something on the right, or tell me more here.",
+    space: "work",
+    reply: "How can I help?",
     resolved: false,
   };
 }
 
 export function nextId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function labelFor(space: SpaceId) {
+  if (space === "research") return "Explore";
+  if (space === "work") return "Work";
+  return "Build";
 }

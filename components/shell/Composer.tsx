@@ -32,6 +32,7 @@ import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import {
   isSpaceLibrarySpace,
   spaceLibraryLabel,
+  type SpaceLibraryId,
 } from "@/lib/space-library";
 import { isChatSpace } from "@/lib/spaces";
 import { labelFor } from "@/lib/build-loop";
@@ -501,7 +502,7 @@ export function Composer({
                         : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
-                    {spaceLibraryLabel(spaceId)}
+                    {spaceLibraryLabel(spaceId as SpaceLibraryId)}
                   </button>
                 ) : null}
               </div>

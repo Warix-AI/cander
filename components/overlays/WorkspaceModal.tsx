@@ -44,7 +44,7 @@ export function WorkspaceModal() {
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const open = overlay === "workspace";
+  const open = overlay === "workspace" && entitlements.hasWorkspaces;
 
   const canPersonal = entitlements.canCreatePersonalWorkspace;
   const canBusiness = entitlements.canCreateBusinessWorkspace;
@@ -173,7 +173,7 @@ export function WorkspaceModal() {
           />
           {!canBusiness ? (
             <p className="pt-1 text-[12.5px] text-muted-foreground">
-              Business workspaces need Max or Ultra with Owner/Admin access.
+              Business workspaces need Max with Owner or Admin access.
             </p>
           ) : null}
           {error ? (

@@ -1,5 +1,3 @@
-import { projects as seedProjects, researchSources } from "@/lib/data";
-import { workItems } from "@/lib/work-catalog";
 import type {
   BriefingAction,
   BriefingFilter,
@@ -19,7 +17,7 @@ import type {
   WorkspaceCtx,
 } from "@/lib/space-entities";
 import { bumpVersion, newEntityTimestamps, newId } from "@/lib/space-entities";
-import type { Project, SpaceId } from "@/lib/types";
+import type { SpaceId } from "@/lib/types";
 import {
   attachWorkApp,
   detachWorkApp,
@@ -86,83 +84,14 @@ function projectKindFromSpace(space: SpaceId): SpaceProject["kind"] {
   return "general";
 }
 
-function seedProject(project: Project): SpaceProject {
-  const timestamps = newEntityTimestamps();
-  return {
-    ...timestamps,
-    id: project.id,
-    space: project.space,
-    workspaceId: project.workspaceId,
-    title: project.name,
-    summary: project.summary,
-    cover: project.cover,
-    kind: projectKindFromSpace(project.space),
-    status: "active",
-    threadId: project.threadId,
-    domains: project.domains,
-  };
-}
-
-function seedSources(): SpaceSource[] {
-  const researchWorkspace =
-    seedProjects.find((project) => project.space === "research")?.workspaceId ??
-    seedProjects[0]?.workspaceId ??
-    "marketing";
-  return researchSources.map((source, index) => ({
-    ...newEntityTimestamps(),
-    id: `src-${index + 1}`,
-    space: "research" as const,
-    workspaceId: researchWorkspace,
-    title: source.title,
-    kind: "web" as const,
-    url: source.url.startsWith("http") ? source.url : `https://${source.url}`,
-    folderId: null,
-    citationMeta: source.tag ? { tag: source.tag } : undefined,
-  }));
-}
-
-function seedAttachments(): SpaceAttachment[] {
-  const ids = new Set<string>();
-  for (const project of seedProjects) {
-    if (project.space === "build" || project.space === "work") {
-      ids.add(project.id);
-    }
-  }
-  return [...ids].map((targetId) => {
-    const project = seedProjects.find((item) => item.id === targetId);
-    return {
-      ...newEntityTimestamps(),
-      id: `attach-${targetId}`,
-      workspaceId: project?.workspaceId ?? "marketing",
-      kind: "buildApp" as const,
-      targetId,
-    };
-  });
-}
-
-function seedBriefing(): BriefingItem[] {
-  return workItems
-    .filter((item) => item.lanes.includes("today"))
-    .map((item) => ({
-      ...newEntityTimestamps(),
-      id: item.id,
-      workspaceId: item.workspaceId,
-      connectorId: item.connectorId,
-      tone: item.tone ?? "neutral",
-      title: item.title,
-      summary: item.summary,
-      prompt: item.prompt,
-    }));
-}
-
 function ensureSeed() {
-  if (state.seeded && state.projects.length > 0) return;
+  if (state.seeded) return;
   state = {
-    projects: seedProjects.map(seedProject),
-    sources: seedSources(),
-    briefingItems: seedBriefing(),
+    projects: [],
+    sources: [],
+    briefingItems: [],
     deployments: [],
-    attachments: seedAttachments(),
+    attachments: [],
     entityLinks: [],
     seeded: true,
     revision: 0,
@@ -174,6 +103,30 @@ function hydrate() {
   hydrated = true;
   const stored = parse(window.localStorage.getItem(STORAGE_KEY));
   if (stored?.seeded) {
+    // Drop legacy Acme seed projects if the store still has them.
+    const legacyIds = new Set(
+      (stored.projects ?? [])
+        .map((p) => p.workspaceId)
+        .filter((id) =>
+          ["marketing", "engineering", "operations", "solo-pro", "solo-ultra", "solo-free"].includes(
+            id,
+          ),
+        ),
+    );
+    if (legacyIds.size && (stored.projects?.length ?? 0) > 0) {
+      state = {
+        projects: [],
+        sources: [],
+        briefingItems: [],
+        deployments: [],
+        attachments: [],
+        entityLinks: [],
+        seeded: true,
+        revision: 0,
+      };
+      persist();
+      return;
+    }
     state = {
       ...stored,
       attachments: stored.attachments ?? [],

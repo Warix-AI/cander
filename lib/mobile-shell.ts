@@ -44,6 +44,18 @@ export function getMobilePlatform(): "ios" | "android" | "web" {
   return "web";
 }
 
+/** Open a billing or marketing URL outside the in-app WebView (Safari / Chrome). */
+export function openExternalUrl(url: string) {
+  if (typeof window === "undefined") return;
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.target = "_blank";
+  anchor.rel = "noopener noreferrer";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
 /** Shared across duplicate lock calls so one listener can't zero out another. */
 let pluginHeight = 0;
 let lockCount = 0;

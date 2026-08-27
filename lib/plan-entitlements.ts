@@ -1,121 +1,62 @@
 import type { BillingPlan } from "./types";
 
-export type DevDepth = "none" | "build" | "collaborate" | "operate";
+export type AiCapacity = "standard" | "expanded" | "maximum";
 
+/** Internal plan capabilities — comparison UI uses boolean rows derived from these. */
 export type PlanCapabilities = {
-  devDepth: DevDepth;
-  developmentAccess: boolean;
-  apiAccess: "none" | "limited" | "dev" | "production";
-  apiKeys: "none" | "test" | "dev" | "production";
-  models: "none" | "explore" | "dev" | "shared" | "production";
-  deployments: "none" | "test" | "team" | "production";
-  /** Entitlement to *select* local compute — not a device-class lock. */
-  localHosting: boolean;
-  /** Entitlement to *select* on-device compute — not "phones can't run models." */
-  onDeviceHosting: boolean;
-  /** Permission to serve production workloads. Location is still HostingMode. */
-  productionServing: boolean;
-  infrastructureManagement: boolean;
-  sharedResources: boolean;
-  logs: "none" | "limited" | "full";
-  usage: "none" | "limited" | "full";
-  docs: boolean;
-  workSpace: boolean;
-  sharedWorkspaces: boolean;
+  aiCapacity: AiCapacity;
   voice: boolean;
-  workspaces: boolean;
-  connectorPolicies: boolean;
-  limits: { apiKeys?: number; deployments?: number; devProjects?: number };
+  /** 1, 3, or Infinity — never shown in pricing cells. */
+  workspaceLimit: number;
+  persistentMemory: boolean;
+  advancedMemory: boolean;
+  knowledgeBases: boolean;
+  sharedWorkspaces: boolean;
+  inviteMembers: boolean;
+  rolesAndPermissions: boolean;
+  sharedWorkspaceKnowledge: boolean;
+  organizationControls: boolean;
 };
 
 const PLAN_CAPABILITIES: Record<BillingPlan, PlanCapabilities> = {
   free: {
-    devDepth: "none",
-    developmentAccess: false,
-    apiAccess: "none",
-    apiKeys: "none",
-    models: "none",
-    deployments: "none",
-    localHosting: false,
-    onDeviceHosting: false,
-    productionServing: false,
-    infrastructureManagement: false,
-    sharedResources: false,
-    logs: "none",
-    usage: "none",
-    docs: false,
-    workSpace: false,
-    sharedWorkspaces: false,
+    aiCapacity: "standard",
     voice: false,
-    workspaces: false,
-    connectorPolicies: false,
-    limits: {},
+    workspaceLimit: 1,
+    persistentMemory: true,
+    advancedMemory: false,
+    knowledgeBases: false,
+    sharedWorkspaces: false,
+    inviteMembers: false,
+    rolesAndPermissions: false,
+    sharedWorkspaceKnowledge: false,
+    organizationControls: false,
   },
   pro: {
-    devDepth: "build",
-    developmentAccess: true,
-    apiAccess: "dev",
-    apiKeys: "dev",
-    models: "explore",
-    deployments: "none",
-    localHosting: true,
-    onDeviceHosting: true,
-    productionServing: false,
-    infrastructureManagement: false,
-    sharedResources: false,
-    logs: "limited",
-    usage: "limited",
-    docs: true,
-    workSpace: false,
-    sharedWorkspaces: false,
+    aiCapacity: "expanded",
     voice: true,
-    workspaces: true,
-    connectorPolicies: false,
-    limits: { apiKeys: 5, deployments: 3, devProjects: 5 },
+    workspaceLimit: 3,
+    persistentMemory: true,
+    advancedMemory: true,
+    knowledgeBases: true,
+    sharedWorkspaces: false,
+    inviteMembers: false,
+    rolesAndPermissions: false,
+    sharedWorkspaceKnowledge: false,
+    organizationControls: false,
   },
   max: {
-    devDepth: "collaborate",
-    developmentAccess: true,
-    apiAccess: "dev",
-    apiKeys: "dev",
-    models: "shared",
-    deployments: "team",
-    localHosting: true,
-    onDeviceHosting: true,
-    productionServing: false,
-    infrastructureManagement: false,
-    sharedResources: true,
-    logs: "limited",
-    usage: "limited",
-    docs: true,
-    workSpace: true,
-    sharedWorkspaces: true,
+    aiCapacity: "maximum",
     voice: true,
-    workspaces: true,
-    connectorPolicies: true,
-    limits: { apiKeys: 20, deployments: 10, devProjects: 20 },
-  },
-  ultra: {
-    devDepth: "operate",
-    developmentAccess: true,
-    apiAccess: "production",
-    apiKeys: "production",
-    models: "production",
-    deployments: "production",
-    localHosting: true,
-    onDeviceHosting: true,
-    productionServing: true,
-    infrastructureManagement: true,
-    sharedResources: true,
-    logs: "full",
-    usage: "full",
-    docs: true,
-    workSpace: true,
+    workspaceLimit: Infinity,
+    persistentMemory: true,
+    advancedMemory: true,
+    knowledgeBases: true,
     sharedWorkspaces: true,
-    voice: true,
-    workspaces: true,
-    connectorPolicies: true,
-    limits: {},
+    inviteMembers: true,
+    rolesAndPermissions: true,
+    sharedWorkspaceKnowledge: true,
+    organizationControls: true,
   },
 };
 
@@ -123,71 +64,127 @@ export function capabilitiesFor(plan: BillingPlan): PlanCapabilities {
   return PLAN_CAPABILITIES[plan];
 }
 
-export function canManageInfrastructure(plan: BillingPlan) {
-  return capabilitiesFor(plan).infrastructureManagement;
+export function hasExpandedAiCapacity(plan: BillingPlan) {
+  const tier = capabilitiesFor(plan).aiCapacity;
+  return tier === "expanded" || tier === "maximum";
 }
 
-export function devDepthLabel(depth: DevDepth) {
-  if (depth === "none") return "None";
-  if (depth === "build") return "Build";
-  if (depth === "collaborate") return "Collaborate";
-  return "Production";
-}
-
-export function runtimeLabel(plan: BillingPlan) {
-  const { devDepth } = capabilitiesFor(plan);
-  if (devDepth === "operate") return "Production";
-  if (devDepth === "collaborate") return "Team · integrated";
-  if (devDepth === "build") return "Integrated";
-  return "Not included";
-}
-
-/** Plan permission to choose a compute location. Does not describe hardware. */
-export function hostingAllowed(plan: BillingPlan, mode: "cloud" | "local" | "on-device") {
-  const caps = capabilitiesFor(plan);
-  if (mode === "cloud") return true;
-  if (mode === "local") return caps.localHosting;
-  return caps.onDeviceHosting;
-}
-
-export function hasModelChoice(plan: BillingPlan) {
-  const models = capabilitiesFor(plan).models;
-  return models === "shared" || models === "production";
-}
-
-export function hasWorkSpace(plan: BillingPlan) {
-  return capabilitiesFor(plan).workSpace;
-}
-
-export function isTeamPlan(plan: BillingPlan) {
-  return plan === "max" || plan === "ultra";
-}
-
-export function hasWorkspaceKnowledge(plan: BillingPlan) {
-  return capabilitiesFor(plan).workspaces;
+export function hasMaximumAiCapacity(plan: BillingPlan) {
+  return capabilitiesFor(plan).aiCapacity === "maximum";
 }
 
 export function hasVoice(plan: BillingPlan) {
   return capabilitiesFor(plan).voice;
 }
 
-export function hasWorkspaces(plan: BillingPlan) {
-  return capabilitiesFor(plan).workspaces;
+export function workspaceLimit(plan: BillingPlan) {
+  return capabilitiesFor(plan).workspaceLimit;
 }
 
-export function hasConnectorPolicies(plan: BillingPlan) {
-  return capabilitiesFor(plan).connectorPolicies;
+export function hasMultipleWorkspaces(plan: BillingPlan) {
+  return capabilitiesFor(plan).workspaceLimit > 1;
 }
 
-export function workspaceCap(plan: BillingPlan) {
-  if (plan === "free") return 0;
-  if (plan === "pro") return 3;
-  return Infinity;
+/** Pro/Max show workspace chrome; Free keeps one hidden workspace under the hood. */
+export function hasVisibleWorkspaces(plan: BillingPlan) {
+  return plan !== "free";
+}
+
+export function hasUnlimitedWorkspaces(plan: BillingPlan) {
+  return capabilitiesFor(plan).workspaceLimit === Infinity;
+}
+
+export function hasKnowledgeBases(plan: BillingPlan) {
+  return capabilitiesFor(plan).knowledgeBases;
+}
+
+export function hasSharedWorkspaces(plan: BillingPlan) {
+  return capabilitiesFor(plan).sharedWorkspaces;
+}
+
+export function hasOrganizationControls(plan: BillingPlan) {
+  return capabilitiesFor(plan).organizationControls;
 }
 
 export function nextPlanTier(plan: BillingPlan): BillingPlan | null {
   if (plan === "free") return "pro";
   if (plan === "pro") return "max";
-  if (plan === "max") return "ultra";
   return null;
+}
+
+/** Pricing comparison rows — plan cells are boolean only. */
+export function planComparisonRows(): {
+  label: string;
+  values: Record<BillingPlan, boolean>;
+}[] {
+  const all = (values: Record<BillingPlan, boolean>) => values;
+  return [
+    {
+      label: "Unlimited AI usage",
+      values: all({ free: true, pro: true, max: true }),
+    },
+    {
+      label: "Expanded AI capacity",
+      values: all({ free: false, pro: true, max: true }),
+    },
+    {
+      label: "Maximum AI capacity",
+      values: all({ free: false, pro: false, max: true }),
+    },
+    { label: "Chat", values: all({ free: true, pro: true, max: true }) },
+    { label: "Work", values: all({ free: true, pro: true, max: true }) },
+    { label: "Build", values: all({ free: true, pro: true, max: true }) },
+    { label: "Explore", values: all({ free: true, pro: true, max: true }) },
+    {
+      label: "Connectors",
+      values: all({ free: true, pro: true, max: true }),
+    },
+    { label: "Pins", values: all({ free: true, pro: true, max: true }) },
+    { label: "Recents", values: all({ free: true, pro: true, max: true }) },
+    {
+      label: "Workspaces",
+      values: all({ free: false, pro: true, max: true }),
+    },
+    {
+      label: "Multiple workspaces",
+      values: all({ free: false, pro: true, max: true }),
+    },
+    {
+      label: "Unlimited workspaces",
+      values: all({ free: false, pro: false, max: true }),
+    },
+    { label: "Voice", values: all({ free: false, pro: true, max: true }) },
+    {
+      label: "Persistent memory",
+      values: all({ free: true, pro: true, max: true }),
+    },
+    {
+      label: "Advanced memory",
+      values: all({ free: false, pro: true, max: true }),
+    },
+    {
+      label: "Knowledge bases",
+      values: all({ free: false, pro: true, max: true }),
+    },
+    {
+      label: "Shared workspaces",
+      values: all({ free: false, pro: false, max: true }),
+    },
+    {
+      label: "Invite members",
+      values: all({ free: false, pro: false, max: true }),
+    },
+    {
+      label: "Roles & permissions",
+      values: all({ free: false, pro: false, max: true }),
+    },
+    {
+      label: "Shared workspace knowledge",
+      values: all({ free: false, pro: false, max: true }),
+    },
+    {
+      label: "Organization controls",
+      values: all({ free: false, pro: false, max: true }),
+    },
+  ];
 }

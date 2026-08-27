@@ -14,11 +14,11 @@ import {
   assetFiles,
   buildPreviews,
   connectors,
-  projects,
   scheduledJobs,
   skills,
 } from "@/lib/data";
-import type { SpaceId } from "@/lib/types";
+import { projectsForWorkspace } from "@/lib/project-resolver";
+import type { NavDestinationId, SpaceId } from "@/lib/types";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
 import { SHELL_PANEL_BODY } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
@@ -45,98 +45,11 @@ export function ProjectsBrowser({
   } = useApp();
   const mobile = useMobileShell();
   const [scope, setScope] = useState("all");
-  const space: SpaceId = spaceId ?? "build";
+  const dest: NavDestinationId = spaceId ?? "build";
 
   const { kind, title, empty, onOpen, entries, groups } = useMemo(() => {
-    if (space === "studio") {
-      const list = projects.filter(
-        (item) => item.space === "studio" && item.workspaceId === workspaceId,
-      );
-      const items = list.map((item) =>
-        entry(
-          item.id,
-          item.name,
-          item.id,
-          `Edited ${item.updatedAt}`,
-          "product",
-          undefined,
-          item.cover,
-        ),
-      );
-      return pack("product", "Projects", "No Studio projects yet.", openProject, items, items.map((item) => ({
-        name: item.name,
-        items: [item],
-      })));
-    }
-
-    if (space === "research") {
-      const list = projects.filter(
-        (item) => item.space === "research" && item.workspaceId === workspaceId,
-      );
-      const items = list.map((item) =>
-        entry(item.id, item.name, item.id, `Edited ${item.updatedAt}`, "paper"),
-      );
-      return pack("paper", "Projects", "No Research projects yet.", openProject, items, items.map((item) => ({
-        name: item.name,
-        items: [item],
-      })));
-    }
-
-    if (space === "skills") {
-      const list = skills.filter((item) => item.workspaceId === workspaceId);
-      const items = list.map((item) =>
-        entry(item.id, item.name, item.id, item.updatedAt, "skill"),
-      );
-      return pack("skill", "Tasks", "No tasks yet.", openSkill, items, [
-        {
-          name: "AI drafted",
-          items: items.filter((_, i) => list[i]?.source === "ai"),
-        },
-        {
-          name: "Custom",
-          items: items.filter((_, i) => list[i]?.source === "custom"),
-        },
-      ]);
-    }
-
-    if (space === "files") {
-      const list = assetFiles.filter((item) => item.workspaceId === workspaceId);
-      const names = new Map(projects.map((item) => [item.id, item.name]));
-      const items = list.map((item) =>
-        entry(
-          item.id,
-          item.name,
-          item.id,
-          item.updatedAt,
-          "file",
-          item.projectId ? names.get(item.projectId) : undefined,
-        ),
-      );
-      const grouped = new Map<string, PreviewEntry[]>();
-      for (const item of list) {
-        const label = item.projectId
-          ? (names.get(item.projectId) ?? "Files")
-          : "Library";
-        const current = grouped.get(label) ?? [];
-        current.push(
-          items.find((entryItem) => entryItem.id === item.id) as PreviewEntry,
-        );
-        grouped.set(label, current);
-      }
-      return pack(
-        "file",
-        "Files",
-        "No files yet.",
-        openFile,
-        items,
-        [...grouped.entries()].map(([name, groupItems]) => ({
-          name,
-          items: groupItems,
-        })),
-      );
-    }
-
-    if (space === "connectors") {
+    const projects = projectsForWorkspace(workspaceId);
+    if (dest === "connectors") {
       const blocked = blockedConnectorIds(
         workspaceId,
         workspacePolicies,
@@ -170,40 +83,19 @@ export function ProjectsBrowser({
       );
     }
 
-    if (space === "scheduled") {
-      const list = scheduledJobs.filter((item) => item.workspaceId === workspaceId);
-      const items = list.map((item) =>
-        entry(item.id, item.name, item.id, item.schedule, "schedule", item.nextRun),
-      );
-      return pack("schedule", "Runs", "No scheduled runs yet.", openJob, items, [
-        { name: "Upcoming", items },
-      ]);
-    }
+    const space = dest as SpaceId;
 
-    if (space === "finances" || space === "health") {
+    if (space === "research") {
       const list = projects.filter(
-        (item) => item.space === space && item.workspaceId === workspaceId,
+        (item) => item.space === "research" && item.workspaceId === workspaceId,
       );
       const items = list.map((item) =>
-        entry(
-          item.id,
-          item.name,
-          item.id,
-          `Edited ${item.updatedAt}`,
-          "product",
-          undefined,
-          item.cover,
-        ),
+        entry(item.id, item.name, item.id, `Edited ${item.updatedAt}`, "paper"),
       );
-      const title = space === "finances" ? "Finances" : "Health";
-      return pack(
-        "product",
-        "Projects",
-        `No ${title.toLowerCase()} projects yet.`,
-        openProject,
-        items,
-        items.map((item) => ({ name: item.name, items: [item] })),
-      );
+      return pack("paper", "Projects", "No Research projects yet.", openProject, items, items.map((item) => ({
+        name: item.name,
+        items: [item],
+      })));
     }
 
     if (space === "work") {
@@ -225,35 +117,6 @@ export function ProjectsBrowser({
         "product",
         "Work",
         "Nothing open in Work yet.",
-        openProject,
-        items,
-        items.map((item) => ({ name: item.name, items: [item] })),
-      );
-    }
-
-    if (space === "personal") {
-      const list = projects.filter(
-        (item) =>
-          item.workspaceId === workspaceId &&
-          (item.space === "personal" ||
-            item.space === "finances" ||
-            item.space === "health"),
-      );
-      const items = list.map((item) =>
-        entry(
-          item.id,
-          item.name,
-          item.id,
-          `Edited ${item.updatedAt}`,
-          "product",
-          undefined,
-          item.cover,
-        ),
-      );
-      return pack(
-        "product",
-        "Personal",
-        "Nothing open in Personal yet.",
         openProject,
         items,
         items.map((item) => ({ name: item.name, items: [item] })),
@@ -303,7 +166,7 @@ export function ProjectsBrowser({
       [],
     );
   }, [
-    space,
+    dest,
     workspaceId,
     workspacePolicies,
     openProject,

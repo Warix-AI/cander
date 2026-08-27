@@ -26,8 +26,11 @@ import {
   getAuthSnapshot,
   getAuthUserIdServerSnapshot,
   getAuthUserIdSnapshot,
+  getOnboardingPendingServerSnapshot,
+  getOnboardingPendingSnapshot,
   subscribeAuth,
   subscribeAuthUserId,
+  subscribeOnboardingPending,
 } from "@/lib/session";
 import { useSyncExternalStore } from "react";
 import { BrowserLayout } from "@/components/browser/BrowserLayout";
@@ -88,6 +91,11 @@ function Root() {
     getAuthSnapshot,
     getAuthServerSnapshot,
   );
+  const onboardingPending = useSyncExternalStore(
+    subscribeOnboardingPending,
+    getOnboardingPendingSnapshot,
+    getOnboardingPendingServerSnapshot,
+  );
   useCapacitorMobileShell();
   const mobile = useMobileShell();
   const swipe = useMobileSwipeGestures();
@@ -125,6 +133,16 @@ function Root() {
 
   useEffect(() => {
     if (!signedIn) return;
+    const params = new URLSearchParams(window.location.search);
+    const settings = params.get("settings");
+    if (settings === "organization") {
+      openSettings("organization");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [signedIn, openSettings]);
+
+  useEffect(() => {
+    if (!signedIn) return;
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === ",") {
         event.preventDefault();
@@ -153,7 +171,7 @@ function Root() {
     newChat,
   ]);
 
-  if (!signedIn) {
+  if (!signedIn || onboardingPending) {
     return <OnboardingFlow />;
   }
 

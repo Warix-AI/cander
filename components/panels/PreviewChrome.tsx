@@ -75,7 +75,6 @@ export function PreviewChrome({
   const mobile = useMobileShell();
   const previewing = tool === "preview";
   const changing = tool === "activity";
-  const moreOpen = tool === "more";
   const address = liveUrl ?? url;
 
   return (
@@ -87,7 +86,7 @@ export function PreviewChrome({
             {address}
           </span>
           <span className="truncate text-[12px] font-medium tracking-[-0.01em]">
-            {changing ? "Changes" : moreOpen ? "More" : title}
+            {changing ? "Changes" : title}
           </span>
         </div>
       ) : (
@@ -179,7 +178,6 @@ export function PreviewChrome({
             onTool={onTool}
             address={address}
             previewing={previewing}
-            moreOpen={moreOpen}
           />
         </span>
       </div>
@@ -194,13 +192,11 @@ function AdvancedMenu({
   onTool,
   address,
   previewing,
-  moreOpen,
 }: {
   tool: BuildTool;
   onTool: (id: BuildTool) => void;
   address: string;
   previewing: boolean;
-  moreOpen: boolean;
 }) {
   const { advancedMode, setAdvancedMode } = useApp();
   return (
@@ -210,7 +206,7 @@ function AdvancedMenu({
       align="end"
       matchTrigger={false}
       trigger={({ toggle }) => (
-        <RailBtn label="More tools" onClick={toggle} active={moreOpen}>
+        <RailBtn label="More tools" onClick={toggle}>
           <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
         </RailBtn>
       )}
@@ -226,16 +222,6 @@ function AdvancedMenu({
             }}
           >
             Live preview
-          </MenuItem>
-          <MenuItem
-            icon={SquareStack}
-            active={moreOpen}
-            onClick={() => {
-              onTool("more");
-              close();
-            }}
-          >
-            More
           </MenuItem>
           <MenuItem
             icon={ExternalLink}

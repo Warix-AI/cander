@@ -7,7 +7,7 @@ import type {
   SpaceId,
   Theme,
 } from "@/lib/types";
-import { accountPresets, members } from "@/lib/data";
+import { accountPresets } from "@/lib/data";
 import {
   ALL_SPACE_IDS,
   defaultSidebarLayout,
@@ -36,7 +36,7 @@ const SIDEBAR_STORAGE_VERSION = 12;
 export { SIDEBAR_STORAGE_VERSION };
 
 const workspaceListeners = new Set<Listener>();
-let workspaceId = "marketing";
+let workspaceId = "";
 
 function emitWorkspace() {
   workspaceListeners.forEach((listener) => listener());
@@ -45,7 +45,17 @@ function emitWorkspace() {
 export function subscribeWorkspace(listener: Listener) {
   if (typeof window !== "undefined") {
     const stored = window.localStorage.getItem("courier-workspace");
-    if (stored) workspaceId = stored;
+    if (
+      stored &&
+      !["marketing", "engineering", "operations", "solo-pro", "solo-ultra", "solo-free"].includes(
+        stored,
+      )
+    ) {
+      workspaceId = stored;
+    } else if (stored) {
+      window.localStorage.removeItem("courier-workspace");
+      workspaceId = "";
+    }
   }
   workspaceListeners.add(listener);
   return () => {
@@ -58,7 +68,7 @@ export function getWorkspaceSnapshot() {
 }
 
 export function getWorkspaceServerSnapshot() {
-  return "marketing";
+  return "";
 }
 
 export function persistWorkspace(next: string) {
@@ -200,6 +210,51 @@ export function persistSignedIn() {
   emitAuth();
 }
 
+const ONBOARDING_PENDING_KEY = "courier-onboarding-pending";
+const onboardingPendingListeners = new Set<Listener>();
+let onboardingPending = false;
+
+function emitOnboardingPending() {
+  onboardingPendingListeners.forEach((listener) => listener());
+}
+
+/** True while multi-step signup is in progress (survives email verify / session). */
+export function subscribeOnboardingPending(listener: Listener) {
+  onboardingPendingListeners.add(listener);
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", listener);
+  }
+  return () => {
+    onboardingPendingListeners.delete(listener);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", listener);
+    }
+  };
+}
+
+export function getOnboardingPendingSnapshot() {
+  if (typeof window !== "undefined") {
+    onboardingPending =
+      window.localStorage.getItem(ONBOARDING_PENDING_KEY) === "1";
+  }
+  return onboardingPending;
+}
+
+export function getOnboardingPendingServerSnapshot() {
+  return false;
+}
+
+export function persistOnboardingPending(pending: boolean) {
+  onboardingPending = pending;
+  if (typeof window === "undefined") return;
+  if (pending) {
+    window.localStorage.setItem(ONBOARDING_PENDING_KEY, "1");
+  } else {
+    window.localStorage.removeItem(ONBOARDING_PENDING_KEY);
+  }
+  emitOnboardingPending();
+}
+
 export function persistSignedOut() {
   if (isSupabaseConfigured()) {
     window.localStorage.removeItem("courier-signed-in");
@@ -245,7 +300,7 @@ export function persistHosting(next: HostingMode) {
 }
 
 const actorListeners = new Set<Listener>();
-let actorId = "m1";
+let actorId = "";
 
 function emitActor() {
   actorListeners.forEach((listener) => listener());
@@ -254,8 +309,16 @@ function emitActor() {
 export function subscribeActor(listener: Listener) {
   if (typeof window !== "undefined") {
     const stored = window.localStorage.getItem("courier-actor");
-    if (stored && members.some((item) => item.id === stored)) {
+    // Ignore legacy demo actor ids (m1–m7 / p-*)
+    if (
+      stored &&
+      !/^m[1-7]$/.test(stored) &&
+      !stored.startsWith("p-")
+    ) {
       actorId = stored;
+    } else if (stored) {
+      window.localStorage.removeItem("courier-actor");
+      actorId = "";
     }
   }
   actorListeners.add(listener);
@@ -269,11 +332,11 @@ export function getActorSnapshot() {
 }
 
 export function getActorServerSnapshot() {
-  return "m1";
+  return "";
 }
 
 export function persistActor(next: string) {
-  if (!members.some((item) => item.id === next)) return;
+  if (!next.trim()) return;
   actorId = next;
   window.localStorage.setItem("courier-actor", next);
   emitActor();
@@ -286,42 +349,35 @@ export function presetIdForActor(id: string): AccountPresetId {
 }
 
 const personalSpaceListeners = new Set<Listener>();
-let personalSpaceEnabled = true;
 
 function emitPersonalSpace() {
   personalSpaceListeners.forEach((listener) => listener());
 }
 
+/** @deprecated Personal space toggle removed — always returns true for compat. */
 export function subscribePersonalSpace(listener: Listener) {
-  if (typeof window !== "undefined") {
-    const stored = window.localStorage.getItem("courier-personal-space");
-    if (stored === "on") personalSpaceEnabled = true;
-    if (stored === "off") personalSpaceEnabled = false;
-  }
   personalSpaceListeners.add(listener);
   return () => {
     personalSpaceListeners.delete(listener);
   };
 }
 
+/** @deprecated Personal space toggle removed. */
 export function getPersonalSpaceSnapshot() {
-  return personalSpaceEnabled;
+  return true;
 }
 
+/** @deprecated Personal space toggle removed. */
 export function getPersonalSpaceServerSnapshot() {
   return true;
 }
 
-export function persistPersonalSpace(next: boolean) {
-  personalSpaceEnabled = next;
-  window.localStorage.setItem("courier-personal-space", next ? "on" : "off");
+/** @deprecated Personal space toggle removed — no-op. */
+export function persistPersonalSpace(_next: boolean) {
   emitPersonalSpace();
 }
 
 const pinListeners = new Set<Listener>();
-const DEFAULT_PINS: Pin[] = [
-  { kind: "connector", id: "gmail", tier: "primary" },
-];
 const emptyPins: Pin[] = [];
 let pins: Pin[] = emptyPins;
 let pinsHydrated = false;
@@ -335,10 +391,10 @@ function normalizePin(item: Pin): Pin {
 }
 
 function parsePins(raw: string | null): Pin[] {
-  if (!raw) return DEFAULT_PINS.map(normalizePin);
+  if (!raw) return emptyPins;
   try {
     const data = JSON.parse(raw) as unknown;
-    if (!Array.isArray(data)) return DEFAULT_PINS.map(normalizePin);
+    if (!Array.isArray(data)) return emptyPins;
     return data
       .filter(
         (item): item is Pin =>
@@ -351,7 +407,7 @@ function parsePins(raw: string | null): Pin[] {
       )
       .map(normalizePin);
   } catch {
-    return DEFAULT_PINS.map(normalizePin);
+    return emptyPins;
   }
 }
 
@@ -549,10 +605,11 @@ function layoutNeedsPersist(
     const main = parseNavList(data.main);
     const more = parseNavList(data.more);
     if (!main.length && !more.length) return true;
-    if (main.includes("browser") || more.includes("browser")) return true;
-    if (main.includes("files") || more.includes("files")) return true;
-    const retired = ["recents", "studio", "personal"] as const;
-    if (retired.some((id) => main.includes(id) || more.includes(id))) return true;
+    if (main.includes("browser" as SidebarNavId) || more.includes("browser" as SidebarNavId)) return true;
+    const legacy = ["files", "skills", "scheduled", "studio", "personal", "finances", "health"];
+    if (legacy.some((id) => main.includes(id as SidebarNavId) || more.includes(id as SidebarNavId))) {
+      return true;
+    }
     return false;
   } catch {
     return true;

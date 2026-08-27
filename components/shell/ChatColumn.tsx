@@ -15,7 +15,8 @@ import { Composer } from "@/components/shell/Composer";
 import { APP_TAGLINE } from "@/lib/app-brand";
 import { chatSpaceCopy, spaceIconTint } from "@/lib/space-icons";
 import { homeSuggestions } from "@/lib/suggestions";
-import type { SpaceId } from "@/lib/types";
+import type { NavDestinationId, SpaceId } from "@/lib/types";
+import { chatSpaceId } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import { useChatCanvasCentered } from "@/lib/chat-layout";
 import { useMobileShell } from "@/lib/use-media-query";
@@ -100,7 +101,7 @@ export function ChatColumn() {
       >
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 touch-pan-y">
           {showSpaceNewPrompt ? (
-            <MobileEmptyPrompt spaceId={spaceId} />
+            <MobileEmptyPrompt spaceId={chatSpaceId(spaceId)} />
           ) : hasChatTurns || thread ? (
             <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-6">
               {thread?.sessionSummary ? (
@@ -134,7 +135,7 @@ export function ChatColumn() {
       )}
     >
       {showLanding ? (
-        <EmptyChat spaceId={spaceId} drafting={drafting} onPrompt={send} />
+        <EmptyChat spaceId={chatSpaceId(spaceId)} drafting={drafting} onPrompt={send} />
       ) : (
         <div
           className={cn(

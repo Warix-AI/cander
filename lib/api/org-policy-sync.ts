@@ -211,12 +211,16 @@ export async function syncOrgPolicyToSupabase(ctx: WorkspaceCtx) {
 
 async function syncWorkspacesCatalog(ctx: WorkspaceCtx) {
   const supabase = createSupabaseBrowserClient();
+  // Only sync workspaces the actor already belongs to — never push catalog seeds.
+  const memberWorkspaceIds = await listMemberWorkspaceIds(ctx.actorId);
+  if (!memberWorkspaceIds.length) return;
+
   const catalog = getWorkspaceCatalogSnapshot();
-  const memberWorkspaceIds = new Set(await listMemberWorkspaceIds(ctx.actorId));
+  const byId = new Map(catalog.map((item) => [item.id, item]));
 
-  const candidates = catalog.filter((item) => !item.id.startsWith("solo-"));
-
-  for (const item of candidates) {
+  for (const workspaceId of memberWorkspaceIds) {
+    const item = byId.get(workspaceId);
+    if (!item) continue;
     const row = {
       id: item.id,
       name: item.name,
@@ -229,19 +233,6 @@ async function syncWorkspacesCatalog(ctx: WorkspaceCtx) {
 
     const { error: insertError } = await supabase.from("workspaces").insert(row);
     if (insertError && insertError.code !== "23505") throw insertError;
-
-    if (!memberWorkspaceIds.has(item.id)) {
-      const { error: memberError } = await supabase.from("workspace_members").upsert(
-        {
-          workspace_id: item.id,
-          profile_id: ctx.actorId,
-          role: "Owner",
-          spaces: item.spaces,
-        },
-        { onConflict: "workspace_id,profile_id" },
-      );
-      if (memberError) throw memberError;
-    }
   }
 }
 
@@ -291,6 +282,9 @@ export async function hydrateUserPrefsFromRemote(ctx: WorkspaceCtx) {
 
   if (pinResult.data?.length) {
     replacePinsState((pinResult.data as UserPinRow[]).map(pinRowToPin));
+  } else {
+    // No remote pins — start empty (do not keep legacy Gmail default).
+    replacePinsState([]);
   }
 
   if (sidebarResult.data) {

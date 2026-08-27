@@ -3,10 +3,11 @@
 import { useApp } from "@/components/app/AppProvider";
 import { Modal } from "@/components/ui/Modal";
 import { planLabel } from "@/lib/billing";
-import { account } from "@/lib/data";
 
 export function InviteWall() {
-  const { overlay, closeOverlay, openSettings, entitlements } = useApp();
+  const { overlay, closeOverlay, openSettings, entitlements, actor } = useApp();
+  const isPro = entitlements.plan === "pro";
+  const orgName = actor.managedByOrgName || "Your organization";
 
   return (
     <Modal
@@ -17,18 +18,19 @@ export function InviteWall() {
     >
       <div className="px-5 pt-5 pb-6">
         <p className="font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase">
-          {account.name}
+          {orgName}
         </p>
         <h2
           id="invite-wall-title"
           className="mt-2 text-[18px] font-medium tracking-[-0.02em]"
         >
-          A Max seat is required
+          {isPro ? "Accept your Pro seat" : "Accept your Max seat"}
         </h2>
         <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">
-          {account.name} is a Max organization. Shared workspaces, Work, and
-          org admin stay locked until an Owner or Admin adds a Max seat for
-          you.
+          {orgName} invited you with a {planLabel(entitlements.plan)} seat.
+          {isPro
+            ? " Personal workspaces and limited org access unlock once an Owner or Admin activates your seat."
+            : " Shared workspaces, org collaboration, and admin features unlock once an Owner or Admin activates your seat."}
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <button
@@ -49,13 +51,10 @@ export function InviteWall() {
             View plans
           </button>
         </div>
-            {entitlements.plan === "pro" || entitlements.plan === "ultra" ? (
-          <p className="mt-4 text-[12.5px] text-muted-foreground">
-            Your {planLabel(entitlements.plan)} account still works for personal
-            workspaces
-            {entitlements.plan === "ultra" ? " with full development" : ""}.
-          </p>
-        ) : null}
+        <p className="mt-4 text-[12.5px] text-muted-foreground">
+          Organizations can mix Pro and Max seats — Pro for personal workspaces,
+          Max for shared workspace features.
+        </p>
       </div>
     </Modal>
   );

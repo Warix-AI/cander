@@ -25,7 +25,6 @@ export function ConfigureModal() {
     sidebarLayout,
     moveSidebarNav,
     billingPlan,
-    personalSpaceEnabled,
     actor,
   } = useApp();
   const allowed = memberSpaces(
@@ -35,7 +34,6 @@ export function ConfigureModal() {
   );
   const { main } = resolveSidebarNav(allowed, sidebarLayout, {
     billingPlan,
-    personalEnabled: personalSpaceEnabled,
   });
 
   return (

@@ -26,7 +26,7 @@ export function SpaceLibraryPanel() {
             openSpaceEntity({
               type: "source",
               id,
-              space: spaceId,
+              space: spaceId as SpaceLibraryId,
               workspaceId,
             });
             return;

@@ -12,6 +12,7 @@ const userListeners = new Set<Listener>();
 let signedIn = false;
 let authUser: User | null = null;
 let initialized = false;
+let validating = false;
 
 function emitAuth() {
   authListeners.forEach((listener) => listener());
@@ -22,10 +23,65 @@ function emitUser() {
 }
 
 function setSession(user: User | null) {
+  const nextSignedIn = Boolean(user);
+  const changed =
+    nextSignedIn !== signedIn || (user?.id ?? null) !== (authUser?.id ?? null);
   authUser = user;
-  signedIn = Boolean(user);
-  emitAuth();
-  emitUser();
+  signedIn = nextSignedIn;
+  if (changed) {
+    emitAuth();
+    emitUser();
+  }
+}
+
+/**
+ * Validate the JWT against Auth (not just local storage).
+ * Deleted / banned users fail here even if a stale session cookie remains.
+ */
+export async function validateSupabaseSession(): Promise<User | null> {
+  if (!isSupabaseConfigured() || typeof window === "undefined") return null;
+  if (validating) return authUser;
+  validating = true;
+  try {
+    const supabase = createSupabaseBrowserClient();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      setSession(user);
+      return user;
+    }
+
+    const status =
+      error && typeof error === "object" && "status" in error
+        ? Number((error as { status?: number }).status)
+        : undefined;
+    const message = (error?.message ?? "").toLowerCase();
+    const revoked =
+      status === 401 ||
+      status === 403 ||
+      /user.*(not found|deleted)|invalid (jwt|claim|token)|jwt expired|session.*(expired|missing)|not authenticated|forbidden/i.test(
+        message,
+      );
+
+    // Network blips: keep the current local session until Auth confirms revoke.
+    if (error && !revoked && authUser) {
+      console.warn("[cander] session recheck deferred", error.message);
+      return authUser;
+    }
+
+    await supabase.auth.signOut({ scope: "local" });
+    setSession(null);
+    return null;
+  } catch (err) {
+    console.warn("[cander] session validation failed", err);
+    // Transient errors — do not wipe a working session.
+    return authUser;
+  } finally {
+    validating = false;
+  }
 }
 
 /** Wire Supabase onAuthStateChange — call once from AuthProvider. */
@@ -37,18 +93,41 @@ export function initSupabaseAuthSubscription() {
 
   const supabase = createSupabaseBrowserClient();
 
-  void supabase.auth.getSession().then(({ data }) => {
-    setSession(data.session?.user ?? null);
-  });
+  // Never trust getSession() alone — it only reads local storage / cookies.
+  void validateSupabaseSession();
 
   const {
     data: { subscription },
-  } = supabase.auth.onAuthStateChange((_event, session) => {
-    setSession(session?.user ?? null);
+  } = supabase.auth.onAuthStateChange((event, session) => {
+    if (event === "SIGNED_OUT") {
+      setSession(null);
+      return;
+    }
+    // TOKEN_REFRESHED / SIGNED_IN / INITIAL_SESSION — still verify with Auth
+    // so a deleted user cannot keep a warm JWT.
+    if (session?.user) {
+      void validateSupabaseSession();
+    } else {
+      setSession(null);
+    }
   });
+
+  const onVisible = () => {
+    if (document.visibilityState === "visible") {
+      void validateSupabaseSession();
+    }
+  };
+  const onFocus = () => {
+    void validateSupabaseSession();
+  };
+
+  document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("focus", onFocus);
 
   return () => {
     subscription.unsubscribe();
+    document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("focus", onFocus);
     initialized = false;
   };
 }

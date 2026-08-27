@@ -1,4 +1,23 @@
-import { hostingModes } from "@/lib/billing";
+const hostingModes = [
+  {
+    id: "cloud",
+    label: "Cloud",
+    title: "Cloud",
+    body: "Recursion AI operates the models.",
+  },
+  {
+    id: "local",
+    label: "Local",
+    title: "Local",
+    body: "Your network, your machines.",
+  },
+  {
+    id: "on-device",
+    label: "On-Device",
+    title: "On-Device",
+    body: "Inference on each person's device.",
+  },
+] as const;
 
 export function HostingCard({
   mode,
@@ -7,15 +26,10 @@ export function HostingCard({
 }) {
   return (
     <article className="rounded-[10px] border border-border bg-card p-6">
-      <p className="text-[13px] font-medium">{mode.label}</p>
-      <h3 className="mt-1 text-lg font-medium tracking-[-0.02em]">{mode.title}</h3>
-      <p className="mt-3 text-[14px] leading-relaxed text-muted-foreground">{mode.body}</p>
-      <p className="mt-3 text-[13px] leading-relaxed text-foreground/80">{mode.why}</p>
-      <ul className="mt-4 space-y-1.5 text-[13px] text-muted-foreground">
-        {mode.traits.map((trait) => (
-          <li key={trait}>{trait}</li>
-        ))}
-      </ul>
+      <h3 className="text-lg font-medium tracking-[-0.02em]">{mode.title}</h3>
+      <p className="mt-2 text-[13.5px] leading-relaxed text-muted-foreground">
+        {mode.body}
+      </p>
     </article>
   );
 }

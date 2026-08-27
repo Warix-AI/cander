@@ -1,4 +1,3 @@
-import { starterThreads } from "@/lib/data";
 import type { Message, Thread } from "@/lib/types";
 
 const STORAGE_KEY = "courier-threads-v1";
@@ -13,7 +12,7 @@ type Listener = () => void;
 const listeners = new Set<Listener>();
 
 let state: ChatStoreState = {
-  threads: starterThreads,
+  threads: [],
   revision: 0,
   hydrated: false,
 };

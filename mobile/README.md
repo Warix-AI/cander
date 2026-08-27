@@ -61,6 +61,13 @@ npm run mobile:android:dev
 
 When you add a real backend later, **you do not need to change this shell** — keep pointing at `cander.app` and the web app picks up API changes on its own.
 
+## Sign up & billing (iOS)
+
+- **Account creation** happens in the app (email/password via Supabase) — same WebView as the web product.
+- New iOS users start on **Free**; the onboarding flow skips in-app plan selection.
+- **Upgrades** are not sold in the app. Settings → Plan shows the current plan and a **View subscription** button that opens `https://cander.app/pricing` in Safari.
+- This avoids Apple IAP for SaaS subscriptions while keeping a native sign-up experience.
+
 ## Layout
 
 ```

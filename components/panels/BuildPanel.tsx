@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { Row, SectionLabel, StatLine } from "@/components/panels/Bits";
 import { SpaceLibraryPanel } from "@/components/panels/SpaceLibraryPanel";
-import { BuildMore } from "@/components/panels/BuildMore";
 import { PreviewChrome, previewAddress } from "@/components/panels/PreviewChrome";
 import { AppViewport } from "@/components/preview/AppViewport";
 import { ChangeTimeline } from "@/components/preview/ChangeTimeline";
@@ -112,7 +111,7 @@ export function BuildPanel() {
       <div
         className={cn(
           SHELL_PANEL_SCROLL,
-          (tool === "preview" || tool === "more") && !locked
+          (tool === "preview") && !locked
             ? "overflow-hidden"
             : undefined,
         )}
@@ -206,8 +205,6 @@ export function BuildPanel() {
             />
           </div>
         ) : null}
-
-        {!locked && tool === "more" ? <BuildMore /> : null}
 
         {!locked && tool === "terminal" ? (
           <pre className="h-full p-4 font-mono text-[12px] leading-relaxed text-muted-foreground">

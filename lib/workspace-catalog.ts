@@ -1,4 +1,3 @@
-import { workspaces as seedWorkspaces } from "./data";
 import { NAV_SPACES } from "./spaces";
 import type { Workspace, WorkspaceKind } from "./types";
 import { workspaceKindOf } from "./workspace-kind";
@@ -8,7 +7,7 @@ type Listener = () => void;
 const STORAGE_KEY = "courier-custom-workspaces";
 const listeners = new Set<Listener>();
 let custom: Workspace[] = [];
-let catalog: Workspace[] = seedWorkspaces;
+let catalog: Workspace[] = [];
 let hydrated = false;
 
 function emit() {
@@ -17,7 +16,6 @@ function emit() {
 
 function rebuildCatalog() {
   const byId = new Map<string, Workspace>();
-  for (const item of seedWorkspaces) byId.set(item.id, item);
   for (const item of custom) byId.set(item.id, item);
   catalog = Array.from(byId.values());
 }
@@ -68,7 +66,12 @@ function parse(raw: string | null): Workspace[] {
 function hydrate() {
   if (hydrated || typeof window === "undefined") return;
   hydrated = true;
-  custom = parse(window.localStorage.getItem(STORAGE_KEY));
+  custom = parse(window.localStorage.getItem(STORAGE_KEY)).filter(
+    (item) =>
+      !["marketing", "engineering", "operations", "solo-pro", "solo-ultra", "solo-free"].includes(
+        item.id,
+      ),
+  );
   rebuildCatalog();
 }
 
@@ -92,17 +95,16 @@ export function subscribeWorkspaceCatalog(listener: Listener) {
 }
 
 export function getWorkspaceCatalogSnapshot(): Workspace[] {
-  if (!hydrated) return seedWorkspaces;
+  if (!hydrated && typeof window !== "undefined") hydrate();
   return catalog;
 }
 
 export function getWorkspaceCatalogServerSnapshot(): Workspace[] {
-  return seedWorkspaces;
+  return [];
 }
 
 export function mergeCatalog(extra: Workspace[] = custom): Workspace[] {
   const byId = new Map<string, Workspace>();
-  for (const item of seedWorkspaces) byId.set(item.id, item);
   for (const item of extra) byId.set(item.id, item);
   return Array.from(byId.values());
 }
@@ -111,7 +113,7 @@ export function workspaceById(
   id: string,
   list: Workspace[] = getWorkspaceCatalogSnapshot(),
 ) {
-  return list.find((item) => item.id === id) ?? list[0] ?? seedWorkspaces[0]!;
+  return list.find((item) => item.id === id) ?? list[0];
 }
 
 export function slugifyWorkspaceName(name: string) {
@@ -157,16 +159,30 @@ export function createWorkspace(input: {
   return next;
 }
 
+/** Merge a remote (Supabase) workspace into the local catalog. */
+export function upsertCatalogWorkspace(workspace: Workspace) {
+  hydrate();
+  const next: Workspace = {
+    ...workspace,
+    spaces: workspace.spaces?.length ? [...workspace.spaces] : [...NAV_SPACES],
+  };
+  const index = custom.findIndex((item) => item.id === next.id);
+  if (index >= 0) {
+    custom = custom.map((item, i) => (i === index ? { ...item, ...next } : item));
+  } else {
+    custom = [...custom, next];
+  }
+  persist();
+  return next;
+}
+
 /** @deprecated Prefer createWorkspace({ kind }) — kept for older call sites. */
 export function spacesForNewWorkspace(opts?: {
   includeWork?: boolean;
-  includePersonal?: boolean;
 }): Workspace["spaces"] {
   const includeWork = opts?.includeWork !== false;
-  const includePersonal = opts?.includePersonal !== false;
   return NAV_SPACES.filter((id) => {
     if (id === "work") return includeWork;
-    if (id === "personal") return includePersonal;
     return true;
   });
 }
@@ -176,11 +192,12 @@ export function listCustomWorkspaces() {
   return custom;
 }
 
-export function isSeedWorkspace(id: string) {
-  return seedWorkspaces.some((item) => item.id === id);
+/** @deprecated Seeds removed — always false. */
+export function isSeedWorkspace(_id: string) {
+  return false;
 }
 
-/** Workspaces created in-session — safe to delete. Demo seed workspaces are not. */
+/** Workspaces created in-session or hydrated from Supabase — safe to delete. */
 export function isCustomWorkspace(id: string) {
   hydrate();
   return custom.some((item) => item.id === id);
@@ -198,4 +215,18 @@ export function countWorkspacesByKind(kind: WorkspaceKind) {
   return getWorkspaceCatalogSnapshot().filter(
     (item) => workspaceKindOf(item) === kind,
   ).length;
+}
+
+/** Drop legacy Acme catalog ids from localStorage (one-shot hygiene). */
+export function clearLegacySeedWorkspacesFromStorage() {
+  if (typeof window === "undefined") return;
+  hydrate();
+  const before = custom.length;
+  custom = custom.filter(
+    (item) =>
+      !["marketing", "engineering", "operations", "solo-pro", "solo-ultra", "solo-free"].includes(
+        item.id,
+      ),
+  );
+  if (custom.length !== before) persist();
 }

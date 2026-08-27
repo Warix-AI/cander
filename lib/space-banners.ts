@@ -35,15 +35,7 @@ export const BANNER_PRESETS: {
 export const defaultBannerPreset: Record<BannerKey, BannerPresetId> = {
   work: "price",
   build: "spaces",
-  studio: "dusk",
   research: "host",
-  personal: "spaces",
-  connectors: "price",
-  files: "dusk",
-  skills: "host",
-  scheduled: "spaces",
-  finances: "price",
-  health: "host",
 };
 
 export function emptyBannerChoice(space: BannerKey): SpaceBannerChoice {

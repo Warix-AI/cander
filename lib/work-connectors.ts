@@ -4,13 +4,6 @@ const STORAGE_KEY = "courier-work-connectors";
 const INTENT_KEY = "courier-work-attach-intent";
 const listeners = new Set<Listener>();
 
-/** Default Work stack per workspace — overlaps in the chip. */
-const defaults: Record<string, string[]> = {
-  marketing: ["gmail", "slack", "gcal"],
-  engineering: ["github", "slack", "gcal"],
-  operations: ["gmail", "slack", "stripe"],
-};
-
 let byWorkspace: Record<string, string[]> = {};
 let hydrated = false;
 let revision = 0;
@@ -82,8 +75,7 @@ export function getWorkConnectorsServerSnapshot() {
 
 export function workConnectorIds(workspaceId: string): string[] {
   hydrate();
-  if (byWorkspace[workspaceId]?.length) return byWorkspace[workspaceId];
-  return defaults[workspaceId] ?? ["gmail", "slack", "gcal"];
+  return byWorkspace[workspaceId] ?? [];
 }
 
 export function isWorkConnector(workspaceId: string, connectorId: string) {

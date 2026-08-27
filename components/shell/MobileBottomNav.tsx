@@ -51,6 +51,7 @@ export function MobileBottomNav() {
     threadId,
     newChat,
     actor,
+    entitlements,
   } = useApp();
   const [sheet, setSheet] = useState<MobileSheetId | null>(null);
 
@@ -62,6 +63,10 @@ export function MobileBottomNav() {
     view !== "space" && view !== "recents" && view !== "settings";
   const spacesActive = view === "space" || view === "recents";
   const accountActive = view === "settings" || sheet === "account";
+
+  const tabs = courierTabs.filter(
+    (tab) => tab.id !== "workspace" || entitlements.hasWorkspaces,
+  );
 
   const isCourierActive = (id: MobileNavTabId) => {
     if (id === "chat") return chatActive;
@@ -102,13 +107,15 @@ export function MobileBottomNav() {
       >
         <PinsSheet onSelect={closeSheet} />
       </MobileNavSheet>
-      <MobileNavSheet
-        open={sheet === "workspace"}
-        sheetId="workspace"
-        onClose={closeSheet}
-      >
-        <WorkspaceSheet onSelect={closeSheet} />
-      </MobileNavSheet>
+      {entitlements.hasWorkspaces ? (
+        <MobileNavSheet
+          open={sheet === "workspace"}
+          sheetId="workspace"
+          onClose={closeSheet}
+        >
+          <WorkspaceSheet onSelect={closeSheet} />
+        </MobileNavSheet>
+      ) : null}
       <MobileNavSheet
         open={sheet === "account"}
         sheetId="account"
@@ -129,10 +136,10 @@ export function MobileBottomNav() {
           className="grid h-full w-full items-stretch px-2"
           style={{
             minHeight: MOBILE_NAV_INNER_HEIGHT,
-            gridTemplateColumns: `repeat(${courierTabs.length}, minmax(0, 1fr))`,
+            gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))`,
           }}
         >
-          {courierTabs.map((tab) => {
+          {tabs.map((tab) => {
             const active = isCourierActive(tab.id);
             return (
               <button

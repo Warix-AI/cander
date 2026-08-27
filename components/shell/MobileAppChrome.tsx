@@ -443,7 +443,6 @@ function BuildToolsMenu({
 }) {
   const changing = buildTool === "activity";
   const previewing = buildTool === "preview";
-  const moreOpen = buildTool === "more";
 
   const goTool = (id: BuildTool, close: () => void) => {
     setBuildTool(id);
@@ -483,13 +482,6 @@ function BuildToolsMenu({
             onClick={() => goTool("preview", close)}
           >
             Live preview
-          </ChromeMenuItem>
-          <ChromeMenuItem
-            icon={SquareStack}
-            active={moreOpen}
-            onClick={() => goTool("more", close)}
-          >
-            More
           </ChromeMenuItem>
           <ChromeMenuItem
             icon={ExternalLink}

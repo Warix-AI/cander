@@ -5,17 +5,14 @@ import { useApp } from "@/components/app/AppProvider";
 import { AccountAvatar } from "@/components/shell/AccountAvatar";
 import { Dropdown } from "@/components/ui/Controls";
 import { planLabel } from "@/lib/billing";
-import { persistActor, persistSignedOut } from "@/lib/session";
+import { signOutAccount } from "@/lib/auth/sign-out";
 import { cn } from "@/lib/utils";
 
 /** Shared footer row chrome for AccountMenu. */
 export const SIDEBAR_FOOTER_ROW =
   "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-200 hover:bg-sidebar-accent";
 
-export function signOutAccount() {
-  persistActor("m1");
-  persistSignedOut();
-}
+export { signOutAccount };
 
 const menuItemClass =
   "menu-row-hover flex w-full items-center gap-2.5 rounded-[8px] px-3 py-2 text-left text-[13.5px] transition-colors duration-200";
@@ -82,8 +79,7 @@ export function AccountMenu() {
             role="menuitem"
             className={menuItemClass}
             onClick={() => {
-              signOutAccount();
-              close();
+              void signOutAccount().finally(() => close());
             }}
           >
             <LogOut className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.7} />

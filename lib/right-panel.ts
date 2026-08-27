@@ -1,5 +1,5 @@
 import { isChatSpace } from "@/lib/spaces";
-import type { CourierView, SpaceId } from "@/lib/types";
+import type { CourierView, NavDestinationId } from "@/lib/types";
 
 export function chatIsActive(opts: {
   thread: unknown;
@@ -12,7 +12,7 @@ export function canUseRightPanel(opts: {
   view: CourierView;
   thread: unknown;
   drafting: boolean;
-  spaceId: SpaceId | null;
+  spaceId: NavDestinationId | null;
   connectorId?: string | null;
   projectId?: string | null;
   jobId?: string | null;

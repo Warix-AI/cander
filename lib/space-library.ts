@@ -1,20 +1,16 @@
-import type { SpaceId } from "./types";
-
-export const spaceLibrarySpaces = ["build", "studio", "research"] as const;
+export const spaceLibrarySpaces = ["build", "research"] as const;
 
 export type SpaceLibraryId = (typeof spaceLibrarySpaces)[number];
 
-export function isSpaceLibrarySpace(
-  id: SpaceId | null | undefined,
-): id is SpaceLibraryId {
-  return !!id && spaceLibrarySpaces.includes(id as SpaceLibraryId);
+export function isSpaceLibrarySpace(id: string) {
+  return (spaceLibrarySpaces as readonly string[]).includes(id);
 }
 
+export const spaceLibraryLabels: Record<SpaceLibraryId, string> = {
+  build: "Build library",
+  research: "Explore library",
+};
+
 export function spaceLibraryLabel(id: SpaceLibraryId) {
-  const labels: Record<SpaceLibraryId, string> = {
-    build: "Build library",
-    studio: "Studio library",
-    research: "Research library",
-  };
-  return labels[id];
+  return spaceLibraryLabels[id];
 }

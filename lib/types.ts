@@ -10,20 +10,12 @@ export type ModelRequirements = {
 export type HardwareCapabilities = {
   memoryGb?: number;
 };
-export type BillingPlan = "free" | "pro" | "max" | "ultra";
+export type BillingPlan = "free" | "pro" | "max";
 export type Theme = "light" | "dark";
-export type SpaceId =
-  | "work"
-  | "build"
-  | "studio"
-  | "research"
-  | "personal"
-  | "files"
-  | "skills"
-  | "scheduled"
-  | "connectors"
-  | "finances"
-  | "health";
+export type SpaceId = "work" | "build" | "research";
+
+/** Sidebar destinations that are not product spaces (e.g. Connectors). */
+export type NavDestinationId = SpaceId | "connectors";
 
 export type CourierView =
   | "chat"
@@ -72,7 +64,6 @@ export type BuildTool =
   | "files"
   | "editor"
   | "preview"
-  | "more"
   | "terminal"
   | "git"
   | "deployments"
@@ -119,31 +110,22 @@ export type SettingsTab =
 
 export type Role = "Owner" | "Admin" | "Member";
 export type SeatStatus = "active" | "pending";
+
+export type SubscriptionStatus =
+  | "none"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled";
 export type MemberKind = "org" | "personal";
 /** Tenancy flavor — same UI, different permissions and invite rules. */
 export type WorkspaceKind = "personal" | "business";
-export type UltraScope = "org" | "personal";
-
-/** Ultra seat can attach to a person, or just license a machine. */
-export type UltraSeatKind = "user" | "machine";
-
-export type UltraLicense = {
-  id: string;
-  /** Null when kind is machine — managed without a separate login. */
-  userId: string | null;
-  scope: UltraScope;
-  kind: UltraSeatKind;
-  /** Optional label for machine seats (e.g. "Inference rack 2"). */
-  label?: string;
-};
 
 export type AccountPresetId =
   | "max-owner"
   | "max-admin"
   | "max-member"
-  | "ultra-member"
   | "pro"
-  | "ultra"
   | "free";
 
 export type WorkspaceResource = {
@@ -376,4 +358,16 @@ export type Member = {
   plan: BillingPlan;
   seatStatus: SeatStatus;
   kind: MemberKind;
+  /** Org member: company that manages this seat. */
+  managedByOrgName?: string;
+  /** Max owner skipped org setup during onboarding — show finish CTA. */
+  orgSetupDeferred?: boolean;
+  /** Linked Supabase organization id when known. */
+  orgId?: string;
+  /** Stripe-backed access for personal payers; org members set active on accept. */
+  subscriptionStatus?: SubscriptionStatus;
+  /** When the current billing period ends (ISO timestamp). */
+  subscriptionPeriodEnd?: string;
+  /** Subscription set to cancel at period end — billing stops after subscriptionPeriodEnd. */
+  cancelAtPeriodEnd?: boolean;
 };

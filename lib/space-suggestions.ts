@@ -4,9 +4,7 @@ import type { SpaceId } from "@/lib/types";
 
 export type SpaceSuggestion = {
   id: string;
-  /** Short text shown on the chip. */
   label: string;
-  /** Full message sent when the chip is clicked. */
   prompt: string;
 };
 
@@ -22,31 +20,6 @@ export function spaceChatSuggestions(
       label: item.label,
       prompt: item.prompt,
     }));
-  }
-
-  if (spaceId === "personal") {
-    return [
-      {
-        id: "personal-today",
-        label: "Today",
-        prompt: "What’s on my plate today?",
-      },
-      {
-        id: "personal-money",
-        label: "Finances",
-        prompt: "Summarize this month’s invoices and what’s still unpaid.",
-      },
-      {
-        id: "personal-goals",
-        label: "Goals",
-        prompt: "How are my goals looking this quarter?",
-      },
-      {
-        id: "personal-car",
-        label: "Car",
-        prompt: "Anything due on the car — service, insurance, or registration?",
-      },
-    ];
   }
 
   if (spaceId === "build") {
@@ -69,48 +42,14 @@ export function spaceChatSuggestions(
     ];
   }
 
-  if (spaceId === "studio") {
-    return [
-      {
-        id: "studio-image",
-        label: "Hero image",
-        prompt: "Generate a hero image for this launch.",
-      },
-      {
-        id: "studio-video",
-        label: "Product video",
-        prompt: "Storyboard a short product video.",
-      },
-      {
-        id: "studio-edit",
-        label: "Retouch still",
-        prompt: "Retouch this still and export variants.",
-      },
-    ];
-  }
-
   if (spaceId === "research") {
-    return [
-      {
-        id: "research-landscape",
-        label: "Competitors",
-        prompt: "Research competitors and summarize the landscape.",
-      },
-      {
-        id: "research-sources",
-        label: "Find sources",
-        prompt: "Find sources I can cite for pricing claims.",
-      },
-      {
-        id: "research-brief",
-        label: "Research brief",
-        prompt: "Turn my notes into a short research brief.",
-      },
-    ];
+    const researchPrompts = prompts.filter((item) => item.space === "research");
+    return researchPrompts.slice(0, 4).map((item) => ({
+      id: item.id,
+      label: item.label.slice(0, 28),
+      prompt: item.label,
+    }));
   }
 
-  return prompts
-    .filter((item) => item.space === spaceId)
-    .slice(0, 3)
-    .map((item) => ({ id: item.id, label: item.label, prompt: item.label }));
+  return [];
 }

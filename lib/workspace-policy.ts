@@ -1,6 +1,7 @@
-import { members as seedMembers, workspaces as seedWorkspaces } from "./data";
 import { getWorkspaceCatalogSnapshot } from "./workspace-catalog";
 import { ALL_SPACE_IDS } from "./spaces";
+import { normalizePlan, isTeamPlan } from "@/lib/plans";
+import { hasOrganizationControls } from "@/lib/plan-entitlements";
 import type {
   BillingPlan,
   KnowledgeBase,
@@ -25,134 +26,9 @@ export const emptyPolicy = (): WorkspacePolicy => ({
   disabledConnectors: [],
 });
 
-const file = (
-  id: string,
-  name: string,
-  size: string,
-  uploadedAt: string,
-): KnowledgeFile => ({ id, name, size, uploadedAt });
-
-const seedPolicies: Record<string, WorkspacePolicy> = {
-  marketing: {
-    knowledgeBases: [
-      {
-        id: "kb-brand",
-        name: "Brand voice",
-        summary: "Tone, claims we do not make, and Graphite language.",
-        sources: 3,
-        updatedAt: "2d ago",
-        files: [
-          file("f-brand-1", "graphite-voice.pdf", "240 KB", "2d ago"),
-          file("f-brand-2", "claims-we-dont-make.md", "18 KB", "5d ago"),
-          file("f-brand-3", "recursion-examples.txt", "9 KB", "1w ago"),
-        ],
-      },
-      {
-        id: "kb-product",
-        name: "Product facts",
-        summary: "Cander pricing, plans, and approved feature copy.",
-        sources: 2,
-        updatedAt: "5h ago",
-        files: [
-          file("f-prod-1", "cander-pricing.pdf", "410 KB", "5h ago"),
-          file("f-prod-2", "feature-matrix.csv", "22 KB", "1d ago"),
-        ],
-      },
-      {
-        id: "kb-campaigns",
-        name: "Campaign archive",
-        summary: "Past launches, stills, and cutdowns for reuse.",
-        sources: 4,
-        updatedAt: "Yesterday",
-        files: [
-          file("f-camp-1", "spring-launch.zip", "12.4 MB", "Yesterday"),
-          file("f-camp-2", "hero-stills.pdf", "8.1 MB", "3d ago"),
-          file("f-camp-3", "cutdown-notes.md", "6 KB", "4d ago"),
-          file("f-camp-4", "press-kit.pdf", "2.2 MB", "1w ago"),
-        ],
-      },
-    ],
-    members: [
-      { memberId: "m1", spaces: ALL_SPACES },
-      { memberId: "m2", spaces: ALL_SPACES },
-      { memberId: "m4", spaces: ["work", "studio", "research", "personal", "connectors"] },
-      { memberId: "m6", spaces: ALL_SPACES },
-    ],
-    disabledConnectors: ["github", "jira", "linear"],
-  },
-  engineering: {
-    knowledgeBases: [
-      {
-        id: "kb-arch",
-        name: "Architecture",
-        summary: "Runtime topology, hosting, and service boundaries.",
-        sources: 3,
-        updatedAt: "1d ago",
-        files: [
-          file("f-arch-1", "runtime-topology.pdf", "1.1 MB", "1d ago"),
-          file("f-arch-2", "hosting.md", "14 KB", "2d ago"),
-          file("f-arch-3", "service-map.json", "8 KB", "1w ago"),
-        ],
-      },
-      {
-        id: "kb-runbooks",
-        name: "Runbooks",
-        summary: "On-call steps, local runtime, and incident notes.",
-        sources: 2,
-        updatedAt: "3d ago",
-        files: [
-          file("f-run-1", "on-call.md", "21 KB", "3d ago"),
-          file("f-run-2", "local-runtime.md", "12 KB", "1w ago"),
-        ],
-      },
-    ],
-    members: [
-      {
-        memberId: "m1",
-        spaces: ["work", "build", "research", "personal", "connectors"],
-      },
-      {
-        memberId: "m2",
-        spaces: ["work", "build", "research", "personal", "connectors"],
-      },
-      {
-        memberId: "m3",
-        spaces: ["work", "build", "research", "personal", "connectors"],
-      },
-      {
-        memberId: "m5",
-        spaces: ["work", "build", "research", "personal", "connectors"],
-      },
-    ],
-    disabledConnectors: ["hubspot", "gmail"],
-  },
-  operations: {
-    knowledgeBases: [
-      {
-        id: "kb-vendors",
-        name: "Vendor policy",
-        summary: "Who we may connect, retention, and review cadence.",
-        sources: 2,
-        updatedAt: "1w ago",
-        files: [
-          file("f-vend-1", "vendor-policy.pdf", "380 KB", "1w ago"),
-          file("f-vend-2", "retention.md", "11 KB", "2w ago"),
-        ],
-      },
-    ],
-    members: [
-      { memberId: "m1", spaces: ["work", "research", "personal", "connectors"] },
-      { memberId: "m2", spaces: ["work", "research", "personal", "connectors"] },
-      { memberId: "m5", spaces: ["work", "research", "personal", "connectors"] },
-      { memberId: "m6", spaces: ["work", "research", "connectors"] },
-    ],
-    disabledConnectors: ["figma", "discord"],
-  },
-};
-
 const listeners = new Set<Listener>();
-let policies: Record<string, WorkspacePolicy> = structuredClone(seedPolicies);
-let orgMembers: Member[] = structuredClone(seedMembers);
+let policies: Record<string, WorkspacePolicy> = {};
+let orgMembers: Member[] = [];
 let policyRevision = 0;
 
 function emit() {
@@ -209,16 +85,7 @@ function withCatalogSpaces(spaces: SpaceId[], fallback: SpaceId[]): SpaceId[] {
   const ensure = (id: SpaceId) => {
     if (fallback.includes(id) && !next.includes(id)) next.push(id);
   };
-  ensure("work");
-  ensure("personal");
-  if (
-    (fallback.includes("personal") ||
-      fallback.includes("finances") ||
-      fallback.includes("health")) &&
-    !next.includes("personal")
-  ) {
-    next.push("personal");
-  }
+  for (const id of ALL_SPACE_IDS) ensure(id);
   return next;
 }
 
@@ -278,14 +145,13 @@ function asMemberRows(
 }
 
 function hydrate(raw: unknown): Record<string, WorkspacePolicy> {
-  const next = structuredClone(seedPolicies);
+  const next: Record<string, WorkspacePolicy> = {};
   if (!raw || typeof raw !== "object") return next;
   for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
     if (!value || typeof value !== "object") continue;
     const policy = value as Partial<WorkspacePolicy>;
     const fallback =
       getWorkspaceCatalogSnapshot().find((item) => item.id === id)?.spaces ??
-      seedWorkspaces.find((item) => item.id === id)?.spaces ??
       ALL_SPACES;
     next[id] = {
       knowledgeBases: Array.isArray(policy.knowledgeBases)
@@ -303,46 +169,48 @@ function hydrate(raw: unknown): Record<string, WorkspacePolicy> {
 }
 
 function hydrateMembers(raw: unknown): Member[] {
-  const seed = structuredClone(seedMembers);
-  if (!Array.isArray(raw)) return seed;
-  const stored = new Map<string, Partial<Member>>();
+  if (!Array.isArray(raw)) return [];
+  const next: Member[] = [];
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const row = item as Partial<Member>;
     if (!row.id) continue;
-    stored.set(String(row.id), row);
-  }
-  return seed.map((base) => {
-    const row = stored.get(base.id);
-    if (!row) return base;
+    // Drop legacy Acme demo roster ids
+    const id = String(row.id);
+    if (/^m[1-7]$/.test(id) || id.startsWith("p-")) continue;
     const role: Role =
       row.role === "Owner" || row.role === "Admin" || row.role === "Member"
         ? row.role
-        : base.role;
-    const storedPlan = String(row.plan ?? "");
-    const plan: BillingPlan =
-      storedPlan === "plus"
-        ? "pro"
-        : storedPlan === "free" ||
-            storedPlan === "pro" ||
-            storedPlan === "max" ||
-            storedPlan === "ultra"
-          ? (storedPlan as BillingPlan)
-          : base.plan;
+        : "Member";
+    const plan: BillingPlan = normalizePlan(row.plan);
     const seatStatus: SeatStatus =
       row.seatStatus === "active" || row.seatStatus === "pending"
         ? row.seatStatus
-        : base.seatStatus;
-    return {
-      ...base,
+        : "active";
+    next.push({
+      id,
+      name: String(row.name ?? "Member"),
+      email: String(row.email ?? ""),
+      short: String(row.short ?? "Member"),
+      initials: String(row.initials ?? "ME"),
       role,
       plan,
       seatStatus,
+      kind: row.kind === "org" ? "org" : "personal",
       workspaceIds: Array.isArray(row.workspaceIds)
         ? row.workspaceIds.map(String)
-        : base.workspaceIds,
-    };
-  });
+        : [],
+      ...(row.managedByOrgName
+        ? { managedByOrgName: String(row.managedByOrgName) }
+        : {}),
+      ...(row.orgId ? { orgId: String(row.orgId) } : {}),
+      ...(row.orgSetupDeferred ? { orgSetupDeferred: true } : {}),
+      ...(row.subscriptionStatus
+        ? { subscriptionStatus: row.subscriptionStatus }
+        : {}),
+    });
+  }
+  return next;
 }
 
 export function subscribePolicies(listener: Listener) {
@@ -353,21 +221,20 @@ export function subscribePolicies(listener: Listener) {
         policies = hydrate(JSON.parse(stored));
         persist();
       } catch {
-        policies = structuredClone(seedPolicies);
+        policies = {};
       }
     }
-    const version = window.localStorage.getItem("courier-org-members-v");
     const storedMembers = window.localStorage.getItem("courier-org-members");
-    if (version !== "3") {
-      orgMembers = structuredClone(seedMembers);
-      window.localStorage.setItem("courier-org-members-v", "3");
-      persist();
-    } else if (storedMembers) {
+    window.localStorage.setItem("courier-org-members-v", "4");
+    if (storedMembers) {
       try {
         orgMembers = hydrateMembers(JSON.parse(storedMembers));
+        persist();
       } catch {
-        orgMembers = structuredClone(seedMembers);
+        orgMembers = [];
       }
+    } else {
+      orgMembers = [];
     }
   }
   listeners.add(listener);
@@ -381,7 +248,47 @@ export function getPoliciesSnapshot() {
 }
 
 export function getPoliciesServerSnapshot() {
-  return seedPolicies;
+  return {};
+}
+
+/** Replace or insert a member in the org roster (Supabase session hydrate). */
+export function upsertOrgMember(member: Member) {
+  const index = orgMembers.findIndex((item) => item.id === member.id);
+  if (index >= 0) {
+    orgMembers = orgMembers.map((item) =>
+      item.id === member.id ? { ...item, ...member } : item,
+    );
+  } else {
+    orgMembers = [member, ...orgMembers];
+  }
+  persist();
+}
+
+/** Draft invite from onboarding — pending until billing confirms seats. */
+export function addPendingOrgInvite(opts: {
+  email: string;
+  name: string;
+  plan: BillingPlan;
+  orgName: string;
+  workspaceIds: string[];
+}) {
+  const email = opts.email.trim().toLowerCase();
+  if (!email.includes("@")) return;
+  const name = opts.name.trim() || email.split("@")[0] || "Member";
+  const id = `invite-${email.replace(/[^a-z0-9]/gi, "")}`;
+  upsertOrgMember({
+    id,
+    name,
+    email,
+    short: name.split(/\s+/)[0] || "Member",
+    initials: name.slice(0, 2).toUpperCase() || "IN",
+    role: "Member",
+    workspaceIds: opts.workspaceIds,
+    plan: opts.plan === "max" ? "max" : "pro",
+    seatStatus: "pending",
+    kind: "org",
+    managedByOrgName: opts.orgName,
+  });
 }
 
 export function getMembersSnapshot() {
@@ -389,15 +296,13 @@ export function getMembersSnapshot() {
 }
 
 export function getMembersServerSnapshot() {
-  return seedMembers;
+  return [];
 }
 
 function workspaceSpaces(workspaceId: string): SpaceId[] {
   return (
     getWorkspaceCatalogSnapshot().find((item) => item.id === workspaceId)
-      ?.spaces ??
-    seedWorkspaces.find((item) => item.id === workspaceId)?.spaces ??
-    ALL_SPACES
+      ?.spaces ?? ALL_SPACES
   );
 }
 
@@ -445,22 +350,27 @@ export function ensurePolicy(
   adminId?: string,
   spaces: SpaceId[] = ALL_SPACES,
 ) {
-  if (!policies[workspaceId]) {
-    const admin = adminId
-      ? [{ memberId: adminId, spaces: [...spaces] }]
-      : [];
-    policies = {
-      ...policies,
-      [workspaceId]: { ...emptyPolicy(), members: admin },
-    };
-  }
+  const existing = policies[workspaceId] ?? emptyPolicy();
+  let members = existing.members;
   if (adminId) {
+    const idx = members.findIndex((item) => item.memberId === adminId);
+    if (idx >= 0) {
+      members = members.map((item, i) =>
+        i === idx ? { memberId: adminId, spaces: [...spaces] } : item,
+      );
+    } else {
+      members = [...members, { memberId: adminId, spaces: [...spaces] }];
+    }
     orgMembers = orgMembers.map((member) =>
       member.id === adminId && !member.workspaceIds.includes(workspaceId)
         ? { ...member, workspaceIds: [...member.workspaceIds, workspaceId] }
         : member,
     );
   }
+  policies = {
+    ...policies,
+    [workspaceId]: { ...existing, members },
+  };
   persist();
 }
 
@@ -507,15 +417,12 @@ export function setMemberRole(memberId: string, role: Role, actorId?: string) {
 export function activateMaxSeat(memberId: string) {
   orgMembers = orgMembers.map((member) => {
     if (member.id !== memberId) return member;
-    const workspaceIds = member.workspaceIds.filter(
-      (id) => !id.startsWith("solo-"),
-    );
     return {
       ...member,
       plan: "max" as const,
       seatStatus: "active" as const,
       role: member.role === "Owner" ? "Owner" : "Member",
-      workspaceIds: workspaceIds.length ? workspaceIds : ["marketing"],
+      workspaceIds: member.workspaceIds,
     };
   });
   persist();
@@ -524,30 +431,46 @@ export function activateMaxSeat(memberId: string) {
 export function setMemberSeat(memberId: string, plan: BillingPlan) {
   orgMembers = orgMembers.map((member) => {
     if (member.id !== memberId) return member;
-    if (plan === "max" || plan === "ultra") {
-      const workspaceIds = member.workspaceIds.filter(
-        (id) => !id.startsWith("solo-"),
-      );
+    if (isTeamPlan(plan)) {
       return {
         ...member,
         plan,
         seatStatus: "active",
-        workspaceIds: workspaceIds.length ? workspaceIds : ["marketing"],
+        workspaceIds: member.workspaceIds,
       };
     }
-    const solo =
-      plan === "pro"
-        ? member.id === "p-ultra"
-          ? "solo-ultra"
-          : "solo-pro"
-        : "solo-free";
     return {
       ...member,
       plan,
       seatStatus: member.kind === "org" ? "pending" : "active",
-      workspaceIds: [solo],
+      workspaceIds: member.workspaceIds,
     };
   });
+  persist();
+}
+
+/** Org roster Pro/Max seat change (keeps org membership). */
+export function setMemberOrgPlan(
+  memberId: string,
+  plan: Extract<BillingPlan, "pro" | "max">,
+) {
+  orgMembers = orgMembers.map((member) =>
+    member.id === memberId ? { ...member, plan, kind: "org" } : member,
+  );
+  persist();
+}
+
+export function removeOrgMember(memberId: string) {
+  orgMembers = orgMembers.filter((member) => member.id !== memberId);
+  policies = Object.fromEntries(
+    Object.entries(policies).map(([workspaceId, policy]) => [
+      workspaceId,
+      {
+        ...policy,
+        members: policy.members.filter((row) => row.memberId !== memberId),
+      },
+    ]),
+  );
   persist();
 }
 
@@ -734,7 +657,7 @@ export function blockedConnectorIds(
   map: Record<string, WorkspacePolicy> | undefined,
   plan?: BillingPlan,
 ) {
-  if (plan && plan !== "max" && plan !== "ultra") return [];
+  if (plan && !hasOrganizationControls(plan)) return [];
   return policyFor(workspaceId, map).disabledConnectors;
 }
 

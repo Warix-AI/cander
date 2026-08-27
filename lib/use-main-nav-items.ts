@@ -1,14 +1,14 @@
 "use client";
 
 import { useApp } from "@/components/app/AppProvider";
-import { spaces } from "@/lib/data";
-import { extraNavLabels, navIcon } from "@/lib/space-icons";
 import {
   isExtraNavId,
   resolveSidebarNav,
   type SidebarNavId,
 } from "@/lib/spaces";
 import { memberSpaces } from "@/lib/workspace-policy";
+import { spaces } from "@/lib/data";
+import { extraNavLabels, navIcon } from "@/lib/space-icons";
 
 const PRIMARY_NAV_LABELS: Partial<Record<SidebarNavId, string>> = {
   research: "Explore",
@@ -21,19 +21,13 @@ export function navLabel(id: SidebarNavId) {
 }
 
 export function useMainNavItems() {
-  const {
-    workspace,
-    actor,
-    workspacePolicies,
-    sidebarLayout,
-    billingPlan,
-    personalSpaceEnabled,
-  } = useApp();
+  const { workspace, actor, workspacePolicies, sidebarLayout, billingPlan } =
+    useApp();
 
   const { main } = resolveSidebarNav(
     memberSpaces(workspace.id, actor.id, workspacePolicies),
     sidebarLayout,
-    { billingPlan, personalEnabled: personalSpaceEnabled },
+    { billingPlan },
   );
 
   return main

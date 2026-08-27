@@ -109,9 +109,7 @@ export function ConnectorsDashboard() {
           workspace,
         );
         const installed =
-          item.installed ||
-          installedIds.includes(item.id) ||
-          accounts.length > 0;
+          installedIds.includes(item.id) || accounts.length > 0;
         return {
           ...item,
           installed,
@@ -199,7 +197,6 @@ export function ConnectorsDashboard() {
 
   return (
     <DashFrame
-      space="connectors"
       banner={false}
       title="Connectors"
       subtitle="Link apps so the app can act across them."

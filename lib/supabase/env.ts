@@ -3,7 +3,13 @@ export function supabaseUrl() {
   if (!url) {
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
   }
-  return url;
+  // Dashboard "Connect" sometimes copies the REST endpoint; the JS client
+  // already appends /rest/v1, so strip it to avoid .../rest/v1/rest/v1/...
+  return url
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/rest\/v1$/i, "")
+    .replace(/\/+$/, "");
 }
 
 export function supabaseAnonKey() {

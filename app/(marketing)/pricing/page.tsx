@@ -4,7 +4,6 @@ import { FinalCta } from "@/components/marketing/FinalCta";
 import { PricingCards } from "@/components/marketing/PricingCard";
 import { PricingComparison } from "@/components/marketing/PricingComparison";
 import { PageWidth, Section, SectionHeader } from "@/components/marketing/Section";
-import { UltraTeamStory } from "@/components/marketing/UltraTeamStory";
 import { marketingMetadata } from "@/lib/marketing";
 
 export const metadata = marketingMetadata("/pricing");
@@ -18,7 +17,7 @@ export default function PricingPage() {
             as="h1"
             kicker="One AI"
             title="Pricing"
-            body="Free, Pro, Max, and Ultra. Cloud on every plan. Unlimited Local and On-device on your hardware from Pro."
+            body="Free, Pro, and Max. Unlimited AI usage on every plan. Personal and business workspaces on all tiers."
             center
           />
           <div className="mt-10">
@@ -35,12 +34,6 @@ export default function PricingPage() {
           <div className="mt-8">
             <PricingComparison />
           </div>
-        </PageWidth>
-      </Section>
-
-      <Section>
-        <PageWidth>
-          <UltraTeamStory />
         </PageWidth>
       </Section>
 

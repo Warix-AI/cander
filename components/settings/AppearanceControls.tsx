@@ -14,6 +14,7 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsChrome";
 import { useMobileShell } from "@/lib/use-media-query";
+import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 export function AppearanceControls({
@@ -26,6 +27,7 @@ export function AppearanceControls({
   const appearance = useAppearance();
   const activeLayout = layoutModeFor(appearance.layout);
   const mobile = useMobileShell();
+  const curve = compact ? SHELL_G3_RADIUS : undefined;
 
   return (
     <div className={cn(compact ? "space-y-8" : mobile ? "space-y-6" : "space-y-10", className)}>
@@ -40,10 +42,14 @@ export function AppearanceControls({
                   active={appearance.colorMode === preset.id}
                   onSelect={() => setColorMode(preset.id)}
                   mobile
+                  curve={curve}
                   preview={
                     <span
                       aria-hidden
-                      className="block h-9 w-full rounded-[8px] border border-black/5"
+                      className={cn(
+                        "block h-9 w-full border border-black/5",
+                        curve ?? "rounded-[8px]",
+                      )}
                       style={{ background: swatchForMode(preset.id) }}
                     />
                   }
@@ -72,10 +78,14 @@ export function AppearanceControls({
               label={preset.label}
               active={appearance.colorMode === preset.id}
               onSelect={() => setColorMode(preset.id)}
+              curve={curve}
               preview={
                 <span
                   aria-hidden
-                  className="block h-9 w-full rounded-[8px] border border-black/5"
+                  className={cn(
+                    "block h-9 w-full border border-black/5",
+                    curve ?? "rounded-[8px]",
+                  )}
                   style={{ background: swatchForMode(preset.id) }}
                 />
               }
@@ -103,13 +113,15 @@ export function AppearanceControls({
             label="Classic"
             active={activeLayout === "classic"}
             onSelect={() => setLayoutMode("classic")}
-            preview={<ClassicLayoutPreview />}
+            curve={curve}
+            preview={<ClassicLayoutPreview curve={curve} />}
           />
           <AppearanceOptionCard
             label="Floating"
             active={activeLayout === "floating"}
             onSelect={() => setLayoutMode("floating")}
-            preview={<FloatingLayoutPreview />}
+            curve={curve}
+            preview={<FloatingLayoutPreview curve={curve} />}
           />
         </div>
       </section>
@@ -124,12 +136,14 @@ function AppearanceOptionCard({
   onSelect,
   preview,
   mobile = false,
+  curve,
 }: {
   label: string;
   active: boolean;
   onSelect: () => void;
   preview: React.ReactNode;
   mobile?: boolean;
+  curve?: string;
 }) {
   return (
     <button
@@ -138,10 +152,11 @@ function AppearanceOptionCard({
       onClick={onSelect}
       className={cn(
         "flex flex-col gap-2 bg-card px-3 py-3 text-left transition-colors duration-200",
+        curve ?? (mobile ? "rounded-[12px]" : "rounded-[10px]"),
         mobile
-          ? "rounded-[12px] border border-border bg-card"
+          ? "border border-border bg-card"
           : cn(
-              "rounded-[10px] border",
+              "border",
               active
                 ? "border-foreground/25 bg-muted ring-1 ring-foreground/10"
                 : "border-border hover:bg-muted/60",
@@ -154,11 +169,14 @@ function AppearanceOptionCard({
   );
 }
 
-function ClassicLayoutPreview() {
+function ClassicLayoutPreview({ curve }: { curve?: string }) {
   return (
     <div
       aria-hidden
-      className="flex h-9 w-full overflow-hidden rounded-[8px] border border-black/5 bg-muted/80"
+      className={cn(
+        "flex h-9 w-full overflow-hidden border border-black/5 bg-muted/80",
+        curve ?? "rounded-[8px]",
+      )}
     >
       <div className="h-full w-[28%] border-r border-black/5 bg-background" />
       <div className="h-full flex-1 bg-background" />
@@ -166,14 +184,27 @@ function ClassicLayoutPreview() {
   );
 }
 
-function FloatingLayoutPreview() {
+function FloatingLayoutPreview({ curve }: { curve?: string }) {
   return (
     <div
       aria-hidden
-      className="flex h-9 w-full gap-1 rounded-[8px] border border-black/5 bg-muted/50 p-1"
+      className={cn(
+        "flex h-9 w-full gap-1 border border-black/5 bg-muted/50 p-1",
+        curve ?? "rounded-[8px]",
+      )}
     >
-      <div className="h-full w-[28%] rounded-[5px] border border-black/5 bg-background shadow-sm" />
-      <div className="h-full flex-1 rounded-[5px] border border-black/5 bg-background shadow-sm" />
+      <div
+        className={cn(
+          "h-full w-[28%] border border-black/5 bg-background shadow-sm",
+          curve ?? "rounded-[5px]",
+        )}
+      />
+      <div
+        className={cn(
+          "h-full flex-1 border border-black/5 bg-background shadow-sm",
+          curve ?? "rounded-[5px]",
+        )}
+      />
     </div>
   );
 }

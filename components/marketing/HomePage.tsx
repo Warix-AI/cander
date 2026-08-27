@@ -62,7 +62,7 @@ export function HomePage() {
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <SectionHeader
               title="Plans and pricing"
-              body="Free, Pro, Max, and Ultra — per user, per month."
+              body="Free, Pro, and Max — per month."
             />
             <Cta href="/pricing" variant="secondary">
               Compare plans

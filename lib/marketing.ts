@@ -22,9 +22,9 @@ export const marketingPages: Record<string, MarketingPage> = {
   },
   "/pricing": {
     path: "/pricing",
-    title: "Pricing — Free, Pro, Max & Ultra",
+    title: "Pricing — Free, Pro & Max",
     description:
-      "Free to start. Pro $20, Max $50, Ultra $300 per user per month. Cloud on every plan. Runtime and hosting deepen from Pro.",
+      "Free to start. Pro $20, Max $50 per month. Same Cander app on every plan — more power and collaboration as you upgrade.",
   },
   "/spaces": {
     path: "/spaces",
@@ -36,7 +36,7 @@ export const marketingPages: Record<string, MarketingPage> = {
     path: "/work",
     title: "Work — Inbox, Calendar & Customers",
     description:
-      "Work is for day-to-day operations — inbox, calendar, and customers. Available on Max and Ultra.",
+      "Work is for day-to-day operations — inbox, calendar, and customers. Available on every plan.",
   },
   "/build": {
     path: "/build",

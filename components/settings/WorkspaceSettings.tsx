@@ -68,8 +68,6 @@ export function WorkspacesSettings({
   const {
     workspacePolicies,
     entitlements,
-    personalSpaceEnabled,
-    setPersonalSpaceEnabled,
     actor,
     openOverlay,
   } = useApp();
@@ -114,41 +112,6 @@ export function WorkspacesSettings({
           ) : null
         }
       />
-
-      {entitlements.canManageWorkspaces ? (
-        <SettingsSection
-          title="Organization defaults"
-          description="Applies across business workspaces for this organization."
-          className="mt-8"
-        >
-          <SettingsGroup>
-            <SettingsRow label="Allow Personal space">
-              {mobile ? (
-                <SettingsSwitch
-                  label="Allow Personal space"
-                  checked={personalSpaceEnabled}
-                  onChange={setPersonalSpaceEnabled}
-                />
-              ) : (
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={personalSpaceEnabled}
-                  onClick={() => setPersonalSpaceEnabled(!personalSpaceEnabled)}
-                  className="inline-flex h-8 shrink-0 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-                >
-                  {personalSpaceEnabled ? "On" : "Off"}
-                </button>
-              )}
-            </SettingsRow>
-          </SettingsGroup>
-          {mobile ? (
-            <SettingsFootnote>
-              Let members open Personal from search and pins — not in primary navigation.
-            </SettingsFootnote>
-          ) : null}
-        </SettingsSection>
-      ) : null}
 
       {entitlements.hasWorkspaces || canCreate ? (
         <SettingsSection
@@ -275,12 +238,12 @@ function WorkspacePage({
       <SettingsSection
         title="Knowledge bases"
         description={
-          entitlements.hasWorkspaceKnowledge
+          entitlements.hasKnowledgeBases
             ? `Sources the app can use inside ${workspace.name}.`
             : "Knowledge bases start on Pro."
         }
       >
-        {entitlements.hasWorkspaceKnowledge ? (
+        {entitlements.hasKnowledgeBases ? (
           mobile ? (
             <>
               <SettingsGroup>
@@ -481,13 +444,7 @@ function WorkspacePage({
                     mobile ? (
                       <div className="border-t border-border bg-muted/20 px-4 py-3">
                         <SettingsGroup className="border-0">
-                          {workspace.spaces
-                            .filter(
-                              (spaceId) =>
-                                spaceId !== "work" ||
-                                entitlements.canUseWorkSpace,
-                            )
-                            .map((spaceId) => {
+                          {workspace.spaces.map((spaceId) => {
                               const on = row.spaces.includes(spaceId);
                               const space = spaceCatalog.find(
                                 (item) => item.id === spaceId,
@@ -515,13 +472,7 @@ function WorkspacePage({
                       </div>
                     ) : (
                       <div className="flex flex-wrap gap-1.5 px-4 pb-3.5">
-                        {workspace.spaces
-                          .filter(
-                            (spaceId) =>
-                              spaceId !== "work" ||
-                              entitlements.canUseWorkSpace,
-                          )
-                          .map((spaceId) => {
+                        {workspace.spaces.map((spaceId) => {
                             const on = row.spaces.includes(spaceId);
                             const space = spaceCatalog.find(
                               (item) => item.id === spaceId,
