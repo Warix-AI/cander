@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { ArrowLeft, Check } from "lucide-react";
-import { CourierMark } from "@/components/brand/CourierMark";
+import { CanderMark } from "@/components/brand/CanderMark";
 import { useApp } from "@/components/app/AppProvider";
 import { connectors } from "@/lib/data";
 import { installConnector } from "@/lib/connector-install";
@@ -320,7 +320,7 @@ function OnboardingShell({
         setShortName((current) =>
           current.trim()
             ? current
-            : metaName.trim().split(/\s+/)[0] || "Matt",
+            : metaName.trim().split(/\s+/)[0] || "You",
         );
       }
     });
@@ -1348,7 +1348,7 @@ function OnboardingShell({
           )}
           aria-hidden={!showAppearancePreview}
         >
-          <CourierMark
+          <CanderMark
             tone="white"
             className="absolute top-[30px] right-[35px] z-20 h-7 w-7"
           />
@@ -1537,6 +1537,7 @@ function SignInStep({
             value={email}
             onChange={(event) => onEmail(event.target.value)}
             autoComplete="username"
+            name="cander-email"
             className={inputClass}
           />
         </Field>
@@ -1546,6 +1547,8 @@ function SignInStep({
             value={password}
             onChange={(event) => onPassword(event.target.value)}
             autoComplete="current-password"
+            name="cander-password"
+            placeholder=""
             className={inputClass}
           />
         </Field>
@@ -1863,7 +1866,7 @@ function ProfileStep({
         <input
           value={shortName}
           onChange={(event) => onShortName(event.target.value)}
-          placeholder="Matt"
+          placeholder="Your name"
           aria-label="What should we call you?"
           autoComplete="nickname"
           className={inputClass}

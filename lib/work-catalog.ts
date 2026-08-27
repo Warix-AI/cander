@@ -30,22 +30,9 @@ export function workItemsFor(
   scope: WorkScope,
   attachedConnectorIds: string[] = [],
 ): WorkItem[] {
-  const attached = new Set(attachedConnectorIds);
-  const seeded = workItems.filter((item) => {
-    if (item.workspaceId !== workspaceId || !item.lanes.includes(scope)) {
-      return false;
-    }
-    if (item.connectorId && !attached.has(item.connectorId)) return false;
-    return true;
-  });
-  const generated = attachedConnectorIds.flatMap((id) =>
+  return attachedConnectorIds.flatMap((id) =>
     generatedItemsFor(workspaceId, id, scope),
   );
-  const seen = new Set(seeded.map((item) => item.id));
-  return [
-    ...seeded,
-    ...generated.filter((item) => !seen.has(item.id)),
-  ];
 }
 
 /** Lightweight rows created when a connector is attached to Work. */

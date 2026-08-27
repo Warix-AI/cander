@@ -56,7 +56,7 @@ export function VoiceOrb({
   const style = { width: size, height: size };
   const orb = (
     <img
-      src="/courier-orb.png"
+      src="/cander-orb.png"
       alt=""
       draggable={false}
       className="h-full w-full object-cover"

@@ -26,12 +26,12 @@ export const handshakePositioning =
 
 export const handshakeStatus = {
   state: "ACTIVE" as const,
-  headline: "Your business is connected to the AI ecosystem.",
+  headline: "Connect Handshake to let agents work with your business.",
   stats: [
-    { label: "Connected Agents", value: "4" },
-    { label: "Capabilities", value: "24" },
-    { label: "Actions Completed", value: "18,492" },
-    { label: "Revenue Influenced", value: "$240,000" },
+    { label: "Connected Agents", value: "0" },
+    { label: "Capabilities", value: "0" },
+    { label: "Actions Completed", value: "0" },
+    { label: "Revenue Influenced", value: "$0" },
   ],
 };
 
@@ -124,44 +124,12 @@ export const handshakeConnectionCategories = [
   "Custom MCP",
 ];
 
-export const handshakeConnections = [
-  {
-    name: "Shopify Commerce",
-    category: "Commerce",
-    status: "Connected" as const,
-    capabilities: 12,
-  },
-  {
-    name: "Salesforce CRM",
-    category: "CRM",
-    status: "Connected" as const,
-    capabilities: 8,
-  },
-  {
-    name: "Booking System",
-    category: "Calendar",
-    status: "Connected" as const,
-    capabilities: 4,
-  },
-  {
-    name: "HubSpot",
-    category: "CRM",
-    status: "Connected" as const,
-    capabilities: 6,
-  },
-  {
-    name: "Internal APIs",
-    category: "Custom MCP",
-    status: "Connected" as const,
-    capabilities: 5,
-  },
-  {
-    name: "MCP Servers",
-    category: "Custom MCP",
-    status: "Connected" as const,
-    capabilities: 3,
-  },
-];
+export const handshakeConnections: {
+  name: string;
+  category: string;
+  status: "Connected";
+  capabilities: number;
+}[] = [];
 
 export const handshakeCapabilities = {
   intro:
@@ -259,58 +227,23 @@ export const handshakeContextData = {
   },
 };
 
-export const handshakeConversations = [
-  {
-    id: "23948",
-    time: "Today · 8:42 PM",
-    customerMessage:
-      "I need a laptop for video editing under $2500",
-    businessMessage:
-      "Based on your requirements, these three models match your needs.",
-    action: "Added recommendation",
-  },
-  {
-    id: "23941",
-    time: "Today · 7:18 PM",
-    customerMessage: "Can I reschedule my appointment to Thursday?",
-    businessMessage: "Thursday at 2:00 PM and 4:30 PM are available.",
-    action: "Offered scheduling options",
-  },
-  {
-    id: "23902",
-    time: "Yesterday · 4:55 PM",
-    customerMessage: "What's your return policy on opened electronics?",
-    businessMessage:
-      "Opened electronics can be returned within 30 days with receipt.",
-    action: "Answered from business knowledge",
-  },
-  {
-    id: "23888",
-    time: "Yesterday · 2:12 PM",
-    customerMessage: "I'd like to upgrade my order to express shipping.",
-    businessMessage: "Express shipping is available for $14.99.",
-    action: "Pending user approval",
-  },
-];
+export const handshakeConversations: {
+  id: string;
+  time: string;
+  customerMessage: string;
+  businessMessage: string;
+  action: string;
+}[] = [];
 
 export const handshakeTransactions = {
   headline: "Handshake Impact",
   stats: [
-    { label: "AI influenced revenue", value: "$1.2M" },
-    { label: "Completed actions", value: "48,292" },
-    { label: "Conversion rate", value: "18%" },
+    { label: "AI influenced revenue", value: "$0" },
+    { label: "Completed actions", value: "0" },
+    { label: "Conversion rate", value: "—" },
   ],
-  completedActions: [
-    { name: "Product Recommendations", value: "12,400" },
-    { name: "Appointments Booked", value: "2,300" },
-    { name: "Purchases Assisted", value: "740" },
-    { name: "Revenue Influenced", value: "$184,000" },
-  ],
-  topInteractions: [
-    "Product recommendations",
-    "Scheduling",
-    "Support",
-  ],
+  completedActions: [] as { name: string; value: string }[],
+  topInteractions: [] as string[],
 };
 
 export const handshakeSecurity = {
@@ -349,10 +282,10 @@ export const handshakeSecurity = {
 };
 
 export const handshakeSettings = {
-  account: "Acme Corp",
-  status: "Connected" as const,
-  connectedSince: "Aug 12, 2026",
+  account: "",
+  status: "Not connected" as const,
+  connectedSince: "—",
   notifications: true,
   autoApproveRecommendations: false,
-  webhookUrl: "https://api.acme.com/handshake/webhook",
+  webhookUrl: "",
 };

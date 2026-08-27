@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { CourierMark } from "@/components/brand/CourierMark";
+import { CanderMark } from "@/components/brand/CanderMark";
 import { isMobileShell } from "@/lib/mobile-shell";
 import {
   getThemeServerSnapshot,
@@ -72,7 +72,7 @@ export function MobileBootSplash() {
         fading && "opacity-0",
       )}
     >
-      <CourierMark
+      <CanderMark
         className="!h-10 !w-[42px]"
         tone={dark ? "white" : "black"}
       />

@@ -33,15 +33,24 @@ export function isMacDesktopShell() {
   return isDesktopShell() && getCanderDesktopBridge()?.platform === "darwin";
 }
 
+function subscribeDesktopShell(_onStoreChange: () => void) {
+  return () => {};
+}
+
+function getDesktopShellSnapshot() {
+  return isDesktopShell();
+}
+
+function getDesktopShellServerSnapshot() {
+  return false;
+}
+
 /** Client hook — false on the server / in a normal browser. */
 export function useDesktopShell() {
   return useSyncExternalStore(
-    (callback) => {
-      callback();
-      return () => {};
-    },
-    () => isDesktopShell(),
-    () => false,
+    subscribeDesktopShell,
+    getDesktopShellSnapshot,
+    getDesktopShellServerSnapshot,
   );
 }
 

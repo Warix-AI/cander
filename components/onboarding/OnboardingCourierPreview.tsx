@@ -1,6 +1,6 @@
 "use client";
 
-import { CourierMark } from "@/components/brand/CourierMark";
+import { CanderMark } from "@/components/brand/CanderMark";
 import { appearanceToCss, useAppearance } from "@/lib/appearance";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
@@ -66,16 +66,8 @@ export function OnboardingCourierPreview() {
               className="flex h-7 w-7 items-center justify-center bg-foreground/10"
               style={{ borderRadius: radius }}
             >
-              <CourierMark className="h-4 w-4" />
+              <CanderMark className="h-4 w-4" />
             </span>
-            <span
-              className="h-6 w-6 bg-chart-2/50"
-              style={{ borderRadius: radius }}
-            />
-            <span
-              className="h-6 w-6 bg-foreground/10"
-              style={{ borderRadius: radius }}
-            />
             <span
               className="mt-auto h-6 w-6 bg-foreground/15"
               style={{ borderRadius: "999px" }}

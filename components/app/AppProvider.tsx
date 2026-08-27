@@ -572,6 +572,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setPreview = useCallback((id: AccountPresetId) => {
+    if (isSupabaseConfigured()) return;
     const preset = accountPresets.find((item) => item.id === id);
     if (!preset) return;
     persistActor(preset.actorId);
@@ -579,6 +580,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setBillingPlan = useCallback((plan: BillingPlan) => {
+    if (isSupabaseConfigured()) return;
     const preset: AccountPresetId =
       plan === "free" ? "free" : plan === "pro" ? "pro" : "max-owner";
     const match = accountPresets.find((item) => item.id === preset);

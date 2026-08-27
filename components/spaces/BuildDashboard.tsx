@@ -13,13 +13,11 @@ import { NewBuildMenu } from "@/components/spaces/NewBuildMenu";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import {
   buildScopeOptions,
-  filterPreviews,
   taskMeta,
   workspaceAutomations,
   workspaceOneOffTasks,
   type BuildScope,
 } from "@/lib/build-catalog";
-import { buildPreviews } from "@/lib/data";
 import { useSpaceProjects } from "@/lib/hooks/use-space-query";
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
 import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
@@ -41,10 +39,9 @@ export function BuildDashboard() {
   const hoistFilters =
     mobile && view === "space" && mobileSurface === "panel";
   const [scope, setScope] = useState<BuildScope>("all");
+  const { data: spaceProjects, loading: projectsLoading } =
+    useSpaceProjects("build");
 
-  const previews = buildPreviews.filter(
-    (item) => item.workspaceId === workspaceId,
-  );
   const automations = useMemo(
     () => workspaceAutomations(workspaceId),
     [workspaceId],
@@ -53,9 +50,6 @@ export function BuildDashboard() {
     () => workspaceOneOffTasks(workspaceId),
     [workspaceId],
   );
-  const filteredPreviews = filterPreviews(previews, scope);
-  const { data: spaceProjects, loading: projectsLoading } =
-    useSpaceProjects("build");
 
   const openTask = (id: string) => {
     const task =
@@ -150,7 +144,14 @@ export function BuildDashboard() {
         ) : (
           <PreviewGrid
             layout={spaceLayout}
-            items={filteredPreviews.map(toEntry)}
+            items={spaceProjects.map((item) => ({
+              id: item.id,
+              name: item.title,
+              projectId: item.id,
+              meta: `Edited ${item.updatedAt}`,
+              badge: item.status === "published" ? "Published" : undefined,
+              image: item.cover,
+            }))}
             onOpen={openProject}
             empty={
               scope === "apps"
@@ -164,15 +165,4 @@ export function BuildDashboard() {
       </div>
     </DashFrame>
   );
-}
-
-function toEntry(item: (typeof buildPreviews)[number]) {
-  return {
-    id: item.id,
-    name: item.name,
-    projectId: item.projectId,
-    meta: `Edited ${item.updatedAt}`,
-    badge: item.published ? "Published" : undefined,
-    image: item.image,
-  };
 }

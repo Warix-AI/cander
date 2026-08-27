@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CourierMark } from "@/components/brand/CourierMark";
+import { CanderMark } from "@/components/brand/CanderMark";
 import {
   signInWithPassword,
   signUpWithPassword,
@@ -123,7 +123,7 @@ export function InviteAcceptFlow({ token }: { token: string }) {
 
   return (
     <>
-      <CourierMark className="h-7 w-7" />
+      <CanderMark className="h-7 w-7" />
       <h1 className="heading-display mt-8 text-[1.85rem] tracking-[-0.03em]">
         Join {preview.orgName}
       </h1>

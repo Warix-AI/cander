@@ -2,16 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
-import { PreviewAccount } from "@/components/settings/PreviewAccount";
 import {
   SettingsGroup,
   SettingsHeader,
   SettingsPage,
   SettingsSection,
 } from "@/components/settings/SettingsChrome";
-import { useMobileShell } from "@/lib/use-media-query";
 import { planLabel } from "@/lib/billing";
-import { getDataBackend, isSupabaseConfigured } from "@/lib/data-backend";
+import { isSupabaseConfigured } from "@/lib/data-backend";
 import { isPaidPlan, webAppPlansSettingsUrl } from "@/lib/plans";
 import { isMobileShell, openExternalUrl } from "@/lib/mobile-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -42,10 +40,7 @@ function daysRemaining(iso: string | null | undefined) {
 
 export function PlansSettings() {
   const { entitlements, actor } = useApp();
-  const mobile = useMobileShell();
   const nativeShell = isMobileShell();
-  const showDemoPicker =
-    getDataBackend() === "local" && !nativeShell && !mobile;
 
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
@@ -233,12 +228,6 @@ export function PlansSettings() {
         title="Your plan"
         subtitle="Account status for this seat. Cancel anytime — billing runs through the end of your current period."
       />
-
-      {showDemoPicker ? (
-        <div className="mt-8">
-          <PreviewAccount />
-        </div>
-      ) : null}
 
       <SettingsSection title="Current plan" className="mt-8">
         <SettingsGroup>{billingBody}</SettingsGroup>

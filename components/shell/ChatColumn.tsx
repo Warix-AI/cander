@@ -8,7 +8,7 @@ import {
   Telescope,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { CourierMark } from "@/components/brand/CourierMark";
+import { CanderMark } from "@/components/brand/CanderMark";
 import { ChatMessage } from "@/components/chat/MessageBlocks";
 import { SessionSummaryBubble } from "@/components/chat/SessionSummaryBubble";
 import { Composer } from "@/components/shell/Composer";
@@ -258,7 +258,7 @@ function EmptyChat({
         className="flex w-full max-w-[44rem] flex-col items-center max-md:!mt-0"
         style={{ marginTop: padTop }}
       >
-        <CourierMark className="landing-mark mb-4 !h-[35.64px] !w-[37.2px] -translate-y-[2px]" />
+        <CanderMark className="landing-mark mb-4 !h-[35.64px] !w-[37.2px] -translate-y-[2px]" />
         {copy ? (
           <>
             <h1 className="landing-headline heading-display text-center text-[1.85rem] md:text-[2.15rem]">

@@ -33,10 +33,6 @@ import type { WorkspaceCtx } from "@/lib/space-entities";
 const IMPORT_FLAG = "courier-connectors-imported-v1";
 const SYNC_DEBOUNCE_MS = 600;
 
-const WORK_STORAGE_KEY = "courier-work-connectors";
-const INSTALL_STORAGE_KEY = "courier-installed-connectors";
-const CONNECTIONS_STORAGE_KEY = "courier-workspace-connections";
-
 let skipRemoteSync = false;
 
 async function listMemberWorkspaceIds(profileId: string) {
@@ -175,25 +171,9 @@ export async function syncConnectorsToSupabase(ctx: WorkspaceCtx) {
   }
 }
 
-function readLocalConnectorPayload() {
-  if (typeof window === "undefined") return null;
-  return {
-    work: window.localStorage.getItem(WORK_STORAGE_KEY),
-    installed: window.localStorage.getItem(INSTALL_STORAGE_KEY),
-    connections: window.localStorage.getItem(CONNECTIONS_STORAGE_KEY),
-  };
-}
-
-/** One-time import of localStorage connector state → Supabase. */
-export async function importLocalConnectorsIfNeeded(ctx: WorkspaceCtx) {
+/** Live accounts stay empty — leftover prototype connector pins are not imported. */
+export async function importLocalConnectorsIfNeeded(_ctx: WorkspaceCtx) {
   if (typeof window === "undefined") return;
-  if (window.localStorage.getItem(IMPORT_FLAG) === "1") return;
-
-  const raw = readLocalConnectorPayload();
-  if (raw?.work || raw?.installed || raw?.connections) {
-    await syncConnectorsToSupabase(ctx);
-  }
-
   window.localStorage.setItem(IMPORT_FLAG, "1");
 }
 

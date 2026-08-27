@@ -87,8 +87,7 @@ export function OverviewPage() {
           {handshakePositioning}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <HandshakeBadge tone="success">Network healthy</HandshakeBadge>
-          <HandshakeBadge tone="neutral">4 active connections</HandshakeBadge>
+          <HandshakeBadge tone="neutral">No active connections</HandshakeBadge>
         </div>
       </HandshakeCard>
     </div>

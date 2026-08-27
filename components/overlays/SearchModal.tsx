@@ -14,9 +14,7 @@ import {
 import { useApp } from "@/components/app/AppProvider";
 import { Modal } from "@/components/ui/Modal";
 import {
-  assetFiles,
   connectors,
-  skills,
   spaces,
 } from "@/lib/data";
 import { getChatThreads } from "@/lib/api/chat-store";
@@ -44,10 +42,8 @@ export function SearchModal() {
     workspaceId,
     openSpace,
     openProject,
-    openSkill,
     openConnector,
     openThread,
-    openFile,
     openRecents,
     openBrowser,
     newChat,
@@ -198,26 +194,6 @@ export function SearchModal() {
       });
     }
 
-    for (const file of assetFiles.filter((item) => item.workspaceId === workspaceId)) {
-      if (!match(file.name) && !match(file.ext)) continue;
-      items.push({
-        id: `file-${file.id}`,
-        title: file.name,
-        meta: `${file.ext} · ${file.source}`,
-        group: "Files",
-        run: () => openFile(file.id),
-      });
-    }
-    for (const skill of skills.filter((item) => item.workspaceId === workspaceId)) {
-      if (!match(skill.name) && !match(skill.summary)) continue;
-      items.push({
-        id: `skill-${skill.id}`,
-        title: skill.name,
-        meta: skill.summary,
-        group: "Tasks",
-        run: () => openSkill(skill.id),
-      });
-    }
     for (const connector of connectors) {
       if (!match(connector.name) && !match(connector.description)) continue;
       items.push({
@@ -247,10 +223,8 @@ export function SearchModal() {
     workspaceId,
     openSpace,
     openProject,
-    openSkill,
     openConnector,
     openThread,
-    openFile,
     openRecents,
     openBrowser,
     newChat,

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CourierMark } from "@/components/brand/CourierMark";
+import { CanderMark } from "@/components/brand/CanderMark";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { updatePassword } from "@/lib/supabase/auth-actions";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -64,7 +64,7 @@ export default function AuthResetPage() {
     <main className="flex min-h-svh flex-col items-center justify-center bg-background px-6 py-16 text-foreground">
       <div className="w-full max-w-[24rem]">
         <Link href="/" className="inline-flex items-center gap-2">
-          <CourierMark className="h-7 w-7" />
+          <CanderMark className="h-7 w-7" />
           <span className="text-[15px] font-medium tracking-[-0.02em]">Cander</span>
         </Link>
         <h1 className="mt-8 text-[1.75rem] font-medium tracking-[-0.03em]">
