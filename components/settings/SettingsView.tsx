@@ -67,9 +67,7 @@ import { persistSignedOut, persistActor } from "@/lib/session";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
-  activateMaxSeat,
   setMemberRole,
-  setMemberSeat,
   toggleMemberWorkspace,
 } from "@/lib/workspace-policy";
 
@@ -413,13 +411,9 @@ function OrganizationSettings() {
                   description={`${member.email} · ${planLabel(member.plan)}${pending ? " · Needs Max seat" : ""}`}
                 >
                   {pending ? (
-                    <button
-                      type="button"
-                      onClick={() => activateMaxSeat(member.id)}
-                      className="inline-flex h-8 items-center rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-                    >
-                      Add Max seat
-                    </button>
+                    <span className="text-[12.5px] text-muted-foreground">
+                      Pending
+                    </span>
                   ) : canEditRole ? (
                     <select
                       value={member.role}
@@ -444,23 +438,15 @@ function OrganizationSettings() {
                     </span>
                   )}
                 </SettingsRow>
-                {!pending && entitlements.isOwner ? (
-                  <div className="flex flex-wrap gap-1.5 px-4 py-3">
-                    {(["max", "ultra", "pro", "free"] as const).map((plan) => (
-                      <button
-                        key={plan}
-                        type="button"
-                        onClick={() => setMemberSeat(member.id, plan)}
-                        className={cn(
-                          "inline-flex h-7 items-center rounded-full px-2.5 text-[11.5px] font-medium tracking-[-0.01em]",
-                          member.plan === plan && member.seatStatus === "active"
-                            ? "bg-muted text-foreground"
-                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                        )}
-                      >
-                        {planLabel(plan)}
-                      </button>
-                    ))}
+                {!pending ? (
+                  <div className="px-4 py-2.5">
+                    <p className="text-[12px] text-muted-foreground">
+                      Plan:{" "}
+                      <span className="font-medium text-foreground">
+                        {planLabel(member.plan)}
+                      </span>
+                      {member.seatStatus === "active" ? " · Active" : ""}
+                    </p>
                   </div>
                 ) : null}
                 {!pending ? (

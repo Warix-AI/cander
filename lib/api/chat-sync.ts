@@ -9,24 +9,49 @@ import {
 import {
   subscribeChatRealtime,
   syncThreadsToSupabase,
+  upsertThreadsToSupabase,
 } from "@/lib/api/chat-api.supabase";
 import type { WorkspaceCtx } from "@/lib/space-entities";
 
 const SYNC_DEBOUNCE_MS = 600;
+const IMPORT_FLAG_KEY = "courier-chat-imported-v1";
 
 let skipRemoteSync = false;
 
-/** Pull remote threads into the local chat store. */
+/** Pull remote threads for the active workspace; keep other workspaces in store. */
 export async function hydrateChatFromRemote(
   api: ChatApi,
   ctx: WorkspaceCtx,
 ) {
   skipRemoteSync = true;
-  const threads = await api.listThreads(ctx);
-  replaceChatThreads(threads);
+  const remote = await api.listThreads(ctx);
+  const { threads: current } = getChatStoreSnapshot();
+  const otherWorkspaces = current.filter(
+    (item) => item.workspaceId !== ctx.workspaceId,
+  );
+  replaceChatThreads([...otherWorkspaces, ...remote]);
   window.setTimeout(() => {
     skipRemoteSync = false;
   }, 0);
+}
+
+/** One-time upsert of localStorage threads → Supabase after first auth. */
+export async function importLocalChatIfNeeded(ctx: WorkspaceCtx) {
+  if (typeof window === "undefined") return;
+  if (window.localStorage.getItem(IMPORT_FLAG_KEY) === "1") return;
+
+  getChatStoreSnapshot();
+  const { threads } = getChatStoreSnapshot();
+  if (threads.length) {
+    await upsertThreadsToSupabase(ctx, threads);
+  }
+
+  window.localStorage.setItem(IMPORT_FLAG_KEY, "1");
+}
+
+export async function bootstrapSupabaseChat(api: ChatApi, ctx: WorkspaceCtx) {
+  await importLocalChatIfNeeded(ctx);
+  await hydrateChatFromRemote(api, ctx);
 }
 
 /** Debounced push of local store → Supabase after AppProvider mutations. */

@@ -1,4 +1,4 @@
-/** Local → Supabase migration helpers (Phase 1). */
+/** Local → Supabase migration helpers. */
 export type MigrationScan = {
   projects: number;
   sources: number;
@@ -44,7 +44,13 @@ export function scanLocalMigration(): MigrationScan {
   return { projects, sources, threads, attachments };
 }
 
-/** Import runs automatically via entity-sync on first Supabase session. */
+/** @deprecated Import runs via bootstrapSupabaseSession on first Supabase login. */
 export async function migrateToRemote(_workspaceId: string): Promise<void> {
   return;
 }
+
+export {
+  scanLegacyStorage,
+  allSupabaseImportsComplete,
+  clearLegacyStorageAfterImport,
+} from "@/lib/legacy-storage";

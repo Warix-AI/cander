@@ -8,23 +8,15 @@ import {
   useSyncExternalStore,
 } from "react";
 import { createApiBundle, type ApiBundle } from "@/lib/api";
+import { startSupabaseEntitySync } from "@/lib/api/entity-sync";
+import { startSupabaseOrgPolicySync } from "@/lib/api/org-policy-sync";
+import { startSupabaseConnectorSync } from "@/lib/api/connector-sync";
+import { startSupabaseBrowserSync } from "@/lib/api/browser-sync";
 import {
-  bootstrapSupabaseEntities,
-  startSupabaseEntitySync,
-} from "@/lib/api/entity-sync";
-import {
-  bootstrapSupabaseOrgPolicy,
-  startSupabaseOrgPolicySync,
-} from "@/lib/api/org-policy-sync";
-import {
-  bootstrapSupabaseConnectors,
-  startSupabaseConnectorSync,
-} from "@/lib/api/connector-sync";
-import {
-  hydrateChatFromRemote,
   startChatRealtimePull,
   startChatRemoteSync,
 } from "@/lib/api/chat-sync";
+import { bootstrapSupabaseSession } from "@/lib/import/bootstrap-supabase";
 import {
   subscribeChatStore,
   getChatStoreSnapshot,
@@ -82,33 +74,16 @@ export function SpaceDataProvider({
 
     let cancelled = false;
 
-    void bootstrapSupabaseEntities(api.entities, ctx).catch((err) => {
+    void bootstrapSupabaseSession(api, ctx).catch((err) => {
       if (!cancelled) {
-        console.warn("[cander] entity bootstrap failed", err);
-      }
-    });
-
-    void bootstrapSupabaseOrgPolicy(ctx).catch((err) => {
-      if (!cancelled) {
-        console.warn("[cander] org policy bootstrap failed", err);
-      }
-    });
-
-    void bootstrapSupabaseConnectors(ctx).catch((err) => {
-      if (!cancelled) {
-        console.warn("[cander] connector bootstrap failed", err);
-      }
-    });
-
-    void hydrateChatFromRemote(api.chat, ctx).catch((err) => {
-      if (!cancelled) {
-        console.warn("[cander] initial chat hydrate failed", err);
+        console.warn("[cander] supabase bootstrap failed", err);
       }
     });
 
     const stopEntitySync = startSupabaseEntitySync(api.entities, ctx);
     const stopOrgPolicySync = startSupabaseOrgPolicySync(ctx);
     const stopConnectorSync = startSupabaseConnectorSync(ctx);
+    const stopBrowserSync = startSupabaseBrowserSync(ctx);
     const stopChatSync = startChatRemoteSync(ctx);
     const stopChatRealtime = startChatRealtimePull(api.chat, ctx);
 
@@ -117,10 +92,11 @@ export function SpaceDataProvider({
       stopEntitySync();
       stopOrgPolicySync();
       stopConnectorSync();
+      stopBrowserSync();
       stopChatSync();
       stopChatRealtime();
     };
-  }, [api.chat, api.entities, backend, ctx]);
+  }, [api, backend, ctx]);
 
   const value = useMemo(
     () => ({ api, ctx, entityRevision, chatRevision }),

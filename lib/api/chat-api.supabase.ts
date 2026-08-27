@@ -198,17 +198,25 @@ export async function syncThreadsToSupabase(
   ctx: WorkspaceCtx,
   threads: Thread[],
 ) {
-  const supabase = createSupabaseBrowserClient();
   const scoped = threads.filter((item) => item.workspaceId === ctx.workspaceId);
-  if (!scoped.length) return;
+  await upsertThreadsToSupabase(ctx, scoped);
+}
 
-  const threadRows = scoped.map((thread) => threadToRow(thread, ctx.actorId));
+/** Upsert all threads (first-login import across workspaces). */
+export async function upsertThreadsToSupabase(
+  ctx: WorkspaceCtx,
+  threads: Thread[],
+) {
+  if (!threads.length) return;
+
+  const supabase = createSupabaseBrowserClient();
+  const threadRows = threads.map((thread) => threadToRow(thread, ctx.actorId));
   const { error: threadError } = await supabase
     .from("threads")
     .upsert(threadRows, { onConflict: "id" });
   if (threadError) throw threadError;
 
-  const messageRows = scoped.flatMap((thread) =>
+  const messageRows = threads.flatMap((thread) =>
     thread.messages.map((message, index) =>
       messageToRow(message, thread.id, thread.workspaceId, index),
     ),

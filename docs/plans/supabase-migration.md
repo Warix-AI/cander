@@ -91,7 +91,7 @@ Run migration `001_tenancy.sql` (file in `supabase/migrations/` — apply in Sup
 
 - [x] Add `createApiBundle(mode: "local" | "supabase")` in `lib/api/index.ts`.
 - [x] `SpaceDataProvider` reads `NEXT_PUBLIC_DATA_BACKEND`.
-- [x] Supabase mode uses Supabase chat + entity + connector adapters (build/browser still local until Phase 5).
+- [x] Supabase mode uses Supabase adapters for entities, chat, connectors, build, and browser.
 
 **Exit criteria:** User can sign up/in; workspace list loads from Supabase; local mode still works via env flag.
 
@@ -288,17 +288,21 @@ Schema migration `005_connectors.sql`:
 
 | Today | Target |
 |-------|--------|
-| Fake `*.courier.app` URLs | `BuildRuntimeApi` → deploy service |
-| Hardcoded file tree | Project files in Storage or git integration |
-| `publish` → local deployment row | Real URL + status webhook |
+| Fake `*.courier.app` URLs | `BuildRuntimeApi` → `build-publish` Edge Function |
+| Hardcoded file tree | `project_files` table + default seed |
+| `publish` → local deployment row | Edge Function writes `deployments` + updates project |
 
-- [ ] Edge Function `build-publish` or external CI webhook updates `deployments`.
-- [ ] Keep local stub when `DATA_BACKEND=local`.
+- [x] Migration SQL authored (`supabase/migrations/006_build_browser.sql`)
+- [ ] Migration applied to staging Supabase project
+- [x] Edge Function `build-publish` updates `deployments` and project `published_url`.
+- [x] `lib/api/build-runtime-api.supabase.ts` wired in `createApiBundle("supabase")`.
+- [x] Keep local stub when `DATA_BACKEND=local`.
 
 ### 5.2 Browser
 
-- [ ] Optional: persist `browser_sessions` if needed for cross-device research.
-- [ ] `captureReference` already creates sources — works once Phase 1 done.
+- [x] `browser_sessions` table — per profile + workspace URL/title.
+- [x] `lib/api/browser-sync.ts` — import, hydrate, debounced push, realtime.
+- [x] `captureReference` uses Supabase entity `createSource` in supabase mode.
 
 **Exit criteria:** Publish updates real deployment URL; preview can remain client-side until infra exists.
 
@@ -306,17 +310,15 @@ Schema migration `005_connectors.sql`:
 
 ## Phase 6 — Cleanup
 
-- [ ] Gate `lib/data.ts` imports behind `local` mode; move seeds to `scripts/seed.ts`.
-- [ ] Remove deprecated localStorage keys (after import + verification):
-  - `courier-space-entities-v1`
-  - `courier-work-connectors`
-  - `courier-workspace-connections`
-  - `courier-workspace-policies`
-  - `courier-org-members`
-  - `courier-signed-in`, `courier-actor`
-- [ ] Delete dead code: unused bridge paths, duplicate project lookups.
-- [ ] Add CI: `supabase db lint`, migration apply on staging.
-- [ ] Document runbook: local dev, staging deploy, prod deploy.
+- [x] `lib/dev-data.ts` marks `lib/data.ts` as local-dev seed; staging seed in `supabase/seed.sql`.
+- [x] Legacy localStorage cleanup after import (`lib/legacy-storage.ts` + unified bootstrap).
+- [x] Remove deprecated auth keys (`courier-signed-in`, `courier-actor`) post-import.
+- [x] Unified `lib/import/bootstrap-supabase.ts` replaces per-phase bootstrap calls.
+- [x] CI: `.github/workflows/supabase-ci.yml` + `scripts/check-migrations.sh`.
+- [x] Runbook: `docs/runbook/supabase.md`.
+- [ ] Migrate remaining UI reads from `lib/data.ts` to entity store (non-blocking).
+
+**Exit criteria:** Supabase migration complete; local mode unchanged; runbook documents deploy path.
 
 ---
 

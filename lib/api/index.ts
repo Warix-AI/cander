@@ -1,4 +1,5 @@
 import { createLocalBuildRuntimeApi } from "@/lib/api/build-runtime-api";
+import { createSupabaseBuildRuntimeApi } from "@/lib/api/build-runtime-api.supabase";
 import type { BuildRuntimeApi } from "@/lib/api/build-runtime-api";
 import { createLocalChatApi } from "@/lib/api/chat-api.local";
 import { createSupabaseChatApi } from "@/lib/api/chat-api.supabase";
@@ -7,6 +8,7 @@ import { createLocalConnectorApi } from "@/lib/api/connector-api";
 import { createSupabaseConnectorApi } from "@/lib/api/connector-api.supabase";
 import type { ConnectorApi } from "@/lib/api/connector-api";
 import { createLocalBrowserApi } from "@/lib/api/browser-api";
+import { createSupabaseBrowserApi } from "@/lib/api/browser-api.supabase";
 import type { BrowserApi } from "@/lib/api/browser-api";
 import { createLocalSpaceEntityApi } from "@/lib/api/space-entity-api.local";
 import { createSupabaseSpaceEntityApi } from "@/lib/api/space-entity-api.supabase";
@@ -38,8 +40,8 @@ export function createApiBundle(mode: DataBackend): ApiBundle {
       entities,
       chat: createSupabaseChatApi(),
       connectors: createSupabaseConnectorApi(entities),
-      build: createLocalBuildRuntimeApi(),
-      browser: createLocalBrowserApi(),
+      build: createSupabaseBuildRuntimeApi(entities),
+      browser: createSupabaseBrowserApi(entities),
     };
   }
   return createLocalApiBundle();

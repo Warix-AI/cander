@@ -1,3 +1,7 @@
+/**
+ * Local-dev seed catalog — mock members, workspaces, connectors, threads, etc.
+ * Supabase mode uses Postgres; see lib/dev-data.ts and supabase/seed.sql.
+ */
 import type {
   AccountPresetId,
   AssetFile,

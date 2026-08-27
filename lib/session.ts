@@ -201,7 +201,10 @@ export function persistSignedIn() {
 }
 
 export function persistSignedOut() {
-  if (isSupabaseConfigured()) return;
+  if (isSupabaseConfigured()) {
+    window.localStorage.removeItem("courier-signed-in");
+    window.localStorage.removeItem("courier-actor");
+  }
   localSignedIn = false;
   window.localStorage.removeItem("courier-signed-in");
   emitAuth();
