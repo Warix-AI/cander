@@ -69,8 +69,6 @@ import {
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
-const demoEmail = "matthew@acme.com";
-const demoPassword = "courier";
 const supabaseMode = () => isSupabaseConfigured();
 
 function presetForPlan(plan: BillingPlan): AccountPresetId {
@@ -271,11 +269,11 @@ function OnboardingShell({
   const [step, setStep] = useState<Step>(() =>
     initialSignedIn ? "profile" : "welcome",
   );
-  const [email, setEmail] = useState(usingSupabase ? "" : demoEmail);
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [verifyCode, setVerifyCode] = useState("");
-  const [name, setName] = useState(usingSupabase ? "" : "Matthew Gross");
-  const [shortName, setShortName] = useState(usingSupabase ? "" : "Matt");
+  const [name, setName] = useState("");
+  const [shortName, setShortName] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
   const [plan, setPlan] = useState<BillingPlan | null>(
     nativeShell ? "free" : null,
@@ -708,13 +706,11 @@ function OnboardingShell({
       return;
     }
     if (!shortName.trim()) {
-      setShortName(name.trim().split(/\s+/)[0] || "Matt");
+      setShortName(name.trim().split(/\s+/)[0] || "You");
     }
 
     if (!isSupabaseConfigured()) {
-      setError("");
-      setInfo("");
-      setStep("verify");
+      setError("Sign in uses your live Cander account. This session is not connected to the account service.");
       return;
     }
 
@@ -907,16 +903,17 @@ function OnboardingShell({
       return;
     }
 
-    if (email.trim().toLowerCase() !== demoEmail) {
-      setError(`Use ${demoEmail} for this prototype.`);
+    if (!email.trim().includes("@")) {
+      setError("Enter the email for your account.");
       return;
     }
-    if (password && password !== demoPassword) {
-      setError(`Prototype password is "${demoPassword}".`);
+    if (!password) {
+      setError("Enter your password.");
       return;
     }
-    setError("");
-    enterWithPlan("max");
+    setError(
+      "Sign in uses your live Cander account. This session is not connected to the account service.",
+    );
   };
 
   const sendForgot = async () => {
@@ -1153,7 +1150,6 @@ function OnboardingShell({
 
             {step === "sign-in" ? (
               <SignInStep
-                supabase={usingSupabase}
                 email={email}
                 password={password}
                 error={error}
@@ -1501,7 +1497,6 @@ function WelcomeStep({
 }
 
 function SignInStep({
-  supabase = false,
   email,
   password,
   error,
@@ -1512,7 +1507,6 @@ function SignInStep({
   onForgot,
   onOAuth,
 }: {
-  supabase?: boolean;
   email: string;
   password: string;
   error: string;
@@ -1529,9 +1523,7 @@ function SignInStep({
         Sign in
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        {supabase
-          ? "Use the email and password for your Cander account."
-          : "Use Matthew's demo credentials. This prototype only opens the Max Owner account."}
+        Use the email and password for your Cander account.
       </p>
       <form
         className="mt-8 space-y-3"
@@ -1553,7 +1545,6 @@ function SignInStep({
             type="password"
             value={password}
             onChange={(event) => onPassword(event.target.value)}
-            placeholder={supabase ? undefined : demoPassword}
             autoComplete="current-password"
             className={inputClass}
           />
@@ -1566,7 +1557,7 @@ function SignInStep({
           disabled={busy}
           className={primaryBtnClass}
         >
-          {busy ? "Signing in…" : supabase ? "Sign in" : "Continue as Matthew"}
+          {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
 
@@ -1590,19 +1581,6 @@ function SignInStep({
         </div>
         <OAuthButtons disabled={busy} onSelect={onOAuth} />
       </div>
-
-      {!supabase ? (
-        <div className={cn("mt-6 border border-border bg-card p-3.5", SHELL_G3_RADIUS)}>
-          <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-            Demo login
-          </p>
-          <p className="mt-2 font-mono text-[12.5px] leading-relaxed">
-            {demoEmail}
-            <br />
-            {demoPassword}
-          </p>
-        </div>
-      ) : null}
     </>
   );
 }
@@ -1933,7 +1911,7 @@ function WorkspaceStep({
         <input
           value={workspaceName}
           onChange={(event) => onWorkspaceName(event.target.value)}
-          placeholder="Acme"
+          placeholder="Company"
           aria-label="First workspace"
           autoComplete="organization"
           autoFocus
@@ -2228,7 +2206,7 @@ function OrgSetupStep({
           <input
             value={orgName}
             onChange={(event) => onOrgName(event.target.value)}
-            placeholder="Acme Inc."
+            placeholder="Company"
             aria-label="Organization name"
             autoComplete="organization"
             autoFocus

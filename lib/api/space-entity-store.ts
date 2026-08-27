@@ -62,6 +62,16 @@ let state: PersistedState = {
   seeded: false,
   revision: 0,
 };
+const EMPTY_ENTITY_STORE: PersistedState = {
+  projects: [],
+  sources: [],
+  briefingItems: [],
+  deployments: [],
+  attachments: [],
+  entityLinks: [],
+  seeded: false,
+  revision: 0,
+};
 let hydrated = false;
 
 function emit() {
@@ -166,16 +176,7 @@ export function getSpaceEntityStoreSnapshot(): PersistedState {
 }
 
 export function getSpaceEntityStoreServerSnapshot(): PersistedState {
-  return {
-    projects: [],
-    sources: [],
-    briefingItems: [],
-    deployments: [],
-    attachments: [],
-    entityLinks: [],
-    seeded: false,
-    revision: 0,
-  };
+  return EMPTY_ENTITY_STORE;
 }
 
 /** Replace store contents (Supabase hydrate). Does not write localStorage. */

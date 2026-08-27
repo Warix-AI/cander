@@ -442,7 +442,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [mobileMenuScreen, setMobileMenuScreen] =
     useState<MobileMenuScreen>("main");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [workspaceRailOpen, setWorkspaceRailOpen] = useState(true);
+  const [workspaceRailOpen, setWorkspaceRailOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [buildTool, setBuildTool] = useState<BuildTool>("preview");
@@ -516,6 +516,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (mobileNavTimer.current) clearTimeout(mobileNavTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (workspacesFor(actor, entitlements).length < 2) {
+      setWorkspaceRailOpen(false);
+    }
+  }, [actor, entitlements]);
 
   const pushTarget = useCallback((snap: Snapshot) => {
     setHist((h) => {

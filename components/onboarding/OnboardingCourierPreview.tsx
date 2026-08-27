@@ -96,7 +96,7 @@ export function OnboardingCourierPreview() {
           >
             <div className="flex items-center justify-between gap-2">
               <span className="truncate text-[12px] font-medium tracking-[-0.02em]">
-                Acme Inc.
+                Workspace
               </span>
               <span
                 className="h-5 w-5 bg-muted"

@@ -13,14 +13,14 @@ export function PublishSheet() {
   const { publishBuild } = useSpaceMutation();
   const displayName = entityProject?.title ?? project?.name ?? "app";
   const slug = displayName.toLowerCase().replace(/\s+/g, "-");
-  const hostedUrl = `https://${slug}.courier.app`;
+  const hostedUrl = `https://${slug}.cander.app`;
   const domains = entityProject?.domains ?? project?.domains ?? [];
   const options = useMemo(
     () => [
       {
-        id: "courier",
+        id: "cander",
         url: hostedUrl,
-        label: `${slug}.courier.app`,
+        label: `${slug}.cander.app`,
         hint: "Verified subdomain",
       },
       ...domains.map((domain) => ({
@@ -32,12 +32,12 @@ export function PublishSheet() {
     ],
     [hostedUrl, domains, slug],
   );
-  const [selected, setSelected] = useState(options[0]?.id ?? "courier");
+  const [selected, setSelected] = useState(options[0]?.id ?? "cander");
   const [busy, setBusy] = useState(false);
 
   if (overlay !== "publish") return null;
   const chosen = options.find((item) => item.id === selected) ?? options[0];
-  const url = liveUrl && selected === "courier" ? liveUrl : chosen.url;
+  const url = liveUrl && selected === "cander" ? liveUrl : chosen.url;
 
   const handlePublish = async () => {
     if (!projectId || busy) return;

@@ -367,7 +367,7 @@ async function applySignupPlanAndSpacesClient(opts: {
     const kind = opts.workspaceKind ?? (teamPlan ? "business" : "personal");
     const name =
       opts.workspaceName?.trim() ||
-      (kind === "personal" ? "Personal" : "Acme");
+      (kind === "personal" ? "Personal" : "Workspace");
     const { error: createWsError } = await supabase.from("workspaces").upsert({
       id: wsId,
       name,

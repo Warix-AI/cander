@@ -151,7 +151,7 @@ export function AccountSecuritySettings({ onAfterSignOut }: Props) {
     if (supabase) {
       return "Permanently deletes your Auth user and cascaded profile data.";
     }
-    return "Clears local session data for this prototype.";
+    return "Clears local session data for this browser.";
   };
 
   const body = (

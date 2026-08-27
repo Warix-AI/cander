@@ -99,8 +99,10 @@ export function getWorkspaceCatalogSnapshot(): Workspace[] {
   return catalog;
 }
 
+const EMPTY_CATALOG: Workspace[] = [];
+
 export function getWorkspaceCatalogServerSnapshot(): Workspace[] {
-  return [];
+  return EMPTY_CATALOG;
 }
 
 export function mergeCatalog(extra: Workspace[] = custom): Workspace[] {
