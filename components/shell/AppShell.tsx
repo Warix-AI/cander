@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { AuthProvider } from "@/components/app/AuthProvider";
 import { AppProvider, useApp } from "@/components/app/AppProvider";
 import { SpaceDataProvider } from "@/components/app/SpaceDataProvider";
 import { ChatColumn } from "@/components/shell/ChatColumn";
@@ -23,7 +24,10 @@ import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import {
   getAuthServerSnapshot,
   getAuthSnapshot,
+  getAuthUserIdServerSnapshot,
+  getAuthUserIdSnapshot,
   subscribeAuth,
+  subscribeAuthUserId,
 } from "@/lib/session";
 import { useSyncExternalStore } from "react";
 import { BrowserLayout } from "@/components/browser/BrowserLayout";
@@ -44,18 +48,25 @@ import { cn } from "@/lib/utils";
 
 export function AppShell() {
   return (
-    <AppProvider>
-      <SpaceDataBridge>
-        <Root />
-      </SpaceDataBridge>
-    </AppProvider>
+    <AuthProvider>
+      <AppProvider>
+        <SpaceDataBridge>
+          <Root />
+        </SpaceDataBridge>
+      </AppProvider>
+    </AuthProvider>
   );
 }
 
 function SpaceDataBridge({ children }: { children: React.ReactNode }) {
-  const { workspaceId, actorId } = useApp();
+  const { workspaceId } = useApp();
+  const authUserId = useSyncExternalStore(
+    subscribeAuthUserId,
+    getAuthUserIdSnapshot,
+    getAuthUserIdServerSnapshot,
+  );
   return (
-    <SpaceDataProvider workspaceId={workspaceId} actorId={actorId}>
+    <SpaceDataProvider workspaceId={workspaceId} actorId={authUserId}>
       {children}
     </SpaceDataProvider>
   );

@@ -1,0 +1,21 @@
+# Minimal Supabase CLI config for local development.
+# See: https://supabase.com/docs/guides/cli
+
+project_id = "cander"
+
+[api]
+enabled = true
+port = 54321
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]

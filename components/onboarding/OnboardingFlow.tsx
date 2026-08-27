@@ -14,6 +14,11 @@ import {
   persistWorkspace,
   subscribeAuth,
 } from "@/lib/session";
+import { isSupabaseConfigured } from "@/lib/data-backend";
+import {
+  signInWithPassword,
+  signUpWithPassword,
+} from "@/lib/supabase/auth-actions";
 import { AppearanceControls } from "@/components/settings/AppearanceControls";
 import { OnboardingCourierPreview } from "@/components/onboarding/OnboardingCourierPreview";
 import { AppearanceScope } from "@/components/theme/AppearanceProvider";
@@ -176,34 +181,60 @@ function OnboardingShell() {
 
   const enterWithPlan = (chosen: BillingPlan = "max") => {
     setPreview(presetForPlan(chosen));
-    persistSignedIn();
+    if (!isSupabaseConfigured()) {
+      persistSignedIn();
+    }
   };
 
-  const applySetup = () => {
-    for (const id of selectedConnectors) {
-      installConnector(id);
-    }
-    const created = createWorkspace({
-      name: workspaceName.trim() || (workspaceKind === "personal" ? "Personal" : "Acme"),
-      kind: workspaceKind,
-    });
-    if (created) {
-      persistWorkspace(created.id);
-      setWorkspace(created.id);
-    }
-    if (plan === "ultra") {
-      addUltraLicense({
-        kind: ultraSeatKind,
-        scope: workspaceKind === "business" ? "org" : "personal",
-        userId: ultraSeatKind === "user" ? "self" : null,
-        label:
-          ultraSeatKind === "machine" ? "Production machine 1" : undefined,
+  const applySetup = async () => {
+    try {
+      if (isSupabaseConfigured()) {
+        if (password.length < 8) {
+          setError("Password must be at least 8 characters.");
+          setStep("create");
+          return;
+        }
+        await signUpWithPassword({ email, password, name });
+      }
+
+      for (const id of selectedConnectors) {
+        installConnector(id);
+      }
+      const created = createWorkspace({
+        name: workspaceName.trim() || (workspaceKind === "personal" ? "Personal" : "Acme"),
+        kind: workspaceKind,
       });
+      if (created) {
+        persistWorkspace(created.id);
+        setWorkspace(created.id);
+      }
+      if (plan === "ultra") {
+        addUltraLicense({
+          kind: ultraSeatKind,
+          scope: workspaceKind === "business" ? "org" : "personal",
+          userId: ultraSeatKind === "user" ? "self" : null,
+          label:
+            ultraSeatKind === "machine" ? "Production machine 1" : undefined,
+        });
+      }
+      enterWithPlan(plan);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create account.");
     }
-    enterWithPlan(plan);
   };
 
-  const signIn = () => {
+  const signIn = async () => {
+    if (isSupabaseConfigured()) {
+      setError("");
+      try {
+        await signInWithPassword({ email, password });
+        setPreview(presetForPlan("free"));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Sign in failed.");
+      }
+      return;
+    }
+
     if (email.trim().toLowerCase() !== demoEmail) {
       setError(`Use ${demoEmail} for this prototype.`);
       return;
@@ -224,6 +255,10 @@ function OnboardingShell() {
       }
       if (!email.trim().includes("@")) {
         setError("Enter a valid email.");
+        return;
+      }
+      if (isSupabaseConfigured() && password.length < 8) {
+        setError("Password must be at least 8 characters.");
         return;
       }
       setError("");
@@ -325,6 +360,7 @@ function OnboardingShell() {
 
             {step === "welcome" ? (
               <WelcomeStep
+                supabase={isSupabaseConfigured()}
                 onSignIn={() => {
                   setError("");
                   setStep("sign-in");
@@ -339,6 +375,7 @@ function OnboardingShell() {
 
             {step === "sign-in" ? (
               <SignInStep
+                supabase={isSupabaseConfigured()}
                 email={email}
                 password={password}
                 error={error}
@@ -528,9 +565,11 @@ function AppearanceStep({ onSubmit }: { onSubmit: () => void }) {
 }
 
 function WelcomeStep({
+  supabase = false,
   onSignIn,
   onCreate,
 }: {
+  supabase?: boolean;
   onSignIn: () => void;
   onCreate: () => void;
 }) {
@@ -540,8 +579,9 @@ function WelcomeStep({
         Welcome
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Sign in as Matthew, or create an account to walk through setup. Either
-        path continues in Matt&apos;s Max Owner workspace.
+        {supabase
+          ? "Sign in to your account, or create one to get started."
+          : "Sign in as Matthew, or create an account to walk through setup. Either path continues in Matt's Max Owner workspace."}
       </p>
       <div className="mt-8 space-y-2.5">
         <button
@@ -564,6 +604,7 @@ function WelcomeStep({
 }
 
 function SignInStep({
+  supabase = false,
   email,
   password,
   error,
@@ -571,6 +612,7 @@ function SignInStep({
   onPassword,
   onSubmit,
 }: {
+  supabase?: boolean;
   email: string;
   password: string;
   error: string;
@@ -584,8 +626,9 @@ function SignInStep({
         Sign in
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Use Matthew&apos;s demo credentials. This prototype only opens the Max
-        Owner account.
+        {supabase
+          ? "Use the email and password for your Cander account."
+          : "Use Matthew's demo credentials. This prototype only opens the Max Owner account."}
       </p>
       <form
         className="mt-8 space-y-3"
@@ -619,10 +662,11 @@ function SignInStep({
           type="submit"
           className="inline-flex h-11 w-full items-center justify-center rounded-full bg-primary text-[14px] font-medium tracking-[-0.01em] text-primary-foreground hover:bg-foreground"
         >
-          Continue as Matthew
+          {supabase ? "Sign in" : "Continue as Matthew"}
         </button>
       </form>
 
+      {supabase ? null : (
       <div className="mt-6 rounded-[10px] border border-border bg-card p-3.5">
         <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
           Demo login
@@ -633,6 +677,7 @@ function SignInStep({
           {demoPassword}
         </p>
       </div>
+      )}
     </>
   );
 }

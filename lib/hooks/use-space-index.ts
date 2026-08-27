@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { connectorName } from "@/lib/api/connector-api";
 import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
@@ -10,10 +9,9 @@ import {
   filterIndexEntries,
   recencyRank,
   sortIndexEntries,
-  type IndexEntryKind,
   type SpaceIndexEntry,
 } from "@/lib/space-index";
-import type { SpaceId } from "@/lib/types";
+import type { SpaceId, Thread } from "@/lib/types";
 import { navLabel } from "@/lib/use-main-nav-items";
 
 function spaceLabel(space?: SpaceId) {
@@ -22,8 +20,7 @@ function spaceLabel(space?: SpaceId) {
 }
 
 export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }) {
-  const { api, ctx, entityRevision } = useSpaceData();
-  const { threads, workspaceId } = useApp();
+  const { api, ctx, entityRevision, chatRevision } = useSpaceData();
   const [projects, setProjects] = useState<Awaited<
     ReturnType<typeof api.entities.listAllProjects>
   >>([]);
@@ -33,6 +30,7 @@ export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }
   const [briefing, setBriefing] = useState<Awaited<
     ReturnType<typeof api.connectors.syncBriefing>
   >>([]);
+  const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,12 +42,14 @@ export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }
       api.entities.listAllProjects(ctx),
       api.entities.listSources(ctx),
       api.connectors.syncBriefing(ctx),
+      api.chat.listThreads(ctx),
     ])
-      .then(([nextProjects, nextSources, nextBriefing]) => {
+      .then(([nextProjects, nextSources, nextBriefing, nextThreads]) => {
         if (cancelled) return;
         setProjects(nextProjects);
         setSources(nextSources);
         setBriefing(nextBriefing);
+        setThreads(nextThreads);
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -62,13 +62,13 @@ export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }
     return () => {
       cancelled = true;
     };
-  }, [api.entities, api.connectors, ctx, entityRevision]);
+  }, [api.entities, api.connectors, api.chat, ctx, entityRevision, chatRevision]);
 
   const entries = useMemo(() => {
     const usedProjects = new Set<string>();
     const items: SpaceIndexEntry[] = [];
 
-    for (const thread of threads.filter((item) => item.workspaceId === workspaceId)) {
+    for (const thread of threads) {
       if (thread.projectId) usedProjects.add(thread.projectId);
       items.push({
         key: thread.id,
@@ -150,7 +150,7 @@ export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }
       sorted = filterIndexEntries(sorted, opts.query);
     }
     return sorted;
-  }, [threads, workspaceId, projects, sources, briefing, opts?.space, opts?.query]);
+  }, [threads, projects, sources, briefing, opts?.space, opts?.query]);
 
   return { entries, loading, error };
 }

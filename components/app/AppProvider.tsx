@@ -10,7 +10,13 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { accountPresets, projects, starterThreads } from "@/lib/data";
+import { accountPresets, projects } from "@/lib/data";
+import {
+  getChatStoreServerSnapshot,
+  getChatStoreSnapshot,
+  subscribeChatStore,
+  updateChatThreads,
+} from "@/lib/api/chat-store";
 import {
   deleteWorkspace as deleteCustomWorkspace,
   getWorkspaceCatalogServerSnapshot,
@@ -124,6 +130,13 @@ import {
 } from "@/lib/persistent-chat";
 import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
+import { isSupabaseConfigured } from "@/lib/data-backend";
+import {
+  getSupabaseUserServerSnapshot,
+  getSupabaseUserSnapshot,
+  subscribeSupabaseUser,
+} from "@/lib/supabase/auth-store";
+import { memberFromSupabaseUser } from "@/lib/supabase/member-from-user";
 
 type Snapshot = {
   view: CourierView;
@@ -338,6 +351,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     getActorSnapshot,
     getActorServerSnapshot,
   );
+  const supabaseUser = useSyncExternalStore(
+    subscribeSupabaseUser,
+    getSupabaseUserSnapshot,
+    getSupabaseUserServerSnapshot,
+  );
   const personalSpaceEnabled = useSyncExternalStore(
     subscribePersonalSpace,
     getPersonalSpaceSnapshot,
@@ -353,10 +371,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     getMembersSnapshot,
     getMembersServerSnapshot,
   );
-  const actor = useMemo(
-    () => orgMembers.find((item) => item.id === actorId) ?? orgMembers[0],
-    [orgMembers, actorId],
-  );
+  const actor = useMemo(() => {
+    if (isSupabaseConfigured() && supabaseUser) {
+      const matched = orgMembers.find((item) => item.id === supabaseUser.id);
+      if (matched) return matched;
+      return memberFromSupabaseUser(supabaseUser);
+    }
+    return orgMembers.find((item) => item.id === actorId) ?? orgMembers[0];
+  }, [orgMembers, actorId, supabaseUser]);
   const entitlements = useMemo(() => entitlementsFor(actor), [actor]);
   const billingPlan = entitlements.plan;
   const workspaceId = useSyncExternalStore(
@@ -381,7 +403,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const [view, setView] = useState<CourierView>("chat");
-  const [threads, setThreads] = useState<Thread[]>(starterThreads);
+  const chatStore = useSyncExternalStore(
+    subscribeChatStore,
+    getChatStoreSnapshot,
+    getChatStoreServerSnapshot,
+  );
+  const threads = chatStore.threads;
+  const setThreads = useCallback(
+    (updater: Thread[] | ((prev: Thread[]) => Thread[])) => {
+      updateChatThreads(updater);
+    },
+    [],
+  );
   const [threadId, setThreadId] = useState<string | null>(null);
   const [spaceId, setSpaceId] = useState<SpaceId | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);

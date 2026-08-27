@@ -19,6 +19,15 @@ import {
   type SidebarNavId,
   type SidebarNavOpts,
 } from "@/lib/spaces";
+import { isSupabaseConfigured } from "@/lib/data-backend";
+import {
+  getSupabaseAuthServerSnapshot,
+  getSupabaseAuthSnapshot,
+  getSupabaseUserIdServerSnapshot,
+  getSupabaseUserIdSnapshot,
+  subscribeSupabaseAuth,
+  subscribeSupabaseUserId,
+} from "@/lib/supabase/auth-store";
 
 type Listener = () => void;
 
@@ -116,13 +125,21 @@ export function persistTheme(next: Theme) {
 }
 
 const authListeners = new Set<Listener>();
-let signedIn = false;
+let localSignedIn = false;
 
 function emitAuth() {
   authListeners.forEach((listener) => listener());
 }
 
 export function subscribeAuth(listener: Listener) {
+  if (isSupabaseConfigured()) {
+    const unsub = subscribeSupabaseAuth(listener);
+    authListeners.add(listener);
+    return () => {
+      unsub();
+      authListeners.delete(listener);
+    };
+  }
   authListeners.add(listener);
   if (typeof window !== "undefined") {
     window.addEventListener("storage", listener);
@@ -136,24 +153,54 @@ export function subscribeAuth(listener: Listener) {
 }
 
 export function getAuthSnapshot() {
-  if (typeof window !== "undefined") {
-    signedIn = window.localStorage.getItem("courier-signed-in") === "1";
+  if (isSupabaseConfigured()) {
+    return getSupabaseAuthSnapshot();
   }
-  return signedIn;
+  if (typeof window !== "undefined") {
+    localSignedIn = window.localStorage.getItem("courier-signed-in") === "1";
+  }
+  return localSignedIn;
 }
 
 export function getAuthServerSnapshot() {
+  if (isSupabaseConfigured()) {
+    return getSupabaseAuthServerSnapshot();
+  }
   return false;
 }
 
+/** Authenticated profile id — Supabase user id or local demo actor id. */
+export function subscribeAuthUserId(listener: Listener) {
+  if (isSupabaseConfigured()) {
+    return subscribeSupabaseUserId(listener);
+  }
+  return subscribeActor(listener);
+}
+
+export function getAuthUserIdSnapshot() {
+  if (isSupabaseConfigured()) {
+    return getSupabaseUserIdSnapshot() ?? "local-user";
+  }
+  return getActorSnapshot();
+}
+
+export function getAuthUserIdServerSnapshot() {
+  if (isSupabaseConfigured()) {
+    return getSupabaseUserIdServerSnapshot() ?? "local-user";
+  }
+  return getActorServerSnapshot();
+}
+
 export function persistSignedIn() {
-  signedIn = true;
+  if (isSupabaseConfigured()) return;
+  localSignedIn = true;
   window.localStorage.setItem("courier-signed-in", "1");
   emitAuth();
 }
 
 export function persistSignedOut() {
-  signedIn = false;
+  if (isSupabaseConfigured()) return;
+  localSignedIn = false;
   window.localStorage.removeItem("courier-signed-in");
   emitAuth();
 }
