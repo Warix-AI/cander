@@ -33,6 +33,8 @@ type Listener = () => void;
 
 const SIDEBAR_STORAGE_VERSION = 12;
 
+export { SIDEBAR_STORAGE_VERSION };
+
 const workspaceListeners = new Set<Listener>();
 let workspaceId = "marketing";
 
@@ -383,6 +385,15 @@ export function persistPins(next: Pin[]) {
   emitPins();
 }
 
+/** Replace pins (Supabase hydrate). */
+export function replacePinsState(next: Pin[]) {
+  pins = next.length ? next.map(normalizePin) : emptyPins;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem("courier-pins", JSON.stringify(pins));
+  }
+  emitPins();
+}
+
 export function pinTierOf(kind: PinKind, id: string): PinTier | null {
   hydratePins();
   const match = pins.find((item) => item.kind === kind && item.id === id);
@@ -593,6 +604,22 @@ export function persistSidebar(next: SidebarLayout) {
       more: next.more,
     }),
   );
+  emitSidebar();
+}
+
+/** Replace sidebar layout (Supabase hydrate). */
+export function replaceSidebarState(next: SidebarLayout) {
+  sidebarLayout = next;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(
+      "courier-sidebar",
+      JSON.stringify({
+        v: SIDEBAR_STORAGE_VERSION,
+        main: next.main,
+        more: next.more,
+      }),
+    );
+  }
   emitSidebar();
 }
 

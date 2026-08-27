@@ -12,6 +12,7 @@ type Store = Record<string, Record<string, ConnectorAccount[]>>;
 
 let byWorkspace: Store = {};
 let hydrated = false;
+let revision = 0;
 
 function emit() {
   listeners.forEach((listener) => listener());
@@ -60,7 +61,23 @@ function hydrate() {
 
 function persist() {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(byWorkspace));
+  revision += 1;
   emit();
+}
+
+/** Replace workspace connections (Supabase hydrate). */
+export function replaceWorkspaceConnectionsState(next: Store) {
+  byWorkspace = next;
+  hydrated = true;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(byWorkspace));
+  }
+  revision += 1;
+  emit();
+}
+
+export function getWorkspaceConnectionsRevision() {
+  return revision;
 }
 
 export function subscribeWorkspaceConnections(listener: Listener) {

@@ -5,6 +5,7 @@ const installListeners = new Set<Listener>();
 const EMPTY_INSTALLED: string[] = [];
 let installedIds: string[] = EMPTY_INSTALLED;
 let hydrated = false;
+let revision = 0;
 
 function emit() {
   installListeners.forEach((listener) => listener());
@@ -53,6 +54,7 @@ export function installConnector(id: string) {
   if (installedIds.includes(id)) return;
   installedIds = [id, ...installedIds];
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(installedIds));
+  revision += 1;
   emit();
 }
 
@@ -63,7 +65,23 @@ export function uninstallConnector(id: string) {
     STORAGE_KEY,
     JSON.stringify(installedIds.length ? installedIds : []),
   );
+  revision += 1;
   emit();
+}
+
+/** Replace installed catalog state (Supabase hydrate). */
+export function replaceInstalledConnectorsState(next: string[]) {
+  installedIds = next.length ? [...next] : EMPTY_INSTALLED;
+  hydrated = true;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(installedIds));
+  }
+  revision += 1;
+  emit();
+}
+
+export function getInstalledConnectorsRevision() {
+  return revision;
 }
 
 export function mergeConnectorInstalled(

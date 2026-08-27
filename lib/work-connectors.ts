@@ -13,6 +13,7 @@ const defaults: Record<string, string[]> = {
 
 let byWorkspace: Record<string, string[]> = {};
 let hydrated = false;
+let revision = 0;
 
 function emit() {
   listeners.forEach((listener) => listener());
@@ -42,7 +43,23 @@ function hydrate() {
 
 function persist() {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(byWorkspace));
+  revision += 1;
   emit();
+}
+
+/** Replace work connector state (Supabase hydrate). */
+export function replaceWorkConnectorsState(next: Record<string, string[]>) {
+  byWorkspace = next;
+  hydrated = true;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(byWorkspace));
+  }
+  revision += 1;
+  emit();
+}
+
+export function getWorkConnectorsRevision() {
+  return revision;
 }
 
 export function subscribeWorkConnectors(listener: Listener) {

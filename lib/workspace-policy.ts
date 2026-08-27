@@ -153,6 +153,7 @@ const seedPolicies: Record<string, WorkspacePolicy> = {
 const listeners = new Set<Listener>();
 let policies: Record<string, WorkspacePolicy> = structuredClone(seedPolicies);
 let orgMembers: Member[] = structuredClone(seedMembers);
+let policyRevision = 0;
 
 function emit() {
   listeners.forEach((listener) => listener());
@@ -164,7 +165,37 @@ function persist() {
     JSON.stringify(policies),
   );
   window.localStorage.setItem("courier-org-members", JSON.stringify(orgMembers));
+  policyRevision += 1;
   emit();
+}
+
+/** Replace policy state (Supabase hydrate). Writes localStorage for offline reads. */
+export function replacePolicyStoreState(next: {
+  policies: Record<string, WorkspacePolicy>;
+  orgMembers: Member[];
+}) {
+  policies = next.policies;
+  orgMembers = next.orgMembers;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(
+      "courier-workspace-policies",
+      JSON.stringify(policies),
+    );
+    window.localStorage.setItem("courier-org-members", JSON.stringify(orgMembers));
+  }
+  policyRevision += 1;
+  emit();
+}
+
+export function getPolicyStoreRevision() {
+  return policyRevision;
+}
+
+export function subscribePolicyStore(listener: Listener) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 function asSpaceList(value: unknown, fallback: SpaceId[]): SpaceId[] {

@@ -13,6 +13,14 @@ import {
   startSupabaseEntitySync,
 } from "@/lib/api/entity-sync";
 import {
+  bootstrapSupabaseOrgPolicy,
+  startSupabaseOrgPolicySync,
+} from "@/lib/api/org-policy-sync";
+import {
+  bootstrapSupabaseConnectors,
+  startSupabaseConnectorSync,
+} from "@/lib/api/connector-sync";
+import {
   hydrateChatFromRemote,
   startChatRealtimePull,
   startChatRemoteSync,
@@ -80,6 +88,18 @@ export function SpaceDataProvider({
       }
     });
 
+    void bootstrapSupabaseOrgPolicy(ctx).catch((err) => {
+      if (!cancelled) {
+        console.warn("[cander] org policy bootstrap failed", err);
+      }
+    });
+
+    void bootstrapSupabaseConnectors(ctx).catch((err) => {
+      if (!cancelled) {
+        console.warn("[cander] connector bootstrap failed", err);
+      }
+    });
+
     void hydrateChatFromRemote(api.chat, ctx).catch((err) => {
       if (!cancelled) {
         console.warn("[cander] initial chat hydrate failed", err);
@@ -87,12 +107,16 @@ export function SpaceDataProvider({
     });
 
     const stopEntitySync = startSupabaseEntitySync(api.entities, ctx);
+    const stopOrgPolicySync = startSupabaseOrgPolicySync(ctx);
+    const stopConnectorSync = startSupabaseConnectorSync(ctx);
     const stopChatSync = startChatRemoteSync(ctx);
     const stopChatRealtime = startChatRealtimePull(api.chat, ctx);
 
     return () => {
       cancelled = true;
       stopEntitySync();
+      stopOrgPolicySync();
+      stopConnectorSync();
       stopChatSync();
       stopChatRealtime();
     };

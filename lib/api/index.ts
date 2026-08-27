@@ -4,6 +4,7 @@ import { createLocalChatApi } from "@/lib/api/chat-api.local";
 import { createSupabaseChatApi } from "@/lib/api/chat-api.supabase";
 import type { ChatApi } from "@/lib/api/chat-api";
 import { createLocalConnectorApi } from "@/lib/api/connector-api";
+import { createSupabaseConnectorApi } from "@/lib/api/connector-api.supabase";
 import type { ConnectorApi } from "@/lib/api/connector-api";
 import { createLocalBrowserApi } from "@/lib/api/browser-api";
 import type { BrowserApi } from "@/lib/api/browser-api";
@@ -32,10 +33,11 @@ export function createLocalApiBundle(): ApiBundle {
 
 export function createApiBundle(mode: DataBackend): ApiBundle {
   if (mode === "supabase") {
+    const entities = createSupabaseSpaceEntityApi();
     return {
-      entities: createSupabaseSpaceEntityApi(),
+      entities,
       chat: createSupabaseChatApi(),
-      connectors: createLocalConnectorApi(),
+      connectors: createSupabaseConnectorApi(entities),
       build: createLocalBuildRuntimeApi(),
       browser: createLocalBrowserApi(),
     };

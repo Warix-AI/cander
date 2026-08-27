@@ -91,7 +91,7 @@ Run migration `001_tenancy.sql` (file in `supabase/migrations/` — apply in Sup
 
 - [x] Add `createApiBundle(mode: "local" | "supabase")` in `lib/api/index.ts`.
 - [x] `SpaceDataProvider` reads `NEXT_PUBLIC_DATA_BACKEND`.
-- [x] Supabase mode uses Supabase chat + entity adapters (connectors/build/browser still local until Phase 3+).
+- [x] Supabase mode uses Supabase chat + entity + connector adapters (build/browser still local until Phase 5).
 
 **Exit criteria:** User can sign up/in; workspace list loads from Supabase; local mode still works via env flag.
 
@@ -213,25 +213,30 @@ Two options (pick **B** for cleaner long-term):
 
 Migration `004_org_policy.sql`:
 
+- [x] Migration SQL authored (`supabase/migrations/004_org_policy.sql`)
+- [ ] Migration applied to staging Supabase project
+
 | Table | Replaces |
 |-------|----------|
 | `workspace_policies` | `lib/workspace-policy.ts` localStorage |
 | `org_members` | `lib/data.ts` members + `courier-org-members` |
 | `knowledge_bases` | policy seed KBs |
 | `knowledge_files` | KB file metadata (+ Supabase Storage for blobs) |
-| `pins` | `courier-pins` in session |
+| `user_pins` | `courier-pins` in session |
 | `sidebar_layouts` | `courier-sidebar` in session |
 
 ### 3.2 Entitlements & RLS
 
-- [ ] Document mapping: `entitlementsFor()` in `lib/entitlements.ts` → RLS policies + Edge Function checks.
+- [x] Document mapping: `entitlementsFor()` → RLS policies (`docs/plans/entitlements-rls.md`).
 - [ ] Plan gates (Free/Pro/Ultra/Max) enforced on write paths, not UI alone.
-- [ ] `memberSpaces()` ACL → `workspace_members.spaces[]` in RLS.
+- [x] `memberSpaces()` ACL → `workspace_member_spaces` table + sync.
 
 ### 3.3 Settings UI
 
-- [ ] Organization, workspaces, plans, appearance (appearance can stay local).
-- [ ] Migrate reads/writes from `persistWorkspace`, `workspace-catalog`, policy stores.
+- [x] Bulk sync: `lib/api/org-policy-sync.ts` — import, hydrate, debounced push, realtime.
+- [x] `workspace-policy.ts` + `session.ts` replace/hydrate helpers.
+- [x] `SpaceDataProvider` bootstraps org policy in supabase mode.
+- [ ] Appearance stays local; full invite-by-email flow (Phase 4).
 
 **Exit criteria:** Invite member, change role, toggle space access — all persisted in Supabase.
 
@@ -246,25 +251,30 @@ Migration `004_org_policy.sql`:
 | Today | Target |
 |-------|--------|
 | `lib/api/connector-api.ts` | Single `ConnectorApi` |
-| `lib/work-connectors.ts` | ↓ |
+| `lib/work-connectors.ts` | ↓ synced via `connector-sync.ts` |
 | `lib/workspace-connections.ts` | ↓ |
+| `lib/connector-install.ts` | ↓ |
 
 Schema migration `005_connectors.sql`:
+
+- [x] Migration SQL authored (`supabase/migrations/005_connectors.sql`)
+- [ ] Migration applied to staging Supabase project
 
 | Table | Purpose |
 |-------|---------|
 | `connector_catalog` | Static marketplace (seed from `lib/data.ts` connectors) |
-| `connector_installations` | Installed in workspace |
-| `connector_accounts` | OAuth tokens (secrets in Vault / encrypted column) |
+| `connector_installations` | Profile catalog installs + workspace work stack |
+| `connector_accounts` | Connected accounts (`token_ref` for Vault later) |
 
 ### 4.2 Briefing sync
 
-- [ ] `ConnectorApi.syncBriefing()` → Edge Function / cron (Gmail, Handshake, etc.).
-- [ ] Writes `briefing_items` rows; UI unchanged via `useSpaceBriefingItems`.
+- [x] `ConnectorApi.syncBriefing()` → `briefing-sync` Edge Function (mock templates).
+- [x] Writes `briefing_items` rows; UI unchanged via `useSpaceBriefingItems`.
 
 ### 4.3 MCP / panel sessions
 
-- [ ] `openSession()` returns panel config from DB + live token refresh.
+- [x] `openSession()` reads `panel_type` from catalog + local account state.
+- [ ] Live OAuth token refresh (Phase 4+ / production infra).
 
 **Exit criteria:** Connect/disconnect persists; briefing items sync from one connector end-to-end.
 
