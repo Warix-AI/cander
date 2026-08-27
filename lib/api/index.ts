@@ -8,6 +8,7 @@ import type { ConnectorApi } from "@/lib/api/connector-api";
 import { createLocalBrowserApi } from "@/lib/api/browser-api";
 import type { BrowserApi } from "@/lib/api/browser-api";
 import { createLocalSpaceEntityApi } from "@/lib/api/space-entity-api.local";
+import { createSupabaseSpaceEntityApi } from "@/lib/api/space-entity-api.supabase";
 import type { SpaceEntityApi } from "@/lib/api/space-entity-api";
 import type { DataBackend } from "@/lib/data-backend";
 
@@ -29,22 +30,10 @@ export function createLocalApiBundle(): ApiBundle {
   };
 }
 
-let warnedSupabaseEntityFallback = false;
-
 export function createApiBundle(mode: DataBackend): ApiBundle {
   if (mode === "supabase") {
-    if (
-      typeof window !== "undefined" &&
-      process.env.NODE_ENV === "development" &&
-      !warnedSupabaseEntityFallback
-    ) {
-      warnedSupabaseEntityFallback = true;
-      console.warn(
-        "[cander] DATA_BACKEND=supabase — entity adapters still local until Phase 1 lands.",
-      );
-    }
     return {
-      entities: createLocalSpaceEntityApi(),
+      entities: createSupabaseSpaceEntityApi(),
       chat: createSupabaseChatApi(),
       connectors: createLocalConnectorApi(),
       build: createLocalBuildRuntimeApi(),

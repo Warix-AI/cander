@@ -9,11 +9,19 @@ import {
 } from "react";
 import { createApiBundle, type ApiBundle } from "@/lib/api";
 import {
+  bootstrapSupabaseEntities,
+  startSupabaseEntitySync,
+} from "@/lib/api/entity-sync";
+import {
   hydrateChatFromRemote,
   startChatRealtimePull,
   startChatRemoteSync,
 } from "@/lib/api/chat-sync";
-import { subscribeChatStore, getChatStoreSnapshot, getChatStoreServerSnapshot } from "@/lib/api/chat-store";
+import {
+  subscribeChatStore,
+  getChatStoreSnapshot,
+  getChatStoreServerSnapshot,
+} from "@/lib/api/chat-store";
 import {
   getSpaceEntityStoreServerSnapshot,
   getSpaceEntityStoreSnapshot,
@@ -25,9 +33,7 @@ import type { WorkspaceCtx } from "@/lib/space-entities";
 type SpaceDataContextValue = {
   api: ApiBundle;
   ctx: WorkspaceCtx;
-  /** Bump when local entity store mutates. */
   entityRevision: number;
-  /** Bump when chat store mutates. */
   chatRevision: number;
 };
 
@@ -67,21 +73,30 @@ export function SpaceDataProvider({
     if (backend !== "supabase") return;
 
     let cancelled = false;
+
+    void bootstrapSupabaseEntities(api.entities, ctx).catch((err) => {
+      if (!cancelled) {
+        console.warn("[cander] entity bootstrap failed", err);
+      }
+    });
+
     void hydrateChatFromRemote(api.chat, ctx).catch((err) => {
       if (!cancelled) {
         console.warn("[cander] initial chat hydrate failed", err);
       }
     });
 
-    const stopSync = startChatRemoteSync(ctx);
-    const stopRealtime = startChatRealtimePull(api.chat, ctx);
+    const stopEntitySync = startSupabaseEntitySync(api.entities, ctx);
+    const stopChatSync = startChatRemoteSync(ctx);
+    const stopChatRealtime = startChatRealtimePull(api.chat, ctx);
 
     return () => {
       cancelled = true;
-      stopSync();
-      stopRealtime();
+      stopEntitySync();
+      stopChatSync();
+      stopChatRealtime();
     };
-  }, [api.chat, backend, ctx]);
+  }, [api.chat, api.entities, backend, ctx]);
 
   const value = useMemo(
     () => ({ api, ctx, entityRevision, chatRevision }),

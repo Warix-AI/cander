@@ -30,11 +30,23 @@ import {
 
 const STORAGE_KEY = "courier-space-entities-v1";
 
+type EntityLink = {
+  id: string;
+  workspaceId: string;
+  fromType: EntityRef["type"];
+  fromId: string;
+  toType: EntityRef["type"];
+  toId: string;
+  createdAt: string;
+};
+
 type PersistedState = {
   projects: SpaceProject[];
   sources: SpaceSource[];
   briefingItems: BriefingItem[];
   deployments: Deployment[];
+  attachments: SpaceAttachment[];
+  entityLinks: EntityLink[];
   seeded: boolean;
   revision: number;
 };
@@ -47,6 +59,8 @@ let state: PersistedState = {
   sources: [],
   briefingItems: [],
   deployments: [],
+  attachments: [],
+  entityLinks: [],
   seeded: false,
   revision: 0,
 };
@@ -90,17 +104,40 @@ function seedProject(project: Project): SpaceProject {
 }
 
 function seedSources(): SpaceSource[] {
+  const researchWorkspace =
+    seedProjects.find((project) => project.space === "research")?.workspaceId ??
+    seedProjects[0]?.workspaceId ??
+    "marketing";
   return researchSources.map((source, index) => ({
     ...newEntityTimestamps(),
     id: `src-${index + 1}`,
     space: "research" as const,
-    workspaceId: "ws-personal",
+    workspaceId: researchWorkspace,
     title: source.title,
     kind: "web" as const,
     url: source.url.startsWith("http") ? source.url : `https://${source.url}`,
     folderId: null,
     citationMeta: source.tag ? { tag: source.tag } : undefined,
   }));
+}
+
+function seedAttachments(): SpaceAttachment[] {
+  const ids = new Set<string>();
+  for (const project of seedProjects) {
+    if (project.space === "build" || project.space === "work") {
+      ids.add(project.id);
+    }
+  }
+  return [...ids].map((targetId) => {
+    const project = seedProjects.find((item) => item.id === targetId);
+    return {
+      ...newEntityTimestamps(),
+      id: `attach-${targetId}`,
+      workspaceId: project?.workspaceId ?? "marketing",
+      kind: "buildApp" as const,
+      targetId,
+    };
+  });
 }
 
 function seedBriefing(): BriefingItem[] {
@@ -125,6 +162,8 @@ function ensureSeed() {
     sources: seedSources(),
     briefingItems: seedBriefing(),
     deployments: [],
+    attachments: seedAttachments(),
+    entityLinks: [],
     seeded: true,
     revision: 0,
   };
@@ -135,7 +174,11 @@ function hydrate() {
   hydrated = true;
   const stored = parse(window.localStorage.getItem(STORAGE_KEY));
   if (stored?.seeded) {
-    state = stored;
+    state = {
+      ...stored,
+      attachments: stored.attachments ?? [],
+      entityLinks: stored.entityLinks ?? [],
+    };
     return;
   }
   ensureSeed();
@@ -175,9 +218,43 @@ export function getSpaceEntityStoreServerSnapshot(): PersistedState {
     sources: [],
     briefingItems: [],
     deployments: [],
+    attachments: [],
+    entityLinks: [],
     seeded: false,
     revision: 0,
   };
+}
+
+/** Replace store contents (Supabase hydrate). Does not write localStorage. */
+export function replaceEntityStoreState(next: {
+  projects: SpaceProject[];
+  sources: SpaceSource[];
+  briefingItems: BriefingItem[];
+  deployments: Deployment[];
+  attachments?: SpaceAttachment[];
+  entityLinks?: EntityLink[];
+  seeded?: boolean;
+}) {
+  state = {
+    projects: next.projects,
+    sources: next.sources,
+    briefingItems: next.briefingItems,
+    deployments: next.deployments,
+    attachments: next.attachments ?? state.attachments,
+    entityLinks: next.entityLinks ?? state.entityLinks,
+    seeded: next.seeded ?? true,
+    revision: state.revision + 1,
+  };
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+  emit();
+}
+
+/** Bump revision without mutation — Supabase realtime / remote writes. */
+export function notifyEntityStoreChange() {
+  state = { ...state, revision: state.revision + 1 };
+  emit();
 }
 
 function filterProjects(
@@ -375,6 +452,11 @@ export const localSpaceEntityStore = {
 
   listAttachments(ctx: WorkspaceCtx): SpaceAttachment[] {
     hydrate();
+    const persisted = state.attachments.filter(
+      (item) => item.workspaceId === ctx.workspaceId,
+    );
+    if (persisted.length) return persisted;
+
     const ids = workAppIds(ctx.workspaceId);
     const now = new Date().toISOString();
     return ids.map((targetId) => ({
@@ -389,9 +471,18 @@ export const localSpaceEntityStore = {
   },
 
   attachToWork(ctx: WorkspaceCtx, ref: EntityRef) {
+    hydrate();
     if (ref.type === "project") {
       attachWorkApp(ctx.workspaceId, ref.id);
     }
+    const existing = state.attachments.find(
+      (item) =>
+        item.workspaceId === ctx.workspaceId &&
+        item.targetId === ref.id &&
+        item.kind === (ref.type === "project" ? "buildApp" : "connector"),
+    );
+    if (existing) return existing;
+
     const attachment: SpaceAttachment = {
       ...newEntityTimestamps(),
       id: newId(),
@@ -400,16 +491,45 @@ export const localSpaceEntityStore = {
       targetId: ref.id,
       label: ref.label,
     };
+    state = { ...state, attachments: [attachment, ...state.attachments] };
+    persist();
     return attachment;
   },
 
   detachFromWork(ctx: WorkspaceCtx, attachmentId: string) {
-    const targetId = attachmentId.replace(/^attach-/, "");
+    hydrate();
+    const attachment = state.attachments.find((item) => item.id === attachmentId);
+    const targetId = attachment?.targetId ?? attachmentId.replace(/^attach-/, "");
     detachWorkApp(ctx.workspaceId, targetId);
+    state = {
+      ...state,
+      attachments: state.attachments.filter((item) => item.id !== attachmentId),
+    };
+    persist();
   },
 
-  linkReference(_ctx: WorkspaceCtx, _ref: EntityRef, _target: EntityRef) {
-    // Cross-entity links are persisted when backend arrives; no-op locally.
+  linkReference(ctx: WorkspaceCtx, ref: EntityRef, target: EntityRef) {
+    hydrate();
+    const exists = state.entityLinks.some(
+      (item) =>
+        item.workspaceId === ctx.workspaceId &&
+        item.fromType === ref.type &&
+        item.fromId === ref.id &&
+        item.toType === target.type &&
+        item.toId === target.id,
+    );
+    if (exists) return;
+    const link: EntityLink = {
+      id: newId(),
+      workspaceId: ctx.workspaceId,
+      fromType: ref.type,
+      fromId: ref.id,
+      toType: target.type,
+      toId: target.id,
+      createdAt: new Date().toISOString(),
+    };
+    state = { ...state, entityLinks: [link, ...state.entityLinks] };
+    persist();
   },
 
   listDeployments(ctx: WorkspaceCtx, projectId: string) {

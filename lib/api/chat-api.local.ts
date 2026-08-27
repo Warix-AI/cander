@@ -14,7 +14,7 @@ import type {
   ThreadFilter,
   WorkspaceCtx,
 } from "@/lib/space-entities";
-import type { Message, Thread } from "@/lib/types";
+import type { Message, SpaceId, Thread } from "@/lib/types";
 
 function nowTime() {
   return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -39,7 +39,7 @@ function createThreadRecord(
 function composeAssistantReply(
   ctx: WorkspaceCtx,
   content: string,
-  spaceId?: string | null,
+  spaceId?: SpaceId | null,
 ): Message {
   const kind = classifyTurn(content);
   const intent = inferIntent(content, ctx.workspaceId, spaceId ?? undefined);

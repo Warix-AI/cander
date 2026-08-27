@@ -87,11 +87,11 @@ Run migration `001_tenancy.sql` (file in `supabase/migrations/` — apply in Sup
 - [x] `actorId` becomes `profile.id` from session.
 - [x] `SpaceDataBridge` passes real `profileId` into `SpaceDataProvider`.
 
-### 0.4 Adapter factory (no Supabase impl yet)
+### 0.4 Adapter factory
 
 - [x] Add `createApiBundle(mode: "local" | "supabase")` in `lib/api/index.ts`.
 - [x] `SpaceDataProvider` reads `NEXT_PUBLIC_DATA_BACKEND`.
-- [x] Supabase mode falls back to local adapters until Phase 1–2 land (with console warn).
+- [x] Supabase mode uses Supabase chat + entity adapters (connectors/build/browser still local until Phase 3+).
 
 **Exit criteria:** User can sign up/in; workspace list loads from Supabase; local mode still works via env flag.
 
@@ -104,6 +104,9 @@ Run migration `001_tenancy.sql` (file in `supabase/migrations/` — apply in Sup
 ### 1.1 Schema
 
 Migration `002_space_entities.sql`:
+
+- [x] Migration SQL authored (`supabase/migrations/002_space_entities.sql`)
+- [ ] Migration applied to staging Supabase project
 
 | Table | Maps to |
 |-------|---------|
@@ -121,37 +124,32 @@ Optional: space column checked against `workspace_members.spaces[]` (mirror `mem
 
 ### 1.2 Supabase adapter
 
-- [ ] Implement `lib/api/space-entity-api.supabase.ts` — full `SpaceEntityApi` from `lib/api/space-entity-api.ts`.
-- [ ] Wire into `createApiBundle("supabase")`.
-- [ ] Use optimistic concurrency on `version` column for updates.
+- [x] Implement `lib/api/space-entity-api.supabase.ts` — full `SpaceEntityApi`.
+- [x] Wire into `createApiBundle("supabase")`.
+- [x] Use optimistic concurrency on `version` column for updates.
 
 ### 1.3 Fix local bugs before parity
 
 | Bug | File | Fix |
 |-----|------|-----|
-| Sources seeded with wrong `workspaceId` | `lib/api/space-entity-store.ts` `seedSources()` | Use actual workspace IDs |
-| Attachments derived from `work-apps` | `listAttachments()` | Persist in `work_attachments` (local + Supabase) |
-| `linkReference` no-op | `space-entity-store.ts` | Implement locally + in Supabase |
+| Sources seeded with wrong `workspaceId` | `lib/api/space-entity-store.ts` `seedSources()` | [x] Use actual workspace IDs |
+| Attachments derived from `work-apps` | `listAttachments()` | [x] Persist in `work_attachments` (local store) |
+| `linkReference` no-op | `space-entity-store.ts` | [x] Implement locally + in Supabase |
 
 ### 1.4 Unify project sources (blocker for clean migration)
 
-Today projects exist in **two places**:
-
-- `lib/data.ts` → `projects` (used by `AppProvider`, `intent.ts`)
-- `space-entity-store` (used by dashboards/hooks)
-
-- [ ] `AppProvider.openProject` / `project` resolution → `useSpaceProject(id)` only.
-- [ ] Remove direct `projects.find(...)` from `AppProvider` and `lib/intent.ts` where possible.
-- [ ] `lib/data.ts` `projects` → seed script only, not runtime import in UI.
+- [x] `AppProvider` `project` resolution reads entity store via `project-resolver`.
+- [x] `lib/intent.ts` uses workspace-scoped projects from entity store.
+- [ ] Remaining UI: `ProjectsBrowser`, studio/personal dashboards still import `lib/data` (non-blocking).
 
 ### 1.5 Data import
 
-- [ ] On first authenticated load: read `localStorage` key `courier-space-entities-v1` → upsert to Supabase (idempotent by entity `id`).
-- [ ] Mark import complete in `profiles` metadata or local flag to avoid re-import.
+- [x] On first Supabase session: `courier-space-entities-v1` → upsert via `entity-sync.ts`.
+- [x] Mark import complete with local flag `courier-entities-imported-v1`.
 
 ### 1.6 Realtime (optional in Phase 1)
 
-- [ ] Supabase Realtime subscription on `projects`, `sources` → bump `entityRevision` in provider (replace manual revision for remote mode).
+- [x] Supabase Realtime on `projects`, `sources`, etc. → hydrate store + bump `entityRevision`.
 
 **Exit criteria:** Work/Build/Explore dashboards load from Supabase; create/update/delete persists; local mode unchanged.
 
@@ -189,7 +187,7 @@ Two options (pick **B** for cleaner long-term):
 **B — Store ( cleaner )**  
 - [x] New `chat-store` in `lib/api/chat-store.ts` (localStorage + subscribe).
 - [x] `AppProvider` reads/writes chat store instead of `useState(starterThreads)`.
-- [ ] `AppProvider` calls `api.chat.*` for all thread/message ops (sendMessage still local for now).
+- [ ] `AppProvider.sendMessage` → direct `api.chat.sendMessage` (build-loop stays client-side for now).
 
 ### 2.3 sendMessage → Edge Function
 

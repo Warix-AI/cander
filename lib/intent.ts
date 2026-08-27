@@ -1,4 +1,8 @@
-import { connectors, projects, scheduledJobs } from "./data";
+import { connectors, scheduledJobs } from "./data";
+import {
+  defaultProjectForSpace,
+  projectsForWorkspace,
+} from "./project-resolver";
 import { isChatSpace } from "./spaces";
 import type { BuildTool, SpaceId } from "./types";
 
@@ -61,7 +65,8 @@ export function inferIntent(
   currentSpace?: SpaceId | null,
 ): Intent {
   const text = raw.toLowerCase();
-  const mentioned = projects.find((project) =>
+  const workspaceProjects = projectsForWorkspace(workspaceId);
+  const mentioned = workspaceProjects.find((project) =>
     text.includes(project.name.toLowerCase()),
   );
   const connecting = includesAny(text, [
@@ -163,9 +168,7 @@ export function inferIntent(
     const project =
       mentioned?.space === "work"
         ? mentioned
-        : projects.find(
-            (item) => item.space === "work" && item.workspaceId === workspaceId,
-          );
+        : defaultProjectForSpace(workspaceId, "work");
     return finish({
       space: "work",
       projectId: project?.id ?? mentioned?.id,
@@ -181,8 +184,8 @@ export function inferIntent(
     const project =
       mentioned?.space === "work"
         ? mentioned
-        : projects.find((item) => item.id === "launch-sync") ??
-          projects.find(
+        : workspaceProjects.find((item) => item.id === "launch-sync") ??
+          workspaceProjects.find(
             (item) => item.space === "work" && item.workspaceId === workspaceId,
           );
     return finish({
@@ -207,7 +210,7 @@ export function inferIntent(
     const project =
       mentioned?.space === "personal"
         ? mentioned
-        : projects.find(
+        : workspaceProjects.find(
             (item) =>
               item.space === "personal" && item.workspaceId === workspaceId,
           );
@@ -267,7 +270,7 @@ export function inferIntent(
     const project =
       mentioned?.space === "finances"
         ? mentioned
-        : projects.find(
+        : workspaceProjects.find(
             (item) => item.space === "finances" && item.workspaceId === workspaceId,
           );
     return finish({
@@ -289,7 +292,7 @@ export function inferIntent(
     const project =
       mentioned?.space === "health"
         ? mentioned
-        : projects.find(
+        : workspaceProjects.find(
             (item) => item.space === "health" && item.workspaceId === workspaceId,
           );
     return finish({
@@ -309,7 +312,7 @@ export function inferIntent(
     const project =
       mentioned?.id === "annual-goals"
         ? mentioned
-        : projects.find(
+        : workspaceProjects.find(
             (item) =>
               item.id === "annual-goals" && item.workspaceId === workspaceId,
           );
@@ -332,7 +335,7 @@ export function inferIntent(
     const project =
       mentioned?.id === "car-service"
         ? mentioned
-        : projects.find(
+        : workspaceProjects.find(
             (item) =>
               item.id === "car-service" && item.workspaceId === workspaceId,
           );
@@ -364,10 +367,10 @@ export function inferIntent(
   ) {
     const project =
       mentioned ??
-      projects.find(
+      workspaceProjects.find(
         (item) => item.space === "studio" && item.workspaceId === workspaceId,
       ) ??
-      projects.find((item) => item.space === "studio");
+      workspaceProjects.find((item) => item.space === "studio");
     const presentation = includesAny(text, ["presentation", "deck"]);
     return finish({
       space: "studio",
@@ -395,7 +398,7 @@ export function inferIntent(
     const project =
       mentioned?.space === "research"
         ? mentioned
-        : (projects.find((item) => item.id === "competitor-research") ??
+        : (workspaceProjects.find((item) => item.id === "competitor-research") ??
           mentioned);
     return finish({
       space: "research",
@@ -423,10 +426,10 @@ export function inferIntent(
   ) {
     const buildProject =
       mentioned ??
-      projects.find(
+      workspaceProjects.find(
         (item) => item.space === "build" && item.workspaceId === workspaceId,
       ) ??
-      projects.find((item) => item.space === "build");
+      workspaceProjects.find((item) => item.space === "build");
     return finish({
       space: "build",
       projectId: buildProject?.id,
@@ -448,10 +451,10 @@ export function inferIntent(
 
   const buildProject =
     mentioned ??
-    projects.find(
+    workspaceProjects.find(
       (item) => item.space === "build" && item.workspaceId === workspaceId,
     ) ??
-    projects.find((item) => item.space === "build");
+    workspaceProjects.find((item) => item.space === "build");
 
   return {
     space: "build",

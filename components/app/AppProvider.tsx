@@ -10,13 +10,22 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { accountPresets, projects } from "@/lib/data";
+import { accountPresets, projects as seedProjects } from "@/lib/data";
 import {
   getChatStoreServerSnapshot,
   getChatStoreSnapshot,
   subscribeChatStore,
   updateChatThreads,
 } from "@/lib/api/chat-store";
+import {
+  findProjectInWorkspace,
+} from "@/lib/project-resolver";
+import {
+  getSpaceEntityStoreServerSnapshot,
+  getSpaceEntityStoreSnapshot,
+  localSpaceEntityStore,
+  subscribeSpaceEntityStore,
+} from "@/lib/api/space-entity-store";
 import {
   deleteWorkspace as deleteCustomWorkspace,
   getWorkspaceCatalogServerSnapshot,
@@ -27,7 +36,6 @@ import {
 } from "@/lib/workspace-catalog";
 import { workspaceKindOf } from "@/lib/workspace-kind";
 import { inferIntent, nextId } from "@/lib/intent";
-import { localSpaceEntityStore } from "@/lib/api/space-entity-store";
 import type { EntityRef } from "@/lib/space-entities";
 import { latestThreadForProject } from "@/lib/selectors";
 import {
@@ -401,6 +409,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     getSidebarSnapshot,
     getSidebarServerSnapshot,
   );
+  const entityRevision = useSyncExternalStore(
+    subscribeSpaceEntityStore,
+    () => getSpaceEntityStoreSnapshot().revision,
+    () => getSpaceEntityStoreServerSnapshot().revision,
+  );
 
   const [view, setView] = useState<CourierView>("chat");
   const chatStore = useSyncExternalStore(
@@ -535,7 +548,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [hist, applySnapshot]);
 
   const workspace = workspaceById(workspaceId, workspaceCatalog);
-  const project = projects.find((item) => item.id === projectId);
+  const project = useMemo(() => {
+    if (!projectId) return undefined;
+    return (
+      findProjectInWorkspace(workspaceId, projectId) ??
+      seedProjects.find((item) => item.id === projectId)
+    );
+  }, [projectId, workspaceId, entityRevision]);
   const thread = threads.find((item) => item.id === threadId) ?? null;
   const setHostingMode = useCallback((id: HostingMode) => {
     if (!entitlements.hostingAllowed(id)) return;
@@ -1199,7 +1218,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               : null) ??
         (intent.resolved ? intent.space : null);
       const matched = intent.projectId
-        ? projects.find((item) => item.id === intent.projectId)
+        ? findProjectInWorkspace(workspaceId, intent.projectId)
         : undefined;
       if (matched && matched.workspaceId !== workspaceId) {
         persistWorkspace(matched.workspaceId);
@@ -1854,7 +1873,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const openProject = useCallback((id: string) => {
     const ctx = { workspaceId, actorId: actor.id };
     const fromStore = localSpaceEntityStore.getProject(ctx, id);
-    const match = fromStore ?? projects.find((item) => item.id === id);
+    const match =
+      fromStore ??
+      findProjectInWorkspace(workspaceId, id) ??
+      seedProjects.find((item) => item.id === id);
     if (!match) return;
     const space = match.space;
     const itemWorkspaceId = match.workspaceId;
@@ -1958,9 +1980,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (id: string) => {
       const ctx = { workspaceId, actorId: actor.id };
       const fromStore = localSpaceEntityStore.getProject(ctx, id);
-      const match = fromStore ?? projects.find((item) => item.id === id);
-      if (!match) return;
-      const legacy = projects.find((item) => item.id === id);
+      const legacy =
+        findProjectInWorkspace(workspaceId, id) ??
+        seedProjects.find((item) => item.id === id);
+      if (!fromStore && !legacy) return;
       const linked = legacy
         ? latestThreadForProject(threads, legacy)
         : threads.find((item) => item.projectId === id);
