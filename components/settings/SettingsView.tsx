@@ -31,11 +31,14 @@ import {
   SettingsStatGrid,
   SettingsSwitch,
   settingsInputClass,
-  settingsSelectClass,
 } from "@/components/settings/SettingsChrome";
 import { WorkspacesSettings } from "@/components/settings/WorkspaceSettings";
 import { MemberPlanToggle } from "@/components/settings/MemberPlanToggle";
-import { OrgTeammateInvitePanel } from "@/components/settings/OrgTeammateInvitePanel";
+import { OrgInviteModal } from "@/components/settings/OrgInviteModal";
+import {
+  OrgMemberAccessMobile,
+  OrgMemberAccessPanel,
+} from "@/components/settings/OrgMemberAccessPanel";
 import {
   memberName,
   orgMembersOf,
@@ -54,7 +57,7 @@ import { webAppOrgSettingsUrl } from "@/lib/plans";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { isMobileShell, openExternalUrl } from "@/lib/mobile-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { Role, SettingsTab } from "@/lib/types";
+import type { SettingsTab } from "@/lib/types";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 import { workspaceKindOf } from "@/lib/workspace-kind";
@@ -70,14 +73,10 @@ import {
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
-  setMemberRole,
   setMemberOrgPlan,
-  toggleMemberWorkspace,
   removeOrgMember,
   upsertOrgMember,
 } from "@/lib/workspace-policy";
-
-const roles: Role[] = ["Owner", "Admin", "Member"];
 
 const settingsIcons: Record<SettingsTab, typeof Building2> = {
   organization: Building2,
@@ -290,6 +289,7 @@ function OrganizationSettings() {
     orgMembers,
     actor,
     entitlements,
+    workspacePolicies,
   } = useApp();
   const nativeShell = isMobileShell();
   const orgDisplayName = getOrgNameSnapshot() || actor.managedByOrgName || "Organization";
@@ -299,6 +299,8 @@ function OrganizationSettings() {
   const [planBusy, setPlanBusy] = useState<string | null>(null);
   const [removeBusy, setRemoveBusy] = useState<string | null>(null);
   const [inviteWarning, setInviteWarning] = useState<string | null>(null);
+  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [finishOrgName, setFinishOrgName] = useState("");
   const [finishBusy, setFinishBusy] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
@@ -380,42 +382,6 @@ function OrganizationSettings() {
     { label: "Max seats", value: `${maxSeats}` },
     { label: "People", value: `${roster.length}` },
   ];
-
-  const changeMemberRole = async (memberId: string, role: Role) => {
-    const previous = orgMembers.find((item) => item.id === memberId)?.role;
-    setMemberRole(memberId, role, actor.id);
-    setPlanError(null);
-
-    if (!isSupabaseConfigured() || !orgId) return;
-
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error("Sign in to update roles.");
-      }
-      const response = await fetch("/api/org/members/role", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ memberId, orgId, role }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        if (previous) setMemberRole(memberId, previous, actor.id);
-        throw new Error(data.error ?? "Could not update role.");
-      }
-    } catch (err) {
-      if (previous) setMemberRole(memberId, previous, actor.id);
-      setPlanError(
-        err instanceof Error ? err.message : "Could not update role.",
-      );
-    }
-  };
 
   const changeMemberPlan = async (
     memberId: string,
@@ -505,11 +471,40 @@ function OrganizationSettings() {
 
   return (
     <SettingsPage>
-      <SettingsHeader title="Organization" />
+      <SettingsHeader
+        title="Organization"
+        actions={
+          entitlements.canManageMembers && !nativeShell && !actor.orgSetupDeferred ? (
+            <button
+              type="button"
+              onClick={() => setInviteOpen(true)}
+              className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium tracking-[-0.01em] text-primary-foreground hover:bg-primary/90"
+            >
+              + Invite
+            </button>
+          ) : null
+        }
+      />
+
+      <OrgInviteModal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        orgId={orgId ?? ""}
+        workspaceIds={orgWorkspaces.map((item) => item.id)}
+        ownerEmail={actor.email}
+        onInvited={(message) => {
+          if (message) setInviteMessage(message);
+        }}
+      />
 
       {inviteWarning ? (
         <p className="mt-4 text-[12.5px] leading-relaxed text-destructive">
           {inviteWarning}
+        </p>
+      ) : null}
+      {inviteMessage ? (
+        <p className="mt-4 text-[12.5px] leading-relaxed text-muted-foreground">
+          {inviteMessage}
         </p>
       ) : null}
 
@@ -571,22 +566,10 @@ function OrganizationSettings() {
         </SettingsSection>
       ) : null}
 
-      {entitlements.canManageMembers && !nativeShell ? (
-        <SettingsSection
-          title="Invite teammates"
-          description="Send Pro or Max invites — mixed rosters are supported."
-        >
-          <OrgTeammateInvitePanel
-            orgId={orgId ?? ""}
-            workspaceIds={orgWorkspaces.map((item) => item.id)}
-            ownerEmail={actor.email}
-          />
-        </SettingsSection>
-      ) : null}
 
       <SettingsSection
         title="Users"
-        description="Invite Pro or Max seats — mixed rosters are supported. Change plans anytime; billing prorates on the owner’s subscription."
+        description="Invite Pro or Max seats — mixed rosters are supported. Change plans anytime; billing prorates on the owner's subscription."
       >
         {planError ? (
           <p className="mb-3 text-[12.5px] text-destructive">{planError}</p>
@@ -594,131 +577,79 @@ function OrganizationSettings() {
         <div className="space-y-3">
           {roster.map((member) => {
             const pending = member.seatStatus === "pending";
-            const roleOptions: Role[] = entitlements.isOwner
-              ? roles
-              : roles.filter((role) => role !== "Owner");
-            const canEditRole =
-              entitlements.canManageMembers &&
-              !nativeShell &&
-              (entitlements.isOwner || member.role !== "Owner") &&
-              !pending;
             const seatPlan: "pro" | "max" =
               member.plan === "max" ? "max" : "pro";
             const canEditPlan =
               entitlements.canManageMembers &&
               !nativeShell &&
               member.role !== "Owner";
+            const canEditAccess =
+              entitlements.canManageMembers && !nativeShell && !pending;
             const canRemove =
               entitlements.canManageMembers &&
               !nativeShell &&
               member.id !== actor.id &&
-              member.role !== "Owner" &&
-              !pending;
+              member.role !== "Owner";
             return (
               <SettingsGroup key={member.id}>
                 <SettingsRow
                   label={
-                    member.id === actor.id
-                      ? `${member.name} (You)`
-                      : member.name
-                  }
-                  description={`${member.email} · ${planLabel(member.plan)}${pending ? " · Pending invite" : ""}`}
-                >
-                  {pending ? (
-                    <span className="text-[12.5px] text-muted-foreground">
-                      Pending
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span>
+                        {member.id === actor.id
+                          ? `${member.name} (You)`
+                          : member.name}
+                      </span>
+                      {member.role === "Owner" ? (
+                        <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[11px] font-medium tracking-[-0.01em] text-muted-foreground">
+                          Owner
+                        </span>
+                      ) : null}
+                      <span
+                        className={cn(
+                          "inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium tracking-[-0.01em]",
+                          pending
+                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                            : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                        )}
+                      >
+                        {pending ? "Pending" : "Active"}
+                      </span>
                     </span>
-                  ) : canEditRole ? (
-                    <select
-                      value={member.role}
-                      onChange={(event) =>
-                        void changeMemberRole(
-                          member.id,
-                          event.target.value as Role,
-                        )
+                  }
+                  description={member.email}
+                >
+                  {canEditPlan ? (
+                    <MemberPlanToggle
+                      value={seatPlan}
+                      disabled={planBusy === member.id}
+                      label={`Plan for ${member.name}`}
+                      onChange={(plan) =>
+                        void changeMemberPlan(member.id, plan, seatPlan)
                       }
-                      className={settingsSelectClass}
-                    >
-                      {roleOptions.map((role) => (
-                        <option key={role} value={role}>
-                          {role}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   ) : (
-                    <span className="text-[12.5px] text-muted-foreground">
-                      {member.role}
+                    <span className="text-[12.5px] font-medium text-foreground">
+                      {planLabel(member.plan)}
                     </span>
                   )}
                 </SettingsRow>
-                {!pending ? (
-                  <div className="px-4 py-2.5">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-[12px] text-muted-foreground">
-                        Seat plan
-                        {member.seatStatus === "active" ? " · Active" : ""}
-                      </p>
-                      {canEditPlan ? (
-                        <MemberPlanToggle
-                          value={seatPlan}
-                          disabled={planBusy === member.id}
-                          label={`Plan for ${member.name}`}
-                          onChange={(plan) =>
-                            void changeMemberPlan(member.id, plan, seatPlan)
-                          }
-                        />
-                      ) : (
-                        <span className="text-[12.5px] font-medium text-foreground">
-                          {planLabel(member.plan)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ) : pending && canEditPlan ? (
-                  <div className="px-4 py-2.5">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-[12px] text-muted-foreground">
-                        Invited as
-                      </p>
-                      <MemberPlanToggle
-                        value={seatPlan}
-                        disabled={planBusy === member.id}
-                        label={`Pending plan for ${member.name}`}
-                        onChange={(plan) =>
-                          void changeMemberPlan(member.id, plan, seatPlan)
-                        }
-                      />
-                    </div>
-                  </div>
-                ) : null}
-                {!pending && !nativeShell ? (
-                  <div className="px-4 py-3">
-                    <p className="text-[12px] font-medium tracking-[-0.01em] text-muted-foreground">
-                      Workspaces
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {orgWorkspaces.map((workspace) => {
-                        const on = member.workspaceIds.includes(workspace.id);
-                        return (
-                          <button
-                            key={workspace.id}
-                            type="button"
-                            onClick={() =>
-                              toggleMemberWorkspace(member.id, workspace.id)
-                            }
-                            className={cn(
-                              "inline-flex h-7 items-center rounded-full px-2.5 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
-                              on
-                                ? "bg-primary text-primary-foreground"
-                                : "border border-foreground/15 text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            {workspace.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                {!pending && canEditAccess ? (
+                  nativeShell ? (
+                    <OrgMemberAccessMobile
+                      member={member}
+                      orgWorkspaces={orgWorkspaces}
+                      workspacePolicies={workspacePolicies}
+                      canEdit={canEditAccess}
+                    />
+                  ) : (
+                    <OrgMemberAccessPanel
+                      member={member}
+                      orgWorkspaces={orgWorkspaces}
+                      workspacePolicies={workspacePolicies}
+                      canEdit={canEditAccess}
+                    />
+                  )
                 ) : null}
                 {canRemove || (canEditPlan && pending) ? (
                   <div className="border-t border-border px-4 py-3">

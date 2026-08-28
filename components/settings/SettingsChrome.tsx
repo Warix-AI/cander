@@ -171,8 +171,8 @@ export function SettingsGroup({
         "overflow-hidden",
         mobile
           ? MOBILE_SETTINGS_SURFACE
-          : "border border-border bg-card rounded-[10px]",
-        mobile ? SHELL_G3_RADIUS : undefined,
+          : "border border-border bg-card",
+        SHELL_G3_RADIUS,
         className,
       )}
     >
@@ -205,7 +205,7 @@ export function SettingsRow({
   className,
   onClick,
 }: {
-  label: string;
+  label: ReactNode;
   description?: string;
   children?: ReactNode;
   className?: string;
@@ -214,7 +214,7 @@ export function SettingsRow({
   const body = (
     <>
       <div className="min-w-0 flex-1">
-        <p className="text-[13.5px] font-medium tracking-[-0.01em]">{label}</p>
+        <div className="text-[13.5px] font-medium tracking-[-0.01em]">{label}</div>
         {description ? (
           <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
             {description}
@@ -265,8 +265,8 @@ export function SettingsPanel({
       className={cn(
         mobile
           ? MOBILE_SETTINGS_SURFACE
-          : "border border-border bg-card rounded-[10px]",
-        mobile ? SHELL_G3_RADIUS : undefined,
+          : "border border-border bg-card",
+        SHELL_G3_RADIUS,
         padded && "p-4 sm:p-5",
         className,
       )}
@@ -288,8 +288,8 @@ export function SettingsStatGrid({
         "overflow-hidden",
         mobile
           ? MOBILE_SETTINGS_SURFACE
-          : "border border-border bg-card rounded-[10px]",
-        mobile ? SHELL_G3_RADIUS : undefined,
+          : "border border-border bg-card",
+        SHELL_G3_RADIUS,
         "[&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:top-0 [&>*+*]:before:right-0 [&>*+*]:before:left-4 [&>*+*]:before:h-px [&>*+*]:before:bg-border",
       )}
     >
@@ -344,11 +344,15 @@ export function SettingsField({
 }
 
 /** Shared input chrome for settings forms. */
-export const settingsInputClass =
-  "h-10 w-full rounded-[10px] border border-border bg-background px-3 text-[13.5px] outline-none focus:border-foreground/20";
+export const settingsInputClass = cn(
+  "h-10 w-full border border-border bg-background px-3 text-[13.5px] outline-none focus:border-foreground/20",
+  SHELL_G3_RADIUS,
+);
 
-export const settingsSelectClass =
-  "h-9 rounded-[10px] border border-border bg-background px-2.5 text-[13px] outline-none focus:border-foreground/20";
+export const settingsSelectClass = cn(
+  "h-9 border border-border bg-background px-2.5 text-[13px] outline-none focus:border-foreground/20",
+  SHELL_G3_RADIUS,
+);
 
 /** Muted helper copy below a settings group (mobile footnotes). */
 export function SettingsFootnote({

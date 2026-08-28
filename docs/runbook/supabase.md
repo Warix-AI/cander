@@ -51,6 +51,8 @@ Apply in sequence:
 | `013_profile_short_name.sql` | Preferred short name on profiles |
 | `014_workspace_delete.sql` | Owner can delete workspaces |
 | `015_onboarding_completed.sql` | Gate app until onboarding finish |
+| `016_user_appearance.sql` | Per-user appearance preferences |
+| `017_invite_onboarding.sql` | Invited users skip onboarding gate |
 
 ```bash
 supabase link --project-ref <ref>
@@ -132,6 +134,8 @@ Webhook endpoint: `POST /api/stripe/webhook`. Local: `stripe listen --forward-to
 
 Managed org members (`org_members.role != Owner`) cannot delete their account — sign out only.
 
+**Organization permissions:** Workspace assignment, per-member space ACL, and connector policy are managed under Settings → Organization → Manage access (not per-workspace Permissions).
+
 | Path | `Member.kind` | Organization tab |
 |------|---------------|-------------------|
 | Max personal | personal | Hidden |
@@ -171,7 +175,8 @@ Enable **Confirm email** under Authentication → Providers → Email. Without `
 - [ ] `profiles.plan` matches the plan chosen in onboarding
 - [ ] Work/Build dashboards load projects from Supabase
 - [ ] Chat threads persist across refresh
-- [ ] Settings: role/space toggles survive refresh
+- [ ] Settings: role/space toggles survive refresh (Organization → Manage access)
+- [ ] Appearance: theme persists across sign-out / second browser (migration `016`)
 - [ ] Connectors: install + work stack sync
 - [ ] Publish in Build creates deployment row + updates project URL
 - [ ] Browser URL persists per workspace

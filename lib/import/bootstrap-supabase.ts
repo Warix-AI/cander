@@ -3,6 +3,10 @@
 import type { ApiBundle } from "@/lib/api";
 import { bootstrapSupabaseEntities } from "@/lib/api/entity-sync";
 import { bootstrapSupabaseOrgPolicy } from "@/lib/api/org-policy-sync";
+import {
+  bootstrapSupabaseAppearance,
+  startAppearanceRemoteSync,
+} from "@/lib/api/appearance-sync";
 import { bootstrapSupabaseConnectors } from "@/lib/api/connector-sync";
 import { bootstrapSupabaseBrowser } from "@/lib/api/browser-sync";
 import { bootstrapSupabaseChat } from "@/lib/api/chat-sync";
@@ -16,6 +20,7 @@ export async function bootstrapSupabaseSession(
 ) {
   await bootstrapSupabaseEntities(api.entities, ctx);
   await bootstrapSupabaseOrgPolicy(ctx);
+  await bootstrapSupabaseAppearance(ctx);
   await bootstrapSupabaseConnectors(ctx);
   await bootstrapSupabaseBrowser(ctx);
   await bootstrapSupabaseChat(api.chat, ctx);
@@ -26,3 +31,4 @@ export async function bootstrapSupabaseSession(
 }
 
 export { scanLegacyStorage, allSupabaseImportsComplete } from "@/lib/legacy-storage";
+export { startAppearanceRemoteSync } from "@/lib/api/appearance-sync";

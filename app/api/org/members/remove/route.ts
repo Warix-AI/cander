@@ -6,6 +6,7 @@ import { isSupabaseConfigured } from "@/lib/data-backend";
 import { adjustSeatQuantity } from "@/lib/stripe/subscription";
 import { isStripeConfigured } from "@/lib/stripe/config";
 import type { BillingPlan } from "@/lib/types";
+import { assertOrgManager } from "@/lib/supabase/org-auth";
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -43,18 +44,19 @@ export async function POST(request: Request) {
   }
 
   const admin = createSupabaseAdminClient();
+  const authz = await assertOrgManager(admin, body.orgId, user.id);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+
   const { data: org } = await admin
     .from("organizations")
-    .select("stripe_subscription_id, billing_owner_id")
+    .select("stripe_subscription_id")
     .eq("id", body.orgId)
     .maybeSingle();
 
   if (!org) {
     return NextResponse.json({ error: "Organization not found." }, { status: 404 });
-  }
-
-  if (org.billing_owner_id !== user.id) {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
   const { data: member } = await admin
