@@ -40,9 +40,6 @@ export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
   }
-  if (!isStripeConfigured()) {
-    return NextResponse.json({ bypass: true });
-  }
 
   const authed = await authedProfile(request);
   if (!authed?.user || !authed.profile) {
@@ -62,6 +59,19 @@ export async function POST(request: Request) {
 
   if (body.plan !== "pro" && body.plan !== "max") {
     return NextResponse.json({ error: "Invalid plan." }, { status: 400 });
+  }
+
+  if (!isStripeConfigured()) {
+    // Local/demo unlock — never allow the browser client to write plan columns.
+    await createSupabaseAdminClient()
+      .from("profiles")
+      .update({
+        plan: body.plan,
+        subscription_status: "active",
+        ...(body.checkpoint ? { onboarding_checkpoint: body.checkpoint } : {}),
+      })
+      .eq("id", authed.user.id);
+    return NextResponse.json({ bypass: true });
   }
 
   const origin = new URL(request.url).origin;
@@ -111,6 +121,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ bypass: true, paid: true });
   }
 
+  const authed = await authedProfile(request);
+  if (!authed?.user) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const sessionId = searchParams.get("session_id");
   if (!sessionId) {
@@ -121,6 +136,10 @@ export async function GET(request: Request) {
     const synced = await syncProfileFromCheckoutSession(sessionId);
     if (!synced) {
       return NextResponse.json({ paid: false });
+    }
+
+    if (synced.profileId !== authed.user.id) {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
     const admin = createSupabaseAdminClient();

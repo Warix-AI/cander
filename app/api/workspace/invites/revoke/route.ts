@@ -60,13 +60,26 @@ export async function POST(request: Request) {
   const isWorkspaceManager =
     workspaceMember?.role === "Owner" || workspaceMember?.role === "Admin";
 
+  if (!isWorkspaceManager) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
   if (body.orgId) {
     const authz = await assertOrgManager(admin, body.orgId, user.id);
-    if (!authz.ok && !isWorkspaceManager) {
+    if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
-  } else if (!isWorkspaceManager) {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    const { data: workspace } = await admin
+      .from("workspaces")
+      .select("org_id")
+      .eq("id", body.workspaceId)
+      .maybeSingle();
+    if (!workspace || workspace.org_id !== body.orgId) {
+      return NextResponse.json(
+        { error: "Workspace is not in this organization." },
+        { status: 403 },
+      );
+    }
   }
 
   const { error } = await admin

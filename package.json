@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "check:migrations": "bash scripts/check-migrations.sh",
+    "test:security": "node --experimental-strip-types --test scripts/security-denial.test.ts",
     "seed:supabase": "node --experimental-strip-types scripts/seed.ts 2>/dev/null || npx --yes tsx scripts/seed.ts",
     "desktop": "npm --prefix desktop run dev",
     "desktop:prod": "npm --prefix desktop run start",

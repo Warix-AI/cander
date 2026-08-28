@@ -5,7 +5,6 @@ import {
   knowledgeBaseToRow,
   knowledgeFileToRow,
   memberRowToMember,
-  memberToRow,
   pinRowToPin,
   pinToRow,
   rebuildPoliciesFromRows,
@@ -195,11 +194,12 @@ export async function syncOrgPolicyToSupabase(ctx: WorkspaceCtx) {
   const workspaceIds = await listMemberWorkspaceIds(ctx.actorId);
 
   if (members.length) {
-    const memberRows = members.map(memberToRow);
-    const { error: memberError } = await supabase
-      .from("org_members")
-      .upsert(memberRows, { onConflict: "id" });
-    if (memberError) throw memberError;
+    // Roster mutations go through service-role APIs; client upserts were an
+    // escalation vector once org_members writes were locked down.
+    console.info(
+      "[cander] skipping client org_members upsert (%d local members)",
+      members.length,
+    );
   }
 
   for (const workspaceId of workspaceIds) {

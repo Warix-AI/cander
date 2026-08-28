@@ -386,23 +386,15 @@ async function applySignupPlanAndSpacesClient(opts: {
       .update({
         name: opts.name.trim(),
         short_name: shortName,
-        role: "Owner",
-        onboarding_completed_at: new Date().toISOString(),
-        ...(opts.plan === "free" ? { plan: "free" } : {}),
       })
       .eq("id", opts.userId)
   ).error;
 
-  if (profileError && /short_name|42703|column/i.test(profileError.message)) {
+  if (profileError && /short_name|42703|column|42501|permission/i.test(profileError.message)) {
     profileError = (
       await supabase
         .from("profiles")
-        .update({
-          name: opts.name.trim(),
-          role: "Owner",
-          onboarding_completed_at: new Date().toISOString(),
-          ...(opts.plan === "free" ? { plan: "free" } : {}),
-        })
+        .update({ name: opts.name.trim() })
         .eq("id", opts.userId)
     ).error;
   }
@@ -416,7 +408,7 @@ async function applySignupPlanAndSpacesClient(opts: {
       .limit(1);
     if (denied && (memberships?.length ?? 0) > 0) {
       console.warn(
-        "[cander] profiles update denied — entering with existing workspace. Apply migration 012_profiles_grants.sql",
+        "[cander] profiles update denied — entering with existing workspace.",
         profileError.message,
       );
       finalizeLocalMember(
@@ -429,19 +421,7 @@ async function applySignupPlanAndSpacesClient(opts: {
     throw profileError;
   }
 
-  // Billing columns land in migration 010 — best-effort until applied.
-  if (opts.plan === "free") {
-    const { error: statusError } = await supabase
-      .from("profiles")
-      .update({ subscription_status: "none" })
-      .eq("id", opts.userId);
-    if (statusError) {
-      console.warn(
-        "[cander] subscription_status update skipped — apply migration 010_billing.sql",
-        statusError.message,
-      );
-    }
-  }
+  // Billing / role / onboarding_completed_at are service-role only (/api/onboarding/finish).
 
   const { data: memberships, error: listError } = await supabase
     .from("workspace_members")

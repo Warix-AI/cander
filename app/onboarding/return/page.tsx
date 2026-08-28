@@ -26,8 +26,25 @@ export default function OnboardingReturnPage() {
 
     void (async () => {
       try {
+        const { createSupabaseBrowserClient } = await import(
+          "@/lib/supabase/client"
+        );
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          setState("error");
+          setMessage("Sign in to confirm payment.");
+          return;
+        }
         const response = await fetch(
           `/api/stripe/checkout?session_id=${encodeURIComponent(sessionId)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          },
         );
         const data = await response.json();
         if (data.bypass) {

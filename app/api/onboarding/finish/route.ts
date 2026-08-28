@@ -127,18 +127,17 @@ export async function POST(request: Request) {
       }
     }
 
-    const { data: memberships, error: listError } = await admin
+    // Only touch the personal bootstrap workspace — never rewrite shared
+    // memberships or promote invitees to Owner across every workspace.
+    const wsId = `ws-${user.id.replace(/-/g, "")}`;
+    const { data: personalMembership } = await admin
       .from("workspace_members")
       .select("workspace_id")
-      .eq("profile_id", user.id);
-    if (listError) {
-      return NextResponse.json({ error: listError.message }, { status: 500 });
-    }
+      .eq("profile_id", user.id)
+      .eq("workspace_id", wsId)
+      .maybeSingle();
 
-    let ids = (memberships ?? []).map((row) => String(row.workspace_id));
-    const wsId = `ws-${user.id.replace(/-/g, "")}`;
-
-    if (!ids.length) {
+    if (!personalMembership) {
       const { error: createWsError } = await admin.from("workspaces").upsert({
         id: wsId,
         name: workspaceName,
@@ -166,10 +165,7 @@ export async function POST(request: Request) {
           { status: 500 },
         );
       }
-      ids = [wsId];
-    }
-
-    for (const workspaceId of ids) {
+    } else {
       await admin
         .from("workspaces")
         .update({
@@ -178,21 +174,18 @@ export async function POST(request: Request) {
           kind,
           personal: kind === "personal",
         })
-        .eq("id", workspaceId);
+        .eq("id", wsId);
 
       await admin
         .from("workspace_members")
-        .update({
-          role: "Owner",
-          spaces: navSpaces,
-        })
-        .eq("workspace_id", workspaceId)
+        .update({ spaces: navSpaces })
+        .eq("workspace_id", wsId)
         .eq("profile_id", user.id);
     }
 
     return NextResponse.json({
       ok: true,
-      workspaceIds: ids,
+      workspaceIds: [wsId],
       plan,
     });
   } catch (err) {

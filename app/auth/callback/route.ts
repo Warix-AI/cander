@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
+import { safeAuthNextPath } from "@/lib/security";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
@@ -16,8 +17,7 @@ export async function GET(request: Request) {
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type");
-  const nextRaw = searchParams.get("next") ?? "/";
-  const next = nextRaw.startsWith("/") ? nextRaw : "/";
+  const next = safeAuthNextPath(searchParams.get("next"));
 
   if ((!code && !tokenHash) || !isSupabaseConfigured()) {
     return NextResponse.redirect(`${origin}/?auth=error`);
@@ -54,16 +54,8 @@ export async function GET(request: Request) {
   }
 
   if (exchangeError) {
-    // Server exchange can fail when PKCE verifier lives in another tab/device.
-    // Preserve params so the browser client can retry once cookies settle.
-    const fallback = new URL(`${origin}/`);
-    if (code) fallback.searchParams.set("code", code);
-    if (tokenHash) {
-      fallback.searchParams.set("token_hash", tokenHash);
-      if (type) fallback.searchParams.set("type", type);
-    }
-    if (!code && !tokenHash) fallback.searchParams.set("auth", "error");
-    return NextResponse.redirect(fallback.toString());
+    // Never echo auth secrets into the URL (Referer / history / analytics leak).
+    return NextResponse.redirect(`${origin}/?auth=error`);
   }
 
   let destination = next;

@@ -387,12 +387,14 @@ function ProjectBrowserBody({
   if (tab.kind === "project") {
     const match =
       projects.find((item) => item.id === tab.projectId) ?? null;
-    if (match?.publishedUrl) {
+    if (match?.publishedUrl && isHttpUrl(match.publishedUrl)) {
       return (
         <iframe
           key={`${tab.id}-${reloadKey}-${match.publishedUrl}`}
           title={tab.title}
           src={match.publishedUrl}
+          sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+          referrerPolicy="no-referrer"
           className="h-full w-full border-0 bg-white"
         />
       );
@@ -411,6 +413,8 @@ function ProjectBrowserBody({
         key={`${tab.id}-${reloadKey}-${tab.url}`}
         title={tab.title}
         src={tab.url}
+        sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+        referrerPolicy="no-referrer"
         className="h-full w-full border-0 bg-white"
       />
     );

@@ -5,6 +5,7 @@ import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { sendOrgInviteEmail } from "@/lib/email/send-org-invite";
 import type { OrgInviteDraft } from "@/lib/org-onboarding";
+import { filterOrgWorkspaceIds } from "@/lib/security";
 import { assertOrgManager } from "@/lib/supabase/org-auth";
 
 export async function POST(request: Request) {
@@ -68,6 +69,15 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .maybeSingle();
 
+  const { data: orgWorkspaces } = await admin
+    .from("workspaces")
+    .select("id")
+    .eq("org_id", body.orgId);
+  const workspaceIds = filterOrgWorkspaceIds(
+    body.workspaceIds,
+    (orgWorkspaces ?? []).map((row) => String(row.id)),
+  );
+
   const origin = new URL(request.url).origin;
   const results: { email: string; inviteUrl: string; sent: boolean }[] = [];
 
@@ -87,7 +97,7 @@ export async function POST(request: Request) {
       plan: invite.plan,
       seat_status: "pending",
       kind: "org",
-      workspace_ids: body.workspaceIds ?? [],
+      workspace_ids: workspaceIds,
     });
 
     const { data: row, error } = await admin
@@ -100,7 +110,7 @@ export async function POST(request: Request) {
         first_name: invite.firstName.trim(),
         last_name: invite.lastName.trim(),
         plan: invite.plan,
-        workspace_ids: body.workspaceIds ?? [],
+        workspace_ids: workspaceIds,
       })
       .select("token")
       .single();

@@ -484,20 +484,7 @@ function OnboardingShell({
         throw new Error(data.error ?? "Checkout failed.");
       }
       if (data.bypass) {
-        // Stripe not configured — unlock plan for testing without charging.
-        const paid = await supabase
-          .from("profiles")
-          .update({
-            plan: chosen,
-            subscription_status: "active",
-          })
-          .eq("id", session.user.id);
-        if (paid.error) {
-          await supabase
-            .from("profiles")
-            .update({ plan: chosen })
-            .eq("id", session.user.id);
-        }
+        // Stripe not configured — server already unlocked the plan via admin.
         setPlan(chosen);
         setInfo(
           `${chosen === "max" ? "Max" : "Pro"} unlocked for testing. Billing is not connected yet — nothing was charged.`,

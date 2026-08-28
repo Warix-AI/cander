@@ -1,3 +1,5 @@
+import { escapeHtml } from "@/lib/security";
+
 const RESEND_API = "https://api.resend.com/emails";
 
 export async function sendOrgInviteEmail(opts: {
@@ -10,10 +12,15 @@ export async function sendOrgInviteEmail(opts: {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL ?? "Cander <onboarding@cander.app>";
 
+  const orgName = escapeHtml(opts.orgName);
+  const inviter = opts.inviterName ? escapeHtml(opts.inviterName) : null;
+  const inviteUrl = escapeHtml(opts.inviteUrl);
+  const planLabel = opts.plan === "max" ? "Max" : "Pro";
+
   const subject = `Join ${opts.orgName} on Cander`;
   const html = `
-    <p>${opts.inviterName ? `${opts.inviterName} invited you` : "You've been invited"} to join <strong>${opts.orgName}</strong> on Cander with a ${opts.plan === "max" ? "Max" : "Pro"} seat.</p>
-    <p><a href="${opts.inviteUrl}">Accept invite and create your account</a></p>
+    <p>${inviter ? `${inviter} invited you` : "You've been invited"} to join <strong>${orgName}</strong> on Cander with a ${planLabel} seat.</p>
+    <p><a href="${inviteUrl}">Accept invite and create your account</a></p>
     <p>This link expires in 14 days.</p>
   `;
 
