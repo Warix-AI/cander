@@ -427,21 +427,11 @@ html.cander-narrow .landing-suggestions {
 }
 
 /*
- * Composer slides up with the keyboard, down when it hides.
- * @property lets padding-bottom interpolate when --keyboard-inset changes.
+ * Composer tracks the keyboard via --keyboard-inset (no CSS transition — must stay in sync).
  */
-@property --keyboard-inset {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-
 html.cander-mobile .composer-keyboard-pad,
 html.cander-narrow .composer-keyboard-pad {
   transform: translateY(calc(-1 * var(--keyboard-inset, 0px)));
-  transition:
-    transform 0.32s cubic-bezier(0.33, 1, 0.68, 1),
-    padding-bottom 0.32s cubic-bezier(0.33, 1, 0.68, 1);
   will-change: transform;
 }
 

@@ -46,8 +46,8 @@ export function isSidebarNavId(id: string): id is SidebarNavId {
   return isExtraNavId(id) || ALL_SPACE_IDS.includes(id as SpaceId);
 }
 
-/** Connectors nav hidden until real installs ship. */
-export const SHOW_CONNECTORS_NAV = false;
+/** Connectors nav visible for all plans — installs ship later. */
+export const SHOW_CONNECTORS_NAV = true;
 
 /** Default sidebar — Work, Build, Explore, Recents. */
 export const DEFAULT_SIDEBAR_MAIN: SidebarNavId[] = [

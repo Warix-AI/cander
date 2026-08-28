@@ -35,9 +35,8 @@ export function WorkDashboard() {
   const {
     workspaceId,
     newChat,
-    openJob,
-    openSpaceEntity,
     openProject,
+    openSpaceEntity,
     openConnector,
     spaceLayout,
     setSpaceLayout,
@@ -185,7 +184,7 @@ export function WorkDashboard() {
                 detail: "Scheduled",
                 badge: "Automation",
               }))}
-              onOpen={(id) => openJob(id)}
+              onOpen={(id) => openProject(id)}
               empty={workEmptyCopy("automations")}
             />
           </div>
