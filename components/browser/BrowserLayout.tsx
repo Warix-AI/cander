@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -27,6 +27,11 @@ import { ChatColumn } from "@/components/shell/ChatColumn";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { SplitHandle } from "@/components/shell/SplitHandle";
 import { Dropdown } from "@/components/ui/Controls";
+import {
+  getSidebarPeeking,
+  getSidebarPeekingServerSnapshot,
+  subscribeSidebarPeeking,
+} from "@/lib/sidebar-peek";
 import { cn } from "@/lib/utils";
 
 type BrowserTab = {
@@ -53,6 +58,11 @@ export function BrowserLayout() {
   const [tabs, setTabs] = useState(seedTabs);
   const [activeId, setActiveId] = useState(seedTabs[0].id);
   const [url, setUrl] = useState(seedTabs[0].url);
+  const peeking = useSyncExternalStore(
+    subscribeSidebarPeeking,
+    getSidebarPeeking,
+    getSidebarPeekingServerSnapshot,
+  );
 
   const active = tabs.find((tab) => tab.id === activeId) ?? tabs[0];
 
@@ -105,9 +115,11 @@ export function BrowserLayout() {
             }}
           >
             <header className="flex h-11 shrink-0 items-center gap-1 bg-background px-2">
-              <NavToggle
-                className={cn(sidebarOpen && "lg:hidden")}
-              />
+              {!peeking ? (
+                <NavToggle
+                  className={cn(sidebarOpen && "lg:hidden")}
+                />
+              ) : null}
               <button
                 type="button"
                 aria-label="Close chat"
@@ -125,7 +137,7 @@ export function BrowserLayout() {
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar transition-[flex] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
         <div className="flex h-10 min-w-0 shrink-0 items-center gap-1 bg-sidebar px-2">
-          {!browserChatOpen ? (
+          {!browserChatOpen && !peeking ? (
             <>
               <NavToggle
                 className={cn(sidebarOpen && "lg:hidden")}

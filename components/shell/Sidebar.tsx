@@ -25,6 +25,7 @@ import { workspacesFor } from "@/lib/entitlements";
 import { spaceIcons, spaceIconTint } from "@/lib/space-icons";
 import { type SidebarNavId, isExtraNavId } from "@/lib/spaces";
 import {
+  setSidebarPeeking,
   subscribeSidebarPeekHold,
   subscribeSidebarPeekRelease,
 } from "@/lib/sidebar-peek";
@@ -104,8 +105,15 @@ export function Sidebar() {
     return () => {
       if (peekCloseTimer.current) window.clearTimeout(peekCloseTimer.current);
       if (peekExitTimer.current) window.clearTimeout(peekExitTimer.current);
+      setSidebarPeeking(false);
     };
   }, []);
+
+  const peeking = peek && !sidebarOpen;
+
+  useEffect(() => {
+    setSidebarPeeking(peeking);
+  }, [peeking]);
 
   const clearPeekClose = useCallback(() => {
     if (peekCloseTimer.current) {
@@ -174,7 +182,6 @@ export function Sidebar() {
    */
   const macDesktop = desktop;
   const chromeOutside = desktop || floating;
-  const peeking = peek && !sidebarOpen;
   const workspaceCount = workspacesFor(actor, entitlements).length;
   const showRail =
     entitlements.hasWorkspaces &&
@@ -259,7 +266,7 @@ export function Sidebar() {
       {macDesktop ? (
         <WindowChrome
           clearTrafficLights
-          hideHistory={floating && peeking}
+          hideHistory={peeking}
           className={cn(
             "w-full",
             floating

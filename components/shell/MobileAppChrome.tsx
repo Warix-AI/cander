@@ -2,7 +2,6 @@
 
 import { useSyncExternalStore, type TouchEventHandler } from "react";
 import {
-  ChevronDown,
   ChevronLeft,
   Ellipsis,
   ExternalLink,
@@ -15,7 +14,6 @@ import {
   SquarePen,
   SquareStack,
   Upload,
-  X,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { previewAddress } from "@/components/panels/PreviewChrome";
@@ -76,7 +74,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
     setSettingsWorkspaceId,
     backToSettingsHub,
     closeSettings,
-    backToSpaceHome,
     popEntityNavigation,
     buildTool,
     setBuildTool,
@@ -107,9 +104,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const inConnector =
     spaceId === "connectors" && Boolean(connectorId);
   const entityOpen = Boolean(projectId) || inConnector;
-  const entityTitle = inConnector
-    ? connectorId ?? "Connector"
-    : project?.name ?? null;
   const showEntityBack =
     entityOpen && !inChromeSub && !onMenuMain && mobileSurface !== "menu";
   const showSpaceToggle =
@@ -138,12 +132,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
         : "";
 
   const spaceLabel = spaceId ? navLabel(spaceId as SpaceId) ?? "Space" : "Space";
-  const panelTabLabel = inConnector
-    ? "Connector"
-    : entityTitle ?? spaceLabel;
-  const backLabel = inConnector
-    ? "Connectors"
-    : spaceLabel;
+  const panelTabLabel = inConnector ? "Connector" : spaceLabel;
   const surface: MobileSurface =
     mobileSurface === "menu"
       ? "menu"
@@ -156,11 +145,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
     !onMenuMain &&
     spaceId === "build" &&
     Boolean(projectId);
-  const showLeaveProject =
-    Boolean(projectId) &&
-    !inConnector &&
-    !inChromeSub &&
-    !onMenuMain;
   const showCreateWorkspace =
     inSettings &&
     !settingsMobileHub &&
@@ -280,69 +264,20 @@ export function MobileAppChrome({ className }: { className?: string }) {
           >
             Chat
           </button>
-          {entityOpen ? (
-            <Dropdown
-              align="end"
-              matchTrigger={false}
-              menuClassName="min-w-[11rem]"
-              trigger={({ open, toggle }) => (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={surface === "panel"}
-                  aria-expanded={open}
-                  onClick={() => {
-                    if (surface !== "panel") setChatOrPanel("panel");
-                    else toggle();
-                  }}
-                  className={cn(
-                    "inline-flex max-w-[9rem] items-center gap-1 truncate rounded-full px-3 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
-                    surface === "panel"
-                      ? "bg-white text-foreground shadow-sm dark:bg-neutral-900"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  <span className="truncate">{panelTabLabel}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-3.5 w-3.5 shrink-0 transition-transform",
-                      open && "rotate-180",
-                    )}
-                    strokeWidth={1.8}
-                  />
-                </button>
-              )}
-            >
-              {(close) => (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    backToSpaceHome();
-                    close();
-                  }}
-                  className="menu-row-hover flex w-full items-center rounded-[8px] px-2.5 py-2 text-left text-[13px]"
-                >
-                  Back to {backLabel}
-                </button>
-              )}
-            </Dropdown>
-          ) : (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={surface === "panel"}
-              onClick={() => setChatOrPanel("panel")}
-              className={cn(
-                "max-w-[9rem] truncate rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
-                surface === "panel"
-                  ? "bg-white text-foreground shadow-sm dark:bg-neutral-900"
-                  : "text-muted-foreground",
-              )}
-            >
-              {panelTabLabel}
-            </button>
-          )}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={surface === "panel"}
+            onClick={() => setChatOrPanel("panel")}
+            className={cn(
+              "max-w-[9rem] truncate rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
+              surface === "panel"
+                ? "bg-white text-foreground shadow-sm dark:bg-neutral-900"
+                : "text-muted-foreground",
+            )}
+          >
+            {panelTabLabel}
+          </button>
         </div>
       ) : null
     ) : null;
@@ -388,16 +323,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
         </div>
 
         <div className="relative z-10 flex items-center justify-self-end gap-0.5">
-          {showLeaveProject ? (
-            <button
-              type="button"
-              aria-label="Leave project"
-              onClick={() => backToSpaceHome()}
-              className={mobileChromeButtonClass}
-            >
-              <X className="h-5 w-5" strokeWidth={1.8} />
-            </button>
-          ) : null}
           {showBuildTools ? (
             <BuildToolsMenu
               address={address}

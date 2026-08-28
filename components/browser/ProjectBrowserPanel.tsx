@@ -49,6 +49,11 @@ import {
 } from "@/lib/preview-url";
 import type { ProjectKind, SpaceProject } from "@/lib/space-entities";
 import { DESKTOP_NO_DRAG, useDesktopShell } from "@/lib/desktop-shell";
+import {
+  getSidebarPeeking,
+  getSidebarPeekingServerSnapshot,
+  subscribeSidebarPeeking,
+} from "@/lib/sidebar-peek";
 import { isChatSpace } from "@/lib/spaces";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -71,9 +76,14 @@ export function ProjectBrowserPanel() {
   } = useApp();
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
+  const peeking = useSyncExternalStore(
+    subscribeSidebarPeeking,
+    getSidebarPeeking,
+    getSidebarPeekingServerSnapshot,
+  );
   const chatArmed = drafting || Boolean(thread);
   const projectFullscreen = Boolean(projectId) && !chatArmed;
-  const showHeaderNav = projectFullscreen && !sidebarOpen;
+  const showHeaderNav = projectFullscreen && !sidebarOpen && !peeking;
   const entityRevision = useSyncExternalStore(
     subscribeSpaceEntityStore,
     () => getSpaceEntityStoreSnapshot().revision,
@@ -129,6 +139,7 @@ export function ProjectBrowserPanel() {
     session.tabs.find((tab) => tab.id === session.activeTabId) ?? session.tabs[0];
   const [urlDraft, setUrlDraft] = useState(active?.url ?? "");
   const [reloadKey, setReloadKey] = useState(0);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     setUrlDraft(active?.url ?? "");
@@ -150,6 +161,7 @@ export function ProjectBrowserPanel() {
 
   const selectTab = (id: string) => {
     write({ ...session, activeTabId: id });
+    if (mobile) setMobileNavOpen(true);
   };
 
   const closeTab = (id: string) => {
@@ -226,7 +238,7 @@ export function ProjectBrowserPanel() {
           style={desktop ? DESKTOP_NO_DRAG : undefined}
         >
           {showHeaderNav ? <NavToggle /> : null}
-          {projectFullscreen && spaceId && isChatSpace(spaceId) ? (
+          {showHeaderNav && spaceId && isChatSpace(spaceId) ? (
             <RailBtn
               label="Open chat"
               onClick={() => openSpaceChat(spaceId, { keepProject: true })}
@@ -276,41 +288,43 @@ export function ProjectBrowserPanel() {
         </div>
       )}
 
-      <div className="flex h-[45px] min-w-0 shrink-0 items-center gap-0.5 border-t border-border bg-sidebar px-2">
-        <RailBtn
-          label="Back"
-          disabled={!canBack}
-          onClick={() => goHistory(-1)}
-        >
-          <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
-        </RailBtn>
-        <RailBtn
-          label="Forward"
-          disabled={!canForward}
-          onClick={() => goHistory(1)}
-        >
-          <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
-        </RailBtn>
-        <RailBtn label="Reload" onClick={() => setReloadKey((value) => value + 1)}>
-          <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
-        </RailBtn>
-        <form
-          className="min-w-0 flex-1"
-          onSubmit={(event) => {
-            event.preventDefault();
-            commitUrl();
-          }}
-        >
-          <input
-            value={urlDraft}
-            onChange={(event) => setUrlDraft(event.target.value)}
-            onBlur={commitUrl}
-            spellCheck={false}
-            aria-label="Address"
-            className="h-7 w-full bg-transparent px-2 font-mono text-[12px] text-muted-foreground outline-none"
-          />
-        </form>
-      </div>
+      {mobile ? null : (
+        <div className="flex h-[45px] min-w-0 shrink-0 items-center gap-0.5 border-t border-border bg-sidebar px-2">
+          <RailBtn
+            label="Back"
+            disabled={!canBack}
+            onClick={() => goHistory(-1)}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </RailBtn>
+          <RailBtn
+            label="Forward"
+            disabled={!canForward}
+            onClick={() => goHistory(1)}
+          >
+            <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </RailBtn>
+          <RailBtn label="Reload" onClick={() => setReloadKey((value) => value + 1)}>
+            <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </RailBtn>
+          <form
+            className="min-w-0 flex-1"
+            onSubmit={(event) => {
+              event.preventDefault();
+              commitUrl();
+            }}
+          >
+            <input
+              value={urlDraft}
+              onChange={(event) => setUrlDraft(event.target.value)}
+              onBlur={commitUrl}
+              spellCheck={false}
+              aria-label="Address"
+              className="h-7 w-full bg-transparent px-2 font-mono text-[12px] text-muted-foreground outline-none"
+            />
+          </form>
+        </div>
+      )}
 
       <div
         className={cn(
@@ -326,15 +340,30 @@ export function ProjectBrowserPanel() {
           reloadKey={reloadKey}
         />
         {mobile ? (
-          <ProjectMobileTabBar
-            tabs={session.tabs}
-            activeId={active.id}
-            extraProjects={extraProjects}
-            onSelect={selectTab}
-            onClose={closeTab}
-            onAddUrl={addUrlTab}
-            onAddProject={addProjectTab}
-          />
+          <>
+            <ProjectMobileTabBar
+              tabs={session.tabs}
+              activeId={active.id}
+              extraProjects={extraProjects}
+              onSelect={selectTab}
+              onClose={closeTab}
+              onAddUrl={addUrlTab}
+              onAddProject={addProjectTab}
+            />
+            {mobileNavOpen ? (
+              <MobileBrowserNavSheet
+                urlDraft={urlDraft}
+                canBack={canBack}
+                canForward={canForward}
+                onUrlChange={setUrlDraft}
+                onCommitUrl={commitUrl}
+                onBack={() => goHistory(-1)}
+                onForward={() => goHistory(1)}
+                onReload={() => setReloadKey((value) => value + 1)}
+                onClose={() => setMobileNavOpen(false)}
+              />
+            ) : null}
+          </>
         ) : null}
       </div>
     </div>
@@ -459,8 +488,8 @@ function ProjectMobileTabBar({
   onAddProject: (project: SpaceProject) => void;
 }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 pb-[calc(env(safe-area-inset-bottom,0px)+10px)]">
-      <div className="pointer-events-auto mx-3 flex items-center gap-1 overflow-x-auto rounded-full border border-border/80 bg-background/90 p-1 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur-md">
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center pb-[calc(env(safe-area-inset-bottom,0px)+10px)]">
+      <div className="pointer-events-auto flex w-[60vw] max-w-full items-center gap-1 overflow-x-auto rounded-full border border-border/80 bg-background/90 p-1 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur-md">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -504,6 +533,77 @@ function ProjectMobileTabBar({
           onAddProject={onAddProject}
           compact
         />
+      </div>
+    </div>
+  );
+}
+
+function MobileBrowserNavSheet({
+  urlDraft,
+  canBack,
+  canForward,
+  onUrlChange,
+  onCommitUrl,
+  onBack,
+  onForward,
+  onReload,
+  onClose,
+}: {
+  urlDraft: string;
+  canBack: boolean;
+  canForward: boolean;
+  onUrlChange: (value: string) => void;
+  onCommitUrl: () => void;
+  onBack: () => void;
+  onForward: () => void;
+  onReload: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 z-30 flex flex-col justify-end">
+      <button
+        type="button"
+        aria-label="Dismiss address bar"
+        className="absolute inset-0 bg-black/25"
+        onClick={onClose}
+      />
+      <div className="relative mx-3 mb-[calc(env(safe-area-inset-bottom,0px)+4.75rem)] rounded-[16px] border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.22)]">
+        <div className="flex items-center gap-1">
+          <RailBtn label="Back" disabled={!canBack} onClick={onBack}>
+            <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </RailBtn>
+          <RailBtn label="Forward" disabled={!canForward} onClick={onForward}>
+            <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </RailBtn>
+          <RailBtn label="Reload" onClick={onReload}>
+            <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </RailBtn>
+          <form
+            className="min-w-0 flex-1"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onCommitUrl();
+              onClose();
+            }}
+          >
+            <input
+              value={urlDraft}
+              onChange={(event) => onUrlChange(event.target.value)}
+              onBlur={onCommitUrl}
+              spellCheck={false}
+              autoFocus
+              aria-label="Address"
+              className="h-9 w-full rounded-lg bg-muted/60 px-3 font-mono text-[12px] text-foreground outline-none"
+            />
+          </form>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-8 shrink-0 items-center rounded-lg px-2.5 text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            Done
+          </button>
+        </div>
       </div>
     </div>
   );
