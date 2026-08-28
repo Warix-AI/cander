@@ -4,6 +4,7 @@ import { clearOnboardingCheckpoint } from "@/lib/onboarding-checkpoint";
 import { clearLocalAuthState } from "@/lib/auth/sign-out";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { hydrateMemberFromSupabase } from "@/lib/supabase/hydrate-member";
+import { syncSupabaseAuthUser } from "@/lib/supabase/auth-store";
 import { persistActor, persistOnboardingPending } from "@/lib/session";
 
 /** True when the user already has at least one workspace membership. */
@@ -32,6 +33,8 @@ export async function tryEnterExistingAccount(): Promise<boolean> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return false;
+
+  syncSupabaseAuthUser(user);
 
   const complete = await hasCompletedOnboarding(user.id);
   if (!complete) return false;
