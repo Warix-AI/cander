@@ -242,6 +242,22 @@ const PANEL_COPY: Record<
   },
 };
 
+/** One-line copy for the mobile gradient card (7–8 words). */
+const MOBILE_PANEL_LINE: Record<Step, string> = {
+  welcome: "Operate, build, and explore in one place.",
+  "sign-in": "Pick up where you left off.",
+  forgot: "Reset your password with an email link.",
+  create: "Create an account, then finish setup.",
+  verify: "Enter the code we sent to your email.",
+  profile: "Choose a name Cander should use for you.",
+  plan: "Choose the depth you need today.",
+  "max-intent": "How will you use Max?",
+  "org-setup": "Set up your organization and invite teammates.",
+  workspace: "Name the workspace you'll land in.",
+  connectors: "Apps you'll use with Cander later.",
+  appearance: "Make it feel like yours.",
+};
+
 /**
  * Full-screen auth + onboarding when no session is present.
  * Desktop: 50/50 form left, banner wash right.
@@ -1387,7 +1403,7 @@ function OnboardingShell({
       </div>
 
       {mobile && step !== "plan" && step !== "appearance" ? (
-        <OnboardingMobilePanel step={step} panel={panel} plan={plan} />
+        <OnboardingMobilePanel step={step} />
       ) : null}
 
       {/* Right: 15px inset on all sides; white logo top-right (both themes) */}
@@ -2433,47 +2449,24 @@ const onboardingSelectorActiveClass =
 const onboardingSelectorIdleClass =
   "border-border hover:border-foreground/25 hover:bg-muted/40";
 
-function OnboardingMobilePanel({
-  step,
-  panel,
-  plan,
-}: {
-  step: Step;
-  panel: { title: string; body: string };
-  plan: BillingPlan | null;
-}) {
+function OnboardingMobilePanel({ step }: { step: Step }) {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden">
       <div
         className={cn(
-          "relative overflow-hidden border border-border bg-background/95 p-5 shadow-[0_-12px_40px_oklch(0_0_0/0.12)] backdrop-blur-sm",
+          "relative overflow-hidden p-5 shadow-[0_-12px_40px_oklch(0_0_0/0.18)]",
           SHELL_G3_RADIUS,
         )}
       >
-        <div className="absolute inset-0 panel-wash-price opacity-70" aria-hidden />
-        <div className="panel-grain opacity-30" aria-hidden />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-transparent" aria-hidden />
-        <div className="relative">
-          <p className="text-[1.05rem] font-medium tracking-[-0.02em] text-foreground">
-            {panel.title}
-          </p>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-            {panel.body}
-          </p>
-          {step === "plan" && plan ? (
-            <ul className="mt-3 space-y-1.5">
-              {PLAN_PANEL_BULLETS[plan].slice(0, 3).map((item) => (
-                <li
-                  key={item}
-                  className="flex gap-2 text-[12.5px] leading-snug text-muted-foreground"
-                >
-                  <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-muted-foreground/70" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
+        <div className="absolute inset-0 panel-wash-price" aria-hidden />
+        <div className="panel-grain" aria-hidden />
+        <div
+          className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10"
+          aria-hidden
+        />
+        <p className="relative text-[15px] font-medium tracking-[-0.02em] text-white">
+          {MOBILE_PANEL_LINE[step]}
+        </p>
       </div>
     </div>
   );
