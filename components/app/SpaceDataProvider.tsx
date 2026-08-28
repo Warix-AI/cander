@@ -16,7 +16,7 @@ import {
   startChatRealtimePull,
   startChatRemoteSync,
 } from "@/lib/api/chat-sync";
-import { bootstrapSupabaseSession } from "@/lib/import/bootstrap-supabase";
+import { bootstrapSupabaseSession, startAppearanceRemoteSync } from "@/lib/import/bootstrap-supabase";
 import {
   subscribeChatStore,
   getChatStoreSnapshot,
@@ -82,6 +82,7 @@ export function SpaceDataProvider({
 
     const stopEntitySync = startSupabaseEntitySync(api.entities, ctx);
     const stopOrgPolicySync = startSupabaseOrgPolicySync(ctx);
+    const stopAppearanceSync = startAppearanceRemoteSync(ctx);
     const stopConnectorSync = startSupabaseConnectorSync(ctx);
     const stopBrowserSync = startSupabaseBrowserSync(ctx);
     const stopChatSync = startChatRemoteSync(ctx);
@@ -91,6 +92,7 @@ export function SpaceDataProvider({
       cancelled = true;
       stopEntitySync();
       stopOrgPolicySync();
+      stopAppearanceSync();
       stopConnectorSync();
       stopBrowserSync();
       stopChatSync();

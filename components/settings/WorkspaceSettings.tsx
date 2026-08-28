@@ -7,7 +7,10 @@ import {
   ImagePlus,
   Plus,
   Upload,
+  X,
 } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
+import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { useApp } from "@/components/app/AppProvider";
 import {
   SettingsFootnote,
@@ -23,7 +26,7 @@ import {
 } from "@/components/settings/SettingsChrome";
 import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
 import { workspacesFor } from "@/lib/entitlements";
-import { connectors, spaces as spaceCatalog } from "@/lib/data";
+import { connectors } from "@/lib/data";
 import type { KnowledgeBase, Workspace } from "@/lib/types";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -38,7 +41,6 @@ import {
   renameWorkspaceRemote,
 } from "@/lib/supabase/workspace-actions";
 import {
-  workspaceKindLabel,
   workspaceKindOf,
 } from "@/lib/workspace-kind";
 import {
@@ -54,12 +56,10 @@ import {
   addKnowledgeBase,
   addKnowledgeFile,
   fileSizeLabel,
-  memberSpaces,
   policyFor,
   removeKnowledgeBase,
   removeKnowledgeFile,
   toggleDisabledConnector,
-  toggleMemberSpace,
 } from "@/lib/workspace-policy";
 
 export function WorkspacesSettings({
@@ -126,7 +126,6 @@ export function WorkspacesSettings({
           <SettingsGroup dividerInset="icon">
             {workspaceList.map((item) => {
               const policy = policyFor(item.id, workspacePolicies);
-              const kind = workspaceKindOf(item);
               return (
                 <button
                   key={item.id}
@@ -154,7 +153,6 @@ export function WorkspacesSettings({
                         mobile ? "text-[13px]" : "text-[12.5px]",
                       )}
                     >
-                      {workspaceKindLabel(kind)} ·{" "}
                       {policy.members.length === 1
                         ? "1 person"
                         : `${policy.members.length} people`}
@@ -188,47 +186,56 @@ function WorkspacePage({
   policy: ReturnType<typeof policyFor>;
   onBack: () => void;
 }) {
-  const { orgMembers, workspacePolicies, entitlements, removeWorkspace } =
-    useApp();
+  const { entitlements, removeWorkspace } = useApp();
   const mobile = useMobileShell();
+  const [kbModalOpen, setKbModalOpen] = useState(false);
   const [kbName, setKbName] = useState("");
   const [openKbId, setOpenKbId] = useState<string | null>(null);
-  const [openUser, setOpenUser] = useState<string | null>(
-    policy.members[0]?.memberId ?? null,
-  );
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [workspaceName, setWorkspaceName] = useState(workspace.name);
+  const [savedName, setSavedName] = useState(workspace.name);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameBusy, setRenameBusy] = useState(false);
-  const [renameSaved, setRenameSaved] = useState(false);
+  const iconInput = useRef<HTMLInputElement>(null);
+  const [iconError, setIconError] = useState<string | null>(null);
+  const icons = useSyncExternalStore(
+    subscribeWorkspaceIcons,
+    getWorkspaceIconsSnapshot,
+    getWorkspaceIconsServerSnapshot,
+  );
+  const icon = workspaceIconFor(workspace.id, icons);
 
   const canDelete =
     isCustomWorkspace(workspace.id) &&
     (workspaceKindOf(workspace) === "personal" ||
       entitlements.canManageWorkspaces);
+  const deleteBlocked = policy.members.length > 1;
+  const deleteConfirmOk =
+    deleteConfirmName.trim() === workspace.name.trim();
 
   const handleRename = async () => {
     const trimmed = workspaceName.trim();
-    if (!trimmed || trimmed === workspace.name) return;
+    if (!trimmed || trimmed === savedName) return;
     setRenameBusy(true);
     setRenameError(null);
-    setRenameSaved(false);
     try {
       await renameWorkspaceRemote(workspace.id, trimmed);
-      setRenameSaved(true);
+      setSavedName(trimmed);
     } catch (err) {
       setRenameError(
         err instanceof Error ? err.message : "Could not rename workspace.",
       );
-      setWorkspaceName(workspace.name);
+      setWorkspaceName(savedName);
     } finally {
       setRenameBusy(false);
     }
   };
 
   const handleDelete = async () => {
+    if (!deleteConfirmOk) return;
     setDeleteError(null);
     setDeleteBusy(true);
     try {
@@ -248,74 +255,166 @@ function WorkspacePage({
     }
   };
 
+  const createKnowledgeBase = () => {
+    const trimmed = kbName.trim();
+    if (!trimmed) return;
+    addKnowledgeBase(workspace.id, trimmed);
+    setKbName("");
+    setKbModalOpen(false);
+  };
+
   const workspaceSubtitle =
-    workspaceKindOf(workspace) === "personal"
-      ? "Friends and family share chats, files, and projects here."
-      : "Assigned people get these knowledge bases and connector policies.";
+    "Manage name, icon, knowledge bases, and connector policies.";
+
+  const nameDirty = workspaceName.trim() !== savedName.trim();
 
   return (
     <SettingsPage>
       <button
         type="button"
         onClick={onBack}
-        className="mb-3 inline-flex items-center gap-1 text-[13px] text-muted-foreground transition-colors duration-200 hover:text-foreground max-lg:hidden"
+        className="mb-6 inline-flex items-center gap-1 text-[13px] text-muted-foreground transition-colors duration-200 hover:text-foreground max-lg:hidden"
       >
         <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.7} />
         Workspaces
       </button>
-      <SettingsHeader
-        kicker={workspaceKindLabel(workspaceKindOf(workspace))}
-        title={workspace.name}
-        subtitle={workspaceSubtitle}
-      />
+      <SettingsHeader title={savedName} subtitle={workspaceSubtitle} />
 
-      <SettingsSection title="Name" className="mt-6">
+      <SettingsSection title="Workspace" className="mt-6">
         <SettingsGroup>
-          <div className="space-y-3 px-4 py-4">
-            <input
-              value={workspaceName}
-              onChange={(event) => {
-                setWorkspaceName(event.target.value);
-                setRenameError(null);
-                setRenameSaved(false);
-              }}
-              className={settingsInputClass}
-              aria-label="Workspace name"
-            />
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="space-y-4 px-4 py-4">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                disabled={
-                  renameBusy ||
-                  !workspaceName.trim() ||
-                  workspaceName.trim() === workspace.name
-                }
-                onClick={() => void handleRename()}
-                className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground disabled:opacity-40"
+                title="Upload icon"
+                aria-label="Upload icon"
+                onClick={() => iconInput.current?.click()}
+                className="relative shrink-0"
               >
-                {renameBusy ? "Saving…" : "Save name"}
+                {icon ? (
+                  <span
+                    className={cn(
+                      "inline-flex h-10 w-10 overflow-hidden",
+                      SHELL_G3_RADIUS,
+                    )}
+                  >
+                    <img
+                      src={icon}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  </span>
+                ) : (
+                  <WorkspaceMark id={workspace.id} name={workspaceName || workspace.name} />
+                )}
               </button>
-              {renameSaved ? (
-                <span className="text-[12.5px] text-muted-foreground">Saved</span>
+              <button
+                type="button"
+                onClick={() => iconInput.current?.click()}
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+              >
+                <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
+                {icon ? "Replace icon" : "Add icon"}
+              </button>
+              {icon ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearWorkspaceIcon(workspace.id);
+                    setIconError(null);
+                  }}
+                  className="text-[12.5px] text-muted-foreground hover:text-foreground"
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+            <div className="relative flex items-center gap-2">
+              <input
+                value={workspaceName}
+                onChange={(event) => {
+                  setWorkspaceName(event.target.value);
+                  setRenameError(null);
+                }}
+                className={cn(settingsInputClass, "min-w-0 flex-1")}
+                aria-label="Workspace name"
+              />
+              {nameDirty ? (
+                <button
+                  type="button"
+                  disabled={renameBusy || !workspaceName.trim()}
+                  onClick={() => void handleRename()}
+                  className="inline-flex h-9 shrink-0 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground disabled:opacity-40"
+                >
+                  {renameBusy ? "Saving…" : "Save"}
+                </button>
               ) : null}
             </div>
             {renameError ? (
               <p className="text-[12.5px] text-destructive">{renameError}</p>
             ) : null}
+            {iconError ? (
+              <p className="text-[12.5px] text-destructive">{iconError}</p>
+            ) : null}
           </div>
         </SettingsGroup>
+        <SettingsFootnote>
+          Shown in the workspace rail. Assign people from Organization settings.
+        </SettingsFootnote>
       </SettingsSection>
 
-      <div className={cn(mobile ? "mt-4" : "mt-8 max-lg:mt-4")}>
-        <WorkspaceIconSection workspace={workspace} mobile={mobile} />
-      </div>
+      <input
+        ref={iconInput}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          void readWorkspaceIconFile(file)
+            .then((dataUrl) => {
+              setWorkspaceIcon(workspace.id, dataUrl);
+              setIconError(null);
+            })
+            .catch((err: unknown) => {
+              setIconError(
+                err instanceof Error ? err.message : "Could not upload image.",
+              );
+            });
+        }}
+      />
+
+      <KnowledgeBaseModal
+        open={kbModalOpen}
+        onClose={() => {
+          setKbModalOpen(false);
+          setKbName("");
+        }}
+        name={kbName}
+        onNameChange={setKbName}
+        onCreate={createKnowledgeBase}
+      />
 
       <SettingsSection
         title="Knowledge bases"
         description={
           entitlements.hasKnowledgeBases
-            ? `Sources the app can use inside ${workspace.name}.`
+            ? `Sources the app can use inside ${savedName}.`
             : "Knowledge bases start on Pro."
+        }
+        className={cn(mobile ? "mt-4" : "mt-8 max-lg:mt-4")}
+        actions={
+          entitlements.hasKnowledgeBases ? (
+            <button
+              type="button"
+              aria-label="Create knowledge base"
+              onClick={() => setKbModalOpen(true)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-foreground/15 text-foreground hover:bg-muted"
+            >
+              <Plus className="h-4 w-4" strokeWidth={1.8} />
+            </button>
+          ) : null
         }
       >
         {entitlements.hasKnowledgeBases ? (
@@ -342,72 +441,28 @@ function WorkspacePage({
                   </div>
                 )}
               </SettingsGroup>
-              <form
-                className="mt-3 flex gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  addKnowledgeBase(workspace.id, kbName);
-                  setKbName("");
-                }}
-              >
-                <input
-                  value={kbName}
-                  onChange={(event) => setKbName(event.target.value)}
-                  placeholder="New knowledge base"
-                  className={cn(settingsInputClass, "min-w-0 flex-1")}
-                />
-                <button
-                  type="submit"
-                  className="inline-flex h-10 shrink-0 items-center rounded-full border border-border bg-background px-4 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
-                >
-                  Add
-                </button>
-              </form>
               <SettingsFootnote>
                 PDFs, docs, and text files stay scoped to this workspace.
               </SettingsFootnote>
             </>
           ) : (
-            <>
-              <form
-                className="mb-3 flex max-w-xl gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  addKnowledgeBase(workspace.id, kbName);
-                  setKbName("");
-                }}
-              >
-                <input
-                  value={kbName}
-                  onChange={(event) => setKbName(event.target.value)}
-                  placeholder="New knowledge base"
-                  className={cn(settingsInputClass, "min-w-0 flex-1")}
-                />
-                <button
-                  type="submit"
-                  className="inline-flex h-10 items-center rounded-full border border-foreground/15 px-4 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
-                >
-                  Add
-                </button>
-              </form>
-              <div className="space-y-3">
-                {policy.knowledgeBases.length ? (
-                  policy.knowledgeBases.map((item) => (
-                    <KnowledgeCard
-                      key={item.id}
-                      workspaceId={workspace.id}
-                      item={item}
-                    />
-                  ))
-                ) : (
-                  <SettingsGroup>
-                    <div className="px-4 py-4 text-[13px] text-muted-foreground">
-                      No knowledge bases yet.
-                    </div>
-                  </SettingsGroup>
-                )}
-              </div>
-            </>
+            <div className="space-y-3">
+              {policy.knowledgeBases.length ? (
+                policy.knowledgeBases.map((item) => (
+                  <KnowledgeCard
+                    key={item.id}
+                    workspaceId={workspace.id}
+                    item={item}
+                  />
+                ))
+              ) : (
+                <SettingsGroup>
+                  <div className="px-4 py-4 text-[13px] text-muted-foreground">
+                    No knowledge bases yet. Use + to create one.
+                  </div>
+                </SettingsGroup>
+              )}
+            </div>
           )
         ) : null}
       </SettingsSection>
@@ -479,361 +534,150 @@ function WorkspacePage({
         </SettingsSection>
       ) : null}
 
-      {entitlements.canManageWorkspaces ? (
-        <SettingsSection
-          title="Permissions"
-          description="Click a person to turn spaces on or off. Role is not set here."
-        >
-          <SettingsGroup>
-            {policy.members.map((row) => {
-              const member = orgMembers.find(
-                (item) => item.id === row.memberId,
-              );
-              if (!member) return null;
-              const open = openUser === row.memberId;
-              const enabled = memberSpaces(
-                workspace.id,
-                row.memberId,
-                workspacePolicies,
-              );
-              return (
-                <div key={row.memberId}>
-                  <SettingsLinkRow
-                    label={member.name}
-                    description={`${member.email} · ${enabled.length} of ${workspace.spaces.length} spaces`}
-                    onClick={() =>
-                      setOpenUser((current) =>
-                        current === row.memberId ? null : row.memberId,
-                      )
-                    }
-                  >
-                    <ChevronRight
-                      className={cn(
-                        "h-4 w-4 shrink-0 text-muted-foreground/70 transition-transform duration-200",
-                        open && "rotate-90",
-                      )}
-                      strokeWidth={1.8}
-                    />
-                  </SettingsLinkRow>
-                  {open ? (
-                    mobile ? (
-                      <div className="border-t border-border bg-muted/20 px-4 py-3">
-                        <SettingsGroup className="border-0">
-                          {workspace.spaces.map((spaceId) => {
-                              const on = row.spaces.includes(spaceId);
-                              const space = spaceCatalog.find(
-                                (item) => item.id === spaceId,
-                              );
-                              return (
-                                <SettingsRow
-                                  key={spaceId}
-                                  label={space?.label ?? spaceId}
-                                >
-                                  <SettingsSwitch
-                                    label={space?.label ?? spaceId}
-                                    checked={on}
-                                    onChange={() =>
-                                      toggleMemberSpace(
-                                        workspace.id,
-                                        row.memberId,
-                                        spaceId,
-                                      )
-                                    }
-                                  />
-                                </SettingsRow>
-                              );
-                            })}
-                        </SettingsGroup>
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5 px-4 pb-3.5">
-                        {workspace.spaces.map((spaceId) => {
-                            const on = row.spaces.includes(spaceId);
-                            const space = spaceCatalog.find(
-                              (item) => item.id === spaceId,
-                            );
-                            return (
-                              <button
-                                key={spaceId}
-                                type="button"
-                                onClick={() =>
-                                  toggleMemberSpace(
-                                    workspace.id,
-                                    row.memberId,
-                                    spaceId,
-                                  )
-                                }
-                                className={cn(
-                                  "inline-flex h-7 items-center rounded-full px-2.5 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
-                                  on
-                                    ? "bg-primary text-primary-foreground"
-                                    : "border border-foreground/15 text-muted-foreground hover:text-foreground",
-                                )}
-                              >
-                                {space?.label ?? spaceId}
-                              </button>
-                            );
-                          })}
-                      </div>
-                    )
-                  ) : null}
-                </div>
-              );
-            })}
-            {!policy.members.length ? (
-              <div className="px-4 py-4 text-[13px] text-muted-foreground">
-                Assign people to this workspace from Organization.
-              </div>
-            ) : null}
-          </SettingsGroup>
-        </SettingsSection>
-      ) : null}
-
       {canDelete ? (
-        <SettingsSection title="Danger zone" className="mt-8">
-          {mobile && confirmDelete ? (
-            <SettingsGroup>
-              <div className="space-y-3 px-4 py-4">
-                <p className="text-[13.5px] text-muted-foreground">
-                  Delete{" "}
-                  <span className="font-medium text-foreground">
-                    {workspace.name}
-                  </span>
-                  ? This cannot be undone.
+        <SettingsSection title="Danger zone" className="mt-12">
+          <SettingsGroup>
+            <div className="space-y-3 px-4 py-4">
+              {deleteBlocked ? (
+                <p className="text-[13px] text-muted-foreground">
+                  Remove all other members from Organization before deleting this
+                  workspace.
                 </p>
-                {deleteError ? (
-                  <p className="text-[12.5px] text-destructive">{deleteError}</p>
-                ) : null}
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={deleteBusy}
-                    onClick={() => void handleDelete()}
-                    className="inline-flex h-10 items-center rounded-full bg-destructive px-4 text-[13px] font-medium tracking-[-0.01em] text-destructive-foreground disabled:opacity-50"
-                  >
-                    {deleteBusy ? "Deleting…" : "Delete workspace"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setConfirmDelete(false);
-                      setDeleteError(null);
-                    }}
-                    className="inline-flex h-10 items-center rounded-full border border-border bg-background px-4 text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </SettingsGroup>
-          ) : (
-            <SettingsGroup>
-              {mobile ? (
-                <SettingsLinkRow
-                  label="Delete workspace"
-                  destructive
-                  onClick={() => setConfirmDelete(true)}
-                />
-              ) : (
-                <div className="px-4 py-4">
-                  {confirmDelete ? (
-                    <div className="space-y-3">
-                      <p className="text-[13px] text-muted-foreground">
-                        Delete{" "}
-                        <span className="font-medium text-foreground">
-                          {workspace.name}
-                        </span>
-                        ? This cannot be undone.
-                      </p>
-                      {deleteError ? (
-                        <p className="text-[12.5px] text-destructive">{deleteError}</p>
-                      ) : null}
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          disabled={deleteBusy}
-                          onClick={() => void handleDelete()}
-                          className="inline-flex h-9 items-center rounded-full bg-destructive px-4 text-[13px] font-medium tracking-[-0.01em] text-destructive-foreground disabled:opacity-50"
-                        >
-                          {deleteBusy ? "Deleting…" : "Delete workspace"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setConfirmDelete(false);
-                            setDeleteError(null);
-                          }}
-                          className="inline-flex h-9 items-center rounded-full px-3.5 text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
+              ) : confirmDelete ? (
+                <>
+                  <p className="text-[13px] text-muted-foreground">
+                    Type{" "}
+                    <span className="font-medium text-foreground">
+                      {workspace.name}
+                    </span>{" "}
+                    to confirm deletion. This cannot be undone.
+                  </p>
+                  <input
+                    type="text"
+                    value={deleteConfirmName}
+                    onChange={(event) => setDeleteConfirmName(event.target.value)}
+                    placeholder={workspace.name}
+                    aria-label={`Type ${workspace.name} to confirm`}
+                    className={settingsInputClass}
+                  />
+                  {deleteError ? (
+                    <p className="text-[12.5px] text-destructive">{deleteError}</p>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => setConfirmDelete(true)}
-                      className="inline-flex h-9 items-center rounded-full border border-destructive/30 px-4 text-[13px] font-medium tracking-[-0.01em] text-destructive transition-colors duration-200 hover:bg-destructive/10"
+                      disabled={deleteBusy || !deleteConfirmOk}
+                      onClick={() => void handleDelete()}
+                      className="inline-flex h-9 items-center rounded-full bg-destructive px-4 text-[13px] font-medium tracking-[-0.01em] text-destructive-foreground disabled:opacity-50"
                     >
-                      Delete workspace
+                      {deleteBusy ? "Deleting…" : "Delete workspace"}
                     </button>
-                  )}
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmDelete(false);
+                        setDeleteConfirmName("");
+                        setDeleteError(null);
+                      }}
+                      className="inline-flex h-9 items-center rounded-full px-3.5 text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="inline-flex h-9 items-center rounded-full border border-destructive/30 px-4 text-[13px] font-medium tracking-[-0.01em] text-destructive transition-colors duration-200 hover:bg-destructive/10"
+                >
+                  Delete workspace
+                </button>
               )}
-            </SettingsGroup>
-          )}
-          {mobile ? (
-            <SettingsFootnote>
-              Removes this workspace from your account.
-            </SettingsFootnote>
-          ) : null}
+            </div>
+          </SettingsGroup>
         </SettingsSection>
       ) : null}
     </SettingsPage>
   );
 }
 
-function WorkspaceIconSection({
-  workspace,
-  mobile = false,
+function KnowledgeBaseModal({
+  open,
+  onClose,
+  name,
+  onNameChange,
+  onCreate,
 }: {
-  workspace: Workspace;
-  mobile?: boolean;
+  open: boolean;
+  onClose: () => void;
+  name: string;
+  onNameChange: (value: string) => void;
+  onCreate: () => void;
 }) {
-  const input = useRef<HTMLInputElement>(null);
-  const [error, setError] = useState<string | null>(null);
-  const icons = useSyncExternalStore(
-    subscribeWorkspaceIcons,
-    getWorkspaceIconsSnapshot,
-    getWorkspaceIconsServerSnapshot,
-  );
-  const icon = workspaceIconFor(workspace.id, icons);
-
-  const pickIcon = () => {
-    setError(null);
-    input.current?.click();
-  };
-
-  if (mobile) {
-    return (
-      <SettingsSection title="Icon" className="mt-0">
-        <SettingsGroup dividerInset="icon">
-          <div className="flex items-center gap-3 px-4 py-3.5">
-            <WorkspaceMark id={workspace.id} name={workspace.name} size="lg" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[15px] font-medium tracking-[-0.01em]">
-                Workspace icon
-              </p>
-              <p className="mt-0.5 text-[13px] text-muted-foreground">
-                {icon ? "Custom image" : "Using initials"}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={pickIcon}
-              className="shrink-0 text-[15px] text-primary"
-            >
-              {icon ? "Replace" : "Upload"}
-            </button>
-          </div>
-          {icon ? (
-            <button
-              type="button"
-              onClick={() => {
-                clearWorkspaceIcon(workspace.id);
-                setError(null);
-              }}
-              className="flex w-full items-center px-4 py-3.5 text-left text-[15px] text-destructive transition-colors hover:bg-muted/50"
-            >
-              Remove icon
-            </button>
-          ) : null}
-        </SettingsGroup>
-        {error ? (
-          <p className="mt-2 px-1 text-[12.5px] text-destructive">{error}</p>
-        ) : null}
-        <SettingsFootnote>
-          Shown in the workspace rail. Initials are used when no image is set.
-        </SettingsFootnote>
-        <input
-          ref={input}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (!file) return;
-            void readWorkspaceIconFile(file)
-              .then((dataUrl) => {
-                setWorkspaceIcon(workspace.id, dataUrl);
-                setError(null);
-              })
-              .catch((err: unknown) => {
-                setError(
-                  err instanceof Error ? err.message : "Could not upload image.",
-                );
-              });
-          }}
-        />
-      </SettingsSection>
-    );
-  }
-
   return (
-    <SettingsSection title="Icon" description="Shown in the workspace rail. Initials are used when no image is set." className="mt-0">
-      <SettingsGroup>
-        <div className="flex items-center gap-4 px-4 py-4">
-          <WorkspaceMark id={workspace.id} name={workspace.name} />
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={pickIcon}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-            >
-              <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
-              {icon ? "Replace" : "Upload"}
-            </button>
-            {icon ? (
-              <button
-                type="button"
-                onClick={() => {
-                  clearWorkspaceIcon(workspace.id);
-                  setError(null);
-                }}
-                className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-              >
-                Remove
-              </button>
-            ) : null}
-          </div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      labelledBy="kb-modal-title"
+      className="w-full max-w-[24rem]"
+    >
+      <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-3">
+        <div>
+          <h2
+            id="kb-modal-title"
+            className="text-[16px] font-semibold tracking-[-0.03em]"
+          >
+            New knowledge base
+          </h2>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            Upload files after creating the base.
+          </p>
         </div>
-        {error ? (
-          <p className="px-4 pb-3 text-[12.5px] text-destructive">{error}</p>
-        ) : null}
-      </SettingsGroup>
-      <input
-        ref={input}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (!file) return;
-          void readWorkspaceIconFile(file)
-            .then((dataUrl) => {
-              setWorkspaceIcon(workspace.id, dataUrl);
-              setError(null);
-            })
-            .catch((err: unknown) => {
-              setError(
-                err instanceof Error ? err.message : "Could not upload image.",
-              );
-            });
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={onClose}
+          className={cn(
+            "inline-flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground",
+            SHELL_G3_RADIUS,
+          )}
+        >
+          <X className="h-4 w-4" strokeWidth={1.6} />
+        </button>
+      </div>
+      <form
+        className="space-y-4 px-5 pb-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onCreate();
         }}
-      />
-    </SettingsSection>
+      >
+        <input
+          value={name}
+          onChange={(event) => onNameChange(event.target.value)}
+          placeholder="Knowledge base name"
+          autoFocus
+          className={settingsInputClass}
+        />
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 items-center rounded-full border border-foreground/15 px-4 text-[13px] font-medium hover:bg-muted"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!name.trim()}
+            className="inline-flex h-10 items-center rounded-full bg-primary px-5 text-[13px] font-medium text-primary-foreground disabled:opacity-40"
+          >
+            Create
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -961,7 +805,7 @@ function KnowledgeCard({
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-[10px] border border-border/80 [&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:top-0 [&>*+*]:before:right-0 [&>*+*]:before:left-3 [&>*+*]:before:h-px [&>*+*]:before:bg-border">
+      <div className={cn("overflow-hidden border border-border/80", SHELL_G3_RADIUS, "[&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:top-0 [&>*+*]:before:right-0 [&>*+*]:before:left-3 [&>*+*]:before:h-px [&>*+*]:before:bg-border")}>
         {item.files.length ? (
           item.files.map((entry) => (
             <div

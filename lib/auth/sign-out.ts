@@ -6,6 +6,8 @@ import { signOutSupabase } from "@/lib/supabase/auth-actions";
 import { clearSupabaseAuthState } from "@/lib/supabase/auth-store";
 import { resetPolicyStoreState } from "@/lib/workspace-policy";
 
+const APPEARANCE_KEY = "courier-appearance-v2";
+
 const LOCAL_KEYS = [
   "courier-signed-in",
   "courier-actor",
@@ -21,6 +23,7 @@ const LOCAL_KEYS = [
 /** Clear sticky local prototype state after sign-out / delete. */
 export function clearLocalAuthState() {
   if (typeof window === "undefined") return;
+  const appearance = window.localStorage.getItem(APPEARANCE_KEY);
   for (const key of LOCAL_KEYS) {
     window.localStorage.removeItem(key);
   }
@@ -28,9 +31,13 @@ export function clearLocalAuthState() {
   const doomed: string[] = [];
   for (let i = 0; i < window.localStorage.length; i += 1) {
     const key = window.localStorage.key(i);
-    if (key?.startsWith("courier-")) doomed.push(key);
+    if (!key?.startsWith("courier-") || key === APPEARANCE_KEY) continue;
+    doomed.push(key);
   }
   for (const key of doomed) window.localStorage.removeItem(key);
+  if (appearance) {
+    window.localStorage.setItem(APPEARANCE_KEY, appearance);
+  }
 }
 
 /**

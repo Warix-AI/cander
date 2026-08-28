@@ -438,6 +438,17 @@ export function resetAppearance() {
   syncAppearanceSideEffects(DEFAULT_APPEARANCE);
 }
 
+/** Apply remote appearance without triggering redundant side effects mid-hydrate. */
+export function replaceAppearanceState(next: AppearanceState) {
+  hydrate();
+  state = next;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+  syncAppearanceSideEffects(next);
+  emit();
+}
+
 export function useAppearance() {
   return useSyncExternalStore(
     subscribeAppearance,

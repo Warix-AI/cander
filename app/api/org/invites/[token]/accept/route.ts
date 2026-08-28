@@ -43,6 +43,12 @@ export async function POST(
     return NextResponse.json({ error: acceptError.message }, { status: 400 });
   }
 
+  await admin
+    .from("profiles")
+    .update({ onboarding_completed_at: new Date().toISOString() })
+    .eq("id", user.id)
+    .is("onboarding_completed_at", null);
+
   const { data: org } = await admin
     .from("organizations")
     .select("id, stripe_subscription_id, billing_owner_id")
