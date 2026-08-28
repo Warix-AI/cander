@@ -15,10 +15,13 @@ import { cn } from "@/lib/utils";
 
 export function WindowChrome({
   clearTrafficLights = false,
+  hideHistory = false,
   className,
 }: {
   /** Pad past macOS traffic lights when chrome shares their row. */
   clearTrafficLights?: boolean;
+  /** Hide Search / Back / Forward (e.g. floating sidebar peek over project tabs). */
+  hideHistory?: boolean;
   className?: string;
 }) {
   const desktop = useDesktopShell();
@@ -48,7 +51,7 @@ export function WindowChrome({
         <DesktopTrafficLights className="absolute top-1/2 left-4 -translate-y-1/2" />
       ) : null}
       <NavToggle />
-      <HistoryButtons dragSpacer={dragSpacer} />
+      {!hideHistory ? <HistoryButtons dragSpacer={dragSpacer} /> : dragSpacer}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-export type WorkScope = "today" | "apps" | "automations";
+export type WorkScope = "today" | "apps" | "automations" | "connectors";
 
 export type WorkTone = "urgent" | "waiting" | "ready" | "neutral";
 
@@ -22,6 +22,7 @@ export function workScopeOptions(): { id: WorkScope; label: string }[] {
     { id: "today", label: "Today" },
     { id: "apps", label: "Apps" },
     { id: "automations", label: "Automations" },
+    { id: "connectors", label: "Connectors" },
   ];
 }
 
@@ -117,41 +118,37 @@ const connectorWorkTemplates: Record<string, WorkItemTemplate[]> = {
 export function workSectionTitle(scope: WorkScope) {
   if (scope === "today") return "Your day";
   if (scope === "apps") return "Apps in Work";
-  return "Automations";
+  if (scope === "automations") return "Automations";
+  return "Connectors";
 }
 
 export function workEmptyCopy(scope: WorkScope) {
   if (scope === "today") {
-    return "No work today. Start a project or ask Cander when you're ready.";
+    return "No tasks or alerts yet. Ask Cander when you're ready to plan the day.";
   }
   if (scope === "apps") {
-    return "No apps in Work yet. Features coming soon.";
+    return "No apps in Work yet. Publish from Build and add them here.";
   }
-  return "No automations running yet. Create a project to get started.";
+  if (scope === "automations") {
+    return "No automations running yet. Create one in Build to get started.";
+  }
+  return "No connectors in Work yet. Connect Gmail, Slack, Calendar, or Drive.";
 }
+
+/** Featured connectors shown in Work when none are attached yet. */
+export const WORK_FEATURED_CONNECTOR_IDS = [
+  "gmail",
+  "slack",
+  "gcal",
+  "gdrive",
+] as const;
 
 export function workAppsFor(
   workspaceId: string,
-  attachedConnectorIds: string[],
   attachedBuildIds: string[],
-  connectorNames: Record<string, string>,
   buildNames: Record<string, string>,
 ): WorkItem[] {
   const items: WorkItem[] = [];
-  for (const id of attachedConnectorIds) {
-    items.push({
-      id: `app-connector-${id}`,
-      workspaceId,
-      lanes: ["apps"],
-      title: connectorNames[id] ?? id,
-      summary: "Connected app available in Work.",
-      meta: "Connector · attached",
-      badge: "App",
-      tone: "ready",
-      prompt: `What should I do in ${connectorNames[id] ?? id} for Work today?`,
-      connectorId: id,
-    });
-  }
   for (const id of attachedBuildIds) {
     items.push({
       id: `app-build-${id}`,

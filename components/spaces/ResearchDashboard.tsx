@@ -9,6 +9,7 @@ import {
   ScopeToggle,
   SpaceSettingsButton,
 } from "@/components/spaces/ItemSet";
+import { NewExploreMenu } from "@/components/spaces/NewExploreMenu";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import { researchPaperPreviews } from "@/lib/data";
 import { editedMeta } from "@/lib/format-relative-time";
@@ -88,9 +89,7 @@ export function ResearchDashboard() {
       subtitle="Research, browse, analyze, and discover."
       actions={
         <>
-          <DashBtn primary onClick={() => openBrowserView()}>
-            Browse
-          </DashBtn>
+          <NewExploreMenu onCreated={openProject} />
           <DashBtn onClick={() => newChat("research")}>Ask</DashBtn>
           <SpaceSettingsButton space="research" />
         </>

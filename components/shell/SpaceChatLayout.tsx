@@ -11,6 +11,7 @@ import { MobileContentPager } from "@/components/shell/MobileContentPager";
 import { PanelToggle, RightPanelToggleDock } from "@/components/shell/PanelToggle";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
+import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 import type { MobileSurface } from "@/lib/types";
@@ -32,6 +33,7 @@ export function SpaceChatLayout() {
     expandedPinned,
   } = useApp();
   const mobile = useMobileShell();
+  const floating = useShellStyle() === "floating";
   const chatArmed = drafting || Boolean(thread);
   const panelOn = panelMode !== "collapsed";
   const chatOpen = chatArmed;
@@ -152,7 +154,17 @@ export function SpaceChatLayout() {
         aria-hidden={liveSpacePct === 0 && !pinChat}
       >
         {chatOpen && spaceOpen && !projectId ? (
-          <div className="pointer-events-none absolute top-0 right-0 z-40 hidden h-11 items-center px-3 lg:flex">
+          <div
+            className={cn(
+              "pointer-events-none absolute z-40 hidden h-11 items-center lg:flex",
+              floating ? "top-3 right-3 px-2" : "top-0 right-0 px-3",
+            )}
+            style={
+              floating
+                ? undefined
+                : { transform: "translate(-10px, 5px)" }
+            }
+          >
             <PanelToggle className="pointer-events-auto text-white/85 hover:bg-white/15 hover:text-white" />
           </div>
         ) : null}

@@ -259,6 +259,7 @@ export function Sidebar() {
       {macDesktop ? (
         <WindowChrome
           clearTrafficLights
+          hideHistory={floating && peeking}
           className={cn(
             "w-full",
             floating
@@ -267,7 +268,10 @@ export function Sidebar() {
           )}
         />
       ) : floating ? (
-        <WindowChrome className="w-full shrink-0 bg-transparent text-foreground" />
+        <WindowChrome
+          hideHistory={peeking}
+          className="w-full shrink-0 bg-transparent text-foreground"
+        />
       ) : null}
 
       <div
