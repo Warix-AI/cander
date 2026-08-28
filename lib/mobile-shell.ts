@@ -174,7 +174,26 @@ function ensureSharedListeners() {
   vv?.addEventListener("resize", applyKeyboardInset);
   vv?.addEventListener("scroll", applyKeyboardInset);
   window.addEventListener("resize", applyKeyboardInset);
-  const onFocusIn = () => applyKeyboardInset();
+  const onFocusIn = (event: FocusEvent) => {
+    const target = event.target;
+    const isField =
+      target instanceof HTMLElement &&
+      (target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable);
+    const schedule = () => {
+      applyKeyboardInset();
+      if (isField && target instanceof HTMLElement) {
+        target.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+    };
+    schedule();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(schedule);
+    });
+    window.setTimeout(schedule, 120);
+    window.setTimeout(schedule, 320);
+  };
   const onFocusOut = () => {
     window.setTimeout(applyKeyboardInset, 120);
   };
