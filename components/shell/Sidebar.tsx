@@ -196,7 +196,7 @@ export function Sidebar() {
   const openNav = (id: SidebarNavId) => {
     if (id === "browser") openBrowser();
     else if (id === "recents") openRecents();
-    else if (!isExtraNavId(id)) openSpace(id);
+    else openSpace(id);
   };
 
   const NavBtn = ({ id }: { id: SidebarNavId }) => {

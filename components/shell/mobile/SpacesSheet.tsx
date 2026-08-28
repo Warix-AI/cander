@@ -33,10 +33,8 @@ export function SpacesSheet({ onSelect }: { onSelect: () => void }) {
   const openNav = (id: SidebarNavId) => {
     if (id === "browser") openBrowser();
     else if (id === "recents") openRecents();
-    else if (!isExtraNavId(id)) {
-      if (isChatSpace(id)) openSpaceChat(id);
-      else openSpace(id);
-    }
+    else if (isChatSpace(id)) openSpaceChat(id);
+    else openSpace(id);
     onSelect();
   };
 

@@ -57,11 +57,8 @@ export function MobileMenuDrawer() {
   const openNav = (id: SidebarNavId) => {
     if (id === "browser") openBrowser();
     else if (id === "recents") openRecents();
-    else if (!isExtraNavId(id)) {
-      // #4 — resume the space's main (persistent) conversation.
-      if (isChatSpace(id)) openSpaceChat(id);
-      else openSpace(id as SpaceId);
-    }
+    else if (isChatSpace(id)) openSpaceChat(id);
+    else openSpace(id);
     close();
   };
 
