@@ -192,12 +192,28 @@ export function Sidebar() {
   const settingsNav = visibleSettingsTabs(entitlements);
   const chatActive = view === "chat" && !threadId && !spaceId;
 
+  const activePinnedProject =
+    Boolean(projectId) &&
+    pinnedItems.some(
+      (item) => item.kind === "project" && item.id === projectId,
+    );
+
   const navActive = (id: SidebarNavId) => {
     if (id === "recents") return view === "recents";
     if (id === "research" && view === "browser") return true;
     // Pinned connector detail — highlight the pin, not the Connectors tab.
     if (id === "connectors" && connectorId) return false;
+    // Pinned project — highlight the pin row, not the space.
+    if (activePinnedProject && id === spaceId) return false;
     return spaceId === id && (view === "space" || view === "chat");
+  };
+
+  const pinRowActive = (item: PinnedItem) => {
+    if (item.kind === "thread") return threadId === item.id;
+    if (item.kind === "connector")
+      return connectorId === item.id && spaceId === "connectors";
+    // openProject always sets threadId — still highlight the pin by project.
+    return projectId === item.id;
   };
 
   const openNav = (id: SidebarNavId) => {
@@ -213,13 +229,7 @@ export function Sidebar() {
       id={item.id}
       title={item.title}
       leading={<PinnedLeading item={item} />}
-      active={
-        item.kind === "thread"
-          ? threadId === item.id
-          : item.kind === "connector"
-            ? connectorId === item.id && spaceId === "connectors"
-            : projectId === item.id && !threadId
-      }
+      active={pinRowActive(item)}
       onOpen={() => {
         if (item.kind === "thread") openThread(item.id);
         else if (item.kind === "connector") openConnector(item.id);

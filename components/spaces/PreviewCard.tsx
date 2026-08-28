@@ -1,8 +1,20 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { CalendarClock, Ellipsis, FileText, Folder, Sparkles } from "lucide-react";
+import {
+  CalendarClock,
+  Ellipsis,
+  FileText,
+  Folder,
+  Link2,
+  Pin,
+  Sparkles,
+} from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import {
+  MobileBottomSheet,
+  SheetAction,
+} from "@/components/browser/ProjectMobileSheets";
 import { BannerWash } from "@/components/spaces/BannerWash";
 import { Dropdown } from "@/components/ui/Controls";
 import {
@@ -14,6 +26,7 @@ import { normalizeProjectTitle } from "@/lib/project-name";
 import type { SpaceAttachment } from "@/lib/space-entities";
 import type { BannerKey } from "@/lib/space-banners";
 import type { SpaceLayout } from "@/lib/types";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 const PreviewAttachmentsContext = createContext<SpaceAttachment[] | null>(null);
@@ -402,12 +415,14 @@ function PreviewActions({
 }) {
   const { pinTier, setPin, clearPin, workspaceId, promoteToWork, promoteToBuild } =
     useApp();
+  const mobile = useMobileShell();
   const ctx = useWorkspaceCtx();
   const { attachToWork, detachFromWork, updateProject } = useSpaceMutation();
   const attachments = useContext(PreviewAttachmentsContext) ?? [];
   const tier = pinTier("project", item.projectId);
   const pinned = Boolean(tier);
   const inWork = attachments.some((row) => row.targetId === item.projectId);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(item.name);
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -448,156 +463,71 @@ function PreviewActions({
     }
   };
 
-  return (
-    <span className="flex shrink-0 items-center">
-      <Dropdown
-        align="end"
-        menuClassName="min-w-[9.5rem]"
-        matchTrigger={false}
-        trigger={({ toggle }) => (
-          <button
-            type="button"
-            aria-label="More"
-            onClick={(event) => {
-              event.stopPropagation();
-              toggle();
-            }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-canvas-hover hover:text-foreground"
-          >
-            <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
-          </button>
-        )}
-      >
-        {(close) => (
-          <>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                onOpen(item.projectId);
-                close();
-              }}
-              className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-            >
-              Open
-            </button>
-            {kind === "product" || kind === "paper" ? (
-              <>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setRenameOpen(true);
-                    close();
-                  }}
-                  className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                >
-                  Rename project
-                </button>
-                {!pinned ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setPin("project", item.projectId, "primary");
-                      close();
-                    }}
-                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                  >
-                    Pin
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      clearPin("project", item.projectId);
-                      close();
-                    }}
-                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                  >
-                    Unpin
-                  </button>
-                )}
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    copyLink();
-                    close();
-                  }}
-                  className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                >
-                  Copy link
-                </button>
-                {kind === "product" ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      if (inWork) {
-                        void detachFromWork(`attach-${item.projectId}`);
-                      } else {
-                        void attachToWork(ctx, {
-                          type: "project",
-                          id: item.projectId,
-                          space: "build",
-                          workspaceId,
-                          label: item.name,
-                        });
-                      }
-                      close();
-                    }}
-                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                  >
-                    {inWork ? "Remove from Work" : "Add to Work"}
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        promoteToBuild({
-                          type: "source",
-                          id: item.projectId,
-                          space: "research",
-                          workspaceId,
-                          label: item.name,
-                          snapshot: item.meta,
-                        });
-                        close();
-                      }}
-                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                    >
-                      Use in Build
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        promoteToWork({
-                          type: "source",
-                          id: item.projectId,
-                          space: "research",
-                          workspaceId,
-                          label: item.name,
-                        });
-                        close();
-                      }}
-                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                    >
-                      Add to Work
-                    </button>
-                  </>
-                )}
-              </>
-            ) : kind === "file" ? (
-              <>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
+  const runAndClose = (fn: () => void) => {
+    fn();
+    setMenuOpen(false);
+  };
+
+  const menuBody = (
+    <>
+      <SheetAction
+        label="Open"
+        onClick={() =>
+          runAndClose(() => {
+            onOpen(item.projectId);
+          })
+        }
+      />
+      {kind === "product" || kind === "paper" ? (
+        <>
+          <SheetAction
+            label="Rename project"
+            onClick={() =>
+              runAndClose(() => {
+                setRenameOpen(true);
+              })
+            }
+          />
+          <SheetAction
+            icon={Pin}
+            label={pinned ? "Unpin" : "Pin"}
+            onClick={() =>
+              runAndClose(() => {
+                if (pinned) clearPin("project", item.projectId);
+                else setPin("project", item.projectId, "primary");
+              })
+            }
+          />
+          <SheetAction
+            icon={Link2}
+            label="Copy link"
+            onClick={() => runAndClose(copyLink)}
+          />
+          {kind === "product" ? (
+            <SheetAction
+              label={inWork ? "Remove from Work" : "Add to Work"}
+              onClick={() =>
+                runAndClose(() => {
+                  if (inWork) {
+                    void detachFromWork(`attach-${item.projectId}`);
+                  } else {
+                    void attachToWork(ctx, {
+                      type: "project",
+                      id: item.projectId,
+                      space: "build",
+                      workspaceId,
+                      label: item.name,
+                    });
+                  }
+                })
+              }
+            />
+          ) : (
+            <>
+              <SheetAction
+                label="Use in Build"
+                onClick={() =>
+                  runAndClose(() => {
                     promoteToBuild({
                       type: "source",
                       id: item.projectId,
@@ -606,16 +536,13 @@ function PreviewActions({
                       label: item.name,
                       snapshot: item.meta,
                     });
-                    close();
-                  }}
-                  className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                >
-                  Use in Build
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
+                  })
+                }
+              />
+              <SheetAction
+                label="Add to Work"
+                onClick={() =>
+                  runAndClose(() => {
                     promoteToWork({
                       type: "source",
                       id: item.projectId,
@@ -623,72 +550,368 @@ function PreviewActions({
                       workspaceId,
                       label: item.name,
                     });
-                    close();
-                  }}
-                  className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                >
-                  Add to Work
-                </button>
-              </>
-            ) : null}
-          </>
-        )}
-      </Dropdown>
-      {renameOpen ? (
-        <div
-          className="fixed inset-0 z-[60] flex items-start justify-center bg-black/20 pt-24"
-          onClick={(event) => {
-            event.stopPropagation();
-            if (event.target === event.currentTarget) setRenameOpen(false);
-          }}
-        >
-          <div
-            className="w-full max-w-sm rounded-[16px] border border-border bg-background p-4 shadow-lg"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <p className="text-[14px] font-medium tracking-[-0.01em]">
-              Rename project
-            </p>
-            <input
-              autoFocus
-              value={renameValue}
-              onChange={(event) => setRenameValue(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void saveRename();
+                  })
                 }
-                if (event.key === "Escape") setRenameOpen(false);
-              }}
-              spellCheck={false}
-              className="mt-3 h-10 w-full rounded-[12px] border border-border bg-muted/40 px-3 text-[14px] outline-none"
-            />
-            {renameError ? (
-              <p className="mt-2 text-[12px] text-destructive">{renameError}</p>
-            ) : (
-              <p className="mt-2 text-[12px] text-muted-foreground">
-                Must be unique across this workspace.
+              />
+            </>
+          )}
+        </>
+      ) : kind === "file" ? (
+        <>
+          <SheetAction
+            label="Use in Build"
+            onClick={() =>
+              runAndClose(() => {
+                promoteToBuild({
+                  type: "source",
+                  id: item.projectId,
+                  space: "research",
+                  workspaceId,
+                  label: item.name,
+                  snapshot: item.meta,
+                });
+              })
+            }
+          />
+          <SheetAction
+            label="Add to Work"
+            onClick={() =>
+              runAndClose(() => {
+                promoteToWork({
+                  type: "source",
+                  id: item.projectId,
+                  space: "research",
+                  workspaceId,
+                  label: item.name,
+                });
+              })
+            }
+          />
+        </>
+      ) : null}
+    </>
+  );
+
+  return (
+    <span className="flex shrink-0 items-center">
+      {mobile ? (
+        <>
+          <button
+            type="button"
+            aria-label="More"
+            onClick={(event) => {
+              event.stopPropagation();
+              setMenuOpen(true);
+            }}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-canvas-hover hover:text-foreground"
+          >
+            <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </button>
+          <MobileBottomSheet
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
+            mode="space"
+          >
+            <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
+              <p className="mb-3 truncate px-1 text-[15px] font-medium tracking-[-0.01em]">
+                {item.name}
               </p>
-            )}
-            <div className="mt-4 flex justify-end gap-2">
+              <div className="space-y-0.5">{menuBody}</div>
+            </div>
+          </MobileBottomSheet>
+        </>
+      ) : (
+        <Dropdown
+          align="end"
+          menuClassName="min-w-[9.5rem]"
+          matchTrigger={false}
+          trigger={({ toggle }) => (
+            <button
+              type="button"
+              aria-label="More"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggle();
+              }}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-canvas-hover hover:text-foreground"
+            >
+              <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
+            </button>
+          )}
+        >
+          {(close) => (
+            <>
               <button
                 type="button"
-                onClick={() => setRenameOpen(false)}
-                className="h-9 rounded-[10px] px-3 text-[13px] text-muted-foreground hover:bg-muted"
+                role="menuitem"
+                onClick={() => {
+                  onOpen(item.projectId);
+                  close();
+                }}
+                className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
               >
-                Cancel
+                Open
               </button>
-              <button
-                type="button"
-                disabled={renameBusy}
-                onClick={() => void saveRename()}
-                className="h-9 rounded-[10px] bg-foreground px-3.5 text-[13px] font-medium text-background disabled:opacity-60"
-              >
-                Save
-              </button>
+              {kind === "product" || kind === "paper" ? (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setRenameOpen(true);
+                      close();
+                    }}
+                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                  >
+                    Rename project
+                  </button>
+                  {!pinned ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setPin("project", item.projectId, "primary");
+                        close();
+                      }}
+                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                    >
+                      Pin
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        clearPin("project", item.projectId);
+                        close();
+                      }}
+                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                    >
+                      Unpin
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      copyLink();
+                      close();
+                    }}
+                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                  >
+                    Copy link
+                  </button>
+                  {kind === "product" ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        if (inWork) {
+                          void detachFromWork(`attach-${item.projectId}`);
+                        } else {
+                          void attachToWork(ctx, {
+                            type: "project",
+                            id: item.projectId,
+                            space: "build",
+                            workspaceId,
+                            label: item.name,
+                          });
+                        }
+                        close();
+                      }}
+                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                    >
+                      {inWork ? "Remove from Work" : "Add to Work"}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          promoteToBuild({
+                            type: "source",
+                            id: item.projectId,
+                            space: "research",
+                            workspaceId,
+                            label: item.name,
+                            snapshot: item.meta,
+                          });
+                          close();
+                        }}
+                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                      >
+                        Use in Build
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          promoteToWork({
+                            type: "source",
+                            id: item.projectId,
+                            space: "research",
+                            workspaceId,
+                            label: item.name,
+                          });
+                          close();
+                        }}
+                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                      >
+                        Add to Work
+                      </button>
+                    </>
+                  )}
+                </>
+              ) : kind === "file" ? (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      promoteToBuild({
+                        type: "source",
+                        id: item.projectId,
+                        space: "research",
+                        workspaceId,
+                        label: item.name,
+                        snapshot: item.meta,
+                      });
+                      close();
+                    }}
+                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                  >
+                    Use in Build
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      promoteToWork({
+                        type: "source",
+                        id: item.projectId,
+                        space: "research",
+                        workspaceId,
+                        label: item.name,
+                      });
+                      close();
+                    }}
+                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                  >
+                    Add to Work
+                  </button>
+                </>
+              ) : null}
+            </>
+          )}
+        </Dropdown>
+      )}
+      {renameOpen ? (
+        mobile ? (
+          <MobileBottomSheet
+            open={renameOpen}
+            onClose={() => setRenameOpen(false)}
+            mode="rename"
+          >
+            <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-2">
+              <p className="text-[1.25rem] font-semibold tracking-[-0.02em]">
+                Rename project
+              </p>
+              <input
+                autoFocus
+                value={renameValue}
+                onChange={(event) => setRenameValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void saveRename();
+                  }
+                }}
+                spellCheck={false}
+                className="mt-4 h-11 w-full rounded-[12px] border border-border bg-muted/40 px-3.5 text-[15px] outline-none"
+              />
+              {renameError ? (
+                <p className="mt-2 text-[12px] text-destructive">{renameError}</p>
+              ) : (
+                <p className="mt-2 text-[12px] text-muted-foreground">
+                  Must be unique across this workspace.
+                </p>
+              )}
+              <div className="mt-6 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRenameOpen(false)}
+                  className="h-11 rounded-full border border-border text-[14px] font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={renameBusy}
+                  onClick={() => void saveRename()}
+                  className="h-11 rounded-full bg-foreground text-[14px] font-medium text-background disabled:opacity-60"
+                >
+                  Save changes
+                </button>
+              </div>
+            </div>
+          </MobileBottomSheet>
+        ) : (
+          <div
+            className="fixed inset-0 z-[60] flex items-start justify-center bg-black/20 pt-24"
+            onClick={(event) => {
+              event.stopPropagation();
+              if (event.target === event.currentTarget) setRenameOpen(false);
+            }}
+          >
+            <div
+              className="w-full max-w-sm rounded-[16px] border border-border bg-background p-4 shadow-lg"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="text-[14px] font-medium tracking-[-0.01em]">
+                Rename project
+              </p>
+              <input
+                autoFocus
+                value={renameValue}
+                onChange={(event) => setRenameValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void saveRename();
+                  }
+                  if (event.key === "Escape") setRenameOpen(false);
+                }}
+                spellCheck={false}
+                className="mt-3 h-10 w-full rounded-[12px] border border-border bg-muted/40 px-3 text-[14px] outline-none"
+              />
+              {renameError ? (
+                <p className="mt-2 text-[12px] text-destructive">{renameError}</p>
+              ) : (
+                <p className="mt-2 text-[12px] text-muted-foreground">
+                  Must be unique across this workspace.
+                </p>
+              )}
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRenameOpen(false)}
+                  className="h-9 rounded-[10px] px-3 text-[13px] text-muted-foreground hover:bg-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={renameBusy}
+                  onClick={() => void saveRename()}
+                  className="h-9 rounded-[10px] bg-foreground px-3.5 text-[13px] font-medium text-background disabled:opacity-60"
+                >
+                  Save
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )
       ) : null}
     </span>
   );

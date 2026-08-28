@@ -63,7 +63,7 @@ export function PinsSheet({
     if (item.kind === "connector") {
       return connectorId === item.id && spaceId === "connectors";
     }
-    return projectId === item.id && !threadId;
+    return projectId === item.id;
   };
 
   return (

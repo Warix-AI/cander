@@ -10,6 +10,7 @@ import {
   type ReactNode,
   type TouchEvent as ReactTouchEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   Check,
   ChevronLeft,
@@ -46,10 +47,15 @@ export function MobileBottomSheet({
   const titleId = useId();
   const [dragY, setDragY] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const startY = useRef(0);
   const lastY = useRef(0);
   const lastT = useRef(0);
   const velocity = useRef(0);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) {
@@ -84,7 +90,6 @@ export function MobileBottomSheet({
     velocity.current = (touch.clientY - lastY.current) / dt;
     lastY.current = touch.clientY;
     lastT.current = now;
-    // Allow slight upward pull, dampened; free downward.
     setDragY(dy < 0 ? dy * 0.25 : dy);
   };
 
@@ -103,22 +108,19 @@ export function MobileBottomSheet({
     setDragY(0);
   };
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  const tall =
-    mode === "info" || mode === "add" || mode === "rename" || mode === "space";
-  // Actions ~40% taller than the old 70dvh cap.
   const heightClass =
     mode === "actions"
       ? "min-h-[min(58dvh,520px)] max-h-[92dvh]"
-      : mode === "add"
-        ? "min-h-[min(72dvh,640px)] max-h-[92dvh]"
-        : tall
+      : mode === "add" || mode === "rename"
+        ? "min-h-[min(85dvh,720px)] max-h-[92dvh]"
+        : mode === "info" || mode === "space"
           ? "max-h-[92dvh]"
           : "max-h-[70dvh]";
 
-  return (
-    <div className="fixed inset-0 z-[80] flex flex-col justify-end">
+  const sheet = (
+    <div className="fixed inset-0 z-[80] flex max-w-[100vw] flex-col justify-end">
       <button
         type="button"
         aria-label="Dismiss"
@@ -131,7 +133,7 @@ export function MobileBottomSheet({
         aria-modal="true"
         aria-labelledby={titleId}
         className={cn(
-          "relative z-10 flex w-full flex-col overflow-hidden border border-border bg-background shadow-[0_-12px_40px_rgba(0,0,0,0.18)]",
+          "relative z-10 flex w-full max-w-[100vw] flex-col overflow-hidden border border-border bg-background shadow-[0_-12px_40px_rgba(0,0,0,0.18)]",
           "rounded-t-[22px]",
           heightClass,
           className,
@@ -161,6 +163,8 @@ export function MobileBottomSheet({
       </div>
     </div>
   );
+
+  return createPortal(sheet, document.body);
 }
 
 type ActionsPane = "main" | "publish" | "domains";

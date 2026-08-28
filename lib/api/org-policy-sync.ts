@@ -43,6 +43,8 @@ const PREFS_IMPORT_FLAG = "courier-user-prefs-imported-v1";
 const SYNC_DEBOUNCE_MS = 600;
 
 let skipRemoteSync = false;
+/** Last applied remote pins fingerprint — skip no-op replaces. */
+let lastRemotePinsFingerprint = "";
 
 async function listMemberWorkspaceIds(profileId: string) {
   const supabase = createSupabaseBrowserClient();
@@ -240,24 +242,31 @@ export async function syncUserPrefsToSupabase(ctx: WorkspaceCtx) {
   const supabase = createSupabaseBrowserClient();
   const pins = getPinsSnapshot();
   const sidebar = getSidebarSnapshot();
+  // Block realtime hydrate from wiping local pins during delete→insert.
+  skipRemoteSync = true;
+  try {
+    const { error: deletePinsError } = await supabase
+      .from("user_pins")
+      .delete()
+      .eq("profile_id", ctx.actorId);
+    if (deletePinsError) throw deletePinsError;
 
-  const { error: deletePinsError } = await supabase
-    .from("user_pins")
-    .delete()
-    .eq("profile_id", ctx.actorId);
-  if (deletePinsError) throw deletePinsError;
+    if (pins.length) {
+      const pinRows = pins.map((pin, index) => pinToRow(pin, ctx.actorId, index));
+      const { error: pinError } = await supabase.from("user_pins").insert(pinRows);
+      if (pinError) throw pinError;
+    }
 
-  if (pins.length) {
-    const pinRows = pins.map((pin, index) => pinToRow(pin, ctx.actorId, index));
-    const { error: pinError } = await supabase.from("user_pins").insert(pinRows);
-    if (pinError) throw pinError;
+    const sidebarRow = sidebarToRow(sidebar, ctx.actorId, SIDEBAR_STORAGE_VERSION);
+    const { error: sidebarError } = await supabase
+      .from("sidebar_layouts")
+      .upsert(sidebarRow, { onConflict: "profile_id" });
+    if (sidebarError) throw sidebarError;
+  } finally {
+    window.setTimeout(() => {
+      skipRemoteSync = false;
+    }, 1200);
   }
-
-  const sidebarRow = sidebarToRow(sidebar, ctx.actorId, SIDEBAR_STORAGE_VERSION);
-  const { error: sidebarError } = await supabase
-    .from("sidebar_layouts")
-    .upsert(sidebarRow, { onConflict: "profile_id" });
-  if (sidebarError) throw sidebarError;
 }
 
 export async function hydrateUserPrefsFromRemote(ctx: WorkspaceCtx) {
@@ -280,10 +289,20 @@ export async function hydrateUserPrefsFromRemote(ctx: WorkspaceCtx) {
   if (pinResult.error) throw pinResult.error;
   if (sidebarResult.error) throw sidebarResult.error;
 
+  const localPins = getPinsSnapshot();
   if (pinResult.data?.length) {
-    replacePinsState((pinResult.data as UserPinRow[]).map(pinRowToPin));
+    const remotePins = (pinResult.data as UserPinRow[]).map(pinRowToPin);
+    const fingerprint = remotePins
+      .map((pin, index) => `${pin.kind}:${pin.id}:${pin.tier}:${index}`)
+      .join("|");
+    if (fingerprint !== lastRemotePinsFingerprint) {
+      lastRemotePinsFingerprint = fingerprint;
+      replacePinsState(remotePins);
+    }
+  } else if (localPins.length) {
+    // Mid-sync race (delete before insert) — keep local pins.
   } else {
-    // No remote pins — start empty (do not keep legacy Gmail default).
+    lastRemotePinsFingerprint = "";
     replacePinsState([]);
   }
 
@@ -391,7 +410,10 @@ export function startUserPrefsRemoteSync(ctx: WorkspaceCtx) {
 
 export function subscribeOrgPolicyRealtime(
   ctx: WorkspaceCtx,
-  onChange: () => void,
+  handlers: {
+    onOrgChange: () => void;
+    onPinsChange: () => void;
+  },
 ) {
   const supabase = createSupabaseBrowserClient();
   const channel = supabase
@@ -399,17 +421,17 @@ export function subscribeOrgPolicyRealtime(
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "org_members" },
-      () => onChange(),
+      () => handlers.onOrgChange(),
     )
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "workspace_policies" },
-      () => onChange(),
+      () => handlers.onOrgChange(),
     )
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "user_pins" },
-      () => onChange(),
+      () => handlers.onPinsChange(),
     )
     .subscribe();
 
@@ -419,24 +441,53 @@ export function subscribeOrgPolicyRealtime(
 }
 
 export function startOrgPolicyRealtimePull(ctx: WorkspaceCtx) {
-  let pulling = false;
+  let orgPulling = false;
+  let prefsPulling = false;
+  let orgTimer: ReturnType<typeof setTimeout> | null = null;
+  let prefsTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const pull = () => {
-    if (pulling) return;
-    pulling = true;
-    void Promise.all([
-      hydrateOrgPolicyFromRemote(ctx),
-      hydrateUserPrefsFromRemote(ctx),
-    ])
+  const pullOrg = () => {
+    if (orgPulling || skipRemoteSync) return;
+    orgPulling = true;
+    void hydrateOrgPolicyFromRemote(ctx)
       .catch((err) => {
         console.warn("[cander] org policy hydrate failed", err);
       })
       .finally(() => {
-        pulling = false;
+        orgPulling = false;
       });
   };
 
-  return subscribeOrgPolicyRealtime(ctx, pull);
+  const pullPrefs = () => {
+    if (prefsPulling || skipRemoteSync) return;
+    prefsPulling = true;
+    void hydrateUserPrefsFromRemote(ctx)
+      .catch((err) => {
+        console.warn("[cander] user prefs hydrate failed", err);
+      })
+      .finally(() => {
+        prefsPulling = false;
+      });
+  };
+
+  const stop = subscribeOrgPolicyRealtime(ctx, {
+    onOrgChange: () => {
+      if (orgTimer) clearTimeout(orgTimer);
+      orgTimer = setTimeout(pullOrg, 900);
+    },
+    onPinsChange: () => {
+      // Ignore echoes from our own delete→insert push window.
+      if (skipRemoteSync) return;
+      if (prefsTimer) clearTimeout(prefsTimer);
+      prefsTimer = setTimeout(pullPrefs, 1500);
+    },
+  });
+
+  return () => {
+    if (orgTimer) clearTimeout(orgTimer);
+    if (prefsTimer) clearTimeout(prefsTimer);
+    stop();
+  };
 }
 
 export async function bootstrapSupabaseOrgPolicy(ctx: WorkspaceCtx) {

@@ -742,8 +742,8 @@ function ProjectMobileTabBar({
             className={cn(
               "inline-flex h-9 max-w-[10rem] shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] tracking-[-0.01em] transition-colors",
               active
-                ? "bg-[var(--mobile-chrome-surface)] text-foreground"
-                : "text-muted-foreground hover:bg-[var(--mobile-chrome-surface)]/70",
+                ? "bg-muted/70 text-foreground"
+                : "text-muted-foreground hover:bg-muted/50",
             )}
           >
             <TabGlyph tab={tab} className="h-3.5 w-3.5" />
@@ -777,7 +777,7 @@ function ProjectMobileTabBar({
         aria-label="New tab"
         title="New tab"
         onClick={onAdd}
-        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--mobile-chrome-surface)] text-foreground transition-colors duration-200 hover:bg-muted"
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground transition-colors duration-200 hover:bg-muted"
       >
         <Plus className="h-4 w-4" strokeWidth={1.8} />
       </button>

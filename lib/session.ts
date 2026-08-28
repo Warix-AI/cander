@@ -455,7 +455,17 @@ export function persistPins(next: Pin[]) {
 
 /** Replace pins (Supabase hydrate). */
 export function replacePinsState(next: Pin[]) {
-  pins = next.length ? next.map(normalizePin) : emptyPins;
+  const normalized = next.length ? next.map(normalizePin) : emptyPins;
+  const same =
+    normalized.length === pins.length &&
+    normalized.every(
+      (pin, index) =>
+        pins[index]?.kind === pin.kind &&
+        pins[index]?.id === pin.id &&
+        pins[index]?.tier === pin.tier,
+    );
+  if (same) return;
+  pins = normalized;
   if (typeof window !== "undefined") {
     window.localStorage.setItem("courier-pins", JSON.stringify(pins));
   }

@@ -52,6 +52,12 @@ export function usePinnedItems() {
             title: thread.title,
             spaceId: thread.spaceId,
           });
+        } else {
+          resolved.push({
+            kind: "thread",
+            id: pin.id,
+            title: "Pinned chat",
+          });
         }
         continue;
       }
@@ -64,6 +70,13 @@ export function usePinnedItems() {
           id: project.id,
           title: project.title,
           spaceId: project.space,
+        });
+      } else {
+        // Show immediately — title fills in when the entity store catches up.
+        resolved.push({
+          kind: "project",
+          id: pin.id,
+          title: "Pinned project",
         });
       }
     }
