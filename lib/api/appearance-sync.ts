@@ -3,6 +3,7 @@
 import {
   DEFAULT_APPEARANCE,
   getAppearanceSnapshot,
+  migrateColorModeForSync,
   replaceAppearanceState,
   subscribeAppearance,
   type AppearanceState,
@@ -10,19 +11,56 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { WorkspaceCtx } from "@/lib/space-entities";
 
-const APPEARANCE_IMPORT_FLAG = "courier-appearance-imported-v1";
 const SYNC_DEBOUNCE_MS = 600;
 
 let skipRemoteSync = false;
+let lastColorModeSync: Promise<void> | null = null;
+
+function isValidActorId(actorId: string) {
+  return /^[0-9a-f-]{36}$/i.test(actorId);
+}
+
+function appearanceEquals(a: AppearanceState, b: AppearanceState) {
+  return (
+    a.colorMode === b.colorMode &&
+    a.typography === b.typography &&
+    a.spacing === b.spacing &&
+    a.shapes === b.shapes &&
+    a.motion === b.motion &&
+    a.layout === b.layout
+  );
+}
+
+function isDefaultAppearance(state: AppearanceState) {
+  return appearanceEquals(state, DEFAULT_APPEARANCE);
+}
+
+function hasRemotePreference(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  const data = raw as Record<string, unknown>;
+  if (Object.keys(data).length === 0) return false;
+  return (
+    data.colorMode !== undefined ||
+    typeof data.typography === "number" ||
+    typeof data.spacing === "number" ||
+    typeof data.shapes === "number" ||
+    typeof data.motion === "number" ||
+    typeof data.layout === "number" ||
+    typeof data.color === "number"
+  );
+}
 
 function parseRemoteAppearance(raw: unknown): AppearanceState | null {
-  if (!raw || typeof raw !== "object") return null;
+  if (!hasRemotePreference(raw)) return null;
   const data = raw as Partial<AppearanceState> & { color?: number };
+  const colorMode =
+    data.colorMode !== undefined
+      ? migrateColorModeForSync(data.colorMode)
+      : typeof data.color === "number"
+        ? migrateColorModeForSync(data.color < 45 ? "light" : "dark")
+        : DEFAULT_APPEARANCE.colorMode;
   return {
-    colorMode:
-      data.colorMode === "dark" || data.colorMode === "light"
-        ? data.colorMode
-        : DEFAULT_APPEARANCE.colorMode,
+    colorMode,
     typography:
       typeof data.typography === "number"
         ? data.typography
@@ -38,7 +76,30 @@ function parseRemoteAppearance(raw: unknown): AppearanceState | null {
   };
 }
 
+async function fetchRemoteAppearance(ctx: WorkspaceCtx) {
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("user_appearance")
+    .select("appearance, updated_at")
+    .eq("profile_id", ctx.actorId)
+    .maybeSingle();
+
+  if (error) {
+    if (/user_appearance|42P01|42703/i.test(error.message)) {
+      return { remote: null as AppearanceState | null, updatedAt: null as string | null };
+    }
+    throw error;
+  }
+
+  return {
+    remote: parseRemoteAppearance(data?.appearance),
+    updatedAt:
+      typeof data?.updated_at === "string" ? data.updated_at : null,
+  };
+}
+
 export async function syncAppearanceToSupabase(ctx: WorkspaceCtx) {
+  if (!isValidActorId(ctx.actorId)) return;
   const supabase = createSupabaseBrowserClient();
   const appearance = getAppearanceSnapshot();
   const { error } = await supabase.from("user_appearance").upsert(
@@ -51,53 +112,66 @@ export async function syncAppearanceToSupabase(ctx: WorkspaceCtx) {
   if (error) throw error;
 }
 
-export async function hydrateAppearanceFromRemote(ctx: WorkspaceCtx) {
-  skipRemoteSync = true;
-  const supabase = createSupabaseBrowserClient();
-  const { data, error } = await supabase
-    .from("user_appearance")
-    .select("appearance")
-    .eq("profile_id", ctx.actorId)
-    .maybeSingle();
-
-  if (error) {
-    if (/user_appearance|42P01|42703/i.test(error.message)) {
-      skipRemoteSync = false;
-      return;
-    }
-    throw error;
-  }
-
-  const remote = parseRemoteAppearance(data?.appearance);
-  if (remote) {
-    replaceAppearanceState(remote);
-  }
-
-  window.setTimeout(() => {
-    skipRemoteSync = false;
-  }, 0);
+/** Immediate push for theme changes (no debounce). */
+export function flushAppearanceColorModeSync(ctx: WorkspaceCtx) {
+  if (!isValidActorId(ctx.actorId)) return;
+  lastColorModeSync = syncAppearanceToSupabase(ctx).catch((err) => {
+    console.warn("[cander] appearance colorMode sync failed", err);
+  });
 }
 
-/** Push local appearance once, then keep remote in sync. */
-export async function bootstrapSupabaseAppearance(ctx: WorkspaceCtx) {
-  if (typeof window === "undefined") return;
+export async function hydrateAppearanceFromRemote(ctx: WorkspaceCtx) {
+  if (!isValidActorId(ctx.actorId)) return;
 
-  const imported = window.localStorage.getItem(APPEARANCE_IMPORT_FLAG) === "1";
-  if (!imported) {
-    try {
-      await syncAppearanceToSupabase(ctx);
-      window.localStorage.setItem(APPEARANCE_IMPORT_FLAG, "1");
-    } catch (err) {
-      console.warn("[cander] appearance import failed", err);
+  skipRemoteSync = true;
+  try {
+    const { remote } = await fetchRemoteAppearance(ctx);
+    if (remote) {
+      replaceAppearanceState(remote);
     }
+  } finally {
+    window.setTimeout(() => {
+      skipRemoteSync = false;
+    }, 0);
+  }
+}
+
+/** Push local first, then hydrate remote when it differs. */
+export async function bootstrapSupabaseAppearance(ctx: WorkspaceCtx) {
+  if (typeof window === "undefined" || !isValidActorId(ctx.actorId)) return;
+
+  const local = getAppearanceSnapshot();
+
+  try {
+    await syncAppearanceToSupabase(ctx);
+  } catch (err) {
+    console.warn("[cander] appearance push failed", err);
   }
 
-  await hydrateAppearanceFromRemote(ctx);
+  const { remote } = await fetchRemoteAppearance(ctx);
+  if (!remote) return;
+
+  if (isDefaultAppearance(local) && !isDefaultAppearance(remote)) {
+    replaceAppearanceState(remote);
+    return;
+  }
+
+  if (!appearanceEquals(local, remote)) {
+    try {
+      await syncAppearanceToSupabase(ctx);
+    } catch (err) {
+      console.warn("[cander] appearance reconcile push failed", err);
+      replaceAppearanceState(remote);
+    }
+  }
 }
 
 export function startAppearanceRemoteSync(ctx: WorkspaceCtx) {
+  if (!isValidActorId(ctx.actorId)) return () => {};
+
   let timer: ReturnType<typeof setTimeout> | null = null;
   let syncing = false;
+  let lastSnapshot = getAppearanceSnapshot();
 
   const push = () => {
     if (syncing || skipRemoteSync) return;
@@ -113,6 +187,17 @@ export function startAppearanceRemoteSync(ctx: WorkspaceCtx) {
 
   const unsub = subscribeAppearance(() => {
     if (skipRemoteSync) return;
+    const next = getAppearanceSnapshot();
+    if (appearanceEquals(next, lastSnapshot)) return;
+    const colorModeChanged = next.colorMode !== lastSnapshot.colorMode;
+    lastSnapshot = { ...next };
+
+    if (colorModeChanged) {
+      if (timer) clearTimeout(timer);
+      flushAppearanceColorModeSync(ctx);
+      return;
+    }
+
     if (timer) clearTimeout(timer);
     timer = setTimeout(push, SYNC_DEBOUNCE_MS);
   });
@@ -122,3 +207,5 @@ export function startAppearanceRemoteSync(ctx: WorkspaceCtx) {
     unsub();
   };
 }
+
+export { isValidActorId as isAppearanceActorId };

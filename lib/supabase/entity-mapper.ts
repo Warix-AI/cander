@@ -23,6 +23,7 @@ export type ProjectRow = {
   version: number;
   created_at: string;
   updated_at: string;
+  created_by?: string | null;
 };
 
 export type SourceRow = {
@@ -39,6 +40,7 @@ export type SourceRow = {
   version: number;
   created_at: string;
   updated_at: string;
+  created_by?: string | null;
 };
 
 export type BriefingRow = {
@@ -106,10 +108,14 @@ export function projectRowToEntity(row: ProjectRow): SpaceProject {
     version: row.version,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    createdBy: row.created_by ?? undefined,
   };
 }
 
-export function projectToRow(project: SpaceProject): ProjectRow {
+export function projectToRow(
+  project: SpaceProject,
+  createdBy?: string | null,
+): ProjectRow {
   return {
     id: project.id,
     workspace_id: project.workspaceId,
@@ -126,6 +132,7 @@ export function projectToRow(project: SpaceProject): ProjectRow {
     version: project.version,
     created_at: project.createdAt,
     updated_at: project.updatedAt,
+    created_by: project.createdBy ?? createdBy ?? null,
   };
 }
 
@@ -144,10 +151,14 @@ export function sourceRowToEntity(row: SourceRow): SpaceSource {
     version: row.version,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    createdBy: row.created_by ?? undefined,
   };
 }
 
-export function sourceToRow(source: SpaceSource): SourceRow {
+export function sourceToRow(
+  source: SpaceSource,
+  createdBy?: string | null,
+): SourceRow {
   return {
     id: source.id,
     workspace_id: source.workspaceId,
@@ -162,6 +173,7 @@ export function sourceToRow(source: SpaceSource): SourceRow {
     version: source.version,
     created_at: source.createdAt,
     updated_at: source.updatedAt,
+    created_by: source.createdBy ?? createdBy ?? null,
   };
 }
 

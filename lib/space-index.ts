@@ -15,6 +15,8 @@ export type SpaceIndexEntry = {
   cover?: string;
   badge?: string;
   snippet?: string;
+  createdById?: string;
+  createdByName?: string;
 };
 
 /** Lower rank = more recent. Works with ISO timestamps and legacy relative strings. */

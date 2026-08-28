@@ -107,6 +107,7 @@ export function createSupabaseChatApi(): ChatApi {
         updatedAt: "Just now",
         snippet: "",
         messages: [],
+        createdBy: ctx.actorId,
       };
       const row = threadToRow(thread, ctx.actorId);
       const { error } = await supabase.from("threads").insert(row);
@@ -210,7 +211,23 @@ export async function upsertThreadsToSupabase(
   if (!threads.length) return;
 
   const supabase = createSupabaseBrowserClient();
-  const threadRows = threads.map((thread) => threadToRow(thread, ctx.actorId));
+  const ids = threads.map((thread) => thread.id);
+  const { data: existingRows } = await supabase
+    .from("threads")
+    .select("id, created_by")
+    .in("id", ids);
+  const existingCreatedBy = new Map(
+    (existingRows ?? []).map((row) => [
+      String(row.id),
+      row.created_by ? String(row.created_by) : null,
+    ]),
+  );
+
+  const threadRows = threads.map((thread) => {
+    const createdBy =
+      existingCreatedBy.get(thread.id) ?? thread.createdBy ?? ctx.actorId;
+    return threadToRow({ ...thread, createdBy }, createdBy);
+  });
   const { error: threadError } = await supabase
     .from("threads")
     .upsert(threadRows, { onConflict: "id" });

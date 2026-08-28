@@ -1,0 +1,84 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
+import { isSupabaseConfigured } from "@/lib/data-backend";
+import { assertOrgManager } from "@/lib/supabase/org-auth";
+
+async function authedUser(request: Request) {
+  const authHeader = request.headers.get("Authorization");
+  const token = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length).trim()
+    : null;
+  if (!token) return null;
+
+  const userClient = createClient(supabaseUrl(), supabaseAnonKey(), {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const {
+    data: { user },
+  } = await userClient.auth.getUser();
+  return user;
+}
+
+export async function POST(request: Request) {
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+  }
+
+  const user = await authedUser(request);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  let body: {
+    workspaceId?: string;
+    email?: string;
+    orgId?: string | null;
+  };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  }
+
+  if (!body.workspaceId || !body.email?.includes("@")) {
+    return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
+  }
+
+  const email = body.email.trim().toLowerCase();
+  const admin = createSupabaseAdminClient();
+
+  const { data: workspaceMember } = await admin
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", body.workspaceId)
+    .eq("profile_id", user.id)
+    .maybeSingle();
+
+  const isWorkspaceManager =
+    workspaceMember?.role === "Owner" || workspaceMember?.role === "Admin";
+
+  if (body.orgId) {
+    const authz = await assertOrgManager(admin, body.orgId, user.id);
+    if (!authz.ok && !isWorkspaceManager) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+  } else if (!isWorkspaceManager) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
+  const { error } = await admin
+    .from("workspace_invites")
+    .update({ status: "revoked", updated_at: new Date().toISOString() })
+    .eq("workspace_id", body.workspaceId)
+    .eq("invitee_email", email)
+    .eq("status", "pending");
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}

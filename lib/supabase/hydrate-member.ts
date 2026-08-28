@@ -101,6 +101,9 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
     : profileResult.data;
   const memberships = membershipResult.data ?? [];
   const workspaceIds = memberships.map((row) => String(row.workspace_id));
+  const workspaceRoles = Object.fromEntries(
+    memberships.map((row) => [String(row.workspace_id), asRole(row.role)]),
+  ) as Record<string, Role>;
   const plan = asPlan(profile?.plan);
   const teamPlan = isTeamPlan(plan);
 
@@ -129,7 +132,7 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
   const displayName = String(profile?.name || base.name);
   const shortFromProfile =
     typeof profile?.short_name === "string" ? profile.short_name.trim() : "";
-  const member: Member = {
+  let member: Member = {
     ...base,
     name: displayName,
     email: String(profile?.email || base.email),
@@ -141,6 +144,7 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
     plan,
     role: asRole(profile?.role ?? memberships[0]?.role),
     workspaceIds,
+    workspaceRoles,
     kind: teamPlan ? "org" : "personal",
     seatStatus: "active",
     subscriptionStatus: asSubscriptionStatus(profile?.subscription_status),
@@ -158,7 +162,6 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
 
   upsertOrgMember(member);
 
-  // Replace local roster from real org_members (pending invites included).
   const { data: selfOrg } = await supabase
     .from("org_members")
     .select("org_id")
@@ -172,19 +175,51 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
       supabase.from("organizations").select("name").eq("id", orgId).maybeSingle(),
     ]);
     if (org?.name) persistOrgName(String(org.name));
-    if (orgRows?.length) {
-      const remoteMembers = (orgRows as OrgMemberRow[]).map(memberRowToMember);
-      const merged = remoteMembers.some((item) => item.id === member.id)
-        ? remoteMembers.map((item) =>
-            item.id === member.id ? { ...item, ...member, orgId } : { ...item, orgId },
-          )
-        : [{ ...member, orgId }, ...remoteMembers.map((item) => ({ ...item, orgId }))];
+    const orgName = org?.name ? String(org.name) : undefined;
+    const remoteMembers = (orgRows ?? []) as OrgMemberRow[];
+    const selfOrgRow = remoteMembers
+      .map(memberRowToMember)
+      .find((item) => item.id === member.id);
+
+    if (selfOrgRow) {
+      member = {
+        ...member,
+        ...selfOrgRow,
+        id: member.id,
+        orgId,
+        email: member.email,
+        managedByOrgName: orgName,
+        workspaceIds: Array.from(
+          new Set([...member.workspaceIds, ...selfOrgRow.workspaceIds]),
+        ),
+        workspaceRoles: member.workspaceRoles,
+      };
+      upsertOrgMember(member);
+    }
+
+    if (remoteMembers.length) {
+      const merged = remoteMembers.map((row) => {
+        const parsed = memberRowToMember(row);
+        if (parsed.id === member.id) {
+          return {
+            ...parsed,
+            ...member,
+            orgId,
+            managedByOrgName: orgName,
+            workspaceRoles: member.workspaceRoles,
+          };
+        }
+        return { ...parsed, orgId, managedByOrgName: orgName };
+      });
+      if (!merged.some((item) => item.id === member.id)) {
+        merged.unshift({ ...member, orgId, managedByOrgName: orgName });
+      }
       replacePolicyStoreState({
         policies: getPoliciesSnapshot(),
         orgMembers: merged,
       });
     } else {
-      upsertOrgMember({ ...member, orgId });
+      upsertOrgMember({ ...member, orgId, managedByOrgName: orgName });
     }
   }
 

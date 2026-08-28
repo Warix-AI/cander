@@ -47,6 +47,11 @@ function isColorModeId(value: unknown): value is ColorModeId {
   return COLOR_MODE_PRESETS.some((preset) => preset.id === value);
 }
 
+/** Exported for remote appearance hydration. */
+export function migrateColorModeForSync(value: unknown): ColorModeId {
+  return migrateColorMode(value);
+}
+
 function migrateColorMode(value: unknown): ColorModeId {
   if (value === "dark" || value === "dark-charcoal" || value === "dark-blue") {
     return "dark";

@@ -156,7 +156,7 @@ export function AccountSecuritySettings({ onAfterSignOut }: Props) {
 
   const body = (
     <>
-      {supabase ? (
+      {supabase && !entitlements.showOrgManaged ? (
         <>
           <SettingsRow
             label="Email"
@@ -224,71 +224,72 @@ export function AccountSecuritySettings({ onAfterSignOut }: Props) {
         </DashBtn>
       </SettingsRow>
 
-      <SettingsRow
-        label="Delete account"
-        description={mobile ? undefined : deleteDescription()}
-      >
-        {!entitlements.canDeleteAccount ? (
-          <span className="text-[12.5px] text-muted-foreground">
-            {actor.kind === "org" && actor.role !== "Owner"
-              ? "Managed by your organization"
-              : billingBlocksDelete && isPaidPlan(actor.plan) && !actor.cancelAtPeriodEnd
-                ? "Cancel plan first"
-                : billingBlocksDelete && periodLabel
-                  ? `Active until ${periodLabel}`
-                  : "Unavailable"}
-          </span>
-        ) : confirmDelete ? (
-          <div className="flex w-full max-w-sm flex-col gap-2 sm:items-end">
-            <input
-              type="text"
-              value={deleteConfirmText}
-              onChange={(event) => setDeleteConfirmText(event.target.value)}
-              placeholder='Type "delete" to confirm'
-              aria-label='Type "delete" to confirm account deletion'
-              className="h-10 w-full rounded-[10px] border border-border bg-background px-3 text-[13.5px] outline-none focus:border-foreground/20"
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                disabled={busy === "delete" || !deleteConfirmOk}
-                onClick={() => void removeAccount()}
-                className="inline-flex h-10 items-center rounded-[10px] border border-destructive/30 bg-destructive/10 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/15 disabled:opacity-50"
-              >
-                {busy === "delete" ? "Deleting…" : "Confirm delete"}
-              </button>
-              <DashBtn
-                onClick={() => {
-                  setConfirmDelete(false);
-                  setDeleteConfirmText("");
-                }}
-              >
-                Cancel
-              </DashBtn>
+      {entitlements.canDeleteAccount ? (
+        <SettingsRow
+          label="Delete account"
+          description={mobile ? undefined : deleteDescription()}
+        >
+          {confirmDelete ? (
+            <div className="flex w-full max-w-sm flex-col gap-2 sm:items-end">
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(event) => setDeleteConfirmText(event.target.value)}
+                placeholder='Type "delete" to confirm'
+                aria-label='Type "delete" to confirm account deletion'
+                className="h-10 w-full rounded-[10px] border border-border bg-background px-3 text-[13.5px] outline-none focus:border-foreground/20"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={busy === "delete" || !deleteConfirmOk}
+                  onClick={() => void removeAccount()}
+                  className="inline-flex h-10 items-center rounded-[10px] border border-destructive/30 bg-destructive/10 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/15 disabled:opacity-50"
+                >
+                  {busy === "delete" ? "Deleting…" : "Confirm delete"}
+                </button>
+                <DashBtn
+                  onClick={() => {
+                    setConfirmDelete(false);
+                    setDeleteConfirmText("");
+                  }}
+                >
+                  Cancel
+                </DashBtn>
+              </div>
             </div>
-          </div>
-        ) : billingBlocksDelete ? (
-          <button
-            type="button"
-            onClick={() =>
-              nativeShell
-                ? openExternalUrl(webAppPlansSettingsUrl())
-                : setSettingsTab("plans")
-            }
-            className="inline-flex h-10 items-center rounded-[10px] border border-foreground/15 px-4 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-          >
-            {nativeShell ? "Manage billing on web" : "Cancel plan"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setConfirmDelete(true)}
-            className="inline-flex h-10 items-center rounded-[10px] border border-destructive/30 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/10"
-          >
-            Delete account
-          </button>
-        )}
-      </SettingsRow>
+          ) : billingBlocksDelete ? (
+            <button
+              type="button"
+              onClick={() =>
+                nativeShell
+                  ? openExternalUrl(webAppPlansSettingsUrl())
+                  : setSettingsTab("plans")
+              }
+              className="inline-flex h-10 items-center rounded-[10px] border border-foreground/15 px-4 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+            >
+              {nativeShell ? "Manage billing on web" : "Cancel plan"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="inline-flex h-10 items-center rounded-[10px] border border-destructive/30 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/10"
+            >
+              Delete account
+            </button>
+          )}
+        </SettingsRow>
+      ) : entitlements.showOrgManaged ? (
+        <SettingsRow
+          label="Delete account"
+          description={mobile ? undefined : deleteDescription()}
+        >
+          <span className="text-[12.5px] text-muted-foreground">
+            Managed by your organization
+          </span>
+        </SettingsRow>
+      ) : null}
 
       {message ? (
         <p className="px-4 pb-3 text-[12.5px] text-muted-foreground">{message}</p>
