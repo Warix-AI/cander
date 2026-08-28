@@ -54,6 +54,11 @@ import {
   getSessionReadySnapshot,
   subscribeSessionReady,
 } from "@/lib/session-ready";
+import {
+  getWorkspaceCatalogServerSnapshot,
+  getWorkspaceCatalogSnapshot,
+  subscribeWorkspaceCatalog,
+} from "@/lib/workspace-catalog";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 
 export function AppShell() {
@@ -207,6 +212,34 @@ function Root() {
     return (
       <div className="flex h-svh items-center justify-center bg-background text-foreground">
         <p className="text-[14px] text-muted-foreground">Loading your account…</p>
+      </div>
+    );
+  }
+
+  return (
+    <AuthenticatedShell />
+  );
+}
+
+function AuthenticatedShell() {
+  const { workspaceId, actor } = useApp();
+  const workspaceCatalog = useSyncExternalStore(
+    subscribeWorkspaceCatalog,
+    getWorkspaceCatalogSnapshot,
+    getWorkspaceCatalogServerSnapshot,
+  );
+  const mobile = useMobileShell();
+  const swipe = useMobileSwipeGestures();
+  const workspaceReady =
+    !isSupabaseConfigured() ||
+    (workspaceId.trim() !== "" &&
+      (workspaceCatalog.some((item) => item.id === workspaceId) ||
+        actor.workspaceIds.includes(workspaceId)));
+
+  if (!workspaceReady) {
+    return (
+      <div className="flex h-svh items-center justify-center bg-background text-foreground">
+        <p className="text-[14px] text-muted-foreground">Loading workspace…</p>
       </div>
     );
   }

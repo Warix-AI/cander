@@ -111,11 +111,29 @@ export function mergeCatalog(extra: Workspace[] = custom): Workspace[] {
   return Array.from(byId.values());
 }
 
+const PLACEHOLDER_WORKSPACE: Workspace = {
+  id: "",
+  name: "Workspace",
+  spaces: [...NAV_SPACES],
+  members: 1,
+  budget: "$0",
+  spend: "$0",
+  kind: "personal",
+  personal: true,
+};
+
+/** Resolve workspace by id — never returns undefined (avoids post-login render crashes). */
 export function workspaceById(
   id: string,
   list: Workspace[] = getWorkspaceCatalogSnapshot(),
-) {
-  return list.find((item) => item.id === id) ?? list[0];
+): Workspace {
+  const trimmed = id.trim();
+  if (trimmed) {
+    const match = list.find((item) => item.id === trimmed);
+    if (match) return match;
+    return { ...PLACEHOLDER_WORKSPACE, id: trimmed };
+  }
+  return list[0] ?? PLACEHOLDER_WORKSPACE;
 }
 
 export function slugifyWorkspaceName(name: string) {

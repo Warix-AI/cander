@@ -15,13 +15,14 @@ export type PinnedItem = {
 };
 
 export function usePinnedItems() {
-  const { pins, threads, workspace } = useApp();
+  const { pins, threads, workspaceId } = useApp();
   const { api, ctx, entityRevision } = useSpaceData();
   const [projects, setProjects] = useState<
     Awaited<ReturnType<typeof api.entities.listAllProjects>>
   >([]);
 
   useEffect(() => {
+    if (!ctx.workspaceId.trim()) return;
     let cancelled = false;
     api.entities.listAllProjects(ctx).then((items) => {
       if (!cancelled) setProjects(items);
@@ -47,7 +48,7 @@ export function usePinnedItems() {
       }
       if (pin.kind === "thread") {
         const thread = threads.find(
-          (item) => item.id === pin.id && item.workspaceId === workspace.id,
+          (item) => item.id === pin.id && item.workspaceId === workspaceId,
         );
         if (thread) {
           resolved.push({
@@ -60,7 +61,7 @@ export function usePinnedItems() {
         continue;
       }
       const project = projects.find(
-        (item) => item.id === pin.id && item.workspaceId === workspace.id,
+        (item) => item.id === pin.id && item.workspaceId === workspaceId,
       );
       if (project) {
         resolved.push({
@@ -72,7 +73,7 @@ export function usePinnedItems() {
       }
     }
     return resolved;
-  }, [pins, threads, workspace.id, projects]);
+  }, [pins, threads, workspaceId, projects]);
 
   return { pinnedItems: items };
 }

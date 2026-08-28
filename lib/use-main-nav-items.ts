@@ -21,11 +21,11 @@ export function navLabel(id: SidebarNavId) {
 }
 
 export function useMainNavItems() {
-  const { workspace, actor, workspacePolicies, sidebarLayout, billingPlan } =
+  const { workspaceId, actor, workspacePolicies, sidebarLayout, billingPlan } =
     useApp();
 
   const { main } = resolveSidebarNav(
-    memberSpaces(workspace.id, actor.id, workspacePolicies),
+    memberSpaces(workspaceId, actor.id, workspacePolicies),
     sidebarLayout,
     { billingPlan },
   );

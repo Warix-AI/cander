@@ -98,7 +98,7 @@ export function SpaceDataProvider({
   }, [actorId]);
 
   useEffect(() => {
-    if (backend !== "supabase") return;
+    if (backend !== "supabase" || !workspaceId.trim()) return;
 
     let cancelled = false;
 
@@ -124,7 +124,7 @@ export function SpaceDataProvider({
       stopChatSync();
       stopChatRealtime();
     };
-  }, [api, backend, ctx]);
+  }, [api, backend, ctx, workspaceId]);
 
   useEffect(() => {
     if (!canSyncAppearance) {

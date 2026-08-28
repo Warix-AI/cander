@@ -78,6 +78,13 @@ export function persistWorkspace(next: string) {
   emitWorkspace();
 }
 
+/** Reset in-memory workspace selection (sign-out / user switch). */
+export function resetWorkspaceSession() {
+  if (workspaceId === "") return;
+  workspaceId = "";
+  emitWorkspace();
+}
+
 export function subscribeTheme(listener: Listener) {
   const observer = new MutationObserver(listener);
   observer.observe(document.documentElement, {
