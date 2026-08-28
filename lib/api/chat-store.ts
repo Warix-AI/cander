@@ -60,8 +60,14 @@ export function getChatStoreSnapshot(): ChatStoreState {
   return state;
 }
 
+const EMPTY_CHAT_STORE: ChatStoreState = {
+  threads: [],
+  revision: 0,
+  hydrated: true,
+};
+
 export function getChatStoreServerSnapshot(): ChatStoreState {
-  return { threads: [], revision: 0, hydrated: true };
+  return EMPTY_CHAT_STORE;
 }
 
 /** Replace in-memory threads (Supabase hydrate / import). */

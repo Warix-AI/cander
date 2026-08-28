@@ -16,7 +16,9 @@ export function ComposePage() {
           draft_gmail_message · send_gmail_message
         </p>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Compose as {gmailAccount}. Drafts stay local until send.
+          {gmailAccount
+            ? `Compose as ${gmailAccount}. Drafts stay local until send.`
+            : "Connect Gmail to compose. Drafts stay local until send."}
         </p>
       </div>
 

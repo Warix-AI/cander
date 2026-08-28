@@ -67,7 +67,8 @@ export function FiltersPage() {
       </div>
 
       <ul className="space-y-2">
-        {gmailFilters.map((filter) => (
+        {gmailFilters.length ? (
+          gmailFilters.map((filter) => (
           <li
             key={filter.id}
             className="rounded-[10px] border border-border px-3 py-2.5"
@@ -77,7 +78,12 @@ export function FiltersPage() {
               {filter.action}
             </p>
           </li>
-        ))}
+          ))
+        ) : (
+          <li className="px-1 py-2 text-[12.5px] text-muted-foreground">
+            No filters yet.
+          </li>
+        )}
       </ul>
     </div>
   );

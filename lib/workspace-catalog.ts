@@ -99,8 +99,10 @@ export function getWorkspaceCatalogSnapshot(): Workspace[] {
   return catalog;
 }
 
+const EMPTY_CATALOG: Workspace[] = [];
+
 export function getWorkspaceCatalogServerSnapshot(): Workspace[] {
-  return [];
+  return EMPTY_CATALOG;
 }
 
 export function mergeCatalog(extra: Workspace[] = custom): Workspace[] {
@@ -207,6 +209,17 @@ export function deleteWorkspace(id: string): boolean {
   hydrate();
   if (!isCustomWorkspace(id)) return false;
   custom = custom.filter((item) => item.id !== id);
+  persist();
+  return true;
+}
+
+export function renameWorkspace(id: string, name: string): boolean {
+  hydrate();
+  const trimmed = name.trim();
+  if (!trimmed || !isCustomWorkspace(id)) return false;
+  custom = custom.map((item) =>
+    item.id === id ? { ...item, name: trimmed } : item,
+  );
   persist();
   return true;
 }

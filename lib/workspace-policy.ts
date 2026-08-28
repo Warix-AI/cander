@@ -247,8 +247,10 @@ export function getPoliciesSnapshot() {
   return policies;
 }
 
+const EMPTY_POLICIES: Record<string, WorkspacePolicy> = {};
+
 export function getPoliciesServerSnapshot() {
-  return {};
+  return EMPTY_POLICIES;
 }
 
 /** Replace or insert a member in the org roster (Supabase session hydrate). */
@@ -295,8 +297,10 @@ export function getMembersSnapshot() {
   return orgMembers;
 }
 
+const EMPTY_MEMBERS: Member[] = [];
+
 export function getMembersServerSnapshot() {
-  return [];
+  return EMPTY_MEMBERS;
 }
 
 function workspaceSpaces(workspaceId: string): SpaceId[] {

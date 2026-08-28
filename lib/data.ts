@@ -787,9 +787,9 @@ function conn(
 ): Connector {
   return {
     scope: "public",
+    ...row,
     installed: false,
     accounts: [],
-    ...row,
   };
 }
 

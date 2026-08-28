@@ -63,15 +63,21 @@ export function LabelsPage() {
             />
           ))}
         <SectionLabel>User</SectionLabel>
-        {gmailLabels
-          .filter((label) => label.type === "user")
-          .map((label) => (
-            <StatLine
-              key={label.id}
-              label={label.name}
-              value={`${label.count}`}
-            />
-          ))}
+        {gmailLabels.filter((label) => label.type === "user").length ? (
+          gmailLabels
+            .filter((label) => label.type === "user")
+            .map((label) => (
+              <StatLine
+                key={label.id}
+                label={label.name}
+                value={`${label.count}`}
+              />
+            ))
+        ) : (
+          <p className="px-3 py-2 text-[12.5px] text-muted-foreground">
+            No custom labels yet.
+          </p>
+        )}
       </div>
     </div>
   );

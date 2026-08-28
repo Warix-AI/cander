@@ -9,9 +9,9 @@ import { buildPreviews } from "@/lib/data";
 
 function previewUrlForProject(projectId: string) {
   const preview = buildPreviews.find((item) => item.projectId === projectId);
-  if (!preview) return `https://${projectId}.courier.app`;
+  if (!preview) return `https://${projectId}.cander.app`;
   const slug = preview.name.toLowerCase().replace(/\s+/g, "-");
-  return `https://${slug}.courier.app`;
+  return `https://${slug}.cander.app`;
 }
 
 export type BuildRuntimeApi = {
@@ -46,7 +46,7 @@ export function createLocalBuildRuntimeApi(): BuildRuntimeApi {
     async publish(ctx, projectId, input) {
       const url =
         input.url ??
-        (input.slug ? `https://${input.slug}.courier.app` : null) ??
+        (input.slug ? `https://${input.slug}.cander.app` : null) ??
         previewUrlForProject(projectId);
       await localSpaceEntityStore.createDeployment(ctx, projectId, { url });
       return { url };

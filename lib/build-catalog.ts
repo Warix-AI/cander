@@ -1,4 +1,3 @@
-import { buildPreviews, scheduledJobs, skills } from "./data";
 import type { ScheduledJob, Skill } from "./types";
 
 export type BuildScope =
@@ -11,7 +10,16 @@ export type BuildScope =
 
 export type TaskCadence = "all" | "recurring" | "once";
 
-export type BuildPreview = (typeof buildPreviews)[number];
+export type BuildPreview = {
+  id: string;
+  name: string;
+  projectId: string;
+  summary?: string;
+  updatedAt?: string;
+  published?: boolean;
+  image?: string;
+  workspaceId?: string;
+};
 
 export type BuildTask = {
   id: string;
@@ -70,11 +78,11 @@ export function filterPreviews(
 }
 
 export function workspaceSkills(workspaceId: string): Skill[] {
-  return skills.filter((item) => item.workspaceId === workspaceId);
+  return [];
 }
 
 export function workspaceScheduled(workspaceId: string): ScheduledJob[] {
-  return scheduledJobs.filter((job) => job.workspaceId === workspaceId);
+  return [];
 }
 
 const skillJobIds: Record<string, string> = {

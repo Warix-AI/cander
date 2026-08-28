@@ -19,7 +19,6 @@ import {
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { PlansSettings } from "@/components/settings/PlansSettings";
 import { AccountSecuritySettings } from "@/components/settings/AccountSecuritySettings";
-import { DashBtn } from "@/components/spaces/ItemSet";
 import {
   SettingsField,
   SettingsFootnote,
@@ -43,7 +42,13 @@ import {
   orgMaxSeats,
 } from "@/lib/entitlements";
 import { orgSeatMix, planLabel, seatMixLabel } from "@/lib/billing";
-import { getOrgIdSnapshot, getOrgNameSnapshot } from "@/lib/org-onboarding";
+import {
+  getOrgIdSnapshot,
+  getOrgNameSnapshot,
+  persistOrgName,
+  persistOrgSetupDeferred,
+} from "@/lib/org-onboarding";
+import { setupOrgOnSupabase } from "@/lib/supabase/setup-org-onboarding";
 import { getWorkspaceCatalogSnapshot } from "@/lib/workspace-catalog";
 import { webAppOrgSettingsUrl } from "@/lib/plans";
 import { isSupabaseConfigured } from "@/lib/data-backend";
@@ -69,6 +74,7 @@ import {
   setMemberOrgPlan,
   toggleMemberWorkspace,
   removeOrgMember,
+  upsertOrgMember,
 } from "@/lib/workspace-policy";
 
 const roles: Role[] = ["Owner", "Admin", "Member"];
@@ -282,7 +288,6 @@ function ManagedOrganizationSettings() {
 function OrganizationSettings() {
   const {
     orgMembers,
-    setSettingsTab,
     actor,
     entitlements,
   } = useApp();
@@ -294,14 +299,63 @@ function OrganizationSettings() {
   const [planBusy, setPlanBusy] = useState<string | null>(null);
   const [removeBusy, setRemoveBusy] = useState<string | null>(null);
   const [inviteWarning, setInviteWarning] = useState<string | null>(null);
+  const [finishOrgName, setFinishOrgName] = useState("");
+  const [finishBusy, setFinishBusy] = useState(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const warning = window.sessionStorage.getItem("courier-invite-send-warning");
+    const warning = window.sessionStorage.getItem("cander-invite-send-warning");
     if (!warning) return;
-    window.sessionStorage.removeItem("courier-invite-send-warning");
+    window.sessionStorage.removeItem("cander-invite-send-warning");
     setInviteWarning(warning);
   }, []);
+
+  const finishOrgSetup = async () => {
+    const name = finishOrgName.trim() || orgDisplayName.trim();
+    if (!name || name === "Organization") {
+      setFinishError("Add your organization name.");
+      return;
+    }
+    setFinishBusy(true);
+    setFinishError(null);
+    try {
+      const workspaceId =
+        orgWorkspaces[0]?.id ?? actor.workspaceIds[0] ?? null;
+      if (!workspaceId) {
+        throw new Error("Create a workspace before finishing org setup.");
+      }
+      if (isSupabaseConfigured()) {
+        const orgIdCreated = await setupOrgOnSupabase({
+          orgName: name,
+          workspaceId,
+          invites: [],
+        });
+        upsertOrgMember({
+          ...actor,
+          orgId: orgIdCreated,
+          kind: "org",
+          orgSetupDeferred: false,
+        });
+      } else {
+        persistOrgName(name);
+        upsertOrgMember({
+          ...actor,
+          kind: "org",
+          orgSetupDeferred: false,
+        });
+      }
+      persistOrgName(name);
+      persistOrgSetupDeferred(false);
+      setFinishOrgName("");
+    } catch (err) {
+      setFinishError(
+        err instanceof Error ? err.message : "Could not finish organization setup.",
+      );
+    } finally {
+      setFinishBusy(false);
+    }
+  };
 
   const orgWorkspaces = getWorkspaceCatalogSnapshot().filter(
     (item) => workspaceKindOf(item) === "business",
@@ -326,6 +380,42 @@ function OrganizationSettings() {
     { label: "Max seats", value: `${maxSeats}` },
     { label: "People", value: `${roster.length}` },
   ];
+
+  const changeMemberRole = async (memberId: string, role: Role) => {
+    const previous = orgMembers.find((item) => item.id === memberId)?.role;
+    setMemberRole(memberId, role, actor.id);
+    setPlanError(null);
+
+    if (!isSupabaseConfigured() || !orgId) return;
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Sign in to update roles.");
+      }
+      const response = await fetch("/api/org/members/role", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ memberId, orgId, role }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        if (previous) setMemberRole(memberId, previous, actor.id);
+        throw new Error(data.error ?? "Could not update role.");
+      }
+    } catch (err) {
+      if (previous) setMemberRole(memberId, previous, actor.id);
+      setPlanError(
+        err instanceof Error ? err.message : "Could not update role.",
+      );
+    }
+  };
 
   const changeMemberPlan = async (
     memberId: string,
@@ -426,18 +516,35 @@ function OrganizationSettings() {
       {actor.orgSetupDeferred ? (
         <SettingsSection
           title="Finish setup"
-          description="Complete organization setup to invite Pro and Max teammates."
+          description="Name your organization to unlock teammate invites."
           className="mt-2 lg:mt-8"
         >
           <SettingsPanel>
             <p className="text-[13px] leading-relaxed text-muted-foreground">
-              Seat billing is confirmed on the web after setup. Add your org
-              name and invites below, or anytime from this tab.
+              You chose Max with org setup later. Add your organization name to
+              finish.
             </p>
+            <input
+              value={finishOrgName}
+              onChange={(event) => {
+                setFinishOrgName(event.target.value);
+                setFinishError(null);
+              }}
+              placeholder="Organization name"
+              className={cn(settingsInputClass, "mt-4")}
+            />
+            {finishError ? (
+              <p className="mt-2 text-[12.5px] text-destructive">{finishError}</p>
+            ) : null}
             <div className="mt-4">
-              <DashBtn onClick={() => setSettingsTab("organization")}>
-                Continue setup
-              </DashBtn>
+              <button
+                type="button"
+                disabled={finishBusy}
+                onClick={() => void finishOrgSetup()}
+                className="inline-flex h-10 items-center rounded-full bg-primary px-5 text-[13.5px] font-medium tracking-[-0.01em] text-primary-foreground disabled:opacity-50"
+              >
+                {finishBusy ? "Saving…" : "Create organization"}
+              </button>
             </div>
           </SettingsPanel>
         </SettingsSection>
@@ -525,10 +632,9 @@ function OrganizationSettings() {
                     <select
                       value={member.role}
                       onChange={(event) =>
-                        setMemberRole(
+                        void changeMemberRole(
                           member.id,
                           event.target.value as Role,
-                          actor.id,
                         )
                       }
                       className={settingsSelectClass}
@@ -645,6 +751,11 @@ function GeneralSettings({
   onAfterSignOut: () => void;
 }) {
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [fullName, setFullName] = useState("");
+  const [shortName, setShortName] = useState("");
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [profileBusy, setProfileBusy] = useState(false);
   const photoInput = useRef<HTMLInputElement>(null);
   const mobile = useMobileShell();
   const { actor, entitlements } = useApp();
@@ -654,6 +765,115 @@ function GeneralSettings({
     getProfilePhotosServerSnapshot,
   );
   const photo = profilePhotoFor(actor.id, photos);
+
+  useEffect(() => {
+    setFullName(actor.name);
+    setShortName(actor.short);
+  }, [actor.id, actor.name, actor.short]);
+
+  const saveProfile = async () => {
+    const name = fullName.trim();
+    const short = shortName.trim() || name.split(/\s+/)[0] || "You";
+    if (!name) {
+      setProfileError("Add your full name.");
+      return;
+    }
+    setProfileBusy(true);
+    setProfileError(null);
+    setProfileSaved(false);
+    try {
+      const initials = name
+        .split(/\s+/)
+        .map((part) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase();
+      upsertOrgMember({
+        ...actor,
+        name,
+        short,
+        initials: initials || actor.initials,
+      });
+
+      if (isSupabaseConfigured()) {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) throw new Error("Sign in to save your profile.");
+        const { error } = await supabase
+          .from("profiles")
+          .update({ name, short_name: short })
+          .eq("id", user.id);
+        if (error && /short_name|42703|column/i.test(error.message)) {
+          const retry = await supabase
+            .from("profiles")
+            .update({ name })
+            .eq("id", user.id);
+          if (retry.error) throw retry.error;
+        } else if (error) {
+          throw error;
+        }
+      }
+      setProfileSaved(true);
+    } catch (err) {
+      setProfileError(
+        err instanceof Error ? err.message : "Could not save profile.",
+      );
+    } finally {
+      setProfileBusy(false);
+    }
+  };
+
+  const profileFields = (
+    <div className="grid gap-4 px-4 py-4 sm:grid-cols-2">
+      <SettingsField label="Full name">
+        <input
+          value={fullName}
+          onChange={(event) => {
+            setFullName(event.target.value);
+            setProfileSaved(false);
+            setProfileError(null);
+          }}
+          className={settingsInputClass}
+        />
+      </SettingsField>
+      <SettingsField label="Email" hint="Change email in Account security below.">
+        <input
+          value={actor.email}
+          readOnly
+          className={cn(settingsInputClass, "bg-muted/40 text-muted-foreground")}
+        />
+      </SettingsField>
+      <SettingsField label="What should we call you?">
+        <input
+          value={shortName}
+          onChange={(event) => {
+            setShortName(event.target.value);
+            setProfileSaved(false);
+            setProfileError(null);
+          }}
+          className={settingsInputClass}
+        />
+      </SettingsField>
+      <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+        <button
+          type="button"
+          disabled={profileBusy}
+          onClick={() => void saveProfile()}
+          className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground disabled:opacity-50"
+        >
+          {profileBusy ? "Saving…" : "Save profile"}
+        </button>
+        {profileSaved ? (
+          <span className="text-[12.5px] text-muted-foreground">Saved</span>
+        ) : null}
+        {profileError ? (
+          <span className="text-[12.5px] text-destructive">{profileError}</span>
+        ) : null}
+      </div>
+    </div>
+  );
 
   return (
     <SettingsPage>
@@ -665,230 +885,170 @@ function GeneralSettings({
         </p>
       ) : null}
 
-      <div className={cn(!entitlements.showOrgSettings ? "mt-4" : "mt-2", mobile ? "space-y-6" : "space-y-3")}>
+      <div
+        className={cn(
+          !entitlements.showOrgSettings ? "mt-4" : "mt-2",
+          mobile ? "space-y-6" : "space-y-3",
+        )}
+      >
         {mobile ? (
-        <SettingsSection title="Profile">
-        <SettingsGroup>
-          <div className={cn("flex flex-wrap items-center gap-4 px-4", mobile ? "py-3.5" : "py-4")}>
-            <AccountAvatar
-              memberId={actor.id}
-              name={actor.name}
-              initials={actor.initials}
-              size="lg"
-            />
-            <div className="min-w-0 flex-1">
-              <p className={cn("font-medium tracking-[-0.01em]", mobile ? "text-[15px]" : "text-[13.5px]")}>
-                Profile photo
-              </p>
-              {!mobile ? (
-              <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                Shown on your account row and in shared workspaces.
-              </p>
-              ) : null}
-              <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPhotoError(null);
-                    photoInput.current?.click();
-                  }}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
-                >
-                  <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  {photo ? "Replace" : "Upload"}
-                </button>
-                {photo ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      clearProfilePhoto(actor.id);
-                      setPhotoError(null);
-                    }}
-                    className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
+          <SettingsSection title="Profile">
+            <SettingsGroup>
+              <div
+                className={cn(
+                  "flex flex-wrap items-center gap-4 px-4",
+                  mobile ? "py-3.5" : "py-4",
+                )}
+              >
+                <AccountAvatar
+                  memberId={actor.id}
+                  name={actor.name}
+                  initials={actor.initials}
+                  size="lg"
+                />
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={cn(
+                      "font-medium tracking-[-0.01em]",
+                      mobile ? "text-[15px]" : "text-[13.5px]",
+                    )}
                   >
-                    Remove
-                  </button>
-                ) : null}
+                    Profile photo
+                  </p>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhotoError(null);
+                        photoInput.current?.click();
+                      }}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
+                    >
+                      <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
+                      {photo ? "Replace" : "Upload"}
+                    </button>
+                    {photo ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearProfilePhoto(actor.id);
+                          setPhotoError(null);
+                        }}
+                        className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                  {photoError ? (
+                    <p className="mt-2 text-[12.5px] text-destructive">
+                      {photoError}
+                    </p>
+                  ) : null}
+                </div>
               </div>
-              {photoError ? (
-                <p className="mt-2 text-[12.5px] text-destructive">{photoError}</p>
-              ) : null}
-            </div>
-          </div>
-          <input
-            ref={photoInput}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (!file) return;
-              void readProfilePhotoFile(file)
-                .then((dataUrl) => {
-                  setProfilePhoto(actor.id, dataUrl);
-                  setPhotoError(null);
-                })
-                .catch((err: unknown) => {
-                  setPhotoError(
-                    err instanceof Error
-                      ? err.message
-                      : "Could not upload image.",
-                  );
-                });
-            }}
-          />
-          <div className="grid gap-4 px-4 py-4 sm:grid-cols-2">
-            <SettingsField label="Full name">
               <input
-                defaultValue={actor.name}
-                key={`${actor.id}-name`}
-                className={settingsInputClass}
+                ref={photoInput}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file) return;
+                  void readProfilePhotoFile(file)
+                    .then((dataUrl) => {
+                      setProfilePhoto(actor.id, dataUrl);
+                      setPhotoError(null);
+                    })
+                    .catch((err: unknown) => {
+                      setPhotoError(
+                        err instanceof Error
+                          ? err.message
+                          : "Could not upload image.",
+                      );
+                    });
+                }}
               />
-            </SettingsField>
-            <SettingsField label="Email">
-              <input
-                defaultValue={actor.email}
-                key={`${actor.id}-email`}
-                className={settingsInputClass}
-              />
-            </SettingsField>
-            <SettingsField label="What should we call you?">
-              <input
-                defaultValue={actor.short}
-                key={`${actor.id}-short`}
-                className={settingsInputClass}
-              />
-            </SettingsField>
-            <SettingsField
-              label="Custom instructions"
-              hint={
-                entitlements.hasWorkspaces
-                  ? "Optional. Applied across workspaces on this account."
-                  : "Optional. Applied on this account."
-              }
-              className="sm:col-span-2"
-            >
-              <textarea
-                rows={3}
-                placeholder="Keep replies short. Prefer Recursion brand language."
-                className="w-full rounded-[10px] border border-border bg-background px-3 py-2 text-[13.5px] outline-none focus:border-foreground/20"
-              />
-            </SettingsField>
-          </div>
-        </SettingsGroup>
-          <SettingsFootnote>
-            Shown on your account row and in shared workspaces.
-          </SettingsFootnote>
-        </SettingsSection>
+              {profileFields}
+            </SettingsGroup>
+            <SettingsFootnote>
+              Shown on your account row and in shared workspaces.
+            </SettingsFootnote>
+          </SettingsSection>
         ) : (
-        <SettingsGroup title="Profile">
-          <div className="flex flex-wrap items-center gap-4 px-4 py-4">
-            <AccountAvatar
-              memberId={actor.id}
-              name={actor.name}
-              initials={actor.initials}
-              size="lg"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-[13.5px] font-medium tracking-[-0.01em]">
-                Profile photo
-              </p>
-              <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                Shown on your account row and in shared workspaces.
-              </p>
-              <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPhotoError(null);
-                    photoInput.current?.click();
-                  }}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-                >
-                  <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  {photo ? "Replace" : "Upload"}
-                </button>
-                {photo ? (
+          <SettingsGroup title="Profile">
+            <div className="flex flex-wrap items-center gap-4 px-4 py-4">
+              <AccountAvatar
+                memberId={actor.id}
+                name={actor.name}
+                initials={actor.initials}
+                size="lg"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-[13.5px] font-medium tracking-[-0.01em]">
+                  Profile photo
+                </p>
+                <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                  Shown on your account row and in shared workspaces.
+                </p>
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
-                      clearProfilePhoto(actor.id);
                       setPhotoError(null);
+                      photoInput.current?.click();
                     }}
-                    className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
                   >
-                    Remove
+                    <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
+                    {photo ? "Replace" : "Upload"}
                   </button>
+                  {photo ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearProfilePhoto(actor.id);
+                        setPhotoError(null);
+                      }}
+                      className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+                {photoError ? (
+                  <p className="mt-2 text-[12.5px] text-destructive">
+                    {photoError}
+                  </p>
                 ) : null}
               </div>
-              {photoError ? (
-                <p className="mt-2 text-[12.5px] text-destructive">{photoError}</p>
-              ) : null}
             </div>
-          </div>
-          <input
-            ref={photoInput}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (!file) return;
-              void readProfilePhotoFile(file)
-                .then((dataUrl) => {
-                  setProfilePhoto(actor.id, dataUrl);
-                  setPhotoError(null);
-                })
-                .catch((err: unknown) => {
-                  setPhotoError(
-                    err instanceof Error
-                      ? err.message
-                      : "Could not upload image.",
-                  );
-                });
-            }}
-          />
-          <div className="grid gap-4 px-4 py-4 sm:grid-cols-2">
-            <SettingsField label="Full name">
-              <input
-                defaultValue={actor.name}
-                key={`${actor.id}-name`}
-                className={settingsInputClass}
-              />
-            </SettingsField>
-            <SettingsField label="Email">
-              <input
-                defaultValue={actor.email}
-                key={`${actor.id}-email`}
-                className={settingsInputClass}
-              />
-            </SettingsField>
-            <SettingsField label="What should we call you?">
-              <input
-                defaultValue={actor.short}
-                key={`${actor.id}-short`}
-                className={settingsInputClass}
-              />
-            </SettingsField>
-            <SettingsField
-              label="Custom instructions"
-              hint={
-                entitlements.hasWorkspaces
-                  ? "Optional. Applied across workspaces on this account."
-                  : "Optional. Applied on this account."
-              }
-              className="sm:col-span-2"
-            >
-              <textarea
-                rows={3}
-                placeholder="Keep replies short. Prefer Recursion brand language."
-                className="w-full rounded-[10px] border border-border bg-background px-3 py-2 text-[13.5px] outline-none focus:border-foreground/20"
-              />
-            </SettingsField>
-          </div>
-        </SettingsGroup>
+            <input
+              ref={photoInput}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (!file) return;
+                void readProfilePhotoFile(file)
+                  .then((dataUrl) => {
+                    setProfilePhoto(actor.id, dataUrl);
+                    setPhotoError(null);
+                  })
+                  .catch((err: unknown) => {
+                    setPhotoError(
+                      err instanceof Error
+                        ? err.message
+                        : "Could not upload image.",
+                    );
+                  });
+              }}
+            />
+            {profileFields}
+          </SettingsGroup>
         )}
 
         <AccountSecuritySettings onAfterSignOut={onAfterSignOut} />

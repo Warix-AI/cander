@@ -15,10 +15,6 @@ const SYNC_DEBOUNCE_MS = 600;
 
 let skipRemoteSync = false;
 
-function sessionStorageKey(profileId: string, workspaceId: string) {
-  return `courier-browser-session:${profileId}:${workspaceId}`;
-}
-
 export async function hydrateBrowserSessionFromRemote(ctx: WorkspaceCtx) {
   skipRemoteSync = true;
   const supabase = createSupabaseBrowserClient();
@@ -61,17 +57,8 @@ export async function syncBrowserSessionToSupabase(ctx: WorkspaceCtx) {
   if (error) throw error;
 }
 
-export async function importLocalBrowserSessionIfNeeded(ctx: WorkspaceCtx) {
+export async function importLocalBrowserSessionIfNeeded(_ctx: WorkspaceCtx) {
   if (typeof window === "undefined") return;
-  if (window.localStorage.getItem(IMPORT_FLAG) === "1") return;
-
-  const raw = window.localStorage.getItem(
-    sessionStorageKey(ctx.actorId, ctx.workspaceId),
-  );
-  if (raw) {
-    await syncBrowserSessionToSupabase(ctx);
-  }
-
   window.localStorage.setItem(IMPORT_FLAG, "1");
 }
 

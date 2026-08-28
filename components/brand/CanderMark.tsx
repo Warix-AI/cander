@@ -5,7 +5,7 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import { cn } from "@/lib/utils";
 
 /** White mark for dark / on-color surfaces; black mark for light surfaces. */
-export function CourierMark({
+export function CanderMark({
   className,
   tone = "auto",
 }: {
@@ -16,9 +16,7 @@ export function CourierMark({
   const { theme } = useTheme();
   const useWhite =
     tone === "white" || (tone === "auto" && theme !== "light");
-  const preferred = useWhite
-    ? "/courier-mark-dark.png?v=9"
-    : "/courier-mark-light.png?v=9";
+  const preferred = "/cander-mark.png?v=10";
   const [src, setSrc] = useState(preferred);
 
   useEffect(() => {
@@ -33,8 +31,12 @@ export function CourierMark({
       width={248}
       height={238}
       suppressHydrationWarning
-      onError={() => setSrc("/cander-mark.png?v=9")}
-      className={cn("h-[29.7px] w-[31px] object-contain", className)}
+      onError={() => setSrc("/cander-mark.png?v=10")}
+      className={cn(
+        "h-[29.7px] w-[31px] object-contain",
+        useWhite && "brightness-0 invert",
+        className,
+      )}
     />
   );
 }

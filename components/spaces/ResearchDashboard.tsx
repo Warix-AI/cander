@@ -150,8 +150,8 @@ export function ResearchDashboard() {
             onOpen={openProject}
             empty={
               scope === "projects"
-                ? "No projects yet."
-                : "Nothing in Explore yet."
+                ? "No projects yet. Create one to start researching."
+                : "Nothing in Explore yet. Create a project or save a source."
             }
           />
         )}

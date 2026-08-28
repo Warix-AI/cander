@@ -25,31 +25,41 @@ export function TransactionsPage() {
 
       <HandshakeCard title="Completed Actions">
         <div className="mt-2 space-y-1">
-          {handshakeTransactions.completedActions.map((action) => (
+          {handshakeTransactions.completedActions.length ? (
+            handshakeTransactions.completedActions.map((action) => (
             <StatLine key={action.name} label={action.name} value={action.value} />
-          ))}
+            ))
+          ) : (
+            <p className="px-3 py-2 text-[13px] text-muted-foreground">
+              No completed actions yet.
+            </p>
+          )}
         </div>
       </HandshakeCard>
 
       <HandshakeCard title="Top AI Interactions">
-        <ol className="mt-2 space-y-2 px-3">
-          {handshakeTransactions.topInteractions.map((item, index) => (
-            <li key={item} className="flex items-center gap-3 text-[13px]">
-              <span className="font-mono text-[11px] text-muted-foreground">
-                {index + 1}.
-              </span>
-              {item}
-            </li>
-          ))}
-        </ol>
+        {handshakeTransactions.topInteractions.length ? (
+          <ol className="mt-2 space-y-2 px-3">
+            {handshakeTransactions.topInteractions.map((item, index) => (
+              <li key={item} className="flex items-center gap-3 text-[13px]">
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  {index + 1}.
+                </span>
+                {item}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="mt-2 px-3 py-2 text-[13px] text-muted-foreground">
+            No interactions yet.
+          </p>
+        )}
       </HandshakeCard>
 
       <HandshakeCard>
         <SectionLabel>Conversion insight</SectionLabel>
         <p className="mt-2 px-3 text-[13px] leading-relaxed text-muted-foreground">
-          18% of AI-assisted sessions result in a completed business action —
-          recommendations, bookings, and purchases flowing through verified
-          agent channels.
+          Completed business actions will show here once Handshake is connected.
         </p>
       </HandshakeCard>
     </div>

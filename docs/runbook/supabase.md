@@ -24,9 +24,13 @@ NEXT_PUBLIC_DATA_BACKEND=local
 # Supabase vars optional
 ```
 
-Add auth redirect URL in Supabase dashboard:
+Add auth redirect URLs in Supabase dashboard (Authentication → URL configuration):
 
 - `http://localhost:3000/auth/callback`
+- `https://cander.app/auth/callback`
+- Preview deploys: `https://*.vercel.app/auth/callback` (or the specific PR preview origin)
+
+Site URL should be `https://cander.app` in production.
 
 ## Migrations (order matters)
 
@@ -40,7 +44,12 @@ Apply in sequence:
 | `004_org_policy.sql` | Policy, pins, sidebar |
 | `005_connectors.sql` | Connector catalog + installs |
 | `006_build_browser.sql` | Project files + browser sessions |
-| `008_plans_three_tier.sql` | Retire Ultra; three plans only |
+| `009_org_onboarding.sql` | Org setup RPC + invites |
+| `010_billing.sql` | Subscription columns |
+| `011_billing_period_end.sql` | Period end / cancel flags |
+| `012_profiles_grants.sql` | Grants + workspace_members RLS fix |
+| `013_profile_short_name.sql` | Preferred short name on profiles |
+| `014_workspace_delete.sql` | Owner can delete workspaces |
 
 ```bash
 supabase link --project-ref <ref>
@@ -72,11 +81,11 @@ npm install
 npm run dev
 ```
 
-Sign up / sign in → first session imports localStorage into Postgres, then clears legacy auth keys.
+Sign up / sign in with email + password. Live accounts start empty (no sample data import).
 
 ## Signup → plan → nav
 
-Onboarding writes `profiles.plan` and grants nav spaces on the personal workspace created by `handle_new_user`.
+Onboarding writes `profiles.plan` (and `short_name` when migration 013 is applied) and grants nav spaces on the personal workspace created by `handle_new_user`.
 
 | Plan | `Member.kind` | Default nav | Notes |
 |------|---------------|-------------|-------|
@@ -92,7 +101,11 @@ Nav visibility uses `memberSpaces(workspaceId, actorId)` — not plan alone.
 
 ### Max organization onboarding (web)
 
-After choosing **Max**, onboarding forks: **Personal**, **Set up organization**, or **Set up later**. Org setup collects org name and optional Pro/Max invites; it is always skippable. Onboarding only writes `profiles.plan` — **no in-app checkout**. Seat billing is confirmed later on the web via `/pricing`.
+After choosing **Max**, onboarding forks: **Personal**, **Set up organization**, or **Set up later**. Org setup collects org name and optional Pro/Max invites; it is always skippable.
+
+When Stripe keys are **not** configured, Pro/Max checkout returns `{ bypass: true }` and unlocks the plan for testing without charging. When Stripe **is** configured, paid plans go through Checkout and resume via `/?onboarding=resume`.
+
+Invite emails send when `RESEND_API_KEY` is set; otherwise invite rows are created and shareable links are returned.
 
 When org setup completes with Supabase configured, `setup_org_onboarding` (migration `009`) creates an `organizations` row, links the workspace, upserts the owner in `org_members`, and inserts pending invite rows.
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { CourierMark } from "@/components/brand/CourierMark";
+import { CanderMark } from "@/components/brand/CanderMark";
 import { appearanceToCss, useAppearance } from "@/lib/appearance";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,7 @@ const PREVIEW_NAV = [
 ] as const;
 
 /** Live mini Cander shell that mirrors appearance sliders. */
-export function OnboardingCourierPreview() {
+export function OnboardingAppPreview() {
   const appearance = useAppearance();
   const css = appearanceToCss(appearance);
   const floating = css.shell === "floating";
@@ -66,16 +66,8 @@ export function OnboardingCourierPreview() {
               className="flex h-7 w-7 items-center justify-center bg-foreground/10"
               style={{ borderRadius: radius }}
             >
-              <CourierMark className="h-4 w-4" />
+              <CanderMark className="h-4 w-4" />
             </span>
-            <span
-              className="h-6 w-6 bg-chart-2/50"
-              style={{ borderRadius: radius }}
-            />
-            <span
-              className="h-6 w-6 bg-foreground/10"
-              style={{ borderRadius: radius }}
-            />
             <span
               className="mt-auto h-6 w-6 bg-foreground/15"
               style={{ borderRadius: "999px" }}
@@ -96,7 +88,7 @@ export function OnboardingCourierPreview() {
           >
             <div className="flex items-center justify-between gap-2">
               <span className="truncate text-[12px] font-medium tracking-[-0.02em]">
-                Acme Inc.
+                Workspace
               </span>
               <span
                 className="h-5 w-5 bg-muted"

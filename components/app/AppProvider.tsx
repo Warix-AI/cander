@@ -442,7 +442,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [mobileMenuScreen, setMobileMenuScreen] =
     useState<MobileMenuScreen>("main");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [workspaceRailOpen, setWorkspaceRailOpen] = useState(true);
+  const [workspaceRailOpen, setWorkspaceRailOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [buildTool, setBuildTool] = useState<BuildTool>("preview");
@@ -517,6 +517,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (workspacesFor(actor, entitlements).length < 2) {
+      setWorkspaceRailOpen(false);
+    }
+  }, [actor, entitlements]);
+
   const pushTarget = useCallback((snap: Snapshot) => {
     setHist((h) => {
       const current = h.stack[h.i];
@@ -566,6 +572,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setPreview = useCallback((id: AccountPresetId) => {
+    if (isSupabaseConfigured()) return;
     const preset = accountPresets.find((item) => item.id === id);
     if (!preset) return;
     persistActor(preset.actorId);
@@ -573,6 +580,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setBillingPlan = useCallback((plan: BillingPlan) => {
+    if (isSupabaseConfigured()) return;
     const preset: AccountPresetId =
       plan === "free" ? "free" : plan === "pro" ? "pro" : "max-owner";
     const match = accountPresets.find((item) => item.id === preset);

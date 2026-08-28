@@ -1,54 +1,20 @@
 "use client";
 
 import type { SpaceEntityApi } from "@/lib/api/space-entity-api";
-import {
-  importEntitiesToSupabase,
-  subscribeEntityRealtime,
-} from "@/lib/api/space-entity-api.supabase";
+import { subscribeEntityRealtime } from "@/lib/api/space-entity-api.supabase";
 import {
   notifyEntityStoreChange,
   replaceEntityStoreState,
 } from "@/lib/api/space-entity-store";
 import type { WorkspaceCtx } from "@/lib/space-entities";
 
-const ENTITY_STORAGE_KEY = "courier-space-entities-v1";
 const IMPORT_FLAG_KEY = "courier-entities-imported-v1";
 
-type LocalEntityPayload = {
-  projects?: Parameters<typeof importEntitiesToSupabase>[1]["projects"];
-  sources?: Parameters<typeof importEntitiesToSupabase>[1]["sources"];
-  briefingItems?: Parameters<typeof importEntitiesToSupabase>[1]["briefingItems"];
-  deployments?: Parameters<typeof importEntitiesToSupabase>[1]["deployments"];
-  attachments?: Parameters<typeof importEntitiesToSupabase>[1]["attachments"];
-};
-
-function readLocalEntityPayload(): LocalEntityPayload | null {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(ENTITY_STORAGE_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as LocalEntityPayload & { attachments?: never };
-  } catch {
-    return null;
-  }
-}
-
-/** One-time upsert of localStorage entities → Supabase after first auth. */
-export async function importLocalEntitiesIfNeeded(ctx: WorkspaceCtx) {
+/** One-time upsert of localStorage entities → Supabase after first auth.
+ * Live accounts stay empty — leftover prototype catalogs are not imported.
+ */
+export async function importLocalEntitiesIfNeeded(_ctx: WorkspaceCtx) {
   if (typeof window === "undefined") return;
-  if (window.localStorage.getItem(IMPORT_FLAG_KEY) === "1") return;
-
-  const payload = readLocalEntityPayload();
-  if (payload) {
-    await importEntitiesToSupabase(ctx, {
-      projects: payload.projects,
-      sources: payload.sources,
-      briefingItems: payload.briefingItems,
-      deployments: payload.deployments,
-      attachments: payload.attachments,
-    });
-  }
-
   window.localStorage.setItem(IMPORT_FLAG_KEY, "1");
 }
 

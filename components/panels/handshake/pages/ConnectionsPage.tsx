@@ -30,7 +30,8 @@ export function ConnectionsPage() {
       />
 
       <HandshakeCard title="Business Connections">
-        {handshakeConnections.map((connection) => (
+        {handshakeConnections.length ? (
+          handshakeConnections.map((connection) => (
           <div
             key={connection.name}
             className="flex items-center justify-between gap-3 border-b border-border px-1 py-3 last:border-0"
@@ -48,7 +49,12 @@ export function ConnectionsPage() {
               <HandshakeBadge tone="success">{connection.status}</HandshakeBadge>
             </div>
           </div>
-        ))}
+          ))
+        ) : (
+          <p className="px-1 py-3 text-[13px] text-muted-foreground">
+            No systems connected yet.
+          </p>
+        )}
       </HandshakeCard>
 
       <HandshakeCard title="Categories">

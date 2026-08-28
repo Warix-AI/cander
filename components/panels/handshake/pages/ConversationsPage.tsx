@@ -11,7 +11,8 @@ export function ConversationsPage() {
         </p>
       </div>
 
-      {handshakeConversations.map((conversation) => (
+      {handshakeConversations.length ? (
+        handshakeConversations.map((conversation) => (
         <HandshakeCard key={conversation.id}>
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -48,7 +49,12 @@ export function ConversationsPage() {
             Action: {conversation.action}
           </p>
         </HandshakeCard>
-      ))}
+        ))
+      ) : (
+        <p className="text-[13px] text-muted-foreground">
+          No agent conversations yet.
+        </p>
+      )}
     </div>
   );
 }

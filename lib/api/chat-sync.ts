@@ -9,7 +9,6 @@ import {
 import {
   subscribeChatRealtime,
   syncThreadsToSupabase,
-  upsertThreadsToSupabase,
 } from "@/lib/api/chat-api.supabase";
 import type { WorkspaceCtx } from "@/lib/space-entities";
 
@@ -35,17 +34,11 @@ export async function hydrateChatFromRemote(
   }, 0);
 }
 
-/** One-time upsert of localStorage threads → Supabase after first auth. */
-export async function importLocalChatIfNeeded(ctx: WorkspaceCtx) {
+/** One-time upsert of localStorage threads → Supabase after first auth.
+ * Live accounts stay empty — leftover prototype threads are not imported.
+ */
+export async function importLocalChatIfNeeded(_ctx: WorkspaceCtx) {
   if (typeof window === "undefined") return;
-  if (window.localStorage.getItem(IMPORT_FLAG_KEY) === "1") return;
-
-  getChatStoreSnapshot();
-  const { threads } = getChatStoreSnapshot();
-  if (threads.length) {
-    await upsertThreadsToSupabase(ctx, threads);
-  }
-
   window.localStorage.setItem(IMPORT_FLAG_KEY, "1");
 }
 

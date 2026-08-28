@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ChevronDown, Menu, X } from "lucide-react";
-import { CourierMark } from "@/components/brand/CourierMark";
+import { CanderMark } from "@/components/brand/CanderMark";
 import { Dropdown } from "@/components/ui/Controls";
 import { Cta } from "@/components/marketing/Cta";
 import { MarketingThemeToggle } from "@/components/marketing/MarketingThemeToggle";
@@ -21,7 +21,7 @@ export function MarketingHeader() {
     <header className="sticky top-0 z-40 border-b border-border/50 bg-background/90 backdrop-blur-lg">
       <div className="mx-auto flex h-[52px] max-w-[1080px] items-center gap-4 px-5 md:px-6">
         <Link href="/home" className="flex items-center gap-2">
-          <CourierMark />
+          <CanderMark />
         </Link>
 
         <nav className="ml-2 hidden flex-1 items-center gap-1 lg:flex">

@@ -22,7 +22,7 @@ export function SettingsPage() {
           />
         </div>
         <div className="mt-3">
-          <HandshakeBadge tone="success">{handshakeSettings.status}</HandshakeBadge>
+          <HandshakeBadge tone="neutral">{handshakeSettings.status}</HandshakeBadge>
         </div>
       </HandshakeCard>
 

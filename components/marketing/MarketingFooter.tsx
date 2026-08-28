@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CourierMark } from "@/components/brand/CourierMark";
+import { CanderMark } from "@/components/brand/CanderMark";
 import { Cta } from "@/components/marketing/Cta";
 import { APP_HREF, footerGroups } from "@/lib/marketing";
 
@@ -54,7 +54,7 @@ export function MarketingFooter() {
         </div>
 
         <div className="mt-10 flex items-center gap-2 border-t border-border pt-6">
-          <CourierMark className="h-5 w-5" />
+          <CanderMark className="h-5 w-5" />
         </div>
       </div>
     </footer>

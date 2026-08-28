@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CourierMark } from "@/components/brand/CourierMark";
+import { CanderMark } from "@/components/brand/CanderMark";
 import { InviteAcceptFlow } from "@/components/onboarding/InviteAcceptFlow";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
@@ -58,7 +58,7 @@ export default function OnboardingReturnPage() {
           SHELL_G3_RADIUS,
         )}
       >
-        <CourierMark className="mx-auto h-8 w-8" />
+        <CanderMark className="mx-auto h-8 w-8" />
         {state === "loading" || state === "bypass" ? (
           <p className="mt-6 text-[14px] text-muted-foreground">
             Confirming payment…
