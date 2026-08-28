@@ -49,11 +49,11 @@ export function isSidebarNavId(id: string): id is SidebarNavId {
 /** Connectors nav visible for all plans — installs ship later. */
 export const SHOW_CONNECTORS_NAV = true;
 
-/** Default sidebar — Work, Build, Explore, Recents. */
+/** Default sidebar — Work, Build, Explore, Recents, Connectors. */
 export const DEFAULT_SIDEBAR_MAIN: SidebarNavId[] = [
   ...PRIMARY_NAV_SPACES,
-  ...(SHOW_CONNECTORS_NAV ? (["connectors"] as const) : []),
   "recents",
+  ...(SHOW_CONNECTORS_NAV ? (["connectors"] as const) : []),
 ];
 
 /** @deprecated More menu removed — kept empty for persisted layout shape. */
@@ -149,7 +149,7 @@ export function resolveSidebarNav(
   } else {
     const rankedRest = DEFAULT_SIDEBAR_MAIN.filter((id) => rest.includes(id));
     const extraRest = rest.filter((id) => !DEFAULT_SIDEBAR_MAIN.includes(id));
-    main = dedupeNav([...main, ...rankedRest, ...extraRest]);
+    main = sortMainNav(dedupeNav([...main, ...rankedRest, ...extraRest]));
   }
 
   return { main, more: [] };

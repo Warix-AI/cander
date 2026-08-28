@@ -1042,6 +1042,19 @@ html:not(.dark) .shell-panel :is(.bg-sidebar, .bg-background) {
   }
 }
 
+@keyframes cander-boot-line {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(360%);
+  }
+}
+
+.cander-boot-line {
+  animation: cander-boot-line 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
 /* Marketing pages — normal document scroll; no nested overflow containers. */
 .marketing {
   position: relative;

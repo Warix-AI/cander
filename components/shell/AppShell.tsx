@@ -59,6 +59,7 @@ import {
   getWorkspaceCatalogSnapshot,
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
+import { SessionBootScreen } from "@/components/shell/SessionBootScreen";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { completeEmailVerificationFromUrl } from "@/lib/auth/email-verify-landing";
 import {
@@ -210,11 +211,7 @@ function Root() {
   const bootstrapping = isSupabaseConfigured() && !sessionReady;
 
   if (bootstrapping) {
-    return (
-      <div className="flex h-svh items-center justify-center bg-background text-foreground">
-        <p className="text-[14px] text-muted-foreground">Loading your account…</p>
-      </div>
-    );
+    return <SessionBootScreen label="Loading your account" />;
   }
 
   if (!signedIn || onboardingPending) {
@@ -242,11 +239,7 @@ function AuthenticatedShell() {
         actor.workspaceIds.includes(workspaceId)));
 
   if (!workspaceReady) {
-    return (
-      <div className="flex h-svh items-center justify-center bg-background text-foreground">
-        <p className="text-[14px] text-muted-foreground">Loading workspace…</p>
-      </div>
-    );
+    return <SessionBootScreen label="Loading workspace" />;
   }
 
   return (
