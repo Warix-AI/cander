@@ -20,6 +20,7 @@ import {
   type ProjectRow,
   type SourceRow,
 } from "@/lib/supabase/entity-mapper";
+import { assertUniqueProjectTitle } from "@/lib/project-name";
 import {
   bumpVersion,
   newEntityTimestamps,
@@ -116,12 +117,14 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
 
     async createProject(ctx, input: CreateProjectInput) {
       const supabase = createSupabaseBrowserClient();
+      const existing = await this.listAllProjects(ctx);
+      const title = assertUniqueProjectTitle(existing, input.title);
       const project: SpaceProject = {
         ...newEntityTimestamps(),
         id: newId(),
         workspaceId: ctx.workspaceId,
         space: input.space,
-        title: input.title,
+        title,
         summary: input.summary ?? "",
         cover: input.cover,
         kind: input.kind ?? projectKindFromSpace(input.space),
@@ -132,7 +135,12 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
       const { error } = await supabase
         .from("projects")
         .insert(projectToRow(project, ctx.actorId));
-      if (error) throw error;
+      if (error) {
+        if (/projects_workspace_title_unique|23505/i.test(error.message)) {
+          throw new Error("A project already uses that name.");
+        }
+        throw error;
+      }
       notifyEntityStoreChange();
       return project;
     },
@@ -140,7 +148,12 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
     async updateProject(ctx, id, patch: UpdateProjectPatch) {
       const current = await this.getProject(ctx, id);
       if (!current) throw new Error("Project not found");
-      const next = bumpVersion({ ...current, ...patch });
+      const nextPatch = { ...patch };
+      if (nextPatch.title !== undefined) {
+        const existing = await this.listAllProjects(ctx);
+        nextPatch.title = assertUniqueProjectTitle(existing, nextPatch.title, id);
+      }
+      const next = bumpVersion({ ...current, ...nextPatch });
       const supabase = createSupabaseBrowserClient();
       const { data, error } = await supabase
         .from("projects")
@@ -150,7 +163,12 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
         .eq("version", current.version)
         .select()
         .maybeSingle();
-      if (error) throw error;
+      if (error) {
+        if (/projects_workspace_title_unique|23505/i.test(error.message)) {
+          throw new Error("A project already uses that name.");
+        }
+        throw error;
+      }
       if (!data) throw new Error("Project version conflict — refresh and retry");
       notifyEntityStoreChange();
       return projectRowToEntity(data as ProjectRow);

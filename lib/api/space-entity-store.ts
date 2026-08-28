@@ -17,6 +17,7 @@ import type {
   WorkspaceCtx,
 } from "@/lib/space-entities";
 import { bumpVersion, newEntityTimestamps, newId } from "@/lib/space-entities";
+import { assertUniqueProjectTitle } from "@/lib/project-name";
 import type { SpaceId } from "@/lib/types";
 import {
   attachWorkApp,
@@ -253,12 +254,13 @@ export const localSpaceEntityStore = {
 
   createProject(ctx: WorkspaceCtx, input: CreateProjectInput) {
     hydrate();
+    const title = assertUniqueProjectTitle(state.projects.filter((p) => p.workspaceId === ctx.workspaceId), input.title);
     const project: SpaceProject = {
       ...newEntityTimestamps(),
       id: newId(),
       workspaceId: ctx.workspaceId,
       space: input.space,
-      title: input.title,
+      title,
       summary: input.summary ?? "",
       cover: input.cover,
       kind: input.kind ?? projectKindFromSpace(input.space),
@@ -276,7 +278,15 @@ export const localSpaceEntityStore = {
     if (index < 0) throw new Error("Project not found");
     const current = state.projects[index]!;
     assertWorkspace(ctx, current);
-    const next = bumpVersion({ ...current, ...patch });
+    const nextPatch = { ...patch };
+    if (nextPatch.title !== undefined) {
+      nextPatch.title = assertUniqueProjectTitle(
+        state.projects.filter((p) => p.workspaceId === ctx.workspaceId),
+        nextPatch.title,
+        id,
+      );
+    }
+    const next = bumpVersion({ ...current, ...nextPatch });
     const projects = [...state.projects];
     projects[index] = next;
     state = { ...state, projects };

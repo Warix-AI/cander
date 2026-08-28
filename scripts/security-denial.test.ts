@@ -5,6 +5,11 @@ import {
   filterOrgWorkspaceIds,
   safeAuthNextPath,
 } from "../lib/security.ts";
+import {
+  assertUniqueProjectTitle,
+  isProjectTitleTaken,
+  normalizeProjectTitle,
+} from "../lib/project-name.ts";
 
 test("safeAuthNextPath rejects open redirects", () => {
   assert.equal(safeAuthNextPath("/settings"), "/settings");
@@ -30,4 +35,21 @@ test("escapeHtml neutralizes markup", () => {
     escapeHtml(`<img src=x onerror="alert(1)"> & "hi"`),
     "&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; &quot;hi&quot;",
   );
+});
+
+test("project titles must be unique in a workspace", () => {
+  const projects = [
+    { id: "a", title: "Northwind" },
+    { id: "b", title: "Acme Site" },
+  ];
+  assert.equal(normalizeProjectTitle("  Hello   World "), "Hello World");
+  assert.equal(isProjectTitleTaken(projects, "northwind"), true);
+  assert.equal(isProjectTitleTaken(projects, "Northwind", "a"), false);
+  assert.equal(isProjectTitleTaken(projects, "Fresh Name"), false);
+  assert.equal(assertUniqueProjectTitle(projects, " Fresh Name "), "Fresh Name");
+  assert.throws(
+    () => assertUniqueProjectTitle(projects, "ACME SITE"),
+    /already uses that name/i,
+  );
+  assert.throws(() => assertUniqueProjectTitle(projects, "   "), /required/i);
 });

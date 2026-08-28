@@ -86,6 +86,13 @@ export function ProjectActionsSheetBody({
   statusNote,
   address,
   selectMode,
+  projectName,
+  canRename,
+  renameValue,
+  renameError,
+  renameBusy,
+  onRenameChange,
+  onRenameSave,
   onPublish,
   onOpenExternal,
   onSelectElement,
@@ -97,6 +104,13 @@ export function ProjectActionsSheetBody({
   statusNote?: string;
   address: string;
   selectMode?: boolean;
+  projectName?: string;
+  canRename?: boolean;
+  renameValue?: string;
+  renameError?: string | null;
+  renameBusy?: boolean;
+  onRenameChange?: (value: string) => void;
+  onRenameSave?: () => void;
   onPublish: () => void;
   onOpenExternal: () => void;
   onSelectElement: () => void;
@@ -122,6 +136,42 @@ export function ProjectActionsSheetBody({
           ) : null}
         </div>
       </div>
+
+      {canRename && onRenameChange && onRenameSave ? (
+        <div className="mt-4">
+          <p className="text-[12px] font-medium text-muted-foreground">Name</p>
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              value={renameValue ?? projectName ?? ""}
+              onChange={(event) => onRenameChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  onRenameSave();
+                }
+              }}
+              spellCheck={false}
+              aria-label="Project name"
+              className="h-10 min-w-0 flex-1 rounded-[12px] border border-border bg-muted/40 px-3 text-[15px] outline-none"
+            />
+            <button
+              type="button"
+              disabled={renameBusy}
+              onClick={onRenameSave}
+              className="inline-flex h-10 shrink-0 items-center rounded-[12px] bg-foreground px-3.5 text-[13px] font-medium text-background disabled:opacity-60"
+            >
+              {renameBusy ? "Saving…" : "Save"}
+            </button>
+          </div>
+          {renameError ? (
+            <p className="mt-1.5 text-[12px] text-destructive">{renameError}</p>
+          ) : (
+            <p className="mt-1.5 text-[12px] text-muted-foreground">
+              Names must be unique across this workspace.
+            </p>
+          )}
+        </div>
+      ) : null}
 
       <div className="mt-4">
         <div className="flex items-center justify-between gap-2">

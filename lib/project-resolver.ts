@@ -1,11 +1,12 @@
-import { localSpaceEntityStore } from "@/lib/api/space-entity-store";
+import {
+  getSpaceEntityStoreSnapshot,
+  localSpaceEntityStore,
+} from "@/lib/api/space-entity-store";
+import type { SpaceProject } from "@/lib/space-entities";
 import type { Project, SpaceId } from "@/lib/types";
 
-/** Workspace-scoped projects for intent routing and legacy UI shapes. */
-export function projectsForWorkspace(workspaceId: string): Project[] {
-  const ctx = { workspaceId, actorId: "local" };
-  const fromStore = localSpaceEntityStore.listAllProjects(ctx);
-  return fromStore.map((item) => ({
+function toLegacyProject(item: SpaceProject): Project {
+  return {
     id: item.id,
     name: item.title,
     space: item.space,
@@ -15,7 +16,19 @@ export function projectsForWorkspace(workspaceId: string): Project[] {
     cover: item.cover,
     threadId: item.threadId,
     domains: item.domains,
-  }));
+  };
+}
+
+/** Workspace-scoped projects for intent routing and legacy UI shapes. */
+export function projectsForWorkspace(workspaceId: string): Project[] {
+  const ctx = { workspaceId, actorId: "local" };
+  const fromStore = localSpaceEntityStore.listAllProjects(ctx);
+  if (fromStore.length) {
+    return fromStore.map(toLegacyProject);
+  }
+  return getSpaceEntityStoreSnapshot()
+    .projects.filter((item) => item.workspaceId === workspaceId)
+    .map(toLegacyProject);
 }
 
 export function findProjectInWorkspace(
@@ -24,18 +37,11 @@ export function findProjectInWorkspace(
 ): Project | undefined {
   const ctx = { workspaceId, actorId: "local" };
   const fromStore = localSpaceEntityStore.getProject(ctx, id);
-  if (!fromStore) return undefined;
-  return {
-    id: fromStore.id,
-    name: fromStore.title,
-    space: fromStore.space,
-    workspaceId: fromStore.workspaceId,
-    summary: fromStore.summary,
-    updatedAt: fromStore.updatedAt,
-    cover: fromStore.cover,
-    threadId: fromStore.threadId,
-    domains: fromStore.domains,
-  };
+  if (fromStore) return toLegacyProject(fromStore);
+  const fromSnap = getSpaceEntityStoreSnapshot().projects.find(
+    (item) => item.id === id && item.workspaceId === workspaceId,
+  );
+  return fromSnap ? toLegacyProject(fromSnap) : undefined;
 }
 
 export function defaultProjectForSpace(

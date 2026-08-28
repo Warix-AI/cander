@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useSyncExternalStore, type TouchEventHandler } from "react";
+import { useEffect, useState, useSyncExternalStore, type TouchEventHandler } from "react";
 import { ChevronLeft, Ellipsis, Menu, Plus, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import {
   MobileBottomSheet,
   ProjectActionsSheetBody,
@@ -12,6 +13,8 @@ import {
   MobilePanelActionsCluster,
   useMobilePanelActionsState,
 } from "@/components/shell/mobile/MobilePanelActions";
+import { useSpaceMutation } from "@/lib/hooks/use-space-query";
+import { normalizeProjectTitle } from "@/lib/project-name";
 import { navLabel } from "@/lib/use-main-nav-items";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { isChatSpace, PRIMARY_NAV_SPACES } from "@/lib/spaces";
@@ -68,6 +71,11 @@ export function MobileAppChrome({ className }: { className?: string }) {
     getWorkspaceCatalogServerSnapshot,
   );
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renameBusy, setRenameBusy] = useState(false);
+  const { updateProject } = useSpaceMutation();
+  const { ctx } = useSpaceData();
 
   const inSettings = view === "settings";
   const inMenuSub =
@@ -159,6 +167,38 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const preview = previewAddress(project?.name);
   const address = liveUrl ?? previewUrlForProject(projectId ?? "project") ?? preview.url;
   const published = Boolean(liveUrl && !liveUrl.includes("localhost"));
+  const canRename = spaceId === "build" || spaceId === "research";
+  const projectTitle = project?.name ?? "Project";
+
+  useEffect(() => {
+    if (!actionsOpen) return;
+    setRenameValue(projectTitle);
+    setRenameError(null);
+  }, [actionsOpen, projectTitle]);
+
+  const saveProjectName = async () => {
+    if (!projectId || !canRename) return;
+    const next = normalizeProjectTitle(renameValue);
+    if (!next) {
+      setRenameError("Project name is required.");
+      return;
+    }
+    if (next === projectTitle) {
+      setRenameError(null);
+      return;
+    }
+    setRenameBusy(true);
+    setRenameError(null);
+    try {
+      await updateProject(ctx, projectId, { title: next });
+    } catch (err) {
+      setRenameError(
+        err instanceof Error ? err.message : "Could not rename project.",
+      );
+    } finally {
+      setRenameBusy(false);
+    }
+  };
 
   const onLeadingClick = () => {
     if (showEntityBack) {
@@ -355,6 +395,13 @@ export function MobileAppChrome({ className }: { className?: string }) {
           }
           address={address}
           selectMode={selectMode}
+          canRename={canRename}
+          projectName={projectTitle}
+          renameValue={renameValue}
+          renameError={renameError}
+          renameBusy={renameBusy}
+          onRenameChange={setRenameValue}
+          onRenameSave={() => void saveProjectName()}
           onPublish={() => {
             openOverlay("publish");
             setActionsOpen(false);

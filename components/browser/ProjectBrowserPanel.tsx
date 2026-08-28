@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Minimize2,
   MousePointer2,
+  Pencil,
   Plus,
   RotateCw,
   Upload,
@@ -21,6 +22,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { GoogleHome } from "@/components/browser/GoogleHome";
 import {
   MobileBottomSheet,
@@ -32,6 +34,8 @@ import { AppViewport } from "@/components/preview/AppViewport";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { Dropdown } from "@/components/ui/Controls";
+import { useSpaceMutation } from "@/lib/hooks/use-space-query";
+import { normalizeProjectTitle } from "@/lib/project-name";
 import {
   getSpaceEntityStoreServerSnapshot,
   getSpaceEntityStoreSnapshot,
@@ -93,6 +97,12 @@ export function ProjectBrowserPanel() {
   const desktop = useDesktopShell();
   const [mobileSheet, setMobileSheet] = useState<"info" | "add" | null>(null);
   const [addQuery, setAddQuery] = useState("");
+  const [renameValue, setRenameValue] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [desktopRenameOpen, setDesktopRenameOpen] = useState(false);
+  const { updateProject } = useSpaceMutation();
+  const { ctx } = useSpaceData();
   const peeking = useSyncExternalStore(
     subscribeSidebarPeeking,
     getSidebarPeeking,
@@ -250,6 +260,49 @@ export function ProjectBrowserPanel() {
   const published =
     entity?.status === "published" || Boolean(entity?.publishedUrl);
   const projectTitle = project?.name ?? entity?.title ?? active.title ?? "Project";
+  const canRename = spaceId === "build" || spaceId === "research";
+
+  useEffect(() => {
+    setRenameValue(projectTitle);
+    setRenameError(null);
+  }, [projectTitle, projectId, mobileSheet, desktopRenameOpen]);
+
+  const saveProjectName = async () => {
+    if (!projectId || !canRename) return;
+    const next = normalizeProjectTitle(renameValue);
+    if (!next) {
+      setRenameError("Project name is required.");
+      return;
+    }
+    if (next === projectTitle) {
+      setRenameError(null);
+      setDesktopRenameOpen(false);
+      return;
+    }
+    setRenameBusy(true);
+    setRenameError(null);
+    try {
+      await updateProject(ctx, projectId, { title: next });
+      if (key) {
+        const current = getProjectBrowserSession(key, fallback);
+        setProjectBrowserSession(key, {
+          ...current,
+          tabs: current.tabs.map((tab) =>
+            tab.kind === "project" && tab.projectId === projectId
+              ? { ...tab, title: next }
+              : tab,
+          ),
+        });
+      }
+      setDesktopRenameOpen(false);
+    } catch (err) {
+      setRenameError(
+        err instanceof Error ? err.message : "Could not rename project.",
+      );
+    } finally {
+      setRenameBusy(false);
+    }
+  };
 
   const openAddSheet = () => {
     setAddQuery("");
@@ -377,6 +430,8 @@ export function ProjectBrowserPanel() {
           </form>
           <DesktopProjectToolsMenu
             selectMode={selectMode}
+            canRename={canRename}
+            onRename={() => setDesktopRenameOpen(true)}
             onPublish={() => openOverlay("publish")}
             onOpenExternal={() => window.open(address, "_blank")}
             onSelectElement={() => setSelectMode(!selectMode)}
@@ -387,6 +442,52 @@ export function ProjectBrowserPanel() {
           />
         </div>
       )}
+
+      {desktopRenameOpen ? (
+        <div className="absolute inset-0 z-40 flex items-start justify-center bg-black/20 pt-24">
+          <div className="w-full max-w-sm rounded-[16px] border border-border bg-background p-4 shadow-lg">
+            <p className="text-[14px] font-medium tracking-[-0.01em]">Rename project</p>
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void saveProjectName();
+                }
+                if (event.key === "Escape") setDesktopRenameOpen(false);
+              }}
+              spellCheck={false}
+              className="mt-3 h-10 w-full rounded-[12px] border border-border bg-muted/40 px-3 text-[14px] outline-none"
+            />
+            {renameError ? (
+              <p className="mt-2 text-[12px] text-destructive">{renameError}</p>
+            ) : (
+              <p className="mt-2 text-[12px] text-muted-foreground">
+                Must be unique across this workspace.
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDesktopRenameOpen(false)}
+                className="h-9 rounded-[10px] px-3 text-[13px] text-muted-foreground hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={renameBusy}
+                onClick={() => void saveProjectName()}
+                className="h-9 rounded-[10px] bg-foreground px-3.5 text-[13px] font-medium text-background disabled:opacity-60"
+              >
+                {renameBusy ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
         <ProjectBrowserBody
@@ -439,6 +540,13 @@ export function ProjectBrowserPanel() {
           }
           address={address}
           selectMode={selectMode}
+          canRename={canRename}
+          projectName={projectTitle}
+          renameValue={renameValue}
+          renameError={renameError}
+          renameBusy={renameBusy}
+          onRenameChange={setRenameValue}
+          onRenameSave={() => void saveProjectName()}
           onPublish={() => {
             openOverlay("publish");
             setMobileSheet(null);
@@ -686,12 +794,16 @@ function ProjectMobileTabBar({
 
 function DesktopProjectToolsMenu({
   selectMode,
+  canRename,
+  onRename,
   onPublish,
   onOpenExternal,
   onSelectElement,
   onRefresh,
 }: {
   selectMode: boolean;
+  canRename: boolean;
+  onRename: () => void;
   onPublish: () => void;
   onOpenExternal: () => void;
   onSelectElement: () => void;
@@ -710,6 +822,17 @@ function DesktopProjectToolsMenu({
     >
       {(close) => (
         <>
+          {canRename ? (
+            <DesktopMenuItem
+              icon={Pencil}
+              onClick={() => {
+                onRename();
+                close();
+              }}
+            >
+              Rename
+            </DesktopMenuItem>
+          ) : null}
           <DesktopMenuItem
             icon={Upload}
             onClick={() => {
