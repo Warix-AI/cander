@@ -1,17 +1,34 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
 import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type TouchEvent as ReactTouchEvent,
+} from "react";
+import {
+  Check,
+  ChevronLeft,
   ExternalLink,
+  Globe,
   MousePointer2,
   Pencil,
   Upload,
   X,
 } from "lucide-react";
+import { useApp } from "@/components/app/AppProvider";
 import { PanelToggle } from "@/components/shell/PanelToggle";
+import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import { cn } from "@/lib/utils";
 
 export type ProjectSheetMode = "actions" | "info" | "add" | "rename" | "space";
+
+const DISMISS_PX = 110;
+const DISMISS_VELOCITY = 0.55;
 
 export function MobileBottomSheet({
   open,
@@ -27,9 +44,19 @@ export function MobileBottomSheet({
   className?: string;
 }) {
   const titleId = useId();
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const startY = useRef(0);
+  const lastY = useRef(0);
+  const lastT = useRef(0);
+  const velocity = useRef(0);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setDragY(0);
+      setDragging(false);
+      return;
+    }
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
@@ -37,10 +64,58 @@ export function MobileBottomSheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  const onHandleTouchStart = (event: ReactTouchEvent) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    startY.current = touch.clientY;
+    lastY.current = touch.clientY;
+    lastT.current = performance.now();
+    velocity.current = 0;
+    setDragging(true);
+  };
+
+  const onHandleTouchMove = (event: ReactTouchEvent) => {
+    if (!dragging) return;
+    const touch = event.touches[0];
+    if (!touch) return;
+    const now = performance.now();
+    const dy = touch.clientY - startY.current;
+    const dt = Math.max(1, now - lastT.current);
+    velocity.current = (touch.clientY - lastY.current) / dt;
+    lastY.current = touch.clientY;
+    lastT.current = now;
+    // Allow slight upward pull, dampened; free downward.
+    setDragY(dy < 0 ? dy * 0.25 : dy);
+  };
+
+  const onHandleTouchEnd = () => {
+    if (!dragging) return;
+    setDragging(false);
+    const shouldClose =
+      dragY > DISMISS_PX ||
+      (dragY > 40 && velocity.current > DISMISS_VELOCITY) ||
+      (dragY < -48 && Math.abs(velocity.current) > DISMISS_VELOCITY);
+    if (shouldClose) {
+      onClose();
+      setDragY(0);
+      return;
+    }
+    setDragY(0);
+  };
+
   if (!open) return null;
 
   const tall =
     mode === "info" || mode === "add" || mode === "rename" || mode === "space";
+  // Actions ~40% taller than the old 70dvh cap.
+  const heightClass =
+    mode === "actions"
+      ? "min-h-[min(58dvh,520px)] max-h-[92dvh]"
+      : mode === "add"
+        ? "min-h-[min(72dvh,640px)] max-h-[92dvh]"
+        : tall
+          ? "max-h-[92dvh]"
+          : "max-h-[70dvh]";
 
   return (
     <div className="fixed inset-0 z-[80] flex flex-col justify-end">
@@ -48,6 +123,7 @@ export function MobileBottomSheet({
         type="button"
         aria-label="Dismiss"
         className="absolute inset-0 bg-black/35"
+        style={{ opacity: Math.max(0.15, 1 - dragY / 320) }}
         onClick={onClose}
       />
       <div
@@ -56,28 +132,44 @@ export function MobileBottomSheet({
         aria-labelledby={titleId}
         className={cn(
           "relative z-10 flex w-full flex-col overflow-hidden border border-border bg-background shadow-[0_-12px_40px_rgba(0,0,0,0.18)]",
-          tall ? "max-h-[92dvh] rounded-t-[22px]" : "max-h-[70dvh] rounded-t-[22px]",
+          "rounded-t-[22px]",
+          heightClass,
           className,
         )}
+        style={{
+          transform: `translate3d(0, ${Math.max(0, dragY)}px, 0)`,
+          transition: dragging
+            ? "none"
+            : "transform 280ms cubic-bezier(0.32, 0.72, 0, 1)",
+        }}
       >
-        <div className="flex shrink-0 justify-center pt-2.5 pb-1">
+        <div
+          className="flex shrink-0 touch-none justify-center pt-2.5 pb-1"
+          onTouchStart={onHandleTouchStart}
+          onTouchMove={onHandleTouchMove}
+          onTouchEnd={onHandleTouchEnd}
+          onTouchCancel={onHandleTouchEnd}
+        >
           <span className="h-1 w-10 rounded-full bg-muted-foreground/35" />
         </div>
         <div id={titleId} className="sr-only">
-          Project
+          Sheet
         </div>
-        {children}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {children}
+        </div>
       </div>
     </div>
   );
 }
+
+type ActionsPane = "main" | "publish" | "domains";
 
 export function ProjectActionsSheetBody({
   published,
   projectName,
   selectMode,
   canRename,
-  onPublish,
   onOpenExternal,
   onSelectElement,
   onRename,
@@ -86,51 +178,220 @@ export function ProjectActionsSheetBody({
   projectName?: string;
   selectMode?: boolean;
   canRename?: boolean;
-  onPublish: () => void;
   onOpenExternal: () => void;
   onSelectElement: () => void;
   onRename?: () => void;
 }) {
+  const [pane, setPane] = useState<ActionsPane>("main");
+
+  useEffect(() => {
+    setPane("main");
+  }, [projectName]);
+
   return (
-    <div className="flex min-h-0 flex-col px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-1">
-      <div className="flex min-w-0 items-center gap-2">
-        <span
-          className={cn(
-            "inline-block h-2 w-2 shrink-0 rounded-full",
-            published ? "bg-emerald-500" : "bg-muted-foreground/50",
-          )}
-        />
-        <p className="text-[15px] font-medium tracking-[-0.01em]">
-          {published ? "Published" : "Draft"}
-        </p>
-        {projectName ? (
-          <p className="min-w-0 truncate text-[15px] text-muted-foreground">
-            {projectName}
-          </p>
-        ) : null}
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div
+        className={cn(
+          "flex min-h-0 w-full flex-1 flex-col transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          pane === "main" ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <div className="flex min-h-0 flex-1 flex-col px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2.25rem)] pt-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <span
+              className={cn(
+                "inline-block h-2 w-2 shrink-0 rounded-full",
+                published ? "bg-emerald-500" : "bg-muted-foreground/50",
+              )}
+            />
+            <p className="text-[15px] font-medium tracking-[-0.01em]">
+              {published ? "Published" : "Draft"}
+            </p>
+            {projectName ? (
+              <p className="min-w-0 truncate text-[15px] text-muted-foreground">
+                {projectName}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="mt-4 space-y-0.5">
+            <SheetAction
+              icon={Upload}
+              label="Publish"
+              onClick={() => setPane("publish")}
+              primary
+            />
+            <SheetAction
+              icon={Globe}
+              label="Domains"
+              onClick={() => setPane("domains")}
+            />
+            <SheetAction
+              icon={ExternalLink}
+              label="Open externally"
+              onClick={onOpenExternal}
+            />
+            <SheetAction
+              icon={MousePointer2}
+              label="Select element"
+              active={selectMode}
+              onClick={onSelectElement}
+            />
+            {canRename && onRename ? (
+              <SheetAction
+                icon={Pencil}
+                label="Rename project"
+                onClick={onRename}
+              />
+            ) : null}
+          </div>
+        </div>
       </div>
 
-      <div className="mt-4 space-y-0.5">
-        <SheetAction icon={Upload} label="Publish" onClick={onPublish} primary />
-        <SheetAction
-          icon={ExternalLink}
-          label="Open externally"
-          onClick={onOpenExternal}
-        />
-        <SheetAction
-          icon={MousePointer2}
-          label="Select element"
-          active={selectMode}
-          onClick={onSelectElement}
-        />
-        {canRename && onRename ? (
-          <SheetAction
-            icon={Pencil}
-            label="Rename project"
-            onClick={onRename}
-          />
-        ) : null}
+      <div
+        className={cn(
+          "absolute inset-0 flex flex-col bg-background transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          pane === "publish" ? "translate-x-0" : "translate-x-full",
+        )}
+      >
+        <SheetSubHeader title="Publish" onBack={() => setPane("main")} />
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2.25rem)]">
+          <PublishPaneBody />
+        </div>
       </div>
+
+      <div
+        className={cn(
+          "absolute inset-0 flex flex-col bg-background transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          pane === "domains" ? "translate-x-0" : "translate-x-full",
+        )}
+      >
+        <SheetSubHeader title="Domains" onBack={() => setPane("main")} />
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2.25rem)]">
+          <p className="text-[14px] text-muted-foreground">
+            Connect a custom domain to this project. Domain settings are coming
+            soon.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SheetSubHeader({
+  title,
+  onBack,
+}: {
+  title: string;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-1 px-2 pb-2 pt-0.5">
+      <button
+        type="button"
+        aria-label="Back"
+        onClick={onBack}
+        className="inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground hover:bg-muted"
+      >
+        <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
+      </button>
+      <p className="text-[16px] font-medium tracking-[-0.01em]">{title}</p>
+    </div>
+  );
+}
+
+function PublishPaneBody() {
+  const { publishApp, liveUrl, project, projectId } = useApp();
+  const { project: entityProject } = useSpaceProject(projectId);
+  const { publishBuild } = useSpaceMutation();
+  const displayName = entityProject?.title ?? project?.name ?? "app";
+  const slug = displayName.toLowerCase().replace(/\s+/g, "-");
+  const hostedUrl = `https://${slug}.cander.app`;
+  const domains = entityProject?.domains ?? project?.domains ?? [];
+  const options = useMemo(
+    () => [
+      {
+        id: "cander",
+        url: hostedUrl,
+        label: `${slug}.cander.app`,
+        hint: "Verified subdomain",
+      },
+      ...domains.map((domain) => ({
+        id: domain,
+        url: domain.startsWith("http") ? domain : `https://${domain}`,
+        label: domain.replace(/^https?:\/\//, ""),
+        hint: "From this project",
+      })),
+    ],
+    [hostedUrl, domains, slug],
+  );
+  const [selected, setSelected] = useState(options[0]?.id ?? "cander");
+  const [busy, setBusy] = useState(false);
+  const chosen = options.find((item) => item.id === selected) ?? options[0];
+  const url = liveUrl && selected === "cander" ? liveUrl : chosen?.url;
+
+  const handlePublish = useCallback(async () => {
+    if (!projectId || busy || !url) return;
+    setBusy(true);
+    try {
+      const result = await publishBuild(projectId, url);
+      publishApp(result.url);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, projectId, publishApp, publishBuild, url]);
+
+  return (
+    <div>
+      <h2 className="text-[1.25rem] font-semibold tracking-[-0.02em]">
+        Publish your app
+      </h2>
+      <p className="mt-4 text-[13px] font-medium">Domain</p>
+      <div className="mt-2 space-y-2">
+        {options.map((item) => {
+          const on = selected === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setSelected(item.id)}
+              className={cn(
+                "flex w-full items-start gap-3 rounded-[12px] border px-3 py-2.5 text-left",
+                on ? "border-foreground/25 bg-muted" : "border-border",
+              )}
+            >
+              <span
+                className={cn(
+                  "mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
+                  on
+                    ? "border-foreground bg-primary text-primary-foreground"
+                    : "border-border",
+                )}
+              >
+                {on ? (
+                  <Check className="h-2.5 w-2.5" strokeWidth={2.4} />
+                ) : null}
+              </span>
+              <span>
+                <span className="block font-mono text-[13px]">{item.label}</span>
+                <span className="mt-0.5 block text-[12px] text-muted-foreground">
+                  {item.hint}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-4 text-[13px] font-medium">Environment</p>
+      <p className="mt-1 text-[13px] text-muted-foreground">Production</p>
+      <button
+        type="button"
+        disabled={busy || !projectId}
+        onClick={() => void handlePublish()}
+        className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-full bg-foreground text-[14px] font-medium text-background disabled:opacity-50"
+      >
+        {busy ? "Publishing…" : "Publish"}
+      </button>
     </div>
   );
 }
@@ -217,6 +478,50 @@ export function ProjectRenameSheetBody({
   );
 }
 
+export function ProjectAddSheetHeader({
+  query,
+  onQueryChange,
+  onSubmit,
+}: {
+  query: string;
+  onQueryChange: (value: string) => void;
+  onClose?: () => void;
+  onSubmit: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => inputRef.current?.focus(), 50);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  return (
+    <div className="shrink-0 px-4 pb-2 pt-1">
+      <p className="text-[17px] font-medium tracking-[-0.02em]">Add tab</p>
+      <p className="mt-1 text-[13px] text-muted-foreground">
+        Search the web or open another project as a tab.
+      </p>
+      <form
+        className="mt-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+      >
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="Search or enter a URL"
+          spellCheck={false}
+          className="h-11 w-full rounded-[12px] bg-muted/60 px-3.5 text-[15px] outline-none placeholder:text-muted-foreground"
+        />
+      </form>
+    </div>
+  );
+}
+
+/** @deprecated Prefer chrome ⋯ actions; kept for type compat. */
 export function ProjectInfoSheetHeader({
   title,
   onClose,
@@ -240,57 +545,6 @@ export function ProjectInfoSheetHeader({
         </button>
         <PanelToggle />
       </div>
-    </div>
-  );
-}
-
-export function ProjectAddSheetHeader({
-  query,
-  onQueryChange,
-  onClose,
-  onSubmit,
-}: {
-  query: string;
-  onQueryChange: (value: string) => void;
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const id = window.setTimeout(() => inputRef.current?.focus(), 50);
-    return () => window.clearTimeout(id);
-  }, []);
-
-  return (
-    <div className="shrink-0">
-      <div className="flex items-center justify-end gap-0.5 px-3 pt-1">
-        <button
-          type="button"
-          aria-label="Close"
-          onClick={onClose}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <X className="h-4 w-4" strokeWidth={1.8} />
-        </button>
-        <PanelToggle />
-      </div>
-      <form
-        className="px-4 pb-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-      >
-        <input
-          ref={inputRef}
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Search or enter a URL"
-          spellCheck={false}
-          className="h-11 w-full rounded-[12px] bg-muted/60 px-3.5 text-[15px] outline-none placeholder:text-muted-foreground"
-        />
-      </form>
     </div>
   );
 }

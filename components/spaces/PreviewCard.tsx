@@ -1,9 +1,8 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { CalendarClock, Ellipsis, FileText, Folder, Link2, Sparkles } from "lucide-react";
+import { CalendarClock, Ellipsis, FileText, Folder, Sparkles } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { PinControl } from "@/components/shell/PinControl";
 import { BannerWash } from "@/components/spaces/BannerWash";
 import { Dropdown } from "@/components/ui/Controls";
 import {
@@ -451,27 +450,6 @@ function PreviewActions({
 
   return (
     <span className="flex shrink-0 items-center">
-      {kind === "product" ? (
-        <>
-          <PinControl
-            kind="project"
-            id={item.projectId}
-            alwaysVisible
-            className="[&_button]:h-7 [&_button]:w-7 @max-[520px]:hidden"
-          />
-          <button
-            type="button"
-            aria-label="Copy link"
-            onClick={(event) => {
-              event.stopPropagation();
-              copyLink();
-            }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-canvas-hover hover:text-foreground @max-[520px]:hidden"
-          >
-            <Link2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-          </button>
-        </>
-      ) : null}
       <Dropdown
         align="end"
         menuClassName="min-w-[9.5rem]"
@@ -503,7 +481,7 @@ function PreviewActions({
             >
               Open
             </button>
-            {kind === "product" ? (
+            {kind === "product" || kind === "paper" ? (
               <>
                 <button
                   type="button"
@@ -552,29 +530,69 @@ function PreviewActions({
                 >
                   Copy link
                 </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    if (inWork) {
-                      void detachFromWork(`attach-${item.projectId}`);
-                    } else {
-                      void attachToWork(ctx, {
-                        type: "project",
-                        id: item.projectId,
-                        space: "build",
-                        workspaceId,
-                        label: item.name,
-                      });
-                    }
-                    close();
-                  }}
-                  className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                >
-                  {inWork ? "Remove from Work" : "Add to Work"}
-                </button>
+                {kind === "product" ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      if (inWork) {
+                        void detachFromWork(`attach-${item.projectId}`);
+                      } else {
+                        void attachToWork(ctx, {
+                          type: "project",
+                          id: item.projectId,
+                          space: "build",
+                          workspaceId,
+                          label: item.name,
+                        });
+                      }
+                      close();
+                    }}
+                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                  >
+                    {inWork ? "Remove from Work" : "Add to Work"}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        promoteToBuild({
+                          type: "source",
+                          id: item.projectId,
+                          space: "research",
+                          workspaceId,
+                          label: item.name,
+                          snapshot: item.meta,
+                        });
+                        close();
+                      }}
+                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                    >
+                      Use in Build
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        promoteToWork({
+                          type: "source",
+                          id: item.projectId,
+                          space: "research",
+                          workspaceId,
+                          label: item.name,
+                        });
+                        close();
+                      }}
+                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                    >
+                      Add to Work
+                    </button>
+                  </>
+                )}
               </>
-            ) : kind === "paper" || kind === "file" ? (
+            ) : kind === "file" ? (
               <>
                 <button
                   type="button"

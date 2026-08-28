@@ -446,6 +446,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
         mode="actions"
       >
         <ProjectActionsSheetBody
+          key={actionsOpen ? "open" : "closed"}
           published={published}
           projectName={projectTitle}
           selectMode={selectMode}
@@ -453,10 +454,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
           onRename={() => {
             setActionsOpen(false);
             setRenameOpen(true);
-          }}
-          onPublish={() => {
-            openOverlay("publish");
-            setActionsOpen(false);
           }}
           onOpenExternal={() => {
             window.open(address, "_blank");

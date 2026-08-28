@@ -207,10 +207,7 @@ export function MobilePanelActionsCluster({
                     key={item.id}
                     label={item.label}
                     selected={scope.value === item.id}
-                    onClick={() => {
-                      scope.onChange(item.id);
-                      setMenuOpen(false);
-                    }}
+                    onClick={() => scope.onChange(item.id)}
                   />
                 ))}
               </div>
@@ -226,19 +223,13 @@ export function MobilePanelActionsCluster({
                   icon={LayoutGrid}
                   label="Cards"
                   active={layout.value === "cards"}
-                  onClick={() => {
-                    layout.onChange("cards");
-                    setMenuOpen(false);
-                  }}
+                  onClick={() => layout.onChange("cards")}
                 />
                 <SheetAction
                   icon={List}
                   label="List"
                   active={layout.value === "list"}
-                  onClick={() => {
-                    layout.onChange("list");
-                    setMenuOpen(false);
-                  }}
+                  onClick={() => layout.onChange("list")}
                 />
               </div>
             </div>
@@ -250,10 +241,7 @@ export function MobilePanelActionsCluster({
                   key={item.id}
                   label={item.label}
                   selected={item.active}
-                  onClick={() => {
-                    item.onClick();
-                    setMenuOpen(false);
-                  }}
+                  onClick={() => item.onClick()}
                 />
               ))}
             </div>

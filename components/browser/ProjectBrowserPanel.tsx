@@ -26,9 +26,7 @@ import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { GoogleHome } from "@/components/browser/GoogleHome";
 import {
   MobileBottomSheet,
-  ProjectActionsSheetBody,
   ProjectAddSheetHeader,
-  ProjectInfoSheetHeader,
   ProjectRenameSheetBody,
 } from "@/components/browser/ProjectMobileSheets";
 import { AppViewport } from "@/components/preview/AppViewport";
@@ -96,9 +94,7 @@ export function ProjectBrowserPanel() {
   } = useApp();
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
-  const [mobileSheet, setMobileSheet] = useState<"info" | "add" | "rename" | null>(
-    null,
-  );
+  const [mobileSheet, setMobileSheet] = useState<"add" | "rename" | null>(null);
   const [addQuery, setAddQuery] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -260,8 +256,6 @@ export function ProjectBrowserPanel() {
     liveUrl ??
     active.url ??
     previewUrlForProject(projectId ?? "project", entity?.publishedUrl);
-  const published =
-    entity?.status === "published" || Boolean(entity?.publishedUrl);
   const projectTitle = project?.name ?? entity?.title ?? active.title ?? "Project";
   const canRename = spaceId === "build" || spaceId === "research";
 
@@ -459,6 +453,7 @@ export function ProjectBrowserPanel() {
             canRename={canRename}
             onRename={() => setDesktopRenameOpen(true)}
             onPublish={() => openOverlay("publish")}
+            onDomain={() => openOverlay("publish")}
             onOpenExternal={() => window.open(address, "_blank")}
             onSelectElement={() => setSelectMode(!selectMode)}
             onRefresh={() => {
@@ -544,41 +539,10 @@ export function ProjectBrowserPanel() {
           projects={allProjects}
           projectTitle={projectTitle}
           onSelect={selectTab}
-          onOpenActive={() => setMobileSheet("info")}
           onClose={closeTab}
           onAdd={openAddSheet}
         />
       ) : null}
-
-      <MobileBottomSheet
-        open={mobile && mobileSheet === "info"}
-        onClose={() => setMobileSheet(null)}
-        mode="info"
-      >
-        <ProjectInfoSheetHeader
-          title={projectTitle}
-          onClose={() => setMobileSheet(null)}
-        />
-        <ProjectActionsSheetBody
-          published={published}
-          projectName={projectTitle}
-          selectMode={selectMode}
-          canRename={canRename}
-          onRename={() => setMobileSheet("rename")}
-          onPublish={() => {
-            openOverlay("publish");
-            setMobileSheet(null);
-          }}
-          onOpenExternal={() => {
-            window.open(address, "_blank");
-            setMobileSheet(null);
-          }}
-          onSelectElement={() => {
-            setSelectMode(!selectMode);
-            setMobileSheet(null);
-          }}
-        />
-      </MobileBottomSheet>
 
       <MobileBottomSheet
         open={mobile && mobileSheet === "rename"}
@@ -603,10 +567,9 @@ export function ProjectBrowserPanel() {
         <ProjectAddSheetHeader
           query={addQuery}
           onQueryChange={setAddQuery}
-          onClose={() => setMobileSheet(null)}
           onSubmit={submitAddQuery}
         />
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] pt-1">
           <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
             Projects
           </p>
@@ -746,7 +709,6 @@ function ProjectMobileTabBar({
   projects,
   projectTitle,
   onSelect,
-  onOpenActive,
   onClose,
   onAdd,
 }: {
@@ -755,7 +717,6 @@ function ProjectMobileTabBar({
   projects: SpaceProject[];
   projectTitle: string;
   onSelect: (id: string) => void;
-  onOpenActive: () => void;
   onClose: (id: string) => void;
   onAdd: () => void;
 }) {
@@ -767,7 +728,7 @@ function ProjectMobileTabBar({
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-t border-border bg-sidebar px-2 py-1.5 pb-[calc(env(safe-area-inset-bottom,0px)+0.375rem)]">
+    <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-border bg-sidebar px-2 py-1.5 pb-[calc(env(safe-area-inset-bottom,0px)+0.375rem)]">
       {tabs.map((tab) => {
         const active = tab.id === activeId;
         const label = labelFor(tab);
@@ -776,14 +737,13 @@ function ProjectMobileTabBar({
             key={tab.id}
             type="button"
             onClick={() => {
-              if (active) onOpenActive();
-              else onSelect(tab.id);
+              if (!active) onSelect(tab.id);
             }}
             className={cn(
-              "inline-flex h-9 max-w-[10rem] shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] tracking-[-0.01em]",
+              "inline-flex h-9 max-w-[10rem] shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] tracking-[-0.01em] transition-colors",
               active
-                ? "bg-foreground text-background"
-                : "text-muted-foreground",
+                ? "bg-[var(--mobile-chrome-surface)] text-foreground"
+                : "text-muted-foreground hover:bg-[var(--mobile-chrome-surface)]/70",
             )}
           >
             <TabGlyph tab={tab} className="h-3.5 w-3.5" />
@@ -804,7 +764,7 @@ function ProjectMobileTabBar({
                     onClose(tab.id);
                   }
                 }}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-background/20"
+                className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full hover:bg-foreground/10"
               >
                 <X className="h-2.5 w-2.5" strokeWidth={2} />
               </span>
@@ -817,7 +777,7 @@ function ProjectMobileTabBar({
         aria-label="New tab"
         title="New tab"
         onClick={onAdd}
-        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--mobile-chrome-surface)] text-foreground transition-colors duration-200 hover:bg-muted"
       >
         <Plus className="h-4 w-4" strokeWidth={1.8} />
       </button>
@@ -830,6 +790,7 @@ function DesktopProjectToolsMenu({
   canRename,
   onRename,
   onPublish,
+  onDomain,
   onOpenExternal,
   onSelectElement,
   onRefresh,
@@ -838,6 +799,7 @@ function DesktopProjectToolsMenu({
   canRename: boolean;
   onRename: () => void;
   onPublish: () => void;
+  onDomain: () => void;
   onOpenExternal: () => void;
   onSelectElement: () => void;
   onRefresh: () => void;
@@ -874,6 +836,15 @@ function DesktopProjectToolsMenu({
             }}
           >
             Publish
+          </DesktopMenuItem>
+          <DesktopMenuItem
+            icon={Globe}
+            onClick={() => {
+              onDomain();
+              close();
+            }}
+          >
+            Domains
           </DesktopMenuItem>
           <DesktopMenuItem
             icon={ExternalLink}
