@@ -89,7 +89,9 @@ export function useMobileSwipeGestures() {
       // Swipe right → toward menu
       if (dx > 0) {
         if (mobileSurface === "panel") {
-          if (view === "space" && spaceId && isChatSpace(spaceId)) {
+          if (projectId) {
+            setMobileSurface("chat");
+          } else if (view === "space" && spaceId && isChatSpace(spaceId)) {
             openSpaceChat(spaceId);
           } else {
             setMobileSurface("chat");
@@ -125,6 +127,7 @@ export function useMobileSwipeGestures() {
       openSpaceChat,
       panelAvailable,
       panelMode,
+      projectId,
       setMobileSurface,
       setPanelMode,
       spaceId,

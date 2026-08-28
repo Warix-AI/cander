@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { persistTheme } from "@/lib/session";
-import { setShellStyle, type ShellStyle } from "@/lib/shell-chrome";
+import { type ShellStyle } from "@/lib/shell-chrome";
 
 export type ColorModeId = "light" | "dark";
 
@@ -154,9 +154,11 @@ export function clearAppearanceLocalState() {
 }
 
 /**
- * Brand defaults: light + floating layout.
+ * Brand defaults: light + classic layout.
  * Color continuum: left = light, center (~50) = mono dark, right = dark tints.
  * Typography 50 = DM Sans.
+ * Shell chrome is viewport-driven (classic desktop, floating mobile) — layout
+ * is kept for stored appearance compat only.
  */
 export const DEFAULT_APPEARANCE: AppearanceState = {
   colorMode: "light",
@@ -164,7 +166,7 @@ export const DEFAULT_APPEARANCE: AppearanceState = {
   spacing: 50,
   shapes: 50,
   motion: 50,
-  layout: 100,
+  layout: 0,
 };
 
 const SERVER_SNAPSHOT: AppearanceState = { ...DEFAULT_APPEARANCE };
@@ -418,7 +420,7 @@ export function typePresetFor(value: number): TypePreset {
   };
 }
 
-/** Sync theme + shell chrome so existing hooks keep working. */
+/** Sync theme so existing hooks keep working. Shell is viewport-driven in AppShell. */
 export function syncAppearanceSideEffects(next: AppearanceState = getAppearanceSnapshot()) {
   if (typeof window === "undefined") return;
   const palette = colorPaletteForMode(next.colorMode);
@@ -433,8 +435,6 @@ export function syncAppearanceSideEffects(next: AppearanceState = getAppearanceS
     // Still refresh color-scheme / keyboard when already in sync.
     persistTheme(palette.theme);
   }
-  const shell: ShellStyle = next.layout >= 50 ? "floating" : "classic";
-  setShellStyle(shell);
 }
 
 export function subscribeAppearance(listener: Listener) {

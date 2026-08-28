@@ -34,7 +34,7 @@ export const FLOAT_ICON_BUTTON = cn(
 /** @deprecated Use SHELL_G3_RADIUS — Tailwind rounded-[20px] is clamped by appearance sliders. */
 export const SHELL_FLOAT_RADIUS = SHELL_G3_RADIUS;
 
-let style: ShellStyle = "floating";
+let style: ShellStyle = "classic";
 let hydrated = false;
 
 function emit() {
@@ -43,7 +43,7 @@ function emit() {
 
 function parse(raw: string | null): ShellStyle {
   if (raw === "classic" || raw === "floating") return raw;
-  return "floating";
+  return "classic";
 }
 
 function hydrate() {
@@ -66,7 +66,7 @@ export function getShellStyleSnapshot() {
 }
 
 export function getShellStyleServerSnapshot(): ShellStyle {
-  return "floating";
+  return "classic";
 }
 
 export function setShellStyle(next: ShellStyle) {

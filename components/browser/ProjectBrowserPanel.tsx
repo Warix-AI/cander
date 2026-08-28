@@ -326,12 +326,7 @@ export function ProjectBrowserPanel() {
         </div>
       )}
 
-      <div
-        className={cn(
-          "relative min-h-0 flex-1 overflow-hidden bg-background",
-          mobile && "pb-[4.25rem]",
-        )}
-      >
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
         <ProjectBrowserBody
           tab={active}
           projects={allProjects}
@@ -339,33 +334,31 @@ export function ProjectBrowserPanel() {
           fallbackSummary={project?.summary ?? ""}
           reloadKey={reloadKey}
         />
-        {mobile ? (
-          <>
-            <ProjectMobileTabBar
-              tabs={session.tabs}
-              activeId={active.id}
-              extraProjects={extraProjects}
-              onSelect={selectTab}
-              onClose={closeTab}
-              onAddUrl={addUrlTab}
-              onAddProject={addProjectTab}
-            />
-            {mobileNavOpen ? (
-              <MobileBrowserNavSheet
-                urlDraft={urlDraft}
-                canBack={canBack}
-                canForward={canForward}
-                onUrlChange={setUrlDraft}
-                onCommitUrl={commitUrl}
-                onBack={() => goHistory(-1)}
-                onForward={() => goHistory(1)}
-                onReload={() => setReloadKey((value) => value + 1)}
-                onClose={() => setMobileNavOpen(false)}
-              />
-            ) : null}
-          </>
+        {mobile && mobileNavOpen ? (
+          <MobileBrowserNavSheet
+            urlDraft={urlDraft}
+            canBack={canBack}
+            canForward={canForward}
+            onUrlChange={setUrlDraft}
+            onCommitUrl={commitUrl}
+            onBack={() => goHistory(-1)}
+            onForward={() => goHistory(1)}
+            onReload={() => setReloadKey((value) => value + 1)}
+            onClose={() => setMobileNavOpen(false)}
+          />
         ) : null}
       </div>
+      {mobile ? (
+        <ProjectMobileTabBar
+          tabs={session.tabs}
+          activeId={active.id}
+          extraProjects={extraProjects}
+          onSelect={selectTab}
+          onClose={closeTab}
+          onAddUrl={addUrlTab}
+          onAddProject={addProjectTab}
+        />
+      ) : null}
     </div>
   );
 }
@@ -488,52 +481,50 @@ function ProjectMobileTabBar({
   onAddProject: (project: SpaceProject) => void;
 }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center pb-[calc(env(safe-area-inset-bottom,0px)+10px)]">
-      <div className="pointer-events-auto flex w-[60vw] max-w-full items-center gap-1 overflow-x-auto rounded-full border border-border/80 bg-background/90 p-1 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur-md">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => onSelect(tab.id)}
-            className={cn(
-              "inline-flex h-9 max-w-[10rem] shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] tracking-[-0.01em]",
-              tab.id === activeId
-                ? "bg-foreground text-background"
-                : "text-muted-foreground",
-            )}
-          >
-            <TabGlyph tab={tab} className="h-3.5 w-3.5" />
-            <span className="truncate">{tab.title}</span>
-            {tab.pinned ? null : (
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label={`Close ${tab.title}`}
-                onClick={(event) => {
+    <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-t border-border bg-sidebar px-2 py-1.5 pb-[calc(env(safe-area-inset-bottom,0px)+0.375rem)]">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onSelect(tab.id)}
+          className={cn(
+            "inline-flex h-9 max-w-[10rem] shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] tracking-[-0.01em]",
+            tab.id === activeId
+              ? "bg-foreground text-background"
+              : "text-muted-foreground",
+          )}
+        >
+          <TabGlyph tab={tab} className="h-3.5 w-3.5" />
+          <span className="truncate">{tab.title}</span>
+          {tab.pinned ? null : (
+            <span
+              role="button"
+              tabIndex={0}
+              aria-label={`Close ${tab.title}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onClose(tab.id);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
                   event.stopPropagation();
                   onClose(tab.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onClose(tab.id);
-                  }
-                }}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-background/20"
-              >
-                <X className="h-2.5 w-2.5" strokeWidth={2} />
-              </span>
-            )}
-          </button>
-        ))}
-        <AddTabMenu
-          extraProjects={extraProjects}
-          onAddUrl={onAddUrl}
-          onAddProject={onAddProject}
-          compact
-        />
-      </div>
+                }
+              }}
+              className="inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-background/20"
+            >
+              <X className="h-2.5 w-2.5" strokeWidth={2} />
+            </span>
+          )}
+        </button>
+      ))}
+      <AddTabMenu
+        extraProjects={extraProjects}
+        onAddUrl={onAddUrl}
+        onAddProject={onAddProject}
+        compact
+      />
     </div>
   );
 }
@@ -567,7 +558,7 @@ function MobileBrowserNavSheet({
         className="absolute inset-0 bg-black/25"
         onClick={onClose}
       />
-      <div className="relative mx-3 mb-[calc(env(safe-area-inset-bottom,0px)+4.75rem)] rounded-[16px] border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.22)]">
+      <div className="relative mx-3 mb-3 rounded-[16px] border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.22)]">
         <div className="flex items-center gap-1">
           <RailBtn label="Back" disabled={!canBack} onClick={onBack}>
             <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />

@@ -2,9 +2,7 @@
 
 import {
   COLOR_MODE_PRESETS,
-  layoutModeFor,
   setColorMode,
-  setLayoutMode,
   swatchForMode,
   useAppearance,
 } from "@/lib/appearance";
@@ -25,7 +23,6 @@ export function AppearanceControls({
   compact?: boolean;
 }) {
   const appearance = useAppearance();
-  const activeLayout = layoutModeFor(appearance.layout);
   const mobile = useMobileShell();
   const curve = compact ? SHELL_G3_RADIUS : undefined;
 
@@ -62,69 +59,37 @@ export function AppearanceControls({
           </SettingsFootnote>
         </SettingsSection>
       ) : (
-      <section>
-        <h3 className="text-[14px] font-medium tracking-[-0.01em]">
-          Color mode
-        </h3>
-        <div
-          className={cn(
-            "grid gap-2",
-            compact ? "mt-4 grid-cols-2" : "mt-5 grid-cols-2",
-          )}
-        >
-          {COLOR_MODE_PRESETS.map((preset) => (
-            <AppearanceOptionCard
-              key={preset.id}
-              label={preset.label}
-              active={appearance.colorMode === preset.id}
-              onSelect={() => setColorMode(preset.id)}
-              curve={curve}
-              preview={
-                <span
-                  aria-hidden
-                  className={cn(
-                    "block h-9 w-full border border-black/5",
-                    curve ?? "rounded-[8px]",
-                  )}
-                  style={{ background: swatchForMode(preset.id) }}
-                />
-              }
-            />
-          ))}
-        </div>
-      </section>
-      )}
-
-      {mobile ? null : (
-      <section>
-        <h3 className="text-[14px] font-medium tracking-[-0.01em]">Layout</h3>
-        {!compact ? (
-          <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
-            Edge-to-edge classic or inset floating chrome.
-          </p>
-        ) : null}
-        <div
-          className={cn(
-            "grid gap-2",
-            compact ? "mt-4 grid-cols-2" : "mt-5 grid-cols-2 sm:grid-cols-4",
-          )}
-        >
-          <AppearanceOptionCard
-            label="Classic"
-            active={activeLayout === "classic"}
-            onSelect={() => setLayoutMode("classic")}
-            curve={curve}
-            preview={<ClassicLayoutPreview curve={curve} />}
-          />
-          <AppearanceOptionCard
-            label="Floating"
-            active={activeLayout === "floating"}
-            onSelect={() => setLayoutMode("floating")}
-            curve={curve}
-            preview={<FloatingLayoutPreview curve={curve} />}
-          />
-        </div>
-      </section>
+        <section>
+          <h3 className="text-[14px] font-medium tracking-[-0.01em]">
+            Color mode
+          </h3>
+          <div
+            className={cn(
+              "grid gap-2",
+              compact ? "mt-4 grid-cols-2" : "mt-5 grid-cols-2",
+            )}
+          >
+            {COLOR_MODE_PRESETS.map((preset) => (
+              <AppearanceOptionCard
+                key={preset.id}
+                label={preset.label}
+                active={appearance.colorMode === preset.id}
+                onSelect={() => setColorMode(preset.id)}
+                curve={curve}
+                preview={
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "block h-9 w-full border border-black/5",
+                      curve ?? "rounded-[8px]",
+                    )}
+                    style={{ background: swatchForMode(preset.id) }}
+                  />
+                }
+              />
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );
@@ -148,63 +113,20 @@ function AppearanceOptionCard({
   return (
     <button
       type="button"
-      aria-pressed={active}
       onClick={onSelect}
       className={cn(
-        "flex flex-col gap-2 bg-card px-3 py-3 text-left transition-colors duration-200",
-        curve ?? (mobile ? "rounded-[12px]" : "rounded-[10px]"),
-        mobile
-          ? "border border-border bg-card"
-          : cn(
-              "border",
-              active
-                ? "border-foreground/25 bg-muted ring-1 ring-foreground/10"
-                : "border-border hover:bg-muted/60",
-            ),
+        "flex flex-col gap-2 border p-2 text-left transition-colors",
+        curve ?? "rounded-[12px]",
+        active
+          ? "border-foreground/25 bg-muted/40"
+          : "border-border hover:border-foreground/15 hover:bg-muted/20",
+        mobile && "p-2.5",
       )}
     >
       {preview}
-      <span className="text-[13px] font-medium tracking-[-0.01em]">{label}</span>
+      <span className="px-0.5 text-[13px] font-medium tracking-[-0.01em]">
+        {label}
+      </span>
     </button>
-  );
-}
-
-function ClassicLayoutPreview({ curve }: { curve?: string }) {
-  return (
-    <div
-      aria-hidden
-      className={cn(
-        "flex h-9 w-full overflow-hidden border border-black/5 bg-muted/80",
-        curve ?? "rounded-[8px]",
-      )}
-    >
-      <div className="h-full w-[28%] border-r border-black/5 bg-background" />
-      <div className="h-full flex-1 bg-background" />
-    </div>
-  );
-}
-
-function FloatingLayoutPreview({ curve }: { curve?: string }) {
-  return (
-    <div
-      aria-hidden
-      className={cn(
-        "flex h-9 w-full gap-1 border border-black/5 bg-muted/50 p-1",
-        curve ?? "rounded-[8px]",
-      )}
-    >
-      <div
-        className={cn(
-          "h-full w-[28%] border border-black/5 bg-background shadow-sm",
-          curve ?? "rounded-[5px]",
-        )}
-      />
-      <div
-        className={cn(
-          "h-full flex-1 border border-black/5 bg-background shadow-sm",
-          curve ?? "rounded-[5px]",
-        )}
-      />
-    </div>
   );
 }

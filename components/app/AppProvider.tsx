@@ -2314,7 +2314,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setVoiceActive(true);
 
     if (view === "space" && spaceId && isChatSpace(spaceId) && !threadId) {
-      openSpaceChat(spaceId);
+      openSpaceChat(spaceId, { keepProject: Boolean(projectId) });
       return;
     }
 

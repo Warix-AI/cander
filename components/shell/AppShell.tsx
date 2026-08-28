@@ -162,10 +162,9 @@ function Root() {
     };
   }, [mobile]);
 
-  // Floating chrome is the mobile default.
+  // Desktop is always classic; floating chrome is mobile-only.
   useEffect(() => {
-    if (!mobile) return;
-    setShellStyle("floating");
+    setShellStyle(mobile ? "floating" : "classic");
   }, [mobile]);
 
   useEffect(() => {

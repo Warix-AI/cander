@@ -238,7 +238,7 @@ const PANEL_COPY: Record<
   },
   appearance: {
     title: "Make it feel like yours.",
-    body: "Pick a color mode and layout — watch the preview update as you go.",
+    body: "Pick a color mode — watch the preview update as you go.",
   },
 };
 
@@ -1456,8 +1456,8 @@ function AppearanceStep({
         Make it yours
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Pick a color mode and layout. The preview on the right updates as you
-        go — continue when it feels right.
+        Pick a color mode. The preview on the right updates as you go — continue
+        when it feels right.
       </p>
       <div className="mt-8">
         <AppearanceControls compact />
