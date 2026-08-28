@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { AuthProvider } from "@/components/app/AuthProvider";
 import { AppProvider, useApp } from "@/components/app/AppProvider";
 import { SpaceDataProvider } from "@/components/app/SpaceDataProvider";
@@ -28,6 +28,7 @@ import {
   getAuthUserIdSnapshot,
   getOnboardingPendingServerSnapshot,
   getOnboardingPendingSnapshot,
+  persistOnboardingPending,
   subscribeAuth,
   subscribeAuthUserId,
   subscribeOnboardingPending,
@@ -48,6 +49,12 @@ import { useMobileShell } from "@/lib/use-media-query";
 import { useMobileSwipeGestures } from "@/lib/use-mobile-swipe";
 import { MOBILE_APP_BG, MOBILE_MENU_BG } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
+import {
+  getSessionReadyServerSnapshot,
+  getSessionReadySnapshot,
+  subscribeSessionReady,
+} from "@/lib/session-ready";
+import { isSupabaseConfigured } from "@/lib/data-backend";
 
 export function AppShell() {
   return (
@@ -96,6 +103,27 @@ function Root() {
     getOnboardingPendingSnapshot,
     getOnboardingPendingServerSnapshot,
   );
+  const sessionReady = useSyncExternalStore(
+    subscribeSessionReady,
+    getSessionReadySnapshot,
+    getSessionReadyServerSnapshot,
+  );
+  // Email-verify callback must set onboarding pending before the auth gate runs.
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const auth = params.get("auth");
+    if (auth === "verified") {
+      persistOnboardingPending(true);
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
+    if (auth === "error") {
+      persistOnboardingPending(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   useCapacitorMobileShell();
   const mobile = useMobileShell();
   const swipe = useMobileSwipeGestures();
@@ -175,6 +203,14 @@ function Root() {
     return <OnboardingFlow />;
   }
 
+  if (isSupabaseConfigured() && signedIn && !sessionReady) {
+    return (
+      <div className="flex h-svh items-center justify-center bg-background text-foreground">
+        <p className="text-[14px] text-muted-foreground">Loading your account…</p>
+      </div>
+    );
+  }
+
   return (
     <AppearanceProvider>
       <MobilePanelActionsProvider>
@@ -223,6 +259,7 @@ function Root() {
 function CourierMain() {
   const {
     view,
+    spaceId,
     drafting,
     thread,
     projectId,
@@ -246,19 +283,7 @@ function CourierMain() {
     return <BrowserLayout />;
   }
 
-  if (view === "space") {
-    const entityOpen = Boolean(
-      projectId || skillId || jobId || connectorId || spaceLibraryOpen,
-    );
-    if (entityOpen && (drafting || thread)) {
-      return (
-        <SplitMainLayout>
-          <div className="flex min-h-0 flex-1 flex-col">
-            <ChatColumn />
-          </div>
-        </SplitMainLayout>
-      );
-    }
+  if (view === "space" || (view === "chat" && spaceId)) {
     return <SpaceChatLayout />;
   }
 

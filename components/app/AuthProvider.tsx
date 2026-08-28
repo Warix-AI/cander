@@ -13,6 +13,7 @@ import {
   validateSupabaseSession,
 } from "@/lib/supabase/auth-store";
 import { hydrateMemberFromSupabase } from "@/lib/supabase/hydrate-member";
+import { setSessionReady } from "@/lib/session-ready";
 
 async function reconcileSupabaseUser(user: User) {
   const complete = await hasCompletedOnboarding(user.id);
@@ -37,7 +38,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const reconciling = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      setSessionReady(true);
+      return;
+    }
+    setSessionReady(false);
     const stopAuth = initSupabaseAuthSubscription();
 
     const reconcileIfNeeded = (user: User | null) => {
@@ -49,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         hadUser.current = false;
         reconciling.current = null;
+        setSessionReady(true);
         return;
       }
 
@@ -63,6 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (reconciling.current === user.id) {
             reconciling.current = null;
           }
+          setSessionReady(true);
         });
     };
 
@@ -70,7 +77,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       reconcileIfNeeded(getSupabaseUserSnapshot());
     });
 
-    reconcileIfNeeded(getSupabaseUserSnapshot());
+    const existing = getSupabaseUserSnapshot();
+    if (existing) {
+      reconcileIfNeeded(existing);
+    } else {
+      void validateSupabaseSession().finally(() => setSessionReady(true));
+    }
 
     return () => {
       stopAuth();
