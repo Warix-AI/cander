@@ -1,8 +1,10 @@
 "use client";
 
 import { isSupabaseConfigured } from "@/lib/data-backend";
-import { persistSignedOut } from "@/lib/session";
+import { persistOnboardingPending, persistSignedOut } from "@/lib/session";
 import { signOutSupabase } from "@/lib/supabase/auth-actions";
+import { clearSupabaseAuthState } from "@/lib/supabase/auth-store";
+import { resetPolicyStoreState } from "@/lib/workspace-policy";
 
 const LOCAL_KEYS = [
   "courier-signed-in",
@@ -37,6 +39,9 @@ export function clearLocalAuthState() {
  */
 export async function signOutAccount() {
   if (isSupabaseConfigured()) {
+    clearSupabaseAuthState();
+    persistOnboardingPending(false);
+    resetPolicyStoreState();
     try {
       await signOutSupabase();
     } catch (err) {

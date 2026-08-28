@@ -63,6 +63,11 @@ export function replacePolicyStoreState(next: {
   emit();
 }
 
+/** Wipe in-memory policy state on sign-out so the next user starts clean. */
+export function resetPolicyStoreState() {
+  replacePolicyStoreState({ policies: {}, orgMembers: [] });
+}
+
 export function getPolicyStoreRevision() {
   return policyRevision;
 }

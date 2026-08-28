@@ -32,6 +32,7 @@ import {
 } from "@/lib/supabase/hydrate-member";
 import { tryEnterExistingAccount } from "@/lib/onboarding-recovery";
 import { clearLocalAuthState } from "@/lib/auth/sign-out";
+import { syncSupabaseAuthUser } from "@/lib/supabase/auth-store";
 import { setupOrgOnSupabase } from "@/lib/supabase/setup-org-onboarding";
 import { AppearanceControls } from "@/components/settings/AppearanceControls";
 import { OnboardingAppPreview } from "@/components/onboarding/OnboardingAppPreview";
@@ -530,6 +531,7 @@ function OnboardingShell({
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
+        syncSupabaseAuthUser(user);
         try {
           await hydrateMemberFromSupabase(user);
         } catch (hydrateErr) {
@@ -721,6 +723,7 @@ function OnboardingShell({
     persistOnboardingPending(true);
     try {
       const result = await signUpWithPassword({ email, password, name });
+      if (result.session?.user) syncSupabaseAuthUser(result.session.user);
       // Existing email (enumeration-safe): empty identities, no session.
       const maybeExisting =
         result.user &&
@@ -729,7 +732,8 @@ function OnboardingShell({
 
       if (maybeExisting) {
         try {
-          await signInWithPassword({ email, password });
+          const signInResult = await signInWithPassword({ email, password });
+          if (signInResult.user) syncSupabaseAuthUser(signInResult.user);
           const entered = await tryEnterExistingAccount();
           if (entered) return;
           persistOnboardingPending(true);
@@ -760,7 +764,8 @@ function OnboardingShell({
         err instanceof Error ? err.message : "Could not create account.";
       if (/already|registered|exists/i.test(message)) {
         try {
-          await signInWithPassword({ email, password });
+          const signInResult = await signInWithPassword({ email, password });
+          if (signInResult.user) syncSupabaseAuthUser(signInResult.user);
           const entered = await tryEnterExistingAccount();
           if (entered) return;
           persistOnboardingPending(true);
@@ -802,7 +807,8 @@ function OnboardingShell({
     setError("");
     setInfo("");
     try {
-      await verifySignupOtp(email, code);
+      const result = await verifySignupOtp(email, code);
+      if (result.user) syncSupabaseAuthUser(result.user);
       setPassedVerify(true);
       setVerifyCode("");
       setStep("profile");
@@ -859,7 +865,8 @@ function OnboardingShell({
       setInfo("");
       setBusy(true);
       try {
-        await signInWithPassword({ email, password });
+        const result = await signInWithPassword({ email, password });
+        if (result.user) syncSupabaseAuthUser(result.user);
         const entered = await tryEnterExistingAccount();
         if (entered) return;
         persistOnboardingPending(true);

@@ -11,6 +11,7 @@ import {
   verifySignupOtp,
 } from "@/lib/supabase/auth-actions";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { syncSupabaseAuthUser } from "@/lib/supabase/auth-store";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { planLabel } from "@/lib/billing";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
@@ -86,7 +87,8 @@ export function InviteAcceptFlow({ token }: { token: string }) {
       setBusy(true);
       setError("");
       try {
-        await verifySignupOtp(preview.email, code);
+        const verifyResult = await verifySignupOtp(preview.email, code);
+        if (verifyResult.user) syncSupabaseAuthUser(verifyResult.user);
         await finishAccept();
       } catch (err) {
         setError(
@@ -120,7 +122,11 @@ export function InviteAcceptFlow({ token }: { token: string }) {
           result.user.identities.length === 0;
         if (maybeExisting) {
           try {
-            await signInWithPassword({ email: preview.email, password });
+            const signInResult = await signInWithPassword({
+              email: preview.email,
+              password,
+            });
+            if (signInResult.user) syncSupabaseAuthUser(signInResult.user);
             await finishAccept();
             return;
           } catch (err) {
@@ -140,13 +146,18 @@ export function InviteAcceptFlow({ token }: { token: string }) {
         const {
           data: { session },
         } = await supabase.auth.getSession();
+        if (session?.user) syncSupabaseAuthUser(session.user);
         if (!session) {
           setMode("verify");
           setInfo(`We sent a code to ${preview.email}. Enter it to join.`);
           return;
         }
       } else {
-        await signInWithPassword({ email: preview.email, password });
+        const signInResult = await signInWithPassword({
+          email: preview.email,
+          password,
+        });
+        if (signInResult.user) syncSupabaseAuthUser(signInResult.user);
       }
       await finishAccept();
     } catch (err) {

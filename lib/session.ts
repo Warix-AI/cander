@@ -21,6 +21,7 @@ import {
 } from "@/lib/spaces";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import {
+  clearSupabaseAuthState,
   getSupabaseAuthServerSnapshot,
   getSupabaseAuthSnapshot,
   getSupabaseUserIdServerSnapshot,
@@ -257,6 +258,7 @@ export function persistOnboardingPending(pending: boolean) {
 
 export function persistSignedOut() {
   if (isSupabaseConfigured()) {
+    clearSupabaseAuthState();
     window.localStorage.removeItem("courier-signed-in");
     window.localStorage.removeItem("courier-actor");
   }

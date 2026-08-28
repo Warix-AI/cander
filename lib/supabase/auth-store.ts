@@ -13,6 +13,7 @@ let signedIn = false;
 let authUser: User | null = null;
 let initialized = false;
 let validating = false;
+let pendingValidation = false;
 
 function emitAuth() {
   authListeners.forEach((listener) => listener());
@@ -34,13 +35,25 @@ function setSession(user: User | null) {
   }
 }
 
+/** Sync auth UI immediately after sign-in / OTP (before async validation). */
+export function syncSupabaseAuthUser(user: User | null) {
+  setSession(user);
+}
+
+export function clearSupabaseAuthState() {
+  setSession(null);
+}
+
 /**
  * Validate the JWT against Auth (not just local storage).
  * Deleted / banned users fail here even if a stale session cookie remains.
  */
 export async function validateSupabaseSession(): Promise<User | null> {
   if (!isSupabaseConfigured() || typeof window === "undefined") return null;
-  if (validating) return authUser;
+  if (validating) {
+    pendingValidation = true;
+    return authUser;
+  }
   validating = true;
   try {
     const supabase = createSupabaseBrowserClient();
@@ -81,6 +94,12 @@ export async function validateSupabaseSession(): Promise<User | null> {
     return authUser;
   } finally {
     validating = false;
+    if (pendingValidation) {
+      pendingValidation = false;
+      queueMicrotask(() => {
+        void validateSupabaseSession();
+      });
+    }
   }
 }
 
@@ -103,10 +122,12 @@ export function initSupabaseAuthSubscription() {
       setSession(null);
       return;
     }
-    // TOKEN_REFRESHED / SIGNED_IN / INITIAL_SESSION — still verify with Auth
-    // so a deleted user cannot keep a warm JWT.
+    // Flip UI immediately; validate in background so deleted users still drop.
     if (session?.user) {
-      void validateSupabaseSession();
+      setSession(session.user);
+      queueMicrotask(() => {
+        void validateSupabaseSession();
+      });
     } else {
       setSession(null);
     }
