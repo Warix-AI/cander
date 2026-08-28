@@ -92,6 +92,18 @@ export function useSpaceIndex(opts?: {
 
   useEffect(() => {
     if (!enabled) return;
+    const nextSeed = readIndexSeed(ctx);
+    if (!nextSeed.ready) return;
+    setProjects(nextSeed.projects);
+    setSources(nextSeed.sources);
+    setBriefing(nextSeed.briefing);
+    setThreads(nextSeed.threads);
+    loaded.current = true;
+    setLoading(false);
+  }, [ctx, entityRevision, chatRevision, enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     if (lastWorkspace.current !== ctx.workspaceId) {
       lastWorkspace.current = ctx.workspaceId;
@@ -136,7 +148,7 @@ export function useSpaceIndex(opts?: {
     return () => {
       cancelled = true;
     };
-  }, [api.entities, api.chat, ctx, entityRevision, chatRevision, enabled]);
+  }, [api.entities, api.chat, ctx, enabled]);
 
   const entries = useMemo(() => {
     const usedProjects = new Set<string>();

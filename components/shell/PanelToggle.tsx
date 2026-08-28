@@ -26,7 +26,7 @@ export function PanelToggle({
       className={cn(
         "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
         docked
-          ? "text-muted-foreground hover:bg-muted hover:text-foreground"
+          ? "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
           : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-foreground",
         className,
       )}
@@ -60,7 +60,6 @@ export function RightPanelToggleDock() {
     jobId,
     skillId,
     panelMode,
-    toggleRightPanel,
   } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
@@ -81,7 +80,7 @@ export function RightPanelToggleDock() {
   return (
     <div
       className={cn(
-        "pointer-events-none fixed z-40 hidden h-11 items-center px-3 lg:flex",
+        "pointer-events-none fixed z-50 hidden h-11 items-center bg-background px-3 lg:flex",
         floating ? "top-3" : "top-0",
       )}
       style={{

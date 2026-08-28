@@ -199,34 +199,6 @@ export function Sidebar() {
     else openSpace(id);
   };
 
-  const NavBtn = ({ id }: { id: SidebarNavId }) => {
-    const item = mainNavItems.find((entry) => entry.id === id);
-    if (!item) return null;
-    const { Icon, label } = item;
-    const active = navActive(id);
-    const tinted =
-      id === "work" || id === "build" || id === "research";
-    return (
-      <button
-        type="button"
-        onClick={() => openNav(id)}
-        className={cn(
-          "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
-          active ? "bg-sidebar-accent font-medium" : "hover:bg-sidebar-accent",
-        )}
-      >
-        <Icon
-          className={cn(
-            "h-3.5 w-3.5",
-            tinted ? spaceIconTint(id) : "text-muted-foreground",
-          )}
-          strokeWidth={2}
-        />
-        {label}
-      </button>
-    );
-  };
-
   const renderPinnedRow = (item: PinnedItem) => (
     <PinnedRow
       key={`${item.kind}-${item.id}`}
@@ -417,8 +389,15 @@ export function Sidebar() {
                 />
                 New Chat
               </button>
-              {mainNavItems.map(({ id }) => (
-                <NavBtn key={id} id={id} />
+              {mainNavItems.map((item) => (
+                <SidebarNavButton
+                  key={item.id}
+                  id={item.id}
+                  Icon={item.Icon}
+                  label={item.label}
+                  active={navActive(item.id)}
+                  onOpen={openNav}
+                />
               ))}
             </div>
 
@@ -448,6 +427,41 @@ export function Sidebar() {
       </div>
     </div>
     </>
+  );
+}
+
+function SidebarNavButton({
+  id,
+  Icon,
+  label,
+  active,
+  onOpen,
+}: {
+  id: SidebarNavId;
+  Icon: (props: { className?: string; strokeWidth?: number }) => ReactNode;
+  label: string;
+  active: boolean;
+  onOpen: (id: SidebarNavId) => void;
+}) {
+  const tinted = id === "work" || id === "build" || id === "research";
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(id)}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
+        active ? "bg-sidebar-accent font-medium" : "hover:bg-sidebar-accent",
+      )}
+    >
+      <Icon
+        className={cn(
+          "h-3.5 w-3.5",
+          tinted ? spaceIconTint(id) : "text-muted-foreground",
+        )}
+        strokeWidth={2}
+      />
+      {label}
+    </button>
   );
 }
 

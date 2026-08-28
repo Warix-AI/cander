@@ -30,7 +30,16 @@ export function getCanderDesktopBridge(): CanderDesktopBridge | undefined {
 
 /** Electron on macOS with custom frameless traffic lights. */
 export function isMacDesktopShell() {
-  return isDesktopShell() && getCanderDesktopBridge()?.platform === "darwin";
+  if (typeof navigator === "undefined") return false;
+  const platform = getCanderDesktopBridge()?.platform;
+  if (platform === "win32" || platform === "linux") return false;
+  const mac =
+    platform === "darwin" ||
+    /Mac|Macintosh/i.test(`${navigator.platform} ${navigator.userAgent}`);
+  if (!mac) return false;
+  if (isDesktopShell()) return true;
+  if (typeof document === "undefined") return false;
+  return document.documentElement.classList.contains("cander-desktop");
 }
 
 function subscribeDesktopShell(_onStoreChange: () => void) {

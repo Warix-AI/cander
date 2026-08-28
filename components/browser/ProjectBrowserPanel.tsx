@@ -48,12 +48,7 @@ import {
   previewUrlForProject,
 } from "@/lib/preview-url";
 import type { ProjectKind, SpaceProject } from "@/lib/space-entities";
-import {
-  DESKTOP_NO_DRAG,
-  DESKTOP_TRAFFIC_CLEAR_PX,
-  isMacDesktopShell,
-} from "@/lib/desktop-shell";
-import { SHELL_FLOAT_INSET_PX, useShellStyle } from "@/lib/shell-chrome";
+import { DESKTOP_NO_DRAG, useDesktopShell } from "@/lib/desktop-shell";
 import { isChatSpace } from "@/lib/spaces";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -72,20 +67,13 @@ export function ProjectBrowserPanel() {
     openSpaceChat,
     expandedLayout,
     toggleExpandedLayout,
+    panelMode,
   } = useApp();
   const mobile = useMobileShell();
-  const floating = useShellStyle() === "floating";
-  const macDesktop = isMacDesktopShell();
+  const desktop = useDesktopShell();
   const chatArmed = drafting || Boolean(thread);
   const projectFullscreen = Boolean(projectId) && !chatArmed;
   const showHeaderNav = projectFullscreen && !sidebarOpen;
-  const trafficPadPx =
-    showHeaderNav && macDesktop
-      ? Math.max(
-          0,
-          DESKTOP_TRAFFIC_CLEAR_PX - (floating ? SHELL_FLOAT_INSET_PX : 0),
-        )
-      : 0;
   const entityRevision = useSyncExternalStore(
     subscribeSpaceEntityStore,
     () => getSpaceEntityStoreSnapshot().revision,
@@ -229,16 +217,14 @@ export function ProjectBrowserPanel() {
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-sidebar">
       {mobile ? null : (
         <div
-          className="flex h-10 min-w-0 shrink-0 items-center gap-1 bg-sidebar px-2"
-          style={macDesktop ? DESKTOP_NO_DRAG : undefined}
+          className={cn(
+            "flex h-[45px] min-w-0 shrink-0 items-center gap-1 bg-sidebar",
+            showHeaderNav
+              ? "pr-2 pl-[max(0.5rem,var(--desktop-traffic-clear,0px))]"
+              : "px-2",
+          )}
+          style={desktop ? DESKTOP_NO_DRAG : undefined}
         >
-          {trafficPadPx > 0 ? (
-            <div
-              className="shrink-0"
-              style={{ width: trafficPadPx }}
-              aria-hidden
-            />
-          ) : null}
           {showHeaderNav ? <NavToggle /> : null}
           {projectFullscreen && spaceId && isChatSpace(spaceId) ? (
             <RailBtn
@@ -274,21 +260,23 @@ export function ProjectBrowserPanel() {
                 )}
               </button>
             ) : null}
+            {panelMode === "collapsed" ? null : (
+              <button
+                type="button"
+                aria-label="Leave project"
+                title="Leave project"
+                onClick={() => backToSpaceHome()}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+              </button>
+            )}
             {chatArmed ? <PanelToggle /> : null}
-            <button
-              type="button"
-              aria-label="Leave project"
-              title="Leave project"
-              onClick={() => backToSpaceHome()}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
-            >
-              <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-            </button>
           </span>
         </div>
       )}
 
-      <div className="flex h-10 min-w-0 shrink-0 items-center gap-0.5 border-t border-border bg-sidebar px-2">
+      <div className="flex h-[45px] min-w-0 shrink-0 items-center gap-0.5 border-t border-border bg-sidebar px-2">
         <RailBtn
           label="Back"
           disabled={!canBack}

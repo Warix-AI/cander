@@ -74,26 +74,26 @@ function useAsyncQuery<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by deps array
   }, deps);
 
-  const data =
-    remote !== null
+  const data = cacheReady
+    ? cache
+    : remote !== null
       ? remote
       : cacheHasItems(cache)
         ? cache
         : (painted.current ?? cache);
-  if (painted.current == null && cacheHasItems(cache)) {
-    painted.current = cache;
+  if (painted.current == null && cacheHasItems(data)) {
+    painted.current = data;
   }
 
-  // Cached or last-painted rows stay on screen; never skeleton a background refetch.
   return {
     data,
-    loading: loading && !hasCache && painted.current == null,
+    loading: loading && !cacheReady && painted.current == null,
     error,
   };
 }
 
 export function useSpaceProjects(space: SpaceId, filter?: ProjectFilter) {
-  const { api, ctx, entityRevision } = useSpaceData();
+  const { api, ctx } = useSpaceData();
   const filterKey = filterDepKey(filter);
   const snap = getSpaceEntityStoreSnapshot();
   const cache = snap.seeded
@@ -101,7 +101,7 @@ export function useSpaceProjects(space: SpaceId, filter?: ProjectFilter) {
     : [];
   return useAsyncQuery(
     () => api.entities.listProjects(ctx, space, filter),
-    [api.entities, ctx, space, filterKey, entityRevision],
+    [api.entities, ctx, space, filterKey],
     cache,
     snap.seeded,
   );
@@ -118,7 +118,7 @@ export function useSpaceProject(id: string | null) {
 }
 
 export function useSpaceSources(filter?: SourceFilter) {
-  const { api, ctx, entityRevision } = useSpaceData();
+  const { api, ctx } = useSpaceData();
   const filterKey = filterDepKey(filter);
   const snap = getSpaceEntityStoreSnapshot();
   const cache = snap.seeded
@@ -126,14 +126,14 @@ export function useSpaceSources(filter?: SourceFilter) {
     : [];
   return useAsyncQuery(
     () => api.entities.listSources(ctx, filter),
-    [api.entities, ctx, filterKey, entityRevision],
+    [api.entities, ctx, filterKey],
     cache,
     snap.seeded,
   );
 }
 
 export function useSpaceBriefingItems(filter?: BriefingFilter) {
-  const { api, ctx, entityRevision } = useSpaceData();
+  const { api, ctx } = useSpaceData();
   const filterKey = filterDepKey(filter);
   const snap = getSpaceEntityStoreSnapshot();
 
@@ -147,18 +147,23 @@ export function useSpaceBriefingItems(filter?: BriefingFilter) {
 
   return useAsyncQuery(
     () => api.entities.listBriefingItems(ctx, filter),
-    [api.entities, ctx, filterKey, entityRevision],
+    [api.entities, ctx, filterKey],
     snap.seeded ? localSpaceEntityStore.listBriefingItems(ctx, filter) : [],
     snap.seeded,
   );
 }
 
 export function useSpaceAttachments() {
-  const { api, ctx, entityRevision } = useSpaceData();
+  const { api, ctx } = useSpaceData();
+  const snap = getSpaceEntityStoreSnapshot();
+  const cache = snap.seeded
+    ? localSpaceEntityStore.listAttachments(ctx)
+    : [];
   return useAsyncQuery(
     () => api.entities.listAttachments(ctx),
-    [api.entities, ctx, entityRevision],
-    [] as SpaceAttachment[],
+    [api.entities, ctx],
+    cache,
+    snap.seeded,
   );
 }
 

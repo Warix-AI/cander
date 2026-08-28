@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { CONNECTOR_CATALOG } from "@/lib/api/connector-catalog";
+import {
+  getSpaceEntityStoreSnapshot,
+  localSpaceEntityStore,
+} from "@/lib/api/space-entity-store";
 import type { PinKind, SpaceId } from "@/lib/types";
 
 export type PinnedItem = {
@@ -16,21 +20,12 @@ export type PinnedItem = {
 
 export function usePinnedItems() {
   const { pins, threads, workspaceId } = useApp();
-  const { api, ctx, entityRevision } = useSpaceData();
-  const [projects, setProjects] = useState<
-    Awaited<ReturnType<typeof api.entities.listAllProjects>>
-  >([]);
-
-  useEffect(() => {
-    if (!ctx.workspaceId.trim()) return;
-    let cancelled = false;
-    api.entities.listAllProjects(ctx).then((items) => {
-      if (!cancelled) setProjects(items);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [api.entities, ctx, entityRevision]);
+  const { ctx } = useSpaceData();
+  const snap = getSpaceEntityStoreSnapshot();
+  const projects = snap.seeded
+    ? localSpaceEntityStore.listAllProjects(ctx)
+    : [];
+  const projectRevision = snap.revision;
 
   const items = useMemo(() => {
     const resolved: PinnedItem[] = [];
@@ -73,7 +68,7 @@ export function usePinnedItems() {
       }
     }
     return resolved;
-  }, [pins, threads, workspaceId, projects]);
+  }, [pins, threads, workspaceId, projects, projectRevision]);
 
   return { pinnedItems: items };
 }

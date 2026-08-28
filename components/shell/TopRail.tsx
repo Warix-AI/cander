@@ -3,7 +3,9 @@
 import { X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { MobileSurfaceToggle } from "@/components/shell/MobileSurfaceChrome";
+import { canUseRightPanel } from "@/lib/right-panel";
 import { useMobileShell } from "@/lib/use-media-query";
+import { cn } from "@/lib/utils";
 
 export function TopRail() {
   const {
@@ -13,6 +15,11 @@ export function TopRail() {
     panelMode,
     setPanelMode,
     closeSpaceChat,
+    spaceId,
+    connectorId,
+    projectId,
+    jobId,
+    skillId,
   } = useApp();
   const mobile = useMobileShell();
 
@@ -21,11 +28,29 @@ export function TopRail() {
   const chatPanelOpen = view === "chat" && panelMode !== "collapsed";
   const showMobileSurfaceToggle =
     mobile && (spaceChatOpen || chatPanelOpen);
+  const dockVisible =
+    !mobile &&
+    panelMode === "collapsed" &&
+    canUseRightPanel({
+      view,
+      thread,
+      drafting,
+      spaceId,
+      connectorId,
+      projectId,
+      jobId,
+      skillId,
+    });
 
   if (!mobile && !spaceChatOpen) return null;
 
   return (
-    <header className="flex h-11 shrink-0 items-center justify-end gap-1 bg-background px-2">
+    <header
+      className={cn(
+        "flex h-11 shrink-0 items-center justify-end gap-1 bg-background pl-2",
+        dockVisible ? "pr-14" : "pr-2",
+      )}
+    >
       {showMobileSurfaceToggle ? <MobileSurfaceToggle /> : null}
       {spaceChatOpen ? (
         <button

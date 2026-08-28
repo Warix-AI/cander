@@ -12,7 +12,6 @@ import { PanelToggle, RightPanelToggleDock } from "@/components/shell/PanelToggl
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
-import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 import type { MobileSurface } from "@/lib/types";
 
@@ -33,7 +32,6 @@ export function SpaceChatLayout() {
     expandedPinned,
   } = useApp();
   const mobile = useMobileShell();
-  const floating = useShellStyle() === "floating";
   const chatArmed = drafting || Boolean(thread);
   const panelOn = panelMode !== "collapsed";
   const chatOpen = chatArmed;
@@ -114,7 +112,6 @@ export function SpaceChatLayout() {
   const chatReady = pinChat || liveChatPct > 8;
   const showResize = chatOpen && spaceOpen && !immersive;
   const spaceMode = chatOpen && spaceOpen ? "panel" : "page";
-  const floatingChrome = floating && !mobile;
 
   return (
     <div id="courier-main" className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -143,22 +140,13 @@ export function SpaceChatLayout() {
 
       <div
         className={cn(
-          "relative flex min-h-0 min-w-0 flex-col overflow-hidden @container",
+          "relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
           pinChat && "min-w-0 flex-1",
-          floatingChrome
-            ? cn(
-                "light-surface my-3 mr-3 overflow-hidden",
-                SHELL_G3_RADIUS,
-                !chatOpen && "ml-3",
-              )
-            : cn(
-                "bg-background",
-                chatOpen && liveChatPct > 0 && "border-l border-border",
-              ),
+          chatOpen && liveChatPct > 0 && "border-l border-border",
           animateLayout &&
             !pinChat &&
             "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
-          liveSpacePct === 0 && !pinChat && "pointer-events-none",
+          !spaceOpen && !pinChat && "invisible pointer-events-none",
         )}
         style={pinChat ? undefined : { width: `${liveSpacePct}%` }}
         aria-hidden={liveSpacePct === 0 && !pinChat}

@@ -1,5 +1,6 @@
 "use client";
 
+import { createContext, useContext } from "react";
 import { CalendarClock, Ellipsis, FileText, Folder, Link2, Sparkles } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { PinControl } from "@/components/shell/PinControl";
@@ -10,9 +11,12 @@ import {
   useSpaceMutation,
 } from "@/lib/hooks/use-space-query";
 import { useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
+import type { SpaceAttachment } from "@/lib/space-entities";
 import type { BannerKey } from "@/lib/space-banners";
 import type { SpaceLayout } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const PreviewAttachmentsContext = createContext<SpaceAttachment[] | null>(null);
 
 export type PreviewKind = "product" | "paper" | "skill" | "schedule" | "file";
 
@@ -46,14 +50,16 @@ export function PreviewGrid({
   kind?: PreviewKind;
   dense?: boolean;
 }) {
+  const { data: attachments } = useSpaceAttachments();
+
   if (!items.length) {
     return (
       <p className="mt-3 px-3 py-4 text-[13px] text-muted-foreground">{empty}</p>
     );
   }
 
-  if (layout === "list") {
-    return (
+  const body =
+    layout === "list" ? (
       <div>
         {items.map((item, index) => (
           <PreviewListRow
@@ -65,28 +71,31 @@ export function PreviewGrid({
           />
         ))}
       </div>
+    ) : (
+      <div
+        className={cn(
+          "grid gap-x-3 gap-y-6",
+          dense
+            ? "grid-cols-1 @min-[480px]:grid-cols-2"
+            : "grid-cols-1 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3",
+        )}
+      >
+        {items.map((item, index) => (
+          <PreviewCard
+            key={item.id}
+            item={item}
+            index={index}
+            kind={item.kind ?? kind}
+            onOpen={onOpen}
+          />
+        ))}
+      </div>
     );
-  }
 
   return (
-    <div
-      className={cn(
-        "grid gap-x-3 gap-y-6",
-        dense
-          ? "grid-cols-1 @min-[480px]:grid-cols-2"
-          : "grid-cols-1 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3",
-      )}
-    >
-      {items.map((item, index) => (
-        <PreviewCard
-          key={item.id}
-          item={item}
-          index={index}
-          kind={item.kind ?? kind}
-          onOpen={onOpen}
-        />
-      ))}
-    </div>
+    <PreviewAttachmentsContext.Provider value={attachments}>
+      {body}
+    </PreviewAttachmentsContext.Provider>
   );
 }
 
@@ -395,7 +404,7 @@ function PreviewActions({
     useApp();
   const ctx = useWorkspaceCtx();
   const { attachToWork, detachFromWork } = useSpaceMutation();
-  const { data: attachments } = useSpaceAttachments();
+  const attachments = useContext(PreviewAttachmentsContext) ?? [];
   const tier = pinTier("project", item.projectId);
   const pinned = Boolean(tier);
   const inWork = attachments.some((row) => row.targetId === item.projectId);
