@@ -1,0 +1,24 @@
+name: Supabase CI
+
+on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - "scripts/check-migrations.sh"
+      - ".github/workflows/supabase-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/**"
+
+jobs:
+  migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate migration order
+        run: bash scripts/check-migrations.sh
+
+      - name: Check seed SQL exists
+        run: test -f supabase/seed.sql
