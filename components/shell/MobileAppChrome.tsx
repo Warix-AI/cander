@@ -15,6 +15,7 @@ import {
   SquarePen,
   SquareStack,
   Upload,
+  X,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { previewAddress } from "@/components/panels/PreviewChrome";
@@ -155,6 +156,11 @@ export function MobileAppChrome({ className }: { className?: string }) {
     !onMenuMain &&
     spaceId === "build" &&
     Boolean(projectId);
+  const showLeaveProject =
+    Boolean(projectId) &&
+    !inConnector &&
+    !inChromeSub &&
+    !onMenuMain;
   const showCreateWorkspace =
     inSettings &&
     !settingsMobileHub &&
@@ -178,10 +184,18 @@ export function MobileAppChrome({ className }: { className?: string }) {
   );
 
   const startNewChat = () => {
+    if (spaceId && isChatSpace(spaceId)) {
+      newChat(spaceId);
+      return;
+    }
     newChat();
   };
 
   const startPanelNewChat = () => {
+    if (spaceId && isChatSpace(spaceId)) {
+      newChat(spaceId);
+      return;
+    }
     newChat();
   };
 
@@ -222,6 +236,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
     if (!showSpaceToggle) return;
     if (next === "panel") {
       setMobileSurface("panel");
+      return;
+    }
+    if (projectId) {
+      setMobileSurface("chat");
       return;
     }
     if (spaceId && isChatSpace(spaceId)) {
@@ -369,7 +387,17 @@ export function MobileAppChrome({ className }: { className?: string }) {
           {centerChrome}
         </div>
 
-        <div className="relative z-10 flex justify-self-end">
+        <div className="relative z-10 flex items-center justify-self-end gap-0.5">
+          {showLeaveProject ? (
+            <button
+              type="button"
+              aria-label="Leave project"
+              onClick={() => backToSpaceHome()}
+              className={mobileChromeButtonClass}
+            >
+              <X className="h-5 w-5" strokeWidth={1.8} />
+            </button>
+          ) : null}
           {showBuildTools ? (
             <BuildToolsMenu
               address={address}

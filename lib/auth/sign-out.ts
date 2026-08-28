@@ -1,5 +1,7 @@
 "use client";
 
+import { resetChatStore } from "@/lib/api/chat-store";
+import { resetSpaceEntityStore } from "@/lib/api/space-entity-store";
 import { clearAppearanceLocalState } from "@/lib/appearance";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { persistOnboardingPending, persistSignedOut, resetWorkspaceSession } from "@/lib/session";
@@ -54,6 +56,8 @@ export async function signOutAccount() {
   clearSupabaseAuthState();
   persistOnboardingPending(false);
   resetPolicyStoreState();
+  resetSpaceEntityStore();
+  resetChatStore();
   clearAppearanceLocalState();
   clearLocalAuthState();
   persistSignedOut();

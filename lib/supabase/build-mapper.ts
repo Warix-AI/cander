@@ -9,6 +9,16 @@ export type ProjectFileRow = {
   sort_order: number;
 };
 
+export type ProjectBrowserSessionRow = {
+  profile_id: string;
+  workspace_id: string;
+  space_id: string;
+  project_id: string;
+  active_tab_id: string;
+  tabs: unknown;
+  updated_at: string;
+};
+
 export type BrowserSessionRow = {
   profile_id: string;
   workspace_id: string;

@@ -1,3 +1,4 @@
+import { formatRelativeTime } from "@/lib/format-relative-time";
 import type { Message, SpaceId, Thread } from "@/lib/types";
 
 export type ThreadRow = {
@@ -28,18 +29,6 @@ export type MessageRow = {
   created_at: string;
 };
 
-function formatUpdatedAt(iso: string) {
-  const date = new Date(iso);
-  const diffMs = Date.now() - date.getTime();
-  const mins = Math.floor(diffMs / 60_000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
 export function threadRowToThread(
   row: ThreadRow,
   messages: Message[],
@@ -50,7 +39,7 @@ export function threadRowToThread(
     workspaceId: row.workspace_id,
     projectId: row.project_id ?? undefined,
     spaceId: (row.space_id as SpaceId | null) ?? undefined,
-    updatedAt: formatUpdatedAt(row.updated_at),
+    updatedAt: formatRelativeTime(row.updated_at),
     snippet: row.snippet,
     messages,
     shared: row.shared || undefined,

@@ -6,7 +6,9 @@ import { ChatColumn } from "@/components/shell/ChatColumn";
 import { ResizeHandle } from "@/components/shell/ContextPanel";
 import { TopRail } from "@/components/shell/TopRail";
 import { SpaceDashboard } from "@/components/shell/SpaceDashboard";
+import { ProjectBrowserPanel } from "@/components/browser/ProjectBrowserPanel";
 import { MobileContentPager } from "@/components/shell/MobileContentPager";
+import { PanelToggle, RightPanelToggleDock } from "@/components/shell/PanelToggle";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
@@ -26,11 +28,14 @@ export function SpaceChatLayout() {
     panelRatio,
     dragging,
     mobileSurface,
+    projectId,
   } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
   const chatArmed = drafting || Boolean(thread);
-  const chatOpen = chatArmed && panelMode !== "collapsed";
+  const panelOn = panelMode !== "collapsed";
+  const chatOpen = chatArmed;
+  const spaceOpen = !chatArmed || panelOn;
   const immersive = panelMode === "immersive";
   const wide = panelMode === "wide";
   const panelPct = immersive
@@ -38,34 +43,35 @@ export function SpaceChatLayout() {
     : wide
       ? Math.max(panelRatio, 0.58) * 100
       : panelRatio * 100;
+  const targetSpacePct = !spaceOpen ? 0 : !chatOpen ? 100 : panelPct;
 
-  const [spacePct, setSpacePct] = useState(chatOpen ? panelPct : 100);
-  const wasOpen = useRef(chatOpen);
+  const [spacePct, setSpacePct] = useState(targetSpacePct);
+  const wasOpen = useRef(spaceOpen);
 
   useEffect(() => {
     if (mobile) return;
     if (immersive) {
-      queueMicrotask(() => setSpacePct(100));
-      wasOpen.current = chatOpen;
+      queueMicrotask(() => setSpacePct(spaceOpen ? 100 : 0));
+      wasOpen.current = spaceOpen;
       return;
     }
-    if (!chatOpen) {
-      queueMicrotask(() => setSpacePct(100));
+    if (!spaceOpen) {
+      queueMicrotask(() => setSpacePct(0));
       wasOpen.current = false;
       return;
     }
     if (!wasOpen.current) {
-      queueMicrotask(() => setSpacePct(100));
+      queueMicrotask(() => setSpacePct(0));
       const id = window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
-          setSpacePct(panelPct);
+          setSpacePct(targetSpacePct);
           wasOpen.current = true;
         });
       });
       return () => window.cancelAnimationFrame(id);
     }
-    queueMicrotask(() => setSpacePct(panelPct));
-  }, [chatOpen, immersive, panelPct, mobile]);
+    queueMicrotask(() => setSpacePct(targetSpacePct));
+  }, [spaceOpen, immersive, targetSpacePct, mobile]);
 
   if (mobile) {
     const active: MobileSurface =
@@ -82,31 +88,32 @@ export function SpaceChatLayout() {
         }
         panelPane={
           <div className={cn("flex h-full min-h-0 flex-col overflow-hidden", MOBILE_APP_BG)}>
-            <SpaceRenderModeProvider mode="page">
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
-                <SpaceDashboard />
-              </div>
-            </SpaceRenderModeProvider>
+            {projectId ? (
+              <ProjectBrowserPanel />
+            ) : (
+              <SpaceRenderModeProvider mode="page">
+                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+                  <SpaceDashboard />
+                </div>
+              </SpaceRenderModeProvider>
+            )}
           </div>
         }
       />
     );
   }
 
-  const chatPct = chatOpen ? Math.max(0, 100 - spacePct) : 0;
   const liveSpacePct =
-    dragging && chatOpen && !immersive ? panelPct : spacePct;
-  const liveChatPct =
-    dragging && chatOpen && !immersive
-      ? Math.max(0, 100 - panelPct)
-      : chatPct;
+    dragging && chatOpen && spaceOpen && !immersive ? panelPct : spacePct;
+  const liveChatPct = chatOpen ? Math.max(0, 100 - liveSpacePct) : 0;
   const animateLayout = !dragging && !immersive;
   const chatReady = liveChatPct > 8;
-  const showResize = chatOpen;
-  const spaceMode = chatOpen ? "panel" : "page";
+  const showResize = chatOpen && spaceOpen && !immersive;
+  const spaceMode = chatOpen && spaceOpen ? "panel" : "page";
 
   return (
-    <div id="courier-main" className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+    <div id="courier-main" className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+      <RightPanelToggleDock />
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
@@ -129,7 +136,7 @@ export function SpaceChatLayout() {
 
       <div
         className={cn(
-          "flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
+          "relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
           chatOpen && liveChatPct > 0 && !floating && "border-l border-border",
           animateLayout &&
             "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
@@ -138,9 +145,19 @@ export function SpaceChatLayout() {
         style={{ width: `${liveSpacePct}%` }}
         aria-hidden={liveSpacePct === 0}
       >
+        {chatOpen && spaceOpen && !projectId ? (
+          <div className="pointer-events-none absolute top-0 right-0 z-40 hidden h-11 items-center px-3 lg:flex">
+            <PanelToggle className="pointer-events-auto text-white/85 hover:bg-white/15 hover:text-white" />
+          </div>
+        ) : null}
         <SpaceRenderModeProvider mode={spaceMode}>
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-            <SpaceDashboard />
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col",
+              projectId ? "overflow-hidden" : "overflow-y-auto",
+            )}
+          >
+            {projectId ? <ProjectBrowserPanel /> : <SpaceDashboard />}
           </div>
         </SpaceRenderModeProvider>
       </div>

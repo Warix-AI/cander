@@ -7,6 +7,7 @@ import { PanelToggle } from "@/components/shell/PanelToggle";
 import { PreviewGrid, type PreviewEntry } from "@/components/spaces/PreviewCard";
 import { useSpaceProjects, useSpaceSources } from "@/lib/hooks/use-space-query";
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
+import { editedMeta } from "@/lib/format-relative-time";
 import { spaceLibraryLabel, type SpaceLibraryId } from "@/lib/space-library";
 import { useMobileShell } from "@/lib/use-media-query";
 import { SHELL_PANEL_BODY } from "@/lib/shell-chrome";
@@ -36,7 +37,7 @@ export function SpaceLibraryBrowser({
       id: item.id,
       name: item.title,
       projectId: item.id,
-      meta: `Edited ${item.updatedAt}`,
+      meta: editedMeta(item.updatedAt),
       image: item.cover,
       badge: item.status === "published" ? "Published" : undefined,
     }));

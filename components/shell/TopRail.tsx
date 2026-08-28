@@ -17,9 +17,7 @@ export function TopRail() {
   const mobile = useMobileShell();
 
   const spaceChatOpen =
-    view === "space" &&
-    panelMode !== "collapsed" &&
-    (drafting || Boolean(thread));
+    view === "space" && (drafting || Boolean(thread));
   const chatPanelOpen = view === "chat" && panelMode !== "collapsed";
   const showMobileSurfaceToggle =
     mobile && (spaceChatOpen || chatPanelOpen);

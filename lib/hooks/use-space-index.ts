@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { useApp } from "@/components/app/AppProvider";
 import { connectorName } from "@/lib/api/connector-api";
@@ -13,6 +13,7 @@ import {
   type SpaceIndexEntry,
 } from "@/lib/space-index";
 import type { SpaceId, Thread } from "@/lib/types";
+import { formatRelativeTime } from "@/lib/format-relative-time";
 import { navLabel } from "@/lib/use-main-nav-items";
 import { getWorkspaceCatalogSnapshot } from "@/lib/workspace-catalog";
 import { workspaceKindOf } from "@/lib/workspace-kind";
@@ -47,9 +48,14 @@ function attributionFor(
   return creatorLabel(createdBy, actorId);
 }
 
-export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }) {
+export function useSpaceIndex(opts?: {
+  space?: SpaceId | "all";
+  query?: string;
+  enabled?: boolean;
+}) {
   const { api, ctx, entityRevision, chatRevision } = useSpaceData();
   const { actor } = useApp();
+  const enabled = opts?.enabled !== false;
   const [projects, setProjects] = useState<Awaited<
     ReturnType<typeof api.entities.listAllProjects>
   >>([]);
@@ -57,20 +63,29 @@ export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }
     ReturnType<typeof api.entities.listSources>
   >>([]);
   const [briefing, setBriefing] = useState<Awaited<
-    ReturnType<typeof api.connectors.syncBriefing>
+    ReturnType<typeof api.entities.listBriefingItems>
   >>([]);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loaded = useRef(false);
+
+  // One-shot ingest. Must not depend on entityRevision: syncBriefing notifies
+  // the entity store on success, which would re-run this effect and loop.
+  useEffect(() => {
+    if (!enabled) return;
+    void api.connectors.syncBriefing(ctx).catch(() => {});
+  }, [api.connectors, ctx, enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
-    setLoading(true);
+    if (!loaded.current) setLoading(true);
     setError(null);
     Promise.all([
       api.entities.listAllProjects(ctx),
       api.entities.listSources(ctx),
-      api.connectors.syncBriefing(ctx),
+      api.entities.listBriefingItems(ctx),
       api.chat.listThreads(ctx),
     ])
       .then(([nextProjects, nextSources, nextBriefing, nextThreads]) => {
@@ -86,12 +101,13 @@ export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }
         }
       })
       .finally(() => {
+        loaded.current = true;
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [api.entities, api.connectors, api.chat, ctx, entityRevision, chatRevision]);
+  }, [api.entities, api.chat, ctx, entityRevision, chatRevision, enabled]);
 
   const entries = useMemo(() => {
     const usedProjects = new Set<string>();
@@ -109,7 +125,7 @@ export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }
           spaceLabel(thread.spaceId),
           "Chat",
           creator,
-          thread.updatedAt,
+          formatRelativeTime(thread.updatedAt),
         ]),
         space: thread.spaceId,
         workspaceId: thread.workspaceId,
@@ -134,7 +150,7 @@ export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }
           spaceLabel(project.space),
           "Project",
           creator,
-          project.updatedAt,
+          formatRelativeTime(project.updatedAt),
         ]),
         space: project.space,
         workspaceId: project.workspaceId,
@@ -155,7 +171,7 @@ export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }
         kind: "source",
         entityId: source.id,
         title: source.title,
-        meta: [spaceLabel(source.space), source.kind, source.updatedAt]
+        meta: [spaceLabel(source.space), source.kind, formatRelativeTime(source.updatedAt)]
           .filter(Boolean)
           .join(" · "),
         space: source.space,
@@ -172,7 +188,7 @@ export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }
         kind: "briefing",
         entityId: item.id,
         title: item.title,
-        meta: [connectorName(item.connectorId ?? "work"), item.updatedAt]
+        meta: [connectorName(item.connectorId ?? "work"), formatRelativeTime(item.updatedAt)]
           .filter(Boolean)
           .join(" · "),
         space: "work",

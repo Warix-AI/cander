@@ -65,6 +65,7 @@ export function SearchModal() {
 
   const { entries, loading } = useSpaceIndex({
     query: needle.length >= 2 ? needle : undefined,
+    enabled: open,
   });
 
   useEffect(() => {

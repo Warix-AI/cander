@@ -23,6 +23,7 @@ import {
   mergeConnectorInstalled,
   subscribeInstalledConnectors,
 } from "@/lib/connector-install";
+import { editedMeta } from "@/lib/format-relative-time";
 import { projectsForWorkspace } from "@/lib/project-resolver";
 import type { NavDestinationId, SpaceId } from "@/lib/types";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
@@ -101,7 +102,7 @@ export function ProjectsBrowser({
         (item) => item.space === "research" && item.workspaceId === workspaceId,
       );
       const items = list.map((item) =>
-        entry(item.id, item.name, item.id, `Edited ${item.updatedAt}`, "paper"),
+        entry(item.id, item.name, item.id, editedMeta(item.updatedAt), "paper"),
       );
       return pack("paper", "Projects", "No Explore projects yet. Create one to start researching.", openProject, items, items.map((item) => ({
         name: item.name,
@@ -118,7 +119,7 @@ export function ProjectsBrowser({
           item.id,
           item.name,
           item.id,
-          `Edited ${item.updatedAt}`,
+          editedMeta(item.updatedAt),
           "product",
           undefined,
           item.cover,
@@ -144,7 +145,7 @@ export function ProjectsBrowser({
           item.id,
           item.name,
           item.projectId,
-          `Edited ${item.updatedAt}`,
+          editedMeta(item.updatedAt),
           "product",
           item.published ? "Published" : undefined,
           item.image,

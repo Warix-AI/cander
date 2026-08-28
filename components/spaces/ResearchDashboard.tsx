@@ -11,6 +11,7 @@ import {
 } from "@/components/spaces/ItemSet";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import { researchPaperPreviews } from "@/lib/data";
+import { editedMeta } from "@/lib/format-relative-time";
 import {
   useSpaceProjects,
   useSpaceSources,
@@ -139,8 +140,8 @@ export function ResearchDashboard() {
               projectId: item.id,
               meta:
                 scope === "projects"
-                  ? `Edited ${item.updatedAt}`
-                  : `${exploreKind(item) === "research" ? "Research" : "Report"} · edited ${item.updatedAt}`,
+                  ? editedMeta(item.updatedAt)
+                  : `${exploreKind(item) === "research" ? "Research" : "Report"} · ${editedMeta(item.updatedAt)}`,
               image: scope === "projects" ? item.cover : undefined,
               bannerKey: scope === "projects" ? undefined : ("research" as const),
               paperPreview:

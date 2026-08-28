@@ -285,7 +285,7 @@ function EmptyChat({
                   key={item.id}
                   type="button"
                   onClick={() => onPrompt(item.label)}
-                  className="flex min-h-[6.25rem] flex-col justify-between rounded-[15px] border border-border bg-transparent p-3 text-left transition-colors duration-200 hover:bg-muted"
+                  className="landing-suggestion flex min-h-[6.25rem] flex-col justify-between rounded-[15px] border border-border bg-transparent p-3 text-left transition-colors duration-200"
                 >
                   <Icon
                     className={cn("h-3.5 w-3.5", spaceIconTint(item.space))}

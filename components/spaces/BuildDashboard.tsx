@@ -18,14 +18,30 @@ import {
   workspaceOneOffTasks,
   type BuildScope,
 } from "@/lib/build-catalog";
+import { editedMeta } from "@/lib/format-relative-time";
 import { useSpaceProjects } from "@/lib/hooks/use-space-query";
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
 import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
 import { useMobileShell } from "@/lib/use-media-query";
+import {
+  creatorLabel,
+  sharedWorkspaceAttribution,
+} from "@/lib/workspace-membership";
+import { getWorkspaceCatalogSnapshot } from "@/lib/workspace-catalog";
+import { workspaceKindOf } from "@/lib/workspace-kind";
+import { policyFor } from "@/lib/workspace-policy";
+import type { SpaceProject } from "@/lib/space-entities";
+
+function matchesBuildScope(project: SpaceProject, scope: BuildScope) {
+  if (scope === "apps") return project.kind === "app";
+  if (scope === "websites") return project.kind === "site";
+  return true;
+}
 
 export function BuildDashboard() {
   const {
     workspaceId,
+    actor,
     openProject,
     openJob,
     openSkill,
@@ -42,6 +58,19 @@ export function BuildDashboard() {
   const { data: spaceProjects, loading: projectsLoading } =
     useSpaceProjects("build");
 
+  const workspace = getWorkspaceCatalogSnapshot().find(
+    (item) => item.id === workspaceId,
+  );
+  const showCreator = sharedWorkspaceAttribution(
+    policyFor(workspaceId).members.length,
+    workspace ? workspaceKindOf(workspace) : undefined,
+  );
+
+  const visibleProjects = useMemo(
+    () => spaceProjects.filter((item) => matchesBuildScope(item, scope)),
+    [spaceProjects, scope],
+  );
+
   const automations = useMemo(
     () => workspaceAutomations(workspaceId),
     [workspaceId],
@@ -50,6 +79,18 @@ export function BuildDashboard() {
     () => workspaceOneOffTasks(workspaceId),
     [workspaceId],
   );
+
+  const projectItems = visibleProjects.map((item) => ({
+    id: item.id,
+    name: item.title,
+    projectId: item.id,
+    meta: editedMeta(
+      item.updatedAt,
+      showCreator ? creatorLabel(item.createdBy, actor.id) : null,
+    ),
+    image: item.cover,
+    badge: item.status === "published" ? "Published" : undefined,
+  }));
 
   const openTask = (id: string) => {
     const task =
@@ -98,15 +139,7 @@ export function BuildDashboard() {
           ) : (
             <PreviewGrid
               layout={spaceLayout}
-              items={spaceProjects.map((item) => ({
-                id: item.id,
-                name: item.title,
-                projectId: item.id,
-                meta: `Edited ${item.updatedAt}`,
-                image: item.cover,
-                badge:
-                  item.status === "published" ? "Published" : undefined,
-              }))}
+              items={projectItems}
               onOpen={openProject}
               empty="No projects yet. Create one to start building."
             />
@@ -144,20 +177,13 @@ export function BuildDashboard() {
         ) : (
           <>
             {projectsLoading ? <QuerySkeleton rows={2} /> : null}
-            {!projectsLoading && !spaceProjects.length ? (
+            {!projectsLoading && !visibleProjects.length ? (
               <BuildScopeOverview scope={scope} />
             ) : null}
             {!projectsLoading ? (
               <PreviewGrid
                 layout={spaceLayout}
-                items={spaceProjects.map((item) => ({
-                  id: item.id,
-                  name: item.title,
-                  projectId: item.id,
-                  meta: `Edited ${item.updatedAt}`,
-                  badge: item.status === "published" ? "Published" : undefined,
-                  image: item.cover,
-                }))}
+                items={projectItems}
                 onOpen={openProject}
                 empty={
                   scope === "apps"

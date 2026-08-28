@@ -28,6 +28,12 @@ import {
 
 const STORAGE_KEY = "courier-space-entities-v1";
 
+let ownerId: string | null = null;
+
+function storageKey() {
+  return ownerId ? `${STORAGE_KEY}:${ownerId}` : STORAGE_KEY;
+}
+
 type EntityLink = {
   id: string;
   workspaceId: string;
@@ -94,65 +100,55 @@ function projectKindFromSpace(space: SpaceId): SpaceProject["kind"] {
   return "general";
 }
 
-function ensureSeed() {
-  if (state.seeded) return;
-  state = {
-    projects: [],
-    sources: [],
-    briefingItems: [],
-    deployments: [],
-    attachments: [],
-    entityLinks: [],
-    seeded: true,
-    revision: 0,
-  };
-}
-
 function hydrate() {
   if (hydrated || typeof window === "undefined") return;
   hydrated = true;
-  const stored = parse(window.localStorage.getItem(STORAGE_KEY));
-  if (stored?.seeded) {
-    // Drop legacy Acme seed projects if the store still has them.
-    const legacyIds = new Set(
-      (stored.projects ?? [])
-        .map((p) => p.workspaceId)
-        .filter((id) =>
-          ["marketing", "engineering", "operations", "solo-pro", "solo-ultra", "solo-free"].includes(
-            id,
-          ),
+  if (!ownerId) return;
+  const stored = parse(window.localStorage.getItem(storageKey()));
+  if (!stored?.seeded) return;
+  // Drop legacy Acme seed projects if the store still has them.
+  const legacyIds = new Set(
+    (stored.projects ?? [])
+      .map((p) => p.workspaceId)
+      .filter((id) =>
+        ["marketing", "engineering", "operations", "solo-pro", "solo-ultra", "solo-free"].includes(
+          id,
         ),
-    );
-    if (legacyIds.size && (stored.projects?.length ?? 0) > 0) {
-      state = {
-        projects: [],
-        sources: [],
-        briefingItems: [],
-        deployments: [],
-        attachments: [],
-        entityLinks: [],
-        seeded: true,
-        revision: 0,
-      };
-      persist();
-      return;
-    }
+      ),
+  );
+  if (legacyIds.size && (stored.projects?.length ?? 0) > 0) {
     state = {
-      ...stored,
-      attachments: stored.attachments ?? [],
-      entityLinks: stored.entityLinks ?? [],
+      ...EMPTY_ENTITY_STORE,
+      seeded: false,
+      revision: 0,
     };
+    persist();
     return;
   }
-  ensureSeed();
-  persist();
+  state = {
+    ...stored,
+    attachments: stored.attachments ?? [],
+    entityLinks: stored.entityLinks ?? [],
+  };
 }
 
 function persist() {
   if (typeof window === "undefined") return;
   state = { ...state, revision: state.revision + 1 };
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (ownerId) {
+    window.localStorage.setItem(storageKey(), JSON.stringify(state));
+  }
   emit();
+}
+
+/** Scope the cache to the signed-in user so the next account cannot read it. */
+export function bindSpaceEntityStoreOwner(actorId: string | undefined) {
+  const next = actorId?.trim() || null;
+  if (next === ownerId) return;
+  ownerId = next;
+  hydrated = false;
+  state = { ...EMPTY_ENTITY_STORE };
+  hydrate();
 }
 
 function assertWorkspace<T extends { workspaceId: string }>(
@@ -162,6 +158,17 @@ function assertWorkspace<T extends { workspaceId: string }>(
   if (entity.workspaceId !== ctx.workspaceId) {
     throw new Error("Entity workspace mismatch");
   }
+}
+
+export function resetSpaceEntityStore() {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(storageKey());
+    window.localStorage.removeItem(STORAGE_KEY);
+  }
+  ownerId = null;
+  state = { ...EMPTY_ENTITY_STORE };
+  hydrated = false;
+  emit();
 }
 
 export function subscribeSpaceEntityStore(listener: Listener) {
@@ -199,8 +206,8 @@ export function replaceEntityStoreState(next: {
     seeded: next.seeded ?? true,
     revision: state.revision + 1,
   };
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (typeof window !== "undefined" && ownerId) {
+    window.localStorage.setItem(storageKey(), JSON.stringify(state));
   }
   emit();
 }

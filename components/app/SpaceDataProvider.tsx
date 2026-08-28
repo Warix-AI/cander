@@ -13,6 +13,7 @@ import { startSupabaseEntitySync } from "@/lib/api/entity-sync";
 import { startSupabaseOrgPolicySync } from "@/lib/api/org-policy-sync";
 import { startSupabaseConnectorSync } from "@/lib/api/connector-sync";
 import { startSupabaseBrowserSync } from "@/lib/api/browser-sync";
+import { startSupabaseProjectBrowserSync } from "@/lib/api/project-browser-sync";
 import {
   startChatRealtimePull,
   startChatRemoteSync,
@@ -24,11 +25,13 @@ import {
 } from "@/lib/api/appearance-sync";
 import { setAppearanceActorId } from "@/lib/appearance";
 import {
+  bindChatStoreOwner,
   subscribeChatStore,
   getChatStoreSnapshot,
   getChatStoreServerSnapshot,
 } from "@/lib/api/chat-store";
 import {
+  bindSpaceEntityStoreOwner,
   getSpaceEntityStoreServerSnapshot,
   getSpaceEntityStoreSnapshot,
   subscribeSpaceEntityStore,
@@ -62,6 +65,17 @@ export function SpaceDataProvider({
   children,
 }: SpaceDataProviderProps) {
   const backend = getDataBackend();
+  bindSpaceEntityStoreOwner(
+    backend === "supabase" && !isAppearanceActorId(actorId)
+      ? undefined
+      : actorId,
+  );
+  bindChatStoreOwner(
+    backend === "supabase" && !isAppearanceActorId(actorId)
+      ? undefined
+      : actorId,
+  );
+
   const api = useMemo(() => createApiBundle(backend), [backend]);
   const ctx = useMemo(
     () => ({ workspaceId, actorId }),
@@ -99,6 +113,7 @@ export function SpaceDataProvider({
 
   useEffect(() => {
     if (backend !== "supabase" || !workspaceId.trim()) return;
+    if (!isAppearanceActorId(actorId)) return;
 
     let cancelled = false;
 
@@ -112,6 +127,7 @@ export function SpaceDataProvider({
     const stopOrgPolicySync = startSupabaseOrgPolicySync(ctx);
     const stopConnectorSync = startSupabaseConnectorSync(ctx);
     const stopBrowserSync = startSupabaseBrowserSync(ctx);
+    const stopProjectBrowserSync = startSupabaseProjectBrowserSync(ctx);
     const stopChatSync = startChatRemoteSync(ctx);
     const stopChatRealtime = startChatRealtimePull(api.chat, ctx);
 
@@ -121,10 +137,11 @@ export function SpaceDataProvider({
       stopOrgPolicySync();
       stopConnectorSync();
       stopBrowserSync();
+      stopProjectBrowserSync();
       stopChatSync();
       stopChatRealtime();
     };
-  }, [api, backend, ctx, workspaceId]);
+  }, [actorId, api, backend, ctx, workspaceId]);
 
   useEffect(() => {
     if (!canSyncAppearance) {

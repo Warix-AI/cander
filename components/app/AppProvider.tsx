@@ -129,9 +129,10 @@ import type {
 } from "@/lib/types";
 import { isSpaceLibrarySpace } from "@/lib/space-library";
 import {
-  ensureContinuousChat,
-  startContinuousChat,
   summarizeSession,
+  threadHasTurns,
+  upsertPersistentProjectThread,
+  upsertPersistentSpaceThread,
 } from "@/lib/persistent-chat";
 import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
@@ -654,18 +655,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           let tid = "";
           let hasMessages = false;
           setThreads((current) => {
-            const { threads: next, id: nextId } = ensureContinuousChat(
+            const { threads: next, id: nextId } = upsertPersistentSpaceThread(
               current,
               id,
               prevSpace,
             );
             tid = nextId;
-            hasMessages = Boolean(
-              next
-                .find((item) => item.id === nextId)
-                ?.messages.some(
-                  (msg) => msg.role === "user" || msg.role === "assistant",
-                ),
+            hasMessages = threadHasTurns(
+              next.find((item) => item.id === nextId),
             );
             return next;
           });
@@ -834,20 +831,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let tid = "";
       let hasMessages = false;
       setThreads((current) => {
-        const { threads: next, id } = ensureContinuousChat(
+        const { threads: next, id } = upsertPersistentSpaceThread(
           current,
           workspaceId,
           space,
-          threadId,
         );
         tid = id;
-        hasMessages = Boolean(
-          next
-            .find((item) => item.id === id)
-            ?.messages.some(
-              (msg) => msg.role === "user" || msg.role === "assistant",
-            ),
-        );
+        hasMessages = threadHasTurns(next.find((item) => item.id === id));
         return next;
       });
       setThreadId(tid);
@@ -875,7 +865,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: null,
       });
     },
-    [workspaceId, threadId, pushTarget],
+    [workspaceId, pushTarget],
   );
 
   const applyHomeNewChat = useCallback(() => {
@@ -905,12 +895,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const newChat = useCallback(
     (space?: SpaceId) => {
+      if (space && isChatSpace(space) && projectId && spaceId === space) {
+        let tid = "";
+        let hasMessages = false;
+        setThreads((current) => {
+          const { threads: next, id } = upsertPersistentProjectThread(
+            current,
+            workspaceId,
+            projectId,
+            space,
+          );
+          tid = id;
+          hasMessages = threadHasTurns(next.find((item) => item.id === id));
+          return next;
+        });
+        setThreadId(tid);
+        setDrafting(!hasMessages);
+        setView("space");
+        setPanelIntent("execute");
+        setPanelMode("split");
+        setMobileSurface("chat");
+        if (space === "build") setBuildTool("preview");
+        if (space === "research") setResearchTool("browser");
+        pushTarget({
+          view: "space",
+          spaceId: space,
+          threadId: tid,
+          projectId,
+          panelMode: "split",
+          panelIntent: "execute",
+          connectorId: null,
+          jobId: null,
+          skillId: null,
+        });
+        return;
+      }
+
       if (space && isChatSpace(space)) {
         let tid = "";
+        let hasMessages = false;
         setThreads((current) => {
-          const started = startContinuousChat(current, workspaceId, space);
-          tid = started.id;
-          return started.threads;
+          const { threads: next, id } = upsertPersistentSpaceThread(
+            current,
+            workspaceId,
+            space,
+          );
+          tid = id;
+          hasMessages = threadHasTurns(next.find((item) => item.id === id));
+          return next;
         });
         setThreadId(tid);
         setSpaceId(space);
@@ -919,7 +951,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setJobId(null);
         setSkillId(null);
         setView("space");
-        setDrafting(true);
+        setDrafting(!hasMessages);
         setPanelIntent("execute");
         setPanelMode("split");
         setMobileSurface("chat");
@@ -962,7 +994,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       applyHomeNewChat();
     },
-    [mobile, mobileSurface, applyHomeNewChat, pushTarget, workspaceId],
+    [
+      mobile,
+      mobileSurface,
+      applyHomeNewChat,
+      pushTarget,
+      workspaceId,
+      projectId,
+      spaceId,
+    ],
   );
 
   const openCourierHome = useCallback(() => {
@@ -987,33 +1027,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let tid = "";
       let hasMessages = false;
       setThreads((current) => {
-        const { threads: next, id: nextId } = ensureContinuousChat(
+        const { threads: next, id: nextId } = upsertPersistentSpaceThread(
           current,
           workspaceId,
           id,
-          threadId,
         );
         tid = nextId;
-        hasMessages = Boolean(
-          next
-            .find((item) => item.id === nextId)
-            ?.messages.some(
-              (msg) => msg.role === "user" || msg.role === "assistant",
-            ),
-        );
+        hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
         return next;
       });
       setThreadId(tid);
       setDrafting(!hasMessages);
       setView("space");
       setSpaceId(id);
+      setProjectId(null);
       setPanelIntent("execute");
       setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
       setMobileSurface((surface) => (surface === "menu" ? "chat" : surface));
       if (id === "build") setBuildTool("preview");
       if (id === "research") setResearchTool("browser");
     },
-    [workspaceId, threadId],
+    [workspaceId],
   );
 
   const selectChatSpace = useCallback(
@@ -1027,7 +1061,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (id === "build") setBuildTool("preview");
       if (id === "research")
         setResearchTool(opts?.researchTool ?? "browser");
-      if (threadId) {
+      if (threadId && !projectId) {
+        let tid = threadId;
         setThreads((current) => {
           const existing = current.find((item) => item.id === threadId);
           if (
@@ -1035,20 +1070,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             !existing.projectId &&
             existing.workspaceId === workspaceId
           ) {
-            return ensureContinuousChat(
+            const upserted = upsertPersistentSpaceThread(
               current,
               workspaceId,
               id,
-              threadId,
-            ).threads;
+            );
+            tid = upserted.id;
+            return upserted.threads;
           }
           return current.map((item) =>
             item.id === threadId ? { ...item, spaceId: id } : item,
           );
         });
+        setThreadId(tid);
       }
     },
-    [threadId, workspaceId],
+    [threadId, workspaceId, projectId],
   );
 
   const collapseDraft = useCallback(() => {
@@ -1061,24 +1098,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     summarizeThreadById(threadId);
     setDrafting(false);
     setThreadId(null);
-    setProjectId(null);
-    setConnectorId(null);
-    setJobId(null);
-    setSkillId(null);
-    setPanelMode("collapsed");
-    setPanelIntent("browse");
-    setMobileSurface("chat");
+    const keepProject = Boolean(projectId);
+    if (keepProject) {
+      setMobileSurface("panel");
+    } else {
+      setConnectorId(null);
+      setJobId(null);
+      setSkillId(null);
+      setPanelMode("collapsed");
+      setPanelIntent("browse");
+      setMobileSurface("chat");
+    }
     if (view === "space" && spaceId) {
       pushTarget({
         view: "space",
         spaceId,
         threadId: null,
-        projectId: null,
-        panelMode: "collapsed",
-        panelIntent: "browse",
-        connectorId: null,
-        jobId: null,
-        skillId: null,
+        projectId: keepProject ? projectId : null,
+        panelMode: keepProject ? panelMode : "collapsed",
+        panelIntent: keepProject ? panelIntent : "browse",
+        connectorId: keepProject ? connectorId : null,
+        jobId: keepProject ? jobId : null,
+        skillId: keepProject ? skillId : null,
       });
     }
   }, [
@@ -1087,6 +1128,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     pushTarget,
     threadId,
     summarizeThreadById,
+    projectId,
+    panelMode,
+    panelIntent,
+    connectorId,
+    jobId,
+    skillId,
   ]);
 
   const clearSessionSummary = useCallback(
@@ -1350,24 +1397,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       const assistantId = assistantMsg.id;
-      const usePersistent =
-        Boolean(space) &&
+      const chatSpace = chatSpaceId(space);
+      const useProjectPersistent =
+        Boolean(projectId) && Boolean(chatSpace) && isChatSpace(space);
+      const useSpacePersistent =
+        Boolean(chatSpace) &&
         isChatSpace(space) &&
         !projectId &&
         !intent.projectId &&
         (view === "space" || Boolean(opts?.space));
+      const usePersistent = useProjectPersistent || useSpacePersistent;
       let activeId = threadId ?? nextId("t");
 
       setThreads((current) => {
         let list = current;
-        if (usePersistent && space) {
-          const chatSpace = chatSpaceId(space);
-          if (!chatSpace) return list;
-          const upserted = ensureContinuousChat(
+        if (useProjectPersistent && projectId && chatSpace) {
+          const upserted = upsertPersistentProjectThread(
+            list,
+            workspaceId,
+            projectId,
+            chatSpace,
+          );
+          list = upserted.threads;
+          activeId = upserted.id;
+        } else if (useSpacePersistent && chatSpace) {
+          const upserted = upsertPersistentSpaceThread(
             list,
             workspaceId,
             chatSpace,
-            threadId,
           );
           list = upserted.threads;
           activeId = upserted.id;
@@ -1381,8 +1438,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   title: item.messages.length ? item.title : trimmed.slice(0, 48),
                   snippet: trimmed,
                   updatedAt: "Just now",
-                  spaceId: chatSpaceId(space) ?? undefined,
-                  projectId: intent.projectId ?? item.projectId,
+                  spaceId: chatSpace ?? undefined,
+                  projectId: useProjectPersistent
+                    ? projectId ?? item.projectId
+                    : (intent.projectId ?? item.projectId),
                   workspaceId: matched?.workspaceId ?? item.workspaceId,
                   persistent: usePersistent ? true : item.persistent,
                   sessionSummary: null,
@@ -1395,8 +1454,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           id: activeId,
           title: trimmed.slice(0, 52),
           workspaceId: matched?.workspaceId ?? workspaceId,
-          projectId: intent.projectId,
-          spaceId: chatSpaceId(space) ?? undefined,
+          projectId: useProjectPersistent ? projectId ?? undefined : intent.projectId,
+          spaceId: chatSpace ?? undefined,
           updatedAt: "Just now",
           snippet: trimmed,
           messages: [userMsg, assistantMsg],
@@ -1525,8 +1584,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         Boolean(space) &&
         (view === "space" || Boolean(opts?.space)) &&
         (PRIMARY_NAV_SPACES as readonly string[]).includes(space as string) &&
-        !entityContext;
-      setView(entityContext || !keepSpace ? "chat" : "space");
+        (!entityContext || Boolean(projectId));
+      setView(keepSpace ? "space" : "chat");
       setSpaceId(space ?? spaceId);
       setProjectId(
         projectId ??
@@ -1547,7 +1606,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
       setMobileSurface("chat");
       pushTarget({
-        view: entityContext || !keepSpace ? "chat" : "space",
+        view: keepSpace ? "space" : "chat",
         spaceId: space ?? spaceId,
         threadId: activeId,
         projectId:
@@ -1665,7 +1724,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       target = fallback;
     }
 
+    const dest = target;
     const chatActive = Boolean(threadId) || drafting;
+
+    if (dest === spaceId && projectId && isChatSpace(dest)) {
+      let tid = threadId;
+      let hasMessages = Boolean(thread);
+      setThreads((current) => {
+        const { threads: next, id: nextId } = upsertPersistentSpaceThread(
+          current,
+          workspaceId,
+          dest,
+        );
+        tid = nextId;
+        hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
+        return next;
+      });
+      setProjectId(null);
+      setConnectorId(null);
+      setJobId(null);
+      setSkillId(null);
+      setThreadId(tid);
+      setDrafting(!hasMessages);
+      setPanelIntent(chatActive ? "execute" : "browse");
+      setPanelMode(chatActive ? "split" : "collapsed");
+      setView("space");
+      setMobileSurface("panel");
+      pushTarget({
+        view: "space",
+        spaceId: dest,
+        threadId: tid,
+        projectId: null,
+        panelMode: chatActive ? "split" : "collapsed",
+        panelIntent: chatActive ? "execute" : "browse",
+        connectorId: null,
+        jobId: null,
+        skillId: null,
+      });
+      return;
+    }
+
     if (chatActive && target === spaceId) {
       setMobileSurface("chat");
       if (panelMode === "collapsed") {
@@ -1679,11 +1777,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setView("space");
       setSpaceId(dest);
       setProjectId(null);
-      setDrafting(false);
-      setPanelIntent("browse");
       setConnectorId(null);
       setJobId(null);
       setSkillId(null);
+      if (chatActive && isChatSpace(dest)) {
+        let tid = "";
+        let hasMessages = false;
+        setThreads((current) => {
+          const { threads: next, id: nextId } = upsertPersistentSpaceThread(
+            current,
+            workspaceId,
+            dest,
+          );
+          tid = nextId;
+          hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
+          return next;
+        });
+        setThreadId(tid);
+        setDrafting(!hasMessages);
+        setPanelIntent("execute");
+        setPanelMode("split");
+        setMobileSurface("panel");
+        pushTarget({
+          view: "space",
+          spaceId: dest,
+          threadId: tid,
+          projectId: null,
+          panelMode: "split",
+          panelIntent: "execute",
+          connectorId: null,
+          jobId: null,
+          skillId: null,
+        });
+        return;
+      }
+      setDrafting(false);
+      setPanelIntent("browse");
       setPanelMode("collapsed");
       setMobileSurface("panel");
       setThreadId(null);
@@ -1712,6 +1841,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     drafting,
     spaceId,
     panelMode,
+    projectId,
+    thread,
   ]);
 
   const openRecents = useCallback(() => {
@@ -1832,25 +1963,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const openProject = useCallback((id: string) => {
     const ctx = { workspaceId, actorId: actor.id };
-    const fromStore = localSpaceEntityStore.getProject(ctx, id);
-    const match =
-      fromStore ?? findProjectInWorkspace(workspaceId, id);
+    let match:
+      | ReturnType<typeof localSpaceEntityStore.getProject>
+      | ReturnType<typeof findProjectInWorkspace>
+      | undefined;
+    try {
+      match = localSpaceEntityStore.getProject(ctx, id) ?? undefined;
+    } catch {
+      match = undefined;
+    }
+    if (!match) {
+      try {
+        match = findProjectInWorkspace(workspaceId, id);
+      } catch {
+        match = undefined;
+      }
+    }
+    if (!match) {
+      match = getSpaceEntityStoreSnapshot().projects.find((item) => item.id === id);
+    }
     if (!match) return;
     const space = match.space;
     const itemWorkspaceId = match.workspaceId;
-    const chatActive = Boolean(threadId) || drafting;
-    const keepChat = chatActive && projectId === id;
+    const projectKey = match.id;
     if (itemWorkspaceId !== workspaceId) persistWorkspace(itemWorkspaceId);
+    let tid = "";
+    let hasMessages = false;
+    setThreads((current) => {
+      const { threads: next, id: nextId } = upsertPersistentProjectThread(
+        current,
+        itemWorkspaceId,
+        projectKey,
+        space,
+      );
+      tid = nextId;
+      hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
+      return next;
+    });
     setView("space");
-    setProjectId(match.id);
+    setProjectId(projectKey);
     setSpaceId(space);
     setConnectorId(null);
     setJobId(null);
     setSkillId(null);
-    if (!keepChat) {
-      setThreadId(null);
-      setDrafting(true);
-    }
+    setThreadId(tid);
+    setDrafting(!hasMessages);
     setPanelIntent("execute");
     if (space === "build") setBuildTool("preview");
     if (space === "research") setResearchTool("browser");
@@ -1859,45 +2016,64 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     pushTarget({
       view: "space",
       spaceId: space,
-      threadId: keepChat ? threadId : null,
-      projectId: match.id,
+      threadId: tid,
+      projectId: projectKey,
       panelMode: "split",
       panelIntent: "execute",
       connectorId: null,
       jobId: null,
       skillId: null,
     });
-  }, [workspaceId, actor.id, pushTarget, threadId, drafting, projectId]);
+  }, [workspaceId, actor.id, pushTarget]);
 
   /** Leave a project/entity and return to the space directory on the panel. */
   const backToSpaceHome = useCallback(() => {
     if (!spaceId) return;
+    const chatSpace = chatSpaceId(spaceId);
+    const chatWasOpen = Boolean(threadId) || drafting;
+    let tid: string | null = threadId;
+    let hasMessages = Boolean(thread);
+    if (chatSpace && isChatSpace(chatSpace) && chatWasOpen) {
+      setThreads((current) => {
+        const { threads: next, id: nextId } = upsertPersistentSpaceThread(
+          current,
+          workspaceId,
+          chatSpace,
+        );
+        tid = nextId;
+        hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
+        return next;
+      });
+    }
     setProjectId(null);
     setConnectorId(null);
     setJobId(null);
     setSkillId(null);
-    setPanelIntent("browse");
     setView("space");
     setMobileSurface("panel");
-    // Keep continuous chat armed when a thread exists; otherwise collapse drafting.
-    if (!threadId) {
-      setDrafting(false);
-      setPanelMode("collapsed");
-    } else {
+    if (chatSpace && chatWasOpen) {
+      setThreadId(tid);
+      setDrafting(!hasMessages);
+      setPanelIntent("execute");
       setPanelMode("split");
+    } else {
+      setThreadId(null);
+      setDrafting(false);
+      setPanelIntent("browse");
+      setPanelMode("collapsed");
     }
     pushTarget({
       view: "space",
       spaceId,
-      threadId,
+      threadId: chatSpace && chatWasOpen ? tid : null,
       projectId: null,
-      panelMode: threadId ? "split" : "collapsed",
-      panelIntent: "browse",
+      panelMode: chatSpace && chatWasOpen ? "split" : "collapsed",
+      panelIntent: chatSpace && chatWasOpen ? "execute" : "browse",
       connectorId: null,
       jobId: null,
       skillId: null,
     });
-  }, [spaceId, threadId, pushTarget]);
+  }, [spaceId, threadId, drafting, thread, workspaceId, pushTarget]);
 
   const openThread = useCallback(
     (id: string) => {

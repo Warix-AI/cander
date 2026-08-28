@@ -5,14 +5,7 @@ import type {
   WorkspaceCtx,
 } from "@/lib/space-entities";
 import { localSpaceEntityStore } from "@/lib/api/space-entity-store";
-import { buildPreviews } from "@/lib/data";
-
-function previewUrlForProject(projectId: string) {
-  const preview = buildPreviews.find((item) => item.projectId === projectId);
-  if (!preview) return `https://${projectId}.cander.app`;
-  const slug = preview.name.toLowerCase().replace(/\s+/g, "-");
-  return `https://${slug}.cander.app`;
-}
+import { previewUrlForProject } from "@/lib/preview-url";
 
 export type BuildRuntimeApi = {
   startPreview(ctx: WorkspaceCtx, projectId: string): Promise<PreviewSession>;

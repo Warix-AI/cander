@@ -30,20 +30,31 @@ export async function hydrateEntityStoreFromRemote(
     api.listAttachments(ctx),
   ]);
 
+  replaceEntityStoreState({
+    projects,
+    sources,
+    briefingItems,
+    deployments: [],
+    attachments,
+    seeded: true,
+  });
+
   const deployments = (
     await Promise.all(
       projects.map((project) => api.listDeployments(ctx, project.id)),
     )
   ).flat();
 
-  replaceEntityStoreState({
-    projects,
-    sources,
-    briefingItems,
-    deployments,
-    attachments,
-    seeded: true,
-  });
+  if (deployments.length) {
+    replaceEntityStoreState({
+      projects,
+      sources,
+      briefingItems,
+      deployments,
+      attachments,
+      seeded: true,
+    });
+  }
 }
 
 /** Realtime — bump revision so hooks refetch. */

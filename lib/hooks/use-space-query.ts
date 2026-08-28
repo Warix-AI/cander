@@ -1,7 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
+import {
+  getSpaceEntityStoreSnapshot,
+  localSpaceEntityStore,
+} from "@/lib/api/space-entity-store";
 import type {
   BriefingFilter,
   Deployment,
@@ -23,22 +27,33 @@ function filterDepKey(filter: unknown) {
   }
 }
 
+function cacheHasItems<T>(cache: T) {
+  if (Array.isArray(cache)) return cache.length > 0;
+  return cache != null;
+}
+
 function useAsyncQuery<T>(
   fetcher: () => Promise<T>,
   deps: unknown[],
-  initial: T,
+  cache: T,
+  cacheReady = false,
 ) {
-  const [data, setData] = useState<T>(initial);
-  const [loading, setLoading] = useState(true);
+  const hasCache = cacheReady && cacheHasItems(cache);
+  const [remote, setRemote] = useState<T | null>(null);
+  const [loading, setLoading] = useState(!hasCache);
   const [error, setError] = useState<string | null>(null);
+  const loaded = useRef(hasCache);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    if (!loaded.current) setLoading(true);
     setError(null);
     fetcher()
       .then((result) => {
-        if (!cancelled) setData(result);
+        if (!cancelled) {
+          setRemote(result);
+          loaded.current = true;
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -46,6 +61,7 @@ function useAsyncQuery<T>(
         }
       })
       .finally(() => {
+        loaded.current = true;
         if (!cancelled) setLoading(false);
       });
     return () => {
@@ -54,16 +70,22 @@ function useAsyncQuery<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by deps array
   }, deps);
 
-  return { data, loading, error };
+  // Cached rows paint immediately; an empty seed is not "ready" (avoids a 1s empty flash).
+  return { data: remote ?? cache, loading: loading && !hasCache, error };
 }
 
 export function useSpaceProjects(space: SpaceId, filter?: ProjectFilter) {
   const { api, ctx, entityRevision } = useSpaceData();
   const filterKey = filterDepKey(filter);
+  const snap = getSpaceEntityStoreSnapshot();
+  const cache = snap.seeded
+    ? localSpaceEntityStore.listProjects(ctx, space, filter)
+    : [];
   return useAsyncQuery(
     () => api.entities.listProjects(ctx, space, filter),
     [api.entities, ctx, space, filterKey, entityRevision],
-    [] as SpaceProject[],
+    cache,
+    snap.seeded,
   );
 }
 
@@ -80,20 +102,36 @@ export function useSpaceProject(id: string | null) {
 export function useSpaceSources(filter?: SourceFilter) {
   const { api, ctx, entityRevision } = useSpaceData();
   const filterKey = filterDepKey(filter);
+  const snap = getSpaceEntityStoreSnapshot();
+  const cache = snap.seeded
+    ? localSpaceEntityStore.listSources(ctx, filter)
+    : [];
   return useAsyncQuery(
     () => api.entities.listSources(ctx, filter),
     [api.entities, ctx, filterKey, entityRevision],
-    [] as SpaceSource[],
+    cache,
+    snap.seeded,
   );
 }
 
 export function useSpaceBriefingItems(filter?: BriefingFilter) {
   const { api, ctx, entityRevision } = useSpaceData();
   const filterKey = filterDepKey(filter);
+  const snap = getSpaceEntityStoreSnapshot();
+
+  // One-shot ingest per workspace/filter. Must not depend on entityRevision:
+  // syncBriefing notifies the entity store on success, which would re-run this
+  // effect and loop (Maximum update depth).
+  useEffect(() => {
+    void api.connectors.syncBriefing(ctx, filter).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- filter keyed by filterKey
+  }, [api.connectors, ctx, filterKey]);
+
   return useAsyncQuery(
-    () => api.connectors.syncBriefing(ctx, filter),
-    [api.connectors, ctx, filterKey, entityRevision],
-    [],
+    () => api.entities.listBriefingItems(ctx, filter),
+    [api.entities, ctx, filterKey, entityRevision],
+    snap.seeded ? localSpaceEntityStore.listBriefingItems(ctx, filter) : [],
+    snap.seeded,
   );
 }
 

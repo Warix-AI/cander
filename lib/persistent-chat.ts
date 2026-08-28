@@ -4,9 +4,21 @@ export function spaceChatId(workspaceId: string, spaceId: SpaceId) {
   return `t-space-${workspaceId}-${spaceId}`;
 }
 
+export function projectChatId(workspaceId: string, projectId: string) {
+  return `t-project-${workspaceId}-${projectId}`;
+}
+
 /** Active continuous session for a workspace (not per-space). */
 export function continuousChatId(workspaceId: string) {
   return `t-session-${workspaceId}`;
+}
+
+export function threadHasTurns(thread: Thread | null | undefined) {
+  return Boolean(
+    thread?.messages.some(
+      (message) => message.role === "user" || message.role === "assistant",
+    ),
+  );
 }
 
 export function findPersistentSpaceThread(
@@ -53,6 +65,63 @@ export function upsertPersistentSpaceThread(
   const found = findPersistentSpaceThread(threads, workspaceId, spaceId);
   if (found) return { threads, id: found.id };
   const created = emptyPersistentSpaceThread(workspaceId, spaceId);
+  return { threads: [created, ...threads], id: created.id };
+}
+
+export function findPersistentProjectThread(
+  threads: Thread[],
+  workspaceId: string,
+  projectId: string,
+) {
+  const id = projectChatId(workspaceId, projectId);
+  return (
+    threads.find((item) => item.id === id) ??
+    threads.find(
+      (item) =>
+        item.persistent &&
+        item.workspaceId === workspaceId &&
+        item.projectId === projectId,
+    ) ??
+    null
+  );
+}
+
+export function emptyPersistentProjectThread(
+  workspaceId: string,
+  projectId: string,
+  spaceId: SpaceId,
+): Thread {
+  return {
+    id: projectChatId(workspaceId, projectId),
+    title: "Chat",
+    workspaceId,
+    projectId,
+    spaceId,
+    updatedAt: "Just now",
+    snippet: "",
+    messages: [],
+    persistent: true,
+    sessionSummary: null,
+  };
+}
+
+export function upsertPersistentProjectThread(
+  threads: Thread[],
+  workspaceId: string,
+  projectId: string,
+  spaceId: SpaceId,
+): { threads: Thread[]; id: string } {
+  const found = findPersistentProjectThread(threads, workspaceId, projectId);
+  if (found) {
+    if (found.spaceId === spaceId) return { threads, id: found.id };
+    return {
+      threads: threads.map((item) =>
+        item.id === found.id ? { ...item, spaceId } : item,
+      ),
+      id: found.id,
+    };
+  }
+  const created = emptyPersistentProjectThread(workspaceId, projectId, spaceId);
   return { threads: [created, ...threads], id: created.id };
 }
 

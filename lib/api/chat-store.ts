@@ -2,6 +2,12 @@ import type { Message, Thread } from "@/lib/types";
 
 const STORAGE_KEY = "courier-threads-v1";
 
+let ownerId: string | null = null;
+
+function storageKey() {
+  return ownerId ? `${STORAGE_KEY}:${ownerId}` : STORAGE_KEY;
+}
+
 type ChatStoreState = {
   threads: Thread[];
   revision: number;
@@ -33,18 +39,28 @@ function parse(raw: string | null): Thread[] | null {
 }
 
 function persistLocal() {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state.threads));
+  if (typeof window === "undefined" || !ownerId) return;
+  window.localStorage.setItem(storageKey(), JSON.stringify(state.threads));
 }
 
 function hydrate() {
   if (state.hydrated || typeof window === "undefined") return;
   state.hydrated = true;
-  const stored = parse(window.localStorage.getItem(STORAGE_KEY));
+  if (!ownerId) return;
+  const stored = parse(window.localStorage.getItem(storageKey()));
   if (stored?.length) {
     state.threads = stored;
     state.revision += 1;
   }
+}
+
+/** Scope cached threads to the signed-in user. */
+export function bindChatStoreOwner(actorId: string | undefined) {
+  const next = actorId?.trim() || null;
+  if (next === ownerId) return;
+  ownerId = next;
+  state = { threads: [], revision: state.revision + 1, hydrated: false };
+  hydrate();
 }
 
 export function subscribeChatStore(listener: Listener) {
@@ -89,6 +105,16 @@ export function updateChatThreads(
   state.threads = next;
   state.revision += 1;
   persistLocal();
+  emit();
+}
+
+export function resetChatStore() {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(storageKey());
+    window.localStorage.removeItem(STORAGE_KEY);
+  }
+  ownerId = null;
+  state = { threads: [], revision: 0, hydrated: false };
   emit();
 }
 

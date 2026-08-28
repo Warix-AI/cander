@@ -10,18 +10,11 @@ import {
   projectFileToRow,
   type ProjectFileRow,
 } from "@/lib/supabase/build-mapper";
-import { buildPreviews } from "@/lib/data";
+import { previewUrlForProject } from "@/lib/preview-url";
 import type {
   PublishInput,
   WorkspaceCtx,
 } from "@/lib/space-entities";
-
-function previewUrlForProject(projectId: string) {
-  const preview = buildPreviews.find((item) => item.projectId === projectId);
-  if (!preview) return `https://${projectId}.cander.app`;
-  const slug = preview.name.toLowerCase().replace(/\s+/g, "-");
-  return `https://${slug}.cander.app`;
-}
 
 async function ensureDefaultFiles(ctx: WorkspaceCtx, projectId: string) {
   const supabase = createSupabaseBrowserClient();

@@ -9,10 +9,8 @@ export const LEGACY_AUTH_KEYS = [
   "courier-actor",
 ] as const;
 
-/** Raw payloads imported once; safe to drop after all import flags are set. */
+/** One-time import leftovers. Entity/thread caches stay — they are scoped per user. */
 export const LEGACY_IMPORT_PAYLOAD_KEYS = [
-  "courier-space-entities-v1",
-  "courier-threads-v1",
   "courier-work-connectors",
   "courier-installed-connectors",
   "courier-workspace-connections",

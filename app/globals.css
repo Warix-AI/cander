@@ -928,6 +928,21 @@ html:not(.dark) .light-surface {
     0 4px 12px oklch(0 0 0 / 0.03);
 }
 
+.landing-suggestion {
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+html:not(.dark) .landing-suggestion:hover {
+  background-color: oklch(1 0 0);
+  border-color: oklch(0.91 0.003 265);
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.04),
+    0 4px 12px oklch(0 0 0 / 0.03);
+}
+
 .light-surface-interactive {
   transition:
     background-color 200ms ease,
@@ -972,6 +987,14 @@ html:not(.dark) .menu-row-hover[data-active="true"] {
 .dark .light-surface {
   background: var(--muted);
   border: 0.75px solid var(--border);
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.22),
+    0 4px 12px oklch(0 0 0 / 0.16);
+}
+
+.dark .landing-suggestion:hover {
+  background: var(--muted);
+  border-color: var(--border);
   box-shadow:
     0 1px 2px oklch(0 0 0 / 0.22),
     0 4px 12px oklch(0 0 0 / 0.16);
