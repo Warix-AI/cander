@@ -1,12 +1,12 @@
 "use client";
 
+import { syncAppearanceToSupabase } from "@/lib/api/appearance-sync";
+import { clearAppearanceLocalState } from "@/lib/appearance";
 import { isSupabaseConfigured } from "@/lib/data-backend";
-import { persistOnboardingPending, persistSignedOut } from "@/lib/session";
+import { getWorkspaceSnapshot, persistOnboardingPending, persistSignedOut } from "@/lib/session";
 import { signOutSupabase } from "@/lib/supabase/auth-actions";
-import { clearSupabaseAuthState } from "@/lib/supabase/auth-store";
+import { clearSupabaseAuthState, getSupabaseUserIdSnapshot } from "@/lib/supabase/auth-store";
 import { resetPolicyStoreState } from "@/lib/workspace-policy";
-
-const APPEARANCE_KEY = "courier-appearance-v2";
 
 const LOCAL_KEYS = [
   "courier-signed-in",
@@ -23,21 +23,16 @@ const LOCAL_KEYS = [
 /** Clear sticky local prototype state after sign-out / delete. */
 export function clearLocalAuthState() {
   if (typeof window === "undefined") return;
-  const appearance = window.localStorage.getItem(APPEARANCE_KEY);
   for (const key of LOCAL_KEYS) {
     window.localStorage.removeItem(key);
   }
-  // Import flags and banners — wipe anything courier-* so hydrate starts clean.
   const doomed: string[] = [];
   for (let i = 0; i < window.localStorage.length; i += 1) {
     const key = window.localStorage.key(i);
-    if (!key?.startsWith("courier-") || key === APPEARANCE_KEY) continue;
+    if (!key?.startsWith("courier-")) continue;
     doomed.push(key);
   }
   for (const key of doomed) window.localStorage.removeItem(key);
-  if (appearance) {
-    window.localStorage.setItem(APPEARANCE_KEY, appearance);
-  }
 }
 
 /**
@@ -46,6 +41,17 @@ export function clearLocalAuthState() {
  */
 export async function signOutAccount() {
   if (isSupabaseConfigured()) {
+    const userId = getSupabaseUserIdSnapshot();
+    if (userId) {
+      try {
+        await syncAppearanceToSupabase({
+          workspaceId: getWorkspaceSnapshot(),
+          actorId: userId,
+        });
+      } catch (err) {
+        console.warn("[cander] appearance flush on sign-out failed", err);
+      }
+    }
     clearSupabaseAuthState();
     persistOnboardingPending(false);
     resetPolicyStoreState();
@@ -55,6 +61,7 @@ export async function signOutAccount() {
       console.warn("[cander] signOut failed", err);
     }
   }
+  clearAppearanceLocalState();
   clearLocalAuthState();
   persistSignedOut();
 }

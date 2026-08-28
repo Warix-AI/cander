@@ -136,33 +136,29 @@ export async function hydrateAppearanceFromRemote(ctx: WorkspaceCtx) {
   }
 }
 
-/** Push local first, then hydrate remote when it differs. */
+/** Remote-first on login — never overwrite saved prefs with another user's localStorage. */
 export async function bootstrapSupabaseAppearance(ctx: WorkspaceCtx) {
   if (typeof window === "undefined" || !isValidActorId(ctx.actorId)) return;
 
-  const local = getAppearanceSnapshot();
-
+  skipRemoteSync = true;
   try {
-    await syncAppearanceToSupabase(ctx);
-  } catch (err) {
-    console.warn("[cander] appearance push failed", err);
-  }
+    const { remote } = await fetchRemoteAppearance(ctx);
+    const local = getAppearanceSnapshot();
 
-  const { remote } = await fetchRemoteAppearance(ctx);
-  if (!remote) return;
-
-  if (isDefaultAppearance(local) && !isDefaultAppearance(remote)) {
-    replaceAppearanceState(remote);
-    return;
-  }
-
-  if (!appearanceEquals(local, remote)) {
-    try {
-      await syncAppearanceToSupabase(ctx);
-    } catch (err) {
-      console.warn("[cander] appearance reconcile push failed", err);
+    if (remote) {
       replaceAppearanceState(remote);
+      return;
     }
+
+    if (!isDefaultAppearance(local)) {
+      await syncAppearanceToSupabase(ctx);
+    }
+  } catch (err) {
+    console.warn("[cander] appearance bootstrap failed", err);
+  } finally {
+    window.setTimeout(() => {
+      skipRemoteSync = false;
+    }, 0);
   }
 }
 

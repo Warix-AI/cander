@@ -114,6 +114,45 @@ type Listener = () => void;
 const STORAGE_KEY = "courier-appearance-v2";
 const listeners = new Set<Listener>();
 
+let activeActorId: string | null = null;
+
+function isUuid(value: string) {
+  return /^[0-9a-f-]{36}$/i.test(value);
+}
+
+function storageKey() {
+  return activeActorId && isUuid(activeActorId)
+    ? `${STORAGE_KEY}:${activeActorId}`
+    : STORAGE_KEY;
+}
+
+/** Scope localStorage reads/writes to the signed-in profile. */
+export function setAppearanceActorId(actorId: string | null) {
+  const next = actorId && isUuid(actorId) ? actorId : null;
+  if (activeActorId === next) return;
+  activeActorId = next;
+  hydrated = false;
+  hydrate();
+}
+
+/** Wipe cached appearance on sign-out so the next user starts clean. */
+export function clearAppearanceLocalState() {
+  if (typeof window === "undefined") return;
+  const doomed: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i += 1) {
+    const key = window.localStorage.key(i);
+    if (!key) continue;
+    if (key === STORAGE_KEY || key.startsWith(`${STORAGE_KEY}:`)) {
+      doomed.push(key);
+    }
+  }
+  for (const key of doomed) window.localStorage.removeItem(key);
+  state = { ...DEFAULT_APPEARANCE };
+  hydrated = true;
+  syncAppearanceSideEffects(state);
+  emit();
+}
+
 /**
  * Brand defaults: light + floating layout.
  * Color continuum: left = light, center (~50) = mono dark, right = dark tints.
@@ -180,12 +219,17 @@ function parse(raw: string | null): AppearanceState {
 function hydrate() {
   if (hydrated || typeof window === "undefined") return;
   hydrated = true;
-  state = parse(window.localStorage.getItem(STORAGE_KEY));
+  const key = storageKey();
+  let raw = window.localStorage.getItem(key);
+  if (!raw && activeActorId) {
+    raw = window.localStorage.getItem(STORAGE_KEY);
+  }
+  state = parse(raw);
 }
 
 function persist(next: AppearanceState) {
   state = next;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  window.localStorage.setItem(storageKey(), JSON.stringify(state));
   emit();
 }
 
@@ -448,7 +492,7 @@ export function replaceAppearanceState(next: AppearanceState) {
   hydrate();
   state = next;
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    window.localStorage.setItem(storageKey(), JSON.stringify(state));
   }
   syncAppearanceSideEffects(next);
   emit();

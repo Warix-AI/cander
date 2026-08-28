@@ -22,6 +22,7 @@ import {
   bootstrapSupabaseAppearance,
   isAppearanceActorId,
 } from "@/lib/api/appearance-sync";
+import { setAppearanceActorId } from "@/lib/appearance";
 import {
   subscribeChatStore,
   getChatStoreSnapshot,
@@ -89,6 +90,12 @@ export function SpaceDataProvider({
     backend === "supabase" &&
     sessionReady &&
     isAppearanceActorId(actorId);
+
+  useEffect(() => {
+    if (isAppearanceActorId(actorId)) {
+      setAppearanceActorId(actorId);
+    }
+  }, [actorId]);
 
   useEffect(() => {
     if (backend !== "supabase") return;

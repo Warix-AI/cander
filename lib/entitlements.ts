@@ -22,7 +22,7 @@ import {
   emailFitsWorkspaceKind,
   workspaceKindOf,
 } from "./workspace-kind";
-import { canEditWorkspaceSettings } from "./workspace-membership";
+import { canEditWorkspaceSettings as canEditWorkspaceForRoles } from "./workspace-membership";
 
 export type Entitlements = {
   plan: BillingPlan;
@@ -167,7 +167,7 @@ export function entitlementsFor(actor: Member): Entitlements {
       !(inOrg && actor.role !== "Owner") &&
       !subscriptionBlocksAccountDeletion(actor),
     canEditWorkspaceSettings: (workspaceId) =>
-      canEditWorkspaceSettings(actor.workspaceRoles, workspaceId),
+      canEditWorkspaceForRoles(actor.workspaceRoles, workspaceId),
     canUseSharedResource: (resourceId) => {
       const resource = workspaceResources.find((item) => item.id === resourceId);
       if (!resource) return false;

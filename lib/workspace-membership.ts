@@ -1,4 +1,3 @@
-import { memberName } from "@/lib/entitlements";
 import { getMembersSnapshot } from "@/lib/workspace-policy";
 import type { Role } from "@/lib/types";
 
@@ -88,7 +87,8 @@ export function creatorLabel(
 ): string | null {
   if (!profileId) return null;
   if (actorId && profileId === actorId) return "You";
-  return memberName(profileId, getMembersSnapshot()) || null;
+  const member = getMembersSnapshot().find((item) => item.id === profileId);
+  return member?.name ?? null;
 }
 
 export function sharedWorkspaceAttribution(
