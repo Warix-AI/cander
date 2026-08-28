@@ -49,11 +49,11 @@ export function isSidebarNavId(id: string): id is SidebarNavId {
 /** Connectors nav visible for all plans — installs ship later. */
 export const SHOW_CONNECTORS_NAV = true;
 
-/** Default sidebar — Work, Build, Explore, Recents, Connectors. */
+/** Default sidebar — Work, Build, Explore, Connectors, Recents. */
 export const DEFAULT_SIDEBAR_MAIN: SidebarNavId[] = [
   ...PRIMARY_NAV_SPACES,
-  "recents",
   ...(SHOW_CONNECTORS_NAV ? (["connectors"] as const) : []),
+  "recents",
 ];
 
 /** @deprecated More menu removed — kept empty for persisted layout shape. */
