@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { cn } from "@/lib/utils";
 
-/** White mark for dark / on-color surfaces; black mark for light surfaces. */
+const MARK_VERSION = "11";
+
+/** White mark for dark surfaces; black mark for light surfaces. */
 export function CanderMark({
   className,
   tone = "auto",
@@ -16,12 +17,9 @@ export function CanderMark({
   const { theme } = useTheme();
   const useWhite =
     tone === "white" || (tone === "auto" && theme !== "light");
-  const preferred = "/cander-mark.png?v=10";
-  const [src, setSrc] = useState(preferred);
-
-  useEffect(() => {
-    setSrc(preferred);
-  }, [preferred]);
+  const src = useWhite
+    ? `/cander-mark-dark.png?v=${MARK_VERSION}`
+    : `/cander-mark-light.png?v=${MARK_VERSION}`;
 
   return (
     <img
@@ -31,12 +29,7 @@ export function CanderMark({
       width={248}
       height={238}
       suppressHydrationWarning
-      onError={() => setSrc("/cander-mark.png?v=10")}
-      className={cn(
-        "h-[29.7px] w-[31px] object-contain",
-        useWhite && "brightness-0 invert",
-        className,
-      )}
+      className={cn("h-[29.7px] w-[31px] object-contain", className)}
     />
   );
 }

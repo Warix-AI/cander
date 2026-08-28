@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
-import { ArrowLeft, Check } from "lucide-react";
+import { ArrowLeft, Check, Loader2 } from "lucide-react";
 import { CanderMark } from "@/components/brand/CanderMark";
 import { useApp } from "@/components/app/AppProvider";
 import { connectors } from "@/lib/data";
@@ -32,7 +32,7 @@ import {
 } from "@/lib/supabase/hydrate-member";
 import { tryEnterExistingAccount } from "@/lib/onboarding-recovery";
 import { clearLocalAuthState } from "@/lib/auth/sign-out";
-import { syncSupabaseAuthUser } from "@/lib/supabase/auth-store";
+import { syncSupabaseAuthUser, validateSupabaseSession } from "@/lib/supabase/auth-store";
 import { setupOrgOnSupabase } from "@/lib/supabase/setup-org-onboarding";
 import { AppearanceControls } from "@/components/settings/AppearanceControls";
 import { OnboardingAppPreview } from "@/components/onboarding/OnboardingAppPreview";
@@ -104,7 +104,8 @@ function createStepsFor(
     if (maxIntent === "org-now") steps.push("org-setup");
     if (plan && plan !== "free") steps.push("workspace");
   }
-  steps.push("connectors", "appearance");
+  if (SHOW_ONBOARDING_CONNECTORS) steps.push("connectors");
+  steps.push("appearance");
   return steps;
 }
 
@@ -125,6 +126,18 @@ function validInviteRows(rows: OrgInviteDraft[]) {
 }
 
 const ONBOARDING_CONNECTORS = ["gmail", "slack", "gcal", "notion", "github", "linear"];
+
+/** Connectors onboarding is hidden until real installs ship. */
+const SHOW_ONBOARDING_CONNECTORS = false;
+
+function resolveInitialOnboardingStep(initialSignedIn: boolean): Step {
+  if (typeof window !== "undefined") {
+    const auth = new URLSearchParams(window.location.search).get("auth");
+    if (auth === "verified") return "profile";
+  }
+  if (initialSignedIn || getOnboardingPendingSnapshot()) return "profile";
+  return "welcome";
+}
 
 const PLANS: {
   id: BillingPlan;
@@ -191,7 +204,7 @@ const PANEL_COPY: Record<
   },
   create: {
     title: "Create an account, then finish setup.",
-    body: "We’ll walk through profile, plan, connectors, and appearance — then open the app.",
+    body: "We’ll walk through profile, plan, and appearance — then open the app.",
   },
   verify: {
     title: "Confirm it’s you.",
@@ -256,7 +269,7 @@ function OnboardingShell({
   const nativeShell = isMobileShell();
   const usingSupabase = supabaseMode();
   const [step, setStep] = useState<Step>(() =>
-    initialSignedIn ? "profile" : "welcome",
+    resolveInitialOnboardingStep(initialSignedIn),
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -282,8 +295,8 @@ function OnboardingShell({
     setColorMode("light");
   }, []);
 
-  // Email-verify link lands with ?auth=verified — resume profile step, not the app shell.
-  useEffect(() => {
+  // Email-verify link — sync session immediately so profile step is authenticated.
+  useLayoutEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const auth = params.get("auth");
@@ -292,6 +305,21 @@ function OnboardingShell({
       setPassedVerify(true);
       setStep("profile");
       window.history.replaceState({}, "", window.location.pathname);
+      void validateSupabaseSession().then((user) => {
+        if (user) {
+          syncSupabaseAuthUser(user);
+          if (user.email) setEmail(user.email);
+          const metaName = user.user_metadata?.name;
+          if (typeof metaName === "string" && metaName.trim()) {
+            setName(metaName.trim());
+            setShortName((current) =>
+              current.trim()
+                ? current
+                : metaName.trim().split(/\s+/)[0] || "You",
+            );
+          }
+        }
+      });
       return;
     }
     if (auth === "error") {
@@ -1026,7 +1054,7 @@ function OnboardingShell({
         return;
       }
       setError("");
-      setStep("connectors");
+      setStep("appearance");
       return;
     }
     if (step === "connectors") {
@@ -1291,7 +1319,7 @@ function OnboardingShell({
               />
             ) : null}
 
-            {step === "connectors" ? (
+            {step === "connectors" && SHOW_ONBOARDING_CONNECTORS ? (
               <ConnectorsStep
                 options={connectorOptions}
                 selected={selectedConnectors}
@@ -1411,9 +1439,12 @@ function AppearanceStep({
         type="button"
         disabled={busy}
         onClick={onSubmit}
-        className={cn("mt-8", primaryBtnClass)}
+        className={cn("mt-8 inline-flex items-center gap-2", primaryBtnClass)}
       >
-        {busy ? "Opening…" : "Enter Cander"}
+        Enter Cander
+        {busy ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        ) : null}
       </button>
       <button
         type="button"

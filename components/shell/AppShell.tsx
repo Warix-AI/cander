@@ -60,6 +60,10 @@ import {
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
 import { isSupabaseConfigured } from "@/lib/data-backend";
+import {
+  syncSupabaseAuthUser,
+  validateSupabaseSession,
+} from "@/lib/supabase/auth-store";
 
 export function AppShell() {
   return (
@@ -113,7 +117,7 @@ function Root() {
     getSessionReadySnapshot,
     getSessionReadyServerSnapshot,
   );
-  // Email-verify callback must set onboarding pending before the auth gate runs.
+  // Email-verify callback — resume onboarding and sync session before paint.
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -121,10 +125,12 @@ function Root() {
     if (auth === "verified") {
       persistOnboardingPending(true);
       window.history.replaceState({}, "", window.location.pathname);
+      void validateSupabaseSession().then((user) => {
+        if (user) syncSupabaseAuthUser(user);
+      });
       return;
     }
     if (auth === "error") {
-      persistOnboardingPending(true);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -204,16 +210,22 @@ function Root() {
     newChat,
   ]);
 
-  if (!signedIn || onboardingPending) {
-    return <OnboardingFlow />;
-  }
+  const authVerifiedLanding =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("auth") === "verified";
+  const resumeOnboarding = onboardingPending || authVerifiedLanding;
+  const bootstrapping = isSupabaseConfigured() && !sessionReady;
 
-  if (isSupabaseConfigured() && signedIn && !sessionReady) {
+  if (bootstrapping && !resumeOnboarding) {
     return (
       <div className="flex h-svh items-center justify-center bg-background text-foreground">
         <p className="text-[14px] text-muted-foreground">Loading your account…</p>
       </div>
     );
+  }
+
+  if (!signedIn || onboardingPending) {
+    return <OnboardingFlow />;
   }
 
   return (
