@@ -134,7 +134,7 @@ export function BuildDashboard() {
 
       <div className="mt-5">
         {scope === "projects" ? (
-          projectsLoading ? (
+          projectsLoading && !visibleProjects.length ? (
             <QuerySkeleton rows={2} />
           ) : (
             <PreviewGrid
@@ -176,11 +176,13 @@ export function BuildDashboard() {
           />
         ) : (
           <>
-            {projectsLoading ? <QuerySkeleton rows={2} /> : null}
+            {projectsLoading && !visibleProjects.length ? (
+              <QuerySkeleton rows={2} />
+            ) : null}
             {!projectsLoading && !visibleProjects.length ? (
               <BuildScopeOverview scope={scope} />
             ) : null}
-            {!projectsLoading ? (
+            {!projectsLoading || visibleProjects.length ? (
               <PreviewGrid
                 layout={spaceLayout}
                 items={projectItems}

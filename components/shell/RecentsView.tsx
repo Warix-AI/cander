@@ -102,9 +102,9 @@ export function RecentsView() {
           <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
         </MobileFilterBar>
         <div className="mt-5">
-          {loading ? (
+          {loading && items.length === 0 ? (
             <QuerySkeleton rows={4} />
-          ) : error ? (
+          ) : error && items.length === 0 ? (
             <QueryError message={error} />
           ) : (
             <PreviewGrid

@@ -12,7 +12,7 @@ import { PanelToggle, RightPanelToggleDock } from "@/components/shell/PanelToggl
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
-import { useShellStyle } from "@/lib/shell-chrome";
+import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 import type { MobileSurface } from "@/lib/types";
 
@@ -29,6 +29,8 @@ export function SpaceChatLayout() {
     dragging,
     mobileSurface,
     projectId,
+    expandedLayout,
+    expandedPinned,
   } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
@@ -107,9 +109,12 @@ export function SpaceChatLayout() {
     dragging && chatOpen && spaceOpen && !immersive ? panelPct : spacePct;
   const liveChatPct = chatOpen ? Math.max(0, 100 - liveSpacePct) : 0;
   const animateLayout = !dragging && !immersive;
-  const chatReady = liveChatPct > 8;
+  const pinChat =
+    expandedLayout && expandedPinned && chatOpen && spaceOpen && !immersive;
+  const chatReady = pinChat || liveChatPct > 8;
   const showResize = chatOpen && spaceOpen && !immersive;
   const spaceMode = chatOpen && spaceOpen ? "panel" : "page";
+  const floatingChrome = floating && !mobile;
 
   return (
     <div id="courier-main" className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -117,12 +122,14 @@ export function SpaceChatLayout() {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
+          pinChat && "w-[22.5rem] shrink-0",
           animateLayout &&
+            !pinChat &&
             "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
-          liveChatPct === 0 && "pointer-events-none",
+          liveChatPct === 0 && !pinChat && "pointer-events-none",
         )}
-        style={{ width: `${liveChatPct}%` }}
-        aria-hidden={liveChatPct === 0}
+        style={pinChat ? undefined : { width: `${liveChatPct}%` }}
+        aria-hidden={liveChatPct === 0 && !pinChat}
       >
         {chatArmed && chatReady ? (
           <>
@@ -136,14 +143,25 @@ export function SpaceChatLayout() {
 
       <div
         className={cn(
-          "relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
-          chatOpen && liveChatPct > 0 && !floating && "border-l border-border",
+          "relative flex min-h-0 min-w-0 flex-col overflow-hidden @container",
+          pinChat && "min-w-0 flex-1",
+          floatingChrome
+            ? cn(
+                "light-surface my-3 mr-3 overflow-hidden",
+                SHELL_G3_RADIUS,
+                !chatOpen && "ml-3",
+              )
+            : cn(
+                "bg-background",
+                chatOpen && liveChatPct > 0 && "border-l border-border",
+              ),
           animateLayout &&
+            !pinChat &&
             "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
-          liveSpacePct === 0 && "pointer-events-none",
+          liveSpacePct === 0 && !pinChat && "pointer-events-none",
         )}
-        style={{ width: `${liveSpacePct}%` }}
-        aria-hidden={liveSpacePct === 0}
+        style={pinChat ? undefined : { width: `${liveSpacePct}%` }}
+        aria-hidden={liveSpacePct === 0 && !pinChat}
       >
         {chatOpen && spaceOpen && !projectId ? (
           <div className="pointer-events-none absolute top-0 right-0 z-40 hidden h-11 items-center px-3 lg:flex">

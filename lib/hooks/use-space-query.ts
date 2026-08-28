@@ -43,16 +43,20 @@ function useAsyncQuery<T>(
   const [loading, setLoading] = useState(!hasCache);
   const [error, setError] = useState<string | null>(null);
   const loaded = useRef(hasCache);
+  const painted = useRef<T | null>(hasCache ? cache : null);
 
   useEffect(() => {
     let cancelled = false;
-    if (!loaded.current) setLoading(true);
+    if (!loaded.current && painted.current == null && !hasCache) {
+      setLoading(true);
+    }
     setError(null);
     fetcher()
       .then((result) => {
         if (!cancelled) {
           setRemote(result);
           loaded.current = true;
+          painted.current = result;
         }
       })
       .catch((err: unknown) => {
@@ -70,8 +74,22 @@ function useAsyncQuery<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by deps array
   }, deps);
 
-  // Cached rows paint immediately; an empty seed is not "ready" (avoids a 1s empty flash).
-  return { data: remote ?? cache, loading: loading && !hasCache, error };
+  const data =
+    remote !== null
+      ? remote
+      : cacheHasItems(cache)
+        ? cache
+        : (painted.current ?? cache);
+  if (painted.current == null && cacheHasItems(cache)) {
+    painted.current = cache;
+  }
+
+  // Cached or last-painted rows stay on screen; never skeleton a background refetch.
+  return {
+    data,
+    loading: loading && !hasCache && painted.current == null,
+    error,
+  };
 }
 
 export function useSpaceProjects(space: SpaceId, filter?: ProjectFilter) {
@@ -148,14 +166,19 @@ export function useConnectedConnectors() {
   const { api, ctx } = useSpaceData();
   const [ids, setIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const loaded = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     const load = () => {
+      if (!loaded.current) setLoading(true);
       api.connectors
         .listConnected(ctx)
         .then((result) => {
-          if (!cancelled) setIds(result);
+          if (!cancelled) {
+            setIds(result);
+            loaded.current = true;
+          }
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -169,7 +192,7 @@ export function useConnectedConnectors() {
     };
   }, [api.connectors, ctx]);
 
-  return { connectorIds: ids, loading };
+  return { connectorIds: ids, loading: loading && ids.length === 0 };
 }
 
 export function useProjectDeployments(projectId: string | null) {

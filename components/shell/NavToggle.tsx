@@ -79,12 +79,13 @@ export function LeftNavToggleDock({
   showRail: boolean;
   peeking: boolean;
 }) {
-  const { sidebarOpen } = useApp();
+  const { sidebarOpen, projectId, drafting, thread } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
   const desktop = useDesktopShell();
+  const projectFullscreen = Boolean(projectId) && !drafting && !thread;
 
-  if (mobile || sidebarOpen || peeking) return null;
+  if (mobile || sidebarOpen || peeking || projectFullscreen) return null;
 
   if (desktop) {
     return (

@@ -116,7 +116,8 @@ export function ResearchDashboard() {
       </MobileFilterBar>
 
       <div className="mt-5">
-        {loading ? (
+        {loading &&
+        (scope === "sources" ? !sourceCards.length : !spaceProjects.length) ? (
           <QuerySkeleton rows={2} />
         ) : scope === "sources" ? (
           <PreviewGrid

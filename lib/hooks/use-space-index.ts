@@ -4,8 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { useApp } from "@/components/app/AppProvider";
 import { connectorName } from "@/lib/api/connector-api";
+import { filterThreads, getChatStoreSnapshot } from "@/lib/api/chat-store";
+import {
+  getSpaceEntityStoreSnapshot,
+  localSpaceEntityStore,
+} from "@/lib/api/space-entity-store";
 import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
-import type { EntityRef } from "@/lib/space-entities";
+import type { EntityRef, WorkspaceCtx } from "@/lib/space-entities";
 import {
   filterIndexEntries,
   recencyRank,
@@ -48,6 +53,18 @@ function attributionFor(
   return creatorLabel(createdBy, actorId);
 }
 
+function readIndexSeed(ctx: WorkspaceCtx) {
+  const entity = getSpaceEntityStoreSnapshot();
+  const chat = getChatStoreSnapshot();
+  return {
+    ready: entity.seeded,
+    projects: entity.seeded ? localSpaceEntityStore.listAllProjects(ctx) : [],
+    sources: entity.seeded ? localSpaceEntityStore.listSources(ctx) : [],
+    briefing: entity.seeded ? localSpaceEntityStore.listBriefingItems(ctx) : [],
+    threads: filterThreads(chat.threads, ctx.workspaceId),
+  };
+}
+
 export function useSpaceIndex(opts?: {
   space?: SpaceId | "all";
   query?: string;
@@ -56,19 +73,15 @@ export function useSpaceIndex(opts?: {
   const { api, ctx, entityRevision, chatRevision } = useSpaceData();
   const { actor } = useApp();
   const enabled = opts?.enabled !== false;
-  const [projects, setProjects] = useState<Awaited<
-    ReturnType<typeof api.entities.listAllProjects>
-  >>([]);
-  const [sources, setSources] = useState<Awaited<
-    ReturnType<typeof api.entities.listSources>
-  >>([]);
-  const [briefing, setBriefing] = useState<Awaited<
-    ReturnType<typeof api.entities.listBriefingItems>
-  >>([]);
-  const [threads, setThreads] = useState<Thread[]>([]);
-  const [loading, setLoading] = useState(true);
+  const seed = readIndexSeed(ctx);
+  const [projects, setProjects] = useState(seed.projects);
+  const [sources, setSources] = useState(seed.sources);
+  const [briefing, setBriefing] = useState(seed.briefing);
+  const [threads, setThreads] = useState<Thread[]>(seed.threads);
+  const [loading, setLoading] = useState(!seed.ready);
   const [error, setError] = useState<string | null>(null);
-  const loaded = useRef(false);
+  const loaded = useRef(seed.ready);
+  const lastWorkspace = useRef(ctx.workspaceId);
 
   // One-shot ingest. Must not depend on entityRevision: syncBriefing notifies
   // the entity store on success, which would re-run this effect and loop.
@@ -80,7 +93,23 @@ export function useSpaceIndex(opts?: {
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    if (!loaded.current) setLoading(true);
+    if (lastWorkspace.current !== ctx.workspaceId) {
+      lastWorkspace.current = ctx.workspaceId;
+      loaded.current = false;
+    }
+    const nextSeed = readIndexSeed(ctx);
+    if (!loaded.current) {
+      if (nextSeed.ready) {
+        setProjects(nextSeed.projects);
+        setSources(nextSeed.sources);
+        setBriefing(nextSeed.briefing);
+        setThreads(nextSeed.threads);
+        loaded.current = true;
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+    }
     setError(null);
     Promise.all([
       api.entities.listAllProjects(ctx),
@@ -209,7 +238,7 @@ export function useSpaceIndex(opts?: {
     return sorted;
   }, [threads, projects, sources, briefing, opts?.space, opts?.query, actor.id]);
 
-  return { entries, loading, error };
+  return { entries, loading: loading && entries.length === 0, error };
 }
 
 export function openIndexEntry(

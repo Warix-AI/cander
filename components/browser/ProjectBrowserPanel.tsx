@@ -7,6 +7,9 @@ import {
   ChevronRight,
   Globe,
   LayoutTemplate,
+  Maximize2,
+  MessageSquare,
+  Minimize2,
   Plus,
   RotateCw,
   Workflow,
@@ -16,6 +19,7 @@ import {
 import { useApp } from "@/components/app/AppProvider";
 import { GoogleHome } from "@/components/browser/GoogleHome";
 import { AppViewport } from "@/components/preview/AppViewport";
+import { NavToggle } from "@/components/shell/NavToggle";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { Dropdown } from "@/components/ui/Controls";
 import {
@@ -44,6 +48,13 @@ import {
   previewUrlForProject,
 } from "@/lib/preview-url";
 import type { ProjectKind, SpaceProject } from "@/lib/space-entities";
+import {
+  DESKTOP_NO_DRAG,
+  DESKTOP_TRAFFIC_CLEAR_PX,
+  isMacDesktopShell,
+} from "@/lib/desktop-shell";
+import { SHELL_FLOAT_INSET_PX, useShellStyle } from "@/lib/shell-chrome";
+import { isChatSpace } from "@/lib/spaces";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
@@ -57,8 +68,24 @@ export function ProjectBrowserPanel() {
     backToSpaceHome,
     drafting,
     thread,
+    sidebarOpen,
+    openSpaceChat,
+    expandedLayout,
+    toggleExpandedLayout,
   } = useApp();
   const mobile = useMobileShell();
+  const floating = useShellStyle() === "floating";
+  const macDesktop = isMacDesktopShell();
+  const chatArmed = drafting || Boolean(thread);
+  const projectFullscreen = Boolean(projectId) && !chatArmed;
+  const showHeaderNav = projectFullscreen && !sidebarOpen;
+  const trafficPadPx =
+    showHeaderNav && macDesktop
+      ? Math.max(
+          0,
+          DESKTOP_TRAFFIC_CLEAR_PX - (floating ? SHELL_FLOAT_INSET_PX : 0),
+        )
+      : 0;
   const entityRevision = useSyncExternalStore(
     subscribeSpaceEntityStore,
     () => getSpaceEntityStoreSnapshot().revision,
@@ -201,7 +228,26 @@ export function ProjectBrowserPanel() {
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-sidebar">
       {mobile ? null : (
-        <div className="flex h-10 min-w-0 shrink-0 items-center gap-1 bg-sidebar px-2">
+        <div
+          className="flex h-10 min-w-0 shrink-0 items-center gap-1 bg-sidebar px-2"
+          style={macDesktop ? DESKTOP_NO_DRAG : undefined}
+        >
+          {trafficPadPx > 0 ? (
+            <div
+              className="shrink-0"
+              style={{ width: trafficPadPx }}
+              aria-hidden
+            />
+          ) : null}
+          {showHeaderNav ? <NavToggle /> : null}
+          {projectFullscreen && spaceId && isChatSpace(spaceId) ? (
+            <RailBtn
+              label="Open chat"
+              onClick={() => openSpaceChat(spaceId, { keepProject: true })}
+            >
+              <MessageSquare className="h-3.5 w-3.5" strokeWidth={1.6} />
+            </RailBtn>
+          ) : null}
           <ProjectTabStrip
             tabs={session.tabs}
             activeId={active.id}
@@ -212,20 +258,37 @@ export function ProjectBrowserPanel() {
             onAddProject={addProjectTab}
             extraProjects={extraProjects}
           />
-          <button
-            type="button"
-            aria-label="Leave project"
-            title="Leave project"
-            onClick={() => backToSpaceHome()}
-            className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
-          >
-            <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-          </button>
-          {drafting || thread ? <PanelToggle /> : null}
+          <span className="ml-auto flex shrink-0 items-center gap-0.5">
+            {chatArmed ? (
+              <button
+                type="button"
+                aria-label={expandedLayout ? "Restore layout" : "Expand"}
+                title={expandedLayout ? "Restore layout" : "Expand"}
+                onClick={() => toggleExpandedLayout()}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+              >
+                {expandedLayout ? (
+                  <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+                ) : (
+                  <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+                )}
+              </button>
+            ) : null}
+            {chatArmed ? <PanelToggle /> : null}
+            <button
+              type="button"
+              aria-label="Leave project"
+              title="Leave project"
+              onClick={() => backToSpaceHome()}
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+            </button>
+          </span>
         </div>
       )}
 
-      <div className="flex h-10 min-w-0 shrink-0 items-center gap-0.5 bg-sidebar px-2">
+      <div className="flex h-10 min-w-0 shrink-0 items-center gap-0.5 border-t border-border bg-sidebar px-2">
         <RailBtn
           label="Back"
           disabled={!canBack}
@@ -256,7 +319,7 @@ export function ProjectBrowserPanel() {
             onBlur={commitUrl}
             spellCheck={false}
             aria-label="Address"
-            className="h-7 w-full rounded-lg bg-background px-2.5 font-mono text-[12px] text-foreground outline-none ring-1 ring-border/80 focus:ring-foreground/20"
+            className="h-7 w-full bg-transparent px-2 font-mono text-[12px] text-muted-foreground outline-none"
           />
         </form>
       </div>

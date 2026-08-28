@@ -209,6 +209,9 @@ type AppContextValue = {
   setWorkspaceRailOpen: (open: boolean) => void;
   toggleLeftPanel: () => void;
   toggleRightPanel: () => void;
+  expandedLayout: boolean;
+  expandedPinned: boolean;
+  toggleExpandedLayout: () => void;
   dragging: boolean;
   setDragging: (on: boolean) => void;
   drafting: boolean;
@@ -248,7 +251,7 @@ type AppContextValue = {
   /** Courier home chat — empty chat home. */
   openCourierHome: () => void;
   /** Resume (or create) the persistent dock chat for a space. */
-  openSpaceChat: (space: SpaceId) => void;
+  openSpaceChat: (space: SpaceId, opts?: { keepProject?: boolean }) => void;
   setChatSpace: (id: SpaceId | null) => void;
   armChatInterface: (id: SpaceId) => void;
   /** Attach a space panel to the current chat without switching threads. */
@@ -440,7 +443,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>("collapsed");
   const [panelIntent, setPanelIntent] = useState<PanelIntent>("browse");
-  const [panelRatio, setPanelRatio] = useState(0.58);
+  const [panelRatio, setPanelRatioState] = useState(0.58);
+  const [expandedLayout, setExpandedLayout] = useState(false);
+  const [expandedPinned, setExpandedPinned] = useState(false);
+  const layoutSnapshot = useRef<{
+    sidebarOpen: boolean;
+    workspaceRailOpen: boolean;
+    panelRatio: number;
+    panelMode: PanelMode;
+  } | null>(null);
   const [mobileSurface, setMobileSurface] = useState<MobileSurface>("chat");
   const [mobileMenuScreen, setMobileMenuScreen] =
     useState<MobileMenuScreen>("main");
@@ -825,24 +836,69 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setMobileSurface("chat");
   }, [panelMode]);
 
+  const setPanelRatio = useCallback((n: number) => {
+    setPanelRatioState(n);
+    setExpandedPinned(false);
+  }, []);
+
+  const toggleExpandedLayout = useCallback(() => {
+    if (expandedLayout) {
+      const snap = layoutSnapshot.current;
+      layoutSnapshot.current = null;
+      setExpandedLayout(false);
+      setExpandedPinned(false);
+      if (snap) {
+        setSidebarOpen(snap.sidebarOpen);
+        setWorkspaceRailOpen(snap.workspaceRailOpen);
+        setPanelRatioState(snap.panelRatio);
+        setPanelMode(snap.panelMode);
+      }
+      return;
+    }
+    layoutSnapshot.current = {
+      sidebarOpen,
+      workspaceRailOpen,
+      panelRatio,
+      panelMode,
+    };
+    setSidebarOpen(false);
+    setWorkspaceRailOpen(false);
+    setExpandedLayout(true);
+    setExpandedPinned(true);
+    setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
+  }, [
+    expandedLayout,
+    sidebarOpen,
+    workspaceRailOpen,
+    panelRatio,
+    panelMode,
+  ]);
+
   const openSpaceChat = useCallback(
-    (space: SpaceId) => {
+    (space: SpaceId, opts?: { keepProject?: boolean }) => {
       if (!isChatSpace(space)) return;
+      const keepProject = Boolean(opts?.keepProject && projectId);
       let tid = "";
       let hasMessages = false;
       setThreads((current) => {
-        const { threads: next, id } = upsertPersistentSpaceThread(
-          current,
-          workspaceId,
-          space,
+        const result =
+          keepProject && projectId
+            ? upsertPersistentProjectThread(
+                current,
+                workspaceId,
+                projectId,
+                space,
+              )
+            : upsertPersistentSpaceThread(current, workspaceId, space);
+        tid = result.id;
+        hasMessages = threadHasTurns(
+          result.threads.find((item) => item.id === result.id),
         );
-        tid = id;
-        hasMessages = threadHasTurns(next.find((item) => item.id === id));
-        return next;
+        return result.threads;
       });
       setThreadId(tid);
       setSpaceId(space);
-      setProjectId(null);
+      if (!keepProject) setProjectId(null);
       setConnectorId(null);
       setJobId(null);
       setSkillId(null);
@@ -857,7 +913,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         view: "space",
         spaceId: space,
         threadId: tid,
-        projectId: null,
+        projectId: keepProject ? projectId : null,
         panelMode: "split",
         panelIntent: "execute",
         connectorId: null,
@@ -865,7 +921,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: null,
       });
     },
-    [workspaceId, pushTarget],
+    [workspaceId, pushTarget, projectId],
   );
 
   const applyHomeNewChat = useCallback(() => {
@@ -2051,6 +2107,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSkillId(null);
     setView("space");
     setMobileSurface("panel");
+    layoutSnapshot.current = null;
+    setExpandedLayout(false);
+    setExpandedPinned(false);
     if (chatSpace && chatWasOpen) {
       setThreadId(tid);
       setDrafting(!hasMessages);
@@ -2630,6 +2689,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setWorkspaceRailOpen,
       toggleLeftPanel,
       toggleRightPanel,
+      expandedLayout,
+      expandedPinned,
+      toggleExpandedLayout,
       dragging,
       setDragging,
       drafting,
@@ -2779,6 +2841,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       workspaceRailOpen,
       toggleLeftPanel,
       toggleRightPanel,
+      expandedLayout,
+      expandedPinned,
+      toggleExpandedLayout,
       dragging,
       drafting,
       buildTool,
