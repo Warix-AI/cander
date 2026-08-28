@@ -60,9 +60,9 @@ import {
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
 import { isSupabaseConfigured } from "@/lib/data-backend";
+import { completeEmailVerificationFromUrl } from "@/lib/auth/email-verify-landing";
 import {
   syncSupabaseAuthUser,
-  validateSupabaseSession,
 } from "@/lib/supabase/auth-store";
 
 export function AppShell() {
@@ -124,15 +124,12 @@ function Root() {
     const auth = params.get("auth");
     if (auth === "verified") {
       persistOnboardingPending(true);
-      window.history.replaceState({}, "", window.location.pathname);
-      void validateSupabaseSession().then((user) => {
-        if (user) syncSupabaseAuthUser(user);
-      });
-      return;
     }
-    if (auth === "error") {
-      window.history.replaceState({}, "", window.location.pathname);
-    }
+    void completeEmailVerificationFromUrl().then((result) => {
+      if (result === "verified") {
+        persistOnboardingPending(true);
+      }
+    });
   }, []);
 
   useCapacitorMobileShell();

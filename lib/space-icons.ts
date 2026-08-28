@@ -43,17 +43,4 @@ export function spaceIconTint(_id?: SpaceId | null) {
 
 export const chatSpaceCopy: Partial<
   Record<SpaceId, { headline: string; detail: string }>
-> = {
-  work: {
-    headline: "Work",
-    detail: "Inbox, calendar, and customers — what needs you today.",
-  },
-  build: {
-    headline: "Build",
-    detail: "Apps, sites, and agents — preview on the right.",
-  },
-  research: {
-    headline: "Explore",
-    detail: "Sources, notes, and reports — save what you find.",
-  },
-};
+> = {};

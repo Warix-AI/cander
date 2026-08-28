@@ -46,10 +46,13 @@ export function isSidebarNavId(id: string): id is SidebarNavId {
   return isExtraNavId(id) || ALL_SPACE_IDS.includes(id as SpaceId);
 }
 
-/** Default sidebar — Work, Build, Explore, Connectors, Recents. */
+/** Connectors nav hidden until real installs ship. */
+export const SHOW_CONNECTORS_NAV = false;
+
+/** Default sidebar — Work, Build, Explore, Recents. */
 export const DEFAULT_SIDEBAR_MAIN: SidebarNavId[] = [
   ...PRIMARY_NAV_SPACES,
-  "connectors",
+  ...(SHOW_CONNECTORS_NAV ? (["connectors"] as const) : []),
   "recents",
 ];
 
@@ -86,7 +89,7 @@ export function spaceAllowed(
   _opts?: SidebarNavOpts,
 ): boolean {
   if (id === "browser") return false;
-  if (id === "connectors") return true;
+  if (id === "connectors") return SHOW_CONNECTORS_NAV;
   if (id === "recents") return true;
   return allowed.includes(id as SpaceId);
 }

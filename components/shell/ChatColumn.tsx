@@ -100,9 +100,7 @@ export function ChatColumn() {
         )}
       >
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 touch-pan-y">
-          {showSpaceNewPrompt ? (
-            <MobileEmptyPrompt spaceId={chatSpaceId(spaceId)} />
-          ) : hasChatTurns || thread ? (
+          {hasChatTurns || thread ? (
             <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-6">
               {thread?.sessionSummary ? (
                 <SessionSummaryBubble

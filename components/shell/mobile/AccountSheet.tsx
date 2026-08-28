@@ -51,7 +51,8 @@ export function AccountSheet({ onSelect }: { onSelect: () => void }) {
         type="button"
         className={cn(rowClass, "text-foreground")}
         onClick={() => {
-          void signOutAccount().finally(() => onSelect());
+          void signOutAccount();
+          onSelect();
         }}
       >
         <LogOut className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.7} />

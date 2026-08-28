@@ -300,10 +300,7 @@ export function SettingsStatGrid({
         >
           <p
             className={cn(
-              "text-muted-foreground",
-              mobile
-                ? "text-[13px] tracking-[-0.01em]"
-                : "font-mono text-[10.5px] tracking-[0.08em] uppercase",
+              "text-[13px] tracking-[-0.01em] text-muted-foreground",
             )}
           >
             {item.label}

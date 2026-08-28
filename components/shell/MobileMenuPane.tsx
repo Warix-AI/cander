@@ -131,7 +131,7 @@ function MenuMain({
   onOpenNav: (id: SidebarNavId) => void;
   onOpenSettings: () => void;
 }) {
-  const items = useMainNavItems();
+  const items = useMainNavItems().filter((item) => item.id !== "connectors");
   const chatActive = view === "chat" && !threadId && !spaceId;
 
   const navActive = (id: SidebarNavId) => {
@@ -156,11 +156,11 @@ function MenuMain({
 
   return (
     <>
-      <div className="flex shrink-0 items-center px-5 pt-[calc(env(safe-area-inset-top,0px)+12px)]">
+      <div className="flex shrink-0 items-center px-5 pt-[calc(env(safe-area-inset-top,0px)+22px)]">
         <CanderWordmark />
       </div>
 
-      <div className="mt-[25px] flex min-h-0 flex-1 flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="mt-[30px] flex min-h-0 flex-1 flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="space-y-px">
           <button
             type="button"
