@@ -131,7 +131,7 @@ function MenuMain({
   onOpenNav: (id: SidebarNavId) => void;
   onOpenSettings: () => void;
 }) {
-  const items = useMainNavItems().filter((item) => item.id !== "connectors");
+  const items = useMainNavItems();
   const chatActive = view === "chat" && !threadId && !spaceId;
 
   const navActive = (id: SidebarNavId) => {

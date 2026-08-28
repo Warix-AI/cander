@@ -23,7 +23,7 @@ import {
   useSpaceIndex,
 } from "@/lib/hooks/use-space-index";
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
-import { SHOW_CONNECTORS_NAV, spaceAllowed } from "@/lib/spaces";
+import { spaceAllowed } from "@/lib/spaces";
 import { memberSpaces } from "@/lib/workspace-policy";
 import { cn } from "@/lib/utils";
 
@@ -194,17 +194,15 @@ export function SearchModal() {
       });
     }
 
-    if (SHOW_CONNECTORS_NAV) {
-      for (const connector of connectors) {
-        if (!match(connector.name) && !match(connector.description)) continue;
-        items.push({
-          id: `conn-${connector.id}`,
-          title: connector.name,
-          meta: connector.category,
-          group: "Connectors",
-          run: () => openConnector(connector.id),
-        });
-      }
+    for (const connector of connectors) {
+      if (!match(connector.name) && !match(connector.description)) continue;
+      items.push({
+        id: `conn-${connector.id}`,
+        title: connector.name,
+        meta: connector.category,
+        group: "Connectors",
+        run: () => openConnector(connector.id),
+      });
     }
     for (const thread of getChatThreads().filter(
       (item) => item.workspaceId === workspaceId,

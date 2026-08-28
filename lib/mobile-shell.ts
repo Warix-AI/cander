@@ -68,14 +68,25 @@ function writeKeyboardInset(px: number) {
   root.dataset.keyboard = value > 24 ? "1" : "0";
 }
 
-function applyKeyboardInset() {
+function viewportKeyboardHeight() {
   const vv = window.visualViewport;
-  let viewportKb = 0;
-  if (vv) {
-    viewportKb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-  }
+  if (!vv) return 0;
+  return Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+}
+
+function applyKeyboardInset() {
+  const viewportKb = viewportKeyboardHeight();
   writeKeyboardInset(Math.max(pluginHeight, viewportKb));
   if (window.scrollY !== 0 || window.scrollX !== 0) window.scrollTo(0, 0);
+}
+
+function isEditableField(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    (target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable)
+  );
 }
 
 function heightFromEvent(event: Event): number {
@@ -175,27 +186,18 @@ function ensureSharedListeners() {
   vv?.addEventListener("scroll", applyKeyboardInset);
   window.addEventListener("resize", applyKeyboardInset);
   const onFocusIn = (event: FocusEvent) => {
-    const target = event.target;
-    const isField =
-      target instanceof HTMLElement &&
-      (target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable);
-    const schedule = () => {
-      applyKeyboardInset();
-      if (isField && target instanceof HTMLElement) {
-        target.scrollIntoView({ block: "nearest", inline: "nearest" });
-      }
-    };
-    schedule();
-    requestAnimationFrame(() => {
-      requestAnimationFrame(schedule);
-    });
-    window.setTimeout(schedule, 120);
-    window.setTimeout(schedule, 320);
+    applyKeyboardInset();
+    if (isEditableField(event.target) && event.target instanceof HTMLElement) {
+      event.target.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
   };
-  const onFocusOut = () => {
-    window.setTimeout(applyKeyboardInset, 120);
+  const onFocusOut = (event: FocusEvent) => {
+    // Only drop inset when focus leaves editable fields and the keyboard actually closed.
+    if (isEditableField(event.relatedTarget)) return;
+    applyKeyboardInset();
+    if (viewportKeyboardHeight() <= 24 && pluginHeight <= 24) {
+      writeKeyboardInset(0);
+    }
   };
   window.addEventListener("focusin", onFocusIn);
   window.addEventListener("focusout", onFocusOut);
