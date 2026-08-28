@@ -78,6 +78,7 @@ export async function POST(request: Request) {
       name,
       short_name: shortName,
       role: "Owner",
+      onboarding_completed_at: new Date().toISOString(),
     };
     if (plan === "free") {
       profilePatch.plan = "free";
@@ -110,6 +111,7 @@ export async function POST(request: Request) {
         .update({
           name,
           role: "Owner",
+          onboarding_completed_at: new Date().toISOString(),
           ...(plan === "free" ? { plan: "free" } : {}),
         })
         .eq("id", user.id);

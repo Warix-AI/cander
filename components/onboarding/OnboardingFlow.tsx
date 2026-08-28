@@ -32,6 +32,7 @@ import {
 } from "@/lib/supabase/hydrate-member";
 import { tryEnterExistingAccount } from "@/lib/onboarding-recovery";
 import { clearLocalAuthState } from "@/lib/auth/sign-out";
+import { syncSupabaseAuthUser } from "@/lib/supabase/auth-store";
 import { setupOrgOnSupabase } from "@/lib/supabase/setup-org-onboarding";
 import { AppearanceControls } from "@/components/settings/AppearanceControls";
 import { OnboardingAppPreview } from "@/components/onboarding/OnboardingAppPreview";
@@ -281,12 +282,23 @@ function OnboardingShell({
     setColorMode("light");
   }, []);
 
-  // Recover when onboardingPending is stuck but setup already finished in Supabase.
+  // Email-verify link lands with ?auth=verified — resume profile step, not the app shell.
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
-    void tryEnterExistingAccount().catch((err) => {
-      console.warn("[cander] onboarding recovery failed", err);
-    });
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const auth = params.get("auth");
+    if (auth === "verified") {
+      persistOnboardingPending(true);
+      setPassedVerify(true);
+      setStep("profile");
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
+    if (auth === "error") {
+      setError("Email link expired or invalid. Sign in or request a new code.");
+      setStep("sign-in");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   }, []);
 
   // Resume mid-onboarding after refresh / email link — fill name + email from session.
@@ -530,6 +542,7 @@ function OnboardingShell({
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
+        syncSupabaseAuthUser(user);
         try {
           await hydrateMemberFromSupabase(user);
         } catch (hydrateErr) {
@@ -721,6 +734,7 @@ function OnboardingShell({
     persistOnboardingPending(true);
     try {
       const result = await signUpWithPassword({ email, password, name });
+      if (result.session?.user) syncSupabaseAuthUser(result.session.user);
       // Existing email (enumeration-safe): empty identities, no session.
       const maybeExisting =
         result.user &&
@@ -729,7 +743,8 @@ function OnboardingShell({
 
       if (maybeExisting) {
         try {
-          await signInWithPassword({ email, password });
+          const signInResult = await signInWithPassword({ email, password });
+          if (signInResult.user) syncSupabaseAuthUser(signInResult.user);
           const entered = await tryEnterExistingAccount();
           if (entered) return;
           persistOnboardingPending(true);
@@ -760,7 +775,8 @@ function OnboardingShell({
         err instanceof Error ? err.message : "Could not create account.";
       if (/already|registered|exists/i.test(message)) {
         try {
-          await signInWithPassword({ email, password });
+          const signInResult = await signInWithPassword({ email, password });
+          if (signInResult.user) syncSupabaseAuthUser(signInResult.user);
           const entered = await tryEnterExistingAccount();
           if (entered) return;
           persistOnboardingPending(true);
@@ -801,9 +817,10 @@ function OnboardingShell({
     setBusy(true);
     setError("");
     setInfo("");
-    try {
-      await verifySignupOtp(email, code);
-      setPassedVerify(true);
+      try {
+        const result = await verifySignupOtp(email, code);
+        if (result.user) syncSupabaseAuthUser(result.user);
+        setPassedVerify(true);
       setVerifyCode("");
       setStep("profile");
     } catch (err) {
@@ -859,7 +876,8 @@ function OnboardingShell({
       setInfo("");
       setBusy(true);
       try {
-        await signInWithPassword({ email, password });
+        const result = await signInWithPassword({ email, password });
+        if (result.user) syncSupabaseAuthUser(result.user);
         const entered = await tryEnterExistingAccount();
         if (entered) return;
         persistOnboardingPending(true);

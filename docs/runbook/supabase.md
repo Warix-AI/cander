@@ -50,6 +50,7 @@ Apply in sequence:
 | `012_profiles_grants.sql` | Grants + workspace_members RLS fix |
 | `013_profile_short_name.sql` | Preferred short name on profiles |
 | `014_workspace_delete.sql` | Owner can delete workspaces |
+| `015_onboarding_completed.sql` | Gate app until onboarding finish |
 
 ```bash
 supabase link --project-ref <ref>

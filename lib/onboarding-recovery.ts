@@ -4,22 +4,39 @@ import { clearOnboardingCheckpoint } from "@/lib/onboarding-checkpoint";
 import { clearLocalAuthState } from "@/lib/auth/sign-out";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { hydrateMemberFromSupabase } from "@/lib/supabase/hydrate-member";
+import { syncSupabaseAuthUser } from "@/lib/supabase/auth-store";
 import { persistActor, persistOnboardingPending } from "@/lib/session";
 
-/** True when the user already has at least one workspace membership. */
+/** True when the user finished the in-app onboarding flow (not just signup trigger). */
 export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("profile_id", userId)
-    .limit(1);
+    .from("profiles")
+    .select("onboarding_completed_at, short_name")
+    .eq("id", userId)
+    .maybeSingle();
+
   if (error) {
-    // Privilege / recursive RLS — cannot prove completion from DB.
+    if (/onboarding_completed_at|42703|column/i.test(error.message)) {
+      const { data: legacy, error: legacyError } = await supabase
+        .from("profiles")
+        .select("short_name")
+        .eq("id", userId)
+        .maybeSingle();
+      if (legacyError) {
+        console.warn(
+          "[cander] hasCompletedOnboarding check failed",
+          legacyError.message,
+        );
+        return false;
+      }
+      return Boolean(legacy?.short_name?.trim());
+    }
     console.warn("[cander] hasCompletedOnboarding check failed", error.message);
     return false;
   }
-  return (data?.length ?? 0) > 0;
+
+  return Boolean(data?.onboarding_completed_at);
 }
 
 /**
@@ -33,14 +50,20 @@ export async function tryEnterExistingAccount(): Promise<boolean> {
   } = await supabase.auth.getUser();
   if (!user) return false;
 
+  syncSupabaseAuthUser(user);
+
   const complete = await hasCompletedOnboarding(user.id);
-  if (!complete) return false;
+  if (!complete) {
+    persistOnboardingPending(true);
+    return false;
+  }
 
   try {
     clearLocalAuthState();
     await hydrateMemberFromSupabase(user);
   } catch (err) {
     console.warn("[cander] hydrate on recover failed", err);
+    return false;
   }
   persistActor(user.id);
   persistOnboardingPending(false);

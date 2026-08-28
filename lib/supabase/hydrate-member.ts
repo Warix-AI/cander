@@ -352,6 +352,7 @@ async function applySignupPlanAndSpacesClient(opts: {
         name: opts.name.trim(),
         short_name: shortName,
         role: "Owner",
+        onboarding_completed_at: new Date().toISOString(),
         ...(opts.plan === "free" ? { plan: "free" } : {}),
       })
       .eq("id", opts.userId)
@@ -364,6 +365,7 @@ async function applySignupPlanAndSpacesClient(opts: {
         .update({
           name: opts.name.trim(),
           role: "Owner",
+          onboarding_completed_at: new Date().toISOString(),
           ...(opts.plan === "free" ? { plan: "free" } : {}),
         })
         .eq("id", opts.userId)

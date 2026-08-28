@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { User } from "@supabase/supabase-js";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { clearLocalAuthState } from "@/lib/auth/sign-out";
+import { hasCompletedOnboarding } from "@/lib/onboarding-recovery";
 import { persistOnboardingPending, persistSignedOut } from "@/lib/session";
 import {
   getSupabaseUserSnapshot,
@@ -12,42 +14,63 @@ import {
 } from "@/lib/supabase/auth-store";
 import { hydrateMemberFromSupabase } from "@/lib/supabase/hydrate-member";
 
+async function reconcileSupabaseUser(user: User) {
+  const complete = await hasCompletedOnboarding(user.id);
+  if (complete) {
+    persistOnboardingPending(false);
+    try {
+      clearLocalAuthState();
+      await hydrateMemberFromSupabase(user);
+    } catch (err) {
+      console.warn("[cander] member hydrate failed", err);
+      void validateSupabaseSession();
+    }
+    return;
+  }
+
+  persistOnboardingPending(true);
+}
+
 /** Keeps Supabase session in sync with the client auth store + member roster. */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hadUser = useRef(false);
+  const reconciling = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
     const stopAuth = initSupabaseAuthSubscription();
 
-    const unsubUser = subscribeSupabaseUser(() => {
-      const user = getSupabaseUserSnapshot();
+    const reconcileIfNeeded = (user: User | null) => {
       if (!user) {
         if (hadUser.current) {
-          // User was deleted in Supabase (or signed out) — wipe sticky local mirrors.
           clearLocalAuthState();
           persistOnboardingPending(false);
           persistSignedOut();
         }
         hadUser.current = false;
+        reconciling.current = null;
         return;
       }
+
+      if (reconciling.current === user.id) return;
+      reconciling.current = user.id;
       hadUser.current = true;
-      void hydrateMemberFromSupabase(user).catch((err) => {
-        console.warn("[cander] member hydrate failed", err);
-        // Profile gone / revoked — force a live Auth check.
-        void validateSupabaseSession();
-      });
+      void reconcileSupabaseUser(user)
+        .catch((err) => {
+          console.warn("[cander] session reconcile failed", err);
+        })
+        .finally(() => {
+          if (reconciling.current === user.id) {
+            reconciling.current = null;
+          }
+        });
+    };
+
+    const unsubUser = subscribeSupabaseUser(() => {
+      reconcileIfNeeded(getSupabaseUserSnapshot());
     });
 
-    const existing = getSupabaseUserSnapshot();
-    if (existing) {
-      hadUser.current = true;
-      void hydrateMemberFromSupabase(existing).catch((err) => {
-        console.warn("[cander] member hydrate failed", err);
-        void validateSupabaseSession();
-      });
-    }
+    reconcileIfNeeded(getSupabaseUserSnapshot());
 
     return () => {
       stopAuth();
