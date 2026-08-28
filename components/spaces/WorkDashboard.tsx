@@ -152,16 +152,9 @@ export function WorkDashboard() {
         layout={{ value: spaceLayout, onChange: setSpaceLayout }}
         extras={[
           {
-            id: "add-connector",
-            label: "Add connector",
-            onClick: () => {
-              openSpace("connectors");
-            },
-          },
-          {
-            id: "manage-connectors",
-            label: "Manage connectors",
-            onClick: () => openSpaceSettings("work", { tab: "connectors" }),
+            id: "manage-work",
+            label: "Work settings",
+            onClick: () => openSpaceSettings("work"),
           },
         ]}
       >
@@ -198,9 +191,11 @@ export function WorkDashboard() {
           </div>
         ) : scope === "apps" ? (
           !appItems.length ? (
-            <p className="mt-3 px-3 py-4 text-[13px] text-muted-foreground">
-              {workEmptyCopy("apps")}
-            </p>
+            <div className="mt-3">
+              <p className="px-3 py-2 text-[13px] text-muted-foreground">
+                {workEmptyCopy("apps")}
+              </p>
+            </div>
           ) : spaceLayout === "cards" ? (
             <div className="mt-3 grid grid-cols-1 gap-x-3 gap-y-5 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3">
               {appItems.map((item) => (
@@ -222,12 +217,15 @@ export function WorkDashboard() {
               ))}
             </div>
           )
-        ) : briefingLoading ? (
-          <QuerySkeleton rows={3} />
-        ) : !todayItems.length ? (
-          <p className="mt-3 px-3 py-4 text-[13px] text-muted-foreground">
-            {workEmptyCopy("today")}
-          </p>
+        ) : briefingLoading || !todayItems.length ? (
+          <div className="mt-3">
+            <WorkDayOverview />
+            {!briefingLoading ? (
+              <p className="mt-4 px-1 text-[13px] leading-relaxed text-muted-foreground">
+                {workEmptyCopy("today")}
+              </p>
+            ) : null}
+          </div>
         ) : spaceLayout === "cards" ? (
           <div className="mt-3 grid grid-cols-1 gap-x-3 gap-y-5 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3">
             {todayItems.map((item) => (
@@ -251,6 +249,27 @@ export function WorkDashboard() {
         )}
       </section>
     </DashFrame>
+  );
+}
+
+function WorkDayOverview() {
+  const lanes = [
+    { title: "Inbox", detail: "Mail and replies" },
+    { title: "Calendar", detail: "Meetings and holds" },
+    { title: "Customers", detail: "Accounts that need you" },
+  ];
+  return (
+    <div className="grid gap-2">
+      {lanes.map((lane) => (
+        <div
+          key={lane.title}
+          className="rounded-[10px] border border-border bg-muted/30 px-4 py-3.5"
+        >
+          <p className="text-[14px] font-medium tracking-[-0.02em]">{lane.title}</p>
+          <p className="mt-0.5 text-[12.5px] text-muted-foreground">{lane.detail}</p>
+        </div>
+      ))}
+    </div>
   );
 }
 

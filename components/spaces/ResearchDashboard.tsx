@@ -116,7 +116,7 @@ export function ResearchDashboard() {
 
       <div className="mt-5">
         {loading ? (
-          <QuerySkeleton rows={3} />
+          <QuerySkeleton rows={2} />
         ) : scope === "sources" ? (
           <PreviewGrid
             layout={spaceLayout}
@@ -126,7 +126,11 @@ export function ResearchDashboard() {
             empty="No sources yet. Browse the web and save pages."
           />
         ) : (
-          <PreviewGrid
+          <>
+            {!spaceProjects.length && scope !== "projects" ? (
+              <ExploreScopeOverview scope={scope} />
+            ) : null}
+            <PreviewGrid
             layout={spaceLayout}
             kind={scope === "projects" ? "product" : "paper"}
             items={(visible as SpaceProject[]).map((item) => ({
@@ -154,8 +158,33 @@ export function ResearchDashboard() {
                 : "Nothing in Explore yet. Create a project or save a source."
             }
           />
+          </>
         )}
       </div>
     </DashFrame>
+  );
+}
+
+function ExploreScopeOverview({ scope }: { scope: ExploreScope }) {
+  const lanes =
+    scope === "research"
+      ? ["Research notes", "Open questions", "Reading list"]
+      : scope === "reports"
+        ? ["Reports", "Summaries", "Findings"]
+        : ["Sources", "Notes", "Reports"];
+  return (
+    <div className="mb-4 grid gap-2">
+      {lanes.map((lane) => (
+        <div
+          key={lane}
+          className="rounded-[10px] border border-border bg-muted/30 px-4 py-3.5"
+        >
+          <p className="text-[14px] font-medium tracking-[-0.02em]">{lane}</p>
+          <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+            Save what you find as you explore
+          </p>
+        </div>
+      ))}
+    </div>
   );
 }

@@ -121,8 +121,12 @@ export function workSectionTitle(scope: WorkScope) {
 }
 
 export function workEmptyCopy(scope: WorkScope) {
-  if (scope === "today") return "Nothing on today yet. Create a project or ask Cander.";
-  if (scope === "apps") return "No apps in Work yet. Connect apps from Connectors, or add builds from Build.";
+  if (scope === "today") {
+    return "No work today. Start a project or ask Cander when you're ready.";
+  }
+  if (scope === "apps") {
+    return "No apps in Work yet. Features coming soon.";
+  }
   return "No automations running yet. Create a project to get started.";
 }
 

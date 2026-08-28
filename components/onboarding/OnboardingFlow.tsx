@@ -32,7 +32,7 @@ import {
 } from "@/lib/supabase/hydrate-member";
 import { tryEnterExistingAccount } from "@/lib/onboarding-recovery";
 import { clearLocalAuthState } from "@/lib/auth/sign-out";
-import { syncSupabaseAuthUser, validateSupabaseSession } from "@/lib/supabase/auth-store";
+import { syncSupabaseAuthUser } from "@/lib/supabase/auth-store";
 import { setupOrgOnSupabase } from "@/lib/supabase/setup-org-onboarding";
 import { AppearanceControls } from "@/components/settings/AppearanceControls";
 import { OnboardingAppPreview } from "@/components/onboarding/OnboardingAppPreview";
@@ -65,6 +65,8 @@ import {
   type OnboardingCheckpoint,
 } from "@/lib/onboarding-checkpoint";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
+import { completeEmailVerificationFromUrl } from "@/lib/auth/email-verify-landing";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 const INVITE_SEND_WARNING_KEY = "cander-invite-send-warning";
@@ -267,6 +269,7 @@ function OnboardingShell({
 }) {
   const { setPreview, setWorkspace } = useApp();
   const nativeShell = isMobileShell();
+  const mobile = useMobileShell();
   const usingSupabase = supabaseMode();
   const [step, setStep] = useState<Step>(() =>
     resolveInitialOnboardingStep(initialSignedIn),
@@ -298,16 +301,17 @@ function OnboardingShell({
   // Email-verify link — sync session immediately so profile step is authenticated.
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const auth = params.get("auth");
-    if (auth === "verified") {
-      persistOnboardingPending(true);
-      setPassedVerify(true);
-      setStep("profile");
-      window.history.replaceState({}, "", window.location.pathname);
-      void validateSupabaseSession().then((user) => {
-        if (user) {
-          syncSupabaseAuthUser(user);
+
+    void completeEmailVerificationFromUrl().then((result) => {
+      if (result === "verified") {
+        persistOnboardingPending(true);
+        setPassedVerify(true);
+        setStep("profile");
+        setError("");
+        const supabase = createSupabaseBrowserClient();
+        void supabase.auth.getUser().then(({ data }) => {
+          const user = data.user;
+          if (!user) return;
           if (user.email) setEmail(user.email);
           const metaName = user.user_metadata?.name;
           if (typeof metaName === "string" && metaName.trim()) {
@@ -318,16 +322,41 @@ function OnboardingShell({
                 : metaName.trim().split(/\s+/)[0] || "You",
             );
           }
-        }
-      });
-      return;
-    }
-    if (auth === "error") {
-      setError("Email link expired or invalid. Sign in or request a new code.");
-      setStep("sign-in");
-      window.history.replaceState({}, "", window.location.pathname);
-    }
+        });
+        return;
+      }
+      if (result === "error") {
+        setError("Email link expired or invalid. Sign in or request a new code.");
+        setStep("sign-in");
+      }
+    });
   }, []);
+
+  // PKCE / callback may finish a tick after layout — advance when session appears.
+  useEffect(() => {
+    if (!usingSupabase) return;
+    const supabase = createSupabaseBrowserClient();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session?.user) return;
+      if (event !== "SIGNED_IN" && event !== "INITIAL_SESSION") return;
+      persistOnboardingPending(true);
+      syncSupabaseAuthUser(session.user);
+      setPassedVerify(true);
+      setStep("profile");
+      setError("");
+      if (session.user.email) setEmail(session.user.email);
+      const metaName = session.user.user_metadata?.name;
+      if (typeof metaName === "string" && metaName.trim()) {
+        setName(metaName.trim());
+        setShortName((current) =>
+          current.trim() ? current : metaName.trim().split(/\s+/)[0] || "You",
+        );
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [usingSupabase]);
 
   // Resume mid-onboarding after refresh / email link — fill name + email from session.
   useEffect(() => {
@@ -1132,7 +1161,12 @@ function OnboardingShell({
     >
       {/* Left: auth / onboarding — 50% on desktop; clears traffic lights on Mac. */}
       <div className="relative flex min-h-0 w-full flex-1 flex-col pt-[var(--desktop-titlebar)] lg:w-1/2 lg:flex-none">
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pt-8 pb-10 sm:px-10 sm:pt-10">
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col overflow-y-auto px-6 sm:px-10",
+            mobile ? "pt-[calc(env(safe-area-inset-top,0px)+50px)] pb-36" : "pt-8 sm:pt-10 pb-10",
+          )}
+        >
           <div className="mx-auto w-full max-w-[26rem]">
             {/* Fixed-height back row — same top edge on every step. */}
             <div className="mb-8 flex h-9 items-center">
@@ -1351,6 +1385,10 @@ function OnboardingShell({
           </div>
         </div>
       </div>
+
+      {mobile && step !== "plan" && step !== "appearance" ? (
+        <OnboardingMobilePanel step={step} panel={panel} plan={plan} />
+      ) : null}
 
       {/* Right: 15px inset on all sides; white logo top-right (both themes) */}
       <div className="hidden min-h-0 w-1/2 p-[15px] lg:block">
@@ -1931,8 +1969,8 @@ function PlanStep({
                   "flex min-h-[4.5rem] flex-col justify-center border px-3.5 py-3 text-left transition-colors duration-200",
                   SHELL_G3_RADIUS,
                   active
-                    ? "border-foreground/25 bg-muted"
-                    : "border-border hover:border-foreground/20 hover:bg-muted/40",
+                    ? onboardingSelectorActiveClass
+                    : onboardingSelectorIdleClass,
                 )}
               >
                 <span className="flex items-baseline justify-between gap-3">
@@ -2027,8 +2065,8 @@ function MaxIntentStep({
                   "flex min-h-[4.5rem] flex-col justify-center border px-3.5 py-3 text-left transition-colors duration-200",
                   SHELL_G3_RADIUS,
                   active
-                    ? "border-foreground/25 bg-muted"
-                    : "border-border hover:border-foreground/20 hover:bg-muted/40",
+                    ? onboardingSelectorActiveClass
+                    : onboardingSelectorIdleClass,
                 )}
               >
                 <span className="text-[13.5px] font-medium tracking-[-0.01em]">
@@ -2389,6 +2427,57 @@ const ghostBtnClass = cn(
   "inline-flex h-10 w-full items-center justify-center text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60",
   SHELL_G3_RADIUS,
 );
+
+const onboardingSelectorActiveClass =
+  "border-foreground bg-muted ring-2 ring-foreground/15 shadow-sm";
+const onboardingSelectorIdleClass =
+  "border-border hover:border-foreground/25 hover:bg-muted/40";
+
+function OnboardingMobilePanel({
+  step,
+  panel,
+  plan,
+}: {
+  step: Step;
+  panel: { title: string; body: string };
+  plan: BillingPlan | null;
+}) {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden">
+      <div
+        className={cn(
+          "relative overflow-hidden border border-border bg-background/95 p-5 shadow-[0_-12px_40px_oklch(0_0_0/0.12)] backdrop-blur-sm",
+          SHELL_G3_RADIUS,
+        )}
+      >
+        <div className="absolute inset-0 panel-wash-price opacity-70" aria-hidden />
+        <div className="panel-grain opacity-30" aria-hidden />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-transparent" aria-hidden />
+        <div className="relative">
+          <p className="text-[1.05rem] font-medium tracking-[-0.02em] text-foreground">
+            {panel.title}
+          </p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+            {panel.body}
+          </p>
+          {step === "plan" && plan ? (
+            <ul className="mt-3 space-y-1.5">
+              {PLAN_PANEL_BULLETS[plan].slice(0, 3).map((item) => (
+                <li
+                  key={item}
+                  className="flex gap-2 text-[12.5px] leading-snug text-muted-foreground"
+                >
+                  <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-muted-foreground/70" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Field({
   label,

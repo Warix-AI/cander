@@ -94,7 +94,7 @@ export function BuildDashboard() {
       <div className="mt-5">
         {scope === "projects" ? (
           projectsLoading ? (
-            <QuerySkeleton rows={3} />
+            <QuerySkeleton rows={2} />
           ) : (
             <PreviewGrid
               layout={spaceLayout}
@@ -142,27 +142,57 @@ export function BuildDashboard() {
             empty="No tasks yet."
           />
         ) : (
-          <PreviewGrid
-            layout={spaceLayout}
-            items={spaceProjects.map((item) => ({
-              id: item.id,
-              name: item.title,
-              projectId: item.id,
-              meta: `Edited ${item.updatedAt}`,
-              badge: item.status === "published" ? "Published" : undefined,
-              image: item.cover,
-            }))}
-            onOpen={openProject}
-            empty={
-              scope === "apps"
-                ? "No apps yet."
-                : scope === "websites"
-                  ? "No websites yet."
-                  : "No builds yet."
-            }
-          />
+          <>
+            {projectsLoading ? <QuerySkeleton rows={2} /> : null}
+            {!projectsLoading && !spaceProjects.length ? (
+              <BuildScopeOverview scope={scope} />
+            ) : null}
+            {!projectsLoading ? (
+              <PreviewGrid
+                layout={spaceLayout}
+                items={spaceProjects.map((item) => ({
+                  id: item.id,
+                  name: item.title,
+                  projectId: item.id,
+                  meta: `Edited ${item.updatedAt}`,
+                  badge: item.status === "published" ? "Published" : undefined,
+                  image: item.cover,
+                }))}
+                onOpen={openProject}
+                empty={
+                  scope === "apps"
+                    ? "No apps yet."
+                    : scope === "websites"
+                      ? "No websites yet."
+                      : "No builds yet."
+                }
+              />
+            ) : null}
+          </>
         )}
       </div>
     </DashFrame>
+  );
+}
+
+function BuildScopeOverview({ scope }: { scope: BuildScope }) {
+  const lanes =
+    scope === "apps"
+      ? ["Apps", "Internal tools", "Dashboards"]
+      : scope === "websites"
+        ? ["Marketing sites", "Landing pages", "Docs"]
+        : ["Apps", "Sites", "Agents"];
+  return (
+    <div className="mb-4 grid gap-2">
+      {lanes.map((lane) => (
+        <div
+          key={lane}
+          className="rounded-[10px] border border-border bg-muted/30 px-4 py-3.5"
+        >
+          <p className="text-[14px] font-medium tracking-[-0.02em]">{lane}</p>
+          <p className="mt-0.5 text-[12.5px] text-muted-foreground">Nothing here yet</p>
+        </div>
+      ))}
+    </div>
   );
 }

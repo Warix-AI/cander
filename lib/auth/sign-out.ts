@@ -1,16 +1,10 @@
 "use client";
 
-import { syncAppearanceToSupabase } from "@/lib/api/appearance-sync";
 import { clearAppearanceLocalState } from "@/lib/appearance";
 import { isSupabaseConfigured } from "@/lib/data-backend";
-import {
-  getWorkspaceSnapshot,
-  persistOnboardingPending,
-  persistSignedOut,
-  resetWorkspaceSession,
-} from "@/lib/session";
+import { persistOnboardingPending, persistSignedOut, resetWorkspaceSession } from "@/lib/session";
 import { signOutSupabase } from "@/lib/supabase/auth-actions";
-import { clearSupabaseAuthState, getSupabaseUserIdSnapshot } from "@/lib/supabase/auth-store";
+import { clearSupabaseAuthState } from "@/lib/supabase/auth-store";
 import { resetPolicyStoreState } from "@/lib/workspace-policy";
 
 const LOCAL_KEYS = [
@@ -48,30 +42,18 @@ export function clearLocalAuthState() {
 
 /**
  * Sign out of Supabase (when configured) and clear local session mirrors.
- * Safe to call from menus and settings.
+ * Local state clears immediately so the UI responds on mobile without waiting on network.
  */
 export async function signOutAccount() {
   if (isSupabaseConfigured()) {
-    const userId = getSupabaseUserIdSnapshot();
-    if (userId) {
-      try {
-        await syncAppearanceToSupabase({
-          workspaceId: getWorkspaceSnapshot(),
-          actorId: userId,
-        });
-      } catch (err) {
-        console.warn("[cander] appearance flush on sign-out failed", err);
-      }
-    }
-    clearSupabaseAuthState();
-    persistOnboardingPending(false);
-    resetPolicyStoreState();
-    try {
-      await signOutSupabase();
-    } catch (err) {
+    void signOutSupabase().catch((err) => {
       console.warn("[cander] signOut failed", err);
-    }
+    });
   }
+
+  clearSupabaseAuthState();
+  persistOnboardingPending(false);
+  resetPolicyStoreState();
   clearAppearanceLocalState();
   clearLocalAuthState();
   persistSignedOut();

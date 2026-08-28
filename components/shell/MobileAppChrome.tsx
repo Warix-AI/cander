@@ -342,7 +342,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
       )}
     >
       <div className="grid h-12 grid-cols-[1fr_auto_1fr] items-center px-3">
-        <div className="relative z-10 justify-self-start">
+        <div className={cn("relative z-10 justify-self-start", mobileSurface === "menu" && "ml-2.5")}>
           <button
             type="button"
             aria-label={

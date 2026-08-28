@@ -1,12 +1,13 @@
 "use client";
 
+/** Static placeholder rows — no pulse animation. */
 export function QuerySkeleton({ rows = 3 }: { rows?: number }) {
   return (
     <div className="mt-3 space-y-2">
       {Array.from({ length: rows }).map((_, index) => (
         <div
           key={index}
-          className="h-16 animate-pulse rounded-[10px] bg-muted/60"
+          className="h-16 rounded-[10px] bg-muted/40"
         />
       ))}
     </div>

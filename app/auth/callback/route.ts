@@ -14,10 +14,12 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
+  const tokenHash = searchParams.get("token_hash");
+  const type = searchParams.get("type");
   const nextRaw = searchParams.get("next") ?? "/";
   const next = nextRaw.startsWith("/") ? nextRaw : "/";
 
-  if (!code || !isSupabaseConfigured()) {
+  if ((!code && !tokenHash) || !isSupabaseConfigured()) {
     return NextResponse.redirect(`${origin}/?auth=error`);
   }
 
@@ -38,9 +40,30 @@ export async function GET(request: Request) {
     },
   });
 
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
-  if (error) {
-    return NextResponse.redirect(`${origin}/?auth=error`);
+  let exchangeError: Error | null = null;
+
+  if (code) {
+    const result = await supabase.auth.exchangeCodeForSession(code);
+    exchangeError = result.error;
+  } else if (tokenHash && type) {
+    const result = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: type as "signup" | "invite" | "magiclink" | "recovery" | "email_change" | "email",
+    });
+    exchangeError = result.error;
+  }
+
+  if (exchangeError) {
+    // Server exchange can fail when PKCE verifier lives in another tab/device.
+    // Preserve params so the browser client can retry once cookies settle.
+    const fallback = new URL(`${origin}/`);
+    if (code) fallback.searchParams.set("code", code);
+    if (tokenHash) {
+      fallback.searchParams.set("token_hash", tokenHash);
+      if (type) fallback.searchParams.set("type", type);
+    }
+    if (!code && !tokenHash) fallback.searchParams.set("auth", "error");
+    return NextResponse.redirect(fallback.toString());
   }
 
   let destination = next;
