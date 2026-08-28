@@ -71,6 +71,7 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
         <button
           type="button"
           aria-label="Close menu"
+          data-allow-swipe=""
           className="absolute inset-y-0 right-0 z-30"
           style={{ width: `${peekPct}%` }}
           onClick={() => setMobileSurface("chat")}

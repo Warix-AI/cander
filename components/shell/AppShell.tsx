@@ -8,7 +8,6 @@ import { ChatColumn } from "@/components/shell/ChatColumn";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { MobileAppChrome } from "@/components/shell/MobileAppChrome";
 import { MobileMenuScaffold } from "@/components/shell/MobileMenuScaffold";
-import { MobileBootSplash } from "@/components/shell/MobileBootSplash";
 import { SpaceChatLayout } from "@/components/shell/SpaceChatLayout";
 import { RecentsView } from "@/components/shell/RecentsView";
 import { SplitMainLayout } from "@/components/shell/SplitMainLayout";
@@ -254,7 +253,6 @@ function AuthenticatedShell() {
             // Bottom tab bar removed — no reserved nav inset on mobile.
           )}
         >
-          <MobileBootSplash />
           <Sidebar />
           {mobile ? (
             <MobileMenuScaffold>

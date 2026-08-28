@@ -5,19 +5,29 @@ import {
   AppWindow,
   ChevronLeft,
   ChevronRight,
+  Ellipsis,
+  ExternalLink,
   Globe,
   LayoutTemplate,
   Maximize2,
   MessageSquare,
   Minimize2,
+  MousePointer2,
   Plus,
   RotateCw,
+  Upload,
   Workflow,
   X,
   Zap,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { GoogleHome } from "@/components/browser/GoogleHome";
+import {
+  MobileBottomSheet,
+  ProjectActionsSheetBody,
+  ProjectAddSheetHeader,
+  ProjectInfoSheetHeader,
+} from "@/components/browser/ProjectMobileSheets";
 import { AppViewport } from "@/components/preview/AppViewport";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { PanelToggle } from "@/components/shell/PanelToggle";
@@ -73,9 +83,16 @@ export function ProjectBrowserPanel() {
     expandedLayout,
     toggleExpandedLayout,
     panelMode,
+    openOverlay,
+    selectMode,
+    setSelectMode,
+    refreshPreview,
+    liveUrl,
   } = useApp();
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
+  const [mobileSheet, setMobileSheet] = useState<"info" | "add" | null>(null);
+  const [addQuery, setAddQuery] = useState("");
   const peeking = useSyncExternalStore(
     subscribeSidebarPeeking,
     getSidebarPeeking,
@@ -161,7 +178,6 @@ export function ProjectBrowserPanel() {
 
   const selectTab = (id: string) => {
     write({ ...session, activeTabId: id });
-    if (mobile) setMobileNavOpen(true);
   };
 
   const closeTab = (id: string) => {
@@ -175,11 +191,14 @@ export function ProjectBrowserPanel() {
     write({ tabs, activeTabId });
   };
 
-  const addUrlTab = () => {
+  const addUrlTab = (url?: string) => {
     const tab = makeUrlTab();
+    const next = url
+      ? navigateProjectBrowserTab(tab, normalizeBrowserUrl(url))
+      : tab;
     write({
-      tabs: [...session.tabs, tab],
-      activeTabId: tab.id,
+      tabs: [...session.tabs, next],
+      activeTabId: next.id,
     });
   };
 
@@ -224,6 +243,39 @@ export function ProjectBrowserPanel() {
   const canBack = active.historyIndex > 0;
   const canForward = active.historyIndex < active.history.length - 1;
   const extraProjects = allProjects.filter((item) => item.id !== projectId);
+  const address =
+    liveUrl ??
+    active.url ??
+    previewUrlForProject(projectId ?? "project", entity?.publishedUrl);
+  const published =
+    entity?.status === "published" || Boolean(entity?.publishedUrl);
+  const projectTitle = project?.name ?? entity?.title ?? active.title ?? "Project";
+
+  const openAddSheet = () => {
+    setAddQuery("");
+    setMobileSheet("add");
+  };
+
+  const submitAddQuery = () => {
+    const q = addQuery.trim();
+    if (!q) return;
+    const matched = extraProjects.find(
+      (item) => item.title.toLowerCase() === q.toLowerCase(),
+    );
+    if (matched) {
+      addProjectTab(matched);
+    } else {
+      addUrlTab(q);
+    }
+    setMobileSheet(null);
+    setAddQuery("");
+  };
+
+  const filteredExtra = addQuery.trim()
+    ? extraProjects.filter((item) =>
+        item.title.toLowerCase().includes(addQuery.trim().toLowerCase()),
+      )
+    : extraProjects;
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-sidebar">
@@ -252,7 +304,7 @@ export function ProjectBrowserPanel() {
             projects={allProjects}
             onSelect={selectTab}
             onClose={closeTab}
-            onAddUrl={addUrlTab}
+            onAddUrl={() => addUrlTab()}
             onAddProject={addProjectTab}
             extraProjects={extraProjects}
           />
@@ -323,6 +375,16 @@ export function ProjectBrowserPanel() {
               className="h-7 w-full bg-transparent px-2 font-mono text-[12px] text-muted-foreground outline-none"
             />
           </form>
+          <DesktopProjectToolsMenu
+            selectMode={selectMode}
+            onPublish={() => openOverlay("publish")}
+            onOpenExternal={() => window.open(address, "_blank")}
+            onSelectElement={() => setSelectMode(!selectMode)}
+            onRefresh={() => {
+              refreshPreview();
+              setReloadKey((value) => value + 1);
+            }}
+          />
         </div>
       )}
 
@@ -352,13 +414,95 @@ export function ProjectBrowserPanel() {
         <ProjectMobileTabBar
           tabs={session.tabs}
           activeId={active.id}
-          extraProjects={extraProjects}
           onSelect={selectTab}
+          onOpenActive={() => setMobileSheet("info")}
           onClose={closeTab}
-          onAddUrl={addUrlTab}
-          onAddProject={addProjectTab}
+          onAdd={openAddSheet}
         />
       ) : null}
+
+      <MobileBottomSheet
+        open={mobile && mobileSheet === "info"}
+        onClose={() => setMobileSheet(null)}
+        mode="info"
+      >
+        <ProjectInfoSheetHeader
+          title={projectTitle}
+          onClose={() => setMobileSheet(null)}
+        />
+        <ProjectActionsSheetBody
+          published={published}
+          statusNote={
+            published
+              ? "Your website is up to date."
+              : "Publish to share a live link."
+          }
+          address={address}
+          selectMode={selectMode}
+          onPublish={() => {
+            openOverlay("publish");
+            setMobileSheet(null);
+          }}
+          onOpenExternal={() => {
+            window.open(address, "_blank");
+            setMobileSheet(null);
+          }}
+          onSelectElement={() => {
+            setSelectMode(!selectMode);
+            setMobileSheet(null);
+          }}
+          onRefresh={() => {
+            refreshPreview();
+            setReloadKey((value) => value + 1);
+            setMobileSheet(null);
+          }}
+          onEditAddress={() => {
+            setMobileSheet(null);
+            setMobileNavOpen(true);
+          }}
+          onCopyAddress={() => {
+            void navigator.clipboard?.writeText(address);
+          }}
+        />
+      </MobileBottomSheet>
+
+      <MobileBottomSheet
+        open={mobile && mobileSheet === "add"}
+        onClose={() => setMobileSheet(null)}
+        mode="add"
+      >
+        <ProjectAddSheetHeader
+          query={addQuery}
+          onQueryChange={setAddQuery}
+          onClose={() => setMobileSheet(null)}
+          onSubmit={submitAddQuery}
+        />
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-3">
+          <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
+            Projects
+          </p>
+          {filteredExtra.length ? (
+            filteredExtra.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  addProjectTab(item);
+                  setMobileSheet(null);
+                }}
+                className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left text-[15px] hover:bg-muted/70"
+              >
+                <KindGlyph kind={item.kind} />
+                <span className="truncate">{item.title}</span>
+              </button>
+            ))
+          ) : (
+            <p className="px-2 py-3 text-[13px] text-muted-foreground">
+              No other projects to add. Enter a URL above to open a tab.
+            </p>
+          )}
+        </div>
+      </MobileBottomSheet>
     </div>
   );
 }
@@ -470,66 +614,169 @@ function ProjectTabStrip({
 function ProjectMobileTabBar({
   tabs,
   activeId,
-  extraProjects,
   onSelect,
+  onOpenActive,
   onClose,
-  onAddUrl,
-  onAddProject,
+  onAdd,
 }: {
   tabs: ProjectBrowserTab[];
   activeId: string;
-  extraProjects: SpaceProject[];
   onSelect: (id: string) => void;
+  onOpenActive: () => void;
   onClose: (id: string) => void;
-  onAddUrl: () => void;
-  onAddProject: (project: SpaceProject) => void;
+  onAdd: () => void;
 }) {
   return (
     <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-t border-border bg-sidebar px-2 py-1.5 pb-[calc(env(safe-area-inset-bottom,0px)+0.375rem)]">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          onClick={() => onSelect(tab.id)}
-          className={cn(
-            "inline-flex h-9 max-w-[10rem] shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] tracking-[-0.01em]",
-            tab.id === activeId
-              ? "bg-foreground text-background"
-              : "text-muted-foreground",
-          )}
-        >
-          <TabGlyph tab={tab} className="h-3.5 w-3.5" />
-          <span className="truncate">{tab.title}</span>
-          {tab.pinned ? null : (
-            <span
-              role="button"
-              tabIndex={0}
-              aria-label={`Close ${tab.title}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onClose(tab.id);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
+      {tabs.map((tab) => {
+        const active = tab.id === activeId;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => {
+              if (active) onOpenActive();
+              else onSelect(tab.id);
+            }}
+            className={cn(
+              "inline-flex h-9 max-w-[10rem] shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] tracking-[-0.01em]",
+              active
+                ? "bg-foreground text-background"
+                : "text-muted-foreground",
+            )}
+          >
+            <TabGlyph tab={tab} className="h-3.5 w-3.5" />
+            <span className="truncate">{tab.title}</span>
+            {tab.pinned ? null : (
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label={`Close ${tab.title}`}
+                onClick={(event) => {
                   event.stopPropagation();
                   onClose(tab.id);
-                }
-              }}
-              className="inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-background/20"
-            >
-              <X className="h-2.5 w-2.5" strokeWidth={2} />
-            </span>
-          )}
-        </button>
-      ))}
-      <AddTabMenu
-        extraProjects={extraProjects}
-        onAddUrl={onAddUrl}
-        onAddProject={onAddProject}
-        compact
-      />
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onClose(tab.id);
+                  }
+                }}
+                className="inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-background/20"
+              >
+                <X className="h-2.5 w-2.5" strokeWidth={2} />
+              </span>
+            )}
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        aria-label="New tab"
+        title="New tab"
+        onClick={onAdd}
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+      >
+        <Plus className="h-4 w-4" strokeWidth={1.8} />
+      </button>
     </div>
+  );
+}
+
+function DesktopProjectToolsMenu({
+  selectMode,
+  onPublish,
+  onOpenExternal,
+  onSelectElement,
+  onRefresh,
+}: {
+  selectMode: boolean;
+  onPublish: () => void;
+  onOpenExternal: () => void;
+  onSelectElement: () => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <Dropdown
+      align="end"
+      matchTrigger={false}
+      menuClassName="min-w-[14rem]"
+      trigger={({ toggle }) => (
+        <RailBtn label="Project tools" onClick={toggle}>
+          <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
+        </RailBtn>
+      )}
+    >
+      {(close) => (
+        <>
+          <DesktopMenuItem
+            icon={Upload}
+            onClick={() => {
+              onPublish();
+              close();
+            }}
+          >
+            Publish
+          </DesktopMenuItem>
+          <DesktopMenuItem
+            icon={ExternalLink}
+            onClick={() => {
+              onOpenExternal();
+              close();
+            }}
+          >
+            Open externally
+          </DesktopMenuItem>
+          <DesktopMenuItem
+            icon={MousePointer2}
+            active={selectMode}
+            onClick={() => {
+              onSelectElement();
+              close();
+            }}
+          >
+            Select element
+          </DesktopMenuItem>
+          <DesktopMenuItem
+            icon={RotateCw}
+            onClick={() => {
+              onRefresh();
+              close();
+            }}
+          >
+            Refresh
+          </DesktopMenuItem>
+        </>
+      )}
+    </Dropdown>
+  );
+}
+
+function DesktopMenuItem({
+  children,
+  active,
+  onClick,
+  icon: Icon,
+}: {
+  children: string;
+  active?: boolean;
+  onClick: () => void;
+  icon: typeof Upload;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] tracking-[-0.01em] hover:bg-muted",
+        active && "bg-muted",
+      )}
+    >
+      <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.6} />
+      {children}
+    </button>
   );
 }
 

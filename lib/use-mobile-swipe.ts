@@ -10,9 +10,14 @@ const SWIPE_MIN = 56;
 
 function isChromeTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false;
+  // Inputs always block; when the menu is open we still want edge swipes over rows.
+  if (target.closest("input, textarea, select, [contenteditable='true']")) {
+    return true;
+  }
+  if (target.closest("[data-allow-swipe]")) return false;
   return Boolean(
     target.closest(
-      "header, button, a, input, textarea, select, [role='tab'], [role='tablist'], [data-no-swipe]",
+      "header, button, a, [role='tab'], [role='tablist'], [data-no-swipe]",
     ),
   );
 }
@@ -57,7 +62,16 @@ export function useMobileSwipeGestures() {
   const onTouchStart = useCallback(
     (event: TouchEvent) => {
       if (!mobile) return;
-      if (isChromeTarget(event.target)) {
+      // Menu → chat swipes must work over menu rows / peek strip.
+      if (mobileSurface !== "menu" && isChromeTarget(event.target)) {
+        tracking.current = false;
+        return;
+      }
+      if (
+        mobileSurface === "menu" &&
+        event.target instanceof Element &&
+        event.target.closest("input, textarea, select, [contenteditable='true']")
+      ) {
         tracking.current = false;
         return;
       }
@@ -67,7 +81,7 @@ export function useMobileSwipeGestures() {
       startY.current = touch.clientY;
       tracking.current = true;
     },
-    [mobile],
+    [mobile, mobileSurface],
   );
 
   const onTouchEnd = useCallback(
@@ -107,12 +121,7 @@ export function useMobileSwipeGestures() {
       // Swipe left → toward panel / chat from menu
       if (dx < 0) {
         if (mobileSurface === "menu") {
-          // Space browse with no chat → land on right panel, not empty chat.
-          if (view === "space" && !drafting && !thread) {
-            setMobileSurface("panel");
-          } else {
-            setMobileSurface("chat");
-          }
+          setMobileSurface("chat");
           return;
         }
         if (mobileSurface === "chat" && withPanel) {
@@ -122,7 +131,6 @@ export function useMobileSwipeGestures() {
       }
     },
     [
-      drafting,
       mobileSurface,
       openSpaceChat,
       panelAvailable,
@@ -131,7 +139,6 @@ export function useMobileSwipeGestures() {
       setMobileSurface,
       setPanelMode,
       spaceId,
-      thread,
       view,
     ],
   );
