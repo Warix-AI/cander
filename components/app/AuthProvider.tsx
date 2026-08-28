@@ -58,9 +58,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      const entering = !hadUser.current;
       if (reconciling.current === user.id) return;
       reconciling.current = user.id;
       hadUser.current = true;
+      if (entering) setSessionReady(false);
       void reconcileSupabaseUser(user)
         .catch((err) => {
           console.warn("[cander] session reconcile failed", err);

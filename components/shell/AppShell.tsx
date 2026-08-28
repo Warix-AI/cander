@@ -207,13 +207,9 @@ function Root() {
     newChat,
   ]);
 
-  const authVerifiedLanding =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("auth") === "verified";
-  const resumeOnboarding = onboardingPending || authVerifiedLanding;
   const bootstrapping = isSupabaseConfigured() && !sessionReady;
 
-  if (bootstrapping && !resumeOnboarding) {
+  if (bootstrapping) {
     return (
       <div className="flex h-svh items-center justify-center bg-background text-foreground">
         <p className="text-[14px] text-muted-foreground">Loading your account…</p>

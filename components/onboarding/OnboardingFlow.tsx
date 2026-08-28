@@ -318,8 +318,10 @@ function OnboardingShell({
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
 
-    void completeEmailVerificationFromUrl().then((result) => {
+    void completeEmailVerificationFromUrl().then(async (result) => {
       if (result === "verified") {
+        const entered = await tryEnterExistingAccount().catch(() => false);
+        if (entered) return;
         persistOnboardingPending(true);
         setPassedVerify(true);
         setStep("profile");
@@ -347,32 +349,6 @@ function OnboardingShell({
       }
     });
   }, []);
-
-  // PKCE / callback may finish a tick after layout — advance when session appears.
-  useEffect(() => {
-    if (!usingSupabase) return;
-    const supabase = createSupabaseBrowserClient();
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!session?.user) return;
-      if (event !== "SIGNED_IN" && event !== "INITIAL_SESSION") return;
-      persistOnboardingPending(true);
-      syncSupabaseAuthUser(session.user);
-      setPassedVerify(true);
-      setStep("profile");
-      setError("");
-      if (session.user.email) setEmail(session.user.email);
-      const metaName = session.user.user_metadata?.name;
-      if (typeof metaName === "string" && metaName.trim()) {
-        setName(metaName.trim());
-        setShortName((current) =>
-          current.trim() ? current : metaName.trim().split(/\s+/)[0] || "You",
-        );
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [usingSupabase]);
 
   // Resume mid-onboarding after refresh / email link — fill name + email from session.
   useEffect(() => {
