@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -61,6 +61,18 @@ import {
   removeKnowledgeFile,
   toggleDisabledConnector,
 } from "@/lib/workspace-policy";
+import {
+  acceptWorkspaceInvite,
+  declineWorkspaceInvite,
+  fetchPendingWorkspaceInvites,
+  sendWorkspaceInvite,
+} from "@/lib/api/workspace-invite-client";
+import {
+  getPendingInvitesServerSnapshot,
+  getPendingInvitesSnapshot,
+  subscribePendingInvites,
+} from "@/lib/workspace-invites-store";
+import type { WorkspaceInvite } from "@/lib/workspace-membership";
 
 export function WorkspacesSettings({
   selectedId,
@@ -83,6 +95,15 @@ export function WorkspacesSettings({
   );
   const workspaceList = workspacesFor(actor, entitlements);
   const selected = workspaceList.find((item) => item.id === selectedId) ?? null;
+  const pendingInvites = useSyncExternalStore(
+    subscribePendingInvites,
+    getPendingInvitesSnapshot,
+    getPendingInvitesServerSnapshot,
+  );
+
+  useEffect(() => {
+    void fetchPendingWorkspaceInvites();
+  }, [actor.id]);
 
   if (selected) {
     const policy = policyFor(selected.id, workspacePolicies);
@@ -173,7 +194,83 @@ export function WorkspacesSettings({
           ) : null}
         </SettingsSection>
       ) : null}
+
+      {pendingInvites.length ? (
+        <PendingInvitesSection invites={pendingInvites} />
+      ) : null}
     </SettingsPage>
+  );
+}
+
+function PendingInvitesSection({
+  invites,
+}: {
+  invites: WorkspaceInvite[];
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const respond = async (inviteId: string, action: "accept" | "decline") => {
+    setBusyId(inviteId);
+    setError(null);
+    try {
+      if (action === "accept") {
+        await acceptWorkspaceInvite(inviteId);
+      } else {
+        await declineWorkspaceInvite(inviteId);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update invite.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <SettingsSection
+      title="Pending"
+      description="Workspace invites waiting for your approval."
+      className="mt-8"
+    >
+      {error ? (
+        <p className="mb-3 text-[12.5px] text-destructive">{error}</p>
+      ) : null}
+      <SettingsGroup dividerInset="icon">
+        {invites.map((invite) => (
+          <div
+            key={invite.id}
+            className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="min-w-0">
+              <p className="text-[13.5px] font-medium tracking-[-0.01em]">
+                {invite.workspaceName}
+              </p>
+              <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                Invited by {invite.inviterName}
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                disabled={busyId === invite.id}
+                onClick={() => void respond(invite.id, "decline")}
+                className="inline-flex h-8 items-center rounded-full border border-foreground/15 px-3.5 text-[12.5px] font-medium hover:bg-muted disabled:opacity-50"
+              >
+                Deny
+              </button>
+              <button
+                type="button"
+                disabled={busyId === invite.id}
+                onClick={() => void respond(invite.id, "accept")}
+                className="inline-flex h-8 items-center rounded-full bg-primary px-3.5 text-[12.5px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {busyId === invite.id ? "Saving…" : "Approve"}
+              </button>
+            </div>
+          </div>
+        ))}
+      </SettingsGroup>
+    </SettingsSection>
   );
 }
 
@@ -186,8 +283,9 @@ function WorkspacePage({
   policy: ReturnType<typeof policyFor>;
   onBack: () => void;
 }) {
-  const { entitlements, removeWorkspace } = useApp();
+  const { entitlements, removeWorkspace, actor } = useApp();
   const mobile = useMobileShell();
+  const canManage = entitlements.canEditWorkspaceSettings(workspace.id);
   const [kbModalOpen, setKbModalOpen] = useState(false);
   const [kbName, setKbName] = useState("");
   const [openKbId, setOpenKbId] = useState<string | null>(null);
@@ -201,6 +299,10 @@ function WorkspacePage({
   const [renameBusy, setRenameBusy] = useState(false);
   const iconInput = useRef<HTMLInputElement>(null);
   const [iconError, setIconError] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSent, setInviteSent] = useState(false);
   const icons = useSyncExternalStore(
     subscribeWorkspaceIcons,
     getWorkspaceIconsSnapshot,
@@ -263,8 +365,33 @@ function WorkspacePage({
     setKbModalOpen(false);
   };
 
-  const workspaceSubtitle =
-    "Manage name, icon, knowledge bases, and connector policies.";
+  const workspaceSubtitle = canManage
+    ? "Manage name, icon, knowledge bases, and connector policies."
+    : "You're a member of this workspace — contact the owner for settings changes.";
+
+  const sendInvite = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email.includes("@")) {
+      setInviteError("Enter a valid email.");
+      return;
+    }
+    setInviteBusy(true);
+    setInviteError(null);
+    setInviteSent(false);
+    try {
+      await sendWorkspaceInvite({
+        workspaceId: workspace.id,
+        email,
+        orgId: actor.orgId ?? null,
+      });
+      setInviteEmail("");
+      setInviteSent(true);
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : "Could not send invite.");
+    } finally {
+      setInviteBusy(false);
+    }
+  };
 
   const nameDirty = workspaceName.trim() !== savedName.trim();
 
@@ -284,72 +411,82 @@ function WorkspacePage({
         <SettingsGroup>
           <div className="space-y-4 px-4 py-4">
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                title="Upload icon"
-                aria-label="Upload icon"
-                onClick={() => iconInput.current?.click()}
-                className="relative shrink-0"
-              >
-                {icon ? (
-                  <span
-                    className={cn(
-                      "inline-flex h-10 w-10 overflow-hidden",
-                      SHELL_G3_RADIUS,
-                    )}
+              {canManage ? (
+                <>
+                  <button
+                    type="button"
+                    title="Upload icon"
+                    aria-label="Upload icon"
+                    onClick={() => iconInput.current?.click()}
+                    className="relative shrink-0"
                   >
-                    <img
-                      src={icon}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  </span>
-                ) : (
-                  <WorkspaceMark id={workspace.id} name={workspaceName || workspace.name} />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => iconInput.current?.click()}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-              >
-                <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
-                {icon ? "Replace icon" : "Add icon"}
-              </button>
-              {icon ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    clearWorkspaceIcon(workspace.id);
-                    setIconError(null);
+                    {icon ? (
+                      <span
+                        className={cn(
+                          "inline-flex h-10 w-10 overflow-hidden",
+                          SHELL_G3_RADIUS,
+                        )}
+                      >
+                        <img
+                          src={icon}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      </span>
+                    ) : (
+                      <WorkspaceMark id={workspace.id} name={workspaceName || workspace.name} />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => iconInput.current?.click()}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
+                    {icon ? "Replace icon" : "Add icon"}
+                  </button>
+                  {icon ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearWorkspaceIcon(workspace.id);
+                        setIconError(null);
+                      }}
+                      className="text-[12.5px] text-muted-foreground hover:text-foreground"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </>
+              ) : (
+                <WorkspaceMark id={workspace.id} name={savedName} size="lg" />
+              )}
+            </div>
+            {canManage ? (
+              <div className="relative flex items-center gap-2">
+                <input
+                  value={workspaceName}
+                  onChange={(event) => {
+                    setWorkspaceName(event.target.value);
+                    setRenameError(null);
                   }}
-                  className="text-[12.5px] text-muted-foreground hover:text-foreground"
-                >
-                  Remove
-                </button>
-              ) : null}
-            </div>
-            <div className="relative flex items-center gap-2">
-              <input
-                value={workspaceName}
-                onChange={(event) => {
-                  setWorkspaceName(event.target.value);
-                  setRenameError(null);
-                }}
-                className={cn(settingsInputClass, "min-w-0 flex-1")}
-                aria-label="Workspace name"
-              />
-              {nameDirty ? (
-                <button
-                  type="button"
-                  disabled={renameBusy || !workspaceName.trim()}
-                  onClick={() => void handleRename()}
-                  className="inline-flex h-9 shrink-0 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground disabled:opacity-40"
-                >
-                  {renameBusy ? "Saving…" : "Save"}
-                </button>
-              ) : null}
-            </div>
+                  className={cn(settingsInputClass, "min-w-0 flex-1")}
+                  aria-label="Workspace name"
+                />
+                {nameDirty ? (
+                  <button
+                    type="button"
+                    disabled={renameBusy || !workspaceName.trim()}
+                    onClick={() => void handleRename()}
+                    className="inline-flex h-9 shrink-0 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground disabled:opacity-40"
+                  >
+                    {renameBusy ? "Saving…" : "Save"}
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-[15px] font-medium tracking-[-0.01em]">{savedName}</p>
+            )}
             {renameError ? (
               <p className="text-[12.5px] text-destructive">{renameError}</p>
             ) : null}
@@ -359,31 +496,71 @@ function WorkspacePage({
           </div>
         </SettingsGroup>
         <SettingsFootnote>
-          Shown in the workspace rail. Assign people from Organization settings.
+          {canManage
+            ? "Shown in the workspace rail. Invite members below or assign from Organization settings."
+            : "Contact the workspace owner to change name, icon, or policies."}
         </SettingsFootnote>
       </SettingsSection>
 
-      <input
-        ref={iconInput}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (!file) return;
-          void readWorkspaceIconFile(file)
-            .then((dataUrl) => {
-              setWorkspaceIcon(workspace.id, dataUrl);
-              setIconError(null);
-            })
-            .catch((err: unknown) => {
-              setIconError(
-                err instanceof Error ? err.message : "Could not upload image.",
-              );
-            });
-        }}
-      />
+      {canManage ? (
+        <input
+          ref={iconInput}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (!file) return;
+            void readWorkspaceIconFile(file)
+              .then((dataUrl) => {
+                setWorkspaceIcon(workspace.id, dataUrl);
+                setIconError(null);
+              })
+              .catch((err: unknown) => {
+                setIconError(
+                  err instanceof Error ? err.message : "Could not upload image.",
+                );
+              });
+          }}
+        />
+      ) : null}
+
+      {canManage ? (
+        <SettingsSection title="Members" className="mt-8">
+          <SettingsGroup>
+            <div className="space-y-3 px-4 py-4">
+              <input
+                value={inviteEmail}
+                onChange={(event) => {
+                  setInviteEmail(event.target.value);
+                  setInviteError(null);
+                  setInviteSent(false);
+                }}
+                placeholder="Email address"
+                className={settingsInputClass}
+                aria-label="Invitee email"
+              />
+              {inviteError ? (
+                <p className="text-[12.5px] text-destructive">{inviteError}</p>
+              ) : null}
+              {inviteSent ? (
+                <p className="text-[12.5px] text-muted-foreground">
+                  Invite sent — they must approve before joining.
+                </p>
+              ) : null}
+              <button
+                type="button"
+                disabled={inviteBusy || !inviteEmail.trim()}
+                onClick={() => void sendInvite()}
+                className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground disabled:opacity-50"
+              >
+                {inviteBusy ? "Sending…" : "Invite member"}
+              </button>
+            </div>
+          </SettingsGroup>
+        </SettingsSection>
+      ) : null}
 
       <KnowledgeBaseModal
         open={kbModalOpen}
@@ -405,7 +582,7 @@ function WorkspacePage({
         }
         className={cn(mobile ? "mt-4" : "mt-8 max-lg:mt-4")}
         actions={
-          entitlements.hasKnowledgeBases ? (
+          canManage && entitlements.hasKnowledgeBases ? (
             <button
               type="button"
               aria-label="Create knowledge base"
@@ -417,7 +594,7 @@ function WorkspacePage({
           ) : null
         }
       >
-        {entitlements.hasKnowledgeBases ? (
+        {entitlements.hasKnowledgeBases && canManage ? (
           mobile ? (
             <>
               <SettingsGroup>
@@ -467,7 +644,7 @@ function WorkspacePage({
         ) : null}
       </SettingsSection>
 
-      {entitlements.hasConnectorPolicies ? (
+      {entitlements.hasConnectorPolicies && canManage ? (
         <SettingsSection
           title="Connector policies"
           description="Turn a connector off for this workspace. Installed apps stay in the app; they just can't run here."
@@ -534,7 +711,7 @@ function WorkspacePage({
         </SettingsSection>
       ) : null}
 
-      {canDelete ? (
+      {canDelete && canManage ? (
         <SettingsSection title="Danger zone" className="mt-12">
           <SettingsGroup>
             <div className="space-y-3 px-4 py-4">

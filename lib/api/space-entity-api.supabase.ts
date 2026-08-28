@@ -127,8 +127,11 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
         kind: input.kind ?? projectKindFromSpace(input.space),
         status: "draft",
         instructions: input.instructions,
+        createdBy: ctx.actorId,
       };
-      const { error } = await supabase.from("projects").insert(projectToRow(project));
+      const { error } = await supabase
+        .from("projects")
+        .insert(projectToRow(project, ctx.actorId));
       if (error) throw error;
       notifyEntityStoreChange();
       return project;
@@ -199,8 +202,11 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
         fileId: input.fileId,
         folderId: input.folderId ?? null,
         citationMeta: input.citationMeta,
+        createdBy: ctx.actorId,
       };
-      const { error } = await supabase.from("sources").insert(sourceToRow(source));
+      const { error } = await supabase
+        .from("sources")
+        .insert(sourceToRow(source, ctx.actorId));
       if (error) throw error;
       notifyEntityStoreChange();
       return source;
@@ -426,7 +432,7 @@ export async function importEntitiesToSupabase(
   if (projects.length) {
     const { error } = await supabase
       .from("projects")
-      .upsert(projects.map(projectToRow), { onConflict: "id" });
+      .upsert(projects.map((project) => projectToRow(project)), { onConflict: "id" });
     if (error) throw error;
   }
 
@@ -434,7 +440,7 @@ export async function importEntitiesToSupabase(
   if (sources.length) {
     const { error } = await supabase
       .from("sources")
-      .upsert(sources.map(sourceToRow), { onConflict: "id" });
+      .upsert(sources.map((source) => sourceToRow(source)), { onConflict: "id" });
     if (error) throw error;
   }
 

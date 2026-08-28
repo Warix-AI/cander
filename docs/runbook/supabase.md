@@ -53,6 +53,9 @@ Apply in sequence:
 | `015_onboarding_completed.sql` | Gate app until onboarding finish |
 | `016_user_appearance.sql` | Per-user appearance preferences |
 | `017_invite_onboarding.sql` | Invited users skip onboarding gate |
+| `018_workspace_invites.sql` | Pending workspace invites + org admin auto-add trigger |
+| `019_managed_profile_rls.sql` | Managed org members: profile updates limited to `short_name` |
+| `020_entity_created_by.sql` | `created_by` on projects, sources, project_files |
 
 ```bash
 supabase link --project-ref <ref>
@@ -134,7 +137,7 @@ Webhook endpoint: `POST /api/stripe/webhook`. Local: `stripe listen --forward-to
 
 Managed org members (`org_members.role != Owner`) cannot delete their account — sign out only.
 
-**Organization permissions:** Workspace assignment, per-member space ACL, and connector policy are managed under Settings → Organization → Manage access (not per-workspace Permissions).
+**Organization permissions:** Workspace assignment sends pending invites (Settings → Organization → user detail, or Settings → Workspaces → Invite member). Org admins are auto-added to member workspaces via trigger in `018`.
 
 | Path | `Member.kind` | Organization tab |
 |------|---------------|-------------------|
@@ -177,6 +180,11 @@ Enable **Confirm email** under Authentication → Providers → Email. Without `
 - [ ] Chat threads persist across refresh
 - [ ] Settings: role/space toggles survive refresh (Organization → Manage access)
 - [ ] Appearance: theme persists across sign-out / second browser (migration `016`)
+- [ ] Workspace invite: assign from org user detail → invitee sees Pending in Settings → Workspaces → Approve → workspace in rail
+- [ ] Workspace invite deny removes pending row; guest members cannot edit workspace settings
+- [ ] Managed org member: org tab read-only; only short name editable; no email/delete/cancel billing
+- [ ] Org Users list → user detail screen → manage access, plan, remove
+- [ ] Shared business workspace recents show creator tag on threads/projects
 - [ ] Connectors: install + work stack sync
 - [ ] Publish in Build creates deployment row + updates project URL
 - [ ] Browser URL persists per workspace

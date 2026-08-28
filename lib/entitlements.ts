@@ -22,6 +22,7 @@ import {
   emailFitsWorkspaceKind,
   workspaceKindOf,
 } from "./workspace-kind";
+import { canEditWorkspaceSettings } from "./workspace-membership";
 
 export type Entitlements = {
   plan: BillingPlan;
@@ -62,6 +63,7 @@ export type Entitlements = {
   /** Pro/Max only — Free keeps a hidden First Workspace under the hood. */
   hasWorkspaces: boolean;
   canDeleteAccount: boolean;
+  canEditWorkspaceSettings: (workspaceId: string) => boolean;
 };
 
 function subscriptionActive(actor: Member) {
@@ -164,6 +166,8 @@ export function entitlementsFor(actor: Member): Entitlements {
     canDeleteAccount:
       !(inOrg && actor.role !== "Owner") &&
       !subscriptionBlocksAccountDeletion(actor),
+    canEditWorkspaceSettings: (workspaceId) =>
+      canEditWorkspaceSettings(actor.workspaceRoles, workspaceId),
     canUseSharedResource: (resourceId) => {
       const resource = workspaceResources.find((item) => item.id === resourceId);
       if (!resource) return false;

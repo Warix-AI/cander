@@ -41,6 +41,7 @@ function daysRemaining(iso: string | null | undefined) {
 export function PlansSettings() {
   const { entitlements, actor } = useApp();
   const nativeShell = isMobileShell();
+  const managed = entitlements.showOrgManaged;
 
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
@@ -91,6 +92,7 @@ export function PlansSettings() {
     billing?.cancelAtPeriodEnd ?? actor.cancelAtPeriodEnd ?? false;
   const paidPlan = isPaidPlan(entitlements.plan);
   const showCancel =
+    !managed &&
     paidPlan &&
     (billing?.hasSubscription ||
       Boolean(actor.subscriptionPeriodEnd) ||

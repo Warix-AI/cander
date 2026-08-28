@@ -28,6 +28,8 @@ export type SpaceProject = EntityTimestamps & {
   threadId?: string;
   publishedUrl?: string;
   domains?: string[];
+  /** Profile that created this project — attribution in shared workspaces. */
+  createdBy?: string;
 };
 
 export type SourceKind = "web" | "pdf" | "note" | "report" | "file";
@@ -43,6 +45,8 @@ export type SpaceSource = EntityTimestamps & {
   fileId?: string;
   folderId?: string | null;
   citationMeta?: Record<string, unknown>;
+  /** Profile that created this source — attribution in shared workspaces. */
+  createdBy?: string;
 };
 
 export type BriefingTone = "urgent" | "waiting" | "ready" | "neutral";

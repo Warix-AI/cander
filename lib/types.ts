@@ -216,6 +216,8 @@ export type Thread = {
   persistent?: boolean;
   /** Short Cursor-style blurb written when the dock chat is closed. */
   sessionSummary?: string | null;
+  /** Profile that started this thread — used for attribution in shared workspaces. */
+  createdBy?: string;
 };
 
 export type VoiceAnchor =
@@ -364,6 +366,8 @@ export type Member = {
   orgSetupDeferred?: boolean;
   /** Linked Supabase organization id when known. */
   orgId?: string;
+  /** Per-workspace membership role from workspace_members. */
+  workspaceRoles?: Record<string, Role>;
   /** Stripe-backed access for personal payers; org members set active on accept. */
   subscriptionStatus?: SubscriptionStatus;
   /** When the current billing period ends (ISO timestamp). */

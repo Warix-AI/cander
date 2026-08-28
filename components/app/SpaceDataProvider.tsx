@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useSyncExternalStore,
 } from "react";
 import { createApiBundle, type ApiBundle } from "@/lib/api";
@@ -18,6 +19,10 @@ import {
 } from "@/lib/api/chat-sync";
 import { bootstrapSupabaseSession, startAppearanceRemoteSync } from "@/lib/import/bootstrap-supabase";
 import {
+  bootstrapSupabaseAppearance,
+  isAppearanceActorId,
+} from "@/lib/api/appearance-sync";
+import {
   subscribeChatStore,
   getChatStoreSnapshot,
   getChatStoreServerSnapshot,
@@ -28,6 +33,11 @@ import {
   subscribeSpaceEntityStore,
 } from "@/lib/api/space-entity-store";
 import { getDataBackend } from "@/lib/data-backend";
+import {
+  getSessionReadyServerSnapshot,
+  getSessionReadySnapshot,
+  subscribeSessionReady,
+} from "@/lib/session-ready";
 import type { WorkspaceCtx } from "@/lib/space-entities";
 
 type SpaceDataContextValue = {
@@ -56,6 +66,12 @@ export function SpaceDataProvider({
     () => ({ workspaceId, actorId }),
     [workspaceId, actorId],
   );
+  const sessionReady = useSyncExternalStore(
+    subscribeSessionReady,
+    getSessionReadySnapshot,
+    getSessionReadyServerSnapshot,
+  );
+  const appearanceBootstrapped = useRef(false);
 
   const entityRevision = useSyncExternalStore(
     subscribeSpaceEntityStore,
@@ -68,6 +84,11 @@ export function SpaceDataProvider({
     () => getChatStoreSnapshot().revision,
     () => getChatStoreServerSnapshot().revision,
   );
+
+  const canSyncAppearance =
+    backend === "supabase" &&
+    sessionReady &&
+    isAppearanceActorId(actorId);
 
   useEffect(() => {
     if (backend !== "supabase") return;
@@ -82,7 +103,6 @@ export function SpaceDataProvider({
 
     const stopEntitySync = startSupabaseEntitySync(api.entities, ctx);
     const stopOrgPolicySync = startSupabaseOrgPolicySync(ctx);
-    const stopAppearanceSync = startAppearanceRemoteSync(ctx);
     const stopConnectorSync = startSupabaseConnectorSync(ctx);
     const stopBrowserSync = startSupabaseBrowserSync(ctx);
     const stopChatSync = startChatRemoteSync(ctx);
@@ -92,13 +112,34 @@ export function SpaceDataProvider({
       cancelled = true;
       stopEntitySync();
       stopOrgPolicySync();
-      stopAppearanceSync();
       stopConnectorSync();
       stopBrowserSync();
       stopChatSync();
       stopChatRealtime();
     };
   }, [api, backend, ctx]);
+
+  useEffect(() => {
+    if (!canSyncAppearance) {
+      appearanceBootstrapped.current = false;
+      return;
+    }
+
+    let stopAppearanceSync = () => {};
+
+    void bootstrapSupabaseAppearance(ctx)
+      .catch((err) => {
+        console.warn("[cander] appearance bootstrap failed", err);
+      })
+      .finally(() => {
+        appearanceBootstrapped.current = true;
+        stopAppearanceSync = startAppearanceRemoteSync(ctx);
+      });
+
+    return () => {
+      stopAppearanceSync();
+    };
+  }, [canSyncAppearance, ctx]);
 
   const value = useMemo(
     () => ({ api, ctx, entityRevision, chatRevision }),

@@ -263,7 +263,16 @@ export function upsertOrgMember(member: Member) {
   const index = orgMembers.findIndex((item) => item.id === member.id);
   if (index >= 0) {
     orgMembers = orgMembers.map((item) =>
-      item.id === member.id ? { ...item, ...member } : item,
+      item.id === member.id
+        ? {
+            ...item,
+            ...member,
+            workspaceRoles: {
+              ...item.workspaceRoles,
+              ...member.workspaceRoles,
+            },
+          }
+        : item,
     );
   } else {
     orgMembers = [member, ...orgMembers];

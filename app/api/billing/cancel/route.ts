@@ -155,6 +155,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
+    const { data: managedMember } = await createSupabaseAdminClient()
+      .from("org_members")
+      .select("role, kind")
+      .eq("profile_id", authed.user.id)
+      .eq("kind", "org")
+      .maybeSingle();
+
+    if (managedMember && managedMember.role !== "Owner") {
+      return NextResponse.json(
+        { error: "Managed organization members cannot cancel billing." },
+        { status: 403 },
+      );
+    }
+
     const subscriptionId =
       (authed.org?.stripe_subscription_id as string | null | undefined) ??
       (authed.profile.stripe_subscription_id as string | null | undefined) ??

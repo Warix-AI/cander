@@ -33,12 +33,8 @@ import {
   settingsInputClass,
 } from "@/components/settings/SettingsChrome";
 import { WorkspacesSettings } from "@/components/settings/WorkspaceSettings";
-import { MemberPlanToggle } from "@/components/settings/MemberPlanToggle";
+import { OrgMemberDetailSettings } from "@/components/settings/OrgMemberDetailSettings";
 import { OrgInviteModal } from "@/components/settings/OrgInviteModal";
-import {
-  OrgMemberAccessMobile,
-  OrgMemberAccessPanel,
-} from "@/components/settings/OrgMemberAccessPanel";
 import {
   memberName,
   orgMembersOf,
@@ -73,8 +69,6 @@ import {
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
-  setMemberOrgPlan,
-  removeOrgMember,
   upsertOrgMember,
 } from "@/lib/workspace-policy";
 
@@ -95,6 +89,8 @@ export function SettingsView() {
     setSettingsMobileHub,
     settingsWorkspaceId,
     setSettingsWorkspaceId,
+    settingsOrgMemberId,
+    setSettingsOrgMemberId,
     entitlements,
     canGoBack,
     goBack,
@@ -126,12 +122,16 @@ export function SettingsView() {
     ? "hub"
     : settingsTab === "workspaces" && settingsWorkspaceId
       ? `workspaces/${settingsWorkspaceId}`
-      : settingsTab;
+      : settingsTab === "organization" && settingsOrgMemberId
+        ? `organization/${settingsOrgMemberId}`
+        : settingsTab;
   const stackDepth = settingsMobileHub
     ? 0
     : settingsTab === "workspaces" && settingsWorkspaceId
       ? 2
-      : 1;
+      : settingsTab === "organization" && settingsOrgMemberId
+        ? 2
+        : 1;
   const stackDirection = useMobileStackDirection(stackDepth);
 
   const settingsBody = settingsMobileHub ? (
@@ -170,8 +170,15 @@ export function SettingsView() {
       {settingsTab === "organization" ? (
         entitlements.showOrgManaged ? (
           <ManagedOrganizationSettings />
+        ) : settingsOrgMemberId ? (
+          <OrgMemberDetailSettings
+            memberId={settingsOrgMemberId}
+            onBack={() => setSettingsOrgMemberId(null)}
+          />
         ) : (
-          <OrganizationSettings />
+          <OrganizationSettings
+            onSelectMember={(memberId) => setSettingsOrgMemberId(memberId)}
+          />
         )
       ) : null}
 
@@ -209,8 +216,15 @@ export function SettingsView() {
           {settingsTab === "organization" ? (
             entitlements.showOrgManaged ? (
               <ManagedOrganizationSettings />
+            ) : settingsOrgMemberId ? (
+              <OrgMemberDetailSettings
+                memberId={settingsOrgMemberId}
+                onBack={() => setSettingsOrgMemberId(null)}
+              />
             ) : (
-              <OrganizationSettings />
+              <OrganizationSettings
+                onSelectMember={(memberId) => setSettingsOrgMemberId(memberId)}
+              />
             )
           ) : null}
 
@@ -284,20 +298,20 @@ function ManagedOrganizationSettings() {
   );
 }
 
-function OrganizationSettings() {
+function OrganizationSettings({
+  onSelectMember,
+}: {
+  onSelectMember: (memberId: string) => void;
+}) {
   const {
     orgMembers,
     actor,
     entitlements,
-    workspacePolicies,
   } = useApp();
   const nativeShell = isMobileShell();
   const orgDisplayName = getOrgNameSnapshot() || actor.managedByOrgName || "Organization";
   const orgId = actor.orgId || getOrgIdSnapshot();
   const roster = orgMembersOf(orgMembers);
-  const [planError, setPlanError] = useState<string | null>(null);
-  const [planBusy, setPlanBusy] = useState<string | null>(null);
-  const [removeBusy, setRemoveBusy] = useState<string | null>(null);
   const [inviteWarning, setInviteWarning] = useState<string | null>(null);
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -382,92 +396,6 @@ function OrganizationSettings() {
     { label: "Max seats", value: `${maxSeats}` },
     { label: "People", value: `${roster.length}` },
   ];
-
-  const changeMemberPlan = async (
-    memberId: string,
-    plan: "pro" | "max",
-    currentPlan: "pro" | "max",
-  ) => {
-    if (plan === currentPlan) return;
-    setPlanBusy(memberId);
-    setPlanError(null);
-    setMemberOrgPlan(memberId, plan);
-
-    if (!isSupabaseConfigured() || !orgId) {
-      setPlanBusy(null);
-      return;
-    }
-
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error("Sign in to update seats.");
-      }
-      const response = await fetch("/api/org/members/plan", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ memberId, orgId, plan }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        setMemberOrgPlan(memberId, currentPlan);
-        throw new Error(data.error ?? "Could not update seat plan.");
-      }
-    } catch (err) {
-      setPlanError(
-        err instanceof Error ? err.message : "Could not update seat plan.",
-      );
-    } finally {
-      setPlanBusy(null);
-    }
-  };
-
-  const removeMember = async (memberId: string) => {
-    if (!orgId) return;
-    setRemoveBusy(memberId);
-    setPlanError(null);
-
-    if (!isSupabaseConfigured()) {
-      removeOrgMember(memberId);
-      setRemoveBusy(null);
-      return;
-    }
-
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error("Sign in to remove members.");
-      }
-      const response = await fetch("/api/org/members/remove", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ orgId, memberId }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error ?? "Could not remove member.");
-      }
-      removeOrgMember(memberId);
-    } catch (err) {
-      setPlanError(
-        err instanceof Error ? err.message : "Could not remove member.",
-      );
-    } finally {
-      setRemoveBusy(null);
-    }
-  };
 
   return (
     <SettingsPage>
@@ -569,108 +497,58 @@ function OrganizationSettings() {
 
       <SettingsSection
         title="Users"
-        description="Invite Pro or Max seats — mixed rosters are supported. Change plans anytime; billing prorates on the owner's subscription."
+        description="Invite Pro or Max seats — mixed rosters are supported. Open a user to manage access and billing."
       >
-        {planError ? (
-          <p className="mb-3 text-[12.5px] text-destructive">{planError}</p>
-        ) : null}
-        <div className="space-y-3">
+        <SettingsGroup dividerInset="icon">
           {roster.map((member) => {
             const pending = member.seatStatus === "pending";
             const seatPlan: "pro" | "max" =
               member.plan === "max" ? "max" : "pro";
-            const canEditPlan =
-              entitlements.canManageMembers &&
-              !nativeShell &&
-              member.role !== "Owner";
-            const canEditAccess =
-              entitlements.canManageMembers && !nativeShell && !pending;
-            const canRemove =
-              entitlements.canManageMembers &&
-              !nativeShell &&
-              member.id !== actor.id &&
-              member.role !== "Owner";
             return (
-              <SettingsGroup key={member.id}>
-                <SettingsRow
-                  label={
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span>
-                        {member.id === actor.id
-                          ? `${member.name} (You)`
-                          : member.name}
-                      </span>
-                      {member.role === "Owner" ? (
-                        <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[11px] font-medium tracking-[-0.01em] text-muted-foreground">
-                          Owner
-                        </span>
-                      ) : null}
-                      <span
-                        className={cn(
-                          "inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium tracking-[-0.01em]",
-                          pending
-                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                            : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                        )}
-                      >
-                        {pending ? "Pending" : "Active"}
-                      </span>
+              <button
+                key={member.id}
+                type="button"
+                onClick={() => onSelectMember(member.id)}
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-muted/50"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="text-[13.5px] font-medium tracking-[-0.01em]">
+                      {member.id === actor.id
+                        ? `${member.name} (You)`
+                        : member.name}
                     </span>
-                  }
-                  description={member.email}
-                >
-                  {canEditPlan ? (
-                    <MemberPlanToggle
-                      value={seatPlan}
-                      disabled={planBusy === member.id}
-                      label={`Plan for ${member.name}`}
-                      onChange={(plan) =>
-                        void changeMemberPlan(member.id, plan, seatPlan)
-                      }
-                    />
-                  ) : (
-                    <span className="text-[12.5px] font-medium text-foreground">
-                      {planLabel(member.plan)}
-                    </span>
-                  )}
-                </SettingsRow>
-                {!pending && canEditAccess ? (
-                  nativeShell ? (
-                    <OrgMemberAccessMobile
-                      member={member}
-                      orgWorkspaces={orgWorkspaces}
-                      workspacePolicies={workspacePolicies}
-                      canEdit={canEditAccess}
-                    />
-                  ) : (
-                    <OrgMemberAccessPanel
-                      member={member}
-                      orgWorkspaces={orgWorkspaces}
-                      workspacePolicies={workspacePolicies}
-                      canEdit={canEditAccess}
-                    />
-                  )
-                ) : null}
-                {canRemove || (canEditPlan && pending) ? (
-                  <div className="border-t border-border px-4 py-3">
-                    <button
-                      type="button"
-                      disabled={removeBusy === member.id}
-                      onClick={() => void removeMember(member.id)}
-                      className="text-[12.5px] font-medium text-destructive hover:text-destructive/80 disabled:opacity-50"
+                    {member.role === "Owner" ? (
+                      <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[11px] font-medium tracking-[-0.01em] text-muted-foreground">
+                        Owner
+                      </span>
+                    ) : null}
+                    <span
+                      className={cn(
+                        "inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium tracking-[-0.01em]",
+                        pending
+                          ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                          : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                      )}
                     >
-                      {removeBusy === member.id
-                        ? "Removing…"
-                        : pending
-                          ? "Revoke invite"
-                          : "Remove member"}
-                    </button>
-                  </div>
-                ) : null}
-              </SettingsGroup>
+                      {pending ? "Pending" : "Active"}
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
+                    {member.email}
+                  </span>
+                </span>
+                <span className="hidden shrink-0 text-[12.5px] font-medium text-muted-foreground sm:block">
+                  {planLabel(seatPlan)}
+                </span>
+                <ChevronRight
+                  className="h-4 w-4 shrink-0 text-muted-foreground/70"
+                  strokeWidth={1.8}
+                />
+              </button>
             );
           })}
-        </div>
+        </SettingsGroup>
       </SettingsSection>
     </SettingsPage>
   );
@@ -697,14 +575,48 @@ function GeneralSettings({
   );
   const photo = profilePhotoFor(actor.id, photos);
 
+  const managed = entitlements.showOrgManaged;
+
   useEffect(() => {
     setFullName(actor.name);
     setShortName(actor.short);
   }, [actor.id, actor.name, actor.short]);
 
   const saveProfile = async () => {
+    const short = shortName.trim() || actor.short || "You";
+    if (managed) {
+      setProfileBusy(true);
+      setProfileError(null);
+      setProfileSaved(false);
+      try {
+        upsertOrgMember({ ...actor, short });
+        if (isSupabaseConfigured()) {
+          const supabase = createSupabaseBrowserClient();
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (!user) throw new Error("Sign in to save your profile.");
+          const { error } = await supabase
+            .from("profiles")
+            .update({ short_name: short })
+            .eq("id", user.id);
+          if (error && !/short_name|42703|column/i.test(error.message)) {
+            throw error;
+          }
+        }
+        setProfileSaved(true);
+      } catch (err) {
+        setProfileError(
+          err instanceof Error ? err.message : "Could not save profile.",
+        );
+      } finally {
+        setProfileBusy(false);
+      }
+      return;
+    }
+
     const name = fullName.trim();
-    const short = shortName.trim() || name.split(/\s+/)[0] || "You";
+    const displayShort = shortName.trim() || name.split(/\s+/)[0] || "You";
     if (!name) {
       setProfileError("Add your full name.");
       return;
@@ -722,7 +634,7 @@ function GeneralSettings({
       upsertOrgMember({
         ...actor,
         name,
-        short,
+        short: displayShort,
         initials: initials || actor.initials,
       });
 
@@ -734,7 +646,7 @@ function GeneralSettings({
         if (!user) throw new Error("Sign in to save your profile.");
         const { error } = await supabase
           .from("profiles")
-          .update({ name, short_name: short })
+          .update({ name, short_name: displayShort })
           .eq("id", user.id);
         if (error && /short_name|42703|column/i.test(error.message)) {
           const retry = await supabase
@@ -762,14 +674,26 @@ function GeneralSettings({
         <input
           value={fullName}
           onChange={(event) => {
+            if (managed) return;
             setFullName(event.target.value);
             setProfileSaved(false);
             setProfileError(null);
           }}
-          className={settingsInputClass}
+          readOnly={managed}
+          className={cn(
+            settingsInputClass,
+            managed && "bg-muted/40 text-muted-foreground",
+          )}
         />
       </SettingsField>
-      <SettingsField label="Email" hint="Change email in Account security below.">
+      <SettingsField
+        label="Email"
+        hint={
+          managed
+            ? "Managed by your organization."
+            : "Change email in Account security below."
+        }
+      >
         <input
           value={actor.email}
           readOnly
@@ -794,7 +718,7 @@ function GeneralSettings({
           onClick={() => void saveProfile()}
           className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground disabled:opacity-50"
         >
-          {profileBusy ? "Saving…" : "Save profile"}
+          {profileBusy ? "Saving…" : managed ? "Save" : "Save profile"}
         </button>
         {profileSaved ? (
           <span className="text-[12.5px] text-muted-foreground">Saved</span>

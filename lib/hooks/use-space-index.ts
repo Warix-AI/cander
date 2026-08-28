@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
+import { useApp } from "@/components/app/AppProvider";
 import { connectorName } from "@/lib/api/connector-api";
 import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
 import type { EntityRef } from "@/lib/space-entities";
@@ -13,14 +14,42 @@ import {
 } from "@/lib/space-index";
 import type { SpaceId, Thread } from "@/lib/types";
 import { navLabel } from "@/lib/use-main-nav-items";
+import { getWorkspaceCatalogSnapshot } from "@/lib/workspace-catalog";
+import { workspaceKindOf } from "@/lib/workspace-kind";
+import {
+  creatorLabel,
+  sharedWorkspaceAttribution,
+} from "@/lib/workspace-membership";
+import { policyFor } from "@/lib/workspace-policy";
 
 function spaceLabel(space?: SpaceId) {
   if (!space) return "Chat";
   return navLabel(space) ?? space;
 }
 
+function metaParts(parts: (string | null | undefined)[]) {
+  return parts.filter(Boolean).join(" · ");
+}
+
+function attributionFor(
+  workspaceId: string,
+  createdBy: string | undefined,
+  actorId: string,
+): string | null {
+  const workspace = getWorkspaceCatalogSnapshot().find((item) => item.id === workspaceId);
+  const policy = policyFor(workspaceId);
+  if (
+    !workspace ||
+    !sharedWorkspaceAttribution(policy.members.length, workspaceKindOf(workspace))
+  ) {
+    return null;
+  }
+  return creatorLabel(createdBy, actorId);
+}
+
 export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }) {
   const { api, ctx, entityRevision, chatRevision } = useSpaceData();
+  const { actor } = useApp();
   const [projects, setProjects] = useState<Awaited<
     ReturnType<typeof api.entities.listAllProjects>
   >>([]);
@@ -70,33 +99,43 @@ export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }
 
     for (const thread of threads) {
       if (thread.projectId) usedProjects.add(thread.projectId);
+      const creator = attributionFor(thread.workspaceId, thread.createdBy, actor.id);
       items.push({
         key: thread.id,
         kind: "thread",
         entityId: thread.id,
         title: thread.title,
-        meta: [spaceLabel(thread.spaceId), "Chat", thread.updatedAt]
-          .filter(Boolean)
-          .join(" · "),
+        meta: metaParts([
+          spaceLabel(thread.spaceId),
+          "Chat",
+          creator,
+          thread.updatedAt,
+        ]),
         space: thread.spaceId,
         workspaceId: thread.workspaceId,
         updatedAt: thread.updatedAt,
         rank: recencyRank(thread.updatedAt),
         badge: "Chat",
         snippet: thread.snippet,
+        createdById: thread.createdBy,
+        createdByName: creator ?? undefined,
       });
     }
 
     for (const project of projects) {
       if (usedProjects.has(project.id)) continue;
+      const creator = attributionFor(project.workspaceId, project.createdBy, actor.id);
       items.push({
         key: project.id,
         kind: "project",
         entityId: project.id,
         title: project.title,
-        meta: [spaceLabel(project.space), "Project", project.updatedAt]
-          .filter(Boolean)
-          .join(" · "),
+        meta: metaParts([
+          spaceLabel(project.space),
+          "Project",
+          creator,
+          project.updatedAt,
+        ]),
         space: project.space,
         workspaceId: project.workspaceId,
         updatedAt: project.updatedAt,
@@ -105,6 +144,8 @@ export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }
         badge:
           project.status === "published" ? "Published" : spaceLabel(project.space),
         snippet: project.summary,
+        createdById: project.createdBy,
+        createdByName: creator ?? undefined,
       });
     }
 
@@ -150,7 +191,7 @@ export function useSpaceIndex(opts?: { space?: SpaceId | "all"; query?: string }
       sorted = filterIndexEntries(sorted, opts.query);
     }
     return sorted;
-  }, [threads, projects, sources, briefing, opts?.space, opts?.query]);
+  }, [threads, projects, sources, briefing, opts?.space, opts?.query, actor.id]);
 
   return { entries, loading, error };
 }

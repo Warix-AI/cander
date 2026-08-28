@@ -232,6 +232,8 @@ type AppContextValue = {
   backToSettingsHub: () => void;
   settingsWorkspaceId: string | null;
   setSettingsWorkspaceId: (id: string | null) => void;
+  settingsOrgMemberId: string | null;
+  setSettingsOrgMemberId: (id: string | null) => void;
   closeSettings: () => void;
   spaceLayout: SpaceLayout;
   setSpaceLayout: (layout: SpaceLayout) => void;
@@ -457,6 +459,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("organization");
   const [settingsMobileHub, setSettingsMobileHub] = useState(true);
   const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string | null>(
+    null,
+  );
+  const [settingsOrgMemberId, setSettingsOrgMemberId] = useState<string | null>(
     null,
   );
   const [spaceLayout, setSpaceLayout] = useState<SpaceLayout>("list");
@@ -1954,6 +1959,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const openSettings = useCallback((tab?: SettingsTab, opts?: { hub?: boolean }) => {
     setSettingsWorkspaceId(null);
+    setSettingsOrgMemberId(null);
     if (opts?.hub) {
       setSettingsMobileHub(true);
     } else {
@@ -2472,6 +2478,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       backToSettingsHub,
       settingsWorkspaceId,
       setSettingsWorkspaceId,
+      settingsOrgMemberId,
+      setSettingsOrgMemberId,
       closeSettings,
       spaceLayout,
       setSpaceLayout,
@@ -2610,6 +2618,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       settingsMobileHub,
       backToSettingsHub,
       settingsWorkspaceId,
+      settingsOrgMemberId,
       closeSettings,
       selectSettingsTab,
       spaceLayout,

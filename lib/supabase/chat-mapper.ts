@@ -56,6 +56,7 @@ export function threadRowToThread(
     shared: row.shared || undefined,
     persistent: row.persistent || undefined,
     sessionSummary: row.session_summary,
+    createdBy: row.created_by ?? undefined,
   };
 }
 
