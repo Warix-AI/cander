@@ -351,10 +351,18 @@ export function navigateProjectBrowserTab(
   if (nextHistory[nextHistory.length - 1] !== url) {
     nextHistory.push(url);
   }
+  // Keep the human project name for project tabs — preview hosts are UUIDs.
+  const nextTitle =
+    title ??
+    (tab.kind === "project"
+      ? tab.title
+      : isGoogleUrl(url)
+        ? "Google"
+        : titleFromUrl(url));
   return {
     ...tab,
     url,
-    title: title ?? (isGoogleUrl(url) ? "Google" : titleFromUrl(url)),
+    title: nextTitle,
     history: nextHistory,
     historyIndex: nextHistory.length - 1,
   };
@@ -370,7 +378,12 @@ export function stepProjectBrowserTab(
   return {
     ...tab,
     url,
-    title: isGoogleUrl(url) ? "Google" : titleFromUrl(url) || tab.title,
+    title:
+      tab.kind === "project"
+        ? tab.title
+        : isGoogleUrl(url)
+          ? "Google"
+          : titleFromUrl(url) || tab.title,
     historyIndex: nextIndex,
   };
 }

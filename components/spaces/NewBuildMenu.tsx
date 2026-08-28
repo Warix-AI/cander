@@ -8,7 +8,11 @@ import { useSpaceMutation } from "@/lib/hooks/use-space-query";
 import { useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
 import type { ProjectKind } from "@/lib/space-entities";
 
-const buildKinds: { kind: ProjectKind; label: string; summary: string }[] = [
+export const BUILD_CREATE_OPTIONS: {
+  kind: ProjectKind;
+  label: string;
+  summary: string;
+}[] = [
   { kind: "app", label: "App", summary: "Interactive app or tool" },
   { kind: "site", label: "Website", summary: "Marketing site or landing page" },
   {
@@ -17,6 +21,8 @@ const buildKinds: { kind: ProjectKind; label: string; summary: string }[] = [
     summary: "Scheduled or triggered workflow",
   },
 ];
+
+const buildKinds = BUILD_CREATE_OPTIONS;
 
 type NewBuildMenuProps = {
   onCreated: (projectId: string) => void;

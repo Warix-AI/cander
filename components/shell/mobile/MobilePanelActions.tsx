@@ -9,8 +9,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Check, ChevronDown, Ellipsis, LayoutGrid, List, SquarePen } from "lucide-react";
-import { Dropdown } from "@/components/ui/Controls";
+import { Check, Ellipsis, LayoutGrid, List, SquarePen } from "lucide-react";
+import {
+  MobileBottomSheet,
+  SheetAction,
+} from "@/components/browser/ProjectMobileSheets";
 import type { SpaceLayout } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -48,11 +51,7 @@ const MobilePanelActionsContext =
 
 export function MobilePanelActionsProvider({ children }: { children: ReactNode }) {
   const [actions, setActions] = useState<MobilePanelActionsConfig | null>(null);
-  const setActionsIfChanged = useCallbackStableSetActions(setActions);
-  const value = useMemo(
-    () => ({ actions, setActions: setActionsIfChanged }),
-    [actions, setActionsIfChanged],
-  );
+  const value = useMemo(() => ({ actions, setActions }), [actions]);
   return (
     <MobilePanelActionsContext.Provider value={value}>
       {children}
@@ -60,43 +59,16 @@ export function MobilePanelActionsProvider({ children }: { children: ReactNode }
   );
 }
 
-/** Skip provider updates when hoisted chrome config is referentially new but equivalent. */
-function useCallbackStableSetActions(
-  setActions: (actions: MobilePanelActionsConfig | null) => void,
-) {
-  const lastKey = useRef<string | null>(null);
-  return useMemo(() => {
-    return (next: MobilePanelActionsConfig | null) => {
-      const key = next
-        ? JSON.stringify({
-            newChatLabel: next.newChatLabel,
-            scopeValue: next.scope?.value,
-            scopeOptions: next.scope?.options.map((o) => o.id).join(","),
-            layoutValue: next.layout?.value,
-            extras: next.extras?.map((e) => `${e.id}:${e.active ? 1 : 0}`).join(","),
-          })
-        : "";
-      if (key === lastKey.current) return;
-      lastKey.current = key;
-      setActions(next);
-    };
-  }, [setActions]);
-}
-
 export function useMobilePanelActionsState() {
   return useContext(MobilePanelActionsContext);
 }
 
-/**
- * On mobile, hoists scope/layout/new-chat into MobileAppChrome.
- * On desktop/web, renders the filter row unchanged.
- */
 export function MobileFilterBar({
   active = true,
   children,
   className,
   onNewChat,
-  newChatLabel = "New chat",
+  newChatLabel,
   scope,
   layout,
   extras,
@@ -113,6 +85,12 @@ export function MobileFilterBar({
   const setPanelActions = useMobilePanelActionsState()?.setActions;
   const onNewChatRef = useRef(onNewChat);
   onNewChatRef.current = onNewChat;
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+  const extrasRef = useRef(extras);
+  extrasRef.current = extras;
 
   const scopeValue = scope?.value;
   const layoutValue = layout?.value;
@@ -128,9 +106,26 @@ export function MobileFilterBar({
     setPanelActions({
       onNewChat: () => onNewChatRef.current?.(),
       newChatLabel,
-      scope,
-      layout,
-      extras,
+      scope: scopeRef.current
+        ? {
+            ...scopeRef.current,
+            onChange: (value: string) => scopeRef.current?.onChange(value),
+          }
+        : undefined,
+      layout: layoutRef.current
+        ? {
+            ...layoutRef.current,
+            onChange: (value: SpaceLayout) =>
+              layoutRef.current?.onChange(value),
+          }
+        : undefined,
+      extras: extrasRef.current?.map((item) => ({
+        ...item,
+        onClick: () => {
+          const match = extrasRef.current?.find((row) => row.id === item.id);
+          match?.onClick();
+        },
+      })),
     });
   }, [
     active,
@@ -160,151 +155,136 @@ export function MobileFilterBar({
 
 export function MobilePanelActionsCluster({
   config,
-  onNewChat,
+  onCompose,
 }: {
   config: MobilePanelActionsConfig;
-  onNewChat: () => void;
+  onCompose: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const scope = config.scope;
   const layout = config.layout;
   const extras = config.extras ?? [];
   const hasMenu = Boolean(scope || layout || extras.length);
 
   return (
-    <div className="inline-flex max-w-full shrink-0 items-center rounded-full bg-[var(--mobile-chrome-surface)] p-1">
-      <button
-        type="button"
-        aria-label={config.newChatLabel ?? "New chat"}
-        onClick={onNewChat}
-        className={clusterBtnClass}
-      >
-        <SquarePen className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-      </button>
-      {hasMenu ? (
-        <Dropdown
-          align="end"
-          matchTrigger={false}
-          menuClassName="min-w-[12rem] max-h-[70vh] overflow-y-auto rounded-[14px]"
-          trigger={({ open, toggle }) => (
-            <button
-              type="button"
-              aria-label="View options"
-              aria-expanded={open}
-              onClick={toggle}
-              className={cn(clusterBtnClass, open && "bg-muted")}
-            >
-              {open ? (
-                <ChevronDown className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-              ) : (
-                <Ellipsis className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-              )}
-            </button>
-          )}
+    <>
+      <div className="inline-flex max-w-full shrink-0 items-center rounded-full bg-[var(--mobile-chrome-surface)] p-1">
+        <button
+          type="button"
+          aria-label={config.newChatLabel ?? "New"}
+          onClick={onCompose}
+          className={clusterBtnClass}
         >
-          {(close) => (
-            <>
-              {scope ? (
-                <>
-                  <p className="px-3 py-1 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-                    Filter
-                  </p>
-                  {scope.options.map((item) => {
-                    const selected = scope.value === item.id;
-                    return (
-                      <PanelMenuItem
-                        key={item.id}
-                        label={item.label}
-                        selected={selected}
-                        onClick={() => {
-                          scope.onChange(item.id);
-                          close();
-                        }}
-                      />
-                    );
-                  })}
-                </>
-              ) : null}
-              {layout ? (
-                <>
-                  {scope ? (
-                    <div className="my-1.5 mx-2 h-px bg-border" />
-                  ) : null}
-                  <p className="px-3 py-1 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-                    Layout
-                  </p>
-                  <PanelMenuItem
-                    label="Cards"
-                    icon={LayoutGrid}
-                    selected={layout.value === "cards"}
+          <SquarePen className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+        </button>
+        {hasMenu ? (
+          <button
+            type="button"
+            aria-label="View options"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(true)}
+            className={cn(clusterBtnClass, menuOpen && "bg-muted")}
+          >
+            <Ellipsis className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+          </button>
+        ) : null}
+      </div>
+
+      <MobileBottomSheet
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        mode="space"
+      >
+        <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-1">
+          {scope ? (
+            <div className="mb-3">
+              <p className="px-1 pb-1.5 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
+                Filter
+              </p>
+              <div className="space-y-0.5">
+                {scope.options.map((item) => (
+                  <SheetRow
+                    key={item.id}
+                    label={item.label}
+                    selected={scope.value === item.id}
                     onClick={() => {
-                      layout.onChange("cards");
-                      close();
+                      scope.onChange(item.id);
+                      setMenuOpen(false);
                     }}
                   />
-                  <PanelMenuItem
-                    label="List"
-                    icon={List}
-                    selected={layout.value === "list"}
-                    onClick={() => {
-                      layout.onChange("list");
-                      close();
-                    }}
-                  />
-                </>
-              ) : null}
-              {extras.length ? (
-                <>
-                  {scope || layout ? (
-                    <div className="my-1.5 mx-2 h-px bg-border" />
-                  ) : null}
-                  {extras.map((item) => (
-                    <PanelMenuItem
-                      key={item.id}
-                      label={item.label}
-                      selected={item.active}
-                      onClick={() => {
-                        item.onClick();
-                        close();
-                      }}
-                    />
-                  ))}
-                </>
-              ) : null}
-            </>
-          )}
-        </Dropdown>
-      ) : null}
-    </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {layout ? (
+            <div className="mb-3">
+              <p className="px-1 pb-1.5 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
+                Layout
+              </p>
+              <div className="space-y-0.5">
+                <SheetAction
+                  icon={LayoutGrid}
+                  label="Cards"
+                  active={layout.value === "cards"}
+                  onClick={() => {
+                    layout.onChange("cards");
+                    setMenuOpen(false);
+                  }}
+                />
+                <SheetAction
+                  icon={List}
+                  label="List"
+                  active={layout.value === "list"}
+                  onClick={() => {
+                    layout.onChange("list");
+                    setMenuOpen(false);
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
+          {extras.length ? (
+            <div className="space-y-0.5">
+              {extras.map((item) => (
+                <SheetRow
+                  key={item.id}
+                  label={item.label}
+                  selected={item.active}
+                  onClick={() => {
+                    item.onClick();
+                    setMenuOpen(false);
+                  }}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </MobileBottomSheet>
+    </>
   );
 }
 
-function PanelMenuItem({
+function SheetRow({
   label,
   selected,
   onClick,
-  icon: Icon,
 }: {
   label: string;
   selected?: boolean;
   onClick: () => void;
-  icon?: typeof LayoutGrid;
 }) {
   return (
     <button
       type="button"
-      role="menuitem"
       onClick={onClick}
       className={cn(
-        "menu-row-hover flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-[13px] transition-colors",
-        selected && "bg-muted font-medium",
+        "flex w-full items-center gap-2.5 rounded-[12px] px-3 py-3 text-left text-[15px] tracking-[-0.01em] transition-colors",
+        selected ? "bg-muted font-medium" : "hover:bg-muted/70",
       )}
     >
-      {Icon ? (
-        <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.6} />
-      ) : null}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {selected ? (
-        <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+        <Check className="h-4 w-4 shrink-0" strokeWidth={2} />
       ) : null}
     </button>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { CalendarClock, Ellipsis, FileText, Folder, Link2, Sparkles } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { PinControl } from "@/components/shell/PinControl";
@@ -11,6 +11,7 @@ import {
   useSpaceMutation,
 } from "@/lib/hooks/use-space-query";
 import { useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
+import { normalizeProjectTitle } from "@/lib/project-name";
 import type { SpaceAttachment } from "@/lib/space-entities";
 import type { BannerKey } from "@/lib/space-banners";
 import type { SpaceLayout } from "@/lib/types";
@@ -403,15 +404,49 @@ function PreviewActions({
   const { pinTier, setPin, clearPin, workspaceId, promoteToWork, promoteToBuild } =
     useApp();
   const ctx = useWorkspaceCtx();
-  const { attachToWork, detachFromWork } = useSpaceMutation();
+  const { attachToWork, detachFromWork, updateProject } = useSpaceMutation();
   const attachments = useContext(PreviewAttachmentsContext) ?? [];
   const tier = pinTier("project", item.projectId);
   const pinned = Boolean(tier);
   const inWork = attachments.some((row) => row.targetId === item.projectId);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState(item.name);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renameBusy, setRenameBusy] = useState(false);
+
+  useEffect(() => {
+    if (!renameOpen) return;
+    setRenameValue(item.name);
+    setRenameError(null);
+  }, [renameOpen, item.name]);
 
   const copyLink = () => {
     const slug = item.name.toLowerCase().replace(/\s+/g, "-");
     void navigator.clipboard.writeText(`https://${slug}.app`);
+  };
+
+  const saveRename = async () => {
+    const next = normalizeProjectTitle(renameValue);
+    if (!next) {
+      setRenameError("Project name is required.");
+      return;
+    }
+    if (next === item.name) {
+      setRenameOpen(false);
+      return;
+    }
+    setRenameBusy(true);
+    setRenameError(null);
+    try {
+      await updateProject(ctx, item.projectId, { title: next });
+      setRenameOpen(false);
+    } catch (err) {
+      setRenameError(
+        err instanceof Error ? err.message : "Could not rename project.",
+      );
+    } finally {
+      setRenameBusy(false);
+    }
   };
 
   return (
@@ -470,6 +505,17 @@ function PreviewActions({
             </button>
             {kind === "product" ? (
               <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setRenameOpen(true);
+                    close();
+                  }}
+                  className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                >
+                  Rename project
+                </button>
                 {!pinned ? (
                   <button
                     type="button"
@@ -570,6 +616,62 @@ function PreviewActions({
           </>
         )}
       </Dropdown>
+      {renameOpen ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-start justify-center bg-black/20 pt-24"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (event.target === event.currentTarget) setRenameOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-[16px] border border-border bg-background p-4 shadow-lg"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-[14px] font-medium tracking-[-0.01em]">
+              Rename project
+            </p>
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void saveRename();
+                }
+                if (event.key === "Escape") setRenameOpen(false);
+              }}
+              spellCheck={false}
+              className="mt-3 h-10 w-full rounded-[12px] border border-border bg-muted/40 px-3 text-[14px] outline-none"
+            />
+            {renameError ? (
+              <p className="mt-2 text-[12px] text-destructive">{renameError}</p>
+            ) : (
+              <p className="mt-2 text-[12px] text-muted-foreground">
+                Must be unique across this workspace.
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRenameOpen(false)}
+                className="h-9 rounded-[10px] px-3 text-[13px] text-muted-foreground hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={renameBusy}
+                onClick={() => void saveRename()}
+                className="h-9 rounded-[10px] bg-foreground px-3.5 text-[13px] font-medium text-background disabled:opacity-60"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </span>
   );
 }

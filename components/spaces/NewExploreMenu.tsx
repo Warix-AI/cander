@@ -8,7 +8,7 @@ import { useSpaceMutation } from "@/lib/hooks/use-space-query";
 import { useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
 import type { ProjectKind } from "@/lib/space-entities";
 
-type ExploreStart = {
+export type ExploreStart = {
   id: "research" | "report" | "search";
   label: string;
   summary: string;
@@ -16,7 +16,7 @@ type ExploreStart = {
   title: string;
 };
 
-const exploreStarts: ExploreStart[] = [
+export const EXPLORE_CREATE_OPTIONS: ExploreStart[] = [
   {
     id: "research",
     label: "Research",
@@ -39,6 +39,8 @@ const exploreStarts: ExploreStart[] = [
     title: "Search",
   },
 ];
+
+const exploreStarts = EXPLORE_CREATE_OPTIONS;
 
 type NewExploreMenuProps = {
   onCreated: (projectId: string) => void;

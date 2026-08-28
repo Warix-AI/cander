@@ -29,6 +29,7 @@ import {
   ProjectActionsSheetBody,
   ProjectAddSheetHeader,
   ProjectInfoSheetHeader,
+  ProjectRenameSheetBody,
 } from "@/components/browser/ProjectMobileSheets";
 import { AppViewport } from "@/components/preview/AppViewport";
 import { NavToggle } from "@/components/shell/NavToggle";
@@ -95,7 +96,9 @@ export function ProjectBrowserPanel() {
   } = useApp();
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
-  const [mobileSheet, setMobileSheet] = useState<"info" | "add" | null>(null);
+  const [mobileSheet, setMobileSheet] = useState<"info" | "add" | "rename" | null>(
+    null,
+  );
   const [addQuery, setAddQuery] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -267,6 +270,27 @@ export function ProjectBrowserPanel() {
     setRenameError(null);
   }, [projectTitle, projectId, mobileSheet, desktopRenameOpen]);
 
+  // Keep browser tab labels in sync with the saved project name.
+  useEffect(() => {
+    if (!key || !projectId || !projectTitle) return;
+    const current = getProjectBrowserSession(key, fallback);
+    const needsSync = current.tabs.some(
+      (tab) =>
+        tab.kind === "project" &&
+        tab.projectId === projectId &&
+        tab.title !== projectTitle,
+    );
+    if (!needsSync) return;
+    setProjectBrowserSession(key, {
+      ...current,
+      tabs: current.tabs.map((tab) =>
+        tab.kind === "project" && tab.projectId === projectId
+          ? { ...tab, title: projectTitle }
+          : tab,
+      ),
+    });
+  }, [key, projectId, projectTitle, fallback, sessionRevision]);
+
   const saveProjectName = async () => {
     if (!projectId || !canRename) return;
     const next = normalizeProjectTitle(renameValue);
@@ -277,6 +301,7 @@ export function ProjectBrowserPanel() {
     if (next === projectTitle) {
       setRenameError(null);
       setDesktopRenameOpen(false);
+      setMobileSheet(null);
       return;
     }
     setRenameBusy(true);
@@ -295,6 +320,7 @@ export function ProjectBrowserPanel() {
         });
       }
       setDesktopRenameOpen(false);
+      setMobileSheet(null);
     } catch (err) {
       setRenameError(
         err instanceof Error ? err.message : "Could not rename project.",
@@ -515,6 +541,8 @@ export function ProjectBrowserPanel() {
         <ProjectMobileTabBar
           tabs={session.tabs}
           activeId={active.id}
+          projects={allProjects}
+          projectTitle={projectTitle}
           onSelect={selectTab}
           onOpenActive={() => setMobileSheet("info")}
           onClose={closeTab}
@@ -533,20 +561,10 @@ export function ProjectBrowserPanel() {
         />
         <ProjectActionsSheetBody
           published={published}
-          statusNote={
-            published
-              ? "Your website is up to date."
-              : "Publish to share a live link."
-          }
-          address={address}
+          projectName={projectTitle}
           selectMode={selectMode}
           canRename={canRename}
-          projectName={projectTitle}
-          renameValue={renameValue}
-          renameError={renameError}
-          renameBusy={renameBusy}
-          onRenameChange={setRenameValue}
-          onRenameSave={() => void saveProjectName()}
+          onRename={() => setMobileSheet("rename")}
           onPublish={() => {
             openOverlay("publish");
             setMobileSheet(null);
@@ -559,18 +577,21 @@ export function ProjectBrowserPanel() {
             setSelectMode(!selectMode);
             setMobileSheet(null);
           }}
-          onRefresh={() => {
-            refreshPreview();
-            setReloadKey((value) => value + 1);
-            setMobileSheet(null);
-          }}
-          onEditAddress={() => {
-            setMobileSheet(null);
-            setMobileNavOpen(true);
-          }}
-          onCopyAddress={() => {
-            void navigator.clipboard?.writeText(address);
-          }}
+        />
+      </MobileBottomSheet>
+
+      <MobileBottomSheet
+        open={mobile && mobileSheet === "rename"}
+        onClose={() => setMobileSheet(null)}
+        mode="rename"
+      >
+        <ProjectRenameSheetBody
+          value={renameValue}
+          error={renameError}
+          busy={renameBusy}
+          onChange={setRenameValue}
+          onCancel={() => setMobileSheet(null)}
+          onSave={() => void saveProjectName()}
         />
       </MobileBottomSheet>
 
@@ -722,6 +743,8 @@ function ProjectTabStrip({
 function ProjectMobileTabBar({
   tabs,
   activeId,
+  projects,
+  projectTitle,
   onSelect,
   onOpenActive,
   onClose,
@@ -729,15 +752,25 @@ function ProjectMobileTabBar({
 }: {
   tabs: ProjectBrowserTab[];
   activeId: string;
+  projects: SpaceProject[];
+  projectTitle: string;
   onSelect: (id: string) => void;
   onOpenActive: () => void;
   onClose: (id: string) => void;
   onAdd: () => void;
 }) {
+  const labelFor = (tab: ProjectBrowserTab) => {
+    if (tab.kind !== "project") return tab.title;
+    if (tab.id === activeId && projectTitle) return projectTitle;
+    const match = projects.find((item) => item.id === tab.projectId);
+    return match?.title || tab.title;
+  };
+
   return (
     <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-t border-border bg-sidebar px-2 py-1.5 pb-[calc(env(safe-area-inset-bottom,0px)+0.375rem)]">
       {tabs.map((tab) => {
         const active = tab.id === activeId;
+        const label = labelFor(tab);
         return (
           <button
             key={tab.id}
@@ -754,12 +787,12 @@ function ProjectMobileTabBar({
             )}
           >
             <TabGlyph tab={tab} className="h-3.5 w-3.5" />
-            <span className="truncate">{tab.title}</span>
+            <span className="truncate">{label}</span>
             {tab.pinned ? null : (
               <span
                 role="button"
                 tabIndex={0}
-                aria-label={`Close ${tab.title}`}
+                aria-label={`Close ${label}`}
                 onClick={(event) => {
                   event.stopPropagation();
                   onClose(tab.id);

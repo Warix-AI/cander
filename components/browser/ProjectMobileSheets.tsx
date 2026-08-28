@@ -2,19 +2,16 @@
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import {
-  Copy,
   ExternalLink,
-  Globe,
   MousePointer2,
   Pencil,
-  RotateCw,
   Upload,
   X,
 } from "lucide-react";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { cn } from "@/lib/utils";
 
-export type ProjectSheetMode = "actions" | "info" | "add";
+export type ProjectSheetMode = "actions" | "info" | "add" | "rename" | "space";
 
 export function MobileBottomSheet({
   open,
@@ -42,8 +39,8 @@ export function MobileBottomSheet({
 
   if (!open) return null;
 
-  const tall = mode === "info" || mode === "add";
-  const full = mode === "add";
+  const tall =
+    mode === "info" || mode === "add" || mode === "rename" || mode === "space";
 
   return (
     <div className="fixed inset-0 z-[80] flex flex-col justify-end">
@@ -59,19 +56,13 @@ export function MobileBottomSheet({
         aria-labelledby={titleId}
         className={cn(
           "relative z-10 flex w-full flex-col overflow-hidden border border-border bg-background shadow-[0_-12px_40px_rgba(0,0,0,0.18)]",
-          full
-            ? "h-[min(100dvh,100%)] rounded-none pt-[env(safe-area-inset-top,0px)]"
-            : tall
-              ? "max-h-[92dvh] rounded-t-[22px]"
-              : "max-h-[70dvh] rounded-t-[22px]",
+          tall ? "max-h-[92dvh] rounded-t-[22px]" : "max-h-[70dvh] rounded-t-[22px]",
           className,
         )}
       >
-        {!full ? (
-          <div className="flex shrink-0 justify-center pt-2.5 pb-1">
-            <span className="h-1 w-10 rounded-full bg-muted-foreground/35" />
-          </div>
-        ) : null}
+        <div className="flex shrink-0 justify-center pt-2.5 pb-1">
+          <span className="h-1 w-10 rounded-full bg-muted-foreground/35" />
+        </div>
         <div id={titleId} className="sr-only">
           Project
         </div>
@@ -83,137 +74,44 @@ export function MobileBottomSheet({
 
 export function ProjectActionsSheetBody({
   published,
-  statusNote,
-  address,
-  selectMode,
   projectName,
+  selectMode,
   canRename,
-  renameValue,
-  renameError,
-  renameBusy,
-  onRenameChange,
-  onRenameSave,
   onPublish,
   onOpenExternal,
   onSelectElement,
-  onRefresh,
-  onCopyAddress,
-  onEditAddress,
+  onRename,
 }: {
   published?: boolean;
-  statusNote?: string;
-  address: string;
-  selectMode?: boolean;
   projectName?: string;
+  selectMode?: boolean;
   canRename?: boolean;
-  renameValue?: string;
-  renameError?: string | null;
-  renameBusy?: boolean;
-  onRenameChange?: (value: string) => void;
-  onRenameSave?: () => void;
   onPublish: () => void;
   onOpenExternal: () => void;
   onSelectElement: () => void;
-  onRefresh: () => void;
-  onCopyAddress?: () => void;
-  onEditAddress?: () => void;
+  onRename?: () => void;
 }) {
   return (
     <div className="flex min-h-0 flex-col px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-1">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="flex items-center gap-2 text-[15px] font-medium tracking-[-0.01em]">
-            <span
-              className={cn(
-                "inline-block h-2 w-2 rounded-full",
-                published ? "bg-emerald-500" : "bg-muted-foreground/50",
-              )}
-            />
-            {published ? "Published" : "Draft"}
-          </p>
-          {statusNote ? (
-            <p className="mt-0.5 text-[12px] text-muted-foreground">{statusNote}</p>
-          ) : null}
-        </div>
-      </div>
-
-      {canRename && onRenameChange && onRenameSave ? (
-        <div className="mt-4">
-          <p className="text-[12px] font-medium text-muted-foreground">Name</p>
-          <div className="mt-2 flex items-center gap-2">
-            <input
-              value={renameValue ?? projectName ?? ""}
-              onChange={(event) => onRenameChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  onRenameSave();
-                }
-              }}
-              spellCheck={false}
-              aria-label="Project name"
-              className="h-10 min-w-0 flex-1 rounded-[12px] border border-border bg-muted/40 px-3 text-[15px] outline-none"
-            />
-            <button
-              type="button"
-              disabled={renameBusy}
-              onClick={onRenameSave}
-              className="inline-flex h-10 shrink-0 items-center rounded-[12px] bg-foreground px-3.5 text-[13px] font-medium text-background disabled:opacity-60"
-            >
-              {renameBusy ? "Saving…" : "Save"}
-            </button>
-          </div>
-          {renameError ? (
-            <p className="mt-1.5 text-[12px] text-destructive">{renameError}</p>
-          ) : (
-            <p className="mt-1.5 text-[12px] text-muted-foreground">
-              Names must be unique across this workspace.
-            </p>
+      <div className="flex min-w-0 items-center gap-2">
+        <span
+          className={cn(
+            "inline-block h-2 w-2 shrink-0 rounded-full",
+            published ? "bg-emerald-500" : "bg-muted-foreground/50",
           )}
-        </div>
-      ) : null}
-
-      <div className="mt-4">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[12px] font-medium text-muted-foreground">Website URL</p>
-        </div>
-        <div className="mt-2 flex items-center gap-2 rounded-[14px] border border-border bg-muted/40 px-3 py-2.5">
-          <Globe className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.6} />
-          <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{address}</span>
-          {onEditAddress ? (
-            <button
-              type="button"
-              aria-label="Edit address"
-              onClick={onEditAddress}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
-            </button>
-          ) : null}
-          {onCopyAddress ? (
-            <button
-              type="button"
-              aria-label="Copy address"
-              onClick={onCopyAddress}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <Copy className="h-3.5 w-3.5" strokeWidth={1.6} />
-            </button>
-          ) : null}
-        </div>
-        <p className="mt-2 flex items-center gap-2 text-[12px] text-muted-foreground">
-          <Globe className="h-3.5 w-3.5" strokeWidth={1.6} />
-          Visible to anyone with the link
+        />
+        <p className="text-[15px] font-medium tracking-[-0.01em]">
+          {published ? "Published" : "Draft"}
         </p>
+        {projectName ? (
+          <p className="min-w-0 truncate text-[15px] text-muted-foreground">
+            {projectName}
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-4 space-y-0.5">
-        <SheetAction
-          icon={Upload}
-          label="Publish"
-          onClick={onPublish}
-          primary
-        />
+        <SheetAction icon={Upload} label="Publish" onClick={onPublish} primary />
         <SheetAction
           icon={ExternalLink}
           label="Open externally"
@@ -225,7 +123,95 @@ export function ProjectActionsSheetBody({
           active={selectMode}
           onClick={onSelectElement}
         />
-        <SheetAction icon={RotateCw} label="Refresh" onClick={onRefresh} />
+        {canRename && onRename ? (
+          <SheetAction
+            icon={Pencil}
+            label="Rename project"
+            onClick={onRename}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export function ProjectRenameSheetBody({
+  value,
+  error,
+  busy,
+  onChange,
+  onCancel,
+  onSave,
+}: {
+  value: string;
+  error?: string | null;
+  busy?: boolean;
+  onChange: (value: string) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  return (
+    <div className="flex min-h-0 flex-col px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-2">
+      <h2 className="text-[1.35rem] font-semibold tracking-[-0.02em]">
+        Rename project
+      </h2>
+      <p className="mt-1 text-[13px] text-muted-foreground">
+        Update the name shown in your workspace.
+      </p>
+
+      <label className="mt-5 text-[13px] font-medium tracking-[-0.01em]">
+        Display name
+      </label>
+      <input
+        ref={inputRef}
+        value={value}
+        maxLength={100}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            onSave();
+          }
+        }}
+        spellCheck={false}
+        className="mt-2 h-11 w-full rounded-[12px] border border-border bg-muted/40 px-3.5 text-[15px] outline-none"
+      />
+      {error ? (
+        <p className="mt-2 text-[12px] text-destructive">{error}</p>
+      ) : (
+        <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+          Supports spaces and special characters, up to 100 characters. Names
+          must be unique in this workspace and are visible to members — not to
+          visitors of a published app.
+        </p>
+      )}
+
+      <div className="mt-6 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="h-11 rounded-full border border-border text-[14px] font-medium tracking-[-0.01em] hover:bg-muted/60"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onSave}
+          className="h-11 rounded-full bg-foreground text-[14px] font-medium tracking-[-0.01em] text-background disabled:opacity-60"
+        >
+          {busy ? "Saving…" : "Save changes"}
+        </button>
       </div>
     </div>
   );
@@ -239,7 +225,7 @@ export function ProjectInfoSheetHeader({
   onClose: () => void;
 }) {
   return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-3">
+    <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-2">
       <p className="min-w-0 truncate text-[15px] font-medium tracking-[-0.01em]">
         {title}
       </p>
@@ -277,8 +263,8 @@ export function ProjectAddSheetHeader({
   }, []);
 
   return (
-    <div className="shrink-0 border-b border-border">
-      <div className="flex items-center justify-end gap-0.5 px-3 pt-2">
+    <div className="shrink-0">
+      <div className="flex items-center justify-end gap-0.5 px-3 pt-1">
         <button
           type="button"
           aria-label="Close"
@@ -309,25 +295,27 @@ export function ProjectAddSheetHeader({
   );
 }
 
-function SheetAction({
+export function SheetAction({
   icon: Icon,
   label,
   onClick,
   active,
   primary,
+  description,
 }: {
-  icon: typeof Upload;
+  icon?: typeof Upload;
   label: string;
   onClick: () => void;
   active?: boolean;
   primary?: boolean;
+  description?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-3 rounded-[12px] px-3 py-3 text-left text-[15px] tracking-[-0.01em] transition-colors",
+        "flex w-full items-center gap-3 rounded-[12px] px-3 py-3 text-left transition-colors",
         primary
           ? "bg-foreground text-background hover:opacity-90"
           : active
@@ -335,8 +323,20 @@ function SheetAction({
             : "text-foreground hover:bg-muted/70",
       )}
     >
-      <Icon className="h-4 w-4 shrink-0" strokeWidth={1.7} />
-      {label}
+      {Icon ? <Icon className="h-4 w-4 shrink-0" strokeWidth={1.7} /> : null}
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] tracking-[-0.01em]">{label}</span>
+        {description ? (
+          <span
+            className={cn(
+              "mt-0.5 block text-[12px]",
+              primary ? "text-background/70" : "text-muted-foreground",
+            )}
+          >
+            {description}
+          </span>
+        ) : null}
+      </span>
     </button>
   );
 }

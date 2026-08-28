@@ -7,17 +7,24 @@ import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import {
   MobileBottomSheet,
   ProjectActionsSheetBody,
+  ProjectRenameSheetBody,
 } from "@/components/browser/ProjectMobileSheets";
 import { previewAddress } from "@/components/panels/PreviewChrome";
 import {
   MobilePanelActionsCluster,
   useMobilePanelActionsState,
 } from "@/components/shell/mobile/MobilePanelActions";
+import { BUILD_CREATE_OPTIONS } from "@/components/spaces/NewBuildMenu";
+import {
+  EXPLORE_CREATE_OPTIONS,
+  type ExploreStart,
+} from "@/components/spaces/NewExploreMenu";
 import { useSpaceMutation } from "@/lib/hooks/use-space-query";
 import { normalizeProjectTitle } from "@/lib/project-name";
 import { navLabel } from "@/lib/use-main-nav-items";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { isChatSpace, PRIMARY_NAV_SPACES } from "@/lib/spaces";
+import type { ProjectKind } from "@/lib/space-entities";
 import { previewUrlForProject } from "@/lib/preview-url";
 import {
   getWorkspaceCatalogServerSnapshot,
@@ -61,6 +68,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     liveUrl,
     refreshPreview,
     openOverlay,
+    openProject,
     selectMode,
     setSelectMode,
   } = useApp();
@@ -71,10 +79,13 @@ export function MobileAppChrome({ className }: { className?: string }) {
     getWorkspaceCatalogServerSnapshot,
   );
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameBusy, setRenameBusy] = useState(false);
-  const { updateProject } = useSpaceMutation();
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [newProjectBusy, setNewProjectBusy] = useState(false);
+  const { updateProject, createProject } = useSpaceMutation();
   const { ctx } = useSpaceData();
 
   const inSettings = view === "settings";
@@ -164,6 +175,52 @@ export function MobileAppChrome({ className }: { className?: string }) {
     newChat();
   };
 
+  const handlePanelCompose = () => {
+    if (spaceId === "build" || spaceId === "research") {
+      setNewProjectOpen(true);
+      return;
+    }
+    startPanelNewChat();
+  };
+
+  const createBuildProject = async (kind: ProjectKind, label: string) => {
+    if (newProjectBusy) return;
+    setNewProjectBusy(true);
+    try {
+      const created = await createProject(ctx, {
+        space: "build",
+        title: `New ${label}`,
+        kind,
+        summary:
+          BUILD_CREATE_OPTIONS.find((item) => item.kind === kind)?.summary ??
+          "",
+      });
+      setNewProjectOpen(false);
+      openProject(created.id);
+      setMobileSurface("panel");
+    } finally {
+      setNewProjectBusy(false);
+    }
+  };
+
+  const createExploreProject = async (item: ExploreStart) => {
+    if (newProjectBusy) return;
+    setNewProjectBusy(true);
+    try {
+      const created = await createProject(ctx, {
+        space: "research",
+        title: item.title,
+        kind: item.kind,
+        summary: item.summary,
+      });
+      setNewProjectOpen(false);
+      openProject(created.id);
+      setMobileSurface("panel");
+    } finally {
+      setNewProjectBusy(false);
+    }
+  };
+
   const preview = previewAddress(project?.name);
   const address = liveUrl ?? previewUrlForProject(projectId ?? "project") ?? preview.url;
   const published = Boolean(liveUrl && !liveUrl.includes("localhost"));
@@ -171,10 +228,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const projectTitle = project?.name ?? "Project";
 
   useEffect(() => {
-    if (!actionsOpen) return;
+    if (!renameOpen) return;
     setRenameValue(projectTitle);
     setRenameError(null);
-  }, [actionsOpen, projectTitle]);
+  }, [renameOpen, projectTitle]);
 
   const saveProjectName = async () => {
     if (!projectId || !canRename) return;
@@ -185,12 +242,14 @@ export function MobileAppChrome({ className }: { className?: string }) {
     }
     if (next === projectTitle) {
       setRenameError(null);
+      setRenameOpen(false);
       return;
     }
     setRenameBusy(true);
     setRenameError(null);
     try {
       await updateProject(ctx, projectId, { title: next });
+      setRenameOpen(false);
     } catch (err) {
       setRenameError(
         err instanceof Error ? err.message : "Could not rename project.",
@@ -363,7 +422,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
             ) : showPanelActions && panelActions ? (
               <MobilePanelActionsCluster
                 config={panelActions}
-                onNewChat={startPanelNewChat}
+                onCompose={handlePanelCompose}
               />
             ) : hideNewChat ? (
               <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
@@ -388,20 +447,13 @@ export function MobileAppChrome({ className }: { className?: string }) {
       >
         <ProjectActionsSheetBody
           published={published}
-          statusNote={
-            published
-              ? "Your website is up to date."
-              : "Publish to share a live link."
-          }
-          address={address}
+          projectName={projectTitle}
           selectMode={selectMode}
           canRename={canRename}
-          projectName={projectTitle}
-          renameValue={renameValue}
-          renameError={renameError}
-          renameBusy={renameBusy}
-          onRenameChange={setRenameValue}
-          onRenameSave={() => void saveProjectName()}
+          onRename={() => {
+            setActionsOpen(false);
+            setRenameOpen(true);
+          }}
           onPublish={() => {
             openOverlay("publish");
             setActionsOpen(false);
@@ -416,14 +468,72 @@ export function MobileAppChrome({ className }: { className?: string }) {
             setMobileSurface("panel");
             setActionsOpen(false);
           }}
-          onRefresh={() => {
-            refreshPreview();
-            setActionsOpen(false);
-          }}
-          onCopyAddress={() => {
-            void navigator.clipboard?.writeText(address);
-          }}
         />
+      </MobileBottomSheet>
+
+      <MobileBottomSheet
+        open={renameOpen}
+        onClose={() => setRenameOpen(false)}
+        mode="rename"
+      >
+        <ProjectRenameSheetBody
+          value={renameValue}
+          error={renameError}
+          busy={renameBusy}
+          onChange={setRenameValue}
+          onCancel={() => setRenameOpen(false)}
+          onSave={() => void saveProjectName()}
+        />
+      </MobileBottomSheet>
+
+      <MobileBottomSheet
+        open={newProjectOpen}
+        onClose={() => setNewProjectOpen(false)}
+        mode="space"
+      >
+        <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-1">
+          <p className="px-1 text-[17px] font-medium tracking-[-0.02em]">
+            {spaceId === "research" ? "New explore" : "New build"}
+          </p>
+          <p className="mt-1 px-1 text-[13px] text-muted-foreground">
+            Choose what to create in this space.
+          </p>
+          <div className="mt-4 space-y-0.5">
+            {spaceId === "research"
+              ? EXPLORE_CREATE_OPTIONS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={newProjectBusy}
+                    onClick={() => void createExploreProject(item)}
+                    className="flex w-full flex-col rounded-[12px] px-3 py-3 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
+                  >
+                    <span className="text-[15px] font-medium tracking-[-0.01em]">
+                      {item.label}
+                    </span>
+                    <span className="text-[13px] text-muted-foreground">
+                      {item.summary}
+                    </span>
+                  </button>
+                ))
+              : BUILD_CREATE_OPTIONS.map((item) => (
+                  <button
+                    key={item.kind}
+                    type="button"
+                    disabled={newProjectBusy}
+                    onClick={() => void createBuildProject(item.kind, item.label)}
+                    className="flex w-full flex-col rounded-[12px] px-3 py-3 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
+                  >
+                    <span className="text-[15px] font-medium tracking-[-0.01em]">
+                      {item.label}
+                    </span>
+                    <span className="text-[13px] text-muted-foreground">
+                      {item.summary}
+                    </span>
+                  </button>
+                ))}
+          </div>
+        </div>
       </MobileBottomSheet>
     </>
   );
