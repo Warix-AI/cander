@@ -137,6 +137,7 @@ import {
 import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
 import { isSupabaseConfigured } from "@/lib/data-backend";
+import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
 import {
   getSupabaseUserServerSnapshot,
   getSupabaseUserSnapshot,
@@ -1332,6 +1333,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         at: nowTime(),
       };
 
+      const useLiveAi =
+        kind === "chat" &&
+        isSupabaseConfigured() &&
+        Boolean(supabaseUser);
+
+      if (useLiveAi) {
+        assistantMsg = {
+          ...assistantMsg,
+          content: "Thinking…",
+        };
+      }
+
       if (kind === "undo") {
         const last = checkpoints[0];
         assistantMsg = {
@@ -1622,6 +1635,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       setDrafting(false);
+
+      const kickLiveAi = () => {
+        if (!useLiveAi) return;
+        const priorAiChatId =
+          threads.find((item) => item.id === activeId)?.aiChatId ??
+          thread?.aiChatId ??
+          null;
+        const replyProjectId =
+          projectId ?? intent.projectId ?? matched?.id ?? null;
+        const replyProjectSpace =
+          matched?.space ??
+          project?.space ??
+          (isChatSpace(space) ? space : null) ??
+          null;
+        void fetchPrivateAiReply({
+          aiChatId: priorAiChatId,
+          title: trimmed.slice(0, 52),
+          content: trimmed,
+          workspaceId: matched?.workspaceId ?? workspaceId,
+          projectId: replyProjectId,
+          projectSpace: replyProjectSpace,
+        }).then((result) => {
+          setThreads((current) =>
+            current.map((item) =>
+              item.id !== activeId
+                ? item
+                : {
+                    ...item,
+                    aiChatId: result.aiChatId,
+                    messages: item.messages.map((message) =>
+                      message.id !== assistantId
+                        ? message
+                        : {
+                            ...message,
+                            content: result.content,
+                          },
+                    ),
+                  },
+            ),
+          );
+        });
+      };
+
       if (view === "browser") {
         pushTarget({
           view: "browser",
@@ -1634,6 +1690,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           jobId: null,
           skillId: null,
         });
+        kickLiveAi();
         return;
       }
       const keepSpace =
@@ -1674,9 +1731,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         jobId: intent.jobId ?? jobId,
         skillId: skillId ?? opts?.skillId ?? null,
       });
+      kickLiveAi();
     },
     [
       threadId,
+      thread,
+      threads,
       workspaceId,
       spaceId,
       projectId,
@@ -1694,6 +1754,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       project?.name,
       billingPlan,
       workspacePolicies,
+      supabaseUser,
+      setThreads,
     ],
   );
 

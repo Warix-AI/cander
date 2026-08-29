@@ -218,6 +218,8 @@ export type Thread = {
   sessionSummary?: string | null;
   /** Profile that started this thread — used for attribution in shared workspaces. */
   createdBy?: string;
+  /** Owner-private AI chat row (Edge `ai-chat`) linked to this UI thread. */
+  aiChatId?: string;
 };
 
 export type VoiceAnchor =
