@@ -42,6 +42,11 @@ export type AiGenerateRequest = {
     role: "user" | "assistant" | "system";
     content: string;
   }>;
+  /**
+   * When false, providers should omit tool catalogs from instructions
+   * (used for general conversation / knowledge turns).
+   */
+  allowTools?: boolean;
 };
 
 export type AiGenerateResult = {

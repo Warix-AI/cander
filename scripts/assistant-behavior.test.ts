@@ -40,6 +40,10 @@ import {
   matchTakeMeThereIntent,
 } from "../lib/ai/runtime/intent-matchers.ts";
 import {
+  isConversationOnlyTurn,
+  isInAppToolIntent,
+} from "../lib/ai/tool-intent.ts";
+import {
   clearThreadTaskState,
   getThreadTaskState,
   mergeCondensedSummaries,
@@ -89,6 +93,7 @@ describe("conversation continuity helpers", () => {
   it("behavior prompt discourages repeated self-introductions", () => {
     assert.match(CANDER_ASSISTANT_BEHAVIOR, /Do not repeatedly introduce yourself/);
     assert.match(CANDER_NO_REGREET, /Do not greet/);
+    assert.match(CANDER_ASSISTANT_BEHAVIOR, /answer the user’s message directly/i);
   });
 });
 
@@ -423,6 +428,23 @@ describe("rolling summary + NO_REGREET", () => {
       }),
       true,
     );
+  });
+});
+
+describe("tool vs conversation intent gate", () => {
+  it("treats chitchat and trivia as conversation-only", () => {
+    assert.equal(isConversationOnlyTurn("How's it going?"), true);
+    assert.equal(isConversationOnlyTurn("How fast can a horse run"), true);
+    assert.equal(isConversationOnlyTurn("What is photosynthesis?"), true);
+    assert.equal(isInAppToolIntent("How fast can a horse run"), false);
+    assert.equal(isInAppToolIntent("How's it going?"), false);
+  });
+
+  it("detects in-app tool intents", () => {
+    assert.equal(isInAppToolIntent("create a new project called CRM"), true);
+    assert.equal(isInAppToolIntent("go to the build space"), true);
+    assert.equal(isInAppToolIntent("search my projects for CRM"), true);
+    assert.equal(isConversationOnlyTurn("create a new project"), false);
   });
 });
 

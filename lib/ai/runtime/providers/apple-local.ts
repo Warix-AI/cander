@@ -20,6 +20,7 @@ import {
   formatTaskStateForPrompt,
   getThreadTaskState,
 } from "@/lib/ai/task-state";
+import { isInAppToolIntent } from "@/lib/ai/tool-intent";
 import {
   AiRuntimeError,
   type AiGenerateRequest,
@@ -80,6 +81,11 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
         const priorTurns = hasPriorConversationTurns(request.messages, {
           taskActive,
         });
+        // Conversation / knowledge turns: no tools, no inventory bias.
+        const enableTools =
+          request.allowTools !== false &&
+          (taskActive || isInAppToolIntent(request.content));
+        const includeInventory = enableTools || taskActive;
         const snap = getOnDeviceWorkspaceSnapshot({
           workspaceId: request.workspaceId,
           projectId: request.projectId,
@@ -88,7 +94,7 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
           threadId: request.threadId,
           currentContent: request.content,
         });
-        const toolBlock = formatToolsForPrompt();
+        const toolBlock = enableTools ? formatToolsForPrompt() : "";
         const actorId = getActorSnapshot();
         const member =
           getMembersSnapshot().find((m) => m.id === actorId) ??
@@ -100,12 +106,14 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
             fullName: identity?.fullName ?? snap.fullName,
             email: identity?.email ?? snap.email,
             workspaceName: snap.workspaceName,
-            projectTitle: snap.projectTitle,
-            spaceLabel: snap.spaceLabel,
-            inventoryBlock: snap.inventoryBlock,
+            projectTitle: includeInventory ? snap.projectTitle : null,
+            spaceLabel: includeInventory ? snap.spaceLabel : null,
+            inventoryBlock: includeInventory ? snap.inventoryBlock : null,
             transcriptBlock: priorTurns ? null : snap.transcriptBlock,
             planCapabilityLine: buildPlanCapabilityLine(member),
             hasPriorTurns: priorTurns,
+            includeInventory,
+            toolsEnabled: enableTools,
           }),
           taskBlock,
           toolBlock,

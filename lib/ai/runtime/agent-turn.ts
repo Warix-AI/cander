@@ -12,6 +12,11 @@ import { tryIntentShortcut } from "@/lib/ai/runtime/intent-actions";
 import { buildCreateProjectClarification } from "@/lib/ai/runtime/intent-actions";
 import { setTurnThreadId } from "@/lib/ai/runtime/turn-context";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
+import {
+  isConversationOnlyTurn,
+  isInAppToolIntent,
+} from "@/lib/ai/tool-intent";
+import { getThreadTaskState } from "@/lib/ai/task-state";
 import { generateWithAiRuntime } from "@/lib/ai/runtime/runtime";
 import type {
   AiGenerateRequest,
@@ -38,6 +43,19 @@ function shouldForceCreateProjectCard(
   return /\bproject\b/.test(blob) && /\b(create|new|make)\b/.test(blob);
 }
 
+function toolsAllowedForTurn(request: AiGenerateRequest): boolean {
+  if (request.allowTools === false) return false;
+  const task = getThreadTaskState(request.threadId);
+  const taskActive =
+    Boolean(task) &&
+    task!.status !== "idle" &&
+    task!.status !== "completed";
+  if (taskActive) return true;
+  if (isInAppToolIntent(request.content)) return true;
+  if (isConversationOnlyTurn(request.content)) return false;
+  return false;
+}
+
 export async function runAssistantTurn(
   request: AiGenerateRequest,
 ): Promise<AgentTurnResult> {
@@ -52,13 +70,21 @@ export async function runAssistantTurn(
 async function runAssistantTurnInner(
   request: AiGenerateRequest,
 ): Promise<AgentTurnResult> {
-  const shortcut = await tryIntentShortcut(request.content, {
-    threadId: request.threadId,
-    recentText: (request.messages ?? [])
-      .slice(-6)
-      .map((m) => m.content)
-      .join("\n"),
-  });
+  const allowTools = toolsAllowedForTurn(request);
+  const gatedRequest: AiGenerateRequest = {
+    ...request,
+    allowTools,
+  };
+
+  const shortcut = allowTools
+    ? await tryIntentShortcut(request.content, {
+        threadId: request.threadId,
+        recentText: (request.messages ?? [])
+          .slice(-6)
+          .map((m) => m.content)
+          .join("\n"),
+      })
+    : null;
   if (shortcut) {
     return {
       content: shortcut.content,
@@ -72,8 +98,9 @@ async function runAssistantTurnInner(
   }
 
   const toolResults: AiToolCallResult[] = [];
-  let working: AiGenerateRequest = { ...request };
+  let working: AiGenerateRequest = { ...gatedRequest };
   let last: AiGenerateResult | null = null;
+  let skippedToolOnce = false;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     last = await generateWithAiRuntime(working);
@@ -87,6 +114,37 @@ async function runAssistantTurnInner(
           "I'm here — tell me what you'd like to do.",
         ),
         toolResults: toolResults.length ? toolResults : undefined,
+      };
+    }
+
+    // Model tried a tool on a conversation/knowledge turn — ignore and answer.
+    if (!allowTools) {
+      const cleaned = safeContent(text, "");
+      if (cleaned) {
+        return {
+          ...last,
+          content: cleaned,
+          toolResults: undefined,
+        };
+      }
+      if (!skippedToolOnce) {
+        skippedToolOnce = true;
+        working = {
+          ...gatedRequest,
+          allowTools: false,
+          content: [
+            request.content,
+            "",
+            "Answer directly in plain language. Do not use tools, JSON, or mention projects/workspace search.",
+          ].join("\n"),
+        };
+        continue;
+      }
+      return {
+        ...last,
+        content:
+          "I'm here — ask me anything, or tell me what you'd like to do in Cander.",
+        toolResults: undefined,
       };
     }
 
@@ -118,6 +176,21 @@ async function runAssistantTurnInner(
       }
     }
 
+    // Refuse workspace.search on non–workspace questions.
+    if (
+      call.name === "workspace.search" &&
+      isConversationOnlyTurn(request.content)
+    ) {
+      return {
+        ...last,
+        content: safeContent(
+          text,
+          "I'm here — ask me anything, or tell me what you'd like to do in Cander.",
+        ),
+        toolResults: undefined,
+      };
+    }
+
     const result = await executeAuthorizedTool(call);
     toolResults.push(result);
 
@@ -125,7 +198,6 @@ async function runAssistantTurnInner(
       call.name === "ui.ask_clarification" &&
       (!result.ok || result.pauseForUser)
     ) {
-      // Model sent empty clarification — fall back to create-project card if relevant
       if (!result.ok && request.threadId) {
         const lower = request.content.toLowerCase();
         if (/\bproject\b/.test(lower) && /\b(create|new|make)\b/.test(lower)) {
@@ -178,8 +250,14 @@ async function runAssistantTurnInner(
       };
     }
 
-    if (result.ok && (call.name === "nav.open" || call.name === "project.open" || call.name === "project.create" || call.name === "panel.open" || call.name === "panel.close")) {
-      // Successful in-app action — short confirmation, no need for another model round
+    if (
+      result.ok &&
+      (call.name === "nav.open" ||
+        call.name === "project.open" ||
+        call.name === "project.create" ||
+        call.name === "panel.open" ||
+        call.name === "panel.close")
+    ) {
       return {
         ...last,
         content: safeContent(text, result.output),
@@ -188,7 +266,6 @@ async function runAssistantTurnInner(
     }
 
     if (!result.ok) {
-      // Don't loop forever on bad tools — surface a clean message (never raw tool errors)
       return {
         ...last,
         content: safeContent(
@@ -205,7 +282,7 @@ async function runAssistantTurnInner(
     ].join("\n");
 
     working = {
-      ...request,
+      ...gatedRequest,
       content: followUp,
       messages: [
         ...(request.messages ?? []),

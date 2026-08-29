@@ -5,6 +5,7 @@
 
 import {
   CANDER_ASSISTANT_BEHAVIOR,
+  CANDER_CONVERSATION_FIRST,
   CANDER_GREETING_ONCE,
   CANDER_NO_REGREET,
 } from "@/lib/ai/assistant-behavior";
@@ -22,6 +23,10 @@ export function buildCanderOnDeviceInstructions(opts?: {
   planCapabilityLine?: string | null;
   /** When true, suppress greeting / identity scripts. */
   hasPriorTurns?: boolean;
+  /** When false, omit inventory so general chat isn’t biased toward projects. */
+  includeInventory?: boolean;
+  /** When false, tools are omitted by the caller — reinforce answer-only mode. */
+  toolsEnabled?: boolean;
 }) {
   const whoParts: string[] = [];
   if (opts?.shortName?.trim()) {
@@ -45,6 +50,9 @@ export function buildCanderOnDeviceInstructions(opts?: {
     .filter(Boolean)
     .join(" ");
 
+  const includeInventory = opts?.includeInventory !== false;
+  const toolsEnabled = opts?.toolsEnabled !== false;
+
   return [
     `You are the on-device assistant inside ${APP_NAME} (${APP_ORIGIN}).`,
     `Tagline: “${APP_TAGLINE}”`,
@@ -53,9 +61,13 @@ export function buildCanderOnDeviceInstructions(opts?: {
     "If asked what model you are: say you are Apple Intelligence on-device in Cander. Only discuss identity when the user asks.",
     "",
     CANDER_ASSISTANT_BEHAVIOR,
+    CANDER_CONVERSATION_FIRST,
     opts?.hasPriorTurns ? CANDER_NO_REGREET : CANDER_GREETING_ONCE,
+    !toolsEnabled
+      ? "Tools are disabled for this turn. Answer with helpful plain language only — no JSON."
+      : null,
     "",
-    `${APP_NAME} product map (help users navigate):`,
+    `${APP_NAME} product map (only when the user asks about the product):`,
     "- New Chat: general assistant chat (home).",
     "- Work: work dock / briefing-style work.",
     "- Build: create apps, websites, and projects with Preview.",
@@ -65,14 +77,16 @@ export function buildCanderOnDeviceInstructions(opts?: {
     "- Settings → Hosting: choose Cloud, Auto, or On device AI.",
     "",
     "On device means prompts for inference stay on this iPhone/iPad; Cloud uses Cander’s private cloud path.",
-    "You cannot open URLs or control the UI yourself unless an in-app tool result says you did — tell the user which screen to use when tools are unavailable.",
-    "You have a cached snapshot of this workspace below. Answer from that snapshot. If something is missing, say you don’t see it on-device yet — do not invent it.",
+    includeInventory
+      ? "A cached workspace snapshot may appear below. Use it ONLY if the user asks about their projects/workspace. For general questions, ignore it and answer from general knowledge."
+      : "Do not invent workspace inventory. Answer from general knowledge and conversation.",
     "For new projects, clarify with Build vs Explore (never say research to the user). Always confirm before deleting.",
     who,
     place,
     opts?.planCapabilityLine?.trim() || "",
-    opts?.inventoryBlock?.trim() ? `\n${opts.inventoryBlock.trim()}` : "",
-    // Prefer dialogue in the user prompt; keep a short transcript hint only if provided.
+    includeInventory && opts?.inventoryBlock?.trim()
+      ? `\n${opts.inventoryBlock.trim()}`
+      : "",
     opts?.transcriptBlock?.trim() && !opts.hasPriorTurns
       ? `\n${opts.transcriptBlock.trim()}`
       : "",
