@@ -531,6 +531,7 @@ async function resolveContextText(
     .eq("chat_id", chatId)
     .eq("owner_id", ownerId);
   if (!refs?.length) return null;
+
   const lines = refs.map(
     (r: { ref_kind: string; ref_id: string; meta: Record<string, string> | null }) => {
       const title = r.meta?.title ?? r.ref_id;
@@ -538,10 +539,51 @@ async function resolveContextText(
       return `- ${r.ref_kind}: ${title} (${kind})`;
     },
   );
+
+  const workspaceId =
+    refs.find((r: { ref_kind: string; workspace_id?: string | null }) =>
+      r.ref_kind === "workspace"
+    )?.ref_id ??
+    refs.find((r: { workspace_id?: string | null }) => r.workspace_id)?.workspace_id ??
+    null;
+
+  const inventory: string[] = [];
+  if (workspaceId) {
+    const { data: projects } = await supabase
+      .from("projects")
+      .select("id, title, kind, space_id, updated_at")
+      .eq("workspace_id", workspaceId)
+      .order("updated_at", { ascending: false })
+      .limit(25);
+    if (projects?.length) {
+      inventory.push("Projects in this workspace (most recently updated first):");
+      for (const p of projects) {
+        inventory.push(
+          `- ${p.title} [${p.space_id}/${p.kind}] id=${p.id} updated=${p.updated_at}`,
+        );
+      }
+    }
+    const { data: sources } = await supabase
+      .from("sources")
+      .select("id, title, updated_at")
+      .eq("workspace_id", workspaceId)
+      .order("updated_at", { ascending: false })
+      .limit(15);
+    if (sources?.length) {
+      inventory.push("Sources in this workspace (recent):");
+      for (const s of sources) {
+        inventory.push(`- ${s.title} id=${s.id} updated=${s.updated_at}`);
+      }
+    }
+  }
+
   return [
-    "The user is viewing the following authorized workspace context:",
+    "The user is working inside one authorized workspace. Stay within this workspace only.",
+    "Focused context refs:",
     ...lines,
-    "Use this context only; do not invent access to other workspace data.",
+    ...(inventory.length ? ["", "Workspace inventory:", ...inventory] : []),
+    "",
+    "Use this inventory to answer questions about projects, sources, and recent work. Do not invent items that are not listed.",
   ].join("\n");
 }
 

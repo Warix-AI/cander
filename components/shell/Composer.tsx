@@ -545,6 +545,8 @@ export function Composer({
                   const next = event.target.value;
                   setValue(next);
                   if (landing || stayInPlace) return;
+                  // Stay on the project dock — do not swap to the space chat.
+                  if (projectId) return;
                   if (next.trim() && isChatSpace(spaceId)) {
                     armChatInterface(spaceId);
                   } else if (!next.trim() && !thread) {

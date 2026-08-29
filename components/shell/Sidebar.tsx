@@ -332,7 +332,7 @@ export function Sidebar() {
       <div
         className={cn(
           "flex min-h-0 flex-1 flex-col",
-          !floating && "border-r border-sidebar-border",
+          // Same fill as chat — no hairline between menu and transcript.
         )}
       >
       {/* Classic web only — floating/desktop chrome is outside the menu body. */}

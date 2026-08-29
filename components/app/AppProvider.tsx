@@ -1099,7 +1099,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSpaceId(id);
       setProjectId(null);
       setPanelIntent("execute");
-      setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
+      // Keep a user-collapsed right panel collapsed while arming chat.
       setMobileSurface((surface) => (surface === "menu" ? "chat" : surface));
       if (id === "build") setBuildTool("preview");
       if (id === "research") setResearchTool("browser");
@@ -1767,7 +1767,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (space && (kind === "build" || kind === "refine" || kind === "fix"))
         setBuildTool("preview");
       if (space && kind === "changes") setBuildTool("activity");
-      setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
+      // First turn from an empty chat opens the right panel; later turns
+      // respect a user-collapsed panel (full-window chat stays full-window).
+      const nextPanelMode =
+        panelMode === "collapsed" && !threadHasTurns(thread)
+          ? "split"
+          : panelMode;
+      setPanelMode(nextPanelMode);
       setMobileSurface("chat");
       pushTarget({
         view: keepSpace ? "space" : "chat",
@@ -1776,7 +1782,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         projectId:
           projectId ??
           (intent.projectId ?? null),
-        panelMode: "split",
+        panelMode: nextPanelMode,
         panelIntent: "execute",
         connectorId: intent.connectorId ?? connectorId,
         jobId: intent.jobId ?? jobId,
@@ -1797,6 +1803,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       skillId,
       view,
       drafting,
+      panelMode,
       pushTarget,
       selectedId,
       checkpoints,

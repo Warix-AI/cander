@@ -81,7 +81,7 @@
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-sans: var(--font-dm-sans), ui-sans-serif, sans-serif, system-ui;
   --secondary: oklch(0.269 0 0);
-  --background: oklch(0.205 0 0);
+  --background: oklch(0.175 0 0);
   --canvas-hover: var(--muted);
   --canvas-active: var(--muted);
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
@@ -584,7 +584,7 @@ html:not(.dark) .courier-app-appearance[data-palette="mono"] {
 /* Dark tinted / mono surfaces */
 html.dark .courier-app-appearance[data-palette="tint"],
 html.dark .courier-app-appearance[data-palette="mono"] {
-  --background: oklch(0.205 var(--app-chroma) var(--app-hue));
+  --background: oklch(0.175 var(--app-chroma) var(--app-hue));
   --card: oklch(0.175 calc(var(--app-chroma) * 0.85) var(--app-hue));
   --muted: oklch(0.269 calc(var(--app-chroma) * 0.7) var(--app-hue));
   --accent: oklch(0.32 calc(var(--app-chroma) * 0.9) var(--app-hue));
