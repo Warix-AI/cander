@@ -12,42 +12,153 @@ const RECENT_MESSAGE_LIMIT = 25;
 const CONDENSE_MESSAGE_THRESHOLD = 25;
 const CONDENSE_CHAR_THRESHOLD = 8_000;
 
-const PRODUCT_SYSTEM_PROMPT = `You are Cander’s helpful in-app assistant. Be natural, friendly, concise, and useful. Continue the active conversation using its prior context. Do not repeatedly introduce yourself, mention your model or provider, or use generic greeting scripts unless the user directly asks about your identity. Ask focused follow-up questions only when information is genuinely needed. Prefer short, direct responses.
-Default: answer in plain language. Chitchat and general knowledge (e.g. “how’s it going?”, “how fast can a horse run?”) never need tools — do not search projects or mention Build/Explore unless asked.
+const PRODUCT_SYSTEM_PROMPT = `Be a warm, concise, practical conversational assistant. Answer what the user just said — like ChatGPT in a normal chat, not a product demo.
+
+Default: reply in plain language. No tools. No JSON. No project/workspace digressions unless the user asked about their app or workspace.
+Greetings, brainstorming, opinions, questions, and follow-ups → answer immediately.
+Never volunteer identity, provider, model name, Apple Intelligence, Foundation Models, Cander AI branding, or “I’m powered by…”. Do not start with “I’m…”.
+Only discuss identity/model when the user directly asks — then say briefly you are Cander’s in-app assistant.
+Continue the active conversation. Prefer short, clear replies.
 Answer the question first. Prefer short paragraphs and high information density.
 Do not restate the user's request. Avoid unnecessary headings and filler.
-Expand only when the question needs detail or the user asks for more.
 You may use Markdown; the UI will render it.
-Long conversations are summarized into condensed memory. Prefer that memory plus the recent messages over inventing earlier details.
-If this conversation already has prior user or assistant turns, do not greet or restate identity — answer directly.
-If this is the first user message in a new chat, a brief warm hello using their preferred name is fine. Do not dump workspace IDs, project UUIDs, or inventory dumps in greetings.
-Never put tool names, raw JSON, or “Calling tool…” text in the user-visible reply — only a short human sentence, then optionally one trailing tool JSON object on its own line for the client.
+Long conversations are summarized into condensed memory. Prefer that memory plus recent messages.
+If prior turns exist, do not greet or restate identity — answer directly.
+Never put tool names, raw JSON, or “Calling tool…” in the user-visible reply — only a short human sentence, then optionally one trailing tool JSON object when tools are listed for this turn.
 
-In-app tools — ONLY when the user clearly wants an in-app action. Otherwise reply with no JSON:
+Tool protocol (only if tools are listed below for this turn):
 {"tool":"<name>","arguments":{...}}
-Rules:
-- Never invent workspace_id, UUIDs, or ask the user for them.
-- Never call workspace.search for trivia, science, sports, definitions, or small talk.
-- Navigate spaces with nav.open: target one of new_chat, work, build, research, recents, connectors, settings. "Explore" means research.
-- panel.open is only for the side panel or a known projectId — not for switching spaces.
-- Create projects with project.create only after you know title and space (build or research). If missing, use ui.ask_clarification with single_choice questions: space choices Build (id build) and Explore (id research), plus a title text field when needed. Never say “research” in user-facing copy — say Explore. Never use a free-text field for space.
-- Open a project by searching workspace.search then project.open with the matched id.
-- One JSON object only. No trailing commas. Do not append {"error":...}.
-- Prefer a short human sentence; add tool JSON only if acting. If no tool is needed, reply normally with no JSON.
-Available tools and arguments:
-- nav.open: { "target": "new_chat"|"work"|"build"|"research"|"recents"|"connectors"|"settings", "settingsTab"?: string }
-- panel.open: { "projectId"?: string, "mode"?: string }
-- panel.close: {}
-- project.create: { "title": string, "space": "build"|"research"|"work", "kind"?: string, "summary"?: string }
-- project.open: { "projectId": string }
-- workspace.search: { "query": string }
-- ui.ask_clarification: { "title": string, "description"?: string, "questions": [{ "id", "type", "label", "choices"?: [{ "id", "label" }], "required"?: boolean }], "resumeTool"?: string, "resumeArguments"?: object }
-- ui.confirm: { "title": string, "message": string, "confirmLabel"?: string }`;
+- Never invent workspace_id or UUIDs.
+- Never call workspace.search for trivia or small talk.
+- Never invent tools that are not listed. Complex coding/research → create_work_task only.
+- One JSON object only. No trailing commas.`;
 
-const NO_REGREET_SYSTEM = `This conversation already has prior turns, condensed memory, or an active task. Do not greet, re-introduce yourself, or mention that you are Cander, Apple Intelligence, or any model/provider. Answer the latest user message directly. Continue the same task — do not restart.`;
+const NO_REGREET_SYSTEM = `This conversation already has prior turns, condensed memory, or an active task. Do not greet, re-introduce yourself, or mention identity, model, or provider. Answer the latest user message directly. Continue the same task — do not restart.`;
+
+const NO_TOOLS_THIS_TURN =
+  "No tools are available for this turn. Answer in plain language only. Do not emit JSON tool calls.";
 
 const KNOWN_TOOLS_RE =
-  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|ui\\.(?:ask_clarification|confirm)";
+  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|ui\\.(?:ask_clarification|confirm)|create_work_task";
+
+const EDGE_TOOL_LINES: Record<string, string> = {
+  "nav.open":
+    '- nav.open: { "target": "new_chat"|"work"|"build"|"research"|"recents"|"connectors"|"settings", "settingsTab"?: string }',
+  "panel.open": '- panel.open: { "projectId"?: string, "mode"?: string }',
+  "panel.close": "- panel.close: {}",
+  "project.create":
+    '- project.create: { "title": string, "space"?: "build"|"research"|"work", "kind"?: string, "summary"?: string }',
+  "project.open": '- project.open: { "projectId": string }',
+  "workspace.search": '- workspace.search: { "query": string }',
+  "ui.ask_clarification":
+    '- ui.ask_clarification: { "title": string, "description"?: string, "questions": array, "resumeTool"?: string, "resumeArguments"?: object }',
+  "ui.confirm":
+    '- ui.confirm: { "title": string, "message": string, "confirmLabel"?: string }',
+  create_work_task:
+    '- create_work_task: { "title": string, "goal": string, "kind": "coding"|"research"|"multi_step", "summary"?: string }',
+};
+
+const TOOL_DOMAINS: Record<string, string[]> = {
+  clarification: ["ui.ask_clarification", "ui.confirm"],
+  navigation: ["nav.open", "panel.open", "panel.close"],
+  projects: ["project.create", "project.open"],
+  search: ["workspace.search"],
+  cloud_work: ["create_work_task"],
+};
+
+function isConversationOnlyTurnEdge(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (
+    /^(hi|hey|hello|yo|sup|howdy)\b/i.test(t) ||
+    /\bhow('?s| is| are) (it|things|everything|you)\b/i.test(t) ||
+    /\bhow (fast|tall|old|big|long|many|much|far)\b/i.test(t) ||
+    /\bwhat (is|are|was|were|does|do|did|can)\b/i.test(t) ||
+    /\bwho (is|are|was|were)\b/i.test(t) ||
+    /\bwhy (is|are|do|does|did|can)\b/i.test(t) ||
+    /\bexplain\b|\btell me about\b|\bdefine\b/i.test(t)
+  ) {
+    if (
+      !/\b(create|make|new)\b[\s\S]{0,40}\bproject\b/i.test(t) &&
+      !/\b(open|go to|take me|navigate)\b/i.test(t)
+    ) {
+      return true;
+    }
+  }
+  if (
+    t.length < 160 &&
+    !/\b(project|workspace|build|explore|connector|settings|panel|preview)\b/i.test(
+      t,
+    ) &&
+    (/[?]/.test(t) ||
+      /^(how|what|who|why|when|where|can|could|should|is|are|do|does)\b/i.test(t))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function isComplexWorkIntentEdge(text: string): boolean {
+  const t = text.trim();
+  if (
+    /\b(create|make|new)\b[\s\S]{0,40}\bproject\b/i.test(t) &&
+    !/\b(implement|code|tests?|refactor)\b/i.test(t)
+  ) {
+    return false;
+  }
+  return (
+    /\b(implement|refactor|write tests?|codebase|pull request)\b/i.test(t) ||
+    /\b(build|develop|ship)\b[\s\S]{0,48}\b(app|feature|api|auth)\b/i.test(t) ||
+    /\bresearch (and|&) (compare|analyze)\b/i.test(t) ||
+    (t.length > 220 && /\b(code|implement|debug|typescript|react)\b/i.test(t))
+  );
+}
+
+function resolveAllowedToolsEdge(content: string): string[] {
+  const domains = new Set<string>();
+  const t = content.trim();
+  if (isComplexWorkIntentEdge(t)) {
+    domains.add("cloud_work");
+  } else if (
+    /\b(create|make|new|start)\b[\s\S]{0,40}\bproject\b/i.test(t) ||
+    /\bproject\b[\s\S]{0,40}\b(create|make|new)\b/i.test(t)
+  ) {
+    domains.add("projects");
+    domains.add("clarification");
+  } else if (
+    /\b(open|go to|take me|navigate|switch to|show me)\b/i.test(t) ||
+    /\btake me there\b/i.test(t)
+  ) {
+    domains.add("navigation");
+    if (/\bproject\b/i.test(t)) {
+      domains.add("search");
+      domains.add("projects");
+    }
+  } else if (
+    /\b(search|find|list)\b[\s\S]{0,40}\b(my |the )?(projects?|workspace)\b/i.test(
+      t,
+    )
+  ) {
+    domains.add("search");
+    domains.add("projects");
+  } else if (isConversationOnlyTurnEdge(t)) {
+    return [];
+  } else {
+    return [];
+  }
+  const names = new Set<string>();
+  for (const d of domains) {
+    for (const n of TOOL_DOMAINS[d] ?? []) names.add(n);
+  }
+  return [...names];
+}
+
+function formatEdgeToolCatalog(toolNames: string[]): string {
+  if (!toolNames.length) return NO_TOOLS_THIS_TURN;
+  const lines = toolNames.map((n) => EDGE_TOOL_LINES[n]).filter(Boolean);
+  if (!lines.length) return NO_TOOLS_THIS_TURN;
+  return ["Available tools and arguments for this turn:", ...lines].join("\n");
+}
 
 /** Strip tool/JSON chrome before persisting or feeding condensation. */
 function sanitizeAssistantVisibleText(content: string): string {
@@ -453,6 +564,7 @@ Deno.serve(async (req) => {
           condensed,
           contextText,
           userProfileText,
+          latestUserContent: payload.content.trim(),
         });
 
         const bridgeRes = await fetch(`${bridgeUrl}/v1/chat`, {
@@ -807,13 +919,16 @@ function buildModelMessages(opts: {
   condensed: CondensedContext | null;
   contextText: string | null;
   userProfileText?: string | null;
+  latestUserContent?: string;
 }): Array<{ role: string; content: string }> {
   const afterWatermark = opts.history.filter(
     (m) => m.sort_order > opts.watermark,
   );
   const recent = afterWatermark.slice(-RECENT_MESSAGE_LIMIT);
+  const allowedTools = resolveAllowedToolsEdge(opts.latestUserContent ?? "");
   const messages: Array<{ role: string; content: string }> = [
     { role: "system", content: PRODUCT_SYSTEM_PROMPT },
+    { role: "system", content: formatEdgeToolCatalog(allowedTools) },
   ];
   const condensedActive = condensedIsActive(opts.condensed);
   if (
@@ -827,7 +942,8 @@ function buildModelMessages(opts: {
   if (opts.userProfileText) {
     messages.push({ role: "system", content: opts.userProfileText });
   }
-  if (opts.contextText) {
+  // Only attach workspace inventory context when tools are unlocked
+  if (opts.contextText && allowedTools.length > 0) {
     messages.push({ role: "system", content: opts.contextText });
   }
   if (opts.condensed && Object.keys(opts.condensed).length) {

@@ -1,6 +1,18 @@
 /**
  * Per-thread active task state — separate from prose memory / chat transcript.
+ * Pure module (no path aliases — safe for node:test).
  */
+
+export type ToolDomain =
+  | "core"
+  | "clarification"
+  | "navigation"
+  | "projects"
+  | "search"
+  | "scheduling"
+  | "comms"
+  | "cloud_work"
+  | "review";
 
 export type TaskStatus =
   | "idle"
@@ -21,6 +33,10 @@ export type ThreadTaskState = {
   } | null;
   status: TaskStatus;
   lastToolResults?: Array<{ name: string; ok: boolean; detail: string }>;
+  /** Domains unlocked for this chat’s active task (isolated per threadId). */
+  allowedDomains?: ToolDomain[];
+  /** Linked high-level work task (cloud/sandbox foundation). */
+  workTaskId?: string | null;
   updatedAt: string;
 };
 
@@ -51,6 +67,12 @@ export function upsertThreadTaskState(
         : (prev?.pendingClarification ?? null),
     status: patch.status ?? prev?.status ?? "idle",
     lastToolResults: patch.lastToolResults ?? prev?.lastToolResults,
+    allowedDomains:
+      patch.allowedDomains !== undefined
+        ? patch.allowedDomains
+        : prev?.allowedDomains,
+    workTaskId:
+      patch.workTaskId !== undefined ? patch.workTaskId : prev?.workTaskId,
     updatedAt: new Date().toISOString(),
   };
   byThread.set(threadId, next);
@@ -82,6 +104,7 @@ export function formatTaskStateForPrompt(
     state.goal ? `- Goal: ${state.goal}` : null,
     state.step ? `- Current step: ${state.step}` : null,
     `- Status: ${state.status}`,
+    state.workTaskId ? `- Work task: in progress` : null,
   ];
   const factEntries = Object.entries(state.facts);
   if (factEntries.length) {

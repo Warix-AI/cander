@@ -47,6 +47,8 @@ export type AiGenerateRequest = {
    * (used for general conversation / knowledge turns).
    */
   allowTools?: boolean;
+  /** Domain-gated allowlist — execute only these tool names. */
+  allowedToolNames?: string[];
 };
 
 export type AiGenerateResult = {

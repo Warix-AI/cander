@@ -34,6 +34,9 @@ import {
   validateToolArguments,
 } from "../lib/ai/tools/registry.ts";
 import {
+  resolveAllowedToolsForTurn,
+} from "../lib/ai/tools/domains.ts";
+import {
   matchCreateProjectIntent,
   matchNavIntent,
   matchOpenProjectIntent,
@@ -50,6 +53,11 @@ import {
   migrateThreadTaskState,
   upsertThreadTaskState,
 } from "../lib/ai/task-state.ts";
+import {
+  clearAllWorkTasks,
+  createWorkTask,
+  formatWorkTaskProgressForUser,
+} from "../lib/ai/work-tasks.ts";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -91,9 +99,10 @@ describe("conversation continuity helpers", () => {
   });
 
   it("behavior prompt discourages repeated self-introductions", () => {
-    assert.match(CANDER_ASSISTANT_BEHAVIOR, /Do not repeatedly introduce yourself/);
+    assert.match(CANDER_ASSISTANT_BEHAVIOR, /Never volunteer your identity/i);
+    assert.match(CANDER_ASSISTANT_BEHAVIOR, /I.?m powered by/i);
     assert.match(CANDER_NO_REGREET, /Do not greet/);
-    assert.match(CANDER_ASSISTANT_BEHAVIOR, /answer the user’s message directly/i);
+    assert.match(CANDER_ASSISTANT_BEHAVIOR, /plain language/i);
   });
 });
 
@@ -465,5 +474,121 @@ describe("chat layout smoke", () => {
     );
     // Composer dock drops 38rem when mobile
     assert.match(src, /mobile \? "max-w-none" : "max-w-\[38rem\]"/);
+  });
+});
+
+describe("domain tool gating foundation", () => {
+  it("greetings and ordinary conversation make zero tool calls", () => {
+    for (const msg of [
+      "Hi",
+      "How's it going?",
+      "How fast can a horse run",
+      "What is photosynthesis?",
+    ]) {
+      const r = resolveAllowedToolsForTurn({ content: msg });
+      assert.deepEqual(r.toolNames, [], msg);
+      assert.deepEqual(r.domains, [], msg);
+    }
+  });
+
+  it("on-device instructions never volunteer Apple Intelligence unless asked", () => {
+    const src = readFileSync(
+      join(rootDir, "lib/ai/runtime/cander-on-device-instructions.ts"),
+      "utf8",
+    );
+    // Always-on Apple/Foundation identity block must be gone
+    assert.doesNotMatch(
+      src,
+      /You run on Apple Intelligence/,
+    );
+    assert.match(src, /identityAsked/);
+    assert.match(src, /CANDER_IDENTITY_WHEN_ASKED_ON_DEVICE/);
+    const behavior = readFileSync(
+      join(rootDir, "lib/ai/assistant-behavior.ts"),
+      "utf8",
+    );
+    assert.match(behavior, /Never volunteer your identity/);
+    assert.match(behavior, /I.?m powered by/);
+  });
+
+  it("explicit app actions unlock only the minimum domain tools", () => {
+    const nav = resolveAllowedToolsForTurn({ content: "go to the build space" });
+    assert.ok(nav.toolNames.includes("nav.open"));
+    assert.ok(!nav.toolNames.includes("create_work_task"));
+    assert.ok(!nav.toolNames.includes("workspace.search"));
+    assert.ok(!nav.domains.includes("cloud_work"));
+
+    const create = resolveAllowedToolsForTurn({
+      content: 'create a new project called "CRM"',
+    });
+    assert.ok(create.toolNames.includes("project.create"));
+    assert.ok(create.toolNames.includes("ui.ask_clarification"));
+    assert.ok(!create.toolNames.includes("create_work_task"));
+    assert.ok(!create.toolNames.includes("nav.open"));
+  });
+
+  it("unrelated tool sets are not loaded for casual conversation", () => {
+    const r = resolveAllowedToolsForTurn({ content: "tell me a joke" });
+    assert.equal(r.toolNames.length, 0);
+    assert.ok(!r.domains.includes("navigation"));
+    assert.ok(!r.domains.includes("projects"));
+    assert.ok(!r.domains.includes("cloud_work"));
+  });
+
+  it("different chats cannot leak task state, domains, or work tasks", () => {
+    clearThreadTaskState("iso-a");
+    clearThreadTaskState("iso-b");
+    upsertThreadTaskState("iso-a", {
+      goal: "Secret A",
+      status: "running",
+      allowedDomains: ["projects"],
+      workTaskId: "wt-secret-a",
+    });
+    upsertThreadTaskState("iso-b", {
+      goal: "Other",
+      status: "idle",
+    });
+    assert.equal(getThreadTaskState("iso-a")?.workTaskId, "wt-secret-a");
+    assert.equal(getThreadTaskState("iso-b")?.workTaskId, undefined);
+    assert.notDeepEqual(
+      getThreadTaskState("iso-a")?.allowedDomains,
+      getThreadTaskState("iso-b")?.allowedDomains,
+    );
+    clearThreadTaskState("iso-a");
+    clearThreadTaskState("iso-b");
+  });
+
+  it("complex coding requests unlock create_work_task only", () => {
+    const r = resolveAllowedToolsForTurn({
+      content: "implement auth and write tests for this app",
+    });
+    assert.deepEqual(r.domains, ["cloud_work"]);
+    assert.deepEqual(r.toolNames, ["create_work_task"]);
+    assert.ok(getAiTool("create_work_task")?.enabled);
+
+    clearAllWorkTasks();
+    clearThreadTaskState("wt-thread");
+    const task = createWorkTask({
+      threadId: "wt-thread",
+      title: "Auth + tests",
+      goal: "implement auth and write tests",
+      kind: "coding",
+    });
+    upsertThreadTaskState("wt-thread", {
+      goal: task.goal,
+      step: "work_task_queued",
+      status: "running",
+      workTaskId: task.id,
+      allowedDomains: ["cloud_work"],
+    });
+    const output = formatWorkTaskProgressForUser(task);
+    assert.doesNotMatch(output, /sandbox/i);
+    assert.doesNotMatch(output, /subagent/i);
+    assert.doesNotMatch(output, /vercel/i);
+    assert.match(output, /progress|Working/i);
+    assert.equal(getThreadTaskState("wt-thread")?.step, "work_task_queued");
+    assert.ok(getThreadTaskState("wt-thread")?.workTaskId);
+    clearThreadTaskState("wt-thread");
+    clearAllWorkTasks();
   });
 });

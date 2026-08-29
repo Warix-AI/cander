@@ -14,6 +14,17 @@ export type AiToolDefinition = {
   name: string;
   description: string;
   permission: AiToolPermission;
+  /** Domain bucket for progressive tool unlock. */
+  domain?:
+    | "core"
+    | "clarification"
+    | "navigation"
+    | "projects"
+    | "search"
+    | "scheduling"
+    | "comms"
+    | "cloud_work"
+    | "review";
   parameters: {
     type: "object";
     required?: string[];
@@ -152,6 +163,7 @@ registerAiTool({
   name: "nav.open",
   description: "Navigate to a Cander space, settings, Recents, Connectors, or New Chat.",
   permission: { requireWorkspaceMember: true },
+  domain: "navigation",
   enabled: true,
   parameters: {
     type: "object",
@@ -182,6 +194,7 @@ registerAiTool({
   name: "panel.open",
   description: "Open the side panel, optionally focused on a project.",
   permission: { requireWorkspaceMember: true },
+  domain: "navigation",
   enabled: true,
   parameters: {
     type: "object",
@@ -196,6 +209,7 @@ registerAiTool({
   name: "panel.close",
   description: "Close the side panel.",
   permission: { requireWorkspaceMember: true },
+  domain: "navigation",
   enabled: true,
   parameters: { type: "object", properties: {} },
 });
@@ -205,6 +219,7 @@ registerAiTool({
   description:
     "Create a new project after title and space (build or research/Explore) are known. Prefer ui.ask_clarification if space is missing.",
   permission: { requireWorkspaceMember: true },
+  domain: "projects",
   enabled: true,
   parameters: {
     type: "object",
@@ -225,6 +240,7 @@ registerAiTool({
   name: "project.open",
   description: "Open an existing project by id.",
   permission: { requireWorkspaceMember: true },
+  domain: "projects",
   enabled: true,
   parameters: {
     type: "object",
@@ -237,6 +253,7 @@ registerAiTool({
   name: "workspace.search",
   description: "Search projects the user can access in the current workspace.",
   permission: { requireWorkspaceMember: true },
+  domain: "search",
   enabled: true,
   parameters: {
     type: "object",
@@ -250,6 +267,7 @@ registerAiTool({
   description:
     "Show an inline clarification card above the chat composer to collect structured answers.",
   permission: { requireWorkspaceMember: true },
+  domain: "clarification",
   enabled: true,
   parameters: {
     type: "object",
@@ -269,6 +287,7 @@ registerAiTool({
   description:
     "Ask the user to confirm a sensitive or destructive action before proceeding.",
   permission: { requireWorkspaceMember: true, requiresConfirmation: true },
+  domain: "clarification",
   enabled: true,
   parameters: {
     type: "object",
@@ -277,6 +296,31 @@ registerAiTool({
       title: { type: "string" },
       message: { type: "string" },
       confirmLabel: { type: "string" },
+    },
+  },
+});
+
+registerAiTool({
+  name: "create_work_task",
+  description:
+    "Queue complex coding, research, or multi-step work for backend execution. Use only when local tools cannot finish the job. Do not invent other cloud tools.",
+  permission: {
+    requireWorkspaceMember: true,
+    capability: "cloud_work",
+  },
+  domain: "cloud_work",
+  enabled: true,
+  parameters: {
+    type: "object",
+    required: ["title", "goal", "kind"],
+    properties: {
+      title: { type: "string" },
+      goal: { type: "string" },
+      kind: {
+        type: "string",
+        enum: ["coding", "research", "multi_step"],
+      },
+      summary: { type: "string" },
     },
   },
 });

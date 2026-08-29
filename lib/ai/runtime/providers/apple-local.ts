@@ -3,6 +3,7 @@
 import {
   buildDialoguePrompt,
   hasPriorConversationTurns,
+  isIdentityQuestion,
 } from "@/lib/ai/assistant-behavior";
 import { buildPlanCapabilityLine } from "@/lib/ai/plan-capability";
 import { buildCanderOnDeviceInstructions } from "@/lib/ai/runtime/cander-on-device-instructions";
@@ -20,7 +21,7 @@ import {
   formatTaskStateForPrompt,
   getThreadTaskState,
 } from "@/lib/ai/task-state";
-import { isInAppToolIntent } from "@/lib/ai/tool-intent";
+import { resolveAllowedToolsForTurn } from "@/lib/ai/tools/domains";
 import {
   AiRuntimeError,
   type AiGenerateRequest,
@@ -81,10 +82,18 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
         const priorTurns = hasPriorConversationTurns(request.messages, {
           taskActive,
         });
-        // Conversation / knowledge turns: no tools, no inventory bias.
+        const resolved =
+          request.allowedToolNames !== undefined
+            ? {
+                toolNames: request.allowedToolNames,
+                domains: [] as const,
+              }
+            : resolveAllowedToolsForTurn({
+                content: request.content,
+                taskState,
+              });
         const enableTools =
-          request.allowTools !== false &&
-          (taskActive || isInAppToolIntent(request.content));
+          request.allowTools !== false && resolved.toolNames.length > 0;
         const includeInventory = enableTools || taskActive;
         const snap = getOnDeviceWorkspaceSnapshot({
           workspaceId: request.workspaceId,
@@ -94,7 +103,9 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
           threadId: request.threadId,
           currentContent: request.content,
         });
-        const toolBlock = enableTools ? formatToolsForPrompt() : "";
+        const toolBlock = enableTools
+          ? formatToolsForPrompt(resolved.toolNames)
+          : formatToolsForPrompt([]);
         const actorId = getActorSnapshot();
         const member =
           getMembersSnapshot().find((m) => m.id === actorId) ??
@@ -114,6 +125,7 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
             hasPriorTurns: priorTurns,
             includeInventory,
             toolsEnabled: enableTools,
+            identityAsked: isIdentityQuestion(request.content),
           }),
           taskBlock,
           toolBlock,

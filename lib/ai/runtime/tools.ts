@@ -12,8 +12,13 @@ import {
 } from "@/lib/ai/tools/registry";
 import type { ClarificationQuestion } from "@/lib/ai/clarification/schema";
 import { parseToolCallFromContent } from "@/lib/ai/tool-protocol";
-import { CANDER_TOOL_PROTOCOL_RULES } from "@/lib/ai/tools/prompt";
+import { CANDER_NO_TOOLS_THIS_TURN, CANDER_TOOL_PROTOCOL_RULES } from "@/lib/ai/tools/prompt";
 import { getTurnThreadId } from "@/lib/ai/runtime/turn-context";
+import {
+  createWorkTask,
+  formatWorkTaskProgressForUser,
+} from "@/lib/ai/work-tasks";
+import { upsertThreadTaskState } from "@/lib/ai/task-state";
 
 export type AiToolCallRequest = {
   name: string;
@@ -35,14 +40,17 @@ export function listRuntimeTools(): AiToolDefinition[] {
   return listAiTools().filter((tool) => tool.enabled);
 }
 
-export function formatToolsForPrompt(): string {
-  const tools = listRuntimeTools();
-  if (!tools.length) return CANDER_TOOL_PROTOCOL_RULES;
-  const lines = [
-    CANDER_TOOL_PROTOCOL_RULES,
-    "",
-    "Available tools:",
-  ];
+/** Prompt catalog for this turn — empty toolNames means no tools. */
+export function formatToolsForPrompt(toolNames?: string[]): string {
+  if (toolNames && toolNames.length === 0) {
+    return CANDER_NO_TOOLS_THIS_TURN;
+  }
+  const all = listRuntimeTools();
+  const tools = toolNames?.length
+    ? all.filter((t) => toolNames.includes(t.name))
+    : all;
+  if (!tools.length) return CANDER_NO_TOOLS_THIS_TURN;
+  const lines = [CANDER_TOOL_PROTOCOL_RULES, "", "Available tools:"];
   for (const t of tools) {
     lines.push(
       `- ${t.name}: ${t.description} args=${JSON.stringify(t.parameters)}`,
@@ -83,6 +91,46 @@ export async function executeAuthorizedTool(
     return { name: tool.name, ok: false, output: validated.error };
   }
   const args = validated.args;
+
+  // Work tasks do not need app action handlers.
+  if (tool.name === "create_work_task") {
+    const threadId = getTurnThreadId() ?? "";
+    if (!threadId) {
+      return {
+        name: tool.name,
+        ok: false,
+        output: "No active chat for this work task.",
+      };
+    }
+    const kindRaw = String(args.kind);
+    const kind =
+      kindRaw === "research" || kindRaw === "multi_step"
+        ? kindRaw
+        : "coding";
+    const task = createWorkTask({
+      threadId,
+      title: String(args.title),
+      goal: String(args.goal),
+      kind,
+      summary: args.summary ? String(args.summary) : undefined,
+    });
+    upsertThreadTaskState(threadId, {
+      goal: task.goal,
+      step: "work_task_queued",
+      status: "running",
+      workTaskId: task.id,
+      allowedDomains: ["cloud_work"],
+      pendingClarification: null,
+      facts: { workTaskKind: task.kind, workTaskTitle: task.title },
+    });
+    return {
+      name: tool.name,
+      ok: true,
+      output: formatWorkTaskProgressForUser(task),
+      data: { workTaskId: task.id },
+    };
+  }
+
   const actions = getAppActionHandlers();
   if (!actions) {
     return {

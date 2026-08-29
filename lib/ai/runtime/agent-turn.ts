@@ -1,6 +1,7 @@
 /**
  * Agent loop: intent shortcuts → generate → parse tool → execute → optional re-generate.
  * Never leak tool JSON into the visible assistant reply.
+ * Tools are domain-gated — execute only allowed names for this turn.
  */
 
 import {
@@ -12,11 +13,8 @@ import { tryIntentShortcut } from "@/lib/ai/runtime/intent-actions";
 import { buildCreateProjectClarification } from "@/lib/ai/runtime/intent-actions";
 import { setTurnThreadId } from "@/lib/ai/runtime/turn-context";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
-import {
-  isConversationOnlyTurn,
-  isInAppToolIntent,
-} from "@/lib/ai/tool-intent";
-import { getThreadTaskState } from "@/lib/ai/task-state";
+import { resolveAllowedToolsForTurn } from "@/lib/ai/tools/domains";
+import { getThreadTaskState, upsertThreadTaskState } from "@/lib/ai/task-state";
 import { generateWithAiRuntime } from "@/lib/ai/runtime/runtime";
 import type {
   AiGenerateRequest,
@@ -43,19 +41,6 @@ function shouldForceCreateProjectCard(
   return /\bproject\b/.test(blob) && /\b(create|new|make)\b/.test(blob);
 }
 
-function toolsAllowedForTurn(request: AiGenerateRequest): boolean {
-  if (request.allowTools === false) return false;
-  const task = getThreadTaskState(request.threadId);
-  const taskActive =
-    Boolean(task) &&
-    task!.status !== "idle" &&
-    task!.status !== "completed";
-  if (taskActive) return true;
-  if (isInAppToolIntent(request.content)) return true;
-  if (isConversationOnlyTurn(request.content)) return false;
-  return false;
-}
-
 export async function runAssistantTurn(
   request: AiGenerateRequest,
 ): Promise<AgentTurnResult> {
@@ -70,10 +55,24 @@ export async function runAssistantTurn(
 async function runAssistantTurnInner(
   request: AiGenerateRequest,
 ): Promise<AgentTurnResult> {
-  const allowTools = toolsAllowedForTurn(request);
+  const taskState = getThreadTaskState(request.threadId);
+  const resolved = resolveAllowedToolsForTurn({
+    content: request.content,
+    taskState,
+  });
+  const allowedToolNames = resolved.toolNames;
+  const allowTools = allowedToolNames.length > 0;
+
+  if (allowTools && request.threadId && resolved.domains.length) {
+    upsertThreadTaskState(request.threadId, {
+      allowedDomains: resolved.domains,
+    });
+  }
+
   const gatedRequest: AiGenerateRequest = {
     ...request,
     allowTools,
+    allowedToolNames,
   };
 
   const shortcut = allowTools
@@ -117,8 +116,8 @@ async function runAssistantTurnInner(
       };
     }
 
-    // Model tried a tool on a conversation/knowledge turn — ignore and answer.
-    if (!allowTools) {
+    // Domain gate: refuse tools not in this turn's allowlist.
+    if (!allowTools || !allowedToolNames.includes(call.name)) {
       const cleaned = safeContent(text, "");
       if (cleaned) {
         return {
@@ -132,6 +131,7 @@ async function runAssistantTurnInner(
         working = {
           ...gatedRequest,
           allowTools: false,
+          allowedToolNames: [],
           content: [
             request.content,
             "",
@@ -174,21 +174,6 @@ async function runAssistantTurnInner(
           pausedForUser: true,
         };
       }
-    }
-
-    // Refuse workspace.search on non–workspace questions.
-    if (
-      call.name === "workspace.search" &&
-      isConversationOnlyTurn(request.content)
-    ) {
-      return {
-        ...last,
-        content: safeContent(
-          text,
-          "I'm here — ask me anything, or tell me what you'd like to do in Cander.",
-        ),
-        toolResults: undefined,
-      };
     }
 
     const result = await executeAuthorizedTool(call);
@@ -256,7 +241,8 @@ async function runAssistantTurnInner(
         call.name === "project.open" ||
         call.name === "project.create" ||
         call.name === "panel.open" ||
-        call.name === "panel.close")
+        call.name === "panel.close" ||
+        call.name === "create_work_task")
     ) {
       return {
         ...last,

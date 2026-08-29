@@ -1,15 +1,16 @@
 /**
  * System instructions for Apple on-device sessions.
- * Keep stable product facts here — never claim to be GPT/Claude/Gemini.
+ * Never volunteer identity/provider/model — only when identityAsked.
  */
 
 import {
   CANDER_ASSISTANT_BEHAVIOR,
   CANDER_CONVERSATION_FIRST,
   CANDER_GREETING_ONCE,
+  CANDER_IDENTITY_WHEN_ASKED_ON_DEVICE,
   CANDER_NO_REGREET,
 } from "@/lib/ai/assistant-behavior";
-import { APP_NAME, APP_ORIGIN, APP_TAGLINE } from "@/lib/app-brand";
+import { APP_NAME, APP_TAGLINE } from "@/lib/app-brand";
 
 export function buildCanderOnDeviceInstructions(opts?: {
   shortName?: string | null;
@@ -27,6 +28,8 @@ export function buildCanderOnDeviceInstructions(opts?: {
   includeInventory?: boolean;
   /** When false, tools are omitted by the caller — reinforce answer-only mode. */
   toolsEnabled?: boolean;
+  /** User asked who/what model — append identity script only then. */
+  identityAsked?: boolean;
 }) {
   const whoParts: string[] = [];
   if (opts?.shortName?.trim()) {
@@ -42,48 +45,49 @@ export function buildCanderOnDeviceInstructions(opts?: {
   }
   const who = whoParts.join(" ");
 
-  const place = [
-    opts?.workspaceName ? `Current workspace: ${opts.workspaceName}.` : null,
-    opts?.projectTitle ? `Open project: ${opts.projectTitle}.` : null,
-    opts?.spaceLabel ? `Current space: ${opts.spaceLabel}.` : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const includeInventory = opts?.includeInventory === true;
+  const toolsEnabled = opts?.toolsEnabled === true;
 
-  const includeInventory = opts?.includeInventory !== false;
-  const toolsEnabled = opts?.toolsEnabled !== false;
+  const place =
+    includeInventory || toolsEnabled
+      ? [
+          opts?.workspaceName ? `Current workspace: ${opts.workspaceName}.` : null,
+          opts?.projectTitle ? `Open project: ${opts.projectTitle}.` : null,
+          opts?.spaceLabel ? `Current space: ${opts.spaceLabel}.` : null,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : "";
 
   return [
-    `You are the on-device assistant inside ${APP_NAME} (${APP_ORIGIN}).`,
-    `Tagline: “${APP_TAGLINE}”`,
-    "You run on Apple Intelligence — Apple’s on-device foundation model via the Cander iOS app.",
-    "You are NOT GPT-4, ChatGPT, Claude, Gemini, Llama, or any cloud LLM. Do not invent model names, vendors, or parameter counts.",
-    "If asked what model you are: say you are Apple Intelligence on-device in Cander. Only discuss identity when the user asks.",
-    "",
     CANDER_ASSISTANT_BEHAVIOR,
     CANDER_CONVERSATION_FIRST,
     opts?.hasPriorTurns ? CANDER_NO_REGREET : CANDER_GREETING_ONCE,
+    opts?.identityAsked ? CANDER_IDENTITY_WHEN_ASKED_ON_DEVICE : null,
     !toolsEnabled
       ? "Tools are disabled for this turn. Answer with helpful plain language only — no JSON."
       : null,
-    "",
-    `${APP_NAME} product map (only when the user asks about the product):`,
-    "- New Chat: general assistant chat (home).",
-    "- Work: work dock / briefing-style work.",
-    "- Build: create apps, websites, and projects with Preview.",
-    "- Explore: research, reports, and sources.",
-    "- Connectors: connect apps (Gmail, Slack, calendar, etc.).",
-    "- Recents: recent chats and projects.",
-    "- Settings → Hosting: choose Cloud, Auto, or On device AI.",
-    "",
-    "On device means prompts for inference stay on this iPhone/iPad; Cloud uses Cander’s private cloud path.",
+    toolsEnabled
+      ? [
+          "",
+          `${APP_NAME} product map (use only if relevant to this request):`,
+          `Tagline: “${APP_TAGLINE}”`,
+          "- New Chat: general assistant chat (home).",
+          "- Work: work dock / briefing-style work.",
+          "- Build: create apps, websites, and projects with Preview.",
+          "- Explore: research, reports, and sources.",
+          "- Connectors: connect apps (Gmail, Slack, calendar, etc.).",
+          "- Recents: recent chats and projects.",
+          "- Settings → Hosting: choose Cloud, Auto, or On device AI.",
+          "For new projects, clarify with Build vs Explore (never say research to the user). Always confirm before deleting.",
+        ].join("\n")
+      : null,
     includeInventory
-      ? "A cached workspace snapshot may appear below. Use it ONLY if the user asks about their projects/workspace. For general questions, ignore it and answer from general knowledge."
-      : "Do not invent workspace inventory. Answer from general knowledge and conversation.",
-    "For new projects, clarify with Build vs Explore (never say research to the user). Always confirm before deleting.",
+      ? "A cached workspace snapshot may appear below. Use it ONLY for this in-app request."
+      : null,
     who,
     place,
-    opts?.planCapabilityLine?.trim() || "",
+    toolsEnabled ? opts?.planCapabilityLine?.trim() || "" : "",
     includeInventory && opts?.inventoryBlock?.trim()
       ? `\n${opts.inventoryBlock.trim()}`
       : "",
