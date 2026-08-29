@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   Camera,
+  FileText,
   ImageIcon,
   Link2,
   Paperclip,
@@ -58,7 +59,7 @@ import { stopTextToSpeech } from "@/lib/voice/text-to-speech";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
-import type { ChatImageAttachment } from "@/lib/types";
+import type { ChatFileAttachment, ChatImageAttachment } from "@/lib/types";
 
 type MenuId = "plus" | null;
 
@@ -75,7 +76,10 @@ export function Composer({
 }: {
   onSend: (
     text: string,
-    opts?: { attachments?: ChatImageAttachment[] },
+    opts?: {
+      attachments?: ChatImageAttachment[];
+      files?: ChatFileAttachment[];
+    },
   ) => void;
   landing?: boolean;
   compact?: boolean;
@@ -116,8 +120,7 @@ export function Composer({
   const [value, setValue] = useState("");
   const [dictating, setDictating] = useState(false);
   const [menu, setMenu] = useState<MenuId>(null);
-  const [files, setFiles] = useState<string[]>([]);
-  const [fileSnippets, setFileSnippets] = useState<string[]>([]);
+  const [files, setFiles] = useState<ChatFileAttachment[]>([]);
   const [images, setImages] = useState<ChatImageAttachment[]>([]);
   const [dictateError, setDictateError] = useState<string | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -275,22 +278,20 @@ export function Composer({
       : entityReference
         ? `[ref: ${entityReference.label ?? entityReference.type} — ${entityReference.snapshot ?? entityReference.id}] `
       : "";
-    const fileNote = files.length
-      ? files.map((name) => `[User attached file: ${name}]`).join("\n")
-      : "";
-    const snippetNote = fileSnippets.join("\n\n");
-    const payload = `${refPrefix}${value}`.trim();
-    const body = [payload, fileNote, snippetNote].filter(Boolean).join("\n");
+    // Visible chat text = what the user typed only. File bodies go via opts.files.
+    const body = `${refPrefix}${value}`.trim();
     // #region agent log
-    fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'E',location:'Composer.tsx:submit',message:'submit body composition',data:{filesCount:files.length,fileNames:files.slice(0,3),snippetsCount:fileSnippets.length,snippetPrefixes:fileSnippets.map(s=>s.slice(0,40)),imagesCount:images.length,bodyPrefix:body.slice(0,120),valueLen:value.length},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'post-fix',hypothesisId:'E',location:'Composer.tsx:submit',message:'submit body composition',data:{filesCount:files.length,fileNames:files.map(f=>f.name).slice(0,3),hasFileText:files.some(f=>Boolean(f.text)),imagesCount:images.length,bodyPrefix:body.slice(0,80),bodyHasAttachMarker:/User attached file|Attached file/i.test(body),valueLen:value.length},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
-    if (!body && !images.length) return;
+    if (!body && !images.length && !files.length) return;
     speechRef.current?.stop();
     speechRef.current = null;
-    onSend(body || "", images.length ? { attachments: images } : undefined);
+    onSend(body || "", {
+      ...(images.length ? { attachments: images } : {}),
+      ...(files.length ? { files } : {}),
+    });
     setValue("");
     setFiles([]);
-    setFileSnippets([]);
     setImages([]);
     setMenu(null);
     setDictating(false);
@@ -588,13 +589,26 @@ export function Composer({
                     />
                   </button>
                 ))}
-                {files.map((name) => (
-                  <span
-                    key={name}
-                    className="inline-flex items-center rounded-lg bg-muted px-2 py-1 font-mono text-[11px]"
+                {files.map((file) => (
+                  <button
+                    key={file.name}
+                    type="button"
+                    title={`Remove ${file.name}`}
+                    onClick={() =>
+                      setFiles((current) =>
+                        current.filter((item) => item.name !== file.name),
+                      )
+                    }
+                    className="inline-flex h-10 max-w-[7.5rem] items-center gap-1.5 rounded-[10px] border border-border bg-muted px-2"
                   >
-                    {name}
-                  </span>
+                    <FileText
+                      className="h-4 w-4 shrink-0 text-muted-foreground"
+                      strokeWidth={1.7}
+                    />
+                    <span className="truncate text-[11px] tracking-[-0.01em]">
+                      {file.name}
+                    </span>
+                  </button>
                 ))}
               </div>
             ) : null}
@@ -774,26 +788,15 @@ export function Composer({
         awaitingFilePickRef.current = false;
         setAttachError(null);
         void filesFromList(list).then((parsed) => {
-          if (parsed.fileNames.length) {
-            setFiles((current) =>
-              [...current, ...parsed.fileNames].slice(0, 6),
-            );
-          }
-          if (parsed.textSnippets.length) {
-            setFileSnippets((current) =>
-              [...current, ...parsed.textSnippets].slice(0, 6),
-            );
+          if (parsed.files.length) {
+            setFiles((current) => [...current, ...parsed.files].slice(0, 6));
           }
           if (parsed.images.length) {
             setImages((current) =>
               [...current, ...parsed.images].slice(0, 4),
             );
           }
-          if (
-            parsed.fileNames.length ||
-            parsed.images.length ||
-            parsed.textSnippets.length
-          ) {
+          if (parsed.files.length || parsed.images.length) {
             setMenu(null);
           }
         });

@@ -215,12 +215,22 @@ export type ChatBlock =
       url: string;
       name: string;
       mime?: string;
+    }
+  | {
+      type: "file";
+      name: string;
     };
 
 export type ChatImageAttachment = {
   url: string;
   name: string;
   mime: string;
+};
+
+export type ChatFileAttachment = {
+  name: string;
+  /** Extracted text for the model only — not shown in the bubble. */
+  text?: string;
 };
 
 export type Checkpoint = {

@@ -16,7 +16,7 @@ import { Composer } from "@/components/shell/Composer";
 import { APP_TAGLINE } from "@/lib/app-brand";
 import { chatSpaceCopy, spaceIconTint } from "@/lib/space-icons";
 import { homeSuggestions } from "@/lib/suggestions";
-import type { ChatImageAttachment, Message, SpaceId } from "@/lib/types";
+import type { ChatFileAttachment, ChatImageAttachment, Message, SpaceId } from "@/lib/types";
 import { chatSpaceId } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import { useChatCanvasCentered } from "@/lib/chat-layout";
@@ -36,7 +36,10 @@ function ComposerDock({
 }: {
   onSend: (
     text: string,
-    opts?: { attachments?: ChatImageAttachment[] },
+    opts?: {
+      attachments?: ChatImageAttachment[];
+      files?: ChatFileAttachment[];
+    },
   ) => void;
   hideSpaceTools?: boolean;
 }) {
@@ -129,9 +132,21 @@ export function ChatColumn() {
     }
   }, [last?.content, last?.role, last?.status]);
 
-  const send = (text: string, opts?: { attachments?: ChatImageAttachment[] }) => {
+  const send = (
+    text: string,
+    opts?: {
+      attachments?: ChatImageAttachment[];
+      files?: ChatFileAttachment[];
+    },
+  ) => {
     const trimmed = text.trim();
-    if (!trimmed && !opts?.attachments?.length) return;
+    if (
+      !trimmed &&
+      !opts?.attachments?.length &&
+      !opts?.files?.length
+    ) {
+      return;
+    }
     const go = () => sendMessage(trimmed, opts);
     if (
       showLanding &&

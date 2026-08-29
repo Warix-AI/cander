@@ -124,6 +124,7 @@ import type {
   HostingMode,
   Checkpoint,
   ChatImageAttachment,
+  ChatFileAttachment,
   Message,
   Member,
   MobileSurface,
@@ -200,6 +201,7 @@ type SendOpts = {
   space?: SpaceId;
   skillId?: string;
   attachments?: ChatImageAttachment[];
+  files?: ChatFileAttachment[];
 };
 
 type AppContextValue = {
@@ -1291,9 +1293,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = useCallback(
     (text: string, opts?: SendOpts) => {
       const attachments = opts?.attachments?.filter((a) => a.url) ?? [];
+      const fileAttachments = opts?.files ?? [];
       const trimmed = text.trim();
-      if (!trimmed && !attachments.length) return;
-      const contentForIntent = trimmed || "(image attached)";
+      if (!trimmed && !attachments.length && !fileAttachments.length) return;
+      const contentForIntent =
+        trimmed ||
+        (attachments.length
+          ? "(image attached)"
+          : fileAttachments.length
+            ? "(file attached)"
+            : "");
       const kind = classifyTurn(contentForIntent);
       const intent = inferIntent(
         contentForIntent,
@@ -1383,17 +1392,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         name: item.name,
         mime: item.mime,
       }));
-      const displayText =
-        trimmed ||
-        (attachments.length
-          ? attachments.map((a) => a.name).join(", ")
-          : "");
+      const fileBlocks = fileAttachments.map((item) => ({
+        type: "file" as const,
+        name: item.name,
+      }));
+      const displayBlocks = [...imageBlocks, ...fileBlocks];
+      // Bubble shows typed text only — never "[User attached file…]" markers.
+      const displayText = trimmed;
       const userMsg: Message = {
         id: nextId("u"),
         role: "user",
         content: displayText,
         at: nowTime(),
-        blocks: imageBlocks.length ? imageBlocks : undefined,
+        blocks: displayBlocks.length ? displayBlocks : undefined,
       };
 
       let assistantMsg: Message = {
@@ -1431,10 +1442,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const aiUserContent = [
         trimmed,
-        ...attachments.map((a) => `[User attached image: ${a.name}]`),
+        ...fileAttachments.map((f) =>
+          f.text?.trim()
+            ? `File “${f.name}” contents:\n${f.text.trim()}`
+            : `File attached: ${f.name}`,
+        ),
+        ...attachments.map((a) => `Image attached: ${a.name}`),
       ]
         .filter(Boolean)
-        .join("\n");
+        .join("\n\n");
 
       if (kind === "undo") {
         const last = checkpoints[0];
