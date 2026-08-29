@@ -57,6 +57,11 @@ export type AiGenerateRequest = {
   /** Classifier route target (Phase 1). */
   preferredRoute?: "on_device" | "pcc" | "cander_cloud";
   routingReason?: string;
+  /**
+   * Ephemeral tool/search context for this turn only — never persisted as a user message.
+   * Used by the legacy cloud path; orchestrator uses structured events instead.
+   */
+  toolContext?: string;
 };
 
 export type AiGenerateResult = {

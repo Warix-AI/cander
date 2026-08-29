@@ -19,12 +19,13 @@ import {
   recordRoutingDecision,
 } from "@/lib/ai/intelligence";
 import { getPccAvailability } from "@/lib/ai/intelligence/pcc";
-import { getAiRuntimeMode } from "@/lib/ai/runtime/mode-store";
 import { generateWithAiRuntime } from "@/lib/ai/runtime/runtime";
 import type {
   AiGenerateRequest,
   AiGenerateResult,
 } from "@/lib/ai/runtime/types";
+import { isAgentOrchestratorEnabled } from "@/lib/ai/orchestrator/flags";
+import { getAiRuntimeMode } from "@/lib/ai/runtime/mode-store";
 
 const MAX_TOOL_ROUNDS = 3;
 
@@ -138,6 +139,19 @@ async function runAssistantTurnInner(
   request: AiGenerateRequest,
   opts?: AgentTurnOptions,
 ): Promise<AgentTurnResult> {
+  // Phase 1+ cutover: cloud path uses Edge TurnOrchestrator (Cap/web/desktop identical).
+  // Local/on-device keeps the legacy loop. Set NEXT_PUBLIC_AI_AGENT_ORCHESTRATOR=0 to force legacy cloud.
+  if (isAgentOrchestratorEnabled()) {
+    const mode = getAiRuntimeMode();
+    const forceLocal = mode === "local";
+    if (!forceLocal) {
+      const { runOrchestratedTurn } = await import(
+        "@/lib/ai/orchestrator/run-turn"
+      );
+      return runOrchestratedTurn(request, { onProgress: opts?.onProgress });
+    }
+  }
+
   const report = (progress: AgentTurnProgress) => {
     try {
       opts?.onProgress?.(progress);
@@ -288,21 +302,19 @@ async function runAssistantTurnInner(
       label: "Thinking",
       detail: "Generating…",
     });
-    const followUp = [
-      `Internal result for web.search: ${searchResult.output}`,
-      "Answer the user’s question using only these live results. Cite real URLs. Do not invent headlines or sources. Plain language only — no JSON or tool names.",
-      "",
-      `User question: ${request.content.trim()}`,
-    ].join("\n");
+    // Phase 0: keep the real user utterance; inject search via toolContext (not persisted).
     const answered = await generateWithAiRuntime({
       ...gatedRequest,
       allowTools: false,
       allowedToolNames: [],
-      content: followUp,
+      content: request.content.trim(),
+      toolContext: [
+        `Live web.search results:\n${searchResult.output}`,
+        "Answer using only these live results. Cite real URLs. Do not invent headlines or sources.",
+      ].join("\n\n"),
       messages: [
         ...(request.messages ?? []),
         { role: "user", content: request.content },
-        { role: "user", content: followUp },
       ],
     });
     return {
@@ -527,10 +539,10 @@ async function runAssistantTurnInner(
       });
     }
 
-    const followUp = [
-      `Internal result for ${result.name}: ${result.output}`,
+    const toolNote = [
+      `Result for ${result.name}:\n${result.output}`,
       "Continue briefly for the user in plain language only. Call another tool only if still needed; otherwise a short normal reply with no JSON and no tool names. Cite real URLs from the results only — never invent sources or claim you searched if results are empty.",
-    ].join("\n");
+    ].join("\n\n");
 
     report({
       phase: "generating",
@@ -540,12 +552,13 @@ async function runAssistantTurnInner(
 
     working = {
       ...gatedRequest,
-      content: followUp,
+      // Keep the real user utterance — never persist tool blobs as user turns.
+      content: request.content,
+      toolContext: [working.toolContext, toolNote].filter(Boolean).join("\n\n"),
       messages: [
         ...(request.messages ?? []),
         { role: "user", content: request.content },
         { role: "assistant", content: text || "(acted)" },
-        { role: "user", content: followUp },
       ],
     };
   }

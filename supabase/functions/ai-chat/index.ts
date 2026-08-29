@@ -404,6 +404,14 @@ Deno.serve(async (req) => {
         return json(400, { error: "chatId and content required" });
       }
 
+      // Phase 0: never persist Internal-result tool blobs as conversational user turns
+      if (/^\s*Internal result for\b/i.test(payload.content.trim())) {
+        return json(400, {
+          error:
+            "Refusing to persist Internal-result blob as user message. Use toolContext or ai-agent run_turn.",
+        });
+      }
+
       const { data: chat, error: chatError } = await supabase
         .from("ai_chats")
         .select("*")
@@ -448,6 +456,11 @@ Deno.serve(async (req) => {
         .eq("owner_id", user.id)
         .order("sort_order", { ascending: true });
 
+      // Drop accidental Internal-result blobs from prior bad writes
+      const cleanHistory = ((history ?? []) as HistoryRow[]).filter(
+        (m) => !/^\s*Internal result for\b/i.test(m.content ?? ""),
+      );
+
       const contextText = await resolveContextText(
         supabase,
         user.id,
@@ -476,7 +489,7 @@ Deno.serve(async (req) => {
           );
         }
 
-        const historyRows = (history ?? []) as HistoryRow[];
+        const historyRows = cleanHistory;
         const watermark =
           typeof chat.condensed_through_sort_order === "number"
             ? chat.condensed_through_sort_order
@@ -489,6 +502,18 @@ Deno.serve(async (req) => {
           contextText,
           userProfileText,
           latestUserContent: payload.content.trim(),
+          toolContext:
+            typeof payload.toolContext === "string"
+              ? payload.toolContext.trim()
+              : null,
+        });
+
+        console.log("[CONTEXT_BUILD]", {
+          chatId: payload.chatId,
+          historyCount: historyRows.length,
+          modelMessageCount: modelMessages.length,
+          hasToolContext: Boolean(payload.toolContext),
+          // never log bodies
         });
 
         const rawImages = Array.isArray(payload.images)
@@ -861,6 +886,7 @@ function buildModelMessages(opts: {
   contextText: string | null;
   userProfileText?: string | null;
   latestUserContent?: string;
+  toolContext?: string | null;
 }): Array<{ role: string; content: string; images?: string[] }> {
   const afterWatermark = opts.history.filter(
     (m) => m.sort_order > opts.watermark,
@@ -894,8 +920,15 @@ function buildModelMessages(opts: {
       content: formatCondensedSystem(opts.condensed),
     });
   }
+  if (opts.toolContext?.trim()) {
+    messages.push({
+      role: "system",
+      content: `Tool/search context for this turn only (not a user message):\n${opts.toolContext.trim()}`,
+    });
+  }
   for (const m of recent) {
     if (m.role === "system") continue;
+    if (/^\s*Internal result for\b/i.test(m.content ?? "")) continue;
     const content =
       m.role === "assistant"
         ? sanitizeAssistantVisibleText(m.content) || m.content

@@ -85,6 +85,7 @@ export function createCloudProvider(): AiRuntimeProvider {
 
         const result = await sendAiChatMessage(chatId, request.content, {
           images: request.images,
+          toolContext: request.toolContext,
         });
         return {
           aiChatId: chatId,

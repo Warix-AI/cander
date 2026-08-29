@@ -12,8 +12,9 @@ fi
 count=0
 while IFS= read -r f; do
   base="$(basename "$f")"
-  if [[ ! "$base" =~ ^[0-9]{3}_ ]]; then
-    echo "Migration must start with 3-digit prefix: $base"
+  # Accept legacy NNN_name.sql and supabase CLI timestamp_name.sql
+  if [[ ! "$base" =~ ^[0-9]{3}_ ]] && [[ ! "$base" =~ ^[0-9]{14}_ ]]; then
+    echo "Migration must start with 3-digit or 14-digit timestamp prefix: $base"
     exit 1
   fi
   if ! grep -qi 'create table\|alter table\|create policy' "$f"; then
