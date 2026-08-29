@@ -26,6 +26,14 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get("Authorization") ?? "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders(), "Content-Type": "application/json" },
+      });
+    }
+
     const payload = (await req.json()) as PublishPayload;
     const workspaceId = payload.workspaceId?.trim();
     const projectId = payload.projectId?.trim();
@@ -43,7 +51,6 @@ Deno.serve(async (req) => {
     const deploymentId = `dep-${crypto.randomUUID().slice(0, 8)}`;
     const now = new Date().toISOString();
 
-    const authHeader = req.headers.get("Authorization") ?? "";
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
@@ -53,6 +60,46 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders(), "Content-Type": "application/json" },
+      });
+    }
+
+    const { data: membership } = await supabase
+      .from("workspace_members")
+      .select("workspace_id")
+      .eq("workspace_id", workspaceId)
+      .eq("profile_id", user.id)
+      .maybeSingle();
+    if (!membership) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { ...corsHeaders(), "Content-Type": "application/json" },
+      });
+    }
+
+    const { data: project } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", projectId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (!project) {
+      return new Response(
+        JSON.stringify({ error: "Project not found in workspace" }),
+        {
+          status: 404,
+          headers: { ...corsHeaders(), "Content-Type": "application/json" },
+        },
+      );
+    }
 
     const { error: deployError } = await supabase.from("deployments").insert({
       id: deploymentId,

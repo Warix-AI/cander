@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
 import { createBillingPortalSession } from "@/lib/stripe/subscription";
 import { isStripeConfigured } from "@/lib/stripe/config";
@@ -28,7 +29,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const { data: profile } = await userClient
+  // Stripe IDs are not granted to authenticated SELECT (migration 030).
+  const admin = createSupabaseAdminClient();
+  const { data: profile } = await admin
     .from("profiles")
     .select("stripe_customer_id")
     .eq("id", user.id)

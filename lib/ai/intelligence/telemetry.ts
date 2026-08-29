@@ -63,9 +63,11 @@ async function persistRoutingEvent(event: RoutingTelemetryEvent) {
     const { createSupabaseBrowserClient } = await import(
       "@/lib/supabase/client"
     );
+    const workspaceId = event.workspaceId?.trim();
+    if (!workspaceId) return; // Never write null-workspace telemetry (cross-tenant hole).
     const supabase = createSupabaseBrowserClient();
     await supabase.from("ai_routing_events").insert({
-      workspace_id: event.workspaceId || null,
+      workspace_id: workspaceId,
       thread_id: event.threadId || null,
       project_id: event.projectId || null,
       task_type: event.taskType,

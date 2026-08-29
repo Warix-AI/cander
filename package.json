@@ -9,6 +9,7 @@
     "lint": "eslint",
     "check:migrations": "bash scripts/check-migrations.sh",
     "test:security": "node --experimental-strip-types --test scripts/security-denial.test.ts",
+    "test:isolation": "node --experimental-strip-types scripts/security-isolation-probe.ts",
     "test:assistant": "node --experimental-strip-types --test scripts/assistant-behavior.test.ts",
     "test:intelligence": "node --experimental-strip-types --test scripts/intelligence.test.ts",
     "seed:supabase": "node --experimental-strip-types scripts/seed.ts 2>/dev/null || npx --yes tsx scripts/seed.ts",

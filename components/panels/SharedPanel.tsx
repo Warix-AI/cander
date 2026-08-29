@@ -1,30 +1,19 @@
 "use client";
 
-import { useApp } from "@/components/app/AppProvider";
-import { Row, SectionLabel } from "@/components/panels/Bits";
-import { spaces } from "@/lib/data";
+import { SectionLabel } from "@/components/panels/Bits";
 
+/**
+ * Chats are owner-private (migration 027). This panel no longer implies
+ * workspace-visible threads — that claim was false under RLS.
+ */
 export function SharedPanel() {
-  const { threads, openThread } = useApp();
-  const shared = threads.filter((thread) => thread.shared);
-
   return (
     <div className="p-3 pt-4">
-      <SectionLabel>Visible to the workspace</SectionLabel>
-      {shared.length ? (
-        shared.map((thread) => (
-          <Row
-            key={thread.id}
-            title={thread.title}
-            meta={spaces.find((s) => s.id === thread.spaceId)?.label}
-            onClick={() => openThread(thread.id)}
-          />
-        ))
-      ) : (
-        <p className="px-3 py-6 text-[13px] text-muted-foreground">
-          Nothing shared yet.
-        </p>
-      )}
+      <SectionLabel>Your chats</SectionLabel>
+      <p className="px-3 py-6 text-[13px] leading-relaxed text-muted-foreground">
+        Chats stay private to you. Teammates in a shared workspace can see
+        projects and files, not your conversations.
+      </p>
     </div>
   );
 }

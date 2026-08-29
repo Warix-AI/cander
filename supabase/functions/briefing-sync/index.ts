@@ -6,7 +6,7 @@ type BriefingPayload = {
 };
 
 type BriefingTemplate = {
-  id: string;
+  suffix: string;
   connectorId?: string;
   tone: "urgent" | "waiting" | "ready" | "neutral";
   title: string;
@@ -16,7 +16,7 @@ type BriefingTemplate = {
 
 const TEMPLATES: BriefingTemplate[] = [
   {
-    id: "w-northwind-reply",
+    suffix: "northwind-reply",
     connectorId: "gmail",
     tone: "urgent",
     title: "Northwind — pricing note",
@@ -25,7 +25,7 @@ const TEMPLATES: BriefingTemplate[] = [
       "Draft a reply to Northwind's pricing note — keep it clear on seat vs usage.",
   },
   {
-    id: "w-slack-threads",
+    suffix: "slack-threads",
     connectorId: "slack",
     tone: "urgent",
     title: "Two Slack threads waiting",
@@ -34,7 +34,7 @@ const TEMPLATES: BriefingTemplate[] = [
       "Summarize the two Slack threads waiting on me and draft short replies.",
   },
   {
-    id: "w-launch-sync",
+    suffix: "launch-sync",
     connectorId: "gcal",
     tone: "ready",
     title: "2:00 PM — Launch sync",
@@ -43,7 +43,7 @@ const TEMPLATES: BriefingTemplate[] = [
       "Prep me for the 2 PM launch sync — open questions and last week's notes.",
   },
   {
-    id: "w-vendor-invoice",
+    suffix: "vendor-invoice",
     connectorId: "gmail",
     tone: "waiting",
     title: "Vendor invoice — Figma",
@@ -52,7 +52,7 @@ const TEMPLATES: BriefingTemplate[] = [
       "Draft a polite nudge to finance about the Figma PO I requested Monday.",
   },
   {
-    id: "w-handshake-review",
+    suffix: "handshake-review",
     connectorId: "handshake",
     tone: "neutral",
     title: "Handshake capability review",
@@ -69,12 +69,26 @@ function corsHeaders() {
   };
 }
 
+function scopedId(workspaceId: string, suffix: string) {
+  // Keep IDs stable per workspace; never reuse global template PKs.
+  const safeWs = workspaceId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 48);
+  return `brief-${safeWs}-${suffix}`.slice(0, 120);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders() });
   }
 
   try {
+    const authHeader = req.headers.get("Authorization") ?? "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders(), "Content-Type": "application/json" },
+      });
+    }
+
     const payload = (await req.json()) as BriefingPayload;
     const workspaceId = payload.workspaceId?.trim();
     if (!workspaceId) {
@@ -84,12 +98,35 @@ Deno.serve(async (req) => {
       });
     }
 
-    const authHeader = req.headers.get("Authorization") ?? "";
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       { global: { headers: { Authorization: authHeader } } },
     );
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders(), "Content-Type": "application/json" },
+      });
+    }
+
+    const { data: membership, error: memberError } = await supabase
+      .from("workspace_members")
+      .select("workspace_id")
+      .eq("workspace_id", workspaceId)
+      .eq("profile_id", user.id)
+      .maybeSingle();
+    if (memberError || !membership) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { ...corsHeaders(), "Content-Type": "application/json" },
+      });
+    }
 
     const templates = TEMPLATES.filter((item) => {
       if (payload.connectorId && item.connectorId !== payload.connectorId) {
@@ -99,7 +136,7 @@ Deno.serve(async (req) => {
     });
 
     const rows = templates.map((item) => ({
-      id: item.id,
+      id: scopedId(workspaceId, item.suffix),
       workspace_id: workspaceId,
       connector_id: item.connectorId ?? null,
       tone: item.tone,
@@ -119,11 +156,12 @@ Deno.serve(async (req) => {
       if (error) throw error;
     }
 
-    return new Response(JSON.stringify({ synced: rows.length }), {
+    return new Response(JSON.stringify({ ok: true, count: rows.length }), {
       headers: { ...corsHeaders(), "Content-Type": "application/json" },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "briefing-sync failed";
+    const message =
+      err instanceof Error ? err.message : "briefing-sync failed";
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders(), "Content-Type": "application/json" },

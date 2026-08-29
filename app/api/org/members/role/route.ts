@@ -93,7 +93,8 @@ export async function POST(request: Request) {
   const { error: memberError } = await admin
     .from("org_members")
     .update({ role: body.role })
-    .eq("id", body.memberId);
+    .eq("id", body.memberId)
+    .eq("org_id", body.orgId);
 
   if (memberError) {
     return NextResponse.json({ error: memberError.message }, { status: 500 });

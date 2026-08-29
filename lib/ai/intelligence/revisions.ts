@@ -83,12 +83,17 @@ export async function ensureDraftRevision(opts: {
 
 export async function createCandidateChangeSet(opts: {
   projectId: string;
-  workspaceId?: string | null;
+  workspaceId: string;
   baseRevisionId?: string | null;
   summary: string;
   workerRunId?: string | null;
 }): Promise<string | null> {
   if (!isSupabaseConfigured()) return null;
+  const workspaceId = opts.workspaceId?.trim();
+  if (!workspaceId) {
+    console.warn("[cander] change set requires workspaceId");
+    return null;
+  }
   try {
     const supabase = createSupabaseBrowserClient();
     let baseId = opts.baseRevisionId;
@@ -105,7 +110,7 @@ export async function createCandidateChangeSet(opts: {
       .from("project_revisions")
       .insert({
         project_id: opts.projectId,
-        workspace_id: opts.workspaceId ?? null,
+        workspace_id: workspaceId,
         kind: "candidate",
         parent_revision_id: baseId,
         storage_pointer: `candidate://${opts.projectId}/${Date.now()}`,
@@ -117,7 +122,7 @@ export async function createCandidateChangeSet(opts: {
       .from("project_change_sets")
       .insert({
         project_id: opts.projectId,
-        workspace_id: opts.workspaceId ?? null,
+        workspace_id: workspaceId,
         base_revision_id: baseId,
         candidate_revision_id: candidateId,
         status: "pending_review",

@@ -35,10 +35,10 @@ const stubAdapter: CloudExecutionAdapter = {
 
     // Simulated Builder → Verifier pipeline (no real sandbox yet).
     await delay(40);
-    if (task.projectId) {
+    if (task.projectId && task.workspaceId) {
       await createCandidateChangeSet({
         projectId: task.projectId,
-        workspaceId: task.workspaceId ?? null,
+        workspaceId: task.workspaceId,
         summary: `Candidate change for “${task.title}”`,
         workerRunId: task.id,
       });

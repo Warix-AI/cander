@@ -33,16 +33,19 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const admin = createSupabaseAdminClient();
-  const { data: orgId, error: acceptError } = await admin.rpc("accept_org_invite", {
-    p_token: token,
-    p_profile_id: user.id,
-  });
+  const { data: orgId, error: acceptError } = await userClient.rpc(
+    "accept_org_invite",
+    {
+      p_token: token,
+      p_profile_id: user.id,
+    },
+  );
 
   if (acceptError) {
     return NextResponse.json({ error: acceptError.message }, { status: 400 });
   }
 
+  const admin = createSupabaseAdminClient();
   await admin
     .from("profiles")
     .update({ onboarding_completed_at: new Date().toISOString() })

@@ -128,37 +128,46 @@ export async function createDurableAiTask(input: {
     input.summary?.trim() ||
     "Reviewing your project — I’ll update this chat when there’s progress.";
 
+  const workspaceId = input.workspaceId?.trim() || null;
+
   if (isSupabaseConfigured()) {
     try {
-      const supabase = createSupabaseBrowserClient();
-      const row = {
-        workspace_id: input.workspaceId || null,
-        thread_id: input.threadId,
-        project_id: input.projectId || null,
-        draft_revision_id: input.draftRevisionId || null,
-        title: input.title.trim() || "Work task",
-        goal: input.goal.trim() || input.title.trim(),
-        kind: input.kind,
-        task_type: "execution",
-        status: "queued",
-        progress_note: progressNote,
-        routing_decision: input.routingDecision ?? null,
-        idempotency_key: input.idempotencyKey ?? null,
-        facts: {},
-      };
-      const { data, error } = await supabase
-        .from("ai_tasks")
-        .insert(row)
-        .select("*")
-        .single();
-      if (!error && data) {
-        const task = mapRow(data as Record<string, unknown>);
-        void import("./execution-adapter").then((m) =>
-          m.enqueueExecutionJob(task),
+      // Fail closed: never insert into the null-workspace shared bucket.
+      if (!workspaceId) {
+        console.warn(
+          "[cander] ai_tasks require workspaceId; using memory fallback",
         );
-        return task;
+      } else {
+        const supabase = createSupabaseBrowserClient();
+        const row = {
+          workspace_id: workspaceId,
+          thread_id: input.threadId,
+          project_id: input.projectId || null,
+          draft_revision_id: input.draftRevisionId || null,
+          title: input.title.trim() || "Work task",
+          goal: input.goal.trim() || input.title.trim(),
+          kind: input.kind,
+          task_type: "execution",
+          status: "queued",
+          progress_note: progressNote,
+          routing_decision: input.routingDecision ?? null,
+          idempotency_key: input.idempotencyKey ?? null,
+          facts: {},
+        };
+        const { data, error } = await supabase
+          .from("ai_tasks")
+          .insert(row)
+          .select("*")
+          .single();
+        if (!error && data) {
+          const task = mapRow(data as Record<string, unknown>);
+          void import("./execution-adapter").then((m) =>
+            m.enqueueExecutionJob(task),
+          );
+          return task;
+        }
+        console.warn("[cander] ai_tasks insert failed", error?.message);
       }
-      console.warn("[cander] ai_tasks insert failed", error?.message);
     } catch (err) {
       console.warn("[cander] ai_tasks unavailable", err);
     }

@@ -281,28 +281,32 @@ Deno.serve(async (req) => {
     if (action === "create_chat") {
       const id = newId("aic");
       const now = new Date().toISOString();
-      let row = {
+      // Only attach workspace_id when the caller is a member; never stick a
+      // foreign workspace onto an owner-private chat.
+      let workspaceId: string | null = null;
+      const requestedWs = payload.workspaceId?.trim() || null;
+      if (requestedWs) {
+        const { data: membership } = await supabase
+          .from("workspace_members")
+          .select("workspace_id")
+          .eq("workspace_id", requestedWs)
+          .eq("profile_id", user.id)
+          .maybeSingle();
+        if (membership) workspaceId = requestedWs;
+      }
+      const row = {
         id,
         owner_id: user.id,
-        workspace_id: payload.workspaceId ?? null,
+        workspace_id: workspaceId,
         title: payload.title?.trim() || "New chat",
         created_at: now,
         updated_at: now,
       };
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .from("ai_chats")
         .insert(row)
         .select("*")
         .single();
-      // Invalid/foreign workspace id should not block chat creation.
-      if (error && row.workspace_id) {
-        row = { ...row, workspace_id: null };
-        ({ data, error } = await supabase
-          .from("ai_chats")
-          .insert(row)
-          .select("*")
-          .single());
-      }
       if (error) throw error;
 
       if (payload.contextRefs?.length) {

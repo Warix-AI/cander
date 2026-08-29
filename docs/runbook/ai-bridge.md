@@ -87,4 +87,4 @@ BRIDGE_MAX_BODY_BYTES=1048576
 
 - Production managed models / model picker
 - Real tool or MCP execution
-- Making legacy `threads` / `messages` owner-private (follow-up)
+- ~~Making legacy `threads` / `messages` owner-private~~ — done in migration `027_chat_owner_private.sql`

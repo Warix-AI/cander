@@ -68,12 +68,14 @@ export async function POST(request: Request) {
       (kind === "personal" ? "Personal" : "Workspace");
     const navSpaces = [...NAV_SPACES];
     const stripeLive = isStripeConfigured();
+    const billingBypass =
+      !stripeLive &&
+      (process.env.ALLOW_BILLING_BYPASS === "1" ||
+        process.env.NODE_ENV !== "production");
 
     const admin = createSupabaseAdminClient();
 
-    // Persist the plan the user chose. Until Stripe is wired, treat paid plans as
-    // active so entitlements/workspaces unlock. With Stripe live, paid plans are
-    // written by the checkout webhook after payment.
+    // Persist the plan the user chose. Paid unlock without Stripe only when bypass allowed.
     const profilePatch: Record<string, unknown> = {
       name,
       short_name: shortName,
@@ -83,7 +85,7 @@ export async function POST(request: Request) {
     if (plan === "free") {
       profilePatch.plan = "free";
       profilePatch.subscription_status = "none";
-    } else if (!stripeLive) {
+    } else if (billingBypass) {
       profilePatch.plan = plan;
       profilePatch.subscription_status = "active";
     }

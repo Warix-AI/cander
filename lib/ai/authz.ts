@@ -27,6 +27,31 @@ export function assertNotSharedWorkspaceAccess(opts: {
   void opts.isWorkspaceMember;
 }
 
+/** Intelligence rows must never land in a shared null-workspace bucket. */
+export function assertIntelligenceWorkspaceBound(opts: {
+  workspaceId: string | null | undefined;
+  isWorkspaceMember: boolean;
+}): string {
+  const workspaceId = opts.workspaceId?.trim() || "";
+  if (!workspaceId) {
+    throw new Error("Forbidden: intelligence rows require a workspace_id");
+  }
+  if (!opts.isWorkspaceMember) {
+    throw new Error("Forbidden: not a member of the intelligence workspace");
+  }
+  return workspaceId;
+}
+
+/** Attach workspace to a new chat only when the actor is a member. */
+export function resolveChatWorkspaceId(opts: {
+  requestedWorkspaceId: string | null | undefined;
+  isWorkspaceMember: boolean;
+}): string | null {
+  const requested = opts.requestedWorkspaceId?.trim() || null;
+  if (!requested || !opts.isWorkspaceMember) return null;
+  return requested;
+}
+
 export type ContextAccessGate = {
   actorId: string;
   isWorkspaceMember: boolean;

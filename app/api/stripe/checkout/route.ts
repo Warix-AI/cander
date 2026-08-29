@@ -62,6 +62,16 @@ export async function POST(request: Request) {
   }
 
   if (!isStripeConfigured()) {
+    // Local/demo unlock only when explicitly allowed — never in production by accident.
+    if (
+      process.env.ALLOW_BILLING_BYPASS !== "1" &&
+      process.env.NODE_ENV === "production"
+    ) {
+      return NextResponse.json(
+        { error: "Billing is not configured." },
+        { status: 503 },
+      );
+    }
     // Local/demo unlock — never allow the browser client to write plan columns.
     await createSupabaseAdminClient()
       .from("profiles")
@@ -118,6 +128,15 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   if (!isStripeConfigured()) {
+    if (
+      process.env.ALLOW_BILLING_BYPASS !== "1" &&
+      process.env.NODE_ENV === "production"
+    ) {
+      return NextResponse.json(
+        { error: "Billing is not configured." },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({ bypass: true, paid: true });
   }
 

@@ -14,9 +14,11 @@ import {
   assertAiChatOwner,
   assertBridgeUrlSafeForEdge,
   assertContextRefAccess,
+  assertIntelligenceWorkspaceBound,
   assertNotSharedWorkspaceAccess,
   formatContextBlock,
   isLocalOrPrivateUrl,
+  resolveChatWorkspaceId,
 } from "../lib/ai/authz.ts";
 import { resolveAuthorizedToolNames } from "../lib/ai/tools/registry.ts";
 
@@ -159,5 +161,55 @@ test("context block formats authorized summaries only", () => {
   assert.match(
     formatContextBlock([{ kind: "project", title: "Northwind" }]),
     /authorized workspace context/,
+  );
+});
+
+test("intelligence rows require non-null workspace membership", () => {
+  assert.throws(
+    () =>
+      assertIntelligenceWorkspaceBound({
+        workspaceId: null,
+        isWorkspaceMember: true,
+      }),
+    /require a workspace_id/,
+  );
+  assert.throws(
+    () =>
+      assertIntelligenceWorkspaceBound({
+        workspaceId: "ws-a",
+        isWorkspaceMember: false,
+      }),
+    /not a member/,
+  );
+  assert.equal(
+    assertIntelligenceWorkspaceBound({
+      workspaceId: "  ws-a  ",
+      isWorkspaceMember: true,
+    }),
+    "ws-a",
+  );
+});
+
+test("create_chat only attaches workspace when actor is a member", () => {
+  assert.equal(
+    resolveChatWorkspaceId({
+      requestedWorkspaceId: "ws-foreign",
+      isWorkspaceMember: false,
+    }),
+    null,
+  );
+  assert.equal(
+    resolveChatWorkspaceId({
+      requestedWorkspaceId: "ws-a",
+      isWorkspaceMember: true,
+    }),
+    "ws-a",
+  );
+  assert.equal(
+    resolveChatWorkspaceId({
+      requestedWorkspaceId: null,
+      isWorkspaceMember: true,
+    }),
+    null,
   );
 });
