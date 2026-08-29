@@ -13,20 +13,21 @@ export function UserMessage({
   return (
     <div className="max-w-[min(78%,36rem)] space-y-2">
       {images.length ? (
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-1.5">
           {images.map((image, index) => (
             <a
               key={`${image.name}-${index}`}
               href={image.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="block overflow-hidden rounded-2xl border border-border bg-muted"
+              className="block h-10 w-10 overflow-hidden rounded-[10px] border border-border bg-muted"
+              title={image.name}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={image.url}
                 alt={image.name}
-                className="max-h-56 max-w-full object-contain"
+                className="h-full w-full object-cover"
               />
             </a>
           ))}

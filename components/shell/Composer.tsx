@@ -449,7 +449,7 @@ export function Composer({
                     <img
                       src={image.url}
                       alt={image.name}
-                      className="h-14 w-14 object-cover"
+                      className="h-10 w-10 object-cover"
                     />
                   </button>
                 ))}

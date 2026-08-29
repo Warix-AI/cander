@@ -101,11 +101,18 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const entityOpen = Boolean(projectId) || inConnector;
   const showEntityBack =
     entityOpen && !inChromeSub && !onMenuMain && mobileSurface !== "menu";
+  const showHomeChatPanelToggle =
+    !inChromeSub &&
+    !onMenuMain &&
+    view === "chat" &&
+    !spaceId &&
+    !projectId;
   const showSpaceToggle =
     !inChromeSub &&
     !onMenuMain &&
-    (inPrimarySpace || inConnector) &&
-    (view === "space" || (view === "chat" && Boolean(spaceId)));
+    ((inPrimarySpace || inConnector) &&
+      (view === "space" || (view === "chat" && Boolean(spaceId)))) ||
+    showHomeChatPanelToggle;
 
   const settingsNav = visibleSettingsTabs(entitlements);
   const workspaceName = settingsWorkspaceId
@@ -127,7 +134,11 @@ export function MobileAppChrome({ className }: { className?: string }) {
         : "";
 
   const spaceLabel = spaceId ? navLabel(spaceId as SpaceId) ?? "Space" : "Space";
-  const panelTabLabel = inConnector ? "Connector" : spaceLabel;
+  const panelTabLabel = showHomeChatPanelToggle
+    ? "Panel"
+    : inConnector
+      ? "Connector"
+      : spaceLabel;
   const surface: MobileSurface =
     mobileSurface === "menu"
       ? "menu"
@@ -292,6 +303,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const setChatOrPanel = (next: "chat" | "panel") => {
     if (!showSpaceToggle) return;
     if (next === "panel") {
+      setPanelMode("split");
       setMobileSurface("panel");
       return;
     }

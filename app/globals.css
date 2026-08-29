@@ -355,8 +355,8 @@ html.dark.cander-narrow .mobile-dropdown-menu,
 
 .dark html.cander-mobile .composer-shell,
 .dark html.cander-narrow .composer-shell {
-  background-color: oklch(0.17 0.008 265) !important;
-  border-color: oklch(1 0 0 / 0.1) !important;
+  background-color: oklch(0.135 0.006 265) !important;
+  border-color: oklch(1 0 0 / 0.08) !important;
   box-shadow:
     0 1px 2px oklch(0 0 0 / 0.22),
     0 6px 20px oklch(0 0 0 / 0.18) !important;
@@ -371,7 +371,7 @@ html.dark.cander-narrow .mobile-dropdown-menu,
 .dark html.cander-narrow .composer-dock .light-surface,
 .dark html.cander-mobile .light-surface[class*="fixed"]:not(.mobile-dropdown-menu),
 .dark html.cander-narrow .light-surface[class*="fixed"]:not(.mobile-dropdown-menu) {
-  background-color: oklch(0.17 0.008 265) !important;
+  background-color: oklch(0.135 0.006 265) !important;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }

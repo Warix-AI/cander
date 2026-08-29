@@ -17,7 +17,8 @@ Answer the question first. Prefer short paragraphs and high information density.
 Do not restate the user's request. Avoid unnecessary headings and filler.
 Expand only when the question needs detail or the user asks for more.
 You may use Markdown; the UI will render it.
-Long conversations are summarized into condensed memory. Prefer that memory plus the recent messages over inventing earlier details.`;
+Long conversations are summarized into condensed memory. Prefer that memory plus the recent messages over inventing earlier details.
+When greeting, be warm and brief — use the user's preferred name when known (e.g. "Hi, Alex — how can I help?"). Do not dump workspace IDs, project UUIDs, or inventory dumps in greetings.`;
 
 type Json = Record<string, unknown>;
 
@@ -295,6 +296,7 @@ Deno.serve(async (req) => {
         user.id,
         payload.chatId,
       );
+      const userProfileText = await resolveUserProfileText(supabase, user.id);
 
       const bridgeUrl = (Deno.env.get("CANDER_AI_BRIDGE_URL") ?? "").replace(
         /\/$/,
@@ -328,6 +330,7 @@ Deno.serve(async (req) => {
           watermark,
           condensed,
           contextText,
+          userProfileText,
         });
 
         const bridgeRes = await fetch(`${bridgeUrl}/v1/chat`, {
@@ -522,6 +525,58 @@ async function authorizeRef(
   return { ok: false, error: "Unsupported context kind", workspaceId: null, meta: null };
 }
 
+async function resolveUserProfileText(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  userId: string,
+): Promise<string | null> {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("name, short_name, email, plan")
+    .eq("id", userId)
+    .maybeSingle();
+
+  const { data: memberships } = await supabase
+    .from("workspace_members")
+    .select("role, workspace_id, workspaces(id, name, kind)")
+    .eq("profile_id", userId)
+    .limit(20);
+
+  const preferred =
+    (typeof profile?.short_name === "string" && profile.short_name.trim()) ||
+    (typeof profile?.name === "string" && profile.name.trim().split(/\s+/)[0]) ||
+    null;
+  const fullName =
+    typeof profile?.name === "string" ? profile.name.trim() : null;
+  const plan = profile?.plan || null;
+
+  const orgLines: string[] = [];
+  for (const row of memberships ?? []) {
+    const ws = Array.isArray(row.workspaces)
+      ? row.workspaces[0]
+      : row.workspaces;
+    if (!ws?.name) continue;
+    orgLines.push(
+      `- ${ws.name} (${ws.kind ?? "workspace"}) role=${row.role ?? "member"}`,
+    );
+  }
+
+  const lines = [
+    "Signed-in user profile (use for tone and personalization; stay within their authorized data):",
+    preferred ? `Preferred name: ${preferred}` : null,
+    fullName ? `Full name: ${fullName}` : null,
+    profile?.email ? `Email: ${profile.email}` : null,
+    plan ? `Billing plan: ${plan}` : null,
+    orgLines.length ? "Organizations / workspaces:" : null,
+    ...orgLines,
+    preferred
+      ? `Greet with "Hi, ${preferred}" (or similar) when opening a conversation — never lead with raw IDs.`
+      : "Greet briefly and warmly when opening a conversation.",
+  ].filter(Boolean);
+
+  return lines.length > 1 ? lines.join("\n") : null;
+}
+
 async function resolveContextText(
   // deno-lint-ignore no-explicit-any
   supabase: any,
@@ -587,6 +642,7 @@ async function resolveContextText(
     ...(inventory.length ? ["", "Workspace inventory:", ...inventory] : []),
     "",
     "Use this inventory to answer questions about projects, sources, and recent work. Do not invent items that are not listed.",
+    "In casual replies, prefer project titles over raw UUIDs unless the user asks for an id.",
   ].join("\n");
 }
 
@@ -619,6 +675,7 @@ function buildModelMessages(opts: {
   watermark: number;
   condensed: CondensedContext | null;
   contextText: string | null;
+  userProfileText?: string | null;
 }): Array<{ role: string; content: string }> {
   const afterWatermark = opts.history.filter(
     (m) => m.sort_order > opts.watermark,
@@ -627,6 +684,9 @@ function buildModelMessages(opts: {
   const messages: Array<{ role: string; content: string }> = [
     { role: "system", content: PRODUCT_SYSTEM_PROMPT },
   ];
+  if (opts.userProfileText) {
+    messages.push({ role: "system", content: opts.userProfileText });
+  }
   if (opts.contextText) {
     messages.push({ role: "system", content: opts.contextText });
   }

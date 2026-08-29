@@ -18,8 +18,9 @@ export function canUseRightPanel(opts: {
   jobId?: string | null;
   skillId?: string | null;
 }) {
-  if (!chatIsActive(opts)) return false;
+  // Home New Chat / empty landing — allow opening the choice panel before a send.
   if (opts.view === "chat") return true;
+  if (!chatIsActive(opts)) return false;
   if (opts.view !== "space") return false;
   return (
     isChatSpace(opts.spaceId) ||

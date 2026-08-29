@@ -10,6 +10,7 @@ import {
   subscribeChatRealtime,
   syncThreadsToSupabase,
 } from "@/lib/api/chat-api.supabase";
+import { threadHasTurns } from "@/lib/persistent-chat";
 import type { WorkspaceCtx } from "@/lib/space-entities";
 
 const SYNC_DEBOUNCE_MS = 600;
@@ -50,7 +51,15 @@ export async function hydrateChatFromRemote(
   const otherWorkspaces = latest.filter(
     (item) => item.workspaceId !== ctx.workspaceId,
   );
-  replaceChatThreads([...otherWorkspaces, ...remote]);
+  const remoteIds = new Set(remote.map((item) => item.id));
+  // Keep local turns that have not landed remotely yet (avoids wiping New Chat).
+  const localPending = latest.filter(
+    (item) =>
+      item.workspaceId === ctx.workspaceId &&
+      !remoteIds.has(item.id) &&
+      threadHasTurns(item),
+  );
+  replaceChatThreads([...otherWorkspaces, ...remote, ...localPending]);
   window.setTimeout(() => {
     skipRemoteSync = false;
   }, 0);

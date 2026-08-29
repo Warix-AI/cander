@@ -15,7 +15,7 @@ import { Composer } from "@/components/shell/Composer";
 import { APP_TAGLINE } from "@/lib/app-brand";
 import { chatSpaceCopy, spaceIconTint } from "@/lib/space-icons";
 import { homeSuggestions } from "@/lib/suggestions";
-import type { ChatImageAttachment, SpaceId } from "@/lib/types";
+import type { ChatImageAttachment, Message, SpaceId } from "@/lib/types";
 import { chatSpaceId } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import { useChatCanvasCentered } from "@/lib/chat-layout";
@@ -43,13 +43,28 @@ export function ChatColumn() {
   const showLanding =
     !browserMode && !hasChatTurns && (!thread || drafting) && !showSpaceNewPrompt;
   const endRef = useRef<HTMLDivElement>(null);
+  const latestUserRef = useRef<HTMLDivElement>(null);
   const last = thread?.messages.at(-1);
+  const lastUserId = [...(thread?.messages ?? [])]
+    .reverse()
+    .find((m) => m.role === "user")?.id;
   const floating = useShellStyle() === "floating";
   const { centered } = useChatCanvasCentered();
 
+  useLayoutEffect(() => {
+    if (!lastUserId) return;
+    const el = latestUserRef.current;
+    if (!el) return;
+    el.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [lastUserId, last?.id]);
+
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
-  }, [last?.id, last?.content, last?.blocks]);
+    // While the assistant is typing, keep the growing reply in view without
+    // yanking the user message off the top.
+    if (last?.role === "assistant" && last.status === "streaming") {
+      endRef.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [last?.content, last?.role, last?.status]);
 
   const send = (text: string, opts?: { attachments?: ChatImageAttachment[] }) => {
     const trimmed = text.trim();
@@ -69,16 +84,33 @@ export function ChatColumn() {
     go();
   };
 
+  const renderTranscript = (messages: Message[]) => (
+    <>
+      {messages.map((message) => {
+        const pin = message.id === lastUserId && message.role === "user";
+        return (
+          <div
+            key={message.id}
+            ref={pin ? latestUserRef : undefined}
+            className={pin ? "scroll-mt-3" : undefined}
+          >
+            <ChatMessage message={message} />
+          </div>
+        );
+      })}
+      {/* Room below the latest turn so it can sit near the top like ChatGPT. */}
+      <div className="min-h-[42vh]" aria-hidden />
+      <div ref={endRef} />
+    </>
+  );
+
   if (browserMode) {
     return (
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
         <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
           {thread ? (
             <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-5">
-              {thread.messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
-              ))}
-              <div ref={endRef} />
+              {renderTranscript(thread.messages)}
             </div>
           ) : (
             <div ref={endRef} />
@@ -108,12 +140,7 @@ export function ChatColumn() {
                   summary={thread.sessionSummary}
                 />
               ) : null}
-              {thread
-                ? thread.messages.map((message) => (
-                    <ChatMessage key={message.id} message={message} />
-                  ))
-                : null}
-              <div ref={endRef} />
+              {thread ? renderTranscript(thread.messages) : null}
             </div>
           ) : (
             <div ref={endRef} />
@@ -157,12 +184,7 @@ export function ChatColumn() {
                 summary={thread.sessionSummary}
               />
             ) : null}
-            {thread
-              ? thread.messages.map((message) => (
-                  <ChatMessage key={message.id} message={message} />
-                ))
-              : null}
-            <div ref={endRef} />
+            {thread ? renderTranscript(thread.messages) : null}
           </div>
         </div>
       )}

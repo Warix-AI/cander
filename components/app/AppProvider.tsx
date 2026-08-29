@@ -838,6 +838,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     setPanelMode((mode) => (mode === "collapsed" ? "split" : "collapsed"));
+    // Keep a usable right-panel share when opening from empty New Chat.
+    setPanelRatioState((ratio) => (ratio < 0.5 ? 0.55 : ratio));
     setMobileSurface("chat");
   }, [panelMode]);
 

@@ -121,7 +121,7 @@ export function SpaceChatLayout() {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
-          pinChat && "w-[22.5rem] shrink-0",
+          pinChat && "w-[40%] min-w-[16rem] max-w-[28rem] shrink-0",
           animateLayout &&
             !pinChat &&
             "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
@@ -144,7 +144,7 @@ export function SpaceChatLayout() {
         className={cn(
           "relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar @container",
           pinChat && "min-w-0 flex-1",
-          chatOpen && liveChatPct > 0 && "border-l border-border",
+          chatOpen && liveChatPct > 0 && "border-l border-border/40",
           animateLayout &&
             !pinChat &&
             "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",

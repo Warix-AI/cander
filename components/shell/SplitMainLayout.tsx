@@ -86,7 +86,9 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
   }, [panelOn, immersive, panelPct, mobile, canPanel]);
 
   if (mobile) {
-    const withPanel = canPanel && panelOn;
+    // Keep the panel pane mounted whenever the right panel is available so
+    // Chat|Panel swipe works before the first message (home New Chat).
+    const withPanel = canPanel;
     const active: MobileSurface =
       mobileSurface === "panel" && withPanel ? "panel" : "chat";
 
@@ -127,7 +129,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col",
-          immersive ? "w-[22.5rem] shrink-0" : "min-w-0 flex-1",
+          immersive ? "w-[40%] min-w-[16rem] max-w-[28rem] shrink-0" : "min-w-0 flex-1",
           !immersive &&
             showPanelColumn &&
             animateLayout &&
@@ -148,7 +150,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
               !immersive &&
                 animateLayout &&
                 "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
-              livePanelWidth > 0 && !floating && "border-l border-border bg-sidebar",
+              livePanelWidth > 0 && !floating && "border-l border-border/40 bg-sidebar",
               livePanelWidth === 0 && !panelOn && "pointer-events-none",
             )}
             style={immersive ? undefined : { width: `${livePanelWidth}%` }}
