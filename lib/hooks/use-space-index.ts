@@ -19,6 +19,7 @@ import {
 } from "@/lib/space-index";
 import type { SpaceId, Thread } from "@/lib/types";
 import { formatRelativeTime } from "@/lib/format-relative-time";
+import { threadHasTurns } from "@/lib/persistent-chat";
 import { navLabel } from "@/lib/use-main-nav-items";
 import { getWorkspaceCatalogSnapshot } from "@/lib/workspace-catalog";
 import { workspaceKindOf } from "@/lib/workspace-kind";
@@ -155,6 +156,10 @@ export function useSpaceIndex(opts?: {
     const items: SpaceIndexEntry[] = [];
 
     for (const thread of threads) {
+      // Empty space/project docks do not belong in Recents until a turn exists.
+      if (!threadHasTurns(thread)) continue;
+      // Owner-private: only the current user's chats in the index.
+      if (thread.createdBy && thread.createdBy !== actor.id) continue;
       if (thread.projectId) usedProjects.add(thread.projectId);
       const creator = attributionFor(thread.workspaceId, thread.createdBy, actor.id);
       items.push({

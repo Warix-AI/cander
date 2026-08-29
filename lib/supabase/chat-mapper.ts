@@ -1,4 +1,3 @@
-import { formatRelativeTime } from "@/lib/format-relative-time";
 import type { Message, SpaceId, Thread } from "@/lib/types";
 
 export type ThreadRow = {
@@ -29,6 +28,19 @@ export type MessageRow = {
   created_at: string;
 };
 
+function isIsoTimestamp(value: string) {
+  const t = Date.parse(value);
+  return !Number.isNaN(t);
+}
+
+/** Prefer an ISO updatedAt from the client store; fall back to now. */
+export function threadUpdatedAtIso(thread: Thread) {
+  if (thread.updatedAt && isIsoTimestamp(thread.updatedAt)) {
+    return new Date(thread.updatedAt).toISOString();
+  }
+  return new Date().toISOString();
+}
+
 export function threadRowToThread(
   row: ThreadRow,
   messages: Message[],
@@ -39,7 +51,7 @@ export function threadRowToThread(
     workspaceId: row.workspace_id,
     projectId: row.project_id ?? undefined,
     spaceId: (row.space_id as SpaceId | null) ?? undefined,
-    updatedAt: formatRelativeTime(row.updated_at),
+    updatedAt: row.updated_at,
     snippet: row.snippet,
     messages,
     shared: row.shared || undefined,
@@ -53,6 +65,7 @@ export function threadToRow(
   thread: Thread,
   createdBy?: string | null,
 ): ThreadRow {
+  const updated = threadUpdatedAtIso(thread);
   return {
     id: thread.id,
     workspace_id: thread.workspaceId,
@@ -63,9 +76,9 @@ export function threadToRow(
     shared: Boolean(thread.shared),
     persistent: Boolean(thread.persistent),
     session_summary: thread.sessionSummary ?? null,
-    created_by: createdBy ?? null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    created_by: createdBy ?? thread.createdBy ?? null,
+    created_at: updated,
+    updated_at: updated,
   };
 }
 

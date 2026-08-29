@@ -61,7 +61,7 @@ export function ContextPanel() {
           ? cn("light-surface my-3 mr-3 overflow-hidden", SHELL_G3_RADIUS)
           : mobile
             ? cn("overflow-hidden", MOBILE_APP_BG)
-            : "light-surface rounded-none border-0 border-l border-border shadow-none",
+            : "overflow-hidden rounded-none border-0 border-l border-border bg-sidebar shadow-none",
         !dragging &&
           !mobile &&
           "transition-[width] duration-[550ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]",

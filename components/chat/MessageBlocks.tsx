@@ -18,7 +18,7 @@ export function ChatMessage({ message }: { message: Message }) {
   if (message.role === "user") {
     return (
       <div className="flex flex-col items-end">
-        <UserMessage content={message.content} />
+        <UserMessage content={message.content} blocks={message.blocks} />
       </div>
     );
   }

@@ -188,7 +188,19 @@ export type ChatBlock =
       label: string;
       status: "running" | "done" | "error";
       detail?: string;
+    }
+  | {
+      type: "image";
+      url: string;
+      name: string;
+      mime?: string;
     };
+
+export type ChatImageAttachment = {
+  url: string;
+  name: string;
+  mime: string;
+};
 
 export type Checkpoint = {
   id: string;

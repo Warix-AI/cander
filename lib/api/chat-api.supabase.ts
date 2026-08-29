@@ -104,7 +104,7 @@ export function createSupabaseChatApi(): ChatApi {
         workspaceId: ctx.workspaceId,
         projectId: input.projectId,
         spaceId: input.spaceId,
-        updatedAt: "Just now",
+        updatedAt: new Date().toISOString(),
         snippet: "",
         messages: [],
         createdBy: ctx.actorId,

@@ -17,7 +17,8 @@ import type { ChatBlock, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function AssistantMessage({ message }: { message: Message }) {
-  const pending = message.status === "pending" || message.status === "streaming";
+  const pending = message.status === "pending";
+  const streaming = message.status === "streaming";
   const showThinking =
     pending &&
     (!message.content ||
@@ -46,7 +47,7 @@ export function AssistantMessage({ message }: { message: Message }) {
         .map((block, index) => (
           <BlockView key={index} block={block} />
         ))}
-      {!showThinking ? <MessageActions message={message} /> : null}
+      {!showThinking && !streaming ? <MessageActions message={message} /> : null}
     </div>
   );
 }
@@ -162,6 +163,22 @@ function BlockView({ block }: { block: ChatBlock }) {
           status={block.status}
           detail={block.detail}
         />
+      );
+    case "image":
+      return (
+        <a
+          href={block.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="my-1 block max-w-full overflow-hidden rounded-[10px] border border-border"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={block.url}
+            alt={block.name}
+            className="max-h-64 max-w-full object-contain"
+          />
+        </a>
       );
   }
 }

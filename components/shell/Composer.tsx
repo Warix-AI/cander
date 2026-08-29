@@ -45,6 +45,7 @@ import {
 import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
+import type { ChatImageAttachment } from "@/lib/types";
 
 type MenuId = "plus" | null;
 
@@ -57,7 +58,10 @@ export function Composer({
   onFocus,
   autoFocus = false,
 }: {
-  onSend: (text: string) => void;
+  onSend: (
+    text: string,
+    opts?: { attachments?: ChatImageAttachment[] },
+  ) => void;
   landing?: boolean;
   compact?: boolean;
   hideSpaceTools?: boolean;
@@ -97,6 +101,7 @@ export function Composer({
   const [dictating, setDictating] = useState(false);
   const [menu, setMenu] = useState<MenuId>(null);
   const [files, setFiles] = useState<string[]>([]);
+  const [images, setImages] = useState<ChatImageAttachment[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -225,6 +230,7 @@ export function Composer({
   const stayInPlace = compact || hideSpaceTools;
   const dictatingActive = dictating;
   const hasText = value.trim().length > 0;
+  const hasPayload = hasText || images.length > 0 || files.length > 0;
   const pinTarget = thread
     ? ({ kind: "thread" as const, id: thread.id })
     : projectId
@@ -243,7 +249,7 @@ export function Composer({
   };
 
   const submit = () => {
-    if (dictatingActive && !hasText) {
+    if (dictatingActive && !hasText && !images.length) {
       endDictation();
       return;
     }
@@ -252,10 +258,16 @@ export function Composer({
       : entityReference
         ? `[ref: ${entityReference.label ?? entityReference.type} — ${entityReference.snapshot ?? entityReference.id}] `
       : "";
+    const fileNote = files.length
+      ? files.map((name) => `[User attached file: ${name}]`).join("\n")
+      : "";
     const payload = `${refPrefix}${value}`.trim();
-    if (!payload) return;
-    onSend(payload);
+    const body = [payload, fileNote].filter(Boolean).join("\n");
+    if (!body && !images.length) return;
+    onSend(body || "", images.length ? { attachments: images } : undefined);
     setValue("");
+    setFiles([]);
+    setImages([]);
     setMenu(null);
     setDictating(false);
     clearPageReference();
@@ -402,7 +414,7 @@ export function Composer({
                 />
                 <ComposerTrailingActions
                   compact
-                  hasText={hasText}
+                  hasText={hasPayload}
                   hasVoice={entitlements.hasVoice}
                   voiceActive={voiceActive}
                   onStartVoice={startVoice}
@@ -419,8 +431,28 @@ export function Composer({
               showUsageBar && "mb-2.5",
             )}
           >
-            {files.length ? (
-              <div className="mb-1.5 flex flex-wrap gap-1.5">
+            {files.length || images.length ? (
+              <div className="mb-1.5 flex flex-wrap items-end gap-1.5">
+                {images.map((image) => (
+                  <button
+                    key={`${image.name}-${image.url.slice(-12)}`}
+                    type="button"
+                    title="Remove image"
+                    onClick={() =>
+                      setImages((current) =>
+                        current.filter((item) => item.url !== image.url),
+                      )
+                    }
+                    className="relative overflow-hidden rounded-[10px] border border-border"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={image.url}
+                      alt={image.name}
+                      className="h-14 w-14 object-cover"
+                    />
+                  </button>
+                ))}
                 {files.map((name) => (
                   <span
                     key={name}
@@ -571,7 +603,7 @@ export function Composer({
               />
               <div className="flex shrink-0 items-center gap-0.5 self-end md:self-start">
               <ComposerTrailingActions
-                hasText={hasText}
+                hasText={hasPayload}
                 hasVoice={entitlements.hasVoice}
                 voiceActive={voiceActive}
                 onStartVoice={startVoice}
@@ -613,8 +645,46 @@ export function Composer({
       className="sr-only"
       aria-hidden
       onChange={(event) => {
-        finishFilePick(event.target.files, (next) => {
-          setFiles((current) => [...current, ...next].slice(0, 6));
+        const list = event.target.files;
+        awaitingFilePickRef.current = false;
+        if (!list?.length) {
+          event.target.value = "";
+          return;
+        }
+        const readers = [...list].slice(0, 4).map(
+          (file) =>
+            new Promise<ChatImageAttachment | null>((resolve) => {
+              if (!file.type.startsWith("image/")) {
+                resolve(null);
+                return;
+              }
+              if (file.size > 2_500_000) {
+                resolve(null);
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = () => {
+                const url = typeof reader.result === "string" ? reader.result : "";
+                if (!url) {
+                  resolve(null);
+                  return;
+                }
+                resolve({
+                  url,
+                  name: file.name,
+                  mime: file.type || "image/png",
+                });
+              };
+              reader.onerror = () => resolve(null);
+              reader.readAsDataURL(file);
+            }),
+        );
+        void Promise.all(readers).then((items) => {
+          const next = items.filter(Boolean) as ChatImageAttachment[];
+          if (next.length) {
+            setImages((current) => [...current, ...next].slice(0, 4));
+          }
+          setMenu(null);
         });
         event.target.value = "";
       }}

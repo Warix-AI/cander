@@ -100,6 +100,7 @@ import type {
   BillingPlan,
   HostingMode,
   Checkpoint,
+  ChatImageAttachment,
   Message,
   Member,
   MobileSurface,
@@ -138,6 +139,8 @@ import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
+import { typewriterReveal } from "@/lib/ai/typewriter";
+import { openProjectImageTab } from "@/lib/chat-image-attach";
 import {
   getSupabaseUserServerSnapshot,
   getSupabaseUserSnapshot,
@@ -169,6 +172,7 @@ function sameSnap(a: Snapshot, b: Snapshot) {
 type SendOpts = {
   space?: SpaceId;
   skillId?: string;
+  attachments?: ChatImageAttachment[];
 };
 
 type AppContextValue = {
@@ -1246,10 +1250,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const sendMessage = useCallback(
     (text: string, opts?: SendOpts) => {
+      const attachments = opts?.attachments?.filter((a) => a.url) ?? [];
       const trimmed = text.trim();
-      if (!trimmed) return;
-      const kind = classifyTurn(trimmed);
-      const intent = inferIntent(trimmed, workspaceId, opts?.space ?? spaceId);
+      if (!trimmed && !attachments.length) return;
+      const contentForIntent = trimmed || "(image attached)";
+      const kind = classifyTurn(contentForIntent);
+      const intent = inferIntent(
+        contentForIntent,
+        workspaceId,
+        opts?.space ?? spaceId,
+      );
       const currentChat =
         opts?.space ?? (isChatSpace(spaceId) ? spaceId : null);
       const allowed = memberSpaces(workspaceId, actor.id, workspacePolicies);
@@ -1319,11 +1329,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       const selection = selectedId;
+      const imageBlocks = attachments.map((item) => ({
+        type: "image" as const,
+        url: item.url,
+        name: item.name,
+        mime: item.mime,
+      }));
+      const displayText =
+        trimmed ||
+        (attachments.length
+          ? attachments.map((a) => a.name).join(", ")
+          : "");
       const userMsg: Message = {
         id: nextId("u"),
         role: "user",
-        content: trimmed,
+        content: displayText,
         at: nowTime(),
+        blocks: imageBlocks.length ? imageBlocks : undefined,
       };
 
       let assistantMsg: Message = {
@@ -1345,6 +1367,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           status: "pending",
         };
       }
+
+      const aiUserContent = [
+        trimmed,
+        ...attachments.map((a) => `[User attached image: ${a.name}]`),
+      ]
+        .filter(Boolean)
+        .join("\n");
 
       if (kind === "undo") {
         const last = checkpoints[0];
@@ -1505,9 +1534,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             item.id === existing.id
               ? {
                   ...item,
-                  title: item.messages.length ? item.title : trimmed.slice(0, 48),
-                  snippet: trimmed,
-                  updatedAt: "Just now",
+                  title: item.messages.length ? item.title : displayText.slice(0, 48),
+                  snippet: displayText,
+                  updatedAt: new Date().toISOString(),
                   spaceId: chatSpace ?? undefined,
                   projectId: useProjectPersistent
                     ? projectId ?? item.projectId
@@ -1515,6 +1544,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   workspaceId: matched?.workspaceId ?? item.workspaceId,
                   persistent: usePersistent ? true : item.persistent,
                   sessionSummary: null,
+                  createdBy: item.createdBy ?? actor.id,
                   messages: [...item.messages, userMsg, assistantMsg],
                 }
               : item,
@@ -1522,20 +1552,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         const created: Thread = {
           id: activeId,
-          title: trimmed.slice(0, 52),
+          title: displayText.slice(0, 52),
           workspaceId: matched?.workspaceId ?? workspaceId,
           projectId: useProjectPersistent ? projectId ?? undefined : intent.projectId,
           spaceId: chatSpace ?? undefined,
-          updatedAt: "Just now",
-          snippet: trimmed,
+          updatedAt: new Date().toISOString(),
+          snippet: displayText,
           messages: [userMsg, assistantMsg],
           persistent: usePersistent || undefined,
           sessionSummary: null,
+          createdBy: actor.id,
         };
         return [created, ...list];
       });
       setThreadId(activeId);
       setDrafting(false);
+
+      if (attachments.length && projectId && isChatSpace(space)) {
+        for (const image of attachments) {
+          openProjectImageTab({
+            profileId: actor.id,
+            workspaceId: matched?.workspaceId ?? workspaceId,
+            spaceId: space,
+            projectId,
+            projectTitle: project?.name ?? "Project",
+            imageUrl: image.url,
+            imageName: image.name,
+          });
+        }
+      }
 
       if (kind === "build" || kind === "refine" || kind === "fix") {
         const checkpoint = makeCheckpoint(trimmed, selection);
@@ -1652,8 +1697,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           null;
         void fetchPrivateAiReply({
           aiChatId: priorAiChatId,
-          title: trimmed.slice(0, 52),
-          content: trimmed,
+          title: displayText.slice(0, 52),
+          content: aiUserContent,
           workspaceId: matched?.workspaceId ?? workspaceId,
           projectId: replyProjectId,
           projectSpace: replyProjectSpace,
@@ -1663,44 +1708,66 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               message.id === assistantId ||
               (message.role === "assistant" &&
                 (message.status === "pending" ||
+                  message.status === "streaming" ||
                   message.content === "Thinking…" ||
                   message.content === "Thinking..."));
 
-            setThreads((current) => {
-              const apply = (item: Thread): Thread => {
-                const nextMessages = item.messages.map((message) =>
-                  isPendingAssistant(message)
-                    ? {
-                        ...message,
-                        content: result.content,
-                        status: "complete" as const,
-                      }
-                    : message,
-                );
-                if (result.condensationOccurred) {
-                  nextMessages.push({
-                    id: nextId("evt"),
-                    role: "system",
-                    content: "__CHAT_CONDENSED__",
-                    at: nowTime(),
-                    event: "condensed",
-                  });
-                }
-                return {
-                  ...item,
-                  aiChatId: result.aiChatId.startsWith("local-")
-                    ? item.aiChatId
-                    : result.aiChatId,
-                  messages: nextMessages,
+            const patchAssistant = (
+              content: string,
+              status: "streaming" | "complete",
+              condensationOccurred: boolean,
+            ) => {
+              setThreads((current) => {
+                const apply = (item: Thread): Thread => {
+                  let nextMessages = item.messages.map((message) =>
+                    isPendingAssistant(message) || message.id === assistantId
+                      ? { ...message, content, status }
+                      : message,
+                  );
+                  if (
+                    condensationOccurred &&
+                    status === "complete" &&
+                    !nextMessages.some((m) => m.event === "condensed")
+                  ) {
+                    nextMessages = [
+                      ...nextMessages,
+                      {
+                        id: nextId("evt"),
+                        role: "system",
+                        content: "__CHAT_CONDENSED__",
+                        at: nowTime(),
+                        event: "condensed" as const,
+                      },
+                    ];
+                  }
+                  return {
+                    ...item,
+                    aiChatId: result.aiChatId.startsWith("local-")
+                      ? item.aiChatId
+                      : result.aiChatId,
+                    messages: nextMessages,
+                  };
                 };
-              };
-              if (current.some((item) => item.id === activeId)) {
+                if (current.some((item) => item.id === activeId)) {
+                  return current.map((item) =>
+                    item.id === activeId ? apply(item) : item,
+                  );
+                }
                 return current.map((item) =>
-                  item.id === activeId ? apply(item) : item,
+                  item.messages.some(
+                    (m) => m.id === assistantId || isPendingAssistant(m),
+                  )
+                    ? apply(item)
+                    : item,
                 );
-              }
-              return current.map((item) =>
-                item.messages.some(isPendingAssistant) ? apply(item) : item,
+              });
+            };
+
+            typewriterReveal(result.content, (partial, done) => {
+              patchAssistant(
+                partial,
+                done ? "complete" : "streaming",
+                done && result.condensationOccurred,
               );
             });
           })
@@ -1813,6 +1880,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       billingPlan,
       workspacePolicies,
       supabaseUser,
+      actor.id,
       setThreads,
     ],
   );

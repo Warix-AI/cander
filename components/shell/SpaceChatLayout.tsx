@@ -142,7 +142,7 @@ export function SpaceChatLayout() {
 
       <div
         className={cn(
-          "relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
+          "relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar @container",
           pinChat && "min-w-0 flex-1",
           chatOpen && liveChatPct > 0 && "border-l border-border",
           animateLayout &&

@@ -15,7 +15,7 @@ import { Composer } from "@/components/shell/Composer";
 import { APP_TAGLINE } from "@/lib/app-brand";
 import { chatSpaceCopy, spaceIconTint } from "@/lib/space-icons";
 import { homeSuggestions } from "@/lib/suggestions";
-import type { SpaceId } from "@/lib/types";
+import type { ChatImageAttachment, SpaceId } from "@/lib/types";
 import { chatSpaceId } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import { useChatCanvasCentered } from "@/lib/chat-layout";
@@ -51,10 +51,10 @@ export function ChatColumn() {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [last?.id, last?.content, last?.blocks]);
 
-  const send = (text: string) => {
+  const send = (text: string, opts?: { attachments?: ChatImageAttachment[] }) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    const go = () => sendMessage(trimmed);
+    if (!trimmed && !opts?.attachments?.length) return;
+    const go = () => sendMessage(trimmed, opts);
     if (
       showLanding &&
       !browserMode &&

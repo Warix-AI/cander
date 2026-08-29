@@ -148,7 +148,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
               !immersive &&
                 animateLayout &&
                 "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
-              livePanelWidth > 0 && !floating && "border-l border-border",
+              livePanelWidth > 0 && !floating && "border-l border-border bg-sidebar",
               livePanelWidth === 0 && !panelOn && "pointer-events-none",
             )}
             style={immersive ? undefined : { width: `${livePanelWidth}%` }}
