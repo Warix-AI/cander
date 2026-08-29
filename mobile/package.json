@@ -16,6 +16,7 @@
     "add:android": "npx cap add android"
   },
   "dependencies": {
+    "@capacitor-community/speech-recognition": "^7.0.1",
     "@capacitor/android": "^7.4.3",
     "@capacitor/camera": "^7.0.5",
     "@capacitor/core": "^7.4.3",

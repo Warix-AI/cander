@@ -45,6 +45,16 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Cander uses the camera to attach photos to your chats.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Cander uses your photo library to attach images to your chats.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Cander may save edited photos when you choose to keep them.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Cander uses the microphone for dictation and voice chat.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Cander turns your speech into text for dictation and voice chat.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

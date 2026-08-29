@@ -46,6 +46,7 @@ import {
 import {
   DOCUMENT_ACCEPT,
   filesFromList,
+  isCapacitorNative,
   pickWithCapacitorCamera,
 } from "@/lib/composer-attach";
 import {
@@ -119,15 +120,15 @@ export function Composer({
   const [fileSnippets, setFileSnippets] = useState<string[]>([]);
   const [images, setImages] = useState<ChatImageAttachment[]>([]);
   const [dictateError, setDictateError] = useState<string | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const imageRef = useRef<HTMLInputElement>(null);
-  const cameraRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const speechRef = useRef<SpeechSession | null>(null);
   const valueBaseRef = useRef("");
   /** Keep the + menu visible while the native file sheet is open (iOS). */
   const awaitingFilePickRef = useRef(false);
+  const nativeShell = isCapacitorNative();
 
   useEffect(() => {
     const apply = () => {
@@ -201,17 +202,10 @@ export function Composer({
     const resetAwaitingPick = () => {
       awaitingFilePickRef.current = false;
     };
-    const inputs: HTMLInputElement[] = [];
-    if (fileRef.current) inputs.push(fileRef.current);
-    if (imageRef.current) inputs.push(imageRef.current);
-    if (cameraRef.current) inputs.push(cameraRef.current);
-    for (const input of inputs) {
-      input.addEventListener("cancel", resetAwaitingPick);
-    }
+    const input = fileRef.current;
+    input?.addEventListener("cancel", resetAwaitingPick);
     return () => {
-      for (const input of inputs) {
-        input.removeEventListener("cancel", resetAwaitingPick);
-      }
+      input?.removeEventListener("cancel", resetAwaitingPick);
     };
   }, []);
 
@@ -442,41 +436,57 @@ export function Composer({
                 }}
               />
             ) : null}
-            <MenuRow
-              icon={<Camera className="h-4 w-4" strokeWidth={1.7} />}
-              label="Camera"
-              onClick={() => {
-                void (async () => {
-                  const fromCap = await pickWithCapacitorCamera("camera");
-                  if (fromCap) {
-                    setImages((current) => [...current, fromCap].slice(0, 4));
+            {nativeShell ? (
+              <>
+                <MenuRow
+                  icon={<Camera className="h-4 w-4" strokeWidth={1.7} />}
+                  label="Camera"
+                  onClick={() => {
+                    setAttachError(null);
                     setMenu(null);
-                    return;
-                  }
-                  openFilePicker(cameraRef);
-                })();
-              }}
-            />
-            <MenuRow
-              icon={<ImageIcon className="h-4 w-4" strokeWidth={1.7} />}
-              label="Photos"
-              onClick={() => {
-                void (async () => {
-                  const fromCap = await pickWithCapacitorCamera("photos");
-                  if (fromCap) {
-                    setImages((current) => [...current, fromCap].slice(0, 4));
+                    void (async () => {
+                      const result = await pickWithCapacitorCamera("camera");
+                      if (result.ok) {
+                        setImages((current) =>
+                          [...current, result.image].slice(0, 4),
+                        );
+                        return;
+                      }
+                      if (!result.cancelled) setAttachError(result.message);
+                    })();
+                  }}
+                />
+                <MenuRow
+                  icon={<ImageIcon className="h-4 w-4" strokeWidth={1.7} />}
+                  label="Photos"
+                  onClick={() => {
+                    setAttachError(null);
                     setMenu(null);
-                    return;
-                  }
-                  openFilePicker(imageRef);
-                })();
-              }}
-            />
-            <MenuRow
-              icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
-              label="Files"
-              onClick={() => openFilePicker(fileRef)}
-            />
+                    void (async () => {
+                      const result = await pickWithCapacitorCamera("photos");
+                      if (result.ok) {
+                        setImages((current) =>
+                          [...current, result.image].slice(0, 4),
+                        );
+                        return;
+                      }
+                      if (!result.cancelled) setAttachError(result.message);
+                    })();
+                  }}
+                />
+                <MenuRow
+                  icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
+                  label="Files"
+                  onClick={() => openFilePicker(fileRef)}
+                />
+              </>
+            ) : (
+              <MenuRow
+                icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
+                label="Attach"
+                onClick={() => openFilePicker(fileRef)}
+              />
+            )}
             {browserMode ? (
               <MenuRow
                 icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
@@ -490,8 +500,10 @@ export function Composer({
           </ComposerMenu>
         ) : null}
 
-        {dictateError ? (
-          <p className="mb-1 px-1 text-[12px] text-muted-foreground">{dictateError}</p>
+        {dictateError || attachError ? (
+          <p className="mb-1 px-1 text-[12px] text-muted-foreground">
+            {dictateError || attachError}
+          </p>
         ) : null}
 
         {voiceActive && !dictatingActive ? (
@@ -740,13 +752,18 @@ export function Composer({
       ref={fileRef}
       type="file"
       multiple
-      accept={DOCUMENT_ACCEPT}
+      accept={
+        nativeShell
+          ? DOCUMENT_ACCEPT
+          : `${DOCUMENT_ACCEPT},image/*`
+      }
       tabIndex={-1}
       className="sr-only"
       aria-hidden
       onChange={(event) => {
         const list = event.target.files;
         awaitingFilePickRef.current = false;
+        setAttachError(null);
         void filesFromList(list).then((parsed) => {
           if (parsed.fileNames.length) {
             setFiles((current) =>
@@ -768,50 +785,6 @@ export function Composer({
             parsed.images.length ||
             parsed.textSnippets.length
           ) {
-            setMenu(null);
-          }
-        });
-        event.target.value = "";
-      }}
-    />
-    <input
-      ref={imageRef}
-      type="file"
-      accept="image/*"
-      multiple
-      tabIndex={-1}
-      className="sr-only"
-      aria-hidden
-      onChange={(event) => {
-        const list = event.target.files;
-        awaitingFilePickRef.current = false;
-        void filesFromList(list).then((parsed) => {
-          if (parsed.images.length) {
-            setImages((current) =>
-              [...current, ...parsed.images].slice(0, 4),
-            );
-            setMenu(null);
-          }
-        });
-        event.target.value = "";
-      }}
-    />
-    <input
-      ref={cameraRef}
-      type="file"
-      accept="image/*"
-      capture="environment"
-      tabIndex={-1}
-      className="sr-only"
-      aria-hidden
-      onChange={(event) => {
-        const list = event.target.files;
-        awaitingFilePickRef.current = false;
-        void filesFromList(list).then((parsed) => {
-          if (parsed.images.length) {
-            setImages((current) =>
-              [...current, ...parsed.images].slice(0, 4),
-            );
             setMenu(null);
           }
         });
