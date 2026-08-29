@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore, type TouchEventHandler } from "react";
-import { ChevronLeft, Ellipsis, Menu, Plus, SquarePen } from "lucide-react";
+import { ChevronLeft, ChevronRight, Ellipsis, Menu, Plus, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import {
@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 /**
  * ChatGPT-style mobile top bar.
  * Content: menu · Chat|{Space} · new chat
+ * In-project: back · project name (actions) · forward to panel / ⋯ on panel
  * Menu / settings sub-screens: back · title · (+ create workspace)
  */
 export function MobileAppChrome({ className }: { className?: string }) {
@@ -101,18 +102,22 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const entityOpen = Boolean(projectId) || inConnector;
   const showEntityBack =
     entityOpen && !inChromeSub && !onMenuMain && mobileSurface !== "menu";
+  const showProjectTools =
+    !inChromeSub && !onMenuMain && Boolean(projectId) && inPrimarySpace;
   const showHomeChatPanelToggle =
     !inChromeSub &&
     !onMenuMain &&
     view === "chat" &&
     !spaceId &&
     !projectId;
+  // Space-level Chat|Build toggle — not used inside a project (name chip instead).
   const showSpaceToggle =
     !inChromeSub &&
     !onMenuMain &&
-    ((inPrimarySpace || inConnector) &&
+    !showProjectTools &&
+    (((inPrimarySpace || inConnector) &&
       (view === "space" || (view === "chat" && Boolean(spaceId)))) ||
-    showHomeChatPanelToggle;
+      showHomeChatPanelToggle);
 
   const settingsNav = visibleSettingsTabs(entitlements);
   const workspaceName = settingsWorkspaceId
@@ -146,8 +151,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
         ? "panel"
         : "chat";
 
-  const showProjectTools =
-    !inChromeSub && !onMenuMain && Boolean(projectId) && inPrimarySpace;
   const showCreateWorkspace =
     inSettings &&
     !settingsMobileHub &&
@@ -271,6 +274,12 @@ export function MobileAppChrome({ className }: { className?: string }) {
   };
 
   const onLeadingClick = () => {
+    // In-project panel: left arrow returns to chat (does not leave the project).
+    if (showProjectTools && surface === "panel") {
+      setMobileSurface("chat");
+      return;
+    }
+    // In-project chat: leave project → space screen.
     if (showEntityBack) {
       popEntityNavigation();
       return;
@@ -301,7 +310,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
   };
 
   const setChatOrPanel = (next: "chat" | "panel") => {
-    if (!showSpaceToggle) return;
     if (next === "panel") {
       setPanelMode("split");
       setMobileSurface("panel");
@@ -311,6 +319,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
       setMobileSurface("chat");
       return;
     }
+    if (!showSpaceToggle) return;
     if (spaceId && isChatSpace(spaceId)) {
       openSpaceChat(spaceId);
       return;
@@ -323,11 +332,20 @@ export function MobileAppChrome({ className }: { className?: string }) {
   };
 
   const centerChrome =
-    !onMenuMain && (inChromeSub || showSpaceToggle) ? (
+    !onMenuMain && (inChromeSub || showProjectTools || showSpaceToggle) ? (
       inChromeSub ? (
         <p className="truncate text-center text-[15px] font-medium tracking-[-0.01em]">
           {subTitle}
         </p>
+      ) : showProjectTools ? (
+        <button
+          type="button"
+          aria-label={`${projectTitle} project actions`}
+          onClick={() => setActionsOpen(true)}
+          className="inline-flex max-w-[15rem] items-center justify-center rounded-full bg-muted/70 px-5 py-2 text-[14px] font-medium tracking-[-0.01em] text-foreground transition-colors active:bg-muted"
+        >
+          <span className="truncate">{projectTitle}</span>
+        </button>
       ) : showSpaceToggle ? (
         <div
           role="tablist"
@@ -389,13 +407,15 @@ export function MobileAppChrome({ className }: { className?: string }) {
             <button
               type="button"
               aria-label={
-                showEntityBack
-                  ? "Back"
-                  : inChromeSub
+                showProjectTools && surface === "panel"
+                  ? "Back to chat"
+                  : showEntityBack
                     ? "Back"
-                    : mobileSurface === "menu"
-                      ? "Close menu"
-                      : "Open menu"
+                    : inChromeSub
+                      ? "Back"
+                      : mobileSurface === "menu"
+                        ? "Close menu"
+                        : "Open menu"
               }
               onClick={onLeadingClick}
               className={mobileChromeButtonClass}
@@ -414,14 +434,29 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
           <div className="relative z-10 flex items-center justify-self-end gap-0.5">
             {showProjectTools ? (
-              <button
-                type="button"
-                aria-label="Project tools"
-                onClick={() => setActionsOpen(true)}
-                className={mobileChromeButtonClass}
-              >
-                <Ellipsis className="h-5 w-5" strokeWidth={1.8} />
-              </button>
+              surface === "chat" ? (
+                <button
+                  type="button"
+                  aria-label={
+                    spaceId === "research"
+                      ? "Open Explore"
+                      : "Open Build"
+                  }
+                  onClick={() => setChatOrPanel("panel")}
+                  className={mobileChromeButtonClass}
+                >
+                  <ChevronRight className="h-5 w-5" strokeWidth={1.8} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  aria-label="Project tools"
+                  onClick={() => setActionsOpen(true)}
+                  className={mobileChromeButtonClass}
+                >
+                  <Ellipsis className="h-5 w-5" strokeWidth={1.8} />
+                </button>
+              )
             ) : showCreateWorkspace ? (
               <button
                 type="button"
