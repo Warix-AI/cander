@@ -303,7 +303,7 @@ Deno.serve(async (req) => {
             Authorization: `Bearer ${bridgeSecret}`,
           },
           body: JSON.stringify({ model: MODEL, messages }),
-          signal: AbortSignal.timeout(120_000),
+          signal: AbortSignal.timeout(45_000),
         });
 
         if (!bridgeRes.ok) {

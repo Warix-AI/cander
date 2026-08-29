@@ -1658,45 +1658,60 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectSpace: replyProjectSpace,
         })
           .then((result) => {
-            setThreads((current) =>
-              current.map((item) =>
-                item.id !== activeId
-                  ? item
-                  : {
-                      ...item,
-                      aiChatId: result.aiChatId.startsWith("local-")
-                        ? item.aiChatId
-                        : result.aiChatId,
-                      messages: item.messages.map((message) =>
-                        message.id !== assistantId
-                          ? message
-                          : {
-                              ...message,
-                              content: result.content,
-                            },
-                      ),
-                    },
-              ),
-            );
+            setThreads((current) => {
+              const apply = (item: Thread): Thread => ({
+                ...item,
+                aiChatId: result.aiChatId.startsWith("local-")
+                  ? item.aiChatId
+                  : result.aiChatId,
+                messages: item.messages.map((message) => {
+                  const isTarget =
+                    message.id === assistantId ||
+                    (message.role === "assistant" &&
+                      (message.content === "Thinking…" ||
+                        message.content === "Thinking..."));
+                  return isTarget
+                    ? { ...message, content: result.content }
+                    : message;
+                }),
+              });
+              if (current.some((item) => item.id === activeId)) {
+                return current.map((item) =>
+                  item.id === activeId ? apply(item) : item,
+                );
+              }
+              // Thread may have been remapped by remote hydrate — patch any Thinking placeholder.
+              return current.map((item) =>
+                item.messages.some(
+                  (m) =>
+                    m.id === assistantId ||
+                    (m.role === "assistant" &&
+                      (m.content === "Thinking…" || m.content === "Thinking...")),
+                )
+                  ? apply(item)
+                  : item,
+              );
+            });
           })
           .catch(() => {
             setThreads((current) =>
-              current.map((item) =>
-                item.id !== activeId
-                  ? item
-                  : {
-                      ...item,
-                      messages: item.messages.map((message) =>
-                        message.id !== assistantId
-                          ? message
-                          : {
-                              ...message,
-                              content:
-                                "I couldn't reach the AI bridge. Check that Ollama, the local bridge, and the HTTPS tunnel are running.",
-                            },
-                      ),
-                    },
-              ),
+              current.map((item) => ({
+                ...item,
+                messages: item.messages.map((message) => {
+                  const isTarget =
+                    message.id === assistantId ||
+                    (message.role === "assistant" &&
+                      (message.content === "Thinking…" ||
+                        message.content === "Thinking..."));
+                  return isTarget
+                    ? {
+                        ...message,
+                        content:
+                          "I couldn't reach the AI bridge. Check that Ollama, the local bridge, and the HTTPS tunnel are running.",
+                      }
+                    : message;
+                }),
+              })),
             );
           });
       };

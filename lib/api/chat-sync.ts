@@ -55,8 +55,21 @@ export function startChatRemoteSync(ctx: WorkspaceCtx) {
 
   const push = () => {
     if (syncing || skipRemoteSync) return;
-    syncing = true;
     const { threads } = getChatStoreSnapshot();
+    // Don't sync mid-flight AI placeholders — prevents realtime hydrate from
+    // wiping / remapping the in-progress assistant message.
+    if (
+      threads.some((thread) =>
+        thread.messages.some(
+          (m) =>
+            m.role === "assistant" &&
+            (m.content === "Thinking…" || m.content === "Thinking..."),
+        ),
+      )
+    ) {
+      return;
+    }
+    syncing = true;
     void syncThreadsToSupabase(ctx, threads)
       .catch((err) => {
         console.warn("[cander] chat sync failed", err);
