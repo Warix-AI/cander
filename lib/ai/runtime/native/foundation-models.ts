@@ -49,7 +49,11 @@ function getPlugin(): FoundationModelsNative | null {
   }
 
   const existing = cap.Plugins?.CanderFoundationModels;
-  if (existing?.getAvailability && existing?.generate) {
+  if (
+    existing &&
+    typeof existing.getAvailability === "function" &&
+    typeof existing.generate === "function"
+  ) {
     cachedPlugin = existing;
     return existing;
   }
@@ -59,7 +63,11 @@ function getPlugin(): FoundationModelsNative | null {
       const registered = cap.registerPlugin<FoundationModelsNative>(
         "CanderFoundationModels",
       );
-      if (registered?.getAvailability && registered?.generate) {
+      if (
+        registered &&
+        typeof registered.getAvailability === "function" &&
+        typeof registered.generate === "function"
+      ) {
         cachedPlugin = registered;
         return registered;
       }
