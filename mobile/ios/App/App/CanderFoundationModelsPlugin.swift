@@ -37,6 +37,7 @@ public class CanderFoundationModelsPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func generate(_ call: CAPPluginCall) {
         let prompt = call.getString("prompt")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let instructions = call.getString("instructions")?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else {
             call.reject("Prompt is required", "invalid_prompt")
             return
@@ -46,7 +47,10 @@ public class CanderFoundationModelsPlugin: CAPPlugin, CAPBridgedPlugin {
         if #available(iOS 26.0, *) {
             Task {
                 do {
-                    let content = try await Self.generateOnDevice(prompt: prompt)
+                    let content = try await Self.generateOnDevice(
+                        prompt: prompt,
+                        instructions: instructions
+                    )
                     call.resolve([
                         "content": content,
                         "runtime": "apple-local",
@@ -110,7 +114,7 @@ public class CanderFoundationModelsPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @available(iOS 26.0, *)
-    private static func generateOnDevice(prompt: String) async throws -> String {
+    private static func generateOnDevice(prompt: String, instructions: String?) async throws -> String {
         let model = SystemLanguageModel.default
         guard case .available = model.availability else {
             throw NSError(
@@ -119,7 +123,12 @@ public class CanderFoundationModelsPlugin: CAPPlugin, CAPBridgedPlugin {
                 userInfo: [NSLocalizedDescriptionKey: "On-device model is not available."]
             )
         }
-        let session = LanguageModelSession()
+        let session: LanguageModelSession
+        if let instructions, !instructions.isEmpty {
+            session = LanguageModelSession(instructions: instructions)
+        } else {
+            session = LanguageModelSession()
+        }
         let response = try await session.respond(to: prompt)
         return response.content
     }

@@ -35,6 +35,7 @@ import { clearLocalAuthState } from "@/lib/auth/sign-out";
 import { syncSupabaseAuthUser } from "@/lib/supabase/auth-store";
 import { setupOrgOnSupabase } from "@/lib/supabase/setup-org-onboarding";
 import { AppearanceControls } from "@/components/settings/AppearanceControls";
+import { HostingModePicker } from "@/components/settings/HostingModePicker";
 import { OnboardingAppPreview } from "@/components/onboarding/OnboardingAppPreview";
 import { VerifyCodeInput } from "@/components/onboarding/VerifyCodeInput";
 import { AppearanceScope } from "@/components/theme/AppearanceProvider";
@@ -92,6 +93,7 @@ type Step =
   | "org-setup"
   | "workspace"
   | "appearance"
+  | "hosting"
   | "connectors";
 
 function createStepsFor(
@@ -108,6 +110,7 @@ function createStepsFor(
   }
   if (SHOW_ONBOARDING_CONNECTORS) steps.push("connectors");
   steps.push("appearance");
+  if (nativeShell) steps.push("hosting");
   return steps;
 }
 
@@ -240,6 +243,10 @@ const PANEL_COPY: Record<
     title: "Make it feel like yours.",
     body: "Pick a color mode — watch the preview update as you go.",
   },
+  hosting: {
+    title: "Where should AI run?",
+    body: "Cloud always works. On device uses Apple Intelligence on this phone when available. Auto picks for you.",
+  },
 };
 
 /** One-line copy for the mobile gradient card (7–8 words). */
@@ -256,6 +263,7 @@ const MOBILE_PANEL_LINE: Record<Step, string> = {
   workspace: "Name the workspace you'll land in.",
   connectors: "Apps you'll use with Cander later.",
   appearance: "Make it feel like yours.",
+  hosting: "Choose Cloud, Auto, or On device.",
 };
 
 /**
@@ -999,7 +1007,7 @@ function OnboardingShell({
         return;
       }
       setError("");
-      setStep(nativeShell ? "connectors" : "plan");
+      setStep(nativeShell ? (SHOW_ONBOARDING_CONNECTORS ? "connectors" : "appearance") : "plan");
       return;
     }
     if (step === "plan") {
@@ -1071,6 +1079,15 @@ function OnboardingShell({
       return;
     }
     if (step === "appearance") {
+      if (nativeShell) {
+        setError("");
+        setStep("hosting");
+        return;
+      }
+      void applySetup();
+      return;
+    }
+    if (step === "hosting") {
       void applySetup();
     }
   };
@@ -1358,6 +1375,15 @@ function OnboardingShell({
               <AppearanceStep
                 busy={busy}
                 error={error}
+                submitLabel={nativeShell ? "Continue" : "Enter Cander"}
+                onSubmit={goCreateNext}
+              />
+            ) : null}
+
+            {step === "hosting" ? (
+              <HostingStep
+                busy={busy}
+                error={error}
                 onSubmit={goCreateNext}
               />
             ) : null}
@@ -1365,7 +1391,7 @@ function OnboardingShell({
         </div>
       </div>
 
-      {mobile && step !== "plan" && step !== "appearance" ? (
+      {mobile && step !== "plan" && step !== "appearance" && step !== "hosting" ? (
         <OnboardingMobilePanel step={step} />
       ) : null}
 
@@ -1432,10 +1458,12 @@ function AppearanceStep({
   onSubmit,
   busy = false,
   error = "",
+  submitLabel = "Enter Cander",
 }: {
   onSubmit: () => void;
   busy?: boolean;
   error?: string;
+  submitLabel?: string;
 }) {
   return (
     <>
@@ -1458,7 +1486,7 @@ function AppearanceStep({
         onClick={onSubmit}
         className={cn("mt-8 inline-flex items-center gap-2", primaryBtnClass)}
       >
-        Enter Cander
+        {submitLabel}
         {busy ? (
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
         ) : null}
@@ -1472,6 +1500,46 @@ function AppearanceStep({
         className={cn("mt-2", ghostBtnClass)}
       >
         Reset defaults
+      </button>
+    </>
+  );
+}
+
+function HostingStep({
+  onSubmit,
+  busy = false,
+  error = "",
+}: {
+  onSubmit: () => void;
+  busy?: boolean;
+  error?: string;
+}) {
+  return (
+    <>
+      <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
+        Where should AI run?
+      </h1>
+      <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
+        Cloud always works. On device uses Apple Intelligence on this phone when
+        available. Auto prefers on-device, then falls back to Cloud. You can
+        change this later in Settings → Hosting.
+      </p>
+      <div className="mt-8">
+        <HostingModePicker />
+      </div>
+      {error ? (
+        <p className="mt-4 text-[12.5px] text-destructive">{error}</p>
+      ) : null}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onSubmit}
+        className={cn("mt-8 inline-flex items-center gap-2", primaryBtnClass)}
+      >
+        Enter Cander
+        {busy ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        ) : null}
       </button>
     </>
   );

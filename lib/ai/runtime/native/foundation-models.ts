@@ -16,7 +16,10 @@ export type FoundationModelsAvailability = {
 
 type FoundationModelsNative = {
   getAvailability: () => Promise<Partial<FoundationModelsAvailability>>;
-  generate: (opts: { prompt: string }) => Promise<{ content?: string }>;
+  generate: (opts: {
+    prompt: string;
+    instructions?: string;
+  }) => Promise<{ content?: string }>;
 };
 
 type CapacitorBridge = {
@@ -126,12 +129,16 @@ export async function getFoundationModelsAvailability(): Promise<FoundationModel
 
 export async function generateWithFoundationModels(
   prompt: string,
+  instructions?: string,
 ): Promise<string> {
   const plugin = getPlugin();
   if (!plugin) {
     throw new Error("On-device Apple AI plugin is not available.");
   }
-  const result = await plugin.generate({ prompt });
+  const result = await plugin.generate({
+    prompt,
+    ...(instructions?.trim() ? { instructions: instructions.trim() } : {}),
+  });
   const content = result.content?.trim();
   if (!content) throw new Error("On-device model returned an empty reply.");
   return content;

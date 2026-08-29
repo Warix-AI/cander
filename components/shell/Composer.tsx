@@ -17,7 +17,6 @@ import {
 import { useApp } from "@/components/app/AppProvider";
 import { ReferenceChip } from "@/components/shell/ReferenceChip";
 import { ComposerUsageBar } from "@/components/shell/ComposerUsageBar";
-import { AiRuntimeModeControl } from "@/components/shell/AiRuntimeModeControl";
 import {
   USAGE_BAR_THRESHOLD,
 } from "@/lib/hourly-usage";
@@ -616,10 +615,6 @@ export function Composer({
             )}
           </div>
         )}
-
-        <div className="mt-1.5 flex items-center justify-end gap-2">
-          <AiRuntimeModeControl />
-        </div>
 
         {showUsageBar ? (
           <ComposerUsageBar floating={floating} percent={usagePercent} />
