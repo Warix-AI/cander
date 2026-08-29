@@ -1415,14 +1415,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           kind === "research");
 
       if (useLiveAi) {
-        // Casual chat: label only. Tool/complex turns add a detail line via onProgress.
+        // No "Thinking" chrome for ordinary chat — activity appears only for tools/work.
         assistantMsg = {
           ...assistantMsg,
           content: "",
           status: "pending",
-          activity: {
-            label: "Thinking",
-          },
+          activity: null,
         };
       }
 
@@ -1785,6 +1783,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectSpace: replyProjectSpace,
           messages: historyMessages,
           onProgress: (progress) => {
+            // Only surface tool/work activity in the transcript — never "Thinking about…".
+            const visible =
+              progress.phase === "tool" ||
+              (progress.phase === "follow_up" && Boolean(progress.detail?.trim())) ||
+              (progress.phase === "thinking" &&
+                Boolean(progress.detail?.trim()) &&
+                !/^Thinking about\b/i.test(progress.detail ?? ""));
+            const nextActivity =
+              visible && progress.detail?.trim()
+                ? {
+                    label: progress.label || "Working",
+                    detail: progress.detail.trim(),
+                    kind: (progress.phase === "tool" ? "tool" : "work") as
+                      | "tool"
+                      | "work",
+                  }
+                : null;
             setThreads((current) =>
               current.map((item) => ({
                 ...item,
@@ -1798,10 +1813,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   return isTarget
                     ? {
                         ...message,
-                        activity: {
-                          label: progress.label,
-                          detail: progress.detail,
-                        },
+                        activity: nextActivity,
                       }
                     : message;
                 }),
@@ -2179,6 +2191,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectSpace: (spaceId as SpaceId | null) ?? null,
           messages: historyMessages,
           onProgress: (progress) => {
+            const visible =
+              progress.phase === "tool" ||
+              (progress.phase === "follow_up" && Boolean(progress.detail?.trim()));
+            const nextActivity =
+              visible && progress.detail?.trim()
+                ? {
+                    label: progress.label || "Working",
+                    detail: progress.detail.trim(),
+                    kind: (progress.phase === "tool" ? "tool" : "work") as
+                      | "tool"
+                      | "work",
+                  }
+                : null;
             setThreads((current) =>
               current.map((item) => ({
                 ...item,
@@ -2186,10 +2211,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   m.id === assistantId
                     ? {
                         ...m,
-                        activity: {
-                          label: progress.label,
-                          detail: progress.detail,
-                        },
+                        activity: nextActivity,
                       }
                     : m,
                 ),

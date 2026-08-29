@@ -152,12 +152,14 @@ export type PlatformDeployment = {
 
 export type MessageStatus = "complete" | "pending" | "streaming" | "error";
 
-/** Live activity under Thinking (Cursor-style). */
+/** Live activity while tools/complex work run (not ordinary chat). */
 export type MessageActivity = {
-  /** Primary shimmer line, e.g. "Thinking" */
+  /** Primary shimmer line, e.g. "Working" */
   label: string;
-  /** Secondary detail, e.g. "Calling tool…" / "Thinking about …" */
-  detail?: string;
+  /** Required for display — tool/work detail on the line below */
+  detail: string;
+  /** Only tool/work activity is rendered in the transcript */
+  kind: "tool" | "work";
 };
 
 export type Message = {

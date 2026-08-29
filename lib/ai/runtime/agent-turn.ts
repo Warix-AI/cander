@@ -124,9 +124,10 @@ async function runAssistantTurnInner(
     }
   };
 
+  // Do not surface a "Thinking" line for ordinary chat. Progress UI is tool/work only.
   report({
     phase: "thinking",
-    label: "Thinking",
+    label: "Working",
   });
 
   const taskState = getThreadTaskState(request.threadId);
@@ -149,12 +150,11 @@ async function runAssistantTurnInner(
   const allowedToolNames = decision.toolNames;
   const allowTools = allowedToolNames.length > 0;
 
-  // Only show a second line for tool-capable / complex work — not casual chat.
   const complexDetail = detailForComplexWork(decision.taskType);
-  if (allowTools || complexDetail) {
+  if (complexDetail) {
     report({
       phase: "thinking",
-      label: "Thinking",
+      label: "Working",
       detail: complexDetail,
     });
   }
@@ -187,7 +187,7 @@ async function runAssistantTurnInner(
       const first = shortcut.toolResults[0]!;
       report({
         phase: "tool",
-        label: "Thinking",
+        label: "Working",
         detail: detailForTool(first.name),
         toolName: first.name,
       });
@@ -209,16 +209,19 @@ async function runAssistantTurnInner(
   let skippedToolOnce = false;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    report({
-      phase: round === 0 ? "generating" : "follow_up",
-      label: "Thinking",
-      detail:
-        round === 0
-          ? allowTools || complexDetail
-            ? complexDetail
-            : undefined
-          : "Using the result…",
-    });
+    if (round > 0) {
+      report({
+        phase: "follow_up",
+        label: "Working",
+        detail: "Using the result…",
+      });
+    } else if (complexDetail) {
+      report({
+        phase: "thinking",
+        label: "Working",
+        detail: complexDetail,
+      });
+    }
     last = await generateWithAiRuntime(working);
     const { text, call } = parseToolCallFromContent(last.content);
 
@@ -295,7 +298,7 @@ async function runAssistantTurnInner(
 
     report({
       phase: "tool",
-      label: "Thinking",
+      label: "Working",
       detail: detailForTool(call.name),
       toolName: call.name,
     });
