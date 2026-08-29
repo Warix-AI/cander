@@ -338,14 +338,12 @@ export function MobileAppChrome({ className }: { className?: string }) {
           {subTitle}
         </p>
       ) : showProjectTools ? (
-        <button
-          type="button"
-          aria-label={`${projectTitle} project actions`}
-          onClick={() => setActionsOpen(true)}
-          className="inline-flex max-w-[15rem] items-center justify-center rounded-full bg-muted/70 px-5 py-2 text-[14px] font-medium tracking-[-0.01em] text-foreground transition-colors active:bg-muted"
+        <div
+          className="inline-flex h-11 max-w-[15rem] items-center justify-center rounded-full bg-muted/70 px-5 text-[14px] font-medium tracking-[-0.01em] text-foreground"
+          aria-label={projectTitle}
         >
           <span className="truncate">{projectTitle}</span>
-        </button>
+        </div>
       ) : showSpaceToggle ? (
         <div
           role="tablist"
