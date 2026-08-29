@@ -230,6 +230,89 @@ async function runAssistantTurnInner(
     };
   }
 
+  // Live web intent: hit Brave first. Models often say “I’ll search…” without
+  // emitting tool JSON — that never reaches the API. Force the tool here.
+  // Only when this turn’s content unlocked web (not sticky unrelated tools).
+  const webIntentThisTurn =
+    allowTools &&
+    allowedToolNames.includes("web.search") &&
+    decision.domains.includes("web") &&
+    !decision.domains.some(
+      (d) =>
+        d === "projects" ||
+        d === "navigation" ||
+        d === "cloud_work" ||
+        d === "clarification",
+    );
+  if (webIntentThisTurn) {
+    const query = request.content.trim().slice(0, 200);
+    console.log("[MODEL_TOOL_CALL]", {
+      round: 0,
+      name: "web.search",
+      allowed: true,
+      forced: true,
+    });
+    report({
+      phase: "tool",
+      label: "Thinking",
+      detail: detailForTool("web.search"),
+      toolName: "web.search",
+    });
+    const searchResult = await executeAuthorizedTool({
+      name: "web.search",
+      arguments: { query },
+    });
+    if (!searchResult.ok) {
+      return {
+        content: contentAfterFailedWebSearch(
+          "",
+          "I couldn’t complete a live web search. Please try again in a moment — I won’t invent headlines or sources.",
+        ),
+        runtime: "cloud",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+        toolResults: [searchResult],
+      };
+    }
+    report({
+      phase: "follow_up",
+      label: "Thinking",
+      detail: "Reading sources…",
+      toolName: "web.search",
+    });
+    report({
+      phase: "generating",
+      label: "Thinking",
+      detail: "Generating…",
+    });
+    const followUp = [
+      `Internal result for web.search: ${searchResult.output}`,
+      "Answer the user’s question using only these live results. Cite real URLs. Do not invent headlines or sources. Plain language only — no JSON or tool names.",
+      "",
+      `User question: ${request.content.trim()}`,
+    ].join("\n");
+    const answered = await generateWithAiRuntime({
+      ...gatedRequest,
+      allowTools: false,
+      allowedToolNames: [],
+      content: followUp,
+      messages: [
+        ...(request.messages ?? []),
+        { role: "user", content: request.content },
+        { role: "user", content: followUp },
+      ],
+    });
+    return {
+      ...answered,
+      content: safeContent(
+        answered.content,
+        "I found sources but couldn’t summarize them. Try asking again.",
+      ),
+      toolResults: [searchResult],
+    };
+  }
+
   const toolResults: AiToolCallResult[] = [];
   let working: AiGenerateRequest = { ...gatedRequest };
   let last: AiGenerateResult | null = null;
@@ -253,15 +336,6 @@ async function runAssistantTurnInner(
     const { text, call } = parseToolCallFromContent(last.content);
 
     if (!call) {
-      // Never let a “I searched…” claim stand when no tool ran.
-      if (looksLikeClaimedSearch(text) && allowTools) {
-        return {
-          ...last,
-          content:
-            "I wasn’t able to run a live web search for that. Try asking again, or rephrase with “search the web for…”.",
-          toolResults: toolResults.length ? toolResults : undefined,
-        };
-      }
       return {
         ...last,
         content: safeContent(
