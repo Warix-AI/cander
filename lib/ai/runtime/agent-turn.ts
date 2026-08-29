@@ -54,6 +54,10 @@ async function runAssistantTurnInner(
 ): Promise<AgentTurnResult> {
   const shortcut = await tryIntentShortcut(request.content, {
     threadId: request.threadId,
+    recentText: (request.messages ?? [])
+      .slice(-6)
+      .map((m) => m.content)
+      .join("\n"),
   });
   if (shortcut) {
     return {

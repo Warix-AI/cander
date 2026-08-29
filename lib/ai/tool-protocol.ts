@@ -17,22 +17,41 @@ export function stripToolJsonFromText(content: string): string {
   let text = content.trim();
   // Fenced tool blocks at the end
   text = text.replace(/```(?:json)?\s*\{[\s\S]*?"tool"\s*:[\s\S]*?\}\s*```\s*$/i, "");
-  // Inline tool objects (possibly multiple / with error trailers)
+  // Canonical tool objects
   text = text.replace(
     /\{\s*"tool"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[\s\S]*?\}\s*\}\s*/g,
     "",
   );
+  // Malformed {"nav.open": {...}} / {"project.create": {...}}
+  text = text.replace(
+    /\{\s*"(?:nav\.open|project\.(?:create|open)|panel\.(?:open|close)|workspace\.search|ui\.(?:ask_clarification|confirm))"\s*:\s*\{[\s\S]*?\}\s*\}\s*/g,
+    "",
+  );
   text = text.replace(/\{\s*"error"\s*:\s*"[^"]*"\s*\}\s*/g, "");
+  // Inline tool prose models sometimes dump as “buttons”
+  text = text.replace(
+    /`?\s*nav\.open\s*\{\s*"target"\s*:\s*"[^"]+"\s*\}\s*`?/gi,
+    "",
+  );
+  text = text.replace(
+    /`?\s*\{\s*"tool"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[\s\S]*?\}\s*\}\s*`?/g,
+    "",
+  );
   // Leftover bare tool lines
   text = text
     .split("\n")
     .filter((line) => {
       const t = line.trim();
-      if (!t.startsWith("{")) return true;
+      if (!t.startsWith("{") && !t.startsWith("`")) return true;
       if (t.includes('"tool"') || t.includes('"error"')) return false;
+      if (/nav\.open|project\.(create|open)/i.test(t) && t.includes("{")) {
+        return false;
+      }
       return true;
     })
     .join("\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
   return text;
 }
@@ -57,6 +76,30 @@ function tryParseToolObject(raw: string): ParsedToolCall | null {
             ? (args as Record<string, unknown>)
             : {},
       };
+    } catch {
+      // try next
+    }
+  }
+  // Malformed {"nav.open": {...}} style — treat tool name as the key
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as Record<string, unknown>;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const keys = Object.keys(parsed);
+        if (keys.length === 1) {
+          const name = keys[0]!;
+          if (/^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|ui\.(ask_clarification|confirm))$/.test(name)) {
+            const args = parsed[name];
+            return {
+              name,
+              arguments:
+                args && typeof args === "object" && !Array.isArray(args)
+                  ? (args as Record<string, unknown>)
+                  : {},
+            };
+          }
+        }
+      }
     } catch {
       // try next
     }
@@ -102,7 +145,13 @@ export function parseToolCallFromContent(content: string): {
     }
     if (end < 0) break;
     const slice = searchIn.slice(i, end + 1);
-    if (/"tool"\s*:/.test(slice) || /"name"\s*:\s*"[a-z][a-z0-9_.-]*"/i.test(slice)) {
+    if (
+      /"tool"\s*:/.test(slice) ||
+      /"name"\s*:\s*"[a-z][a-z0-9_.-]*"/i.test(slice) ||
+      /"(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search)"\s*:/.test(
+        slice,
+      )
+    ) {
       objects.push(slice);
     }
     i = end;
@@ -131,7 +180,10 @@ export function parseToolCallFromContent(content: string): {
   }
 
   // Looks like tool JSON but unparseable — still strip so UI never shows it
-  if (/"tool"\s*:/.test(trimmed)) {
+  if (
+    /"tool"\s*:/.test(trimmed) ||
+    /"(nav\.open|project\.(create|open))"\s*:/.test(trimmed)
+  ) {
     return { text: stripToolJsonFromText(trimmed), call: null };
   }
 

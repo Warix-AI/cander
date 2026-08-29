@@ -4,9 +4,12 @@ import { useApp } from "@/components/app/AppProvider";
 import { BannerWash } from "@/components/spaces/BannerWash";
 import { buildPreviews } from "@/lib/data";
 import type { BannerKey } from "@/lib/space-banners";
-import type { PreviewNodeId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+/**
+ * Calm project preview placeholder — no select-to-edit / localhost mock UI.
+ * Real previews use published URLs (iframe) in ProjectBrowserPanel.
+ */
 export function AppViewport({
   name,
   summary,
@@ -14,16 +17,7 @@ export function AppViewport({
   name: string;
   summary: string;
 }) {
-  const {
-    viewport,
-    selectMode,
-    selectedId,
-    setHoveredId,
-    selectElement,
-    previewKey,
-    project,
-    spaceId,
-  } = useApp();
+  const { viewport, previewKey, project, spaceId } = useApp();
 
   const framed = viewport !== "desktop";
   const cover =
@@ -53,6 +47,7 @@ export function AppViewport({
         )}
       >
         {cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={cover}
             alt=""
@@ -61,102 +56,18 @@ export function AppViewport({
         ) : (
           <>
             <BannerWash space={washSpace} />
-            <div className="absolute inset-x-0 top-0 flex items-center justify-between p-6 text-[12px] text-white/80">
-              <PreviewHit
-                id="nav"
-                selectMode={selectMode}
-                selected={selectedId}
-                onHover={setHoveredId}
-                onSelect={selectElement}
-              >
-                <span className="font-medium tracking-[-0.02em]">{name}</span>
-              </PreviewHit>
-              <PreviewHit
-                id="cta"
-                selectMode={selectMode}
-                selected={selectedId}
-                onHover={setHoveredId}
-                onSelect={selectElement}
-              >
-                <span className="inline-flex rounded-full border border-white/25 px-3 py-1 text-[11px]">
-                  Get started
-                </span>
-              </PreviewHit>
-            </div>
-            <div className="absolute inset-x-0 bottom-0 p-8 text-white md:p-10">
-              <PreviewHit
-                id="kicker"
-                selectMode={selectMode}
-                selected={selectedId}
-                onHover={setHoveredId}
-                onSelect={selectElement}
-              >
-                <p className="font-mono text-[11px] tracking-[0.08em] text-white/70 uppercase">
-                  localhost
-                </p>
-              </PreviewHit>
-              <PreviewHit
-                id="heading"
-                selectMode={selectMode}
-                selected={selectedId}
-                onHover={setHoveredId}
-                onSelect={selectElement}
-              >
-                <p className="mt-3 text-[2rem] font-semibold tracking-[-0.04em] md:text-[2.4rem]">
-                  {name}
-                </p>
-              </PreviewHit>
-              <PreviewHit
-                id="body"
-                selectMode={selectMode}
-                selected={selectedId}
-                onHover={setHoveredId}
-                onSelect={selectElement}
-              >
-                <p className="mt-3 max-w-sm text-[14px] leading-relaxed text-white/75">
-                  {summary}
-                </p>
-              </PreviewHit>
+            <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center text-white">
+              <p className="text-[1.5rem] font-semibold tracking-[-0.03em] md:text-[1.75rem]">
+                {name}
+              </p>
+              <p className="mt-2 max-w-sm text-[13.5px] leading-relaxed text-white/75">
+                {summary?.trim() ||
+                  "Preview will show here when this project is published or running."}
+              </p>
             </div>
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-function PreviewHit({
-  id,
-  selectMode,
-  selected,
-  onHover,
-  onSelect,
-  children,
-}: {
-  id: PreviewNodeId;
-  selectMode: boolean;
-  selected: PreviewNodeId | null;
-  onHover: (id: PreviewNodeId | null) => void;
-  onSelect: (id: PreviewNodeId) => void;
-  children: React.ReactNode;
-}) {
-  const active = selected === id;
-  return (
-    <div
-      onMouseEnter={() => onHover(id)}
-      onMouseLeave={() => onHover(null)}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelect(id);
-      }}
-      className={cn(
-        "cursor-pointer rounded-[6px] transition-[outline] duration-150",
-        "hover:outline hover:outline-1 hover:outline-offset-2 hover:outline-white/55",
-        selectMode && "hover:outline-white/80",
-        active && "outline outline-2 outline-offset-2 outline-white",
-      )}
-    >
-      {children}
     </div>
   );
 }

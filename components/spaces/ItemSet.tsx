@@ -450,7 +450,7 @@ export function DashFrame({
     <div
       className={cn(
         "@container relative flex min-h-0 flex-1 flex-col overflow-y-auto",
-        mobile ? MOBILE_APP_BG : "bg-background",
+        mobile ? MOBILE_APP_BG : "bg-white dark:bg-background",
       )}
     >
       {view === "space" && !bannerSpace && !inPanel && !desktop ? (

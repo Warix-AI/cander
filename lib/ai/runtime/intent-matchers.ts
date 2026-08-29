@@ -49,6 +49,37 @@ export function matchNavIntent(
   return null;
 }
 
+/** “open/take me to the project …” with a name. */
+export function matchOpenProjectIntent(content: string): {
+  query: string;
+} | null {
+  const text = content.trim();
+  const named =
+    text.match(
+      /\b(?:take me to|go to|open|show)\b.{0,40}?\bprojects?\b\s+[“"']([^”"']+)[”"']/i,
+    ) ||
+    text.match(
+      /\b(?:take me to|go to|open|show)\b.{0,40}?\bprojects?\b\s+(?:called|named)?\s*[“"']?([A-Za-z0-9][\w\s-]{0,60})[”"']?\s*$/i,
+    ) ||
+    text.match(
+      /\b(?:take me to|go to|open|show)\b\s+[“"']([^”"']+)[”"']\s*$/i,
+    );
+  if (!named?.[1]?.trim()) return null;
+  const q = named[1].trim();
+  if (/^(build|explore|research|work|recents?|connectors?|settings?)$/i.test(q)) {
+    return null;
+  }
+  return { query: q };
+}
+
+/** Pronoun follow-ups after a project was just discussed. */
+export function matchTakeMeThereIntent(content: string): boolean {
+  const text = content.trim();
+  return /^(take me there|take me to it|open it|go there|open that|show (?:me )?that|open the project)\.?$/i.test(
+    text,
+  );
+}
+
 /** “create a new project …” with optional quoted/called name. */
 export function matchCreateProjectIntent(content: string): {
   title: string | null;

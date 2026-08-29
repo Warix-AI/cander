@@ -34,6 +34,8 @@ import {
 import {
   matchCreateProjectIntent,
   matchNavIntent,
+  matchOpenProjectIntent,
+  matchTakeMeThereIntent,
 } from "../lib/ai/runtime/intent-matchers.ts";
 
 describe("conversation continuity helpers", () => {
@@ -279,5 +281,14 @@ describe("intent shortcuts", () => {
     const create = matchCreateProjectIntent("create a new project");
     assert.ok(create);
     assert.equal(create.title, null);
+  });
+
+  it("opens a named project and understands take me there", () => {
+    assert.deepEqual(
+      matchOpenProjectIntent("take me to the project 'the one'"),
+      { query: "the one" },
+    );
+    assert.equal(matchTakeMeThereIntent("take me there"), true);
+    assert.equal(matchTakeMeThereIntent("open Build"), false);
   });
 });

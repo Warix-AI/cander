@@ -4,6 +4,22 @@ import { useState } from "react";
 import { Check, ChevronDown, Circle, LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const TOOL_LABELS: Record<string, string> = {
+  "nav.open": "Opened",
+  "panel.open": "Opened panel",
+  "panel.close": "Closed panel",
+  "project.create": "Created project",
+  "project.open": "Opened project",
+  "workspace.search": "Searched",
+  "ui.ask_clarification": "Asked for details",
+  "ui.confirm": "Asked for confirmation",
+};
+
+function humanToolLabel(label: string): string {
+  const key = label.trim();
+  return TOOL_LABELS[key] ?? key.replace(/\./g, " ");
+}
+
 /** Compact tool-activity row for in-app agent actions. */
 export function ToolCallBlock({
   label,
@@ -17,6 +33,7 @@ export function ToolCallBlock({
   const [open, setOpen] = useState(false);
   const running = status === "running";
   const done = status === "done";
+  const title = humanToolLabel(label);
 
   return (
     <div className="my-1 max-w-full">
@@ -40,7 +57,7 @@ export function ToolCallBlock({
           <Circle className="h-3.5 w-3.5 shrink-0" strokeWidth={1.6} />
         )}
         <span className="min-w-0 truncate">
-          {running ? `${label}…` : done ? label : label}
+          {running ? `${title}…` : title}
         </span>
         {detail ? (
           <ChevronDown

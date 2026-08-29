@@ -199,7 +199,9 @@ export function BuildPanel() {
               name={displayName}
               summary={
                 project
-                  ? "Click anything to select it, then tell chat what to change."
+                  ? entityProject?.summary ||
+                    project.summary ||
+                    "Preview will show here when this project is published or running."
                   : "Keep typing. A preview will stand up as soon as this chat has a project."
               }
             />

@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { useApp } from "@/components/app/AppProvider";
-import { LayoutToggle, ScopeToggle } from "@/components/spaces/ItemSet";
+import { LayoutToggle } from "@/components/spaces/ItemSet";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
@@ -51,7 +51,6 @@ export function ProjectsBrowser({
     billingPlan,
   } = useApp();
   const mobile = useMobileShell();
-  const [scope, setScope] = useState("all");
   const dest: NavDestinationId = spaceId ?? "build";
   useSyncExternalStore(
     subscribeInstalledConnectors,
@@ -59,7 +58,7 @@ export function ProjectsBrowser({
     getInstalledConnectorsServerSnapshot,
   );
 
-  const { kind, title, empty, onOpen, entries, groups } = useMemo(() => {
+  const { kind, title, empty, onOpen, entries } = useMemo(() => {
     const projects = projectsForWorkspace(workspaceId);
     if (dest === "connectors") {
       const blocked = blockedConnectorIds(
@@ -204,19 +203,10 @@ export function ProjectsBrowser({
       )}
       <div
         className={cn(
-          "flex items-center justify-between gap-2 pb-3",
+          "flex items-center justify-end gap-2 pb-3",
           mobile ? "px-4 pt-3" : "px-3",
         )}
       >
-        <ScopeToggle
-          compact
-          value={scope}
-          onChange={setScope}
-          options={[
-            { id: "all", label: "All" },
-            { id: "projects", label: "Projects" },
-          ]}
-        />
         <LayoutToggle
           compact
           layout={spaceLayout}
@@ -224,36 +214,14 @@ export function ProjectsBrowser({
         />
       </div>
       <div className={cn("min-h-0 flex-1 overflow-y-auto pb-4", mobile ? "px-4" : "px-3")}>
-        {scope === "all" ? (
-          <PreviewGrid
-            dense
-            layout={spaceLayout}
-            kind={kind}
-            items={entries}
-            onOpen={handleOpen}
-            empty={empty}
-          />
-        ) : (
-          <div className="space-y-6">
-            {groups
-              .filter((group) => group.items.length)
-              .map((group) => (
-                <div key={group.name}>
-                  <p className="mb-3 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-                    {group.name}
-                  </p>
-                  <PreviewGrid
-                    dense
-                    layout={spaceLayout}
-                    kind={kind}
-                    items={group.items}
-                    onOpen={handleOpen}
-                    empty={empty}
-                  />
-                </div>
-              ))}
-          </div>
-        )}
+        <PreviewGrid
+          dense
+          layout={spaceLayout}
+          kind={kind}
+          items={entries}
+          onOpen={handleOpen}
+          empty={empty}
+        />
       </div>
     </div>
   );

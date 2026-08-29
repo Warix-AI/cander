@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useApp } from "@/components/app/AppProvider";
-import { LayoutToggle, ScopeToggle } from "@/components/spaces/ItemSet";
+import { LayoutToggle } from "@/components/spaces/ItemSet";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { PreviewGrid, type PreviewEntry } from "@/components/spaces/PreviewCard";
 import { useSpaceProjects, useSpaceSources } from "@/lib/hooks/use-space-query";
@@ -13,8 +13,6 @@ import { useMobileShell } from "@/lib/use-media-query";
 import { SHELL_PANEL_BODY } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
-type LibraryScope = "all" | "projects" | "sources";
-
 export function SpaceLibraryBrowser({
   space,
   onOpen,
@@ -24,7 +22,6 @@ export function SpaceLibraryBrowser({
 }) {
   const mobile = useMobileShell();
   const { spaceLayout, setSpaceLayout } = useApp();
-  const [scope, setScope] = useState<LibraryScope>("all");
   const { data: projects, loading: projectsLoading } = useSpaceProjects(space);
   const { data: sources, loading: sourcesLoading } = useSpaceSources({
     space,
@@ -49,10 +46,8 @@ export function SpaceLibraryBrowser({
       kind: "file",
       detail: item.kind,
     }));
-    if (scope === "projects") return projectItems;
-    if (scope === "sources") return sourceItems;
     return [...projectItems, ...sourceItems];
-  }, [projects, sources, scope]);
+  }, [projects, sources]);
 
   return (
     <div className={SHELL_PANEL_BODY}>
@@ -66,20 +61,10 @@ export function SpaceLibraryBrowser({
       )}
       <div
         className={cn(
-          "flex items-center justify-between gap-2 pb-3",
+          "flex items-center justify-end gap-2 pb-3",
           mobile ? "px-4 pt-3" : "px-3",
         )}
       >
-        <ScopeToggle
-          compact
-          value={scope}
-          onChange={(value) => setScope(value as LibraryScope)}
-          options={[
-            { id: "all", label: "All" },
-            { id: "projects", label: "Projects" },
-            { id: "sources", label: "Sources" },
-          ]}
-        />
         <LayoutToggle compact layout={spaceLayout} onChange={setSpaceLayout} />
       </div>
       <div className={cn("min-h-0 flex-1 overflow-y-auto pb-4", mobile ? "px-4" : "px-3")}>

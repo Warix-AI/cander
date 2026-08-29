@@ -8,6 +8,8 @@ import { getAppActionHandlers } from "@/lib/ai/runtime/app-actions";
 import {
   matchCreateProjectIntent,
   matchNavIntent,
+  matchOpenProjectIntent,
+  matchTakeMeThereIntent,
 } from "@/lib/ai/runtime/intent-matchers";
 import { executeAuthorizedTool } from "@/lib/ai/runtime/tools";
 import type { AiToolCallResult } from "@/lib/ai/runtime/tools";
@@ -18,7 +20,12 @@ export type IntentShortcutResult = {
   pausedForUser?: boolean;
 };
 
-export { matchCreateProjectIntent, matchNavIntent };
+export {
+  matchCreateProjectIntent,
+  matchNavIntent,
+  matchOpenProjectIntent,
+  matchTakeMeThereIntent,
+};
 
 export function buildCreateProjectClarification(opts: {
   threadId: string;
@@ -55,7 +62,11 @@ export function buildCreateProjectClarification(opts: {
  */
 export async function tryIntentShortcut(
   content: string,
-  opts: { threadId?: string | null },
+  opts: {
+    threadId?: string | null;
+    /** Prior turns — used for “take me there” → last mentioned project. */
+    recentText?: string | null;
+  },
 ): Promise<IntentShortcutResult | null> {
   const nav = matchNavIntent(content);
   if (nav) {
@@ -69,6 +80,42 @@ export async function tryIntentShortcut(
         : result.output || `Couldn't open ${nav.label}.`,
       toolResults: [result],
     };
+  }
+
+  const openProject = matchOpenProjectIntent(content);
+  if (openProject) {
+    const result = await executeAuthorizedTool({
+      name: "workspace.search",
+      arguments: { query: openProject.query },
+    });
+    return {
+      content: result.ok
+        ? result.output
+        : result.output || `Couldn't find “${openProject.query}”.`,
+      toolResults: [result],
+      pausedForUser: result.pauseForUser,
+    };
+  }
+
+  if (matchTakeMeThereIntent(content)) {
+    const hint = opts.recentText ?? "";
+    const quoted =
+      hint.match(/[“"']([^”"']{2,80})[”"']/) ||
+      hint.match(/\b(?:project|created)\s+[“"']?([A-Za-z0-9][\w\s-]{1,60})/i);
+    const query = quoted?.[1]?.trim();
+    if (query) {
+      const result = await executeAuthorizedTool({
+        name: "workspace.search",
+        arguments: { query },
+      });
+      return {
+        content: result.ok
+          ? result.output
+          : result.output || `Couldn't open “${query}”.`,
+        toolResults: [result],
+        pausedForUser: result.pauseForUser,
+      };
+    }
   }
 
   const create = matchCreateProjectIntent(content);
