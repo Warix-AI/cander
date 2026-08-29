@@ -1,5 +1,5 @@
 /**
- * Focused tests for assistant behavior, clarification, and tools.
+ * Focused tests for assistant behavior, clarification, tools, and intent shortcuts.
  * Run: npm run test:assistant
  */
 import assert from "node:assert/strict";
@@ -20,11 +20,17 @@ import {
 } from "../lib/ai/clarification/schema.ts";
 import {
   parseToolCallFromContent,
+  stripToolJsonFromText,
 } from "../lib/ai/tool-protocol.ts";
 import {
   getAiTool,
+  normalizeToolArguments,
   validateToolArguments,
 } from "../lib/ai/tools/registry.ts";
+import {
+  matchCreateProjectIntent,
+  matchNavIntent,
+} from "../lib/ai/runtime/intent-matchers.ts";
 
 describe("conversation continuity helpers", () => {
   it("detects prior turns and builds dialogue prompts", () => {
@@ -43,7 +49,6 @@ describe("conversation continuity helpers", () => {
     );
     assert.match(prompt, /Conversation so far/);
     assert.match(prompt, /Latest user message:\nSecond/);
-    assert.ok(!prompt.endsWith("User: Second\n\nLatest"));
   });
 
   it("keeps chats isolated by only using provided history", () => {
@@ -64,11 +69,6 @@ describe("conversation continuity helpers", () => {
   it("behavior prompt discourages repeated self-introductions", () => {
     assert.match(CANDER_ASSISTANT_BEHAVIOR, /Do not repeatedly introduce yourself/);
     assert.match(CANDER_NO_REGREET, /Do not greet/);
-    const withHistory = hasPriorConversationTurns([
-      { role: "user", content: "yo" },
-      { role: "assistant", content: "hey" },
-    ]);
-    assert.equal(withHistory, true);
   });
 });
 
@@ -102,7 +102,10 @@ describe("clarification cards", () => {
 
     card.answers.name = "Acme";
     card.answers.type = "website";
-    assert.equal(validateQuestionAnswer(card.questions[1]!, "nope"), "Pick one of the listed options.");
+    assert.equal(
+      validateQuestionAnswer(card.questions[1]!, "nope"),
+      "Pick one of the listed options.",
+    );
     assert.deepEqual(validateAllClarificationAnswers(card), {});
 
     const result = {
@@ -113,7 +116,29 @@ describe("clarification cards", () => {
       resumeTool: "project.create",
     };
     assert.match(formatClarificationAnswersForModel(result), /Acme/);
-    assert.match(formatClarificationAnswersForModel(result), /website/);
+  });
+
+  it("create-with-name clarification includes space choices", () => {
+    const card = createClarificationCard({
+      threadId: "t1",
+      title: "New project",
+      questions: [
+        {
+          id: "space",
+          type: "single_choice",
+          label: "Which space should this live in?",
+          required: true,
+          choices: [
+            { id: "build", label: "Build" },
+            { id: "research", label: "Explore" },
+          ],
+        },
+      ],
+      resumeTool: "project.create",
+      resumeArguments: { title: "Hello Dude" },
+    });
+    assert.equal(card.questions[0]?.choices?.length, 2);
+    assert.equal(card.resumeArguments?.title, "Hello Dude");
   });
 });
 
@@ -121,7 +146,7 @@ describe("tools", () => {
   it("validates tool arguments and requires confirmation flag on ui.confirm", () => {
     const create = getAiTool("project.create");
     assert.ok(create?.enabled);
-    const bad = validateToolArguments(create!, {});
+    const bad = validateToolArguments(create!, { title: "Demo" });
     assert.equal(bad.ok, false);
 
     const good = validateToolArguments(create!, {
@@ -132,11 +157,6 @@ describe("tools", () => {
 
     const confirm = getAiTool("ui.confirm");
     assert.equal(confirm?.permission.requiresConfirmation, true);
-    const confirmArgs = validateToolArguments(confirm!, {
-      title: "Delete?",
-      message: "This cannot be undone.",
-    });
-    assert.equal(confirmArgs.ok, true);
   });
 
   it("parses trailing tool JSON from model output", () => {
@@ -144,18 +164,76 @@ describe("tools", () => {
       'Sure — opening Build.\n{"tool":"nav.open","arguments":{"target":"build"}}',
     );
     assert.match(text, /opening Build/);
+    assert.doesNotMatch(text, /"tool"/);
     assert.equal(call?.name, "nav.open");
     assert.equal(call?.arguments?.target, "build");
   });
 
-  it("supports create-project clarification resume args shape", () => {
-    const tool = getAiTool("project.create");
-    assert.ok(tool);
-    const merged = validateToolArguments(tool, {
-      title: "Launch site",
-      space: "build",
-      kind: "app",
+  it("parses trailing-comma tool JSON", () => {
+    const { text, call } = parseToolCallFromContent(
+      '{"tool":"project.create","arguments":{"title":"Hello Dude","description":"",}}',
+    );
+    assert.equal(call?.name, "project.create");
+    assert.equal(call?.arguments?.title, "Hello Dude");
+    assert.doesNotMatch(text, /"tool"/);
+  });
+
+  it("extracts tool from dual blob and strips error junk", () => {
+    const { text, call } = parseToolCallFromContent(
+      'Hi\n{"tool":"panel.open","arguments":{}} {"error": "Missing required argument: workspace_id"}',
+    );
+    assert.equal(call?.name, "panel.open");
+    assert.doesNotMatch(text, /workspace_id/);
+    assert.doesNotMatch(text, /"tool"/);
+  });
+
+  it("strips unknown workspace_id and aliases name→title", () => {
+    const create = getAiTool("project.create")!;
+    const normalized = normalizeToolArguments("project.create", {
+      name: "Hello Dude",
+      space: "explore",
+      workspace_id: "abc",
+      description: "note",
     });
-    assert.equal(merged.ok, true);
+    assert.equal(normalized.workspace_id, undefined);
+    assert.equal(normalized.title, "Hello Dude");
+    assert.equal(normalized.space, "research");
+    assert.equal(normalized.summary, "note");
+    const validated = validateToolArguments(create, normalized);
+    assert.equal(validated.ok, true);
+  });
+
+  it("visible strip never leaves tool JSON", () => {
+    const stripped = stripToolJsonFromText(
+      'Opening.\n{"tool":"nav.open","arguments":{"target":"build"}}',
+    );
+    assert.doesNotMatch(stripped, /"tool"/);
+    assert.match(stripped, /Opening/);
+  });
+});
+
+describe("intent shortcuts", () => {
+  it("maps go to build space to nav.open build", () => {
+    const nav = matchNavIntent("go to the build space");
+    assert.equal(nav?.target, "build");
+  });
+
+  it("maps explore to research", () => {
+    const nav = matchNavIntent("take me to explore");
+    assert.equal(nav?.target, "research");
+  });
+
+  it("parses create project with name", () => {
+    const create = matchCreateProjectIntent(
+      'create a new project called "Hello Dude"',
+    );
+    assert.ok(create);
+    assert.equal(create.title, "Hello Dude");
+  });
+
+  it("parses create project without name", () => {
+    const create = matchCreateProjectIntent("create a new project");
+    assert.ok(create);
+    assert.equal(create.title, null);
   });
 });

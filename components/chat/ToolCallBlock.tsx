@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check, ChevronDown, Circle, LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** Compact tool-activity row. Live tool execution is not wired yet. */
+/** Compact tool-activity row for in-app agent actions. */
 export function ToolCallBlock({
   label,
   status,

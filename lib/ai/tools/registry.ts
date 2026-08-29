@@ -73,12 +73,54 @@ function isType(value: unknown, type: string): boolean {
   return true;
 }
 
+/** Normalize aliases then validate; strip unknown keys instead of failing. */
+export function normalizeToolArguments(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const input = { ...(args ?? {}) };
+
+  // Common model inventions — drop, never ask the user for these.
+  delete input.workspace_id;
+  delete input.workspaceId;
+  delete input.user_id;
+  delete input.userId;
+
+  if (toolName === "project.create") {
+    if (input.name != null && input.title == null) input.title = input.name;
+    if (input.description != null && input.summary == null) {
+      input.summary = input.description;
+    }
+    delete input.name;
+    delete input.description;
+    if (typeof input.space === "string") {
+      const s = input.space.toLowerCase();
+      if (s === "explore") input.space = "research";
+    }
+  }
+
+  if (toolName === "nav.open" && typeof input.target === "string") {
+    const t = input.target.toLowerCase();
+    if (t === "explore") input.target = "research";
+    if (t === "home") input.target = "new_chat";
+  }
+
+  return input;
+}
+
 /** Validate tool arguments against the registered JSON-schema-like shape. */
 export function validateToolArguments(
   tool: AiToolDefinition,
   args: Record<string, unknown> | undefined,
 ): { ok: true; args: Record<string, unknown> } | { ok: false; error: string } {
-  const input = args ?? {};
+  const normalized = normalizeToolArguments(tool.name, args);
+  const allowed = new Set(Object.keys(tool.parameters.properties));
+  const input: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(normalized)) {
+    if (allowed.has(key)) input[key] = value;
+    // Unknown keys stripped — do not fail the call.
+  }
+
   const required = tool.parameters.required ?? [];
   for (const key of required) {
     if (input[key] === undefined || input[key] === null || input[key] === "") {
@@ -87,9 +129,7 @@ export function validateToolArguments(
   }
   for (const [key, value] of Object.entries(input)) {
     const schema = tool.parameters.properties[key];
-    if (!schema) {
-      return { ok: false, error: `Unknown argument: ${key}` };
-    }
+    if (!schema) continue;
     const types = Array.isArray(schema.type) ? schema.type : [schema.type];
     if (!types.some((t) => isType(value, t))) {
       return {
@@ -98,6 +138,7 @@ export function validateToolArguments(
       };
     }
     if (schema.enum && !schema.enum.includes(String(value))) {
+      // Soft-map explore→research already done; otherwise fail.
       return {
         ok: false,
         error: `Invalid value for ${key}: must be one of ${schema.enum.join(", ")}`,
@@ -162,17 +203,17 @@ registerAiTool({
 registerAiTool({
   name: "project.create",
   description:
-    "Create a new project. Ask for missing title/type/platform via ui.ask_clarification first.",
+    "Create a new project after title and space (build or research/Explore) are known. Prefer ui.ask_clarification if space is missing.",
   permission: { requireWorkspaceMember: true },
   enabled: true,
   parameters: {
     type: "object",
-    required: ["title"],
+    required: ["title", "space"],
     properties: {
       title: { type: "string" },
       space: {
         type: "string",
-        enum: ["build", "research", "work", "chat"],
+        enum: ["build", "research", "work"],
       },
       kind: { type: "string" },
       summary: { type: "string" },

@@ -1768,10 +1768,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   message.content === "Thinking..."));
 
             const toolBlocks =
-              result.toolLabels?.map((name) => ({
+              result.toolResults?.map((t) => ({
                 type: "tool" as const,
-                label: name,
-                status: "done" as const,
+                label: t.name,
+                status: (t.ok ? "done" : "error") as "done" | "error",
+                detail: t.output,
               })) ?? [];
 
             const patchAssistant = (
@@ -2030,17 +2031,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       void (async () => {
         if (result.resumeTool) {
-          const merged = {
+          const merged: Record<string, unknown> = {
             ...(result.resumeArguments ?? {}),
             ...result.answers,
           };
-          // Map common clarification keys into project.create args
-          if (result.resumeTool === "project.create" && !merged.title) {
-            merged.title =
-              result.answers.project_name ??
-              result.answers.name ??
-              result.answers.title ??
-              "Untitled project";
+          if (result.resumeTool === "project.create") {
+            if (!merged.title) {
+              merged.title =
+                result.answers.project_name ??
+                result.answers.name ??
+                result.answers.title ??
+                "Untitled project";
+            }
+            if (typeof merged.space === "string") {
+              const s = String(merged.space).toLowerCase();
+              if (s === "explore") merged.space = "research";
+            }
+          }
+          if (
+            result.resumeTool === "project.open" &&
+            !merged.projectId &&
+            result.answers.projectId
+          ) {
+            merged.projectId = result.answers.projectId;
           }
           const toolResult = await executeAuthorizedTool({
             name: result.resumeTool,
@@ -2063,6 +2076,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                               type: "tool" as const,
                               label: result.resumeTool!,
                               status: "done" as const,
+                              detail: toolResult.output,
+                            },
+                          ],
+                        }
+                      : m,
+                  ),
+                };
+              }),
+            );
+            return;
+          }
+          if (!toolResult.ok) {
+            setThreads((current) =>
+              current.map((item) => {
+                if (item.id !== activeId) return item;
+                return {
+                  ...item,
+                  messages: item.messages.map((m) =>
+                    m.id === assistantId
+                      ? {
+                          ...m,
+                          content: toolResult.output,
+                          status: "complete" as const,
+                          blocks: [
+                            {
+                              type: "tool" as const,
+                              label: result.resumeTool!,
+                              status: "error" as const,
                               detail: toolResult.output,
                             },
                           ],
@@ -2678,7 +2719,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return { ok: true, detail: "Closed panel." };
       },
       projectCreate: async (opts) => {
-        const space = (opts.space as SpaceId) || "build";
+        let space = (opts.space as SpaceId) || "";
+        if (space === ("explore" as SpaceId)) space = "research";
+        if (!space || !["build", "research", "work"].includes(space)) {
+          return {
+            ok: false,
+            detail: "Pick a space (Build or Explore) before creating a project.",
+          };
+        }
         const kind =
           (opts.kind as "app" | "research" | "general" | undefined) ??
           (space === "research"
@@ -2699,7 +2747,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           openProject(project.id);
           return {
             ok: true,
-            detail: `Created project “${project.title}”.`,
+            detail: `Created “${project.title}” in ${space === "research" ? "Explore" : space === "build" ? "Build" : "Work"}.`,
             projectId: project.id,
           };
         } catch (err) {

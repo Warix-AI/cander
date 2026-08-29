@@ -183,7 +183,7 @@ export type ChatBlock =
   | { type: "connect"; service: string; status: "pending" | "connected" }
   | { type: "error"; title: string; body: string; details?: string }
   | { type: "deploy"; url: string; status: "ready" | "live" }
-  /** Shell for future agent tool activity — not wired to live tools yet. */
+  /** In-app agent tool activity. */
   | {
       type: "tool";
       label: string;

@@ -12,6 +12,7 @@ import {
 } from "@/lib/ai/tools/registry";
 import type { ClarificationQuestion } from "@/lib/ai/clarification/schema";
 import { parseToolCallFromContent } from "@/lib/ai/tool-protocol";
+import { CANDER_TOOL_PROTOCOL_RULES } from "@/lib/ai/tools/prompt";
 
 export type AiToolCallRequest = {
   name: string;
@@ -35,11 +36,10 @@ export function listRuntimeTools(): AiToolDefinition[] {
 
 export function formatToolsForPrompt(): string {
   const tools = listRuntimeTools();
-  if (!tools.length) return "";
+  if (!tools.length) return CANDER_TOOL_PROTOCOL_RULES;
   const lines = [
-    "You can request in-app tools by ending your reply with a single JSON object on its own line:",
-    '{"tool":"<name>","arguments":{...}}',
-    "Only use tools when needed. Otherwise reply normally with no JSON tool line.",
+    CANDER_TOOL_PROTOCOL_RULES,
+    "",
     "Available tools:",
   ];
   for (const t of tools) {
@@ -70,6 +70,15 @@ export async function executeAuthorizedTool(
 
   const validated = validateToolArguments(tool, call.arguments);
   if (!validated.ok) {
+    // Clarification with bad/empty args should still pause, not dump errors as "continue"
+    if (tool.name === "ui.ask_clarification") {
+      return {
+        name: tool.name,
+        ok: false,
+        output: validated.error,
+        pauseForUser: true,
+      };
+    }
     return { name: tool.name, ok: false, output: validated.error };
   }
   const args = validated.args;
@@ -139,11 +148,50 @@ export async function executeAuthorizedTool(
       }
       case "workspace.search": {
         const result = actions.workspaceSearch(String(args.query));
+        const results = result.results ?? [];
+        // Single strong match → open it
+        if (results.length === 1) {
+          const open = actions.projectOpen(results[0]!.id);
+          return {
+            name: "project.open",
+            ok: open.ok,
+            output: open.ok
+              ? `Opened “${results[0]!.title}”.`
+              : open.detail,
+            data: { projectId: results[0]!.id, results },
+          };
+        }
+        if (results.length > 1) {
+          const clarify = actions.askClarification({
+            title: "Which project?",
+            description: "I found a few matches.",
+            questions: [
+              {
+                id: "projectId",
+                type: "single_choice",
+                label: "Pick a project",
+                required: true,
+                choices: results.map((r) => ({
+                  id: r.id,
+                  label: r.space ? `${r.title} (${r.space})` : r.title,
+                })),
+              },
+            ],
+            resumeTool: "project.open",
+          });
+          return {
+            name: "ui.ask_clarification",
+            ok: clarify.ok,
+            output: clarify.detail,
+            pauseForUser: true,
+            data: { results },
+          };
+        }
         return {
           name: tool.name,
-          ok: result.ok,
-          output: `${result.detail}\n${JSON.stringify(result.results)}`,
-          data: { results: result.results },
+          ok: true,
+          output: `No projects matched “${args.query}”.`,
+          data: { results },
         };
       }
       case "ui.ask_clarification": {

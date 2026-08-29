@@ -7,6 +7,7 @@
  */
 
 import { runAssistantTurn } from "@/lib/ai/runtime/agent-turn";
+import type { AiToolCallResult } from "@/lib/ai/runtime/tools";
 import { AiRuntimeError } from "@/lib/ai/runtime/types";
 import type { SpaceId } from "@/lib/types";
 
@@ -59,7 +60,7 @@ export async function fetchPrivateAiReply(opts: {
   condensationOccurred: boolean;
   runtime?: string;
   pausedForUser?: boolean;
-  toolLabels?: string[];
+  toolResults?: AiToolCallResult[];
 }> {
   try {
     const result = await runAssistantTurn({
@@ -79,7 +80,7 @@ export async function fetchPrivateAiReply(opts: {
       condensationOccurred: result.condensationOccurred,
       runtime: result.runtime,
       pausedForUser: result.pausedForUser,
-      toolLabels: result.toolResults?.map((t) => t.name),
+      toolResults: result.toolResults,
     };
   } catch (err) {
     if (err instanceof AiRuntimeError) {
