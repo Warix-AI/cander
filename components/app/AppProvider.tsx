@@ -12,6 +12,17 @@ import {
 } from "react";
 import { accountPresets } from "@/lib/data";
 import {
+  formatClarificationAnswersForModel,
+  type ClarificationQuestion,
+  type ClarificationSubmitResult,
+} from "@/lib/ai/clarification/schema";
+import {
+  clearClarification,
+  openClarificationCard,
+} from "@/lib/ai/clarification/store";
+import { registerAppActionHandlers } from "@/lib/ai/runtime/app-actions";
+import { executeAuthorizedTool } from "@/lib/ai/runtime/tools";
+import {
   getChatStoreServerSnapshot,
   getChatStoreSnapshot,
   subscribeChatStore,
@@ -271,6 +282,8 @@ type AppContextValue = {
   updateSessionSummary: (text: string, threadId?: string | null) => void;
   clearPersistentChat: (threadId?: string | null) => void;
   sendMessage: (text: string, opts?: SendOpts) => void;
+  /** After a clarification card submit — persist answers and continue the assistant. */
+  continueAfterClarification: (result: ClarificationSubmitResult) => void;
   openSpace: (id: NavDestinationId) => void;
   openRecents: () => void;
   openBrowser: (opts?: { chat?: boolean; query?: string }) => void;
@@ -1705,10 +1718,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const kickLiveAi = () => {
         if (!useLiveAi) return;
+        const liveThreads = getChatStoreSnapshot().threads;
+        const liveThread =
+          liveThreads.find((item) => item.id === activeId) ?? thread ?? null;
         const priorAiChatId =
+          liveThread?.aiChatId ??
           threads.find((item) => item.id === activeId)?.aiChatId ??
-          thread?.aiChatId ??
           null;
+        const historyMessages = (liveThread?.messages ?? [])
+          .filter(
+            (m) =>
+              (m.role === "user" || m.role === "assistant") &&
+              m.id !== assistantId &&
+              m.status !== "pending" &&
+              m.status !== "streaming" &&
+              !m.event &&
+              Boolean(m.content?.trim()) &&
+              m.content !== "Thinking…" &&
+              m.content !== "Thinking...",
+          )
+          .map((m) => ({
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          }));
         const replyProjectId =
           projectId ?? intent.projectId ?? matched?.id ?? null;
         const replyProjectSpace =
@@ -1724,6 +1756,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           workspaceId: matched?.workspaceId ?? workspaceId,
           projectId: replyProjectId,
           projectSpace: replyProjectSpace,
+          messages: historyMessages,
         })
           .then((result) => {
             const isPendingAssistant = (message: Message) =>
@@ -1734,6 +1767,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   message.content === "Thinking…" ||
                   message.content === "Thinking..."));
 
+            const toolBlocks =
+              result.toolLabels?.map((name) => ({
+                type: "tool" as const,
+                label: name,
+                status: "done" as const,
+              })) ?? [];
+
             const patchAssistant = (
               content: string,
               status: "streaming" | "complete",
@@ -1743,7 +1783,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 const apply = (item: Thread): Thread => {
                   let nextMessages = item.messages.map((message) =>
                     isPendingAssistant(message) || message.id === assistantId
-                      ? { ...message, content, status }
+                      ? {
+                          ...message,
+                          content,
+                          status,
+                          ...(status === "complete" && toolBlocks.length
+                            ? {
+                                blocks: [
+                                  ...toolBlocks,
+                                  ...(message.blocks ?? []).filter(
+                                    (b) => b.type !== "tool",
+                                  ),
+                                ],
+                              }
+                            : {}),
+                        }
                       : message,
                   );
                   if (
@@ -1910,6 +1964,153 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       actor.id,
       setThreads,
     ],
+  );
+
+  const continueAfterClarification = useCallback(
+    (result: ClarificationSubmitResult) => {
+      const activeId = threadId;
+      if (!activeId) return;
+      clearClarification(activeId);
+      const assistantId = nextId("a");
+      const userMsgId = nextId("u");
+      const summary = formatClarificationAnswersForModel(result);
+
+      setThreads((current) =>
+        current.map((item) => {
+          if (item.id !== activeId) return item;
+          return {
+            ...item,
+            updatedAt: nowTime(),
+            snippet: result.title,
+            messages: [
+              ...item.messages,
+              {
+                id: userMsgId,
+                role: "user" as const,
+                content: `Submitted: ${result.title}`,
+                at: nowTime(),
+                blocks: [
+                  {
+                    type: "clarification" as const,
+                    title: result.title,
+                    answers: result.answers,
+                    skipped: result.skipped,
+                  },
+                ],
+              },
+              {
+                id: assistantId,
+                role: "assistant" as const,
+                content: "",
+                at: nowTime(),
+                status: "pending" as const,
+              },
+            ],
+          };
+        }),
+      );
+
+      const live = getChatStoreSnapshot().threads.find((t) => t.id === activeId);
+      const historyMessages = (live?.messages ?? [])
+        .filter(
+          (m) =>
+            (m.role === "user" || m.role === "assistant") &&
+            m.id !== assistantId &&
+            m.status !== "pending" &&
+            Boolean(m.content?.trim()),
+        )
+        .map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        }));
+
+      const resumeContent = result.resumeTool
+        ? `${summary}\n\nPlease continue using tool ${result.resumeTool} with these answers merged into arguments.`
+        : `${summary}\n\nContinue with the task using these answers.`;
+
+      void (async () => {
+        if (result.resumeTool) {
+          const merged = {
+            ...(result.resumeArguments ?? {}),
+            ...result.answers,
+          };
+          // Map common clarification keys into project.create args
+          if (result.resumeTool === "project.create" && !merged.title) {
+            merged.title =
+              result.answers.project_name ??
+              result.answers.name ??
+              result.answers.title ??
+              "Untitled project";
+          }
+          const toolResult = await executeAuthorizedTool({
+            name: result.resumeTool,
+            arguments: merged,
+          });
+          if (toolResult.ok && !toolResult.pauseForUser) {
+            setThreads((current) =>
+              current.map((item) => {
+                if (item.id !== activeId) return item;
+                return {
+                  ...item,
+                  messages: item.messages.map((m) =>
+                    m.id === assistantId
+                      ? {
+                          ...m,
+                          content: toolResult.output,
+                          status: "complete" as const,
+                          blocks: [
+                            {
+                              type: "tool" as const,
+                              label: result.resumeTool!,
+                              status: "done" as const,
+                              detail: toolResult.output,
+                            },
+                          ],
+                        }
+                      : m,
+                  ),
+                };
+              }),
+            );
+            return;
+          }
+        }
+
+        const reply = await fetchPrivateAiReply({
+          aiChatId: live?.aiChatId ?? null,
+          threadId: activeId,
+          title: result.title.slice(0, 52),
+          content: resumeContent,
+          workspaceId,
+          projectId,
+          projectSpace: (spaceId as SpaceId | null) ?? null,
+          messages: historyMessages,
+        });
+        typewriterReveal(reply.content, (partial, done) => {
+          setThreads((current) =>
+            current.map((item) => {
+              if (item.id !== activeId) return item;
+              return {
+                ...item,
+                aiChatId: reply.aiChatId.startsWith("local-")
+                  ? item.aiChatId
+                  : reply.aiChatId || item.aiChatId,
+                messages: item.messages.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        content: partial,
+                        status: done ? ("complete" as const) : ("streaming" as const),
+                      }
+                    : m,
+                ),
+              };
+            }),
+          );
+        });
+      })();
+    },
+    [threadId, workspaceId, projectId, spaceId, setThreads],
   );
 
   const selectElement = useCallback((id: PreviewNodeId) => {
@@ -2440,6 +2641,136 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [entitlements.showOrgSettings, pushTarget]);
 
+  useEffect(() => {
+    registerAppActionHandlers({
+      navOpen: (target) => {
+        if (target.kind === "new_chat") {
+          newChat();
+          return { ok: true, detail: "Opened New Chat." };
+        }
+        if (target.kind === "recents") {
+          openRecents();
+          return { ok: true, detail: "Opened Recents." };
+        }
+        if (target.kind === "connectors") {
+          openSpace("connectors");
+          return { ok: true, detail: "Opened Connectors." };
+        }
+        if (target.kind === "settings") {
+          openSettings(
+            (target.tab as SettingsTab | undefined) ?? "hosting",
+          );
+          return { ok: true, detail: "Opened Settings." };
+        }
+        openSpace(target.space as NavDestinationId);
+        return { ok: true, detail: `Opened ${target.space}.` };
+      },
+      panelOpen: (opts) => {
+        if (opts.projectId) openProject(opts.projectId);
+        else {
+          setPanelMode("split");
+          setPanelIntent("browse");
+        }
+        return { ok: true, detail: "Opened panel." };
+      },
+      panelClose: () => {
+        setPanelMode("collapsed");
+        return { ok: true, detail: "Closed panel." };
+      },
+      projectCreate: async (opts) => {
+        const space = (opts.space as SpaceId) || "build";
+        const kind =
+          (opts.kind as "app" | "research" | "general" | undefined) ??
+          (space === "research"
+            ? "research"
+            : space === "work"
+              ? "general"
+              : "app");
+        try {
+          const project = localSpaceEntityStore.createProject(
+            { workspaceId, actorId: actor.id },
+            {
+              space,
+              title: opts.title,
+              kind,
+              summary: opts.summary ?? "",
+            },
+          );
+          openProject(project.id);
+          return {
+            ok: true,
+            detail: `Created project “${project.title}”.`,
+            projectId: project.id,
+          };
+        } catch (err) {
+          return {
+            ok: false,
+            detail:
+              err instanceof Error ? err.message : "Could not create project.",
+          };
+        }
+      },
+      projectOpen: (projectIdArg) => {
+        openProject(projectIdArg);
+        return { ok: true, detail: `Opened project ${projectIdArg}.` };
+      },
+      workspaceSearch: (query) => {
+        const q = query.trim().toLowerCase();
+        const projects = localSpaceEntityStore
+          .listAllProjects({ workspaceId, actorId: actor.id })
+          .filter((p) => !q || p.title.toLowerCase().includes(q))
+          .slice(0, 12)
+          .map((p) => ({ id: p.id, title: p.title, space: p.space }));
+        return {
+          ok: true,
+          detail: `Found ${projects.length} project(s).`,
+          results: projects,
+        };
+      },
+      askClarification: (opts) => {
+        const tid = threadId;
+        if (!tid) {
+          return { ok: false, detail: "No active chat to attach a card to." };
+        }
+        const questions = (opts.questions ?? []) as ClarificationQuestion[];
+        if (!questions.length) {
+          return { ok: false, detail: "Clarification requires questions." };
+        }
+        openClarificationCard({
+          threadId: tid,
+          title: opts.title,
+          description: opts.description,
+          questions,
+          resumeTool: opts.resumeTool,
+          resumeArguments: opts.resumeArguments,
+        });
+        return { ok: true, detail: "Clarification card opened." };
+      },
+      requestConfirm: (opts) => {
+        const confirmed =
+          typeof window !== "undefined" &&
+          window.confirm(`${opts.title}\n\n${opts.message}`);
+        return {
+          ok: confirmed,
+          detail: confirmed ? "User confirmed." : "User cancelled.",
+          confirmed,
+        };
+      },
+    });
+    return () => registerAppActionHandlers(null);
+  }, [
+    newChat,
+    openRecents,
+    openSpace,
+    openSettings,
+    openProject,
+    setPanelMode,
+    setPanelIntent,
+    workspaceId,
+    actor.id,
+    threadId,
+  ]);
+
   const backToSettingsHub = useCallback(() => {
     setSettingsWorkspaceId(null);
     setSettingsMobileHub(true);
@@ -2954,6 +3285,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateSessionSummary,
       clearPersistentChat,
       sendMessage,
+      continueAfterClarification,
       openSpace,
       openRecents,
       openBrowser,
@@ -3096,6 +3428,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateSessionSummary,
       clearPersistentChat,
       sendMessage,
+      continueAfterClarification,
       openSpace,
       openRecents,
       openBrowser,

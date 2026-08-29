@@ -142,10 +142,10 @@ test("client-supplied tool names must be registered", () => {
     () => resolveAuthorizedToolNames(["not.a.real.tool"]),
     /Unknown or disabled/,
   );
-  assert.throws(
-    () => resolveAuthorizedToolNames(["workspace.search"]),
-    /Unknown or disabled/,
-  );
+  // Enabled tools resolve; unknown names still deny.
+  const allowed = resolveAuthorizedToolNames(["workspace.search"]);
+  assert.equal(allowed.length, 1);
+  assert.equal(allowed[0]?.name, "workspace.search");
   assert.deepEqual(resolveAuthorizedToolNames([]), []);
   assert.deepEqual(resolveAuthorizedToolNames(undefined), []);
 });

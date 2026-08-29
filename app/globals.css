@@ -1079,6 +1079,43 @@ html:not(.dark) .shell-panel :is(.bg-sidebar, .bg-background) {
   animation: cander-boot-line 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
+/* Assistant pending state — slow L→R shimmer on the word “Thinking”. */
+@keyframes thinking-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.thinking-shimmer {
+  display: inline-block;
+  background-image: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 35%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 65%,
+    var(--muted-foreground) 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: thinking-shimmer 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-shimmer {
+    animation: none;
+    background-image: none;
+    color: var(--muted-foreground);
+    -webkit-text-fill-color: var(--muted-foreground);
+  }
+}
+
 /* Marketing pages — normal document scroll; no nested overflow containers. */
 .marketing {
   position: relative;

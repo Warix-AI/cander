@@ -164,6 +164,25 @@ function BlockView({ block }: { block: ChatBlock }) {
           detail={block.detail}
         />
       );
+    case "clarification":
+      return (
+        <div className="my-1 rounded-[10px] border border-border/80 bg-muted/30 px-3 py-2 text-[13px]">
+          <p className="font-medium tracking-[-0.01em]">{block.title}</p>
+          <ul className="mt-1 space-y-0.5 text-muted-foreground">
+            {Object.entries(block.answers).map(([key, value]) => (
+              <li key={key}>
+                <span className="text-foreground/80">{key}</span>:{" "}
+                {typeof value === "string" ? value : JSON.stringify(value)}
+              </li>
+            ))}
+          </ul>
+          {block.skipped ? (
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              Some optional fields were skipped.
+            </p>
+          ) : null}
+        </div>
+      );
     case "image":
       return (
         <a

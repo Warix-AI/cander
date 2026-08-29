@@ -1,11 +1,16 @@
 "use client";
 
+import {
+  buildDialoguePrompt,
+  hasPriorConversationTurns,
+} from "@/lib/ai/assistant-behavior";
 import { buildCanderOnDeviceInstructions } from "@/lib/ai/runtime/cander-on-device-instructions";
 import {
   ensureOnDeviceIdentity,
   getOnDeviceWorkspaceSnapshot,
   refreshOnDeviceInventoryCache,
 } from "@/lib/ai/runtime/on-device-workspace-cache";
+import { formatToolsForPrompt } from "@/lib/ai/runtime/tools";
 import {
   generateWithFoundationModels,
   getFoundationModelsAvailability,
@@ -22,8 +27,6 @@ import {
  * Apple on-device provider via Capacitor → Foundation Models.
  *
  * PRIVACY: Inference stays on-device. Do not call Edge/ai-chat from this path.
- * Identity/workspace text is assembled from local caches (and optionally a
- * profiles row for the user’s name) — never used to proxy the chat prompt.
  */
 export function createAppleLocalProvider(): AiRuntimeProvider {
   return {
@@ -38,7 +41,7 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
         private: true,
         offline: true,
         streaming: avail.streaming,
-        tools: false,
+        tools: true,
         structuredOutput: false,
       };
     },
@@ -58,12 +61,11 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
         );
       }
       try {
-        // Prefer cached member/checkpoint; fall back to profiles once if needed.
-        // Inventory refresh is metadata-only (not the chat prompt).
         const [identity] = await Promise.all([
           ensureOnDeviceIdentity(),
           refreshOnDeviceInventoryCache(request.workspaceId),
         ]);
+        const priorTurns = hasPriorConversationTurns(request.messages);
         const snap = getOnDeviceWorkspaceSnapshot({
           workspaceId: request.workspaceId,
           projectId: request.projectId,
@@ -72,19 +74,26 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
           threadId: request.threadId,
           currentContent: request.content,
         });
-        const instructions = buildCanderOnDeviceInstructions({
-          shortName: identity?.shortName ?? snap.shortName,
-          fullName: identity?.fullName ?? snap.fullName,
-          email: identity?.email ?? snap.email,
-          workspaceName: snap.workspaceName,
-          projectTitle: snap.projectTitle,
-          spaceLabel: snap.spaceLabel,
-          inventoryBlock: snap.inventoryBlock,
-          transcriptBlock: snap.transcriptBlock,
-        });
-        // On-device only — never route this prompt through Edge.
+        const toolBlock = formatToolsForPrompt();
+        const instructions = [
+          buildCanderOnDeviceInstructions({
+            shortName: identity?.shortName ?? snap.shortName,
+            fullName: identity?.fullName ?? snap.fullName,
+            email: identity?.email ?? snap.email,
+            workspaceName: snap.workspaceName,
+            projectTitle: snap.projectTitle,
+            spaceLabel: snap.spaceLabel,
+            inventoryBlock: snap.inventoryBlock,
+            transcriptBlock: priorTurns ? null : snap.transcriptBlock,
+            hasPriorTurns: priorTurns,
+          }),
+          toolBlock,
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        const prompt = buildDialoguePrompt(request.messages, request.content);
         const content = await generateWithFoundationModels(
-          request.content,
+          prompt,
           instructions,
         );
         return {

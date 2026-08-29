@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { CanderMark } from "@/components/brand/CanderMark";
+import { ClarificationCardSlot } from "@/components/chat/ClarificationCard";
 import { ChatMessage } from "@/components/chat/MessageBlocks";
 import { SessionSummaryBubble } from "@/components/chat/SessionSummaryBubble";
 import { Composer } from "@/components/shell/Composer";
@@ -30,7 +31,8 @@ const homePromptIcons = {
 } as const;
 
 export function ChatColumn() {
-  const { thread, spaceId, sendMessage, drafting, view } = useApp();
+  const { thread, spaceId, sendMessage, drafting, view, continueAfterClarification } =
+    useApp();
   const browserMode = view === "browser";
   const mobile = useMobileShell();
   const hasChatTurns = Boolean(
@@ -120,6 +122,10 @@ export function ChatColumn() {
             <div ref={endRef} />
           )}
         </div>
+        <ClarificationCardSlot
+          threadId={thread?.id}
+          onSubmitted={continueAfterClarification}
+        />
         <Composer onSend={send} hideSpaceTools />
       </section>
     );
@@ -151,6 +157,10 @@ export function ChatColumn() {
           )}
         </div>
         <div className={cn("shrink-0", MOBILE_APP_BG)}>
+          <ClarificationCardSlot
+            threadId={thread?.id}
+            onSubmitted={continueAfterClarification}
+          />
           <Composer onSend={send} />
         </div>
       </section>
@@ -193,7 +203,15 @@ export function ChatColumn() {
         </div>
       )}
 
-      {showLanding ? null : <Composer onSend={send} />}
+      {showLanding ? null : (
+        <>
+          <ClarificationCardSlot
+            threadId={thread?.id}
+            onSubmitted={continueAfterClarification}
+          />
+          <Composer onSend={send} />
+        </>
+      )}
     </section>
   );
 }

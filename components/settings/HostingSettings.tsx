@@ -27,7 +27,10 @@ export function HostingSettings() {
         subtitle="Choose where AI runs — Cander cloud or on-device Apple Intelligence."
       />
       <SettingsPanel>
-        <SettingsSection title="Inference">
+        <SettingsSection
+          title="Inference"
+          description="Cloud works on every surface. On device keeps prompts on this Apple Intelligence device. Auto picks on-device when ready."
+        >
           <HostingModePicker onModeChange={onModeChange} />
           <SettingsFootnote>
             On device requires the Cander iOS app on hardware that supports Apple

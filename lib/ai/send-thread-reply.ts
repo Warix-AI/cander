@@ -3,12 +3,10 @@
 /**
  * Client entry for private AI replies.
  *
- * Routes through AIRuntime (AUTO / LOCAL / CLOUD).
- * Cloud path: Edge ai-chat → tunnel → bridge (existing behavior).
- * LOCAL path: on-device only — never silently falls back to cloud.
+ * Routes through AIRuntime agent turn (tools + clarification) then providers.
  */
 
-import { generateWithAiRuntime } from "@/lib/ai/runtime/runtime";
+import { runAssistantTurn } from "@/lib/ai/runtime/agent-turn";
 import { AiRuntimeError } from "@/lib/ai/runtime/types";
 import type { SpaceId } from "@/lib/types";
 
@@ -50,15 +48,21 @@ export async function fetchPrivateAiReply(opts: {
   workspaceId: string;
   projectId?: string | null;
   projectSpace?: SpaceId | null;
+  messages?: Array<{
+    role: "user" | "assistant" | "system";
+    content: string;
+  }>;
 }): Promise<{
   aiChatId: string;
   content: string;
   offline: boolean;
   condensationOccurred: boolean;
   runtime?: string;
+  pausedForUser?: boolean;
+  toolLabels?: string[];
 }> {
   try {
-    const result = await generateWithAiRuntime({
+    const result = await runAssistantTurn({
       aiChatId: opts.aiChatId,
       threadId: opts.threadId,
       title: opts.title,
@@ -66,6 +70,7 @@ export async function fetchPrivateAiReply(opts: {
       workspaceId: opts.workspaceId,
       projectId: opts.projectId,
       projectSpace: opts.projectSpace,
+      messages: opts.messages,
     });
     return {
       aiChatId: result.aiChatId ?? opts.aiChatId ?? "",
@@ -73,6 +78,8 @@ export async function fetchPrivateAiReply(opts: {
       offline: result.offline,
       condensationOccurred: result.condensationOccurred,
       runtime: result.runtime,
+      pausedForUser: result.pausedForUser,
+      toolLabels: result.toolResults?.map((t) => t.name),
     };
   } catch (err) {
     if (err instanceof AiRuntimeError) {

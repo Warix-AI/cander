@@ -191,6 +191,12 @@ export type ChatBlock =
       detail?: string;
     }
   | {
+      type: "clarification";
+      title: string;
+      answers: Record<string, unknown>;
+      skipped?: boolean;
+    }
+  | {
       type: "image";
       url: string;
       name: string;

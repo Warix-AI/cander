@@ -12,13 +12,19 @@ const RECENT_MESSAGE_LIMIT = 10;
 const CONDENSE_MESSAGE_THRESHOLD = 25;
 const CONDENSE_CHAR_THRESHOLD = 8_000;
 
-const PRODUCT_SYSTEM_PROMPT = `You are Cander, a concise product assistant.
+const PRODUCT_SYSTEM_PROMPT = `You are Cander’s helpful in-app assistant. Be natural, friendly, concise, and useful. Continue the active conversation using its prior context. Do not repeatedly introduce yourself, mention your model or provider, or use generic greeting scripts unless the user directly asks about your identity. Ask focused follow-up questions only when information is genuinely needed. Prefer short, direct responses and take available in-app actions when appropriate.
 Answer the question first. Prefer short paragraphs and high information density.
 Do not restate the user's request. Avoid unnecessary headings and filler.
 Expand only when the question needs detail or the user asks for more.
 You may use Markdown; the UI will render it.
 Long conversations are summarized into condensed memory. Prefer that memory plus the recent messages over inventing earlier details.
-When greeting, be warm and brief — use the user's preferred name when known (e.g. "Hi, Alex — how can I help?"). Do not dump workspace IDs, project UUIDs, or inventory dumps in greetings.`;
+If this conversation already has prior user or assistant turns, do not greet or restate identity — answer directly.
+If this is the first user message in a new chat, a brief warm hello using their preferred name is fine. Do not dump workspace IDs, project UUIDs, or inventory dumps in greetings.
+When you need to operate the app, end your reply with a single JSON line: {"tool":"<name>","arguments":{...}}
+Supported tools include nav.open, panel.open, panel.close, project.create, project.open, workspace.search, ui.ask_clarification, ui.confirm.
+Prefer ui.ask_clarification when required fields are missing. Prefer short normal replies when no tool is needed.`;
+
+const NO_REGREET_SYSTEM = `This conversation already has prior turns. Do not greet, re-introduce yourself, or mention that you are Cander, Apple Intelligence, or any model/provider. Answer the latest user message directly.`;
 
 type Json = Record<string, unknown>;
 
@@ -570,8 +576,8 @@ async function resolveUserProfileText(
     orgLines.length ? "Organizations / workspaces:" : null,
     ...orgLines,
     preferred
-      ? `Greet with "Hi, ${preferred}" (or similar) when opening a conversation — never lead with raw IDs.`
-      : "Greet briefly and warmly when opening a conversation.",
+      ? `Preferred name is ${preferred}. Use it naturally when helpful. Only greet with "Hi, ${preferred}" on the first message of a brand-new conversation — never on follow-ups, and never lead with raw IDs.`
+      : "Only greet briefly on the first message of a brand-new conversation — never on follow-ups.",
   ].filter(Boolean);
 
   return lines.length > 1 ? lines.join("\n") : null;
@@ -684,6 +690,21 @@ function buildModelMessages(opts: {
   const messages: Array<{ role: string; content: string }> = [
     { role: "system", content: PRODUCT_SYSTEM_PROMPT },
   ];
+  const hasPriorTurns = recent.some(
+    (m) =>
+      (m.role === "user" || m.role === "assistant") &&
+      Boolean(m.content?.trim()),
+  );
+  // Exclude the just-inserted latest user turn when deciding "prior" — if only one
+  // user message exists, this is still the opening turn.
+  const priorBesidesLatest = recent.filter(
+    (m) => m.role === "user" || m.role === "assistant",
+  );
+  if (priorBesidesLatest.length > 1) {
+    messages.push({ role: "system", content: NO_REGREET_SYSTEM });
+  } else if (hasPriorTurns && priorBesidesLatest.length === 1) {
+    // Single turn = opening; no NO_REGREET
+  }
   if (opts.userProfileText) {
     messages.push({ role: "system", content: opts.userProfileText });
   }

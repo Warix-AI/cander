@@ -12,6 +12,7 @@ import {
 } from "@/lib/ai/runtime/native/foundation-models";
 import type { AiRuntimeMode } from "@/lib/ai/runtime/types";
 import { persistHosting } from "@/lib/session";
+import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 const MODES: {
@@ -94,8 +95,13 @@ export function HostingModePicker({
   };
 
   return (
-    <div className={cn("flex flex-col gap-3", className)}>
-      <div className="overflow-hidden rounded-[12px] border border-border">
+    <div className={cn("flex flex-col gap-4", className)}>
+      <div
+        className={cn(
+          "overflow-hidden border border-border bg-card",
+          SHELL_G3_RADIUS,
+        )}
+      >
         {MODES.map((item) => {
           const selected = mode === item.id;
           const blockedLocal = item.id === "local" && !status.available;
@@ -105,14 +111,18 @@ export function HostingModePicker({
               type="button"
               onClick={() => select(item.id)}
               className={cn(
-                "flex w-full flex-col gap-1 border-b border-border/60 px-4 py-3.5 text-left last:border-b-0",
-                selected ? "bg-muted/40" : "hover:bg-muted/30",
+                "flex w-full flex-col gap-1 border-b border-border/60 px-4 py-3.5 text-left transition-colors last:border-b-0",
+                selected
+                  ? "bg-muted/50"
+                  : "bg-transparent hover:bg-muted/30",
               )}
             >
               <div className="flex items-center justify-between gap-3">
-                <span className="text-[15px] font-medium">{item.title}</span>
+                <span className="text-[15px] font-medium tracking-[-0.01em]">
+                  {item.title}
+                </span>
                 {selected ? (
-                  <span className="text-[12px] text-muted-foreground">
+                  <span className="rounded-full bg-foreground/8 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                     Selected
                   </span>
                 ) : null}
@@ -130,13 +140,30 @@ export function HostingModePicker({
         })}
       </div>
 
-      <div className="rounded-[12px] border border-border/70 px-4 py-3 text-[12.5px] leading-relaxed text-muted-foreground">
-        <div className="font-medium text-foreground">
-          Apple Intelligence: {status.available ? "Ready" : "Unavailable"}
+      <div
+        className={cn(
+          "border border-border/80 bg-muted/20 px-4 py-3.5 text-[12.5px] leading-relaxed text-muted-foreground",
+          SHELL_G3_RADIUS,
+        )}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-medium text-foreground">
+            Apple Intelligence
+          </span>
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[11px] font-medium",
+              status.available
+                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                : "bg-muted text-muted-foreground",
+            )}
+          >
+            {status.available ? "Ready" : "Unavailable"}
+          </span>
         </div>
-        <p className="mt-1">{status.message}</p>
+        <p className="mt-1.5">{status.message}</p>
         {status.reason ? (
-          <p className="mt-1 font-mono text-[11px] opacity-80">{status.reason}</p>
+          <p className="mt-1 font-mono text-[11px] opacity-70">{status.reason}</p>
         ) : null}
       </div>
     </div>

@@ -34,6 +34,14 @@ export type AiGenerateRequest = {
   aiChatId?: string | null;
   /** UI thread id — used by on-device context (Recents / “this chat”). */
   threadId?: string | null;
+  /**
+   * Prior turns in this UI thread (excluding the in-flight empty assistant).
+   * Cloud still prefers Edge DB history; LOCAL uses this for dialogue continuity.
+   */
+  messages?: Array<{
+    role: "user" | "assistant" | "system";
+    content: string;
+  }>;
 };
 
 export type AiGenerateResult = {

@@ -56,7 +56,7 @@ export function createCloudProvider(): AiRuntimeProvider {
         private: false,
         offline: false,
         streaming: false,
-        tools: false,
+        tools: true,
         structuredOutput: false,
       };
     },

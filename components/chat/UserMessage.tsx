@@ -40,6 +40,24 @@ export function UserMessage({
           </p>
         </div>
       ) : null}
+      {blocks
+        ?.filter((b) => b.type === "clarification")
+        .map((block, index) => (
+          <div
+            key={`clarify-${index}`}
+            className="rounded-[10px] border border-border/80 bg-background/80 px-3 py-2 text-[13px]"
+          >
+            <p className="font-medium">{block.title}</p>
+            <ul className="mt-1 space-y-0.5 text-muted-foreground">
+              {Object.entries(block.answers).map(([key, value]) => (
+                <li key={key}>
+                  {key}:{" "}
+                  {typeof value === "string" ? value : JSON.stringify(value)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
     </div>
   );
 }

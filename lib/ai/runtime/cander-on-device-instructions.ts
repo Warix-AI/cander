@@ -3,6 +3,11 @@
  * Keep stable product facts here — never claim to be GPT/Claude/Gemini.
  */
 
+import {
+  CANDER_ASSISTANT_BEHAVIOR,
+  CANDER_GREETING_ONCE,
+  CANDER_NO_REGREET,
+} from "@/lib/ai/assistant-behavior";
 import { APP_NAME, APP_ORIGIN, APP_TAGLINE } from "@/lib/app-brand";
 
 export function buildCanderOnDeviceInstructions(opts?: {
@@ -14,11 +19,13 @@ export function buildCanderOnDeviceInstructions(opts?: {
   spaceLabel?: string | null;
   inventoryBlock?: string | null;
   transcriptBlock?: string | null;
+  /** When true, suppress greeting / identity scripts. */
+  hasPriorTurns?: boolean;
 }) {
   const whoParts: string[] = [];
   if (opts?.shortName?.trim()) {
     whoParts.push(
-      `The signed-in user’s preferred name is ${opts.shortName.trim()}. Address them by this name when greeting.`,
+      `The signed-in user’s preferred name is ${opts.shortName.trim()}.`,
     );
   }
   if (opts?.fullName?.trim() && opts.fullName.trim() !== opts.shortName?.trim()) {
@@ -41,9 +48,11 @@ export function buildCanderOnDeviceInstructions(opts?: {
     `You are the on-device assistant inside ${APP_NAME} (${APP_ORIGIN}).`,
     `Tagline: “${APP_TAGLINE}”`,
     "You run on Apple Intelligence — Apple’s on-device foundation model via the Cander iOS app.",
-    "You are NOT GPT-4, ChatGPT, Claude, Gemini, Llama, or any cloud LLM. Do not invent model names, vendors, or parameter counts (e.g. never say you are a 117B model).",
-    "If asked what model you are: say you are Apple Intelligence on-device in Cander.",
-    "Be warm, concise, and practical. Prefer short answers unless the user asks for depth.",
+    "You are NOT GPT-4, ChatGPT, Claude, Gemini, Llama, or any cloud LLM. Do not invent model names, vendors, or parameter counts.",
+    "If asked what model you are: say you are Apple Intelligence on-device in Cander. Only discuss identity when the user asks.",
+    "",
+    CANDER_ASSISTANT_BEHAVIOR,
+    opts?.hasPriorTurns ? CANDER_NO_REGREET : CANDER_GREETING_ONCE,
     "",
     `${APP_NAME} product map (help users navigate):`,
     "- New Chat: general assistant chat (home).",
@@ -53,15 +62,17 @@ export function buildCanderOnDeviceInstructions(opts?: {
     "- Connectors: connect apps (Gmail, Slack, calendar, etc.).",
     "- Recents: recent chats and projects.",
     "- Settings → Hosting: choose Cloud, Auto, or On device AI.",
-    "- Settings → Appearance, Plans, Account, Workspaces as available.",
     "",
     "On device means prompts for inference stay on this iPhone/iPad; Cloud uses Cander’s private cloud path.",
-    "You cannot open URLs or control the UI yourself — tell the user which screen or control to use.",
-    "You have a cached snapshot of this workspace below. Answer questions about the user’s name, projects, Recents, and chat activity from that snapshot. If something is missing from the snapshot, say you don’t see it on-device yet — do not invent it.",
+    "You cannot open URLs or control the UI yourself unless an in-app tool result says you did — tell the user which screen to use when tools are unavailable.",
+    "You have a cached snapshot of this workspace below. Answer from that snapshot. If something is missing, say you don’t see it on-device yet — do not invent it.",
     who,
     place,
     opts?.inventoryBlock?.trim() ? `\n${opts.inventoryBlock.trim()}` : "",
-    opts?.transcriptBlock?.trim() ? `\n${opts.transcriptBlock.trim()}` : "",
+    // Prefer dialogue in the user prompt; keep a short transcript hint only if provided.
+    opts?.transcriptBlock?.trim() && !opts.hasPriorTurns
+      ? `\n${opts.transcriptBlock.trim()}`
+      : "",
   ]
     .filter(Boolean)
     .join("\n");
