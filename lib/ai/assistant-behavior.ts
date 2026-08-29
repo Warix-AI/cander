@@ -18,7 +18,9 @@ export type AiHistoryMessage = {
 /** True when prior turns mean we must suppress greeting scripts. */
 export function hasPriorConversationTurns(
   messages: AiHistoryMessage[] | undefined | null,
+  opts?: { condensedActive?: boolean; taskActive?: boolean },
 ): boolean {
+  if (opts?.taskActive || opts?.condensedActive) return true;
   if (!messages?.length) return false;
   return messages.some(
     (m) =>
@@ -27,6 +29,26 @@ export function hasPriorConversationTurns(
       m.content !== "Thinking…" &&
       m.content !== "Thinking...",
   );
+}
+
+/**
+ * Cloud/Edge: suppress identity greetings when the chat is already underway
+ * (more than the opening user turn, condensed memory, or an active task).
+ */
+export function shouldSuppressReGreeting(opts: {
+  turns: Array<{ role: string; content?: string | null }>;
+  condensedActive?: boolean;
+  taskActive?: boolean;
+}): boolean {
+  if (opts.taskActive || opts.condensedActive) return true;
+  const meaningful = opts.turns.filter(
+    (m) =>
+      (m.role === "user" || m.role === "assistant") &&
+      Boolean(m.content?.trim()) &&
+      m.content !== "Thinking…" &&
+      m.content !== "Thinking...",
+  );
+  return meaningful.length > 1 || meaningful.some((m) => m.role === "assistant");
 }
 
 /**

@@ -17,6 +17,10 @@ import {
   getFoundationModelsAvailability,
 } from "@/lib/ai/runtime/native/foundation-models";
 import {
+  formatTaskStateForPrompt,
+  getThreadTaskState,
+} from "@/lib/ai/task-state";
+import {
   AiRuntimeError,
   type AiGenerateRequest,
   type AiGenerateResult,
@@ -68,7 +72,14 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
           ensureOnDeviceIdentity(),
           refreshOnDeviceInventoryCache(request.workspaceId),
         ]);
-        const priorTurns = hasPriorConversationTurns(request.messages);
+        const taskState = getThreadTaskState(request.threadId);
+        const taskActive =
+          Boolean(taskState) &&
+          taskState!.status !== "idle" &&
+          taskState!.status !== "completed";
+        const priorTurns = hasPriorConversationTurns(request.messages, {
+          taskActive,
+        });
         const snap = getOnDeviceWorkspaceSnapshot({
           workspaceId: request.workspaceId,
           projectId: request.projectId,
@@ -82,6 +93,7 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
         const member =
           getMembersSnapshot().find((m) => m.id === actorId) ??
           getMembersSnapshot()[0];
+        const taskBlock = formatTaskStateForPrompt(taskState);
         const instructions = [
           buildCanderOnDeviceInstructions({
             shortName: identity?.shortName ?? snap.shortName,
@@ -95,6 +107,7 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
             planCapabilityLine: buildPlanCapabilityLine(member),
             hasPriorTurns: priorTurns,
           }),
+          taskBlock,
           toolBlock,
         ]
           .filter(Boolean)

@@ -11,7 +11,7 @@ import {
 import { tryIntentShortcut } from "@/lib/ai/runtime/intent-actions";
 import { buildCreateProjectClarification } from "@/lib/ai/runtime/intent-actions";
 import { setTurnThreadId } from "@/lib/ai/runtime/turn-context";
-import { stripToolJsonFromText } from "@/lib/ai/tool-protocol";
+import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
 import { generateWithAiRuntime } from "@/lib/ai/runtime/runtime";
 import type {
   AiGenerateRequest,
@@ -26,7 +26,7 @@ export type AgentTurnResult = AiGenerateResult & {
 };
 
 function safeContent(text: string, fallback: string): string {
-  const cleaned = stripToolJsonFromText(text || "").trim();
+  const cleaned = sanitizeAssistantVisibleText(text || "").trim();
   return cleaned || fallback;
 }
 
@@ -188,20 +188,20 @@ async function runAssistantTurnInner(
     }
 
     if (!result.ok) {
-      // Don't loop forever on bad tools — surface a clean message
+      // Don't loop forever on bad tools — surface a clean message (never raw tool errors)
       return {
         ...last,
         content: safeContent(
           text,
-          `I couldn't complete that (${result.output}). Try again in a different way?`,
+          "I couldn't complete that. Try again in a different way?",
         ),
         toolResults,
       };
     }
 
     const followUp = [
-      `Tool ${result.name} result: ok — ${result.output}`,
-      "Continue briefly for the user. Call another tool only if still needed; otherwise a short normal reply with no JSON.",
+      `Internal result for ${result.name}: ${result.output}`,
+      "Continue briefly for the user in plain language only. Call another tool only if still needed; otherwise a short normal reply with no JSON and no tool names.",
     ].join("\n");
 
     working = {

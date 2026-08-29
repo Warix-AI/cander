@@ -10,6 +10,7 @@ import {
   CANDER_NO_REGREET,
   buildDialoguePrompt,
   hasPriorConversationTurns,
+  shouldSuppressReGreeting,
 } from "../lib/ai/assistant-behavior.ts";
 import {
   createClarificationCard,
@@ -24,6 +25,7 @@ import {
 } from "../lib/ai/clarification/schema.ts";
 import {
   parseToolCallFromContent,
+  sanitizeAssistantVisibleText,
   stripToolJsonFromText,
 } from "../lib/ai/tool-protocol.ts";
 import {
@@ -37,6 +39,18 @@ import {
   matchOpenProjectIntent,
   matchTakeMeThereIntent,
 } from "../lib/ai/runtime/intent-matchers.ts";
+import {
+  clearThreadTaskState,
+  getThreadTaskState,
+  mergeCondensedSummaries,
+  migrateThreadTaskState,
+  upsertThreadTaskState,
+} from "../lib/ai/task-state.ts";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("conversation continuity helpers", () => {
   it("detects prior turns and builds dialogue prompts", () => {
@@ -290,5 +304,144 @@ describe("intent shortcuts", () => {
     );
     assert.equal(matchTakeMeThereIntent("take me there"), true);
     assert.equal(matchTakeMeThereIntent("open Build"), false);
+  });
+});
+
+describe("hard sanitize gate", () => {
+  it("removes prose, canonical, key-style, and incomplete tool payloads", () => {
+    const samples = [
+      'Sure.\nui.ask_clarification {"title":"New project","questions":[]}',
+      'Ok\n{"tool":"project.create","arguments":{"title":"CRM","space":"build"}}',
+      'Here\n{"ui.ask_clarification":{"title":"x","questions":[]}}',
+      "Calling tool project.create…\nAlmost done.",
+      'Partial {"tool":"nav.open","arguments":{"target":"build"',
+    ];
+    for (const sample of samples) {
+      const cleaned = sanitizeAssistantVisibleText(sample);
+      assert.doesNotMatch(cleaned, /"tool"/);
+      assert.doesNotMatch(cleaned, /ui\.ask_clarification/);
+      assert.doesNotMatch(cleaned, /Calling tool/i);
+      assert.doesNotMatch(cleaned, /project\.create/);
+    }
+  });
+
+  it("parses known key-style clarification without leaking JSON", () => {
+    const { text, call } = parseToolCallFromContent(
+      'Need a bit more.\n{"ui.ask_clarification":{"title":"New project","questions":[{"id":"space","type":"single_choice","label":"Space"}]}}',
+    );
+    assert.equal(call?.name, "ui.ask_clarification");
+    assert.doesNotMatch(text, /ui\.ask_clarification/);
+    assert.doesNotMatch(text, /"questions"/);
+  });
+});
+
+describe("CRM clarification resume args", () => {
+  it("merges CRM title into project.create without requiring model re-emit", () => {
+    const normalized = normalizeProjectCreateFromClarification(
+      { space: "Build" },
+      { title: "CRM" },
+    );
+    assert.equal(normalized.title, "CRM");
+    assert.equal(normalized.space, "build");
+    const create = getAiTool("project.create")!;
+    const validated = validateToolArguments(create, {
+      title: normalized.title,
+      space: normalized.space,
+    });
+    assert.equal(validated.ok, true);
+  });
+});
+
+describe("per-thread task state", () => {
+  it("isolates state by threadId and migrates on project dock", () => {
+    clearThreadTaskState("t-a");
+    clearThreadTaskState("t-b");
+    clearThreadTaskState("t-project");
+    upsertThreadTaskState("t-a", {
+      goal: "Create CRM",
+      step: "awaiting_space",
+      facts: { title: "CRM" },
+      status: "awaiting_clarification",
+    });
+    upsertThreadTaskState("t-b", {
+      goal: "Other",
+      status: "running",
+    });
+    assert.equal(getThreadTaskState("t-a")?.facts.title, "CRM");
+    assert.notEqual(getThreadTaskState("t-b")?.facts.title, "CRM");
+    migrateThreadTaskState("t-a", "t-project");
+    assert.equal(getThreadTaskState("t-a"), null);
+    assert.equal(getThreadTaskState("t-project")?.facts.title, "CRM");
+    clearThreadTaskState("t-b");
+    clearThreadTaskState("t-project");
+  });
+});
+
+describe("rolling summary + NO_REGREET", () => {
+  it("merges prior summary with newly condensed turns", () => {
+    const merged = mergeCondensedSummaries(
+      "Goal: create CRM. Pending: pick space.",
+      "User chose Build. Created CRM.",
+    );
+    assert.match(merged, /Goal: create CRM/);
+    assert.match(merged, /Created CRM/);
+    assert.match(merged, /Prior summary/);
+  });
+
+  it("suppresses re-greet when prior turns, assistant, condensed, or task", () => {
+    assert.equal(
+      shouldSuppressReGreeting({ turns: [{ role: "user", content: "Hi" }] }),
+      false,
+    );
+    assert.equal(
+      shouldSuppressReGreeting({
+        turns: [
+          { role: "user", content: "Hi" },
+          { role: "assistant", content: "Hello" },
+          { role: "user", content: "CRM" },
+        ],
+      }),
+      true,
+    );
+    assert.equal(
+      shouldSuppressReGreeting({
+        turns: [{ role: "user", content: "Hi" }],
+        condensedActive: true,
+      }),
+      true,
+    );
+    assert.equal(
+      shouldSuppressReGreeting({
+        turns: [{ role: "user", content: "Hi" }],
+        taskActive: true,
+      }),
+      true,
+    );
+    assert.equal(
+      hasPriorConversationTurns([{ role: "user", content: "x" }], {
+        taskActive: true,
+      }),
+      true,
+    );
+  });
+});
+
+describe("chat layout smoke", () => {
+  it("mobile path uses full width and hides scrollbars", () => {
+    const src = readFileSync(
+      join(rootDir, "components/shell/ChatColumn.tsx"),
+      "utf8",
+    );
+    assert.match(src, /data-mobile-chat/);
+    assert.match(src, /min-h-\[30dvh\]/);
+    assert.match(src, /scrollbar-width:none/);
+    assert.match(src, /chat-scroll/);
+    // Mobile branch transcript is full-width
+    assert.match(
+      src,
+      /if \(mobile\)[\s\S]{0,800}?max-w-none/,
+    );
+    // Composer dock drops 38rem when mobile
+    assert.match(src, /mobile \? "max-w-none" : "max-w-\[38rem\]"/);
   });
 });

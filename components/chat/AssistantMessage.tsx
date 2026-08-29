@@ -12,8 +12,8 @@ import {
 import { useApp } from "@/components/app/AppProvider";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
-import { ToolCallBlock } from "@/components/chat/ToolCallBlock";
 import { formatClarificationAnswersForDisplay } from "@/lib/ai/clarification/schema";
+import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
 import type { ChatBlock, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -25,23 +25,16 @@ export function AssistantMessage({ message }: { message: Message }) {
     (!message.content ||
       message.content === "Thinking…" ||
       message.content === "Thinking...");
+  const visibleContent = message.content
+    ? sanitizeAssistantVisibleText(message.content)
+    : "";
 
   return (
     <div className="w-full space-y-2">
-      {message.blocks
-        ?.filter((b) => b.type === "tool")
-        .map((block, index) => (
-          <ToolCallBlock
-            key={`tool-${index}`}
-            label={block.label}
-            status={block.status}
-            detail={block.detail}
-          />
-        ))}
       {showThinking ? (
         <ThinkingIndicator />
-      ) : message.content ? (
-        <MarkdownRenderer content={message.content} />
+      ) : visibleContent ? (
+        <MarkdownRenderer content={visibleContent} />
       ) : null}
       {message.blocks
         ?.filter((b) => b.type !== "tool")
@@ -158,13 +151,8 @@ function BlockView({ block }: { block: ChatBlock }) {
     case "deploy":
       return <DeployBlock block={block} />;
     case "tool":
-      return (
-        <ToolCallBlock
-          label={block.label}
-          status={block.status}
-          detail={block.detail}
-        />
-      );
+      // Hard UI rule: never render tool chrome in the transcript.
+      return null;
     case "clarification":
       return (
         <div className="my-1 rounded-[10px] border border-border/80 bg-muted/30 px-3 py-2 text-[13px]">

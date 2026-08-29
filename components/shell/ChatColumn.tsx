@@ -59,7 +59,8 @@ function ComposerDock({
     >
       <div
         className={cn(
-          "w-full max-w-[38rem]",
+          "w-full",
+          mobile ? "max-w-none" : "max-w-[38rem]",
           (!floating || centered || mobile) && "mx-auto",
         )}
       >
@@ -147,7 +148,7 @@ export function ChatColumn() {
         );
       })}
       {/* Room below the latest turn so it can sit near the top like ChatGPT. */}
-      <div className="min-h-[58vh]" aria-hidden />
+      <div className="min-h-[30dvh]" aria-hidden />
       <div ref={endRef} />
     </>
   );
@@ -155,7 +156,7 @@ export function ChatColumn() {
   if (browserMode) {
     return (
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-        <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
+        <div className="chat-scroll flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {thread ? (
             <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-5">
               {renderTranscript(thread.messages)}
@@ -179,9 +180,9 @@ export function ChatColumn() {
           MOBILE_APP_BG,
         )}
       >
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-1 pb-4 touch-pan-y">
+        <div className="chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-1 pb-4 touch-pan-y [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {hasChatTurns || thread ? (
-            <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-5">
+            <div className="mx-auto flex w-full max-w-none flex-col gap-5">
               {thread?.sessionSummary ? (
                 <SessionSummaryBubble
                   threadId={thread.id}
@@ -212,7 +213,7 @@ export function ChatColumn() {
       ) : (
         <div
           className={cn(
-            "flex-1 overflow-y-auto pt-1 pb-5",
+            "chat-scroll flex-1 overflow-y-auto pt-1 pb-5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
             floating
               ? centered
                 ? "px-4 sm:px-6"

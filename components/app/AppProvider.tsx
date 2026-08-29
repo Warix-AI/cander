@@ -24,9 +24,14 @@ import {
   clearClarification,
   openClarificationCard,
 } from "@/lib/ai/clarification/store";
+import {
+  migrateThreadTaskState,
+  upsertThreadTaskState,
+} from "@/lib/ai/task-state";
 import { registerAppActionHandlers } from "@/lib/ai/runtime/app-actions";
 import { executeAuthorizedTool } from "@/lib/ai/runtime/tools";
 import { createApiBundle } from "@/lib/api";
+import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
 import {
   getChatStoreServerSnapshot,
   getChatStoreSnapshot,
@@ -325,7 +330,10 @@ type AppContextValue = {
   voiceAnchor: VoiceAnchor;
   toggleVoice: () => void;
   setVoiceAnchor: (anchor: VoiceAnchor) => void;
-  openProject: (id: string) => void;
+  openProject: (
+    id: string,
+    opts?: { migrateFromThreadId?: string | null },
+  ) => string | null;
   openProjectChat: (id: string) => void;
   /** Navigate to a typed entity ref from any space dashboard. */
   openSpaceEntity: (ref: EntityRef) => void;
@@ -1774,14 +1782,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   message.content === "Thinking…" ||
                   message.content === "Thinking..."));
 
-            const toolBlocks =
-              result.toolResults?.map((t) => ({
-                type: "tool" as const,
-                label: t.name,
-                status: (t.ok ? "done" : "error") as "done" | "error",
-                detail: t.output,
-              })) ?? [];
-
             const patchAssistant = (
               content: string,
               status: "streaming" | "complete",
@@ -1795,14 +1795,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                           ...message,
                           content,
                           status,
-                          ...(status === "complete" && toolBlocks.length
+                          ...(status === "complete"
                             ? {
-                                blocks: [
-                                  ...toolBlocks,
-                                  ...(message.blocks ?? []).filter(
-                                    (b) => b.type !== "tool",
-                                  ),
-                                ],
+                                blocks: (message.blocks ?? []).filter(
+                                  (b) => b.type !== "tool",
+                                ),
                               }
                             : {}),
                         }
@@ -2063,58 +2060,63 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             arguments: merged,
           });
           if (toolResult.ok && !toolResult.pauseForUser) {
+            upsertThreadTaskState(threadIdRef.current || activeId, {
+              step: "resumed",
+              facts: { ...result.answers },
+              pendingClarification: null,
+              status: "completed",
+              lastToolResults: [
+                {
+                  name: result.resumeTool,
+                  ok: true,
+                  detail: toolResult.output,
+                },
+              ],
+            });
+            // Message may have migrated to a project thread during resume.
             setThreads((current) =>
-              current.map((item) => {
-                if (item.id !== activeId) return item;
-                return {
-                  ...item,
-                  messages: item.messages.map((m) =>
-                    m.id === assistantId
-                      ? {
-                          ...m,
-                          content: toolResult.output,
-                          status: "complete" as const,
-                          blocks: [
-                            {
-                              type: "tool" as const,
-                              label: result.resumeTool!,
-                              status: "done" as const,
-                              detail: toolResult.output,
-                            },
-                          ],
-                        }
-                      : m,
-                  ),
-                };
-              }),
+              current.map((item) => ({
+                ...item,
+                messages: item.messages.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        content: sanitizeAssistantVisibleText(
+                          toolResult.output,
+                        ),
+                        status: "complete" as const,
+                        blocks: (m.blocks ?? []).filter(
+                          (b) => b.type !== "tool",
+                        ),
+                      }
+                    : m,
+                ),
+              })),
             );
             return;
           }
           if (!toolResult.ok) {
+            upsertThreadTaskState(threadIdRef.current || activeId, {
+              status: "failed",
+              pendingClarification: null,
+            });
             setThreads((current) =>
-              current.map((item) => {
-                if (item.id !== activeId) return item;
-                return {
-                  ...item,
-                  messages: item.messages.map((m) =>
-                    m.id === assistantId
-                      ? {
-                          ...m,
-                          content: toolResult.output,
-                          status: "complete" as const,
-                          blocks: [
-                            {
-                              type: "tool" as const,
-                              label: result.resumeTool!,
-                              status: "error" as const,
-                              detail: toolResult.output,
-                            },
-                          ],
-                        }
-                      : m,
-                  ),
-                };
-              }),
+              current.map((item) => ({
+                ...item,
+                messages: item.messages.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        content:
+                          "I couldn't finish that step. Try again, or tell me what to change.",
+                        status: "complete" as const,
+                        blocks: (m.blocks ?? []).filter(
+                          (b) => b.type !== "tool",
+                        ),
+                      }
+                    : m,
+                ),
+              })),
             );
             return;
           }
@@ -2477,7 +2479,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [workspaceId, workspacePolicies, billingPlan],
   );
 
-  const openProject = useCallback((id: string) => {
+  const openProject = useCallback((
+    id: string,
+    opts?: { migrateFromThreadId?: string | null },
+  ): string | null => {
     const ctx = { workspaceId, actorId: actor.id };
     let match:
       | ReturnType<typeof localSpaceEntityStore.getProject>
@@ -2498,14 +2503,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!match) {
       match = getSpaceEntityStoreSnapshot().projects.find((item) => item.id === id);
     }
-    if (!match) return;
+    if (!match) return null;
     const space = match.space;
     const itemWorkspaceId = match.workspaceId;
     const projectKey = match.id;
     if (itemWorkspaceId !== workspaceId) persistWorkspace(itemWorkspaceId);
+    const migrateFrom = opts?.migrateFromThreadId?.trim() || null;
     let tid = "";
     let hasMessages = false;
     setThreads((current) => {
+      const source = migrateFrom
+        ? current.find((item) => item.id === migrateFrom)
+        : null;
       const { threads: next, id: nextId } = upsertPersistentProjectThread(
         current,
         itemWorkspaceId,
@@ -2513,7 +2522,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         space,
       );
       tid = nextId;
-      hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
+      const projectThread = next.find((item) => item.id === nextId);
+      const projectEmpty = !threadHasTurns(projectThread);
+      if (source && projectEmpty && source.id !== nextId) {
+        const migrated = next.map((item) => {
+          if (item.id === nextId) {
+            return {
+              ...item,
+              title: item.title || source.title,
+              snippet: source.snippet,
+              messages: source.messages.map((m) => ({ ...m })),
+              aiChatId: source.aiChatId ?? item.aiChatId,
+              sessionSummary: source.sessionSummary ?? item.sessionSummary,
+              updatedAt: nowTime(),
+            };
+          }
+          // Leave source dock empty so the conversation continues only on the project thread.
+          if (item.id === source.id) {
+            return {
+              ...item,
+              messages: [],
+              aiChatId: undefined,
+              sessionSummary: null,
+              snippet: "",
+              updatedAt: nowTime(),
+            };
+          }
+          return item;
+        });
+        hasMessages = threadHasTurns(
+          migrated.find((item) => item.id === nextId),
+        );
+        migrateThreadTaskState(source.id, nextId);
+        return migrated;
+      }
+      hasMessages = threadHasTurns(projectThread);
       return next;
     });
     setView("space");
@@ -2522,6 +2565,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setConnectorId(null);
     setJobId(null);
     setSkillId(null);
+    threadIdRef.current = tid;
     setThreadId(tid);
     setDrafting(!hasMessages);
     setPanelIntent("execute");
@@ -2540,6 +2584,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       jobId: null,
       skillId: null,
     });
+    return tid;
   }, [workspaceId, actor.id, pushTarget]);
 
   /** Leave a project/entity and return to the space directory on the panel. */
@@ -2748,7 +2793,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               summary: opts.summary ?? "",
             },
           );
-          openProject(project.id);
+          const sourceThreadId = threadIdRef.current;
+          const projectThreadId = openProject(project.id, {
+            migrateFromThreadId: sourceThreadId,
+          });
+          const taskThreadId =
+            projectThreadId || threadIdRef.current || sourceThreadId || "";
+          if (taskThreadId) {
+            upsertThreadTaskState(taskThreadId, {
+              goal: `Create project “${project.title}”`,
+              step: "created",
+              facts: {
+                title: project.title,
+                space,
+                projectId: project.id,
+              },
+              pendingClarification: null,
+              status: "completed",
+            });
+          }
           return {
             ok: true,
             detail: `Created “${project.title}” in ${space === "research" ? "Explore" : space === "build" ? "Build" : "Work"}.`,
@@ -2817,6 +2880,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               ? { ...(opts.resumeArguments ?? {}), title: knownTitle }
               : opts.resumeArguments,
           });
+          upsertThreadTaskState(tid, {
+            goal: knownTitle
+              ? `Create project “${knownTitle}”`
+              : "Create a new project",
+            step: "awaiting_space_and_title",
+            facts: knownTitle ? { title: knownTitle } : {},
+            pendingClarification: {
+              title: "New project",
+              resumeTool: "project.create",
+              resumeArguments: knownTitle
+                ? { title: knownTitle }
+                : opts.resumeArguments,
+            },
+            status: "awaiting_clarification",
+          });
           return { ok: true, detail: "Clarification card opened." };
         }
         openClarificationCard({
@@ -2826,6 +2904,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           questions,
           resumeTool: opts.resumeTool,
           resumeArguments: opts.resumeArguments,
+        });
+        upsertThreadTaskState(tid, {
+          goal: opts.title,
+          step: "awaiting_clarification",
+          pendingClarification: {
+            title: opts.title,
+            resumeTool: opts.resumeTool,
+            resumeArguments: opts.resumeArguments,
+          },
+          status: "awaiting_clarification",
         });
         return { ok: true, detail: "Clarification card opened." };
       },

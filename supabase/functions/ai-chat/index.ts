@@ -7,7 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 const MODEL = "llama3.2";
 const PROVIDER = "ollama-bridge";
 /** Verbatim turns after the condensation watermark (short-term continuity). */
-const RECENT_MESSAGE_LIMIT = 10;
+const RECENT_MESSAGE_LIMIT = 25;
 /** Condense when this many messages pile up past the watermark. */
 const CONDENSE_MESSAGE_THRESHOLD = 25;
 const CONDENSE_CHAR_THRESHOLD = 8_000;
@@ -20,6 +20,7 @@ You may use Markdown; the UI will render it.
 Long conversations are summarized into condensed memory. Prefer that memory plus the recent messages over inventing earlier details.
 If this conversation already has prior user or assistant turns, do not greet or restate identity — answer directly.
 If this is the first user message in a new chat, a brief warm hello using their preferred name is fine. Do not dump workspace IDs, project UUIDs, or inventory dumps in greetings.
+Never put tool names, raw JSON, or “Calling tool…” text in the user-visible reply — only a short human sentence, then optionally one trailing tool JSON object on its own line for the client.
 
 In-app tools — end your reply with exactly one JSON object on its own line when you need to act:
 {"tool":"<name>","arguments":{...}}
@@ -41,7 +42,103 @@ Available tools and arguments:
 - ui.ask_clarification: { "title": string, "description"?: string, "questions": [{ "id", "type", "label", "choices"?: [{ "id", "label" }], "required"?: boolean }], "resumeTool"?: string, "resumeArguments"?: object }
 - ui.confirm: { "title": string, "message": string, "confirmLabel"?: string }`;
 
-const NO_REGREET_SYSTEM = `This conversation already has prior turns. Do not greet, re-introduce yourself, or mention that you are Cander, Apple Intelligence, or any model/provider. Answer the latest user message directly.`;
+const NO_REGREET_SYSTEM = `This conversation already has prior turns, condensed memory, or an active task. Do not greet, re-introduce yourself, or mention that you are Cander, Apple Intelligence, or any model/provider. Answer the latest user message directly. Continue the same task — do not restart.`;
+
+const KNOWN_TOOLS_RE =
+  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|ui\\.(?:ask_clarification|confirm)";
+
+/** Strip tool/JSON chrome before persisting or feeding condensation. */
+function sanitizeAssistantVisibleText(content: string): string {
+  let text = (content || "").trim();
+  if (!text) return "";
+  text = text.replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/gi, "");
+  text = text.replace(
+    /\{\s*"tool"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[\s\S]*?\}\s*\}\s*/g,
+    "",
+  );
+  text = text.replace(
+    /\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"(?:arguments|args)"\s*:\s*\{[\s\S]*?\}\s*\}\s*/g,
+    "",
+  );
+  text = text.replace(
+    new RegExp(
+      `\\{\\s*"(?:${KNOWN_TOOLS_RE})"\\s*:\\s*\\{[\\s\\S]*?\\}\\s*\\}\\s*`,
+      "gi",
+    ),
+    "",
+  );
+  text = text.replace(/\{\s*"error"\s*:\s*"[^"]*"\s*\}\s*/gi, "");
+  text = text.replace(
+    new RegExp(
+      `\`?\\s*(?:${KNOWN_TOOLS_RE})\\s*\\{[\\s\\S]*?\\}\\s*\`?`,
+      "gi",
+    ),
+    "",
+  );
+  text = text.replace(
+    /^(?:calling|using|running|invoking)\s+tool[^\n]*$/gim,
+    "",
+  );
+  text = text
+    .split("\n")
+    .filter((line) => {
+      const t = line.trim();
+      if (!t) return true;
+      if (/^```/.test(t)) return false;
+      if (t.startsWith("{") && /"(?:tool|arguments|error)"/.test(t)) return false;
+      if (
+        new RegExp(`^(?:${KNOWN_TOOLS_RE})\\b`, "i").test(t) &&
+        t.includes("{")
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return text;
+}
+
+function condensedIsActive(condensed: CondensedContext | null): boolean {
+  if (!condensed) return false;
+  return Object.values(condensed).some((v) => {
+    if (typeof v === "string") return Boolean(v.trim());
+    if (Array.isArray(v)) return v.length > 0;
+    return false;
+  });
+}
+
+function mergeCondensedSummaries(
+  previousSummary: string | null | undefined,
+  newlyCondensedTurns: string,
+): string {
+  const prev = (previousSummary ?? "").trim();
+  const next = newlyCondensedTurns.trim();
+  if (!prev) return next;
+  if (!next) return prev;
+  return [
+    "Rolling conversation memory (merged):",
+    "Prior summary:",
+    prev,
+    "",
+    "Newly condensed turns (retain goals, names, decisions, pending questions):",
+    next,
+  ].join("\n");
+}
+
+function shouldSuppressReGreeting(opts: {
+  turns: Array<{ role: string; content?: string | null }>;
+  condensedActive?: boolean;
+}): boolean {
+  if (opts.condensedActive) return true;
+  const meaningful = opts.turns.filter(
+    (m) =>
+      (m.role === "user" || m.role === "assistant") &&
+      Boolean(m.content?.trim()),
+  );
+  return meaningful.length > 1 || meaningful.some((m) => m.role === "assistant");
+}
 
 type Json = Record<string, unknown>;
 
@@ -384,13 +481,22 @@ Deno.serve(async (req) => {
           "I couldn't reach the AI bridge. Check that Ollama, the local bridge, and the HTTPS tunnel are running.";
       }
 
+      // Client needs raw content (with trailing tool JSON) to parse/execute tools.
+      // Persist sanitized prose only so Edge history / condensation never leak tools.
+      const rawForClient = assistantContent;
+      const storedContent =
+        status === "complete"
+          ? sanitizeAssistantVisibleText(assistantContent) ||
+            "(empty reply)"
+          : assistantContent;
+
       const assistantId = newId("aim");
       const assistantRow = {
         id: assistantId,
         chat_id: payload.chatId,
         owner_id: user.id,
         role: "assistant",
-        content: assistantContent,
+        content: storedContent,
         status,
         sort_order: nextOrder + 1,
         error: errorText,
@@ -445,7 +551,7 @@ Deno.serve(async (req) => {
 
       return json(200, {
         userMessage: userRow,
-        assistantMessage: assistantRow,
+        assistantMessage: { ...assistantRow, content: rawForClient },
         offline: status === "error",
         condensation: { occurred: condensationOccurred },
       });
@@ -707,20 +813,14 @@ function buildModelMessages(opts: {
   const messages: Array<{ role: string; content: string }> = [
     { role: "system", content: PRODUCT_SYSTEM_PROMPT },
   ];
-  const hasPriorTurns = recent.some(
-    (m) =>
-      (m.role === "user" || m.role === "assistant") &&
-      Boolean(m.content?.trim()),
-  );
-  // Exclude the just-inserted latest user turn when deciding "prior" — if only one
-  // user message exists, this is still the opening turn.
-  const priorBesidesLatest = recent.filter(
-    (m) => m.role === "user" || m.role === "assistant",
-  );
-  if (priorBesidesLatest.length > 1) {
+  const condensedActive = condensedIsActive(opts.condensed);
+  if (
+    shouldSuppressReGreeting({
+      turns: recent,
+      condensedActive,
+    })
+  ) {
     messages.push({ role: "system", content: NO_REGREET_SYSTEM });
-  } else if (hasPriorTurns && priorBesidesLatest.length === 1) {
-    // Single turn = opening; no NO_REGREET
   }
   if (opts.userProfileText) {
     messages.push({ role: "system", content: opts.userProfileText });
@@ -736,7 +836,11 @@ function buildModelMessages(opts: {
   }
   for (const m of recent) {
     if (m.role === "system") continue;
-    messages.push({ role: m.role, content: m.content });
+    const content =
+      m.role === "assistant"
+        ? sanitizeAssistantVisibleText(m.content) || m.content
+        : m.content;
+    messages.push({ role: m.role, content });
   }
   return messages;
 }
@@ -816,14 +920,21 @@ async function maybeCondenseChat(opts: {
   if (toCondense.length < 8) return { occurred: false };
 
   const transcript = toCondense
-    .map((m) => `${m.role}: ${m.content}`)
+    .map(
+      (m) =>
+        `${m.role}: ${
+          m.role === "assistant"
+            ? sanitizeAssistantVisibleText(m.content) || m.content
+            : m.content
+        }`,
+    )
     .join("\n")
     .slice(0, 14_000);
 
   const existingJson = JSON.stringify(opts.existing ?? {}, null, 0);
-  const prompt = `Update this condensed chat context JSON using ONLY the new messages.
-Preserve requirements, decisions, constraints, open tasks, important names, and current state.
-Drop conversational filler. Return ONLY valid JSON with keys:
+  const prompt = `Update this condensed chat context JSON by MERGING the existing condensed context with the new messages.
+Preserve requirements, decisions, constraints, open tasks, important names, goals, pending questions, and current state from BOTH sources.
+Drop conversational filler and any tool/JSON chrome. Return ONLY valid JSON with keys:
 conversation_summary, current_state, decisions, open_tasks, important_entities, preferences_constraints
 
 Existing condensed context:
@@ -839,7 +950,7 @@ ${transcript}`;
       {
         role: "system",
         content:
-          "You maintain structured conversation memory. Reply with JSON only.",
+          "You maintain structured conversation memory. Merge prior summary with new turns. Reply with JSON only.",
       },
       { role: "user", content: prompt },
     ],
@@ -848,6 +959,30 @@ ${transcript}`;
 
   const next = parseCondensedJson(raw);
   if (!next) return { occurred: false };
+
+  // Guarantee prior summary is retained even if the model drops it.
+  next.conversation_summary = mergeCondensedSummaries(
+    opts.existing?.conversation_summary,
+    next.conversation_summary ?? "",
+  );
+  if (opts.existing?.decisions?.length) {
+    next.decisions = Array.from(
+      new Set([...(opts.existing.decisions ?? []), ...(next.decisions ?? [])]),
+    );
+  }
+  if (opts.existing?.open_tasks?.length) {
+    next.open_tasks = Array.from(
+      new Set([...(opts.existing.open_tasks ?? []), ...(next.open_tasks ?? [])]),
+    );
+  }
+  if (opts.existing?.important_entities?.length) {
+    next.important_entities = Array.from(
+      new Set([
+        ...(opts.existing.important_entities ?? []),
+        ...(next.important_entities ?? []),
+      ]),
+    );
+  }
 
   const newWatermark = toCondense[toCondense.length - 1].sort_order;
   const { error } = await opts.supabase

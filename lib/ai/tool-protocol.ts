@@ -1,5 +1,6 @@
 /**
  * Tool-call text protocol helpers (no path aliases — safe for node:test).
+ * Visible assistant text must never include tools, JSON, or internal payloads.
  */
 
 export type ParsedToolCall = {
@@ -7,53 +8,105 @@ export type ParsedToolCall = {
   arguments?: Record<string, unknown>;
 };
 
+const KNOWN_TOOLS =
+  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|ui\\.(?:ask_clarification|confirm)";
+
 /** Soft-repair common model JSON mistakes (trailing commas). */
 export function repairJson(raw: string): string {
   return raw.replace(/,\s*([}\]])/g, "$1");
 }
 
-/** Remove tool-call JSON objects (and trailing error blobs) from assistant text. */
-export function stripToolJsonFromText(content: string): string {
-  let text = content.trim();
-  // Fenced tool blocks at the end
-  text = text.replace(/```(?:json)?\s*\{[\s\S]*?"tool"\s*:[\s\S]*?\}\s*```\s*$/i, "");
-  // Canonical tool objects
+/**
+ * Hard sanitize for anything the user might see.
+ * Prefer this over stripToolJsonFromText at UI/Edge boundaries.
+ */
+export function sanitizeAssistantVisibleText(content: string): string {
+  let text = (content || "").trim();
+  if (!text) return "";
+
+  // Fenced JSON / tool blocks anywhere
+  text = text.replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/gi, "");
+
+  // Canonical tool objects (greedy-ish balanced via non-greedy inner)
   text = text.replace(
     /\{\s*"tool"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[\s\S]*?\}\s*\}\s*/g,
     "",
   );
-  // Malformed {"nav.open": {...}} / {"project.create": {...}}
   text = text.replace(
-    /\{\s*"(?:nav\.open|project\.(?:create|open)|panel\.(?:open|close)|workspace\.search|ui\.(?:ask_clarification|confirm))"\s*:\s*\{[\s\S]*?\}\s*\}\s*/g,
+    /\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"(?:arguments|args)"\s*:\s*\{[\s\S]*?\}\s*\}\s*/g,
     "",
   );
-  text = text.replace(/\{\s*"error"\s*:\s*"[^"]*"\s*\}\s*/g, "");
-  // Inline tool prose models sometimes dump as “buttons”
+
+  // Key-style {"ui.ask_clarification":{...}} etc.
   text = text.replace(
-    /`?\s*nav\.open\s*\{\s*"target"\s*:\s*"[^"]+"\s*\}\s*`?/gi,
+    new RegExp(
+      `\\{\\s*"(?:${KNOWN_TOOLS})"\\s*:\\s*\\{[\\s\\S]*?\\}\\s*\\}\\s*`,
+      "gi",
+    ),
+    "",
+  );
+  text = text.replace(/\{\s*"error"\s*:\s*"[^"]*"\s*\}\s*/gi, "");
+
+  // Prose tool dumps: ui.ask_clarification { ... } / `nav.open { ... }`
+  text = text.replace(
+    new RegExp(
+      `\`?\\s*(?:${KNOWN_TOOLS})\\s*\\{[\\s\\S]*?\\}\\s*\`?`,
+      "gi",
+    ),
+    "",
+  );
+
+  // “Calling tool…” / “Using tool …” lines
+  text = text.replace(
+    /^(?:calling|using|running|invoking)\s+tool[^\n]*$/gim,
     "",
   );
   text = text.replace(
-    /`?\s*\{\s*"tool"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[\s\S]*?\}\s*\}\s*`?/g,
+    new RegExp(`^(?:${KNOWN_TOOLS})\\s*(?:…|\\.\\.\\.)?\\s*$`, "gim"),
     "",
   );
-  // Leftover bare tool lines
+
+  // Incomplete / dangling JSON that still looks like a tool payload
+  text = text.replace(/\{[^{}]*"(?:tool|arguments|ui\.ask_clarification)"[^{}]*(?:\{[\s\S]*)?$/gim, "");
+  text = text.replace(/\{[\s\S]*"(?:tool|arguments)"[\s\S]*$/g, (chunk) => {
+    // If the remainder never closed cleanly, drop it
+    const opens = (chunk.match(/\{/g) || []).length;
+    const closes = (chunk.match(/\}/g) || []).length;
+    return opens > closes ? "" : chunk;
+  });
+
+  // Line filter for leftover internals
   text = text
     .split("\n")
     .filter((line) => {
       const t = line.trim();
-      if (!t.startsWith("{") && !t.startsWith("`")) return true;
-      if (t.includes('"tool"') || t.includes('"error"')) return false;
-      if (/nav\.open|project\.(create|open)/i.test(t) && t.includes("{")) {
+      if (!t) return true;
+      if (/^```/.test(t)) return false;
+      if (t.startsWith("{") && /"(?:tool|arguments|error)"/.test(t)) return false;
+      if (new RegExp(`^(?:${KNOWN_TOOLS})\\b`, "i").test(t) && t.includes("{")) {
         return false;
       }
+      if (/^(?:workspace_id|project_id|thread_id)\s*[:=]/i.test(t)) return false;
+      if (/^\[(?:system|internal|debug)\]/i.test(t)) return false;
       return true;
     })
     .join("\n")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-  return text;
+
+  // Final pass: any remaining balanced tool-looking object
+  text = text.replace(
+    /\{\s*"(?:tool|name)"\s*:\s*"[^"]+"[\s\S]*?\}\s*/g,
+    "",
+  );
+
+  return text.trim();
+}
+
+/** @deprecated Prefer sanitizeAssistantVisibleText */
+export function stripToolJsonFromText(content: string): string {
+  return sanitizeAssistantVisibleText(content);
 }
 
 function tryParseToolObject(raw: string): ParsedToolCall | null {
@@ -68,6 +121,13 @@ function tryParseToolObject(raw: string): ParsedToolCall | null {
       };
       const name = parsed.tool ?? parsed.name;
       if (!name || typeof name !== "string") continue;
+      if (
+        !/^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|ui\.(ask_clarification|confirm))$/.test(
+          name,
+        )
+      ) {
+        continue;
+      }
       const args = parsed.arguments ?? parsed.args ?? {};
       return {
         name,
@@ -80,7 +140,7 @@ function tryParseToolObject(raw: string): ParsedToolCall | null {
       // try next
     }
   }
-  // Malformed {"nav.open": {...}} style — treat tool name as the key
+  // Key-style {"nav.open": {...}}
   for (const candidate of candidates) {
     try {
       const parsed = JSON.parse(candidate) as Record<string, unknown>;
@@ -88,7 +148,11 @@ function tryParseToolObject(raw: string): ParsedToolCall | null {
         const keys = Object.keys(parsed);
         if (keys.length === 1) {
           const name = keys[0]!;
-          if (/^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|ui\.(ask_clarification|confirm))$/.test(name)) {
+          if (
+            /^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|ui\.(ask_clarification|confirm))$/.test(
+              name,
+            )
+          ) {
             const args = parsed[name];
             return {
               name,
@@ -108,8 +172,8 @@ function tryParseToolObject(raw: string): ParsedToolCall | null {
 }
 
 /**
- * Extract the last {"tool":...} object from model output.
- * Ignores trailing {"error":...} junk. Visible text never includes tool JSON.
+ * Extract the last validated tool object from model output.
+ * Visible text is always sanitized — never leaks raw payloads.
  */
 export function parseToolCallFromContent(content: string): {
   text: string;
@@ -123,10 +187,11 @@ export function parseToolCallFromContent(content: string): {
   if (fence?.length) {
     const lastFence = fence[fence.length - 1]!;
     const inner = lastFence.replace(/^```(?:json)?\s*/i, "").replace(/```$/, "");
-    if (inner.includes('"tool"')) searchIn = inner.trim();
+    if (/"tool"\s*:/.test(inner) || new RegExp(`"(?:${KNOWN_TOOLS})"\\s*:`).test(inner)) {
+      searchIn = inner.trim();
+    }
   }
 
-  // Collect brace-balanced objects that look like tool calls
   const objects: string[] = [];
   for (let i = 0; i < searchIn.length; i++) {
     if (searchIn[i] !== "{") continue;
@@ -148,44 +213,45 @@ export function parseToolCallFromContent(content: string): {
     if (
       /"tool"\s*:/.test(slice) ||
       /"name"\s*:\s*"[a-z][a-z0-9_.-]*"/i.test(slice) ||
-      /"(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search)"\s*:/.test(
-        slice,
-      )
+      new RegExp(`"(?:${KNOWN_TOOLS})"\\s*:`).test(slice)
     ) {
       objects.push(slice);
     }
     i = end;
   }
 
-  // Prefer last tool-shaped object
   for (let i = objects.length - 1; i >= 0; i--) {
     const call = tryParseToolObject(objects[i]!);
     if (call) {
-      const text = stripToolJsonFromText(trimmed);
-      return { text, call };
+      return { text: sanitizeAssistantVisibleText(trimmed), call };
     }
   }
 
-  // Last-line fallback
   const lines = trimmed.split("\n");
   const last = lines[lines.length - 1]?.trim() ?? "";
-  if (last.startsWith("{") && (last.includes('"tool"') || last.includes('"name"'))) {
+  if (
+    last.startsWith("{") &&
+    (/"tool"\s*:/.test(last) ||
+      /"name"\s*:/.test(last) ||
+      new RegExp(`"(?:${KNOWN_TOOLS})"\\s*:`).test(last))
+  ) {
     const call = tryParseToolObject(last);
     if (call) {
       return {
-        text: stripToolJsonFromText(lines.slice(0, -1).join("\n")),
+        text: sanitizeAssistantVisibleText(lines.slice(0, -1).join("\n")),
         call,
       };
     }
   }
 
-  // Looks like tool JSON but unparseable — still strip so UI never shows it
+  // Unparseable tool-shaped output — strip, do not execute
   if (
     /"tool"\s*:/.test(trimmed) ||
-    /"(nav\.open|project\.(create|open))"\s*:/.test(trimmed)
+    new RegExp(`"(?:${KNOWN_TOOLS})"\\s*:`).test(trimmed) ||
+    new RegExp(`(?:${KNOWN_TOOLS})\\s*\\{`, "i").test(trimmed)
   ) {
-    return { text: stripToolJsonFromText(trimmed), call: null };
+    return { text: sanitizeAssistantVisibleText(trimmed), call: null };
   }
 
-  return { text: trimmed, call: null };
+  return { text: sanitizeAssistantVisibleText(trimmed), call: null };
 }
