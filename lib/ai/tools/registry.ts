@@ -21,6 +21,7 @@ export type AiToolDefinition = {
     | "navigation"
     | "projects"
     | "search"
+    | "knowledge"
     | "scheduling"
     | "comms"
     | "cloud_work"
@@ -254,6 +255,20 @@ registerAiTool({
   description: "Search projects the user can access in the current workspace.",
   permission: { requireWorkspaceMember: true },
   domain: "search",
+  enabled: true,
+  parameters: {
+    type: "object",
+    required: ["query"],
+    properties: { query: { type: "string" } },
+  },
+});
+
+registerAiTool({
+  name: "knowledge.search",
+  description:
+    "Search workspace knowledge-base documents for internal facts (pricing, policy, etc.). Prefer this over inventing company details.",
+  permission: { requireWorkspaceMember: true },
+  domain: "knowledge",
   enabled: true,
   parameters: {
     type: "object",

@@ -61,6 +61,7 @@ import {
   removeKnowledgeFile,
   toggleDisabledConnector,
 } from "@/lib/workspace-policy";
+import { extractKnowledgeFileText } from "@/lib/knowledge/extract-text";
 import {
   acceptWorkspaceInvite,
   declineWorkspaceInvite,
@@ -594,7 +595,7 @@ function WorkspacePage({
           ) : null
         }
       >
-        {entitlements.hasKnowledgeBases && canManage ? (
+        {entitlements.hasKnowledgeBases ? (
           mobile ? (
             <>
               <SettingsGroup>
@@ -604,6 +605,7 @@ function WorkspacePage({
                       key={item.id}
                       workspaceId={workspace.id}
                       item={item}
+                      canManage={canManage}
                       open={openKbId === item.id}
                       onToggle={() =>
                         setOpenKbId((current) =>
@@ -614,12 +616,16 @@ function WorkspacePage({
                   ))
                 ) : (
                   <div className="px-4 py-4 text-[13.5px] text-muted-foreground">
-                    No knowledge bases yet.
+                    {canManage
+                      ? "No knowledge bases yet."
+                      : "No knowledge bases shared in this workspace yet."}
                   </div>
                 )}
               </SettingsGroup>
               <SettingsFootnote>
-                PDFs, docs, and text files stay scoped to this workspace.
+                {canManage
+                  ? "PDFs, docs, and text files stay scoped to this workspace. Members can read; only Admins/Owners manage."
+                  : "You can read workspace knowledge bases. Admins and Owners manage uploads."}
               </SettingsFootnote>
             </>
           ) : (
@@ -630,12 +636,15 @@ function WorkspacePage({
                     key={item.id}
                     workspaceId={workspace.id}
                     item={item}
+                    canManage={canManage}
                   />
                 ))
               ) : (
                 <SettingsGroup>
                   <div className="px-4 py-4 text-[13px] text-muted-foreground">
-                    No knowledge bases yet. Use + to create one.
+                    {canManage
+                      ? "No knowledge bases yet. Use + to create one."
+                      : "No knowledge bases shared in this workspace yet."}
                   </div>
                 </SettingsGroup>
               )}
@@ -863,11 +872,13 @@ function KnowledgeMobileRow({
   item,
   open,
   onToggle,
+  canManage,
 }: {
   workspaceId: string;
   item: KnowledgeBase;
   open: boolean;
   onToggle: () => void;
+  canManage: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
 
@@ -896,15 +907,17 @@ function KnowledgeMobileRow({
                       {entry.size} · {entry.uploadedAt}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      removeKnowledgeFile(workspaceId, item.id, entry.id)
-                    }
-                    className="shrink-0 text-[13px] text-muted-foreground hover:text-foreground"
-                  >
-                    Remove
-                  </button>
+                  {canManage ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        removeKnowledgeFile(workspaceId, item.id, entry.id)
+                      }
+                      className="shrink-0 text-[13px] text-muted-foreground hover:text-foreground"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
                 </div>
               ))
             ) : (
@@ -913,39 +926,46 @@ function KnowledgeMobileRow({
               </div>
             )}
           </SettingsGroup>
-          <div className="mt-3 flex items-center gap-2">
-            <input
-              ref={input}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(event) => {
-                const files = Array.from(event.target.files ?? []);
-                files.forEach((file) => {
-                  addKnowledgeFile(workspaceId, item.id, {
-                    name: file.name,
-                    size: fileSizeLabel(file.size),
-                  });
-                });
-                event.target.value = "";
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => input.current?.click()}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
-            >
-              <Upload className="h-3.5 w-3.5" strokeWidth={1.6} />
-              Upload
-            </button>
-            <button
-              type="button"
-              onClick={() => removeKnowledgeBase(workspaceId, item.id)}
-              className="text-[13px] text-destructive"
-            >
-              Remove base
-            </button>
-          </div>
+          {canManage ? (
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                ref={input}
+                type="file"
+                multiple
+                accept=".md,.txt,.markdown,.csv,.json,.html,.xml,text/*,application/json"
+                className="hidden"
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  void (async () => {
+                    for (const file of files) {
+                      const contentText = await extractKnowledgeFileText(file);
+                      addKnowledgeFile(workspaceId, item.id, {
+                        name: file.name,
+                        size: fileSizeLabel(file.size),
+                        contentText,
+                      });
+                    }
+                  })();
+                  event.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => input.current?.click()}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
+              >
+                <Upload className="h-3.5 w-3.5" strokeWidth={1.6} />
+                Upload
+              </button>
+              <button
+                type="button"
+                onClick={() => removeKnowledgeBase(workspaceId, item.id)}
+                className="text-[13px] text-destructive"
+              >
+                Remove base
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -955,9 +975,11 @@ function KnowledgeMobileRow({
 function KnowledgeCard({
   workspaceId,
   item,
+  canManage,
 }: {
   workspaceId: string;
   item: KnowledgeBase;
+  canManage: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
 
@@ -973,13 +995,15 @@ function KnowledgeCard({
             {item.files.length} files · {item.sources} sources · {item.updatedAt}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => removeKnowledgeBase(workspaceId, item.id)}
-          className="shrink-0 text-[12.5px] text-muted-foreground hover:text-foreground"
-        >
-          Remove
-        </button>
+        {canManage ? (
+          <button
+            type="button"
+            onClick={() => removeKnowledgeBase(workspaceId, item.id)}
+            className="shrink-0 text-[12.5px] text-muted-foreground hover:text-foreground"
+          >
+            Remove
+          </button>
+        ) : null}
       </div>
 
       <div className={cn("overflow-hidden border border-border/80", SHELL_G3_RADIUS, "[&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:top-0 [&>*+*]:before:right-0 [&>*+*]:before:left-3 [&>*+*]:before:h-px [&>*+*]:before:bg-border")}>
@@ -993,17 +1017,20 @@ function KnowledgeCard({
                 <p className="truncate text-[13px]">{entry.name}</p>
                 <p className="font-mono text-[10.5px] text-muted-foreground">
                   {entry.size} · {entry.uploadedAt}
+                  {entry.contentText ? " · indexed" : ""}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() =>
-                  removeKnowledgeFile(workspaceId, item.id, entry.id)
-                }
-                className="shrink-0 text-[12px] text-muted-foreground hover:text-foreground"
-              >
-                Remove
-              </button>
+              {canManage ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    removeKnowledgeFile(workspaceId, item.id, entry.id)
+                  }
+                  className="shrink-0 text-[12px] text-muted-foreground hover:text-foreground"
+                >
+                  Remove
+                </button>
+              ) : null}
             </div>
           ))
         ) : (
@@ -1013,35 +1040,42 @@ function KnowledgeCard({
         )}
       </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          ref={input}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(event) => {
-            const files = Array.from(event.target.files ?? []);
-            files.forEach((file) => {
-              addKnowledgeFile(workspaceId, item.id, {
-                name: file.name,
-                size: fileSizeLabel(file.size),
-              });
-            });
-            event.target.value = "";
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => input.current?.click()}
-          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-foreground/15 px-3 text-[12px] font-medium tracking-[-0.01em] hover:bg-muted"
-        >
-          <Upload className="h-3.5 w-3.5" strokeWidth={1.6} />
-          Upload
-        </button>
-        <p className="text-[12px] text-muted-foreground">
-          PDFs, docs, and text files stay on this workspace.
-        </p>
-      </div>
+      {canManage ? (
+        <div className="flex items-center gap-2">
+          <input
+            ref={input}
+            type="file"
+            multiple
+            accept=".md,.txt,.markdown,.csv,.json,.html,.xml,text/*,application/json"
+            className="hidden"
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              void (async () => {
+                for (const file of files) {
+                  const contentText = await extractKnowledgeFileText(file);
+                  addKnowledgeFile(workspaceId, item.id, {
+                    name: file.name,
+                    size: fileSizeLabel(file.size),
+                    contentText,
+                  });
+                }
+              })();
+              event.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => input.current?.click()}
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-foreground/15 px-3 text-[12px] font-medium tracking-[-0.01em] hover:bg-muted"
+          >
+            <Upload className="h-3.5 w-3.5" strokeWidth={1.6} />
+            Upload
+          </button>
+          <p className="text-[12px] text-muted-foreground">
+            Text files are indexed for AI answers. PDFs can follow later.
+          </p>
+        </div>
+      ) : null}
     </SettingsPanel>
   );
 }

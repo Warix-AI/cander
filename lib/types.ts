@@ -329,6 +329,8 @@ export type KnowledgeFile = {
   name: string;
   size: string;
   uploadedAt: string;
+  /** Extracted plain text for retrieval (text/md/etc.). */
+  contentText?: string;
 };
 
 export type KnowledgeBase = {

@@ -306,6 +306,29 @@ export async function executeAuthorizedTool(
           data: { results },
         };
       }
+      case "knowledge.search": {
+        const result = actions.knowledgeSearch(String(args.query));
+        const results = result.results ?? [];
+        if (!results.length) {
+          return {
+            name: tool.name,
+            ok: true,
+            output:
+              "No matching knowledge-base excerpts. Tell the user you don't have that in workspace docs and suggest adding a knowledge-base file — do not invent pricing or policies.",
+            data: { results },
+          };
+        }
+        const lines = results.map(
+          (r, i) =>
+            `[${i + 1}] ${r.knowledgeBaseName} / ${r.fileName}: ${r.excerpt}`,
+        );
+        return {
+          name: tool.name,
+          ok: true,
+          output: `Knowledge hits for “${args.query}”:\n${lines.join("\n")}`,
+          data: { results },
+        };
+      }
       case "ui.ask_clarification": {
         const questions = Array.isArray(args.questions)
           ? (args.questions as ClarificationQuestion[])

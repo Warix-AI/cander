@@ -56,6 +56,7 @@ export type KnowledgeFileRow = {
   name: string;
   size_label: string;
   uploaded_label: string;
+  content_text?: string | null;
 };
 
 export type UserPinRow = {
@@ -115,11 +116,13 @@ export function memberRowToMember(row: OrgMemberRow): Member {
 }
 
 export function knowledgeFileRowToFile(row: KnowledgeFileRow): KnowledgeFile {
+  const content = row.content_text?.trim();
   return {
     id: row.id,
     name: row.name,
     size: row.size_label,
     uploadedAt: row.uploaded_label,
+    ...(content ? { contentText: content } : {}),
   };
 }
 
@@ -135,6 +138,7 @@ export function knowledgeFileToRow(
     name: file.name,
     size_label: file.size,
     uploaded_label: file.uploadedAt,
+    content_text: file.contentText ?? "",
   };
 }
 

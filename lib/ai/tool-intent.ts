@@ -15,6 +15,10 @@ const IN_APP_PATTERNS: RegExp[] = [
   /\b(publish|deploy|preview)\b/i,
   /\b(connect|connector)\b[\s\S]{0,24}\b(gmail|slack|calendar|notion)\b/i,
   /\btake me there\b/i,
+  /\b(knowledge\s*bases?|internal\s+docs?|our\s+(pricing|policy|policies|customers?))\b/i,
+  /\b(what('?s| is)|whats)\b[\s\S]{0,48}\b(our|the)\b[\s\S]{0,24}\b(pricing|price|rates?|policy|policies)\b/i,
+  /\b(pricing|rates?)\b[\s\S]{0,40}\b(we|our|customers?|offer|charge)\b/i,
+  /\b(search|find|look\s*up|check)\b[\s\S]{0,40}\b(knowledge|internal|pricing|policy)\b/i,
 ];
 
 /** Obvious chitchat / general knowledge — never needs workspace tools. */

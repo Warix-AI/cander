@@ -9,6 +9,7 @@ export type ToolDomain =
   | "navigation"
   | "projects"
   | "search"
+  | "knowledge"
   | "scheduling"
   | "comms"
   | "cloud_work"

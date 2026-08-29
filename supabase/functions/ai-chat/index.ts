@@ -32,6 +32,7 @@ Tool protocol (only if tools are listed below for this turn):
 {"tool":"<name>","arguments":{...}}
 - Never invent workspace_id or UUIDs.
 - Never call workspace.search for trivia or small talk.
+- For internal business facts (pricing, policies, knowledge bases), call knowledge.search and ground answers in returned excerpts. If empty, say docs are missing — never invent company pricing.
 - Never invent tools that are not listed. Complex coding/research → create_work_task only.
 - One JSON object only. No trailing commas.`;
 
@@ -41,7 +42,7 @@ const NO_TOOLS_THIS_TURN =
   "No tools are available for this turn. Answer in plain language only. Do not emit JSON tool calls.";
 
 const KNOWN_TOOLS_RE =
-  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|ui\\.(?:ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval";
+  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|knowledge\\.search|ui\\.(?:ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval";
 
 const EDGE_TOOL_LINES: Record<string, string> = {
   "nav.open":
@@ -52,6 +53,7 @@ const EDGE_TOOL_LINES: Record<string, string> = {
     '- project.create: { "title": string, "space"?: "build"|"research"|"work", "kind"?: string, "summary"?: string }',
   "project.open": '- project.open: { "projectId": string }',
   "workspace.search": '- workspace.search: { "query": string }',
+  "knowledge.search": '- knowledge.search: { "query": string }',
   "ui.ask_clarification":
     '- ui.ask_clarification: { "title": string, "description"?: string, "questions": array, "resumeTool"?: string, "resumeArguments"?: object }',
   "ui.confirm":

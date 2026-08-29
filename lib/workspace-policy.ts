@@ -100,12 +100,15 @@ function asFiles(value: unknown): KnowledgeFile[] {
     if (!item || typeof item !== "object") return [];
     const row = item as Partial<KnowledgeFile>;
     if (!row.id || !row.name) return [];
+    const contentText =
+      typeof row.contentText === "string" ? row.contentText : undefined;
     return [
       {
         id: String(row.id),
         name: String(row.name),
         size: String(row.size ?? "—"),
         uploadedAt: String(row.uploadedAt ?? "Just now"),
+        ...(contentText ? { contentText } : {}),
       },
     ];
   });
@@ -594,7 +597,7 @@ export function removeKnowledgeBase(workspaceId: string, knowledgeId: string) {
 export function addKnowledgeFile(
   workspaceId: string,
   knowledgeId: string,
-  upload: { name: string; size: string },
+  upload: { name: string; size: string; contentText?: string },
 ) {
   const current = policyFor(workspaceId);
   const nextFile: KnowledgeFile = {
@@ -602,6 +605,9 @@ export function addKnowledgeFile(
     name: upload.name,
     size: upload.size,
     uploadedAt: "Just now",
+    ...(upload.contentText?.trim()
+      ? { contentText: upload.contentText.slice(0, 200_000) }
+      : {}),
   };
   policies = {
     ...policies,

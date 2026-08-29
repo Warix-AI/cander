@@ -540,6 +540,13 @@ describe("domain tool gating foundation", () => {
       content: "show me my projects",
     });
     assert.ok(showProjects.toolNames.includes("workspace.search"));
+
+    const pricing = resolveAllowedToolsForTurn({
+      content: "what's our pricing we offer customers today?",
+    });
+    assert.ok(pricing.domains.includes("knowledge"));
+    assert.ok(pricing.toolNames.includes("knowledge.search"));
+    assert.ok(!pricing.toolNames.includes("create_work_task"));
   });
 
   it("unrelated tool sets are not loaded for casual conversation", () => {

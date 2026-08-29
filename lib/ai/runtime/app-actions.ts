@@ -29,6 +29,15 @@ export type AppActionHandlers = {
     detail: string;
     results: Array<{ id: string; title: string; space?: string }>;
   };
+  knowledgeSearch: (query: string) => {
+    ok: boolean;
+    detail: string;
+    results: Array<{
+      knowledgeBaseName: string;
+      fileName: string;
+      excerpt: string;
+    }>;
+  };
   askClarification: (opts: {
     title: string;
     description?: string;

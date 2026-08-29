@@ -11,6 +11,7 @@ export type ToolDomain =
   | "navigation"
   | "projects"
   | "search"
+  | "knowledge"
   | "scheduling"
   | "comms"
   | "cloud_work"
@@ -22,6 +23,7 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
   navigation: ["nav.open", "panel.open", "panel.close"],
   projects: ["project.create", "project.open"],
   search: ["workspace.search"],
+  knowledge: ["knowledge.search"],
   scheduling: [],
   comms: [],
   cloud_work: [
@@ -63,6 +65,11 @@ const IN_APP_PATTERNS: RegExp[] = [
   /\b(publish|deploy|preview)\b/i,
   /\b(connect|connector)\b[\s\S]{0,24}\b(gmail|slack|calendar|notion)\b/i,
   /\btake me there\b/i,
+  // Internal / workspace knowledge (pricing, policy, KB docs)
+  /\b(knowledge\s*bases?|internal\s+docs?|our\s+(pricing|policy|policies|customers?))\b/i,
+  /\b(what('?s| is)|whats)\b[\s\S]{0,48}\b(our|the)\b[\s\S]{0,24}\b(pricing|price|rates?|policy|policies)\b/i,
+  /\b(pricing|rates?)\b[\s\S]{0,40}\b(we|our|customers?|offer|charge)\b/i,
+  /\b(search|find|look\s*up|check)\b[\s\S]{0,40}\b(knowledge|internal|pricing|policy)\b/i,
 ];
 
 const CONVERSATION_ONLY_PATTERNS: RegExp[] = [
@@ -145,6 +152,7 @@ function domainsForResumeTool(resumeTool?: string): ToolDomain[] {
     return ["navigation", "clarification"];
   }
   if (resumeTool === "workspace.search") return ["search", "clarification"];
+  if (resumeTool === "knowledge.search") return ["knowledge", "clarification"];
   if (resumeTool === "create_work_task") return ["cloud_work", "clarification"];
   return ["clarification"];
 }
@@ -219,6 +227,22 @@ export function resolveAllowedToolsForTurn(opts: {
     ) {
       domains.add("search");
       domains.add("projects");
+    }
+    if (
+      /\b(knowledge\s*bases?|internal\s+docs?|our\s+(pricing|policy|policies|customers?))\b/i.test(
+        content,
+      ) ||
+      /\b(what('?s| is)|whats)\b[\s\S]{0,48}\b(our|the)\b[\s\S]{0,24}\b(pricing|price|rates?|policy|policies)\b/i.test(
+        content,
+      ) ||
+      /\b(pricing|rates?)\b[\s\S]{0,40}\b(we|our|customers?|offer|charge)\b/i.test(
+        content,
+      ) ||
+      /\b(search|find|look\s*up|check)\b[\s\S]{0,40}\b(knowledge|internal|pricing|policy)\b/i.test(
+        content,
+      )
+    ) {
+      domains.add("knowledge");
     }
     if (/\b(publish|deploy|preview)\b/i.test(content)) {
       domains.add("navigation");

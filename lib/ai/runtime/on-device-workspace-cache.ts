@@ -16,7 +16,7 @@ import { getActorSnapshot } from "@/lib/session";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { navLabel } from "@/lib/use-main-nav-items";
 import type { SpaceId, Thread } from "@/lib/types";
-import { getMembersSnapshot } from "@/lib/workspace-policy";
+import { getMembersSnapshot, getPoliciesSnapshot } from "@/lib/workspace-policy";
 import { getWorkspaceCatalogSnapshot } from "@/lib/workspace-catalog";
 
 const IDENTITY_KEY = "cander-on-device-identity-v1";
@@ -454,6 +454,21 @@ function buildInventoryLines(opts: SnapshotOpts, thread: Thread | null): string[
         lines.push(
           `- ${s.title} updated ${formatRelativeTime(s.updatedAt)}`,
         );
+      }
+    }
+  } catch {
+    // optional
+  }
+
+  try {
+    const kbs = getPoliciesSnapshot()[opts.workspaceId]?.knowledgeBases ?? [];
+    if (kbs.length) {
+      lines.push("");
+      lines.push(
+        "Knowledge bases (titles only — use knowledge.search for document text):",
+      );
+      for (const kb of kbs.slice(0, 12)) {
+        lines.push(`- ${kb.name} (${kb.files.length} files)`);
       }
     }
   } catch {

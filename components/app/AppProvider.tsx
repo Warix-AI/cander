@@ -164,6 +164,8 @@ import {
 } from "@/lib/mobile-nav-transition";
 import { useMobileShell } from "@/lib/use-media-query";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
+import { speakText, stopTextToSpeech } from "@/lib/voice/text-to-speech";
+import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
 import { typewriterReveal } from "@/lib/ai/typewriter";
 import { openProjectImageTab } from "@/lib/chat-image-attach";
 import {
@@ -1905,6 +1907,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 "complete",
                 result.condensationOccurred,
               );
+              if (voiceActive) {
+                speakText(sanitizeAssistantVisibleText(result.content));
+              }
               return;
             }
 
@@ -1914,6 +1919,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 done ? "complete" : "streaming",
                 done && result.condensationOccurred,
               );
+              if (done && voiceActive) {
+                speakText(sanitizeAssistantVisibleText(result.content));
+              }
             });
           })
           .catch(() => {
@@ -2031,6 +2039,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       workspacePolicies,
       supabaseUser,
       actor.id,
+      voiceActive,
       setThreads,
     ],
   );
@@ -2949,6 +2958,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           results: projects,
         };
       },
+      knowledgeSearch: (query) => {
+        const hits = searchWorkspaceKnowledge(workspaceId, query);
+        return {
+          ok: true,
+          detail: `Found ${hits.length} knowledge hit(s).`,
+          results: hits.map((h) => ({
+            knowledgeBaseName: h.knowledgeBaseName,
+            fileName: h.fileName,
+            excerpt: h.excerpt,
+          })),
+        };
+      },
       askClarification: (opts) => {
         const tid = (opts.threadId?.trim() || threadIdRef.current || "").trim();
         if (!tid) {
@@ -3111,6 +3132,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const toggleVoice = useCallback(() => {
     if (!entitlements.hasVoice) return;
     if (voiceActive) {
+      stopTextToSpeech();
       setVoiceActive(false);
       const activeThread = threadId
         ? threads.find((item) => item.id === threadId)

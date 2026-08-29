@@ -73,6 +73,7 @@ export const CAPABILITY_TO_TOOLS: Record<string, readonly string[]> = {
   request_publish_approval: ["request_publish_approval"],
   projects: ["project.create", "project.open"],
   workspace_search: ["workspace.search"],
+  knowledge_search: ["knowledge.search"],
   research: [],
   release: ["request_publish_approval"],
 };

@@ -66,6 +66,8 @@ function detailForTool(name: string): string {
       return "Opening project…";
     case "workspace.search":
       return "Searching workspace…";
+    case "knowledge.search":
+      return "Searching knowledge…";
     case "ui.ask_clarification":
       return "Preparing questions…";
     case "nav.open":

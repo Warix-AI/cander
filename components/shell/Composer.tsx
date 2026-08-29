@@ -8,8 +8,9 @@ import {
   type RefObject,
 } from "react";
 import {
-  Link2,
+  Camera,
   ImageIcon,
+  Link2,
   Paperclip,
   Pin,
   Plus,
@@ -42,6 +43,17 @@ import {
   peekComposerSeed,
   subscribeComposerSeed,
 } from "@/lib/composer-seed";
+import {
+  DOCUMENT_ACCEPT,
+  filesFromList,
+  pickWithCapacitorCamera,
+} from "@/lib/composer-attach";
+import {
+  isSpeechToTextSupported,
+  startSpeechToText,
+  type SpeechSession,
+} from "@/lib/voice/speech-to-text";
+import { stopTextToSpeech } from "@/lib/voice/text-to-speech";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -104,11 +116,16 @@ export function Composer({
   const [dictating, setDictating] = useState(false);
   const [menu, setMenu] = useState<MenuId>(null);
   const [files, setFiles] = useState<string[]>([]);
+  const [fileSnippets, setFileSnippets] = useState<string[]>([]);
   const [images, setImages] = useState<ChatImageAttachment[]>([]);
+  const [dictateError, setDictateError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const speechRef = useRef<SpeechSession | null>(null);
+  const valueBaseRef = useRef("");
   /** Keep the + menu visible while the native file sheet is open (iOS). */
   const awaitingFilePickRef = useRef(false);
 
@@ -187,6 +204,7 @@ export function Composer({
     const inputs: HTMLInputElement[] = [];
     if (fileRef.current) inputs.push(fileRef.current);
     if (imageRef.current) inputs.push(imageRef.current);
+    if (cameraRef.current) inputs.push(cameraRef.current);
     for (const input of inputs) {
       input.addEventListener("cancel", resetAwaitingPick);
     }
@@ -197,20 +215,16 @@ export function Composer({
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      speechRef.current?.stop();
+      speechRef.current = null;
+    };
+  }, []);
+
   const openFilePicker = (ref: RefObject<HTMLInputElement | null>) => {
     awaitingFilePickRef.current = true;
     ref.current?.click();
-  };
-
-  const finishFilePick = (
-    picked: FileList | null,
-    merge: (names: string[]) => void,
-  ) => {
-    awaitingFilePickRef.current = false;
-    const next = [...(picked ?? [])].map((file) => file.name);
-    if (!next.length) return;
-    merge(next);
-    setMenu(null);
   };
 
   const toggleMenu = (id: MenuId) => {
@@ -244,10 +258,16 @@ export function Composer({
   const pinned = pinTarget ? Boolean(pinTier(pinTarget.kind, pinTarget.id)) : false;
 
   const endDictation = () => {
+    speechRef.current?.stop();
+    speechRef.current = null;
     setDictating(false);
+    setDictateError(null);
   };
 
   const stopVoice = () => {
+    speechRef.current?.stop();
+    speechRef.current = null;
+    stopTextToSpeech();
     if (voiceActive) toggleVoice();
   };
 
@@ -264,26 +284,102 @@ export function Composer({
     const fileNote = files.length
       ? files.map((name) => `[User attached file: ${name}]`).join("\n")
       : "";
+    const snippetNote = fileSnippets.join("\n\n");
     const payload = `${refPrefix}${value}`.trim();
-    const body = [payload, fileNote].filter(Boolean).join("\n");
+    const body = [payload, fileNote, snippetNote].filter(Boolean).join("\n");
     if (!body && !images.length) return;
+    speechRef.current?.stop();
+    speechRef.current = null;
     onSend(body || "", images.length ? { attachments: images } : undefined);
     setValue("");
     setFiles([]);
+    setFileSnippets([]);
     setImages([]);
     setMenu(null);
     setDictating(false);
+    setDictateError(null);
     clearPageReference();
     clearEntityReference();
   };
 
   const startVoice = () => {
+    if (!entitlements.hasVoice) return;
+    stopTextToSpeech();
     if (!voiceActive) toggleVoice();
   };
 
   const startDictation = () => {
+    if (!entitlements.hasVoice) return;
+    if (voiceActive) toggleVoice();
+    setDictateError(null);
+    if (!isSpeechToTextSupported()) {
+      setDictateError("Speech recognition isn’t available here.");
+      setDictating(true);
+      return;
+    }
+    valueBaseRef.current = value.trim() ? `${value.trim()} ` : "";
     setDictating(true);
+    speechRef.current?.stop();
+    speechRef.current = startSpeechToText(
+      {
+        onPartial: (text) => {
+          setValue(`${valueBaseRef.current}${text}`);
+        },
+        onFinal: (text) => {
+          valueBaseRef.current = `${valueBaseRef.current}${text} `.replace(
+            /\s+/g,
+            " ",
+          );
+          setValue(valueBaseRef.current);
+        },
+        onError: (message) => {
+          setDictateError(message);
+        },
+        onEnd: () => {
+          setDictating(false);
+          speechRef.current = null;
+        },
+      },
+      { continuous: true },
+    );
   };
+
+  // Voice conversation mode: listen → send → (TTS handled in AppProvider).
+  useEffect(() => {
+    if (!voiceActive || dictating || !entitlements.hasVoice) return;
+    if (!isSpeechToTextSupported()) return;
+
+    let cancelled = false;
+    const listen = () => {
+      if (cancelled) return;
+      speechRef.current?.stop();
+      speechRef.current = startSpeechToText(
+        {
+          onFinal: (text) => {
+            if (cancelled || !text.trim()) return;
+            speechRef.current?.stop();
+            speechRef.current = null;
+            onSend(text.trim());
+          },
+          onError: () => {
+            /* stay in voice mode; user can retry */
+          },
+          onEnd: () => {
+            if (!cancelled && voiceActive) {
+              window.setTimeout(listen, 350);
+            }
+          },
+        },
+        { continuous: false },
+      );
+    };
+    listen();
+    return () => {
+      cancelled = true;
+      speechRef.current?.stop();
+      speechRef.current = null;
+    };
+  }, [voiceActive, dictating, entitlements.hasVoice, onSend]);
 
   const hint =
     placeholder ??
@@ -336,51 +432,66 @@ export function Composer({
         {menu === "plus" && !compact ? (
           <ComposerMenu>
             {pinTarget ? (
-              <MenuBtn
+              <MenuRow
+                icon={<Pin className={cn("h-4 w-4", pinned && "fill-current")} strokeWidth={1.7} />}
+                label={pinned ? "Unpin" : "Pin"}
                 onClick={() => {
                   if (pinned) clearPin(pinTarget.kind, pinTarget.id);
                   else setPin(pinTarget.kind, pinTarget.id, "primary");
                   setMenu(null);
                 }}
-              >
-                <Pin
-                  className={cn(
-                    "h-3.5 w-3.5 text-muted-foreground",
-                    pinned && "fill-current",
-                  )}
-                  strokeWidth={1.6}
-                />
-                {pinned ? "Unpin" : "Pin"}
-              </MenuBtn>
+              />
             ) : null}
-            <MenuBtn
+            <MenuRow
+              icon={<Camera className="h-4 w-4" strokeWidth={1.7} />}
+              label="Camera"
               onClick={() => {
-                openFilePicker(fileRef);
+                void (async () => {
+                  const fromCap = await pickWithCapacitorCamera("camera");
+                  if (fromCap) {
+                    setImages((current) => [...current, fromCap].slice(0, 4));
+                    setMenu(null);
+                    return;
+                  }
+                  openFilePicker(cameraRef);
+                })();
               }}
-            >
-              <Paperclip className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.6} />
-              Upload file
-            </MenuBtn>
-            <MenuBtn
+            />
+            <MenuRow
+              icon={<ImageIcon className="h-4 w-4" strokeWidth={1.7} />}
+              label="Photos"
               onClick={() => {
-                openFilePicker(imageRef);
+                void (async () => {
+                  const fromCap = await pickWithCapacitorCamera("photos");
+                  if (fromCap) {
+                    setImages((current) => [...current, fromCap].slice(0, 4));
+                    setMenu(null);
+                    return;
+                  }
+                  openFilePicker(imageRef);
+                })();
               }}
-            >
-              <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.6} />
-              Add image
-            </MenuBtn>
+            />
+            <MenuRow
+              icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
+              label="Files"
+              onClick={() => openFilePicker(fileRef)}
+            />
             {browserMode ? (
-              <MenuBtn
+              <MenuRow
+                icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
+                label="Attach page"
                 onClick={() => {
                   attachBrowserReference();
                   setMenu(null);
                 }}
-              >
-                <Link2 className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.6} />
-                Attach page
-              </MenuBtn>
+              />
             ) : null}
           </ComposerMenu>
+        ) : null}
+
+        {dictateError ? (
+          <p className="mb-1 px-1 text-[12px] text-muted-foreground">{dictateError}</p>
         ) : null}
 
         {voiceActive && !dictatingActive ? (
@@ -629,12 +740,36 @@ export function Composer({
       ref={fileRef}
       type="file"
       multiple
+      accept={DOCUMENT_ACCEPT}
       tabIndex={-1}
       className="sr-only"
       aria-hidden
       onChange={(event) => {
-        finishFilePick(event.target.files, (next) => {
-          setFiles((current) => [...current, ...next].slice(0, 6));
+        const list = event.target.files;
+        awaitingFilePickRef.current = false;
+        void filesFromList(list).then((parsed) => {
+          if (parsed.fileNames.length) {
+            setFiles((current) =>
+              [...current, ...parsed.fileNames].slice(0, 6),
+            );
+          }
+          if (parsed.textSnippets.length) {
+            setFileSnippets((current) =>
+              [...current, ...parsed.textSnippets].slice(0, 6),
+            );
+          }
+          if (parsed.images.length) {
+            setImages((current) =>
+              [...current, ...parsed.images].slice(0, 4),
+            );
+          }
+          if (
+            parsed.fileNames.length ||
+            parsed.images.length ||
+            parsed.textSnippets.length
+          ) {
+            setMenu(null);
+          }
         });
         event.target.value = "";
       }}
@@ -650,44 +785,35 @@ export function Composer({
       onChange={(event) => {
         const list = event.target.files;
         awaitingFilePickRef.current = false;
-        if (!list?.length) {
-          event.target.value = "";
-          return;
-        }
-        const readers = [...list].slice(0, 4).map(
-          (file) =>
-            new Promise<ChatImageAttachment | null>((resolve) => {
-              if (!file.type.startsWith("image/")) {
-                resolve(null);
-                return;
-              }
-              if (file.size > 2_500_000) {
-                resolve(null);
-                return;
-              }
-              const reader = new FileReader();
-              reader.onload = () => {
-                const url = typeof reader.result === "string" ? reader.result : "";
-                if (!url) {
-                  resolve(null);
-                  return;
-                }
-                resolve({
-                  url,
-                  name: file.name,
-                  mime: file.type || "image/png",
-                });
-              };
-              reader.onerror = () => resolve(null);
-              reader.readAsDataURL(file);
-            }),
-        );
-        void Promise.all(readers).then((items) => {
-          const next = items.filter(Boolean) as ChatImageAttachment[];
-          if (next.length) {
-            setImages((current) => [...current, ...next].slice(0, 4));
+        void filesFromList(list).then((parsed) => {
+          if (parsed.images.length) {
+            setImages((current) =>
+              [...current, ...parsed.images].slice(0, 4),
+            );
+            setMenu(null);
           }
-          setMenu(null);
+        });
+        event.target.value = "";
+      }}
+    />
+    <input
+      ref={cameraRef}
+      type="file"
+      accept="image/*"
+      capture="environment"
+      tabIndex={-1}
+      className="sr-only"
+      aria-hidden
+      onChange={(event) => {
+        const list = event.target.files;
+        awaitingFilePickRef.current = false;
+        void filesFromList(list).then((parsed) => {
+          if (parsed.images.length) {
+            setImages((current) =>
+              [...current, ...parsed.images].slice(0, 4),
+            );
+            setMenu(null);
+          }
         });
         event.target.value = "";
       }}
@@ -707,27 +833,26 @@ function ComposerMenu({ children }: { children: ReactNode }) {
   );
 }
 
-function MenuBtn({
-  children,
+function MenuRow({
+  icon,
+  label,
   onClick,
-  active,
 }: {
-  children: ReactNode;
+  icon: ReactNode;
+  label: string;
   onClick: () => void;
-  active?: boolean;
 }) {
   return (
     <button
       type="button"
       role="menuitem"
       onClick={onClick}
-      data-active={active ? "true" : undefined}
-      className={cn(
-        "menu-row-hover flex w-full items-center gap-2.5 rounded-[14px] px-2.5 py-2 text-left text-[13.5px] transition-colors duration-200",
-        active && "font-medium",
-      )}
+      className="menu-row-hover flex w-full items-center gap-3 rounded-[14px] px-2 py-2 text-left transition-colors duration-200"
     >
-      {children}
+      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+        {icon}
+      </span>
+      <span className="text-[15px] tracking-[-0.01em]">{label}</span>
     </button>
   );
 }
