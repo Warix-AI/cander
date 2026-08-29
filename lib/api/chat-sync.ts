@@ -17,15 +17,34 @@ const IMPORT_FLAG_KEY = "courier-chat-imported-v1";
 
 let skipRemoteSync = false;
 
+function hasPendingAiThinking(threads: ReturnType<typeof getChatStoreSnapshot>["threads"]) {
+  return threads.some((thread) =>
+    thread.messages.some(
+      (m) =>
+        m.role === "assistant" &&
+        (m.content === "Thinking…" || m.content === "Thinking..."),
+    ),
+  );
+}
+
 /** Pull remote threads for the active workspace; keep other workspaces in store. */
 export async function hydrateChatFromRemote(
   api: ChatApi,
   ctx: WorkspaceCtx,
 ) {
+  const { threads: current } = getChatStoreSnapshot();
+  if (hasPendingAiThinking(current)) return;
+
   skipRemoteSync = true;
   const remote = await api.listThreads(ctx);
-  const { threads: current } = getChatStoreSnapshot();
-  const otherWorkspaces = current.filter(
+  const { threads: latest } = getChatStoreSnapshot();
+  if (hasPendingAiThinking(latest)) {
+    window.setTimeout(() => {
+      skipRemoteSync = false;
+    }, 0);
+    return;
+  }
+  const otherWorkspaces = latest.filter(
     (item) => item.workspaceId !== ctx.workspaceId,
   );
   replaceChatThreads([...otherWorkspaces, ...remote]);
@@ -58,15 +77,7 @@ export function startChatRemoteSync(ctx: WorkspaceCtx) {
     const { threads } = getChatStoreSnapshot();
     // Don't sync mid-flight AI placeholders — prevents realtime hydrate from
     // wiping / remapping the in-progress assistant message.
-    if (
-      threads.some((thread) =>
-        thread.messages.some(
-          (m) =>
-            m.role === "assistant" &&
-            (m.content === "Thinking…" || m.content === "Thinking..."),
-        ),
-      )
-    ) {
+    if (hasPendingAiThinking(threads)) {
       return;
     }
     syncing = true;
@@ -100,6 +111,7 @@ export function startChatRealtimePull(api: ChatApi, ctx: WorkspaceCtx) {
 
   const pull = () => {
     if (pulling) return;
+    if (hasPendingAiThinking(getChatStoreSnapshot().threads)) return;
     pulling = true;
     void hydrateChatFromRemote(api, ctx)
       .catch((err) => {

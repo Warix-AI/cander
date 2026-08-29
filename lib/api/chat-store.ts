@@ -43,15 +43,33 @@ function persistLocal() {
   window.localStorage.setItem(storageKey(), JSON.stringify(state.threads));
 }
 
+/** useSyncExternalStore compares snapshots with Object.is — replace state object on writes. */
+function commitThreads(threads: Thread[]) {
+  state = {
+    ...state,
+    threads,
+    revision: state.revision + 1,
+  };
+  persistLocal();
+  emit();
+}
+
 function hydrate() {
   if (state.hydrated || typeof window === "undefined") return;
-  state.hydrated = true;
-  if (!ownerId) return;
+  if (!ownerId) {
+    state = { ...state, hydrated: true };
+    return;
+  }
   const stored = parse(window.localStorage.getItem(storageKey()));
   if (stored?.length) {
-    state.threads = stored;
-    state.revision += 1;
+    state = {
+      threads: stored,
+      revision: state.revision + 1,
+      hydrated: true,
+    };
+    return;
   }
+  state = { ...state, hydrated: true };
 }
 
 /** Scope cached threads to the signed-in user. */
@@ -88,10 +106,7 @@ export function getChatStoreServerSnapshot(): ChatStoreState {
 
 /** Replace in-memory threads (Supabase hydrate / import). */
 export function replaceChatThreads(threads: Thread[]) {
-  state.threads = threads;
-  state.revision += 1;
-  persistLocal();
-  emit();
+  commitThreads(threads);
 }
 
 /** React-style updater used by AppProvider. */
@@ -102,10 +117,7 @@ export function updateChatThreads(
     typeof updater === "function"
       ? updater(state.threads)
       : updater;
-  state.threads = next;
-  state.revision += 1;
-  persistLocal();
-  emit();
+  commitThreads(next);
 }
 
 export function resetChatStore() {
