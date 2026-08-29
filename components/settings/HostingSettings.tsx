@@ -16,7 +16,10 @@ import {
   setAiRuntimeMode,
   subscribeAiRuntimeMode,
 } from "@/lib/ai/runtime/mode-store";
-import { getFoundationModelsAvailability } from "@/lib/ai/runtime/native/foundation-models";
+import {
+  getFoundationModelsAvailability,
+  resetFoundationModelsPluginCache,
+} from "@/lib/ai/runtime/native/foundation-models";
 import type { AiRuntimeMode } from "@/lib/ai/runtime/types";
 import { persistHosting } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -65,16 +68,25 @@ export function HostingSettings() {
 
   useEffect(() => {
     let cancelled = false;
-    void getFoundationModelsAvailability().then((avail) => {
-      if (cancelled) return;
-      setStatus({
-        available: avail.available,
-        message: avail.message,
-        reason: avail.reason,
+    const refresh = () => {
+      resetFoundationModelsPluginCache();
+      void getFoundationModelsAvailability().then((avail) => {
+        if (cancelled) return;
+        setStatus({
+          available: avail.available,
+          message: avail.message,
+          reason: avail.reason,
+        });
       });
-    });
+    };
+    refresh();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [mode]);
 

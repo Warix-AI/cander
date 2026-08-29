@@ -3,6 +3,8 @@
 /**
  * JS bridge to native CanderFoundationModels Cap plugin.
  * Web: always unavailable (no fake local replies).
+ *
+ * PRIVACY: Calls stay in-process on iOS. Do not proxy these prompts to Edge.
  */
 
 export type FoundationModelsAvailability = {
@@ -17,30 +19,62 @@ type FoundationModelsNative = {
   generate: (opts: { prompt: string }) => Promise<{ content?: string }>;
 };
 
-function getCapacitor(): {
+type CapacitorBridge = {
   isNativePlatform?: () => boolean;
-  registerPlugin?: (name: string) => FoundationModelsNative;
-  Plugins?: { CanderFoundationModels?: FoundationModelsNative };
-} | undefined {
+  getPlatform?: () => string;
+  registerPlugin?: <T>(name: string) => T;
+  Plugins?: Record<string, FoundationModelsNative | undefined>;
+};
+
+let cachedPlugin: FoundationModelsNative | null | undefined;
+
+function getCapacitor(): CapacitorBridge | undefined {
   if (typeof window === "undefined") return undefined;
-  return (window as Window & { Capacitor?: ReturnType<typeof getCapacitor> })
-    .Capacitor;
+  return (window as Window & { Capacitor?: CapacitorBridge }).Capacitor;
+}
+
+/** True only inside the Capacitor iOS/Android shell. */
+export function isNativeFoundationModelsHost() {
+  const cap = getCapacitor();
+  return Boolean(cap?.isNativePlatform?.());
 }
 
 function getPlugin(): FoundationModelsNative | null {
+  if (cachedPlugin !== undefined) return cachedPlugin;
+
   const cap = getCapacitor();
-  if (!cap?.isNativePlatform?.()) return null;
-  if (cap.Plugins?.CanderFoundationModels) {
-    return cap.Plugins.CanderFoundationModels;
+  if (!cap?.isNativePlatform?.()) {
+    cachedPlugin = null;
+    return null;
   }
+
+  const existing = cap.Plugins?.CanderFoundationModels;
+  if (existing?.getAvailability && existing?.generate) {
+    cachedPlugin = existing;
+    return existing;
+  }
+
   if (typeof cap.registerPlugin === "function") {
     try {
-      return cap.registerPlugin("CanderFoundationModels");
+      const registered = cap.registerPlugin<FoundationModelsNative>(
+        "CanderFoundationModels",
+      );
+      if (registered?.getAvailability && registered?.generate) {
+        cachedPlugin = registered;
+        return registered;
+      }
     } catch {
-      return null;
+      // fall through
     }
   }
+
+  cachedPlugin = null;
   return null;
+}
+
+/** Clear cache after foreground / plugin reload. */
+export function resetFoundationModelsPluginCache() {
+  cachedPlugin = undefined;
 }
 
 export async function getFoundationModelsAvailability(): Promise<FoundationModelsAvailability> {
@@ -48,17 +82,22 @@ export async function getFoundationModelsAvailability(): Promise<FoundationModel
   if (!plugin) {
     return {
       available: false,
-      reason: "web_or_no_plugin",
+      reason: isNativeFoundationModelsHost()
+        ? "plugin_missing"
+        : "web_or_no_plugin",
       streaming: false,
-      message:
-        "On-device AI runs in the Cander iOS app on Apple Intelligence devices — not in the browser.",
+      message: isNativeFoundationModelsHost()
+        ? "Native shell is running but the Foundation Models plugin is not registered. Rebuild the iOS app from Xcode."
+        : "On-device AI runs in the Cander iOS app on Apple Intelligence devices — not in the browser.",
     };
   }
   try {
     const result = await plugin.getAvailability();
     return {
       available: Boolean(result.available),
-      reason: String(result.reason ?? (result.available ? "available" : "unavailable")),
+      reason: String(
+        result.reason ?? (result.available ? "available" : "unavailable"),
+      ),
       streaming: Boolean(result.streaming),
       message:
         String(result.message ?? "") ||
@@ -66,12 +105,13 @@ export async function getFoundationModelsAvailability(): Promise<FoundationModel
           ? "On-device model ready."
           : "On-device model unavailable."),
     };
-  } catch {
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
     return {
       available: false,
       reason: "plugin_error",
       streaming: false,
-      message: "Could not reach the on-device AI bridge.",
+      message: `Could not reach the on-device AI bridge (${detail}).`,
     };
   }
 }
