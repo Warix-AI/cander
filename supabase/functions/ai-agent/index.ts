@@ -1,10 +1,15 @@
 /**
  * Edge Agent API — canonical TurnOrchestrator entry.
  * Actions: run_turn | cancel_turn | get_turn
+ * Default: Orchestrator V2 (bounded autonomous loop). Set AI_ORCHESTRATOR_V2=0 for V1.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { resolveModelProvider } from "../_shared/agent/model-provider.ts";
 import { runTurnOrchestrator } from "../_shared/agent/orchestrator.ts";
+import {
+  isOrchestratorV2Enabled,
+  runTurnOrchestratorV2,
+} from "../_shared/agent/v2/orchestrator.ts";
 
 type Json = Record<string, unknown>;
 
@@ -65,7 +70,6 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) throw error;
       if (!data) return json(404, { error: "Turn not found" });
-      // If still running, mark cancelled when orchestrator checks; if pending, cancel now
       if (data.status === "pending" || data.status === "running") {
         await supabase
           .from("ai_chat_turns")
@@ -121,13 +125,35 @@ Deno.serve(async (req) => {
         });
       }
 
+      const useV2 =
+        body?.orchestratorVersion === "v1"
+          ? false
+          : body?.orchestratorVersion === "v2"
+            ? true
+            : isOrchestratorV2Enabled();
+
+      if (useV2) {
+        const result = await runTurnOrchestratorV2(
+          { supabase, ownerId: user.id, provider },
+          {
+            turnId,
+            chatId,
+            content,
+            images,
+            workspaceKnowledgeHits,
+            researchMode: Boolean(body?.researchMode),
+            clientActionResults,
+            locationHint:
+              typeof body?.locationHint === "string" ? body.locationHint : null,
+            userTimezone:
+              typeof body?.userTimezone === "string" ? body.userTimezone : null,
+          },
+        );
+        return json(200, result);
+      }
+
       const result = await runTurnOrchestrator(
-        {
-          supabase,
-          ownerId: user.id,
-          provider,
-          authHeader,
-        },
+        { supabase, ownerId: user.id, provider, authHeader },
         {
           turnId,
           chatId,
@@ -138,7 +164,6 @@ Deno.serve(async (req) => {
           clientActionResults,
         },
       );
-
       return json(200, result);
     }
 

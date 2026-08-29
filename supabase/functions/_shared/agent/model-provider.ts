@@ -46,6 +46,9 @@ export function createOllamaBridgeProvider(opts?: {
     opts?.visionModel ??
     Deno.env.get("OLLAMA_VISION_MODEL") ??
     "llava";
+  const controllerModel =
+    Deno.env.get("OLLAMA_CONTROLLER_MODEL") ?? model;
+  const answerModel = Deno.env.get("OLLAMA_ANSWER_MODEL") ?? model;
 
   return {
     id: "ollama",
@@ -69,7 +72,14 @@ export function createOllamaBridgeProvider(opts?: {
       const hasImages =
         Boolean(req.images?.length) ||
         req.messages.some((m) => (m.images?.length ?? 0) > 0);
-      const modelId = hasImages ? visionModel : model;
+      let modelId = hasImages ? visionModel : model;
+      if (!hasImages) {
+        if (req.purpose === "plan" || req.purpose === "sufficiency") {
+          modelId = controllerModel;
+        } else if (req.purpose === "answer") {
+          modelId = answerModel;
+        }
+      }
 
       const messages = req.messages.map((m) => {
         const row: { role: string; content: string; images?: string[] } = {

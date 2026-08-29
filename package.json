@@ -12,7 +12,7 @@
     "test:isolation": "node --experimental-strip-types scripts/security-isolation-probe.ts",
     "test:assistant": "node --experimental-strip-types --test scripts/assistant-behavior.test.ts",
     "test:intelligence": "node --experimental-strip-types --test scripts/intelligence.test.ts",
-    "test:orchestrator": "node --experimental-strip-types --test scripts/orchestrator.test.ts",
+    "test:orchestrator": "node --experimental-strip-types --test scripts/orchestrator.test.ts scripts/orchestrator-v2.test.ts",
     "seed:supabase": "node --experimental-strip-types scripts/seed.ts 2>/dev/null || npx --yes tsx scripts/seed.ts",
     "desktop": "npm --prefix desktop run dev",
     "desktop:prod": "npm --prefix desktop run start",

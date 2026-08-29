@@ -9,3 +9,13 @@ export function isAgentOrchestratorEnabled(): boolean {
   if (v === "0" || v === "false" || v === "off") return false;
   return true;
 }
+
+/**
+ * Server AI_ORCHESTRATOR_V2 defaults on. Client can force v1 via this flag for debugging.
+ * NEXT_PUBLIC_AI_ORCHESTRATOR_V2=0 → request orchestratorVersion: "v1"
+ */
+export function preferOrchestratorV2(): boolean {
+  const v = process.env.NEXT_PUBLIC_AI_ORCHESTRATOR_V2;
+  if (v === "0" || v === "false" || v === "off") return false;
+  return true;
+}

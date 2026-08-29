@@ -17,6 +17,7 @@ import {
   type AiContextRefInput,
 } from "@/lib/api/ai-chat-api";
 import { routeDeterministic } from "@/lib/ai/orchestrator/router";
+import { preferOrchestratorV2 } from "@/lib/ai/orchestrator/flags";
 import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
 import {
   executeAuthorizedTool,
@@ -107,8 +108,13 @@ function mapStatus(
         detail: detail ?? "Running app action…",
         toolName,
       };
-    case "retrieving":
     case "routing":
+      return {
+        phase: "thinking",
+        label: "Thinking",
+        detail: detail ?? "Planning next step…",
+      };
+    case "retrieving":
     case "thinking":
     default:
       return {
@@ -181,25 +187,24 @@ export async function runOrchestratedTurn(
     ).catch(() => {});
 
     const route = routeDeterministic(request.content);
+    // V2: server requests knowledge via paused_for_client — do not pre-decide.
+    // Keep optional pre-hits only as a warm cache when client already knows.
     let workspaceKnowledgeHits:
       | Array<{ title: string; snippet: string; id?: string }>
       | undefined;
     if (route.needsKnowledge || route.kind === "knowledge_retrieve") {
-      report({
-        phase: "tool",
-        label: "Thinking",
-        detail: "Searching knowledge…",
-        toolName: "knowledge.search",
-      });
+      // Soft hint only; V2 controller may still request knowledge.search
       const hits = searchWorkspaceKnowledge(
         request.workspaceId,
         request.content,
       );
-      workspaceKnowledgeHits = hits.map((h) => ({
-        id: `kb_${h.fileId}`,
-        title: `${h.knowledgeBaseName} / ${h.fileName}`,
-        snippet: h.excerpt,
-      }));
+      if (hits.length) {
+        workspaceKnowledgeHits = hits.map((h) => ({
+          id: `kb_${h.fileId}`,
+          title: `${h.knowledgeBaseName} / ${h.fileName}`,
+          snippet: h.excerpt,
+        }));
+      }
     }
 
     const turnId = newTurnId();
@@ -224,6 +229,7 @@ export async function runOrchestratedTurn(
         content: request.content,
         images: request.images,
         workspaceKnowledgeHits,
+        orchestratorVersion: preferOrchestratorV2() ? "v2" : "v1",
       });
 
       for (const ev of result.statusEvents ?? []) {
@@ -282,6 +288,7 @@ export async function runOrchestratedTurn(
           images: request.images,
           workspaceKnowledgeHits,
           clientActionResults: actionResults,
+          orchestratorVersion: preferOrchestratorV2() ? "v2" : "v1",
         });
         for (const ev of result.statusEvents ?? []) {
           report(mapStatus(ev.phase, ev.detail));

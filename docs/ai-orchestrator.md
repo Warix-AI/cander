@@ -1,46 +1,48 @@
 # AI Turn Orchestrator
 
-Canonical path: **Cap / web / desktop** → `runOrchestratedTurn` → Edge `ai-agent` (`run_turn`) → `TurnOrchestrator` → `ModelProvider` (Ollama/bridge).
+Canonical path: **Cap / web / desktop** → `runOrchestratedTurn` → Edge `ai-agent` (`run_turn`) → **Orchestrator V2** (bounded autonomous loop) → `ModelProvider` (Ollama/bridge).
 
-## Feature flag
+## Flags
 
-- `NEXT_PUBLIC_AI_AGENT_ORCHESTRATOR` default **on**
-- Set to `0` / `false` / `off` to force the legacy client agent loop on cloud
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `NEXT_PUBLIC_AI_AGENT_ORCHESTRATOR` | on | Use Edge agent vs legacy client agent-turn |
+| `AI_ORCHESTRATOR_V2` (Edge) | on | V2 loop vs V1 retrieve-once pipeline |
+| `NEXT_PUBLIC_AI_ORCHESTRATOR_V2` | on | Client requests `orchestratorVersion: v2` |
 
-## Phase status
+Set any to `0`/`false`/`off` to roll back that layer.
 
-| Phase | Status |
-|-------|--------|
-| 0 Clean history + CONTEXT_BUILD | Done — no Internal-result user rows; `toolContext` on legacy `ai-chat` |
-| 1 Orchestrator + Ollama provider | Done — `ai-agent`, budgets, idempotency, cancel, search sessions, turn events, citations |
-| 1 Thin client | Done — shared `lib/ai/orchestrator/run-turn.ts` |
-| 2 Memory | Done — async `conversation_state`, keyword `ConversationHistoryRetriever`, reference hints |
-| 3 One brain | Done — cloud defaults to orchestrator; legacy loop local/`flag=0` only |
+## V2 loop (what changed)
 
-## Verification (unit)
+```
+controller → web_search → web_open → evidence briefing → answer → validate
+                ↑______________________________________________|
+```
+
+- Capability manifest (web/knowledge/tools/location/time)
+- Structured controller decisions (not one-shot regex routing)
+- SSRF-safe `web_open` page reads
+- Evidence briefing before final prose
+- Deterministic + optional model answer validator (retrieve_more / regenerate)
+- Working memory lists for “the second one”
+- Knowledge via `paused_for_client` when server decides
+- Purpose-specific Ollama models (`OLLAMA_CONTROLLER_MODEL`, `OLLAMA_ANSWER_MODEL`)
+
+V1 remains as fallback code path (not a third permanent stack).
+
+## Product rule
+
+The **model does not decide** whether Cander has internet. The orchestrator owns capabilities and iteration. Training cutoffs must not appear when retrieval is available.
+
+## Tests
 
 ```bash
 npm run test:orchestrator
 ```
 
-Covers A/D/F/H routing, AcmeWhatever CEO → web, sufficiency, context newest-turn protection, citation stripping, history keyword search.
-
-## Manual / live checks
-
-- Greeting / “2+2” / explain recursion → direct answer (no Brave)
-- “Who is the CEO of AcmeWhatever?” → web search attempt before IDK
-- Cap retry same `turnId` → no duplicate user rows
-- Cancel / new turn → no stale assistant write
-- Refresh → conversational history without Internal-result blobs
-
-## Product rule
-
-The **model does not decide** whether Cander has internet. The orchestrator detects live/current intent, forces Brave when available, and **blocks finalization** on knowledge-cutoff / “check CNN” deflections until retrieval has run (then regenerates from sources). Broad world-news asks use a bounded multi-query search plan.
-
 ## Remaining limits
 
-- Semantic history retrieval later (interface ready)
-- Extra ModelProviders when product needs them (no fake adapters)
-- `conversation_state` may lag one beat behind the visible answer
-- Client actions still round-trip on all devices
-- Knowledge search still runs on-device and is attached as hits to `run_turn`
+- True SSE/token streaming still pending (status events still returned with the HTTP response; UI maps them when the call completes). Prefer next: `run_turn_stream` NDJSON.
+- Small local models still limit synthesis quality — use stronger `OLLAMA_ANSWER_MODEL` when available.
+- Semantic/pgvector history not required for V2; keyword + working memory first.
+- Knowledge still executes on-device when server pauses for `knowledge.search`.

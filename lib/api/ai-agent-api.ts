@@ -52,6 +52,9 @@ type AgentAction =
         output: string;
         ok: boolean;
       }>;
+      orchestratorVersion?: "v1" | "v2";
+      locationHint?: string | null;
+      userTimezone?: string | null;
     }
   | { action: "cancel_turn"; turnId: string }
   | { action: "get_turn"; turnId: string };
@@ -90,6 +93,9 @@ export function runAgentTurn(body: {
   }>;
   researchMode?: boolean;
   clientActionResults?: Array<{ name: string; output: string; ok: boolean }>;
+  orchestratorVersion?: "v1" | "v2";
+  locationHint?: string | null;
+  userTimezone?: string | null;
 }) {
   return invokeAiAgent<AgentRunTurnResult>({
     action: "run_turn",
