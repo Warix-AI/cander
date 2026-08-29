@@ -382,6 +382,9 @@ export function MobileAppChrome({ className }: { className?: string }) {
       ) : null
     ) : null;
 
+  const projectPanelLabel =
+    spaceId === "research" ? "Explore" : spaceId === "work" ? "Work" : "Build";
+
   return (
     <>
       <header
@@ -402,28 +405,38 @@ export function MobileAppChrome({ className }: { className?: string }) {
               mobileSurface === "menu" && "ml-2.5",
             )}
           >
-            <button
-              type="button"
-              aria-label={
-                showProjectTools && surface === "panel"
-                  ? "Back to chat"
-                  : showEntityBack
+            {showProjectTools && surface === "panel" ? (
+              <button
+                type="button"
+                aria-label="Back to chat"
+                onClick={onLeadingClick}
+                className="inline-flex h-11 shrink-0 items-center gap-0.5 rounded-full bg-[var(--mobile-chrome-surface)] pl-2.5 pr-3.5 text-[14px] font-medium tracking-[-0.01em] text-foreground transition-colors duration-200 hover:bg-muted"
+              >
+                <ChevronLeft className="h-5 w-5 shrink-0" strokeWidth={1.8} />
+                <span>Chat</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                aria-label={
+                  showEntityBack
                     ? "Back"
                     : inChromeSub
                       ? "Back"
                       : mobileSurface === "menu"
                         ? "Close menu"
                         : "Open menu"
-              }
-              onClick={onLeadingClick}
-              className={mobileChromeButtonClass}
-            >
-              {showEntityBack || inChromeSub ? (
-                <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
-              ) : (
-                <Menu className="h-5 w-5" strokeWidth={1.8} />
-              )}
-            </button>
+                }
+                onClick={onLeadingClick}
+                className={mobileChromeButtonClass}
+              >
+                {showEntityBack || inChromeSub ? (
+                  <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
+                ) : (
+                  <Menu className="h-5 w-5" strokeWidth={1.8} />
+                )}
+              </button>
+            )}
           </div>
 
           <div className="relative z-0 flex min-w-0 max-w-full justify-center justify-self-center px-2">
@@ -435,15 +448,12 @@ export function MobileAppChrome({ className }: { className?: string }) {
               surface === "chat" ? (
                 <button
                   type="button"
-                  aria-label={
-                    spaceId === "research"
-                      ? "Open Explore"
-                      : "Open Build"
-                  }
+                  aria-label={`Open ${projectPanelLabel}`}
                   onClick={() => setChatOrPanel("panel")}
-                  className={mobileChromeButtonClass}
+                  className="inline-flex h-11 shrink-0 items-center gap-0.5 rounded-full bg-[var(--mobile-chrome-surface)] pl-3.5 pr-2.5 text-[14px] font-medium tracking-[-0.01em] text-foreground transition-colors duration-200 hover:bg-muted"
                 >
-                  <ChevronRight className="h-5 w-5" strokeWidth={1.8} />
+                  <span>{projectPanelLabel}</span>
+                  <ChevronRight className="h-5 w-5 shrink-0" strokeWidth={1.8} />
                 </button>
               ) : (
                 <button
