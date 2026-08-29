@@ -146,6 +146,13 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
         throw new Error(error.message || "Could not create project.");
       }
       notifyEntityStoreChange();
+      void import("@/lib/ai/intelligence/revisions").then((m) =>
+        m.ensureDraftRevision({
+          projectId: project.id,
+          workspaceId: ctx.workspaceId,
+          actorId: ctx.actorId,
+        }),
+      );
       return project;
     },
 

@@ -11,10 +11,15 @@ import {
 } from "@/lib/ai/runtime/tools";
 import { tryIntentShortcut } from "@/lib/ai/runtime/intent-actions";
 import { buildCreateProjectClarification } from "@/lib/ai/runtime/intent-actions";
-import { setTurnThreadId } from "@/lib/ai/runtime/turn-context";
+import { clearTurnContext, setTurnContext } from "@/lib/ai/runtime/turn-context";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
-import { resolveAllowedToolsForTurn } from "@/lib/ai/tools/domains";
 import { getThreadTaskState, upsertThreadTaskState } from "@/lib/ai/task-state";
+import {
+  classifyAndRoute,
+  recordRoutingDecision,
+} from "@/lib/ai/intelligence";
+import { getPccAvailability } from "@/lib/ai/intelligence/pcc";
+import { getAiRuntimeMode } from "@/lib/ai/runtime/mode-store";
 import { generateWithAiRuntime } from "@/lib/ai/runtime/runtime";
 import type {
   AiGenerateRequest,
@@ -81,6 +86,10 @@ function detailForTool(name: string): string {
       return "Updating panel…";
     case "create_work_task":
       return "Starting work task…";
+    case "check_work_task":
+      return "Checking progress…";
+    case "request_publish_approval":
+      return "Preparing publish…";
     default:
       return "Calling tool…";
   }
@@ -90,11 +99,15 @@ export async function runAssistantTurn(
   request: AiGenerateRequest,
   opts?: AgentTurnOptions,
 ): Promise<AgentTurnResult> {
-  setTurnThreadId(request.threadId);
+  setTurnContext({
+    threadId: request.threadId,
+    workspaceId: request.workspaceId,
+    projectId: request.projectId,
+  });
   try {
     return await runAssistantTurnInner(request, opts);
   } finally {
-    setTurnThreadId(null);
+    clearTurnContext();
   }
 }
 
@@ -117,16 +130,28 @@ async function runAssistantTurnInner(
   });
 
   const taskState = getThreadTaskState(request.threadId);
-  const resolved = resolveAllowedToolsForTurn({
+  const mode = getAiRuntimeMode();
+  const pcc = await getPccAvailability();
+  const decision = classifyAndRoute({
     content: request.content,
     taskState,
+    projectId: request.projectId,
+    forceLocal: mode === "local",
+    forceCloud: mode === "cloud",
+    pccAvailable: pcc.available,
   });
-  const allowedToolNames = resolved.toolNames;
+  recordRoutingDecision(decision, {
+    threadId: request.threadId,
+    projectId: request.projectId,
+    workspaceId: request.workspaceId,
+  });
+
+  const allowedToolNames = decision.toolNames;
   const allowTools = allowedToolNames.length > 0;
 
-  if (allowTools && request.threadId && resolved.domains.length) {
+  if (allowTools && request.threadId && decision.domains.length) {
     upsertThreadTaskState(request.threadId, {
-      allowedDomains: resolved.domains,
+      allowedDomains: decision.domains as import("@/lib/ai/tools/domains").ToolDomain[],
     });
   }
 
@@ -134,6 +159,8 @@ async function runAssistantTurnInner(
     ...request,
     allowTools,
     allowedToolNames,
+    preferredRoute: decision.target,
+    routingReason: decision.reason,
   };
 
   const shortcut = allowTools
@@ -326,7 +353,9 @@ async function runAssistantTurnInner(
         call.name === "project.create" ||
         call.name === "panel.open" ||
         call.name === "panel.close" ||
-        call.name === "create_work_task")
+        call.name === "create_work_task" ||
+        call.name === "check_work_task" ||
+        call.name === "request_publish_approval")
     ) {
       return {
         ...last,

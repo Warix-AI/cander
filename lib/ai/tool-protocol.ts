@@ -9,7 +9,7 @@ export type ParsedToolCall = {
 };
 
 const KNOWN_TOOLS =
-  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|ui\\.(?:ask_clarification|confirm)|create_work_task";
+  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|ui\\.(?:ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval";
 
 /** Soft-repair common model JSON mistakes (trailing commas). */
 export function repairJson(raw: string): string {
@@ -122,7 +122,7 @@ function tryParseToolObject(raw: string): ParsedToolCall | null {
       const name = parsed.tool ?? parsed.name;
       if (!name || typeof name !== "string") continue;
       if (
-        !/^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|ui\.(ask_clarification|confirm)|create_work_task)$/.test(
+        !/^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|ui\.(ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval)$/.test(
           name,
         )
       ) {
@@ -149,7 +149,7 @@ function tryParseToolObject(raw: string): ParsedToolCall | null {
         if (keys.length === 1) {
           const name = keys[0]!;
           if (
-            /^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|ui\.(ask_clarification|confirm)|create_work_task)$/.test(
+            /^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|ui\.(ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval)$/.test(
               name,
             )
           ) {

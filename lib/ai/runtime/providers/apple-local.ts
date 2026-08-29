@@ -17,6 +17,7 @@ import {
   generateWithFoundationModels,
   getFoundationModelsAvailability,
 } from "@/lib/ai/runtime/native/foundation-models";
+import { buildContextPackage } from "@/lib/ai/intelligence/context-budget";
 import {
   formatTaskStateForPrompt,
   getThreadTaskState,
@@ -36,6 +37,7 @@ import { getMembersSnapshot } from "@/lib/workspace-policy";
  * Apple on-device provider via Capacitor → Foundation Models.
  *
  * PRIVACY: Inference stays on-device. Do not call Edge/ai-chat from this path.
+ * Never volunteer Apple / PCC / routing details unless the user asks.
  */
 export function createAppleLocalProvider(): AiRuntimeProvider {
   return {
@@ -94,7 +96,8 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
               });
         const enableTools =
           request.allowTools !== false && resolved.toolNames.length > 0;
-        const includeInventory = enableTools || taskActive;
+        const route =
+          request.preferredRoute === "pcc" ? "pcc" : "on_device";
         const snap = getOnDeviceWorkspaceSnapshot({
           workspaceId: request.workspaceId,
           projectId: request.projectId,
@@ -111,6 +114,16 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
           getMembersSnapshot().find((m) => m.id === actorId) ??
           getMembersSnapshot()[0];
         const taskBlock = formatTaskStateForPrompt(taskState);
+        const pkg = buildContextPackage({
+          route,
+          taskStateText: taskBlock,
+          recentMessages: request.messages,
+          inventoryText: snap.inventoryBlock ?? "",
+          toolCatalog: toolBlock,
+          allowTools: enableTools,
+        });
+        const includeInventory =
+          Boolean(pkg.inventoryText) && (enableTools || taskActive);
         const instructions = [
           buildCanderOnDeviceInstructions({
             shortName: identity?.shortName ?? snap.shortName,
@@ -119,7 +132,7 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
             workspaceName: snap.workspaceName,
             projectTitle: includeInventory ? snap.projectTitle : null,
             spaceLabel: includeInventory ? snap.spaceLabel : null,
-            inventoryBlock: includeInventory ? snap.inventoryBlock : null,
+            inventoryBlock: includeInventory ? pkg.inventoryText : null,
             transcriptBlock: priorTurns ? null : snap.transcriptBlock,
             planCapabilityLine: buildPlanCapabilityLine(member),
             hasPriorTurns: priorTurns,
@@ -127,12 +140,17 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
             toolsEnabled: enableTools,
             identityAsked: isIdentityQuestion(request.content),
           }),
-          taskBlock,
-          toolBlock,
+          pkg.taskStateText,
+          pkg.toolCatalog,
         ]
           .filter(Boolean)
           .join("\n\n");
-        const prompt = buildDialoguePrompt(request.messages, request.content);
+        const prompt = buildDialoguePrompt(
+          (pkg.messages.length ? pkg.messages : request.messages) as
+            | Array<{ role: "user" | "assistant" | "system"; content: string }>
+            | undefined,
+          request.content,
+        );
         const content = await generateWithFoundationModels(
           prompt,
           instructions,

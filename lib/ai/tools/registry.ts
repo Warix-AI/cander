@@ -324,3 +324,41 @@ registerAiTool({
     },
   },
 });
+
+registerAiTool({
+  name: "check_work_task",
+  description:
+    "Check progress on a queued or running work task. Returns a short user-facing status note.",
+  permission: {
+    requireWorkspaceMember: true,
+    capability: "cloud_work",
+  },
+  domain: "cloud_work",
+  enabled: true,
+  parameters: {
+    type: "object",
+    properties: {
+      workTaskId: { type: "string" },
+    },
+  },
+});
+
+registerAiTool({
+  name: "request_publish_approval",
+  description:
+    "Ask the user to explicitly publish the current project draft. Never publish without user action.",
+  permission: {
+    requireWorkspaceMember: true,
+    capability: "release",
+    requiresConfirmation: true,
+  },
+  domain: "cloud_work",
+  enabled: true,
+  parameters: {
+    type: "object",
+    properties: {
+      projectId: { type: "string" },
+      message: { type: "string" },
+    },
+  },
+});

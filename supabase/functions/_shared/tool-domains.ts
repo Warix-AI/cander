@@ -1,9 +1,8 @@
 /**
  * Domain-based tool sets — unlock only after clear intent.
- * Pure data + resolve helpers (no path aliases — safe for node:test).
+ * Pure data + resolve helpers (no path aliases — safe for node:test / Deno Edge).
  *
- * Edge mirror: keep `supabase/functions/_shared/tool-domains.ts` in sync
- * with this file (copy when domains / resolveAllowedToolsForTurn change).
+ * Keep in sync with `lib/ai/tools/domains.ts`.
  */
 
 export type ToolDomain =

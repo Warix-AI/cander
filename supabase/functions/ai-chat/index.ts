@@ -3,6 +3,7 @@
  * Calls CANDER_AI_BRIDGE_URL (HTTPS tunnel only) — never localhost.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { resolveAllowedToolsForTurn } from "../_shared/tool-domains.ts";
 
 const MODEL = "llama3.2";
 const PROVIDER = "ollama-bridge";
@@ -39,7 +40,7 @@ const NO_TOOLS_THIS_TURN =
   "No tools are available for this turn. Answer in plain language only. Do not emit JSON tool calls.";
 
 const KNOWN_TOOLS_RE =
-  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|ui\\.(?:ask_clarification|confirm)|create_work_task";
+  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|ui\\.(?:ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval";
 
 const EDGE_TOOL_LINES: Record<string, string> = {
   "nav.open":
@@ -56,101 +57,13 @@ const EDGE_TOOL_LINES: Record<string, string> = {
     '- ui.confirm: { "title": string, "message": string, "confirmLabel"?: string }',
   create_work_task:
     '- create_work_task: { "title": string, "goal": string, "kind": "coding"|"research"|"multi_step", "summary"?: string }',
+  check_work_task: '- check_work_task: { "workTaskId"?: string }',
+  request_publish_approval:
+    '- request_publish_approval: { "projectId"?: string, "message"?: string }',
 };
-
-const TOOL_DOMAINS: Record<string, string[]> = {
-  clarification: ["ui.ask_clarification", "ui.confirm"],
-  navigation: ["nav.open", "panel.open", "panel.close"],
-  projects: ["project.create", "project.open"],
-  search: ["workspace.search"],
-  cloud_work: ["create_work_task"],
-};
-
-function isConversationOnlyTurnEdge(text: string): boolean {
-  const t = text.trim();
-  if (!t) return false;
-  if (
-    /^(hi|hey|hello|yo|sup|howdy)\b/i.test(t) ||
-    /\bhow('?s| is| are) (it|things|everything|you)\b/i.test(t) ||
-    /\bhow (fast|tall|old|big|long|many|much|far)\b/i.test(t) ||
-    /\bwhat (is|are|was|were|does|do|did|can)\b/i.test(t) ||
-    /\bwho (is|are|was|were)\b/i.test(t) ||
-    /\bwhy (is|are|do|does|did|can)\b/i.test(t) ||
-    /\bexplain\b|\btell me about\b|\bdefine\b/i.test(t)
-  ) {
-    if (
-      !/\b(create|make|new)\b[\s\S]{0,40}\bproject\b/i.test(t) &&
-      !/\b(open|go to|take me|navigate)\b/i.test(t)
-    ) {
-      return true;
-    }
-  }
-  if (
-    t.length < 160 &&
-    !/\b(project|workspace|build|explore|connector|settings|panel|preview)\b/i.test(
-      t,
-    ) &&
-    (/[?]/.test(t) ||
-      /^(how|what|who|why|when|where|can|could|should|is|are|do|does)\b/i.test(t))
-  ) {
-    return true;
-  }
-  return false;
-}
-
-function isComplexWorkIntentEdge(text: string): boolean {
-  const t = text.trim();
-  if (
-    /\b(create|make|new)\b[\s\S]{0,40}\bproject\b/i.test(t) &&
-    !/\b(implement|code|tests?|refactor)\b/i.test(t)
-  ) {
-    return false;
-  }
-  return (
-    /\b(implement|refactor|write tests?|codebase|pull request)\b/i.test(t) ||
-    /\b(build|develop|ship)\b[\s\S]{0,48}\b(app|feature|api|auth)\b/i.test(t) ||
-    /\bresearch (and|&) (compare|analyze)\b/i.test(t) ||
-    (t.length > 220 && /\b(code|implement|debug|typescript|react)\b/i.test(t))
-  );
-}
 
 function resolveAllowedToolsEdge(content: string): string[] {
-  const domains = new Set<string>();
-  const t = content.trim();
-  if (isComplexWorkIntentEdge(t)) {
-    domains.add("cloud_work");
-  } else if (
-    /\b(create|make|new|start)\b[\s\S]{0,40}\bproject\b/i.test(t) ||
-    /\bproject\b[\s\S]{0,40}\b(create|make|new)\b/i.test(t)
-  ) {
-    domains.add("projects");
-    domains.add("clarification");
-  } else if (
-    /\b(open|go to|take me|navigate|switch to|show me)\b/i.test(t) ||
-    /\btake me there\b/i.test(t)
-  ) {
-    domains.add("navigation");
-    if (/\bproject\b/i.test(t)) {
-      domains.add("search");
-      domains.add("projects");
-    }
-  } else if (
-    /\b(search|find|list)\b[\s\S]{0,40}\b(my |the )?(projects?|workspace)\b/i.test(
-      t,
-    )
-  ) {
-    domains.add("search");
-    domains.add("projects");
-  } else if (isConversationOnlyTurnEdge(t)) {
-    return [];
-  } else {
-    return [];
-  }
-  const names = new Set<string>();
-  for (const d of domains) {
-    for (const n of TOOL_DOMAINS[d] ?? []) names.add(n);
-  }
-  return [...names];
+  return resolveAllowedToolsForTurn({ content }).toolNames;
 }
 
 function formatEdgeToolCatalog(toolNames: string[]): string {
@@ -924,8 +837,10 @@ function buildModelMessages(opts: {
   const afterWatermark = opts.history.filter(
     (m) => m.sort_order > opts.watermark,
   );
-  const recent = afterWatermark.slice(-RECENT_MESSAGE_LIMIT);
   const allowedTools = resolveAllowedToolsEdge(opts.latestUserContent ?? "");
+  // Conversational turns: thin recent window (matches client context budgeter).
+  const recentLimit = allowedTools.length ? RECENT_MESSAGE_LIMIT : 6;
+  const recent = afterWatermark.slice(-recentLimit);
   const messages: Array<{ role: string; content: string }> = [
     { role: "system", content: PRODUCT_SYSTEM_PROMPT },
     { role: "system", content: formatEdgeToolCatalog(allowedTools) },

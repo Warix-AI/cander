@@ -13,12 +13,12 @@ import {
 import type { ClarificationQuestion } from "@/lib/ai/clarification/schema";
 import { parseToolCallFromContent } from "@/lib/ai/tool-protocol";
 import { CANDER_NO_TOOLS_THIS_TURN, CANDER_TOOL_PROTOCOL_RULES } from "@/lib/ai/tools/prompt";
-import { getTurnThreadId } from "@/lib/ai/runtime/turn-context";
 import {
-  createWorkTask,
-  formatWorkTaskProgressForUser,
-} from "@/lib/ai/work-tasks";
-import { upsertThreadTaskState } from "@/lib/ai/task-state";
+  getTurnProjectId,
+  getTurnThreadId,
+  getTurnWorkspaceId,
+} from "@/lib/ai/runtime/turn-context";
+import { getThreadTaskState, upsertThreadTaskState } from "@/lib/ai/task-state";
 
 export type AiToolCallRequest = {
   name: string;
@@ -94,6 +94,13 @@ export async function executeAuthorizedTool(
 
   // Work tasks do not need app action handlers.
   if (tool.name === "create_work_task") {
+    const { authorizeToolCapability } = await import(
+      "@/lib/ai/intelligence/capability-gateway"
+    );
+    const gate = authorizeToolCapability(tool.name);
+    if (!gate.ok) {
+      return { name: tool.name, ok: false, output: gate.reason };
+    }
     const threadId = getTurnThreadId() ?? "";
     if (!threadId) {
       return {
@@ -107,8 +114,13 @@ export async function executeAuthorizedTool(
       kindRaw === "research" || kindRaw === "multi_step"
         ? kindRaw
         : "coding";
-    const task = createWorkTask({
+    const { createDurableAiTask, formatDurableTaskProgress } = await import(
+      "@/lib/ai/intelligence/durable-tasks"
+    );
+    const task = await createDurableAiTask({
       threadId,
+      workspaceId: getTurnWorkspaceId(),
+      projectId: getTurnProjectId(),
       title: String(args.title),
       goal: String(args.goal),
       kind,
@@ -126,8 +138,58 @@ export async function executeAuthorizedTool(
     return {
       name: tool.name,
       ok: true,
-      output: formatWorkTaskProgressForUser(task),
+      output: formatDurableTaskProgress(task),
       data: { workTaskId: task.id },
+    };
+  }
+
+  if (tool.name === "check_work_task") {
+    const { getDurableAiTask, formatDurableTaskProgress } = await import(
+      "@/lib/ai/intelligence/durable-tasks"
+    );
+    const threadId = getTurnThreadId() ?? "";
+    const id =
+      (args.workTaskId ? String(args.workTaskId) : "") ||
+      getThreadTaskState(threadId)?.workTaskId ||
+      "";
+    const task = await getDurableAiTask(id);
+    if (!task) {
+      return {
+        name: tool.name,
+        ok: false,
+        output: "I couldn’t find that work item.",
+      };
+    }
+    return {
+      name: tool.name,
+      ok: true,
+      output: formatDurableTaskProgress(task),
+      data: { workTaskId: task.id, status: task.status },
+    };
+  }
+
+  if (tool.name === "request_publish_approval") {
+    const actions = getAppActionHandlers();
+    if (!actions) {
+      return {
+        name: tool.name,
+        ok: false,
+        output: "App actions are not registered yet.",
+      };
+    }
+    const result = actions.requestConfirm({
+      title: "Publish draft?",
+      message:
+        args.message
+          ? String(args.message)
+          : "Publishing promotes your draft. This only happens when you confirm.",
+      confirmLabel: "Publish",
+    });
+    return {
+      name: tool.name,
+      ok: result.ok,
+      output: result.detail,
+      pauseForUser: true,
     };
   }
 

@@ -31,7 +31,9 @@ export const CANDER_TOOL_CATALOG_FOR_EDGE = `Available tools and arguments:
 - workspace.search: { "query": string }
 - ui.ask_clarification: { "title": string, "description"?: string, "questions": [{ "id", "type", "label", "choices"?: [{ "id", "label" }], "required"?: boolean }], "resumeTool"?: string, "resumeArguments"?: object }
 - ui.confirm: { "title": string, "message": string, "confirmLabel"?: string }
-- create_work_task: { "title": string, "goal": string, "kind": "coding"|"research"|"multi_step", "summary"?: string }`;
+- create_work_task: { "title": string, "goal": string, "kind": "coding"|"research"|"multi_step", "summary"?: string }
+- check_work_task: { "workTaskId"?: string }
+- request_publish_approval: { "projectId"?: string, "message"?: string }`;
 
 const EDGE_TOOL_LINES: Record<string, string> = {
   "nav.open":
@@ -48,6 +50,9 @@ const EDGE_TOOL_LINES: Record<string, string> = {
     '- ui.confirm: { "title": string, "message": string, "confirmLabel"?: string }',
   create_work_task:
     '- create_work_task: { "title": string, "goal": string, "kind": "coding"|"research"|"multi_step", "summary"?: string }',
+  check_work_task: '- check_work_task: { "workTaskId"?: string }',
+  request_publish_approval:
+    '- request_publish_approval: { "projectId"?: string, "message"?: string }',
 };
 
 /** Build Edge-facing catalog lines for an allowed tool name list. */

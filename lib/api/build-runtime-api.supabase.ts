@@ -72,6 +72,14 @@ export function createSupabaseBuildRuntimeApi(
         previewUrlForProject(projectId);
 
       notifyEntityStoreChange();
+      void import("@/lib/ai/intelligence/revisions").then((m) =>
+        m.promoteDraftToPublished({
+          projectId,
+          workspaceId: ctx.workspaceId,
+          actorId: ctx.actorId,
+          publishedUrl: url,
+        }),
+      );
       return { url };
     },
   };

@@ -137,12 +137,20 @@ export function BuildPanel() {
         {!locked && tool === "overview" ? (
           <div className="py-2">
             <StatLine
-              label="Status"
-              value={entityProject?.status === "published" ? "Published" : "Preview ready"}
+              label="Draft"
+              value={
+                entityProject?.status === "published"
+                  ? "Active (published copy live)"
+                  : "Active"
+              }
             />
             <StatLine
-              label="Last publish"
-              value={publishedUrl ? "Live" : "Not published"}
+              label="Published"
+              value={
+                entityProject?.status === "published" && publishedUrl
+                  ? publishedUrl
+                  : "Not published — use Publish when ready"
+              }
             />
             <div className="mt-3">
               <SectionLabel>In this project</SectionLabel>

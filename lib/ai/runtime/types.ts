@@ -49,6 +49,9 @@ export type AiGenerateRequest = {
   allowTools?: boolean;
   /** Domain-gated allowlist — execute only these tool names. */
   allowedToolNames?: string[];
+  /** Classifier route target (Phase 1). */
+  preferredRoute?: "on_device" | "pcc" | "cander_cloud";
+  routingReason?: string;
 };
 
 export type AiGenerateResult = {

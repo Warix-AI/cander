@@ -1,6 +1,10 @@
 /**
- * High-level work tasks for future cloud workers / Vercel Sandbox.
- * Local model may create a task; backend decides execution (stubbed for now).
+ * In-memory work tasks — fallback only when Supabase `ai_tasks` is unavailable.
+ *
+ * ADR (Phase 2): Durable SoT is `lib/ai/intelligence/durable-tasks.ts` +
+ * `ai_tasks` table. Prefer a thin `CloudExecutionAdapter` over adopting Vercel
+ * `eve` as the control plane; evaluate eve only as an execution adapter.
+ * Sandbox sessions are ephemeral — never the draft record.
  */
 
 export type WorkTaskKind = "coding" | "research" | "multi_step";
@@ -77,6 +81,7 @@ export function formatWorkTaskProgressForUser(task: WorkTask): string {
 
 /**
  * Future: backend chooses one cloud worker, Vercel Sandbox, or focused subagents.
+ * Prefer `enqueueExecutionJob` in intelligence/execution-adapter.ts.
  * Must NOT be invoked by the local model — orchestration stays server-side.
  */
 export function planWorkTaskExecution(_task: WorkTask): {

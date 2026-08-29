@@ -563,8 +563,12 @@ describe("domain tool gating foundation", () => {
       content: "implement auth and write tests for this app",
     });
     assert.deepEqual(r.domains, ["cloud_work"]);
-    assert.deepEqual(r.toolNames, ["create_work_task"]);
+    assert.ok(r.toolNames.includes("create_work_task"));
+    assert.ok(r.toolNames.includes("check_work_task"));
+    assert.ok(r.toolNames.includes("request_publish_approval"));
+    assert.equal(r.toolNames.length, 3);
     assert.ok(getAiTool("create_work_task")?.enabled);
+    assert.ok(getAiTool("check_work_task")?.enabled);
 
     clearAllWorkTasks();
     clearThreadTaskState("wt-thread");

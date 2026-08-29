@@ -4,6 +4,7 @@ import { createAndroidLocalProvider } from "@/lib/ai/runtime/providers/android-l
 import { createAppleLocalProvider } from "@/lib/ai/runtime/providers/apple-local";
 import { createCloudProvider } from "@/lib/ai/runtime/providers/cloud";
 import { getAiRuntimeMode } from "@/lib/ai/runtime/mode-store";
+import { getPccAvailability } from "@/lib/ai/intelligence/pcc";
 import {
   AiRuntimeError,
   type AiGenerateRequest,
@@ -39,13 +40,13 @@ async function pickLocalProvider(): Promise<AiRuntimeProvider | null> {
 
 /**
  * Resolve which provider handles a request.
+ * Route-driven when preferredRoute is set; user mode remains a privacy override.
  * LOCAL never silently falls back to cloud (privacy).
  */
 export async function resolveProvider(
   mode: AiRuntimeMode = getAiRuntimeMode(),
+  preferredRoute?: AiGenerateRequest["preferredRoute"],
 ): Promise<AiRuntimeProvider> {
-  if (mode === "cloud") return cloudProvider();
-
   if (mode === "local") {
     const local = await pickLocalProvider();
     if (!local) {
@@ -57,7 +58,23 @@ export async function resolveProvider(
     return local;
   }
 
-  // AUTO: prefer local when available and capable; else cloud.
+  if (mode === "cloud") return cloudProvider();
+
+  // AUTO + classifier route
+  if (preferredRoute === "cander_cloud") {
+    return cloudProvider();
+  }
+  if (preferredRoute === "pcc") {
+    const pcc = await getPccAvailability();
+    if (pcc.available) {
+      // PCC shares the Apple native bridge until a dedicated PCC session exists.
+      const local = await pickLocalProvider();
+      if (local) return local;
+    }
+    return cloudProvider();
+  }
+
+  // on_device or unset: prefer local when available
   const local = await pickLocalProvider();
   if (local) return local;
   return cloudProvider();
@@ -90,6 +107,6 @@ export async function generateWithAiRuntime(
   request: AiGenerateRequest,
   mode: AiRuntimeMode = getAiRuntimeMode(),
 ): Promise<AiGenerateResult> {
-  const provider = await resolveProvider(mode);
+  const provider = await resolveProvider(mode, request.preferredRoute);
   return provider.generate(request);
 }
