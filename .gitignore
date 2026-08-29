@@ -48,6 +48,11 @@ next-env.d.ts
 # supabase CLI cache
 supabase/.temp
 
+# local agent / CLI scratch (never commit)
+.cursor/debug-*.log
+.tmp-home/
+.tmp-venv/
+
 # capacitor mobile
 /mobile/node_modules
 /mobile/ios/App/Pods
