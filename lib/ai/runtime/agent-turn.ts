@@ -124,10 +124,10 @@ async function runAssistantTurnInner(
     }
   };
 
-  // Do not surface a "Thinking" line for ordinary chat. Progress UI is tool/work only.
+  // Progress UI: primary Thinking is owned by the client; only emit details for tools/work.
   report({
     phase: "thinking",
-    label: "Working",
+    label: "Thinking",
   });
 
   const taskState = getThreadTaskState(request.threadId);
@@ -154,7 +154,7 @@ async function runAssistantTurnInner(
   if (complexDetail) {
     report({
       phase: "thinking",
-      label: "Working",
+      label: "Thinking",
       detail: complexDetail,
     });
   }
@@ -187,7 +187,7 @@ async function runAssistantTurnInner(
       const first = shortcut.toolResults[0]!;
       report({
         phase: "tool",
-        label: "Working",
+        label: "Thinking",
         detail: detailForTool(first.name),
         toolName: first.name,
       });
@@ -212,13 +212,13 @@ async function runAssistantTurnInner(
     if (round > 0) {
       report({
         phase: "follow_up",
-        label: "Working",
+        label: "Thinking",
         detail: "Using the result…",
       });
     } else if (complexDetail) {
       report({
         phase: "thinking",
-        label: "Working",
+        label: "Thinking",
         detail: complexDetail,
       });
     }
@@ -298,7 +298,7 @@ async function runAssistantTurnInner(
 
     report({
       phase: "tool",
-      label: "Working",
+      label: "Thinking",
       detail: detailForTool(call.name),
       toolName: call.name,
     });

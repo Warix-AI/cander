@@ -1415,12 +1415,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           kind === "research");
 
       if (useLiveAi) {
-        // No "Thinking" chrome for ordinary chat — activity appears only for tools/work.
+        // Always show the primary Thinking line; detail only arrives for tools/work.
         assistantMsg = {
           ...assistantMsg,
           content: "",
           status: "pending",
-          activity: null,
+          activity: {
+            label: "Thinking",
+            kind: "idle",
+          },
         };
       }
 
@@ -1783,23 +1786,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectSpace: replyProjectSpace,
           messages: historyMessages,
           onProgress: (progress) => {
-            // Only surface tool/work activity in the transcript — never "Thinking about…".
-            const visible =
-              progress.phase === "tool" ||
-              (progress.phase === "follow_up" && Boolean(progress.detail?.trim())) ||
-              (progress.phase === "thinking" &&
-                Boolean(progress.detail?.trim()) &&
-                !/^Thinking about\b/i.test(progress.detail ?? ""));
-            const nextActivity =
-              visible && progress.detail?.trim()
-                ? {
-                    label: progress.label || "Working",
-                    detail: progress.detail.trim(),
-                    kind: (progress.phase === "tool" ? "tool" : "work") as
-                      | "tool"
-                      | "work",
-                  }
-                : null;
+            const detailRaw = progress.detail?.trim() || "";
+            const isLegacyAbout = /^Thinking about\b/i.test(detailRaw);
+            const showDetail =
+              !isLegacyAbout &&
+              Boolean(detailRaw) &&
+              (progress.phase === "tool" ||
+                progress.phase === "follow_up" ||
+                (progress.phase === "thinking" &&
+                  detailRaw !== "" &&
+                  !isLegacyAbout));
+            const nextActivity = {
+              label: "Thinking",
+              kind: (progress.phase === "tool"
+                ? "tool"
+                : showDetail
+                  ? "work"
+                  : "idle") as "idle" | "tool" | "work",
+              ...(showDetail ? { detail: detailRaw } : {}),
+            };
             setThreads((current) =>
               current.map((item) => ({
                 ...item,
@@ -2191,19 +2196,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectSpace: (spaceId as SpaceId | null) ?? null,
           messages: historyMessages,
           onProgress: (progress) => {
-            const visible =
-              progress.phase === "tool" ||
-              (progress.phase === "follow_up" && Boolean(progress.detail?.trim()));
-            const nextActivity =
-              visible && progress.detail?.trim()
-                ? {
-                    label: progress.label || "Working",
-                    detail: progress.detail.trim(),
-                    kind: (progress.phase === "tool" ? "tool" : "work") as
-                      | "tool"
-                      | "work",
-                  }
-                : null;
+            const detailRaw = progress.detail?.trim() || "";
+            const isLegacyAbout = /^Thinking about\b/i.test(detailRaw);
+            const showDetail =
+              !isLegacyAbout &&
+              Boolean(detailRaw) &&
+              (progress.phase === "tool" || progress.phase === "follow_up");
+            const nextActivity = {
+              label: "Thinking",
+              kind: (progress.phase === "tool"
+                ? "tool"
+                : showDetail
+                  ? "work"
+                  : "idle") as "idle" | "tool" | "work",
+              ...(showDetail ? { detail: detailRaw } : {}),
+            };
             setThreads((current) =>
               current.map((item) => ({
                 ...item,

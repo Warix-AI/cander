@@ -152,14 +152,16 @@ export type PlatformDeployment = {
 
 export type MessageStatus = "complete" | "pending" | "streaming" | "error";
 
-/** Live activity while tools/complex work run (not ordinary chat). */
+/** Live activity under Thinking while a reply is pending. */
 export type MessageActivity = {
-  /** Primary shimmer line, e.g. "Working" */
+  /** Primary shimmer line — always "Thinking" for pending replies */
   label: string;
-  /** Required for display — tool/work detail on the line below */
-  detail: string;
-  /** Only tool/work activity is rendered in the transcript */
-  kind: "tool" | "work";
+  /**
+   * Optional second line under Thinking (tools / deep work only).
+   * Never a “Thinking about …” echo of the user message.
+   */
+  detail?: string;
+  kind?: "idle" | "tool" | "work";
 };
 
 export type Message = {

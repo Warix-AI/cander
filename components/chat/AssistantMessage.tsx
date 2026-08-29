@@ -20,13 +20,11 @@ import { cn } from "@/lib/utils";
 export function AssistantMessage({ message }: { message: Message }) {
   const pending = message.status === "pending";
   const streaming = message.status === "streaming";
-  const activity = message.activity;
-  // Ordinary chat: no pending chrome. Only tool/work activity shows a status.
   const showThinking =
     pending &&
-    Boolean(activity?.detail?.trim()) &&
-    (activity?.kind === "tool" || activity?.kind === "work") &&
-    !/^Thinking about\b/i.test(activity.detail.trim());
+    (!message.content ||
+      message.content === "Thinking…" ||
+      message.content === "Thinking...");
   const visibleContent = message.content
     ? sanitizeAssistantVisibleText(message.content)
     : "";
@@ -35,8 +33,8 @@ export function AssistantMessage({ message }: { message: Message }) {
     <div className="w-full space-y-2">
       {showThinking ? (
         <ThinkingIndicator
-          label={activity?.label || "Working"}
-          detail={activity?.detail}
+          label={message.activity?.label || "Thinking"}
+          detail={message.activity?.detail}
         />
       ) : visibleContent ? (
         <MarkdownRenderer content={visibleContent} />
