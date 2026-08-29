@@ -266,7 +266,9 @@ async function runAssistantTurnInner(
       return {
         content: contentAfterFailedWebSearch(
           "",
-          "I couldn’t complete a live web search. Please try again in a moment — I won’t invent headlines or sources.",
+          searchResult.output?.trim()
+            ? `Web search failed: ${searchResult.output.trim()}`
+            : "I couldn’t complete a live web search. Please try again in a moment — I won’t invent headlines or sources.",
         ),
         runtime: "cloud",
         offline: false,
