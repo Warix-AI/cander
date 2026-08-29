@@ -30,6 +30,19 @@ describe("deterministic router", () => {
     assert.equal(r.needsWeb, true);
   });
 
+  it("weather today (either word order) → web_retrieve", () => {
+    for (const q of [
+      "whats the weather today in vineyard utah",
+      "what's the weather in Vineyard, Utah?",
+      "weather in vineyard utah",
+      "how's the forecast for tonight",
+    ]) {
+      const r = routeDeterministic(q);
+      assert.equal(r.kind, "web_retrieve", q);
+      assert.equal(r.needsWeb, true, q);
+    }
+  });
+
   it("H: our pricing → knowledge_retrieve", () => {
     const r = routeDeterministic("what's our pricing?");
     assert.equal(r.kind, "knowledge_retrieve");

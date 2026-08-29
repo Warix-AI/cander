@@ -568,22 +568,17 @@ export async function runTurnOrchestrator(
     modelGens++;
     const answerPromptExtra =
       sources.length > 0
-        ? "Answer using the retrieved sources. Cite source ids or their real URLs only."
+        ? "You HAVE live retrieved sources below (or in prior system context). Answer the user's question from those sources now. Do NOT say you lack real-time access, cannot check the weather/news, or that you are only a language model without tools. Cite source ids or their real URLs only. If sources conflict, say so briefly."
         : needsWeb
-          ? "Live web retrieval did not yield usable sources. Say you could not find reliable live information — do not invent."
+          ? "Live web retrieval did not yield usable sources. Say you could not find reliable live information — do not invent. Do not invent weather, scores, or headlines."
           : "Answer helpfully from conversation context.";
 
     const genMessages = [
       ...built.messages,
       { role: "system" as const, content: answerPromptExtra },
     ];
-    // Ensure latest user is present
-    const last = genMessages[genMessages.length - 1];
-    if (!(last?.role === "user" && last.content === userContent)) {
-      // already in recent — ok
-    }
 
-    const answered = await deps.provider.complete({
+    let answered = await deps.provider.complete({
       purpose: "answer",
       messages: genMessages,
       images: input.images,
@@ -593,11 +588,37 @@ export async function runTurnOrchestrator(
     await assertNotCancelled(deps.supabase, input.turnId);
 
     failureStage = "citations";
-    const validated = validateCitations({
+    let validated = validateCitations({
       answer: answered.text || "(empty reply)",
       sources,
     });
     let assistantContent = validated.text.trim() || "(empty reply)";
+
+    // Model sometimes ignores sources and claims no real-time access — one forced rewrite.
+    const falseNoRealtime =
+      sources.length > 0 &&
+      /\b(don'?t|do not|cannot|can'?t|no)\b[\s\S]{0,40}\b(real[- ]?time|current (weather|conditions)|access to (the )?(internet|web|live))\b/i.test(
+        assistantContent,
+      );
+    if (falseNoRealtime && modelGens < budget.maxModelGenerations) {
+      modelGens++;
+      answered = await deps.provider.complete({
+        purpose: "answer",
+        messages: [
+          ...genMessages,
+          {
+            role: "system",
+            content:
+              "Your previous draft incorrectly claimed no live access. Rewrite using ONLY the retrieved sources. Lead with the answer (e.g. temperature/conditions).",
+          },
+        ],
+      });
+      validated = validateCitations({
+        answer: answered.text || assistantContent,
+        sources,
+      });
+      assistantContent = validated.text.trim() || assistantContent;
+    }
 
     // Never claim search without sources
     if (
