@@ -10,7 +10,7 @@ export function CondensedContextIndicator() {
     >
       <div className="h-px min-w-0 flex-1 bg-border" />
       <span className="shrink-0 text-[11.5px] tracking-[-0.01em] text-muted-foreground/80">
-        Chat condensed
+        Chat summary condensed
       </span>
       <div className="h-px min-w-0 flex-1 bg-border" />
     </div>

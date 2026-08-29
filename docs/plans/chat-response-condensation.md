@@ -119,6 +119,15 @@ Keep existing shallow context-ref block as a second system segment when refs exi
 
 Edge loads **all** `ai_chat_messages` into the model every turn. Long Space/project chats will blow context and quality. UI `sessionSummary` is not used for the model.
 
+### Policy (product)
+
+- **UI transcript stays** — keep full visible history for the user (storage is fine for now).
+- **Model does not re-read full history** — after condensation, the model gets: product prompt + workspace inventory + **rolling condensed summary** + a short recent verbatim window (~10 turns).
+- **Threshold:** every ~**25** messages (or ~8k chars) past the watermark, update the summary incrementally.
+- **Marker:** insert subtle “Chat condensed” when a real condensation runs (do not wipe the chat).
+- **Applies to:** home New Chat, Space chats, and Project chats (same private AI path). Home New Chat can later attach to a space/project via the right panel; condensation still runs on that AI chat row.
+- **Monthly wipe:** deferred — not shipping yet.
+
 ### Schema (new migration)
 
 Extend `ai_chats`:

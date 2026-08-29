@@ -6,15 +6,18 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const MODEL = "llama3.2";
 const PROVIDER = "ollama-bridge";
-const RECENT_MESSAGE_LIMIT = 16;
-const CONDENSE_MESSAGE_THRESHOLD = 40;
-const CONDENSE_CHAR_THRESHOLD = 12_000;
+/** Verbatim turns after the condensation watermark (short-term continuity). */
+const RECENT_MESSAGE_LIMIT = 10;
+/** Condense when this many messages pile up past the watermark. */
+const CONDENSE_MESSAGE_THRESHOLD = 25;
+const CONDENSE_CHAR_THRESHOLD = 8_000;
 
 const PRODUCT_SYSTEM_PROMPT = `You are Cander, a concise product assistant.
 Answer the question first. Prefer short paragraphs and high information density.
 Do not restate the user's request. Avoid unnecessary headings and filler.
 Expand only when the question needs detail or the user asks for more.
-You may use Markdown; the UI will render it.`;
+You may use Markdown; the UI will render it.
+Long conversations are summarized into condensed memory. Prefer that memory plus the recent messages over inventing earlier details.`;
 
 type Json = Record<string, unknown>;
 
@@ -589,7 +592,7 @@ async function resolveContextText(
 
 function formatCondensedSystem(condensed: CondensedContext): string {
   const lines = [
-    "Condensed prior conversation context (long-term memory):",
+    "Primary long-term memory for this chat (authoritative for older turns):",
     condensed.conversation_summary
       ? `Summary: ${condensed.conversation_summary}`
       : null,
@@ -606,6 +609,7 @@ function formatCondensedSystem(condensed: CondensedContext): string {
     condensed.preferences_constraints?.length
       ? `Preferences/constraints: ${condensed.preferences_constraints.join("; ")}`
       : null,
+    "Treat this memory as ground truth for anything before the recent messages below.",
   ].filter(Boolean);
   return lines.join("\n");
 }
