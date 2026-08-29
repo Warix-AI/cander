@@ -44,6 +44,7 @@ export function buildAiContextRefs(opts: {
  */
 export async function fetchPrivateAiReply(opts: {
   aiChatId?: string | null;
+  threadId?: string | null;
   title: string;
   content: string;
   workspaceId: string;
@@ -59,6 +60,7 @@ export async function fetchPrivateAiReply(opts: {
   try {
     const result = await generateWithAiRuntime({
       aiChatId: opts.aiChatId,
+      threadId: opts.threadId,
       title: opts.title,
       content: opts.content,
       workspaceId: opts.workspaceId,

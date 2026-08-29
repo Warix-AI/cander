@@ -32,6 +32,8 @@ export type AiGenerateRequest = {
   projectSpace?: string | null;
   /** Existing private ai_chats id when cloud path is used. */
   aiChatId?: string | null;
+  /** UI thread id — used by on-device context (Recents / “this chat”). */
+  threadId?: string | null;
 };
 
 export type AiGenerateResult = {

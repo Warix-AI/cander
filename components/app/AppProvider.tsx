@@ -1718,6 +1718,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           null;
         void fetchPrivateAiReply({
           aiChatId: priorAiChatId,
+          threadId: activeId,
           title: displayText.slice(0, 52),
           content: aiUserContent,
           workspaceId: matched?.workspaceId ?? workspaceId,

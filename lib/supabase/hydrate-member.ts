@@ -161,6 +161,19 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
   }
 
   upsertOrgMember(member);
+  // Keep on-device Apple AI identity warm even if members snapshot is cold later.
+  try {
+    const { persistOnDeviceIdentity } = await import(
+      "@/lib/ai/runtime/on-device-workspace-cache"
+    );
+    persistOnDeviceIdentity({
+      shortName: member.short,
+      fullName: member.name,
+      email: member.email,
+    });
+  } catch {
+    // non-fatal
+  }
 
   const { data: selfOrg } = await supabase
     .from("org_members")
