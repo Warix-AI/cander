@@ -56,6 +56,11 @@ Apply in sequence:
 | `018_workspace_invites.sql` | Pending workspace invites + org admin auto-add trigger |
 | `019_managed_profile_rls.sql` | Managed org members: profile updates limited to `short_name` |
 | `020_entity_created_by.sql` | `created_by` on projects, sources, project_files |
+| `021_project_browser_tabs.sql` | Browser tabs persistence |
+| `022_workspace_isolation_hardening.sql` | Workspace isolation |
+| `023_security_hardening.sql` | Security hardening |
+| `024_project_title_unique.sql` | Unique project titles |
+| `025_private_ai_chat.sql` | Owner-private AI chats, messages, context refs, audit |
 
 ```bash
 supabase link --project-ref <ref>
@@ -78,7 +83,10 @@ Deploy after migrations:
 supabase functions deploy chat-send
 supabase functions deploy briefing-sync
 supabase functions deploy build-publish
+supabase functions deploy ai-chat
 ```
+
+Private AI chat (`ai-chat`) requires Edge secrets `CANDER_AI_BRIDGE_URL` (HTTPS tunnel) and `CANDER_AI_BRIDGE_SECRET`. See [ai-bridge.md](./ai-bridge.md).
 
 ## App
 

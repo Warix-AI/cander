@@ -10,6 +10,15 @@ import {
   isProjectTitleTaken,
   normalizeProjectTitle,
 } from "../lib/project-name.ts";
+import {
+  assertAiChatOwner,
+  assertBridgeUrlSafeForEdge,
+  assertContextRefAccess,
+  assertNotSharedWorkspaceAccess,
+  formatContextBlock,
+  isLocalOrPrivateUrl,
+} from "../lib/ai/authz.ts";
+import { resolveAuthorizedToolNames } from "../lib/ai/tools/registry.ts";
 
 test("safeAuthNextPath rejects open redirects", () => {
   assert.equal(safeAuthNextPath("/settings"), "/settings");
@@ -52,4 +61,103 @@ test("project titles must be unique in a workspace", () => {
     /already uses that name/i,
   );
   assert.throws(() => assertUniqueProjectTitle(projects, "   "), /required/i);
+});
+
+test("private AI chat denies cross-user access", () => {
+  assert.throws(
+    () => assertAiChatOwner({ chatOwnerId: "user-a", actorId: "user-b" }),
+    /Forbidden/,
+  );
+  assert.doesNotThrow(() =>
+    assertAiChatOwner({ chatOwnerId: "user-a", actorId: "user-a" }),
+  );
+});
+
+test("workspace membership does not grant private AI chat access", () => {
+  assert.throws(
+    () =>
+      assertNotSharedWorkspaceAccess({
+        actorId: "member",
+        chatOwnerId: "owner",
+        isWorkspaceMember: true,
+      }),
+    /workspace members cannot access/,
+  );
+});
+
+test("invalid context references are rejected", () => {
+  assert.throws(
+    () =>
+      assertContextRefAccess({
+        actorId: "u1",
+        isWorkspaceMember: true,
+        entityExists: false,
+        entityWorkspaceId: "ws-1",
+        requestedWorkspaceId: "ws-1",
+      }),
+    /Invalid context/,
+  );
+  assert.throws(
+    () =>
+      assertContextRefAccess({
+        actorId: "u1",
+        isWorkspaceMember: false,
+        entityExists: true,
+        entityWorkspaceId: "ws-1",
+        requestedWorkspaceId: "ws-1",
+      }),
+    /not a member/,
+  );
+  assert.throws(
+    () =>
+      assertContextRefAccess({
+        actorId: "u1",
+        isWorkspaceMember: true,
+        entityExists: true,
+        entityWorkspaceId: "ws-1",
+        requestedWorkspaceId: "ws-other",
+      }),
+    /workspace mismatch/,
+  );
+});
+
+test("bridge URL for Edge must be public HTTPS", () => {
+  assert.equal(isLocalOrPrivateUrl("http://127.0.0.1:8787"), true);
+  assert.equal(isLocalOrPrivateUrl("https://bridge.example.com"), false);
+  assert.throws(
+    () => assertBridgeUrlSafeForEdge("http://127.0.0.1:8787"),
+    /HTTPS/,
+  );
+  assert.throws(
+    () => assertBridgeUrlSafeForEdge("https://127.0.0.1:8787"),
+    /localhost|private/i,
+  );
+  assert.doesNotThrow(() =>
+    assertBridgeUrlSafeForEdge("https://cander-bridge.example.com"),
+  );
+});
+
+test("client-supplied tool names must be registered", () => {
+  assert.throws(
+    () => resolveAuthorizedToolNames(["not.a.real.tool"]),
+    /Unknown or disabled/,
+  );
+  assert.throws(
+    () => resolveAuthorizedToolNames(["workspace.search"]),
+    /Unknown or disabled/,
+  );
+  assert.deepEqual(resolveAuthorizedToolNames([]), []);
+  assert.deepEqual(resolveAuthorizedToolNames(undefined), []);
+});
+
+test("context block formats authorized summaries only", () => {
+  assert.equal(formatContextBlock([]), "");
+  assert.match(
+    formatContextBlock([{ kind: "project", title: "Northwind", detail: "build" }]),
+    /Northwind/,
+  );
+  assert.match(
+    formatContextBlock([{ kind: "project", title: "Northwind" }]),
+    /authorized workspace context/,
+  );
 });

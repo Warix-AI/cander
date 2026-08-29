@@ -9,13 +9,14 @@ import {
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { CanderMark } from "@/components/brand/CanderMark";
+import { AiChatPanel } from "@/components/chat/AiChatPanel";
 import { ChatMessage } from "@/components/chat/MessageBlocks";
 import { SessionSummaryBubble } from "@/components/chat/SessionSummaryBubble";
 import { Composer } from "@/components/shell/Composer";
 import { APP_TAGLINE } from "@/lib/app-brand";
 import { chatSpaceCopy, spaceIconTint } from "@/lib/space-icons";
 import { homeSuggestions } from "@/lib/suggestions";
-import type { NavDestinationId, SpaceId } from "@/lib/types";
+import type { SpaceId } from "@/lib/types";
 import { chatSpaceId } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import { useChatCanvasCentered } from "@/lib/chat-layout";
@@ -29,7 +30,20 @@ const homePromptIcons = {
   p2: Telescope,
 } as const;
 
+/**
+ * Home Chat column uses owner-private AiChatPanel.
+ * Space / browser surfaces keep the legacy mock chat until cutover.
+ */
 export function ChatColumn() {
+  const { spaceId, view } = useApp();
+  const browserMode = view === "browser";
+  if (!browserMode && !spaceId) {
+    return <AiChatPanel />;
+  }
+  return <LegacySpaceChatColumn />;
+}
+
+function LegacySpaceChatColumn() {
   const { thread, spaceId, sendMessage, drafting, view } = useApp();
   const browserMode = view === "browser";
   const mobile = useMobileShell();
