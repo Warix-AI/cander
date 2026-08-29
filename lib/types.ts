@@ -152,6 +152,14 @@ export type PlatformDeployment = {
 
 export type MessageStatus = "complete" | "pending" | "streaming" | "error";
 
+/** Live activity under Thinking (Cursor-style). */
+export type MessageActivity = {
+  /** Primary shimmer line, e.g. "Thinking" */
+  label: string;
+  /** Secondary detail, e.g. "Calling tool…" / "Thinking about …" */
+  detail?: string;
+};
+
 export type Message = {
   id: string;
   role: "user" | "assistant" | "system";
@@ -160,6 +168,8 @@ export type Message = {
   blocks?: ChatBlock[];
   /** In-flight / stream status for live AI turns. */
   status?: MessageStatus;
+  /** Cursor-style activity while pending (thinking / tool). */
+  activity?: MessageActivity | null;
   /** Subtle transcript event (not an assistant reply). */
   event?: "condensed";
   /** In-stream divider when the continuous chat switches spaces. */

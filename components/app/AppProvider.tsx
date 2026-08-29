@@ -10,6 +10,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { flushSync } from "react-dom";
 import { accountPresets } from "@/lib/data";
 import {
   CREATE_PROJECT_SPACE_QUESTIONS,
@@ -612,7 +613,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!projectId) return undefined;
     return findProjectInWorkspace(workspaceId, projectId);
   }, [projectId, workspaceId, entityRevision]);
-  const thread = threads.find((item) => item.id === threadId) ?? null;
+  const thread =
+    threads.find((item) => item.id === threadId) ??
+    (threadIdRef.current && threadIdRef.current !== threadId
+      ? threads.find((item) => item.id === threadIdRef.current) ?? null
+      : null);
   const setHostingMode = useCallback((id: HostingMode) => {
     persistHosting(id);
   }, []);
@@ -1407,10 +1412,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           kind === "research");
 
       if (useLiveAi) {
+        const about = displayText.replace(/\s+/g, " ").trim().slice(0, 48);
         assistantMsg = {
           ...assistantMsg,
           content: "",
           status: "pending",
+          activity: {
+            label: "Thinking",
+            detail: about
+              ? `Thinking about “${about}${displayText.trim().length > 48 ? "…" : ""}”`
+              : "Working on your request…",
+          },
         };
       }
 
@@ -1772,6 +1784,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectId: replyProjectId,
           projectSpace: replyProjectSpace,
           messages: historyMessages,
+          onProgress: (progress) => {
+            setThreads((current) =>
+              current.map((item) => ({
+                ...item,
+                messages: item.messages.map((message) => {
+                  const isTarget =
+                    message.id === assistantId ||
+                    (message.role === "assistant" &&
+                      (message.status === "pending" ||
+                        message.status === "streaming") &&
+                      !message.content);
+                  return isTarget
+                    ? {
+                        ...message,
+                        activity: {
+                          label: progress.label,
+                          detail: progress.detail,
+                        },
+                      }
+                    : message;
+                }),
+              })),
+            );
+          },
         })
           .then((result) => {
             const isPendingAssistant = (message: Message) =>
@@ -1795,6 +1831,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                           ...message,
                           content,
                           status,
+                          activity: status === "complete" ? null : message.activity,
                           ...(status === "complete"
                             ? {
                                 blocks: (message.blocks ?? []).filter(
@@ -1843,6 +1880,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 );
               });
             };
+
+            // Apple on-device is already slow — skip fake typewriter lag.
+            if (result.runtime === "apple-local") {
+              patchAssistant(
+                result.content,
+                "complete",
+                result.condensationOccurred,
+              );
+              return;
+            }
 
             typewriterReveal(result.content, (partial, done) => {
               patchAssistant(
@@ -2131,8 +2178,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectId,
           projectSpace: (spaceId as SpaceId | null) ?? null,
           messages: historyMessages,
+          onProgress: (progress) => {
+            setThreads((current) =>
+              current.map((item) => ({
+                ...item,
+                messages: item.messages.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        activity: {
+                          label: progress.label,
+                          detail: progress.detail,
+                        },
+                      }
+                    : m,
+                ),
+              })),
+            );
+          },
         });
-        typewriterReveal(reply.content, (partial, done) => {
+        const applyReply = (partial: string, done: boolean) => {
           setThreads((current) =>
             current.map((item) => {
               if (item.id !== activeId) return item;
@@ -2146,14 +2211,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     ? {
                         ...m,
                         content: partial,
-                        status: done ? ("complete" as const) : ("streaming" as const),
+                        status: done
+                          ? ("complete" as const)
+                          : ("streaming" as const),
+                        activity: done ? null : m.activity,
                       }
                     : m,
                 ),
               };
             }),
           );
-        });
+        };
+        if (reply.runtime === "apple-local") {
+          applyReply(reply.content, true);
+          return;
+        }
+        typewriterReveal(reply.content, applyReply);
       })();
     },
     [threadId, workspaceId, projectId, spaceId, setThreads],
@@ -2511,62 +2584,63 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const migrateFrom = opts?.migrateFromThreadId?.trim() || null;
     let tid = "";
     let hasMessages = false;
-    setThreads((current) => {
-      const source = migrateFrom
-        ? current.find((item) => item.id === migrateFrom)
-        : null;
-      const { threads: next, id: nextId } = upsertPersistentProjectThread(
-        current,
-        itemWorkspaceId,
-        projectKey,
-        space,
-      );
-      tid = nextId;
-      const projectThread = next.find((item) => item.id === nextId);
-      const projectEmpty = !threadHasTurns(projectThread);
-      if (source && projectEmpty && source.id !== nextId) {
-        const migrated = next.map((item) => {
-          if (item.id === nextId) {
-            return {
-              ...item,
-              title: item.title || source.title,
-              snippet: source.snippet,
-              messages: source.messages.map((m) => ({ ...m })),
-              aiChatId: source.aiChatId ?? item.aiChatId,
-              sessionSummary: source.sessionSummary ?? item.sessionSummary,
-              updatedAt: nowTime(),
-            };
-          }
-          // Leave source dock empty so the conversation continues only on the project thread.
-          if (item.id === source.id) {
-            return {
-              ...item,
-              messages: [],
-              aiChatId: undefined,
-              sessionSummary: null,
-              snippet: "",
-              updatedAt: nowTime(),
-            };
-          }
-          return item;
-        });
-        hasMessages = threadHasTurns(
-          migrated.find((item) => item.id === nextId),
-        );
-        migrateThreadTaskState(source.id, nextId);
-        return migrated;
-      }
-      hasMessages = threadHasTurns(projectThread);
-      return next;
+    // Switch selection before mutating the store so useSyncExternalStore
+    // never paints an emptied source thread under the old threadId.
+    const snapshot = getChatStoreSnapshot().threads;
+    const source = migrateFrom
+      ? snapshot.find((item) => item.id === migrateFrom)
+      : null;
+    const { threads: next, id: nextId } = upsertPersistentProjectThread(
+      snapshot,
+      itemWorkspaceId,
+      projectKey,
+      space,
+    );
+    tid = nextId;
+    const projectThread = next.find((item) => item.id === nextId);
+    const projectEmpty = !threadHasTurns(projectThread);
+    let migrated = next;
+    if (source && projectEmpty && source.id !== nextId) {
+      migrated = next.map((item) => {
+        if (item.id === nextId) {
+          return {
+            ...item,
+            title: item.title || source.title,
+            snippet: source.snippet,
+            messages: source.messages.map((m) => ({ ...m })),
+            aiChatId: source.aiChatId ?? item.aiChatId,
+            sessionSummary: source.sessionSummary ?? item.sessionSummary,
+            updatedAt: nowTime(),
+          };
+        }
+        if (item.id === source.id) {
+          return {
+            ...item,
+            messages: [],
+            aiChatId: undefined,
+            sessionSummary: null,
+            snippet: "",
+            updatedAt: nowTime(),
+          };
+        }
+        return item;
+      });
+      migrateThreadTaskState(source.id, nextId);
+    }
+    hasMessages = threadHasTurns(
+      migrated.find((item) => item.id === nextId),
+    );
+    flushSync(() => {
+      threadIdRef.current = tid;
+      setThreadId(tid);
     });
+    setThreads(() => migrated);
     setView("space");
     setProjectId(projectKey);
     setSpaceId(space);
     setConnectorId(null);
     setJobId(null);
     setSkillId(null);
-    threadIdRef.current = tid;
-    setThreadId(tid);
     setDrafting(!hasMessages);
     setPanelIntent("execute");
     if (space === "build") setBuildTool("preview");

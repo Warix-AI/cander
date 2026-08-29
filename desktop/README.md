@@ -44,8 +44,21 @@ When you add a real backend later, **you do not need to change this shell** — 
 
 ```
 desktop/
-  src/main.js      # BrowserWindow + menu
-  src/preload.js   # reserved for future native bridges
-  assets/icon.icns # Dock / Finder icon
-  release/         # built .dmg (gitignored)
+  src/main.js                 # BrowserWindow + menu + FM IPC
+  src/preload.js              # window.canderDesktop bridge
+  src/foundation-models-bridge.js
+  native/FoundationModelsHelper/  # optional Apple Intelligence CLI
+  assets/icon.icns
+  release/                    # built .dmg (gitignored)
 ```
+
+## Apple Intelligence on desktop (optional)
+
+Electron cannot import Foundation Models directly. Build the helper binary on a Mac with Apple Intelligence / macOS that ships `FoundationModels`:
+
+```bash
+cd desktop/native/FoundationModelsHelper
+swiftc -parse-as-library -O -o FoundationModelsHelper main.swift
+```
+
+Then restart the desktop app (or set `CANDER_FM_HELPER=/absolute/path/to/FoundationModelsHelper`). With Auto/Local mode, the web app will use on-device Apple models when the helper reports available; otherwise it keeps using Cloud (Edge → Ollama tunnel).

@@ -9,6 +9,18 @@ export type CanderDesktopBridge = {
     maximize: () => void;
     close: () => void;
   };
+  foundationModels?: {
+    getAvailability: () => Promise<{
+      available?: boolean;
+      reason?: string;
+      streaming?: boolean;
+      message?: string;
+    }>;
+    generate: (opts: {
+      prompt: string;
+      instructions?: string;
+    }) => Promise<{ content?: string }>;
+  };
 };
 
 declare global {

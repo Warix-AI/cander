@@ -7,4 +7,8 @@ contextBridge.exposeInMainWorld("canderDesktop", {
     maximize: () => ipcRenderer.send("cander:window-toggle-maximize"),
     close: () => ipcRenderer.send("cander:window-close"),
   },
+  foundationModels: {
+    getAvailability: () => ipcRenderer.invoke("cander:fm-availability"),
+    generate: (opts) => ipcRenderer.invoke("cander:fm-generate", opts),
+  },
 });

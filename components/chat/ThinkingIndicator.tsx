@@ -3,19 +3,30 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Soft left-to-right shimmer on the word “Thinking” — no trailing dots.
+ * Cursor-style thinking line: shimmer title + optional activity subtitle.
  */
-export function ThinkingIndicator({ className }: { className?: string }) {
+export function ThinkingIndicator({
+  className,
+  label = "Thinking",
+  detail,
+}: {
+  className?: string;
+  label?: string;
+  detail?: string | null;
+}) {
   return (
-    <p
-      className={cn(
-        "thinking-shimmer text-[14.5px] leading-relaxed tracking-[-0.01em]",
-        className,
-      )}
-      aria-live="polite"
-      aria-label="Thinking"
-    >
-      Thinking
-    </p>
+    <div className={cn("space-y-1", className)} aria-live="polite">
+      <p
+        className="thinking-shimmer text-[14.5px] leading-relaxed tracking-[-0.01em]"
+        aria-label={label}
+      >
+        {label}
+      </p>
+      {detail?.trim() ? (
+        <p className="thinking-shimmer text-[13px] leading-snug tracking-[-0.01em] text-muted-foreground opacity-90">
+          {detail.trim()}
+        </p>
+      ) : null}
+    </div>
   );
 }

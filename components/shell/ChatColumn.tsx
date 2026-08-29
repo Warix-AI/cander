@@ -180,7 +180,7 @@ export function ChatColumn() {
           MOBILE_APP_BG,
         )}
       >
-        <div className="chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-1 pb-4 touch-pan-y [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <div className="chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-4 pb-4 touch-pan-y [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {hasChatTurns || thread ? (
             <div className="mx-auto flex w-full max-w-none flex-col gap-5">
               {thread?.sessionSummary ? (
@@ -213,7 +213,7 @@ export function ChatColumn() {
       ) : (
         <div
           className={cn(
-            "chat-scroll flex-1 overflow-y-auto pt-1 pb-5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+            "chat-scroll flex-1 overflow-y-auto pt-4 pb-5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
             floating
               ? centered
                 ? "px-4 sm:px-6"

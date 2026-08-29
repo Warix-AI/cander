@@ -6,7 +6,10 @@
  * Routes through AIRuntime agent turn (tools + clarification) then providers.
  */
 
-import { runAssistantTurn } from "@/lib/ai/runtime/agent-turn";
+import {
+  runAssistantTurn,
+  type AgentTurnProgress,
+} from "@/lib/ai/runtime/agent-turn";
 import type { AiToolCallResult } from "@/lib/ai/runtime/tools";
 import { AiRuntimeError } from "@/lib/ai/runtime/types";
 import type { SpaceId } from "@/lib/types";
@@ -53,6 +56,7 @@ export async function fetchPrivateAiReply(opts: {
     role: "user" | "assistant" | "system";
     content: string;
   }>;
+  onProgress?: (progress: AgentTurnProgress) => void;
 }): Promise<{
   aiChatId: string;
   content: string;
@@ -63,16 +67,19 @@ export async function fetchPrivateAiReply(opts: {
   toolResults?: AiToolCallResult[];
 }> {
   try {
-    const result = await runAssistantTurn({
-      aiChatId: opts.aiChatId,
-      threadId: opts.threadId,
-      title: opts.title,
-      content: opts.content,
-      workspaceId: opts.workspaceId,
-      projectId: opts.projectId,
-      projectSpace: opts.projectSpace,
-      messages: opts.messages,
-    });
+    const result = await runAssistantTurn(
+      {
+        aiChatId: opts.aiChatId,
+        threadId: opts.threadId,
+        title: opts.title,
+        content: opts.content,
+        workspaceId: opts.workspaceId,
+        projectId: opts.projectId,
+        projectSpace: opts.projectSpace,
+        messages: opts.messages,
+      },
+      { onProgress: opts.onProgress },
+    );
     return {
       aiChatId: result.aiChatId ?? opts.aiChatId ?? "",
       content: result.content,

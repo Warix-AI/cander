@@ -3,6 +3,7 @@
 import type { SpaceEntityApi } from "@/lib/api/space-entity-api";
 import { subscribeEntityRealtime } from "@/lib/api/space-entity-api.supabase";
 import {
+  getSpaceEntityStoreSnapshot,
   notifyEntityStoreChange,
   replaceEntityStoreState,
 } from "@/lib/api/space-entity-store";
@@ -30,8 +31,19 @@ export async function hydrateEntityStoreFromRemote(
     api.listAttachments(ctx),
   ]);
 
+  // Keep optimistic local seeds that have not landed in the remote list yet
+  // (avoids wiping AI/manual creates mid-flight during hydrate races).
+  const local = getSpaceEntityStoreSnapshot();
+  const remoteIds = new Set(projects.map((p) => p.id));
+  const pendingLocal = local.projects.filter(
+    (p) =>
+      p.workspaceId === ctx.workspaceId &&
+      !remoteIds.has(p.id) &&
+      Date.now() - Date.parse(p.updatedAt || p.createdAt || "") < 5 * 60_000,
+  );
+
   replaceEntityStoreState({
-    projects,
+    projects: [...projects, ...pendingLocal],
     sources,
     briefingItems,
     deployments: [],
@@ -47,7 +59,7 @@ export async function hydrateEntityStoreFromRemote(
 
   if (deployments.length) {
     replaceEntityStoreState({
-      projects,
+      projects: [...projects, ...pendingLocal],
       sources,
       briefingItems,
       deployments,

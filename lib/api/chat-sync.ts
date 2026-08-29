@@ -59,7 +59,31 @@ export async function hydrateChatFromRemote(
       !remoteIds.has(item.id) &&
       threadHasTurns(item),
   );
-  replaceChatThreads([...otherWorkspaces, ...remote, ...localPending]);
+  // Prefer fresher local copy of the same thread (avoids flicker / wipe races).
+  const mergedRemote = remote.map((remoteThread) => {
+    const local = latest.find((item) => item.id === remoteThread.id);
+    if (!local || local.workspaceId !== ctx.workspaceId) return remoteThread;
+    const localPendingAi = local.messages.some(
+      (m) =>
+        m.role === "assistant" &&
+        (m.status === "pending" ||
+          m.status === "streaming" ||
+          m.content === "Thinking…" ||
+          m.content === "Thinking..."),
+    );
+    if (localPendingAi) return local;
+    if (
+      threadHasTurns(local) &&
+      local.messages.length > remoteThread.messages.length
+    ) {
+      return local;
+    }
+    const localAt = Date.parse(local.updatedAt || "") || 0;
+    const remoteAt = Date.parse(remoteThread.updatedAt || "") || 0;
+    if (localAt > remoteAt && threadHasTurns(local)) return local;
+    return remoteThread;
+  });
+  replaceChatThreads([...otherWorkspaces, ...mergedRemote, ...localPending]);
   window.setTimeout(() => {
     skipRemoteSync = false;
   }, 0);

@@ -32,7 +32,10 @@ export function AssistantMessage({ message }: { message: Message }) {
   return (
     <div className="w-full space-y-2">
       {showThinking ? (
-        <ThinkingIndicator />
+        <ThinkingIndicator
+          label={message.activity?.label || "Thinking"}
+          detail={message.activity?.detail}
+        />
       ) : visibleContent ? (
         <MarkdownRenderer content={visibleContent} />
       ) : null}

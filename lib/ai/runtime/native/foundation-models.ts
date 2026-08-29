@@ -1,10 +1,12 @@
 "use client";
 
 /**
- * JS bridge to native CanderFoundationModels Cap plugin.
- * Web: always unavailable (no fake local replies).
+ * JS bridge to native Apple Foundation Models.
+ * - Capacitor iOS plugin (preferred on mobile)
+ * - Electron desktop helper on macOS (optional binary)
+ * Web browser: always unavailable (no fake local replies).
  *
- * PRIVACY: Calls stay in-process on iOS. Do not proxy these prompts to Edge.
+ * PRIVACY: Calls stay on-device. Do not proxy these prompts to Edge.
  */
 
 export type FoundationModelsAvailability = {
@@ -29,6 +31,10 @@ type CapacitorBridge = {
   Plugins?: Record<string, FoundationModelsNative | undefined>;
 };
 
+type DesktopBridge = {
+  foundationModels?: FoundationModelsNative;
+};
+
 let cachedPlugin: FoundationModelsNative | null | undefined;
 
 function getCapacitor(): CapacitorBridge | undefined {
@@ -36,47 +42,66 @@ function getCapacitor(): CapacitorBridge | undefined {
   return (window as Window & { Capacitor?: CapacitorBridge }).Capacitor;
 }
 
-/** True only inside the Capacitor iOS/Android shell. */
+function getDesktopFoundationModels(): FoundationModelsNative | null {
+  if (typeof window === "undefined") return null;
+  const desk = (window as Window & { canderDesktop?: DesktopBridge })
+    .canderDesktop;
+  const fm = desk?.foundationModels;
+  if (
+    fm &&
+    typeof fm.getAvailability === "function" &&
+    typeof fm.generate === "function"
+  ) {
+    return fm;
+  }
+  return null;
+}
+
+/** True inside Capacitor native shell or Electron desktop with FM bridge. */
 export function isNativeFoundationModelsHost() {
   const cap = getCapacitor();
-  return Boolean(cap?.isNativePlatform?.());
+  if (Boolean(cap?.isNativePlatform?.())) return true;
+  return Boolean(getDesktopFoundationModels());
 }
 
 function getPlugin(): FoundationModelsNative | null {
   if (cachedPlugin !== undefined) return cachedPlugin;
 
   const cap = getCapacitor();
-  if (!cap?.isNativePlatform?.()) {
-    cachedPlugin = null;
-    return null;
-  }
-
-  const existing = cap.Plugins?.CanderFoundationModels;
-  if (
-    existing &&
-    typeof existing.getAvailability === "function" &&
-    typeof existing.generate === "function"
-  ) {
-    cachedPlugin = existing;
-    return existing;
-  }
-
-  if (typeof cap.registerPlugin === "function") {
-    try {
-      const registered = cap.registerPlugin<FoundationModelsNative>(
-        "CanderFoundationModels",
-      );
-      if (
-        registered &&
-        typeof registered.getAvailability === "function" &&
-        typeof registered.generate === "function"
-      ) {
-        cachedPlugin = registered;
-        return registered;
-      }
-    } catch {
-      // fall through
+  if (cap?.isNativePlatform?.()) {
+    const existing = cap.Plugins?.CanderFoundationModels;
+    if (
+      existing &&
+      typeof existing.getAvailability === "function" &&
+      typeof existing.generate === "function"
+    ) {
+      cachedPlugin = existing;
+      return existing;
     }
+
+    if (typeof cap.registerPlugin === "function") {
+      try {
+        const registered = cap.registerPlugin<FoundationModelsNative>(
+          "CanderFoundationModels",
+        );
+        if (
+          registered &&
+          typeof registered.getAvailability === "function" &&
+          typeof registered.generate === "function"
+        ) {
+          cachedPlugin = registered;
+          return registered;
+        }
+      } catch {
+        // fall through to desktop / unavailable
+      }
+    }
+  }
+
+  const desktop = getDesktopFoundationModels();
+  if (desktop) {
+    cachedPlugin = desktop;
+    return desktop;
   }
 
   cachedPlugin = null;
@@ -98,8 +123,8 @@ export async function getFoundationModelsAvailability(): Promise<FoundationModel
         : "web_or_no_plugin",
       streaming: false,
       message: isNativeFoundationModelsHost()
-        ? "Native shell is running but the Foundation Models plugin is not registered. Rebuild the iOS app from Xcode."
-        : "On-device AI runs in the Cander iOS app on Apple Intelligence devices — not in the browser.",
+        ? "Native shell is running but the Foundation Models bridge is not ready."
+        : "On-device AI runs in the Cander iOS app or Mac desktop helper on Apple Intelligence devices — not in the browser.",
     };
   }
   try {

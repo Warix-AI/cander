@@ -1,12 +1,13 @@
 const { app, BrowserWindow, shell, Menu, session, ipcMain } = require("electron");
 const path = require("path");
+const foundationModels = require("./foundation-models-bridge");
 
 const APP_NAME = "Cander";
 const DEFAULT_URL = "https://cander.app";
 const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Bumped when the native shell changes — visible on <html data-cander-shell>. */
-const SHELL_BUILD = "2026-08-26-frameless-traffic";
+const SHELL_BUILD = "2026-08-29-fm-bridge";
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
 /** Classic Mac titlebar / chrome row height (traffic-light axis). */
 const TITLEBAR_PX = 52;
@@ -319,6 +320,16 @@ app.whenReady().then(() => {
   });
   ipcMain.on("cander:window-close", () => {
     mainWindow?.close();
+  });
+
+  ipcMain.handle("cander:fm-availability", async () => {
+    return foundationModels.getAvailability();
+  });
+  ipcMain.handle("cander:fm-generate", async (_event, payload) => {
+    return foundationModels.generate({
+      prompt: payload?.prompt,
+      instructions: payload?.instructions,
+    });
   });
 
   buildMenu();

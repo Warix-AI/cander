@@ -28,6 +28,18 @@ export type AgentTurnResult = AiGenerateResult & {
   pausedForUser?: boolean;
 };
 
+/** Cursor-style live status while the agent thinks / calls tools. */
+export type AgentTurnProgress = {
+  phase: "thinking" | "generating" | "tool" | "follow_up";
+  label: string;
+  detail?: string;
+  toolName?: string;
+};
+
+export type AgentTurnOptions = {
+  onProgress?: (progress: AgentTurnProgress) => void;
+};
+
 function safeContent(text: string, fallback: string): string {
   const cleaned = sanitizeAssistantVisibleText(text || "").trim();
   return cleaned || fallback;
@@ -41,12 +53,46 @@ function shouldForceCreateProjectCard(
   return /\bproject\b/.test(blob) && /\b(create|new|make)\b/.test(blob);
 }
 
+function truncateForDetail(text: string, max = 48): string {
+  const one = text.replace(/\s+/g, " ").trim();
+  if (one.length <= max) return one;
+  return `${one.slice(0, max - 1).trimEnd()}…`;
+}
+
+function detailForUserQuestion(content: string): string {
+  const q = truncateForDetail(content);
+  return q ? `Thinking about “${q}”` : "Working on your request…";
+}
+
+function detailForTool(name: string): string {
+  switch (name) {
+    case "project.create":
+      return "Creating project…";
+    case "project.open":
+      return "Opening project…";
+    case "workspace.search":
+      return "Searching workspace…";
+    case "ui.ask_clarification":
+      return "Preparing questions…";
+    case "nav.open":
+      return "Navigating…";
+    case "panel.open":
+    case "panel.close":
+      return "Updating panel…";
+    case "create_work_task":
+      return "Starting work task…";
+    default:
+      return "Calling tool…";
+  }
+}
+
 export async function runAssistantTurn(
   request: AiGenerateRequest,
+  opts?: AgentTurnOptions,
 ): Promise<AgentTurnResult> {
   setTurnThreadId(request.threadId);
   try {
-    return await runAssistantTurnInner(request);
+    return await runAssistantTurnInner(request, opts);
   } finally {
     setTurnThreadId(null);
   }
@@ -54,7 +100,22 @@ export async function runAssistantTurn(
 
 async function runAssistantTurnInner(
   request: AiGenerateRequest,
+  opts?: AgentTurnOptions,
 ): Promise<AgentTurnResult> {
+  const report = (progress: AgentTurnProgress) => {
+    try {
+      opts?.onProgress?.(progress);
+    } catch {
+      // UI progress must never break the turn.
+    }
+  };
+
+  report({
+    phase: "thinking",
+    label: "Thinking",
+    detail: detailForUserQuestion(request.content),
+  });
+
   const taskState = getThreadTaskState(request.threadId);
   const resolved = resolveAllowedToolsForTurn({
     content: request.content,
@@ -85,6 +146,15 @@ async function runAssistantTurnInner(
       })
     : null;
   if (shortcut) {
+    if (shortcut.toolResults?.length) {
+      const first = shortcut.toolResults[0]!;
+      report({
+        phase: "tool",
+        label: "Thinking",
+        detail: detailForTool(first.name),
+        toolName: first.name,
+      });
+    }
     return {
       content: shortcut.content,
       runtime: "cloud",
@@ -102,6 +172,14 @@ async function runAssistantTurnInner(
   let skippedToolOnce = false;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    report({
+      phase: round === 0 ? "generating" : "follow_up",
+      label: "Thinking",
+      detail:
+        round === 0
+          ? detailForUserQuestion(request.content)
+          : "Using the result…",
+    });
     last = await generateWithAiRuntime(working);
     const { text, call } = parseToolCallFromContent(last.content);
 
@@ -176,6 +254,12 @@ async function runAssistantTurnInner(
       }
     }
 
+    report({
+      phase: "tool",
+      label: "Thinking",
+      detail: detailForTool(call.name),
+      toolName: call.name,
+    });
     const result = await executeAuthorizedTool(call);
     toolResults.push(result);
 

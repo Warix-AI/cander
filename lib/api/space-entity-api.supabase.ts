@@ -135,18 +135,17 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
       };
       localSpaceEntityStore.seedProject(project);
 
-      void supabase
+      const { error } = await supabase
         .from("projects")
-        .insert(projectToRow(project, ctx.actorId))
-        .then(({ error }) => {
-          if (error) {
-            localSpaceEntityStore.deleteProject(ctx, project.id);
-            console.warn("[cander] project create failed", error.message);
-            return;
-          }
-          notifyEntityStoreChange();
-        });
-
+        .insert(projectToRow(project, ctx.actorId));
+      if (error) {
+        localSpaceEntityStore.deleteProject(ctx, project.id);
+        if (/projects_workspace_title_unique|23505/i.test(error.message)) {
+          throw new Error("A project already uses that name.");
+        }
+        throw new Error(error.message || "Could not create project.");
+      }
+      notifyEntityStoreChange();
       return project;
     },
 
