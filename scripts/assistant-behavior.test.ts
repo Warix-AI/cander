@@ -243,6 +243,21 @@ describe("tools", () => {
     assert.equal(call?.arguments?.target, "build");
   });
 
+  it("parses web.search and knowledge.search key-style tool calls", () => {
+    const web = parseToolCallFromContent(
+      'Let me check.\n{"web.search":{"query":"news today"}}',
+    );
+    assert.equal(web.call?.name, "web.search");
+    assert.equal(web.call?.arguments?.query, "news today");
+    assert.doesNotMatch(web.text, /web\.search/);
+
+    const knowledge = parseToolCallFromContent(
+      '{"knowledge.search":{"query":"pricing"}}',
+    );
+    assert.equal(knowledge.call?.name, "knowledge.search");
+    assert.equal(knowledge.call?.arguments?.query, "pricing");
+  });
+
   it("parses trailing-comma tool JSON", () => {
     const { text, call } = parseToolCallFromContent(
       '{"tool":"project.create","arguments":{"title":"Hello Dude","description":"",}}',

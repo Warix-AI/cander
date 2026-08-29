@@ -19,6 +19,19 @@ const IN_APP_PATTERNS: RegExp[] = [
   /\b(what('?s| is)|whats)\b[\s\S]{0,48}\b(our|the)\b[\s\S]{0,24}\b(pricing|price|rates?|policy|policies)\b/i,
   /\b(pricing|rates?)\b[\s\S]{0,40}\b(we|our|customers?|offer|charge)\b/i,
   /\b(search|find|look\s*up|check)\b[\s\S]{0,40}\b(knowledge|internal|pricing|policy)\b/i,
+  /\b(search|look\s*up|google|bing|brave)\b[\s\S]{0,40}\b(online|web|internet|the\s+web)\b/i,
+  /\b(search|look\s*up)\b[\s\S]{0,24}\b(for|up)\b/i,
+  /\b(what('?s| is)|whats)\b[\s\S]{0,40}\b(latest|current|today|news|weather|stock|score)\b/i,
+  /\b(latest|current|today'?s)\b[\s\S]{0,40}\b(news|weather|price|score|headline)\b/i,
+  /\b(who\s+won|box\s+score|stock\s+price|weather\s+in)\b/i,
+  /\b(happened|going\s+on|what's\s+new)\b[\s\S]{0,40}\b(news|headline|today)\b/i,
+  /\bin\s+the\s+news\b/i,
+  /\b(news|headlines?)\b[\s\S]{0,24}\b(today|tonight|this\s+(morning|week))\b/i,
+  /\b(today|tonight)\b[\s\S]{0,40}\b(news|headlines?|weather)\b/i,
+  /\bannounce[d]?\b[\s\S]{0,40}\b(today|yesterday|this\s+week)\b/i,
+  /\b(today|yesterday|this\s+week)\b[\s\S]{0,40}\bannounce/i,
+  /\b(check|get|find)\b[\s\S]{0,24}\b(the\s+)?weather\b/i,
+  /\bhow('?s| is)\b[\s\S]{0,24}\b(the\s+)?weather\b/i,
 ];
 
 /** Obvious chitchat / general knowledge — never needs workspace tools. */

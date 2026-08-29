@@ -22,8 +22,9 @@ const OLLAMA_HOST = (process.env.OLLAMA_HOST ?? "http://127.0.0.1:11434").replac
 const HOST = process.env.BRIDGE_HOST ?? "127.0.0.1";
 const PORT = Number(process.env.BRIDGE_PORT ?? "8787");
 const RATE_LIMIT = Number(process.env.BRIDGE_RATE_LIMIT_PER_MIN ?? "30");
-const MAX_BODY = Number(process.env.BRIDGE_MAX_BODY_BYTES ?? String(1024 * 1024));
-const MODEL = "llama3.2";
+const MAX_BODY = Number(process.env.BRIDGE_MAX_BODY_BYTES ?? String(8 * 1024 * 1024));
+const MODEL = process.env.OLLAMA_MODEL ?? "llama3.2";
+const VISION_MODEL = process.env.OLLAMA_VISION_MODEL ?? "llava";
 
 /** @type {Map<string, { count: number; resetAt: number }>} */
 const buckets = new Map();
@@ -102,33 +103,60 @@ function readBody(req) {
 }
 
 async function callOllama(messages, stream) {
+  const hasImages = messages.some((m) => Array.isArray(m.images) && m.images.length);
+  const model = hasImages ? VISION_MODEL : MODEL;
+  if (hasImages) {
+    const lengths = messages.flatMap((m) =>
+      Array.isArray(m.images)
+        ? m.images.map((img) => String(img || "").length)
+        : [],
+    );
+    console.log("[MODEL_IMAGE_INPUT]", {
+      model,
+      payloadType: "base64",
+      imageCount: lengths.length,
+      byteLengths: lengths.slice(0, 2),
+    });
+  }
   const res = await fetch(`${OLLAMA_HOST}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       messages,
       stream,
     }),
     signal: AbortSignal.timeout(180_000),
   });
-  return res;
+  return { res, model, hasImages };
+}
+
+function stripImageB64(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^data:image\/[^;]+;base64,(.+)$/i);
+  return (match?.[1] ?? raw).replace(/\s/g, "");
 }
 
 function normalizeMessages(raw) {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((m) => m && typeof m.content === "string")
-    .map((m) => ({
-      role: m.role === "assistant" || m.role === "system" ? m.role : "user",
-      content: String(m.content),
-    }));
+    .map((m) => {
+      const msg = {
+        role: m.role === "assistant" || m.role === "system" ? m.role : "user",
+        content: String(m.content),
+      };
+      if (Array.isArray(m.images) && m.images.length) {
+        msg.images = m.images.slice(0, 2).map(stripImageB64);
+      }
+      return msg;
+    });
 }
 
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === "GET" && req.url === "/health") {
-      json(res, 200, { ok: true, model: MODEL });
+      json(res, 200, { ok: true, model: MODEL, visionModel: VISION_MODEL });
       return;
     }
 
@@ -174,23 +202,37 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (path === "/v1/chat") {
-      const ollamaRes = await callOllama(messages, false);
+      const { res: ollamaRes, model, hasImages } = await callOllama(messages, false);
       if (!ollamaRes.ok) {
         const text = await ollamaRes.text();
-        json(res, 502, { error: "ollama_error", detail: text.slice(0, 500) });
+        const visionHint = hasImages
+          ? " Vision model may be missing — install/pull OLLAMA_VISION_MODEL (default llava)."
+          : "";
+        json(res, 502, {
+          error: "ollama_error",
+          detail: (text.slice(0, 500) + visionHint).slice(0, 600),
+          model,
+        });
         return;
       }
       const data = await ollamaRes.json();
       const content = data?.message?.content ?? "";
-      json(res, 200, { content, model: MODEL });
+      json(res, 200, { content, model });
       return;
     }
 
     if (path === "/v1/chat/stream") {
-      const ollamaRes = await callOllama(messages, true);
+      const { res: ollamaRes, model, hasImages } = await callOllama(messages, true);
       if (!ollamaRes.ok || !ollamaRes.body) {
         const text = await ollamaRes.text().catch(() => "");
-        json(res, 502, { error: "ollama_error", detail: text.slice(0, 500) });
+        const visionHint = hasImages
+          ? " Vision model may be missing — install/pull OLLAMA_VISION_MODEL (default llava)."
+          : "";
+        json(res, 502, {
+          error: "ollama_error",
+          detail: (text.slice(0, 500) + visionHint).slice(0, 600),
+          model,
+        });
         return;
       }
 

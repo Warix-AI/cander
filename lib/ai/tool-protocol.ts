@@ -9,7 +9,10 @@ export type ParsedToolCall = {
 };
 
 const KNOWN_TOOLS =
-  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|ui\\.(?:ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval";
+  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|knowledge\\.search|web\\.search|ui\\.(?:ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval";
+
+const KNOWN_TOOL_NAME_RE =
+  /^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|knowledge\.search|web\.search|ui\.(ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval)$/;
 
 /** Soft-repair common model JSON mistakes (trailing commas). */
 export function repairJson(raw: string): string {
@@ -121,11 +124,7 @@ function tryParseToolObject(raw: string): ParsedToolCall | null {
       };
       const name = parsed.tool ?? parsed.name;
       if (!name || typeof name !== "string") continue;
-      if (
-        !/^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|ui\.(ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval)$/.test(
-          name,
-        )
-      ) {
+      if (!KNOWN_TOOL_NAME_RE.test(name)) {
         continue;
       }
       const args = parsed.arguments ?? parsed.args ?? {};
@@ -148,11 +147,7 @@ function tryParseToolObject(raw: string): ParsedToolCall | null {
         const keys = Object.keys(parsed);
         if (keys.length === 1) {
           const name = keys[0]!;
-          if (
-            /^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|ui\.(ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval)$/.test(
-              name,
-            )
-          ) {
+          if (KNOWN_TOOL_NAME_RE.test(name)) {
             const args = parsed[name];
             return {
               name,

@@ -22,6 +22,7 @@ export type AiToolDefinition = {
     | "projects"
     | "search"
     | "knowledge"
+    | "web"
     | "scheduling"
     | "comms"
     | "cloud_work"
@@ -269,6 +270,20 @@ registerAiTool({
     "Search workspace knowledge-base documents for internal facts (pricing, policy, etc.). Prefer this over inventing company details.",
   permission: { requireWorkspaceMember: true },
   domain: "knowledge",
+  enabled: true,
+  parameters: {
+    type: "object",
+    required: ["query"],
+    properties: { query: { type: "string" } },
+  },
+});
+
+registerAiTool({
+  name: "web.search",
+  description:
+    "Search the public internet via Brave for current facts, news, weather, scores, and general web results. Use when the answer needs live or external information.",
+  permission: { requireWorkspaceMember: true },
+  domain: "web",
   enabled: true,
   parameters: {
     type: "object",

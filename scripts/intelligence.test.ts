@@ -104,7 +104,7 @@ describe("context budgeter", () => {
     });
     assert.equal(pkg.inventoryText, "");
     assert.equal(pkg.toolCatalog, "");
-    assert.ok(pkg.messages.length <= 6);
+    assert.ok(pkg.messages.length <= 24);
   });
 
   it("allows larger PCC budgets when routed there", () => {

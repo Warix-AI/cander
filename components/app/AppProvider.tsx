@@ -125,6 +125,7 @@ import type {
   Checkpoint,
   ChatImageAttachment,
   ChatFileAttachment,
+  ChatSendAttachment,
   Message,
   Member,
   MobileSurface,
@@ -164,6 +165,10 @@ import {
   requestMobileSurfaceEnter,
 } from "@/lib/mobile-nav-transition";
 import { useMobileShell } from "@/lib/use-media-query";
+import {
+  collectRecentImageDataUrls,
+  modelContentFromMessage,
+} from "@/lib/ai/attachment-context";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
 import { speakText, stopTextToSpeech } from "@/lib/voice/text-to-speech";
 import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
@@ -202,6 +207,7 @@ type SendOpts = {
   skillId?: string;
   attachments?: ChatImageAttachment[];
   files?: ChatFileAttachment[];
+  sendAttachments?: ChatSendAttachment[];
 };
 
 type AppContextValue = {
@@ -1292,8 +1298,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const sendMessage = useCallback(
     (text: string, opts?: SendOpts) => {
-      const attachments = opts?.attachments?.filter((a) => a.url) ?? [];
-      const fileAttachments = opts?.files ?? [];
+      const sendAttachments = opts?.sendAttachments ?? [];
+      const attachmentsFromSend = sendAttachments
+        .filter((a) => a.type === "image" && a.dataUrl)
+        .map((a) => ({
+          url: a.dataUrl!,
+          name: a.filename,
+          mime: a.mimeType,
+        }));
+      const filesFromSend = sendAttachments
+        .filter((a) => a.type === "file")
+        .map((a) => ({
+          name: a.filename,
+          ...(a.text ? { text: a.text } : {}),
+        }));
+      const attachments =
+        attachmentsFromSend.length > 0
+          ? attachmentsFromSend
+          : (opts?.attachments?.filter((a) => a.url?.startsWith("data:image/")) ??
+            []);
+      const fileAttachments =
+        filesFromSend.length > 0 ? filesFromSend : (opts?.files ?? []);
       const trimmed = text.trim();
       if (!trimmed && !attachments.length && !fileAttachments.length) return;
       const contentForIntent =
@@ -1395,6 +1420,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const fileBlocks = fileAttachments.map((item) => ({
         type: "file" as const,
         name: item.name,
+        ...(item.text ? { text: item.text } : {}),
       }));
       const displayBlocks = [...imageBlocks, ...fileBlocks];
       // Bubble shows typed text only — never "[User attached file…]" markers.
@@ -1440,6 +1466,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         };
       }
 
+      const imageUrls = collectRecentImageDataUrls(
+        undefined,
+        attachments.map((a) => a.url),
+      );
+      // Only mention images to the model when real bytes will be sent.
       const aiUserContent = [
         trimmed,
         ...fileAttachments.map((f) =>
@@ -1447,7 +1478,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ? `File “${f.name}” contents:\n${f.text.trim()}`
             : `File attached: ${f.name}`,
         ),
-        ...attachments.map((a) => `Image attached: ${a.name}`),
+        ...(imageUrls.length
+          ? [`(${imageUrls.length} image(s) attached — inspect the image pixels.)`]
+          : []),
       ]
         .filter(Boolean)
         .join("\n\n");
@@ -1779,14 +1812,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               m.status !== "pending" &&
               m.status !== "streaming" &&
               !m.event &&
-              Boolean(m.content?.trim()) &&
+              (Boolean(m.content?.trim()) ||
+                Boolean(m.blocks?.some((b) => b.type === "image" || b.type === "file"))) &&
               m.content !== "Thinking…" &&
               m.content !== "Thinking...",
           )
           .map((m) => ({
             role: m.role as "user" | "assistant",
-            content: m.content,
-          }));
+            content: modelContentFromMessage(m) || m.content,
+          }))
+          .filter((m) => Boolean(m.content?.trim()));
         const replyProjectId =
           projectId ?? intent.projectId ?? matched?.id ?? null;
         const replyProjectSpace =
@@ -1794,15 +1829,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           project?.space ??
           (isChatSpace(space) ? space : null) ??
           null;
+        const imageUrls = collectRecentImageDataUrls(
+          liveThread?.messages,
+          attachments.map((a) => a.url),
+        );
+        // Prefer current-turn bytes; never call the model with name-only image claims.
+        if (attachments.length > 0 && imageUrls.length === 0) {
+          setThreads((current) =>
+            current.map((item) => ({
+              ...item,
+              messages: item.messages.map((message) =>
+                message.id === assistantId
+                  ? {
+                      ...message,
+                      status: "complete" as const,
+                      activity: null,
+                      content:
+                        "I couldn’t read that photo’s bytes. Try again, or send a JPEG/PNG screenshot.",
+                    }
+                  : message,
+              ),
+            })),
+          );
+          return;
+        }
+        if (imageUrls.length) {
+          console.log("[IMAGE_UPLOADED]", {
+            count: imageUrls.length,
+            mimeType: attachments[0]?.mime ?? "image/jpeg",
+            size: imageUrls.reduce((n, u) => n + u.length, 0),
+          });
+        }
         void fetchPrivateAiReply({
           aiChatId: priorAiChatId,
           threadId: activeId,
-          title: displayText.slice(0, 52),
+          title: displayText.slice(0, 52) || attachments[0]?.name || "Chat",
           content: aiUserContent,
           workspaceId: matched?.workspaceId ?? workspaceId,
           projectId: replyProjectId,
           projectSpace: replyProjectSpace,
           messages: historyMessages,
+          ...(imageUrls.length ? { images: imageUrls } : {}),
           onProgress: (progress) => {
             const detailRaw = progress.detail?.trim() || "";
             const isLegacyAbout = /^Thinking about\b/i.test(detailRaw);
@@ -1811,6 +1878,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               Boolean(detailRaw) &&
               (progress.phase === "tool" ||
                 progress.phase === "follow_up" ||
+                progress.phase === "generating" ||
                 (progress.phase === "thinking" &&
                   detailRaw !== "" &&
                   !isLegacyAbout));
@@ -2111,12 +2179,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             (m.role === "user" || m.role === "assistant") &&
             m.id !== assistantId &&
             m.status !== "pending" &&
-            Boolean(m.content?.trim()),
+            (Boolean(m.content?.trim()) ||
+              Boolean(
+                m.blocks?.some((b) => b.type === "image" || b.type === "file"),
+              )),
         )
         .map((m) => ({
           role: m.role as "user" | "assistant",
-          content: m.content,
-        }));
+          content: modelContentFromMessage(m) || m.content,
+        }))
+        .filter((m) => Boolean(m.content?.trim()));
 
       const resumeContent = result.resumeTool
         ? `${summary}\n\nPlease continue using tool ${result.resumeTool} with these answers merged into arguments.`
@@ -2211,6 +2283,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        const resumeImages = collectRecentImageDataUrls(live?.messages);
         const reply = await fetchPrivateAiReply({
           aiChatId: live?.aiChatId ?? null,
           threadId: activeId,
@@ -2220,6 +2293,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectId,
           projectSpace: (spaceId as SpaceId | null) ?? null,
           messages: historyMessages,
+          ...(resumeImages.length ? { images: resumeImages } : {}),
           onProgress: (progress) => {
             const detailRaw = progress.detail?.trim() || "";
             const isLegacyAbout = /^Thinking about\b/i.test(detailRaw);
@@ -2985,6 +3059,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             excerpt: h.excerpt,
           })),
         };
+      },
+      webSearch: async (query) => {
+        const { searchWeb } = await import("@/lib/api/web-search-client");
+        return searchWeb(query);
       },
       askClarification: (opts) => {
         const tid = (opts.threadId?.trim() || threadIdRef.current || "").trim();

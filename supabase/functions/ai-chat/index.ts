@@ -33,6 +33,7 @@ Tool protocol (only if tools are listed below for this turn):
 - Never invent workspace_id or UUIDs.
 - Never call workspace.search for trivia or small talk.
 - For internal business facts (pricing, policies, knowledge bases), call knowledge.search and ground answers in returned excerpts. If empty, say docs are missing — never invent company pricing.
+- For live/public facts (news, weather, scores, “latest”), call web.search and ground answers in returned snippets. If empty, say so — don’t invent headlines.
 - Never invent tools that are not listed. Complex coding/research → create_work_task only.
 - One JSON object only. No trailing commas.`;
 
@@ -42,7 +43,7 @@ const NO_TOOLS_THIS_TURN =
   "No tools are available for this turn. Answer in plain language only. Do not emit JSON tool calls.";
 
 const KNOWN_TOOLS_RE =
-  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|knowledge\\.search|ui\\.(?:ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval";
+  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|knowledge\\.search|web\\.search|ui\\.(?:ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval";
 
 const EDGE_TOOL_LINES: Record<string, string> = {
   "nav.open":
@@ -54,6 +55,7 @@ const EDGE_TOOL_LINES: Record<string, string> = {
   "project.open": '- project.open: { "projectId": string }',
   "workspace.search": '- workspace.search: { "query": string }',
   "knowledge.search": '- knowledge.search: { "query": string }',
+  "web.search": '- web.search: { "query": string }',
   "ui.ask_clarification":
     '- ui.ask_clarification: { "title": string, "description"?: string, "questions": array, "resumeTool"?: string, "resumeArguments"?: object }',
   "ui.confirm":
@@ -199,6 +201,8 @@ type SendPayload = {
   chatId?: string;
   title?: string;
   content?: string;
+  /** Optional image payloads (data URLs or raw base64) for vision models. */
+  images?: string[];
   workspaceId?: string | null;
   contextRefs?: Array<{
     kind: string;
@@ -487,6 +491,21 @@ Deno.serve(async (req) => {
           latestUserContent: payload.content.trim(),
         });
 
+        const rawImages = Array.isArray(payload.images)
+          ? payload.images.filter((x): x is string => typeof x === "string")
+          : [];
+        if (rawImages.length) {
+          const lastUser = [...modelMessages]
+            .reverse()
+            .find((m) => m.role === "user");
+          if (lastUser) {
+            lastUser.images = rawImages.slice(0, 2).map((img) => {
+              const m = img.match(/^data:image\/[^;]+;base64,(.+)$/i);
+              return (m?.[1] ?? img).replace(/\s/g, "");
+            });
+          }
+        }
+
         const bridgeRes = await fetch(`${bridgeUrl}/v1/chat`, {
           method: "POST",
           headers: {
@@ -494,7 +513,7 @@ Deno.serve(async (req) => {
             Authorization: `Bearer ${bridgeSecret}`,
           },
           body: JSON.stringify({ model: MODEL, messages: modelMessages }),
-          signal: AbortSignal.timeout(45_000),
+          signal: AbortSignal.timeout(rawImages.length ? 90_000 : 45_000),
         });
 
         if (!bridgeRes.ok) {
@@ -842,15 +861,14 @@ function buildModelMessages(opts: {
   contextText: string | null;
   userProfileText?: string | null;
   latestUserContent?: string;
-}): Array<{ role: string; content: string }> {
+}): Array<{ role: string; content: string; images?: string[] }> {
   const afterWatermark = opts.history.filter(
     (m) => m.sort_order > opts.watermark,
   );
   const allowedTools = resolveAllowedToolsEdge(opts.latestUserContent ?? "");
-  // Conversational turns: thin recent window (matches client context budgeter).
-  const recentLimit = allowedTools.length ? RECENT_MESSAGE_LIMIT : 6;
-  const recent = afterWatermark.slice(-recentLimit);
-  const messages: Array<{ role: string; content: string }> = [
+  // Keep a full short-term window for every turn; condensation handles long chats.
+  const recent = afterWatermark.slice(-RECENT_MESSAGE_LIMIT);
+  const messages: Array<{ role: string; content: string; images?: string[] }> = [
     { role: "system", content: PRODUCT_SYSTEM_PROMPT },
     { role: "system", content: formatEdgeToolCatalog(allowedTools) },
   ];

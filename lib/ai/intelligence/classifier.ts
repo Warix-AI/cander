@@ -47,6 +47,7 @@ function isLocalAction(text: string, domains: ToolDomain[]): boolean {
     domains.includes("navigation") ||
     domains.includes("projects") ||
     domains.includes("search") ||
+    domains.includes("knowledge") ||
     domains.includes("clarification")
   );
 }
@@ -63,7 +64,10 @@ export function classifyTaskType(opts: {
   });
 
   if (RELEASE.some((re) => re.test(content))) return "release";
-  if (RESEARCH.some((re) => re.test(content))) return "research";
+  // Live web search needs cloud + Brave — treat as research, not chat.
+  if (gated.domains.includes("web") || RESEARCH.some((re) => re.test(content))) {
+    return "research";
+  }
   if (
     isComplexWorkIntent(content) ||
     EXECUTION.some((re) => re.test(content)) ||

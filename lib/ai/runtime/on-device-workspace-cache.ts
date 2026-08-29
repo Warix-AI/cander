@@ -24,8 +24,8 @@ const INVENTORY_KEY_PREFIX = "cander-on-device-inventory-v1:";
 const MAX_PROJECTS = 20;
 const MAX_SOURCES = 12;
 const MAX_THREADS = 18;
-const MAX_TRANSCRIPT_TURNS = 10;
-const MAX_MSG_CHARS = 420;
+const MAX_TRANSCRIPT_TURNS = 24;
+const MAX_MSG_CHARS = 1200;
 /** Soft budget so Foundation Models instructions stay usable. */
 const MAX_INVENTORY_CHARS = 7_500;
 const REMOTE_INVENTORY_TTL_MS = 120_000;

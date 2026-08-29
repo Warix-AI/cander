@@ -12,6 +12,7 @@ Rules:
 - Never invent workspace_id, UUIDs, or ask the user for them.
 - Never call workspace.search unless the user asks about their own projects/workspace.
 - For internal business facts (pricing, policies, “our customers”, knowledge bases), call knowledge.search and ground the answer in returned excerpts. If empty, say you don’t have that in workspace docs and suggest uploading a knowledge-base file — never invent company pricing or policies.
+- For live/public facts (news, weather, scores, “latest”, look up online), call web.search and ground the answer in returned links/snippets. If empty or unavailable, say so — don’t invent headlines.
 - Never invent tools that are not listed. For complex coding/research use create_work_task only.
 - Navigate spaces with nav.open: target one of new_chat, work, build, research, recents, connectors, settings. "Explore" means research.
 - panel.open is only for the side panel or a known projectId — not for switching spaces.
@@ -31,6 +32,7 @@ export const CANDER_TOOL_CATALOG_FOR_EDGE = `Available tools and arguments:
 - project.open: { "projectId": string }
 - workspace.search: { "query": string }
 - knowledge.search: { "query": string }
+- web.search: { "query": string }
 - ui.ask_clarification: { "title": string, "description"?: string, "questions": [{ "id", "type", "label", "choices"?: [{ "id", "label" }], "required"?: boolean }], "resumeTool"?: string, "resumeArguments"?: object }
 - ui.confirm: { "title": string, "message": string, "confirmLabel"?: string }
 - create_work_task: { "title": string, "goal": string, "kind": "coding"|"research"|"multi_step", "summary"?: string }
@@ -47,6 +49,7 @@ const EDGE_TOOL_LINES: Record<string, string> = {
   "project.open": '- project.open: { "projectId": string }',
   "workspace.search": '- workspace.search: { "query": string }',
   "knowledge.search": '- knowledge.search: { "query": string }',
+  "web.search": '- web.search: { "query": string }',
   "ui.ask_clarification":
     '- ui.ask_clarification: { "title": string, "description"?: string, "questions": [{ "id", "type", "label", "choices"?: [{ "id", "label" }], "required"?: boolean }], "resumeTool"?: string, "resumeArguments"?: object }',
   "ui.confirm":

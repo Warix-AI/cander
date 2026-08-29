@@ -27,6 +27,7 @@ export const CANDER_CONVERSATION_FIRST = `CRITICAL — tool use is rare:
 - Emit a tool JSON object only for a clear in-app action.
 - Never call workspace.search for trivia, science, sports, definitions, or small talk.
 - For company/internal facts (pricing, policy, knowledge bases), use knowledge.search when available; never invent rates or policies.
+- For live web facts (news, weather, scores), use web.search when available; never invent headlines.
 - Complex coding/research multi-step work → create_work_task only (never invent other tools).`;
 
 /** Appended only when the user asks who/what model you are (on-device). */

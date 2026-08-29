@@ -2,7 +2,11 @@
  * Composer attach helpers — Cap Camera/Photos on native; file inputs on web.
  */
 
-import type { ChatFileAttachment, ChatImageAttachment } from "@/lib/types";
+import type {
+  ChatFileAttachment,
+  ChatImageAttachment,
+  ChatSendAttachment,
+} from "@/lib/types";
 import { isMobileShell } from "@/lib/mobile-shell";
 
 const MAX_IMAGE_BYTES = 2_500_000;
@@ -48,6 +52,12 @@ function getCapCamera(): CapCameraPlugin | null {
   return Camera?.getPhoto ? Camera : null;
 }
 
+function approxByteLengthFromDataUrl(dataUrl: string): number {
+  const i = dataUrl.indexOf(",");
+  if (i < 0) return dataUrl.length;
+  return Math.floor(((dataUrl.length - i - 1) * 3) / 4);
+}
+
 async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -60,17 +70,82 @@ async function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+/** Convert HEIC/HEIF (or other) data URLs to JPEG for vision models. */
+export async function ensureJpegDataUrl(
+  dataUrl: string,
+): Promise<{ url: string; mime: string } | null> {
+  if (!dataUrl.startsWith("data:image/")) return null;
+  const mimeMatch = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);/i);
+  const mime = (mimeMatch?.[1] || "image/jpeg").toLowerCase();
+  if (mime === "image/jpeg" || mime === "image/jpg" || mime === "image/png") {
+    return { url: dataUrl, mime: mime === "image/jpg" ? "image/jpeg" : mime };
+  }
+  if (typeof document === "undefined") {
+    // Can't decode HEIC without DOM/canvas.
+    return null;
+  }
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("image decode failed"));
+      el.src = dataUrl;
+    });
+    const canvas = document.createElement("canvas");
+    const max = 1280;
+    const scale = Math.min(1, max / Math.max(img.width, img.height, 1));
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const jpeg = canvas.toDataURL("image/jpeg", 0.85);
+    if (!jpeg.startsWith("data:image/jpeg")) return null;
+    return { url: jpeg, mime: "image/jpeg" };
+  } catch {
+    return null;
+  }
+}
+
+function logImageSelected(data: Record<string, unknown>) {
+  console.log("[IMAGE_SELECTED]", data);
+}
+
 export async function imageFileToAttachment(
   file: File,
 ): Promise<ChatImageAttachment | null> {
-  if (!file.type.startsWith("image/")) return null;
+  if (!file.type.startsWith("image/") && !/\.heic$/i.test(file.name)) {
+    return null;
+  }
   if (file.size > MAX_IMAGE_BYTES) return null;
   try {
-    const url = await fileToDataUrl(file);
+    const rawUrl = await fileToDataUrl(file);
+    const converted = await ensureJpegDataUrl(rawUrl);
+    if (!converted) {
+      logImageSelected({
+        filename: file.name,
+        mimeType: file.type || "unknown",
+        size: file.size,
+        source: "file",
+        ok: false,
+        reason: "convert_failed",
+      });
+      return null;
+    }
+    if (approxByteLengthFromDataUrl(converted.url) > MAX_IMAGE_BYTES) {
+      return null;
+    }
+    logImageSelected({
+      filename: file.name || "image.jpeg",
+      mimeType: converted.mime,
+      size: approxByteLengthFromDataUrl(converted.url),
+      source: "file",
+      ok: true,
+    });
     return {
-      url,
-      name: file.name || "image.png",
-      mime: file.type || "image/png",
+      url: converted.url,
+      name: (file.name || "image.jpeg").replace(/\.heic$/i, ".jpeg"),
+      mime: converted.mime,
     };
   } catch {
     return null;
@@ -88,7 +163,7 @@ export async function filesFromList(
   const files: ChatFileAttachment[] = [];
 
   for (const file of picked.slice(0, 8)) {
-    if (file.type.startsWith("image/")) {
+    if (file.type.startsWith("image/") || /\.heic$/i.test(file.name)) {
       const att = await imageFileToAttachment(file);
       if (att) images.push(att);
       continue;
@@ -147,47 +222,53 @@ async function webPathToAttachment(
     const src = cap?.convertFileSrc?.(webPath) ?? webPath;
     const res = await fetch(src);
     const blob = await res.blob();
-    // #region agent log
-    fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'post-fix',hypothesisId:'A',location:'composer-attach.ts:webPathToAttachment',message:'fetch webPath result',data:{webPathPrefix:webPath.slice(0,80),srcPrefix:src.slice(0,80),ok:res.ok,status:res.status,blobSize:blob.size,blobType:blob.type||'empty',overMax:blob.size>MAX_IMAGE_BYTES},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (blob.size > MAX_IMAGE_BYTES) return null;
     const file = new File([blob], name, {
       type: blob.type || "image/jpeg",
     });
     return imageFileToAttachment(file);
-  } catch (err) {
-    // #region agent log
-    fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'post-fix',hypothesisId:'A',location:'composer-attach.ts:webPathToAttachment',message:'fetch webPath threw',data:{webPathPrefix:webPath.slice(0,80),err:err instanceof Error?err.message:String(err)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+  } catch {
     return null;
   }
 }
 
 export type CapImagePickResult =
   | { ok: true; image: ChatImageAttachment }
-  | { ok: false; cancelled?: boolean; message: string; debug?: string };
+  | { ok: false; cancelled?: boolean; message: string };
 
 function isUserCancel(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err ?? "");
   return /cancel|cancelled|canceled|user denied|No image picked/i.test(msg);
 }
 
-function failPick(
-  message: string,
-  debug: Record<string, unknown>,
-  cancelled?: boolean,
-): CapImagePickResult {
-  const token = Object.entries(debug)
-    .map(([k, v]) => `${k}=${String(v)}`)
-    .join("|");
-  // #region agent log
-  fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'post-fix',hypothesisId:'A',location:'composer-attach.ts:failPick',message,data:debug,timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
+async function finalizeImageAttachment(
+  image: ChatImageAttachment,
+  source: string,
+): Promise<ChatImageAttachment | null> {
+  const converted = await ensureJpegDataUrl(image.url);
+  if (!converted) {
+    logImageSelected({
+      filename: image.name,
+      mimeType: image.mime,
+      size: approxByteLengthFromDataUrl(image.url),
+      source,
+      ok: false,
+      reason: "heic_or_decode_failed",
+    });
+    return null;
+  }
+  const size = approxByteLengthFromDataUrl(converted.url);
+  logImageSelected({
+    filename: image.name,
+    mimeType: converted.mime,
+    size,
+    source,
+    ok: true,
+  });
   return {
-    ok: false,
-    cancelled,
-    message: `${message} [${token}]`,
-    debug: token,
+    url: converted.url,
+    name: image.name.replace(/\.heic$/i, ".jpeg"),
+    mime: converted.mime,
   };
 }
 
@@ -256,17 +337,16 @@ export async function pickWithCapacitorCamera(
       source: source === "camera" ? "CAMERA" : "PHOTOS",
     });
 
-    // #region agent log
-    fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'post-fix',hypothesisId:'B',location:'composer-attach.ts:getPhoto',message:'Camera.getPhoto raw result',data:{source,hasWebPath:Boolean(photo.webPath),hasDataUrl:Boolean(photo.dataUrl),dataUrlLen:photo.dataUrl?.length??0,hasBase64:Boolean(photo.base64String),base64Len:photo.base64String?.length??0,format:photo.format??null,keys:Object.keys(photo||{})},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     const name = source === "camera" ? "camera.jpeg" : "photo.jpeg";
     const fromInline = photoToAttachment(photo, name);
     if (fromInline) {
-      // #region agent log
-      fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'post-fix',hypothesisId:'B',location:'composer-attach.ts:getPhoto',message:'base64/dataUrl attach ok',data:{source,name,urlLen:fromInline.url.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      return { ok: true, image: fromInline };
+      const finalized = await finalizeImageAttachment(fromInline, source);
+      if (finalized) return { ok: true, image: finalized };
+      return {
+        ok: false,
+        message:
+          "Couldn’t convert that photo for the AI (HEIC may be unsupported). Try a screenshot or JPEG.",
+      };
     }
 
     const path = photo.webPath || photo.path;
@@ -275,14 +355,18 @@ export async function pickWithCapacitorCamera(
       if (image) return { ok: true, image };
     }
 
-    return failPick("No image returned from the camera.", {
-      path: "getPhoto",
+    logImageSelected({
+      filename: name,
+      mimeType: photo.format || "unknown",
+      size: 0,
       source,
-      keys: Object.keys(photo || {}).join(","),
-      hasWebPath: Boolean(photo.webPath),
-      hasDataUrl: Boolean(photo.dataUrl),
-      hasBase64: Boolean(photo.base64String),
+      ok: false,
+      reason: "no_bytes",
     });
+    return {
+      ok: false,
+      message: "No image returned from the camera.",
+    };
   } catch (err) {
     if (isUserCancel(err)) {
       return { ok: false, cancelled: true, message: "Cancelled." };
@@ -293,4 +377,33 @@ export async function pickWithCapacitorCamera(
         err instanceof Error ? err.message : "Couldn’t open camera or photos.",
     };
   }
+}
+
+export function toSendAttachments(
+  images: ChatImageAttachment[],
+  files: ChatFileAttachment[],
+): ChatSendAttachment[] {
+  const out: ChatSendAttachment[] = [];
+  for (const img of images) {
+    const dataUrl = img.url.startsWith("data:image/") ? img.url : undefined;
+    out.push({
+      id: `img_${Math.random().toString(36).slice(2, 10)}`,
+      type: "image",
+      filename: img.name,
+      mimeType: img.mime || "image/jpeg",
+      size: dataUrl ? approxByteLengthFromDataUrl(dataUrl) : 0,
+      ...(dataUrl ? { dataUrl } : {}),
+    });
+  }
+  for (const f of files) {
+    out.push({
+      id: `file_${Math.random().toString(36).slice(2, 10)}`,
+      type: "file",
+      filename: f.name,
+      mimeType: "text/plain",
+      size: f.text?.length ?? 0,
+      ...(f.text ? { text: f.text } : {}),
+    });
+  }
+  return out;
 }

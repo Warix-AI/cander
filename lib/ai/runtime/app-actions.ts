@@ -38,6 +38,19 @@ export type AppActionHandlers = {
       excerpt: string;
     }>;
   };
+  webSearch: (query: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    results: Array<{
+      title: string;
+      url: string;
+      description: string;
+      publishedAt: string | null;
+      source: string | null;
+      /** @deprecated use description */
+      snippet?: string;
+    }>;
+  }>;
   askClarification: (opts: {
     title: string;
     description?: string;

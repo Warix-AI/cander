@@ -4,6 +4,11 @@ import { FileText } from "lucide-react";
 import type { ChatBlock } from "@/lib/types";
 import { formatClarificationAnswersForDisplay } from "@/lib/ai/clarification/schema";
 
+function fileExtension(name: string) {
+  const part = name.split(".").pop()?.trim();
+  return part && part !== name ? part.slice(0, 4).toUpperCase() : "FILE";
+}
+
 export function UserMessage({
   content,
   blocks,
@@ -38,14 +43,14 @@ export function UserMessage({
             <div
               key={`${file.name}-${index}`}
               title={file.name}
-              className="inline-flex h-10 max-w-[9rem] items-center gap-1.5 rounded-[10px] border border-border bg-muted px-2"
+              className="relative flex h-10 w-10 flex-col items-center justify-center overflow-hidden rounded-[10px] border border-border bg-muted"
             >
               <FileText
-                className="h-4 w-4 shrink-0 text-muted-foreground"
+                className="h-4 w-4 text-muted-foreground"
                 strokeWidth={1.7}
               />
-              <span className="truncate text-[11px] tracking-[-0.01em]">
-                {file.name}
+              <span className="mt-0.5 font-mono text-[8px] leading-none text-muted-foreground">
+                {fileExtension(file.name)}
               </span>
             </div>
           ))}

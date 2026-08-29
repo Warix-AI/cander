@@ -45,9 +45,27 @@ export type AgentTurnOptions = {
   onProgress?: (progress: AgentTurnProgress) => void;
 };
 
+function looksLikeClaimedSearch(text: string): boolean {
+  return /\b(search(ed|ing)?|found (a |some )?snippet|according to (the )?(web|sources?)|latest (news|weather))\b/i.test(
+    text,
+  );
+}
+
 function safeContent(text: string, fallback: string): string {
   const cleaned = sanitizeAssistantVisibleText(text || "").trim();
   return cleaned || fallback;
+}
+
+/** Never ship a “I searched / found…” preamble when search did not succeed. */
+function contentAfterFailedWebSearch(text: string, toolOutput: string): string {
+  const cleaned = sanitizeAssistantVisibleText(text || "").trim();
+  if (!cleaned || looksLikeClaimedSearch(cleaned)) {
+    return (
+      toolOutput.trim() ||
+      "I couldn’t reach web search right now. Try again in a moment."
+    );
+  }
+  return cleaned;
 }
 
 function shouldForceCreateProjectCard(
@@ -68,6 +86,8 @@ function detailForTool(name: string): string {
       return "Searching workspace…";
     case "knowledge.search":
       return "Searching knowledge…";
+    case "web.search":
+      return "Searching the web…";
     case "ui.ask_clarification":
       return "Preparing questions…";
     case "nav.open":
@@ -140,7 +160,8 @@ async function runAssistantTurnInner(
     taskState,
     projectId: request.projectId,
     forceLocal: mode === "local",
-    forceCloud: mode === "cloud",
+    // Images need cloud/vision — on-device text models cannot see them.
+    forceCloud: mode === "cloud" || Boolean(request.images?.length),
     pccAvailable: pcc.available,
   });
   recordRoutingDecision(decision, {
@@ -171,15 +192,19 @@ async function runAssistantTurnInner(
     ...request,
     allowTools,
     allowedToolNames,
-    preferredRoute: decision.target,
-    routingReason: decision.reason,
+    preferredRoute: request.images?.length
+      ? "cander_cloud"
+      : decision.target,
+    routingReason: request.images?.length
+      ? "image_attachments"
+      : decision.reason,
   };
 
   const shortcut = allowTools
     ? await tryIntentShortcut(request.content, {
         threadId: request.threadId,
         recentText: (request.messages ?? [])
-          .slice(-6)
+          .slice(-24)
           .map((m) => m.content)
           .join("\n"),
       })
@@ -228,6 +253,15 @@ async function runAssistantTurnInner(
     const { text, call } = parseToolCallFromContent(last.content);
 
     if (!call) {
+      // Never let a “I searched…” claim stand when no tool ran.
+      if (looksLikeClaimedSearch(text) && allowTools) {
+        return {
+          ...last,
+          content:
+            "I wasn’t able to run a live web search for that. Try asking again, or rephrase with “search the web for…”.",
+          toolResults: toolResults.length ? toolResults : undefined,
+        };
+      }
       return {
         ...last,
         content: safeContent(
@@ -237,6 +271,12 @@ async function runAssistantTurnInner(
         toolResults: toolResults.length ? toolResults : undefined,
       };
     }
+
+    console.log("[MODEL_TOOL_CALL]", {
+      round,
+      name: call.name,
+      allowed: allowTools && allowedToolNames.includes(call.name),
+    });
 
     // Domain gate: refuse tools not in this turn's allowlist.
     if (!allowTools || !allowedToolNames.includes(call.name)) {
@@ -382,6 +422,16 @@ async function runAssistantTurnInner(
     }
 
     if (!result.ok) {
+      if (call.name === "web.search") {
+        return {
+          ...last,
+          content: contentAfterFailedWebSearch(
+            text,
+            "I couldn’t complete a live web search. Please try again in a moment — I won’t invent headlines or sources.",
+          ),
+          toolResults,
+        };
+      }
       return {
         ...last,
         content: safeContent(
@@ -392,10 +442,25 @@ async function runAssistantTurnInner(
       };
     }
 
+    if (call.name === "web.search") {
+      report({
+        phase: "follow_up",
+        label: "Thinking",
+        detail: "Reading sources…",
+        toolName: call.name,
+      });
+    }
+
     const followUp = [
       `Internal result for ${result.name}: ${result.output}`,
-      "Continue briefly for the user in plain language only. Call another tool only if still needed; otherwise a short normal reply with no JSON and no tool names.",
+      "Continue briefly for the user in plain language only. Call another tool only if still needed; otherwise a short normal reply with no JSON and no tool names. Cite real URLs from the results only — never invent sources or claim you searched if results are empty.",
     ].join("\n");
+
+    report({
+      phase: "generating",
+      label: "Thinking",
+      detail: "Generating…",
+    });
 
     working = {
       ...gatedRequest,

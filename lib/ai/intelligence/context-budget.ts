@@ -22,7 +22,7 @@ export const CONTEXT_BUDGETS: Record<RouteTarget, ContextBudget> = {
     maxBehaviorChars: 1200,
     maxTaskStateChars: 800,
     maxSummaryChars: 600,
-    maxRecentMessages: 6,
+    maxRecentMessages: 24,
     includeInventory: false,
     includeTools: true, // only when toolNames non-empty
     maxInventoryChars: 0,
@@ -42,7 +42,7 @@ export const CONTEXT_BUDGETS: Record<RouteTarget, ContextBudget> = {
     maxBehaviorChars: 2000,
     maxTaskStateChars: 4000,
     maxSummaryChars: 2000,
-    maxRecentMessages: 12,
+    maxRecentMessages: 24,
     includeInventory: false,
     includeTools: true,
     maxInventoryChars: 0,

@@ -219,6 +219,8 @@ export type ChatBlock =
   | {
       type: "file";
       name: string;
+      /** Extracted text for model continuity — not shown in the bubble. */
+      text?: string;
     };
 
 export type ChatImageAttachment = {
@@ -230,6 +232,19 @@ export type ChatImageAttachment = {
 export type ChatFileAttachment = {
   name: string;
   /** Extracted text for the model only — not shown in the bubble. */
+  text?: string;
+};
+
+/** Unified send-path attachment (no device-local file:// URIs). */
+export type ChatSendAttachment = {
+  id: string;
+  type: "image" | "file";
+  filename: string;
+  mimeType: string;
+  size: number;
+  /** Image bytes as data URL — never capacitor:// or file:// */
+  dataUrl?: string;
+  /** Extracted file text for the model */
   text?: string;
 };
 

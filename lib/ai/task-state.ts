@@ -10,6 +10,7 @@ export type ToolDomain =
   | "projects"
   | "search"
   | "knowledge"
+  | "web"
   | "scheduling"
   | "comms"
   | "cloud_work"

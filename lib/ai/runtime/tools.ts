@@ -329,6 +329,42 @@ export async function executeAuthorizedTool(
           data: { results },
         };
       }
+      case "web.search": {
+        const result = await actions.webSearch(String(args.query));
+        const results = result.results ?? [];
+        if (!result.ok) {
+          return {
+            name: tool.name,
+            ok: false,
+            output: result.detail || "Web search failed.",
+            data: { results },
+          };
+        }
+        if (!results.length) {
+          return {
+            name: tool.name,
+            ok: false,
+            output: `No web results for “${args.query}”. Tell the user you couldn’t find current sources — do not invent headlines or claim you searched successfully.`,
+            data: { results },
+          };
+        }
+        const lines = results.map((r, i) => {
+          const description = r.description || r.snippet || "";
+          const meta = [
+            r.source ? `source: ${r.source}` : null,
+            r.publishedAt ? `published: ${r.publishedAt}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          return `[${i + 1}] ${r.title}\n${r.url}${meta ? `\n${meta}` : ""}\n${description}`;
+        });
+        return {
+          name: tool.name,
+          ok: true,
+          output: `Web results for “${args.query}” (cite real URLs only; never invent sources):\n${lines.join("\n\n")}`,
+          data: { results },
+        };
+      }
       case "ui.ask_clarification": {
         const questions = Array.isArray(args.questions)
           ? (args.questions as ClarificationQuestion[])

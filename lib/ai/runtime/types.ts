@@ -43,6 +43,11 @@ export type AiGenerateRequest = {
     content: string;
   }>;
   /**
+   * Image data-URLs (or raw base64) for vision-capable cloud inference.
+   * On-device text models cannot see these — runtime should prefer cloud.
+   */
+  images?: string[];
+  /**
    * When false, providers should omit tool catalogs from instructions
    * (used for general conversation / knowledge turns).
    */

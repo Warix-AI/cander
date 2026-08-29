@@ -56,6 +56,7 @@ export async function fetchPrivateAiReply(opts: {
     role: "user" | "assistant" | "system";
     content: string;
   }>;
+  images?: string[];
   onProgress?: (progress: AgentTurnProgress) => void;
 }): Promise<{
   aiChatId: string;
@@ -77,6 +78,7 @@ export async function fetchPrivateAiReply(opts: {
         projectId: opts.projectId,
         projectSpace: opts.projectSpace,
         messages: opts.messages,
+        images: opts.images,
       },
       { onProgress: opts.onProgress },
     );

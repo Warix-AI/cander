@@ -35,7 +35,7 @@ type AiChatAction =
   | { action: "rename_chat"; chatId: string; title: string }
   | { action: "delete_chat"; chatId: string }
   | { action: "list_messages"; chatId: string }
-  | { action: "send_message"; chatId: string; content: string }
+  | { action: "send_message"; chatId: string; content: string; images?: string[] }
   | { action: "set_context"; chatId: string; contextRefs: AiContextRefInput[] };
 
 async function invokeAiChat<T>(body: AiChatAction): Promise<T> {
@@ -96,13 +96,22 @@ export function listAiChatMessages(chatId: string) {
   });
 }
 
-export function sendAiChatMessage(chatId: string, content: string) {
+export function sendAiChatMessage(
+  chatId: string,
+  content: string,
+  opts?: { images?: string[] },
+) {
   return invokeAiChat<{
     userMessage: AiChatMessageDto;
     assistantMessage: AiChatMessageDto;
     offline?: boolean;
     condensation?: { occurred: boolean };
-  }>({ action: "send_message", chatId, content });
+  }>({
+    action: "send_message",
+    chatId,
+    content,
+    ...(opts?.images?.length ? { images: opts.images } : {}),
+  });
 }
 
 export function setAiChatContext(chatId: string, contextRefs: AiContextRefInput[]) {
