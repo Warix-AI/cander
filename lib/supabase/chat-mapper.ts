@@ -90,6 +90,7 @@ export function messageToRow(
 }
 
 export function messageRowToMessage(row: MessageRow): Message {
+  const condensed = row.content === "__CHAT_CONDENSED__";
   return {
     id: row.id,
     role: row.role,
@@ -97,5 +98,6 @@ export function messageRowToMessage(row: MessageRow): Message {
     at: row.at_label,
     blocks: row.blocks ?? undefined,
     spaceSwitch: row.space_switch ?? undefined,
+    event: condensed ? "condensed" : undefined,
   };
 }

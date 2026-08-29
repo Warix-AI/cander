@@ -74,7 +74,7 @@ export function ChatColumn() {
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
         <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
           {thread ? (
-            <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-6">
+            <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-5">
               {thread.messages.map((message) => (
                 <ChatMessage key={message.id} message={message} />
               ))}
@@ -101,7 +101,7 @@ export function ChatColumn() {
       >
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 touch-pan-y">
           {hasChatTurns || thread ? (
-            <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-6">
+            <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-5">
               {thread?.sessionSummary ? (
                 <SessionSummaryBubble
                   threadId={thread.id}
@@ -147,7 +147,7 @@ export function ChatColumn() {
         >
           <div
             className={cn(
-              "flex w-full max-w-[38rem] flex-col gap-6",
+              "flex w-full max-w-[38rem] flex-col gap-5",
               (!floating || centered) && "mx-auto",
             )}
           >

@@ -1341,7 +1341,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (useLiveAi) {
         assistantMsg = {
           ...assistantMsg,
-          content: "Thinking…",
+          content: "",
+          status: "pending",
         };
       }
 
@@ -1658,38 +1659,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectSpace: replyProjectSpace,
         })
           .then((result) => {
+            const isPendingAssistant = (message: Message) =>
+              message.id === assistantId ||
+              (message.role === "assistant" &&
+                (message.status === "pending" ||
+                  message.content === "Thinking…" ||
+                  message.content === "Thinking..."));
+
             setThreads((current) => {
-              const apply = (item: Thread): Thread => ({
-                ...item,
-                aiChatId: result.aiChatId.startsWith("local-")
-                  ? item.aiChatId
-                  : result.aiChatId,
-                messages: item.messages.map((message) => {
-                  const isTarget =
-                    message.id === assistantId ||
-                    (message.role === "assistant" &&
-                      (message.content === "Thinking…" ||
-                        message.content === "Thinking..."));
-                  return isTarget
-                    ? { ...message, content: result.content }
-                    : message;
-                }),
-              });
+              const apply = (item: Thread): Thread => {
+                const nextMessages = item.messages.map((message) =>
+                  isPendingAssistant(message)
+                    ? {
+                        ...message,
+                        content: result.content,
+                        status: "complete" as const,
+                      }
+                    : message,
+                );
+                if (result.condensationOccurred) {
+                  nextMessages.push({
+                    id: nextId("evt"),
+                    role: "system",
+                    content: "__CHAT_CONDENSED__",
+                    at: nowTime(),
+                    event: "condensed",
+                  });
+                }
+                return {
+                  ...item,
+                  aiChatId: result.aiChatId.startsWith("local-")
+                    ? item.aiChatId
+                    : result.aiChatId,
+                  messages: nextMessages,
+                };
+              };
               if (current.some((item) => item.id === activeId)) {
                 return current.map((item) =>
                   item.id === activeId ? apply(item) : item,
                 );
               }
-              // Thread may have been remapped by remote hydrate — patch any Thinking placeholder.
               return current.map((item) =>
-                item.messages.some(
-                  (m) =>
-                    m.id === assistantId ||
-                    (m.role === "assistant" &&
-                      (m.content === "Thinking…" || m.content === "Thinking...")),
-                )
-                  ? apply(item)
-                  : item,
+                item.messages.some(isPendingAssistant) ? apply(item) : item,
               );
             });
           })
@@ -1701,11 +1712,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   const isTarget =
                     message.id === assistantId ||
                     (message.role === "assistant" &&
-                      (message.content === "Thinking…" ||
+                      (message.status === "pending" ||
+                        message.content === "Thinking…" ||
                         message.content === "Thinking..."));
                   return isTarget
                     ? {
                         ...message,
+                        status: "error" as const,
                         content:
                           "I couldn't reach the AI bridge. Check that Ollama, the local bridge, and the HTTPS tunnel are running.",
                       }

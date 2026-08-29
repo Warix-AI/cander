@@ -44,7 +44,12 @@ export async function fetchPrivateAiReply(opts: {
   workspaceId: string;
   projectId?: string | null;
   projectSpace?: SpaceId | null;
-}): Promise<{ aiChatId: string; content: string; offline: boolean }> {
+}): Promise<{
+  aiChatId: string;
+  content: string;
+  offline: boolean;
+  condensationOccurred: boolean;
+}> {
   const contextRefs = buildAiContextRefs({
     workspaceId: opts.workspaceId,
     projectId: opts.projectId,
@@ -72,6 +77,7 @@ export async function fetchPrivateAiReply(opts: {
         result.assistantMessage.content?.trim() ||
         (result.offline ? OFFLINE_REPLY : "(empty reply)"),
       offline: Boolean(result.offline),
+      condensationOccurred: Boolean(result.condensation?.occurred),
     };
   } catch (err) {
     return {
@@ -81,6 +87,7 @@ export async function fetchPrivateAiReply(opts: {
           ? "Sign in again to use AI chat."
           : OFFLINE_REPLY,
       offline: true,
+      condensationOccurred: false,
     };
   }
 }

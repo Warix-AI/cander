@@ -6,8 +6,33 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const MODEL = "llama3.2";
 const PROVIDER = "ollama-bridge";
+const RECENT_MESSAGE_LIMIT = 16;
+const CONDENSE_MESSAGE_THRESHOLD = 40;
+const CONDENSE_CHAR_THRESHOLD = 12_000;
+
+const PRODUCT_SYSTEM_PROMPT = `You are Cander, a concise product assistant.
+Answer the question first. Prefer short paragraphs and high information density.
+Do not restate the user's request. Avoid unnecessary headings and filler.
+Expand only when the question needs detail or the user asks for more.
+You may use Markdown; the UI will render it.`;
 
 type Json = Record<string, unknown>;
+
+type CondensedContext = {
+  conversation_summary?: string;
+  current_state?: string;
+  decisions?: string[];
+  open_tasks?: string[];
+  important_entities?: string[];
+  preferences_constraints?: string[];
+  last_updated?: string;
+};
+
+type HistoryRow = {
+  role: string;
+  content: string;
+  sort_order: number;
+};
 
 type SendPayload = {
   action:
@@ -257,7 +282,7 @@ Deno.serve(async (req) => {
 
       const { data: history } = await supabase
         .from("ai_chat_messages")
-        .select("role, content")
+        .select("role, content, sort_order")
         .eq("chat_id", payload.chatId)
         .eq("owner_id", user.id)
         .order("sort_order", { ascending: true });
@@ -277,6 +302,7 @@ Deno.serve(async (req) => {
       let assistantContent = "";
       let status = "complete";
       let errorText: string | null = null;
+      let condensationOccurred = false;
 
       try {
         if (!bridgeUrl || !bridgeSecret) {
@@ -288,13 +314,18 @@ Deno.serve(async (req) => {
           );
         }
 
-        const messages = (history ?? []).map((m) => ({
-          role: m.role,
-          content: m.content,
-        }));
-        if (contextText) {
-          messages.unshift({ role: "system", content: contextText });
-        }
+        const historyRows = (history ?? []) as HistoryRow[];
+        const watermark =
+          typeof chat.condensed_through_sort_order === "number"
+            ? chat.condensed_through_sort_order
+            : -1;
+        const condensed = (chat.condensed_context ?? null) as CondensedContext | null;
+        const modelMessages = buildModelMessages({
+          history: historyRows,
+          watermark,
+          condensed,
+          contextText,
+        });
 
         const bridgeRes = await fetch(`${bridgeUrl}/v1/chat`, {
           method: "POST",
@@ -302,7 +333,7 @@ Deno.serve(async (req) => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${bridgeSecret}`,
           },
-          body: JSON.stringify({ model: MODEL, messages }),
+          body: JSON.stringify({ model: MODEL, messages: modelMessages }),
           signal: AbortSignal.timeout(45_000),
         });
 
@@ -341,6 +372,33 @@ Deno.serve(async (req) => {
         .insert(assistantRow);
       if (insertAsstErr) throw insertAsstErr;
 
+      if (status === "complete" && bridgeUrl && bridgeSecret) {
+        try {
+          const { data: fullHistory } = await supabase
+            .from("ai_chat_messages")
+            .select("role, content, sort_order")
+            .eq("chat_id", payload.chatId)
+            .eq("owner_id", user.id)
+            .order("sort_order", { ascending: true });
+
+          const condensedResult = await maybeCondenseChat({
+            bridgeUrl,
+            bridgeSecret,
+            supabase,
+            chatId: payload.chatId,
+            history: (fullHistory ?? []) as HistoryRow[],
+            watermark:
+              typeof chat.condensed_through_sort_order === "number"
+                ? chat.condensed_through_sort_order
+                : -1,
+            existing: (chat.condensed_context ?? null) as CondensedContext | null,
+          });
+          condensationOccurred = condensedResult.occurred;
+        } catch (condenseErr) {
+          console.warn("[ai-chat] condensation skipped", condenseErr);
+        }
+      }
+
       await supabase.from("ai_audit_events").insert({
         id: newId("aie"),
         owner_id: user.id,
@@ -351,6 +409,7 @@ Deno.serve(async (req) => {
         detail: {
           model: MODEL,
           error: errorText,
+          condensationOccurred,
         },
         created_at: new Date().toISOString(),
       });
@@ -359,6 +418,7 @@ Deno.serve(async (req) => {
         userMessage: userRow,
         assistantMessage: assistantRow,
         offline: status === "error",
+        condensation: { occurred: condensationOccurred },
       });
     }
 
@@ -483,4 +543,179 @@ async function resolveContextText(
     ...lines,
     "Use this context only; do not invent access to other workspace data.",
   ].join("\n");
+}
+
+function formatCondensedSystem(condensed: CondensedContext): string {
+  const lines = [
+    "Condensed prior conversation context (long-term memory):",
+    condensed.conversation_summary
+      ? `Summary: ${condensed.conversation_summary}`
+      : null,
+    condensed.current_state ? `Current state: ${condensed.current_state}` : null,
+    condensed.decisions?.length
+      ? `Decisions: ${condensed.decisions.join("; ")}`
+      : null,
+    condensed.open_tasks?.length
+      ? `Open tasks: ${condensed.open_tasks.join("; ")}`
+      : null,
+    condensed.important_entities?.length
+      ? `Important entities: ${condensed.important_entities.join("; ")}`
+      : null,
+    condensed.preferences_constraints?.length
+      ? `Preferences/constraints: ${condensed.preferences_constraints.join("; ")}`
+      : null,
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
+function buildModelMessages(opts: {
+  history: HistoryRow[];
+  watermark: number;
+  condensed: CondensedContext | null;
+  contextText: string | null;
+}): Array<{ role: string; content: string }> {
+  const afterWatermark = opts.history.filter(
+    (m) => m.sort_order > opts.watermark,
+  );
+  const recent = afterWatermark.slice(-RECENT_MESSAGE_LIMIT);
+  const messages: Array<{ role: string; content: string }> = [
+    { role: "system", content: PRODUCT_SYSTEM_PROMPT },
+  ];
+  if (opts.contextText) {
+    messages.push({ role: "system", content: opts.contextText });
+  }
+  if (opts.condensed && Object.keys(opts.condensed).length) {
+    messages.push({
+      role: "system",
+      content: formatCondensedSystem(opts.condensed),
+    });
+  }
+  for (const m of recent) {
+    if (m.role === "system") continue;
+    messages.push({ role: m.role, content: m.content });
+  }
+  return messages;
+}
+
+async function callBridge(
+  bridgeUrl: string,
+  bridgeSecret: string,
+  messages: Array<{ role: string; content: string }>,
+  timeoutMs = 45_000,
+): Promise<string> {
+  const bridgeRes = await fetch(`${bridgeUrl}/v1/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${bridgeSecret}`,
+    },
+    body: JSON.stringify({ model: MODEL, messages }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!bridgeRes.ok) {
+    const detail = await bridgeRes.text().catch(() => "");
+    throw new Error(detail || `AI bridge error (${bridgeRes.status})`);
+  }
+  const data = (await bridgeRes.json()) as { content?: string };
+  return data.content?.trim() || "";
+}
+
+function parseCondensedJson(raw: string): CondensedContext | null {
+  try {
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start < 0 || end <= start) return null;
+    const parsed = JSON.parse(raw.slice(start, end + 1)) as CondensedContext;
+    return {
+      conversation_summary: String(parsed.conversation_summary ?? ""),
+      current_state: String(parsed.current_state ?? ""),
+      decisions: Array.isArray(parsed.decisions)
+        ? parsed.decisions.map(String)
+        : [],
+      open_tasks: Array.isArray(parsed.open_tasks)
+        ? parsed.open_tasks.map(String)
+        : [],
+      important_entities: Array.isArray(parsed.important_entities)
+        ? parsed.important_entities.map(String)
+        : [],
+      preferences_constraints: Array.isArray(parsed.preferences_constraints)
+        ? parsed.preferences_constraints.map(String)
+        : [],
+      last_updated: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function maybeCondenseChat(opts: {
+  bridgeUrl: string;
+  bridgeSecret: string;
+  // deno-lint-ignore no-explicit-any
+  supabase: any;
+  chatId: string;
+  history: HistoryRow[];
+  watermark: number;
+  existing: CondensedContext | null;
+}): Promise<{ occurred: boolean }> {
+  const overflow = opts.history.filter((m) => m.sort_order > opts.watermark);
+  const charCount = overflow.reduce((n, m) => n + (m.content?.length ?? 0), 0);
+  if (
+    overflow.length < CONDENSE_MESSAGE_THRESHOLD &&
+    charCount < CONDENSE_CHAR_THRESHOLD
+  ) {
+    return { occurred: false };
+  }
+
+  const keepRecent = Math.min(RECENT_MESSAGE_LIMIT, overflow.length);
+  const toCondense = overflow.slice(0, overflow.length - keepRecent);
+  if (toCondense.length < 8) return { occurred: false };
+
+  const transcript = toCondense
+    .map((m) => `${m.role}: ${m.content}`)
+    .join("\n")
+    .slice(0, 14_000);
+
+  const existingJson = JSON.stringify(opts.existing ?? {}, null, 0);
+  const prompt = `Update this condensed chat context JSON using ONLY the new messages.
+Preserve requirements, decisions, constraints, open tasks, important names, and current state.
+Drop conversational filler. Return ONLY valid JSON with keys:
+conversation_summary, current_state, decisions, open_tasks, important_entities, preferences_constraints
+
+Existing condensed context:
+${existingJson}
+
+New messages since last condensation:
+${transcript}`;
+
+  const raw = await callBridge(
+    opts.bridgeUrl,
+    opts.bridgeSecret,
+    [
+      {
+        role: "system",
+        content:
+          "You maintain structured conversation memory. Reply with JSON only.",
+      },
+      { role: "user", content: prompt },
+    ],
+    60_000,
+  );
+
+  const next = parseCondensedJson(raw);
+  if (!next) return { occurred: false };
+
+  const newWatermark = toCondense[toCondense.length - 1].sort_order;
+  const { error } = await opts.supabase
+    .from("ai_chats")
+    .update({
+      condensed_context: next,
+      condensed_through_sort_order: newWatermark,
+      condensed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", opts.chatId);
+
+  if (error) throw error;
+  return { occurred: true };
 }

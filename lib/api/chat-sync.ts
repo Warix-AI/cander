@@ -22,7 +22,10 @@ function hasPendingAiThinking(threads: ReturnType<typeof getChatStoreSnapshot>["
     thread.messages.some(
       (m) =>
         m.role === "assistant" &&
-        (m.content === "Thinking…" || m.content === "Thinking..."),
+        (m.status === "pending" ||
+          m.status === "streaming" ||
+          m.content === "Thinking…" ||
+          m.content === "Thinking..."),
     ),
   );
 }

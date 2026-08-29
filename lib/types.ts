@@ -149,12 +149,18 @@ export type PlatformDeployment = {
   hosting: HostingMode;
 };
 
+export type MessageStatus = "complete" | "pending" | "streaming" | "error";
+
 export type Message = {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   at: string;
   blocks?: ChatBlock[];
+  /** In-flight / stream status for live AI turns. */
+  status?: MessageStatus;
+  /** Subtle transcript event (not an assistant reply). */
+  event?: "condensed";
   /** In-stream divider when the continuous chat switches spaces. */
   spaceSwitch?: { from: SpaceId; to: SpaceId };
 };
@@ -175,7 +181,14 @@ export type ChatBlock =
   | { type: "secret"; service: string; keyName: string; filled?: boolean }
   | { type: "connect"; service: string; status: "pending" | "connected" }
   | { type: "error"; title: string; body: string; details?: string }
-  | { type: "deploy"; url: string; status: "ready" | "live" };
+  | { type: "deploy"; url: string; status: "ready" | "live" }
+  /** Shell for future agent tool activity — not wired to live tools yet. */
+  | {
+      type: "tool";
+      label: string;
+      status: "running" | "done" | "error";
+      detail?: string;
+    };
 
 export type Checkpoint = {
   id: string;

@@ -101,6 +101,7 @@ export function sendAiChatMessage(chatId: string, content: string) {
     userMessage: AiChatMessageDto;
     assistantMessage: AiChatMessageDto;
     offline?: boolean;
+    condensation?: { occurred: boolean };
   }>({ action: "send_message", chatId, content });
 }
 
