@@ -7,6 +7,7 @@ export const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: "plans", label: "Plans" },
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
+  { id: "hosting", label: "Hosting" },
 ];
 
 export function visibleSettingsTabs(entitlements: Entitlements) {

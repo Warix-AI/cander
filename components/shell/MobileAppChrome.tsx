@@ -197,6 +197,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const createBuildProject = async (kind: ProjectKind, label: string) => {
     if (newProjectBusy) return;
     setNewProjectBusy(true);
+    setNewProjectOpen(false);
     try {
       const created = await createProject(ctx, {
         space: "build",
@@ -206,7 +207,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
           BUILD_CREATE_OPTIONS.find((item) => item.kind === kind)?.summary ??
           "",
       });
-      setNewProjectOpen(false);
       openProject(created.id);
       setMobileSurface("panel");
     } finally {
@@ -217,6 +217,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const createExploreProject = async (item: ExploreStart) => {
     if (newProjectBusy) return;
     setNewProjectBusy(true);
+    setNewProjectOpen(false);
     try {
       const created = await createProject(ctx, {
         space: "research",
@@ -224,7 +225,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
         kind: item.kind,
         summary: item.summary,
       });
-      setNewProjectOpen(false);
       openProject(created.id);
       setMobileSurface("panel");
     } finally {

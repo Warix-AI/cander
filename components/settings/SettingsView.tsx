@@ -8,6 +8,7 @@ import {
   ImagePlus,
   LayoutGrid,
   Palette,
+  Server,
   UserRound,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
@@ -17,6 +18,7 @@ import {
   useMobileStackDirection,
 } from "@/components/shell/mobile/MobileSlideStack";
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
+import { HostingSettings } from "@/components/settings/HostingSettings";
 import { PlansSettings } from "@/components/settings/PlansSettings";
 import { AccountSecuritySettings } from "@/components/settings/AccountSecuritySettings";
 import {
@@ -78,6 +80,7 @@ const settingsIcons: Record<SettingsTab, typeof Building2> = {
   plans: CreditCard,
   general: UserRound,
   appearance: Palette,
+  hosting: Server,
 };
 
 /** Full-screen account settings — hub on mobile, tabs in sidebar on desktop. */
@@ -198,6 +201,8 @@ export function SettingsView() {
       ) : null}
 
       {settingsTab === "appearance" ? <AppearanceSettings /> : null}
+
+      {settingsTab === "hosting" ? <HostingSettings /> : null}
     </div>
   );
 
@@ -242,6 +247,8 @@ export function SettingsView() {
           ) : null}
 
           {settingsTab === "appearance" ? <AppearanceSettings /> : null}
+
+          {settingsTab === "hosting" ? <HostingSettings /> : null}
         </>
       )}
     </div>

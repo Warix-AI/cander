@@ -37,7 +37,13 @@ export function classifyTurn(raw: string): TurnKind {
     return "skill";
   if (/(research|look up|best onboarding)/.test(text) && /(research|look|learn|best)/.test(text))
     return "research";
-  if (/(build|create|make me|make a|landing|crm|app for|website|add auth|authentication|database)/.test(text))
+  // Require construction phrases — bare "build"/"create" must not steal casual chat
+  // ("are you ready to build?") into the mock plan/checklist loop.
+  if (
+    /(build me|build a|build an|create a|create an|make me|make a|make an|landing page|crm|app for|website|add auth|add authentication|add a database)/.test(
+      text,
+    )
+  )
     return "build";
   if (/(make this|move this|change this|smaller|bigger|color|redesign|remove this|duplicate)/.test(text))
     return "refine";

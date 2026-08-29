@@ -73,7 +73,8 @@ export function NewBuildMenu({ onCreated }: NewBuildMenuProps) {
               role="menuitem"
               disabled={busy}
               onClick={() => {
-                void start(item.kind, item.label).then(() => close());
+                close();
+                void start(item.kind, item.label);
               }}
               className="flex w-full flex-col rounded-[10px] px-3 py-2 text-left hover:bg-muted disabled:opacity-50"
             >

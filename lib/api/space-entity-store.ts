@@ -267,7 +267,20 @@ export const localSpaceEntityStore = {
       status: "draft",
       instructions: input.instructions,
     };
-    state = { ...state, projects: [project, ...state.projects] };
+    state = { ...state, projects: [project, ...state.projects], seeded: true };
+    persist();
+    return project;
+  },
+
+  /** Insert a fully-formed project (optimistic remote create). */
+  seedProject(project: SpaceProject) {
+    hydrate();
+    if (state.projects.some((item) => item.id === project.id)) return project;
+    state = {
+      ...state,
+      projects: [project, ...state.projects],
+      seeded: true,
+    };
     persist();
     return project;
   },

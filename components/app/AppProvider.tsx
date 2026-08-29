@@ -1365,10 +1365,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         at: nowTime(),
       };
 
+      // Signed-in: live AI for chat + construction/skill/research turns.
+      // Keep local mock UI only for special chrome kinds (undo, connect, …)
+      // or when offline / unsigned.
+      const canLiveAi =
+        isSupabaseConfigured() && Boolean(supabaseUser);
       const useLiveAi =
-        kind === "chat" &&
-        isSupabaseConfigured() &&
-        Boolean(supabaseUser);
+        canLiveAi &&
+        (kind === "chat" ||
+          kind === "build" ||
+          kind === "refine" ||
+          kind === "skill" ||
+          kind === "research");
 
       if (useLiveAi) {
         assistantMsg = {
@@ -1482,17 +1490,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ],
         };
         setOverlay("publish");
-      } else if (kind === "skill") {
+      } else if (!useLiveAi && kind === "skill") {
         const skill = skillReply(trimmed);
         assistantMsg = { ...assistantMsg, content: skill.content, blocks: skill.blocks };
-      } else if (kind === "research") {
+      } else if (!useLiveAi && kind === "research") {
         const research = researchReply();
         assistantMsg = {
           ...assistantMsg,
           content: research.content,
           blocks: research.blocks,
         };
-      } else if (kind === "build" || kind === "refine") {
+      } else if (!useLiveAi && (kind === "build" || kind === "refine")) {
         assistantMsg = {
           ...assistantMsg,
           content: selection
@@ -1592,7 +1600,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      if (kind === "build" || kind === "refine" || kind === "fix") {
+      if (
+        !useLiveAi &&
+        (kind === "build" || kind === "refine" || kind === "fix")
+      ) {
         const checkpoint = makeCheckpoint(trimmed, selection);
         const build = assistantMsg.blocks?.find((block) => block.type === "build");
         const count = build && build.type === "build" ? build.items.length : 0;

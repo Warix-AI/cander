@@ -1,19 +1,27 @@
 "use client";
 
-import {
-  createAiChat,
-  sendAiChatMessage,
-  setAiChatContext,
-  type AiContextRefInput,
-} from "@/lib/api/ai-chat-api";
+/**
+ * Client entry for private AI replies.
+ *
+ * Routes through AIRuntime (AUTO / LOCAL / CLOUD).
+ * Cloud path: Edge ai-chat → tunnel → bridge (existing behavior).
+ * LOCAL path: on-device only — never silently falls back to cloud.
+ */
+
+import { generateWithAiRuntime } from "@/lib/ai/runtime/runtime";
+import { AiRuntimeError } from "@/lib/ai/runtime/types";
 import type { SpaceId } from "@/lib/types";
 
 export function buildAiContextRefs(opts: {
   workspaceId: string;
   projectId?: string | null;
   projectSpace?: SpaceId | null;
-}): AiContextRefInput[] {
-  const refs: AiContextRefInput[] = [
+}) {
+  const refs: Array<{
+    kind: "workspace" | "project" | "research";
+    id: string;
+    workspaceId: string;
+  }> = [
     {
       kind: "workspace",
       id: opts.workspaceId,
@@ -31,9 +39,6 @@ export function buildAiContextRefs(opts: {
   return refs;
 }
 
-const OFFLINE_REPLY =
-  "I couldn't reach the AI bridge. Check that Ollama, the local bridge, and the HTTPS tunnel are running.";
-
 /**
  * Ensure a private AI chat exists for this UI thread, attach context, send message.
  */
@@ -49,45 +54,34 @@ export async function fetchPrivateAiReply(opts: {
   content: string;
   offline: boolean;
   condensationOccurred: boolean;
+  runtime?: string;
 }> {
-  const contextRefs = buildAiContextRefs({
-    workspaceId: opts.workspaceId,
-    projectId: opts.projectId,
-    projectSpace: opts.projectSpace,
-  });
-
-  let chatId = opts.aiChatId?.trim() || null;
   try {
-    if (!chatId) {
-      // Create without context first — bad refs must not block the reply.
-      const { chat } = await createAiChat({
-        title: opts.title.slice(0, 80) || "New chat",
-        workspaceId: opts.workspaceId,
-      });
-      chatId = chat.id;
-    }
-    await setAiChatContext(chatId, contextRefs).catch(() => {
-      // Non-fatal — send still works without context.
+    const result = await generateWithAiRuntime({
+      aiChatId: opts.aiChatId,
+      title: opts.title,
+      content: opts.content,
+      workspaceId: opts.workspaceId,
+      projectId: opts.projectId,
+      projectSpace: opts.projectSpace,
     });
-
-    const result = await sendAiChatMessage(chatId, opts.content);
     return {
-      aiChatId: chatId,
-      content:
-        result.assistantMessage.content?.trim() ||
-        (result.offline ? OFFLINE_REPLY : "(empty reply)"),
-      offline: Boolean(result.offline),
-      condensationOccurred: Boolean(result.condensation?.occurred),
+      aiChatId: result.aiChatId ?? opts.aiChatId ?? "",
+      content: result.content,
+      offline: result.offline,
+      condensationOccurred: result.condensationOccurred,
+      runtime: result.runtime,
     };
   } catch (err) {
-    return {
-      aiChatId: chatId ?? `local-${Date.now()}`,
-      content:
-        err instanceof Error && /unauthorized|auth|sign.?in/i.test(err.message)
-          ? "Sign in again to use AI chat."
-          : OFFLINE_REPLY,
-      offline: true,
-      condensationOccurred: false,
-    };
+    if (err instanceof AiRuntimeError) {
+      return {
+        aiChatId: opts.aiChatId ?? "",
+        content: err.message,
+        offline: err.code === "local_unavailable",
+        condensationOccurred: false,
+        runtime: "unavailable",
+      };
+    }
+    throw err;
   }
 }

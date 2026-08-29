@@ -1,7 +1,7 @@
 "use client";
 
 import type { SpaceEntityApi } from "@/lib/api/space-entity-api";
-import { notifyEntityStoreChange } from "@/lib/api/space-entity-store";
+import { notifyEntityStoreChange, localSpaceEntityStore } from "@/lib/api/space-entity-store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   attachmentRowToEntity,
@@ -117,7 +117,8 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
 
     async createProject(ctx, input: CreateProjectInput) {
       const supabase = createSupabaseBrowserClient();
-      const existing = await this.listAllProjects(ctx);
+      // Local uniqueness + optimistic seed so openProject works immediately.
+      const existing = localSpaceEntityStore.listAllProjects(ctx);
       const title = assertUniqueProjectTitle(existing, input.title);
       const project: SpaceProject = {
         ...newEntityTimestamps(),
@@ -132,16 +133,20 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
         instructions: input.instructions,
         createdBy: ctx.actorId,
       };
-      const { error } = await supabase
+      localSpaceEntityStore.seedProject(project);
+
+      void supabase
         .from("projects")
-        .insert(projectToRow(project, ctx.actorId));
-      if (error) {
-        if (/projects_workspace_title_unique|23505/i.test(error.message)) {
-          throw new Error("A project already uses that name.");
-        }
-        throw error;
-      }
-      notifyEntityStoreChange();
+        .insert(projectToRow(project, ctx.actorId))
+        .then(({ error }) => {
+          if (error) {
+            localSpaceEntityStore.deleteProject(ctx, project.id);
+            console.warn("[cander] project create failed", error.message);
+            return;
+          }
+          notifyEntityStoreChange();
+        });
+
       return project;
     },
 
