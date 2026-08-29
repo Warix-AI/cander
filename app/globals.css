@@ -1157,8 +1157,23 @@ html:not(.dark) .shell-panel :is(.bg-sidebar, .bg-background) {
   }
 }
 
+@keyframes cander-surface-enter-back {
+  from {
+    opacity: 0.7;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .cander-surface-enter {
   animation: cander-surface-enter 240ms ease-out;
+}
+
+.cander-surface-enter-back {
+  animation: cander-surface-enter-back 240ms ease-out;
 }
 
 /* Chat transcript scrollers: keep overflow scroll, hide scrollbar chrome */

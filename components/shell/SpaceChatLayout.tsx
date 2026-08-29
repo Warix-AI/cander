@@ -11,6 +11,10 @@ import { MobileContentPager } from "@/components/shell/MobileContentPager";
 import { PanelToggle, RightPanelToggleDock } from "@/components/shell/PanelToggle";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
+import {
+  getMobilePanelStackDirection,
+  setMobilePanelStackDirection,
+} from "@/lib/mobile-nav-transition";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -49,6 +53,20 @@ export function SpaceChatLayout() {
 
   const [spacePct, setSpacePct] = useState(targetSpacePct);
   const wasOpen = useRef(spaceOpen);
+  const prevProjectId = useRef<string | null>(projectId);
+
+  useEffect(() => {
+    const prev = prevProjectId.current;
+    if (projectId && !prev) {
+      setMobilePanelStackDirection("forward");
+    } else if (!projectId && prev) {
+      // Fallback if leave-project didn't set direction explicitly.
+      if (getMobilePanelStackDirection() !== "back") {
+        setMobilePanelStackDirection("back");
+      }
+    }
+    prevProjectId.current = projectId;
+  }, [projectId]);
 
   useEffect(() => {
     if (mobile) return;
@@ -91,13 +109,16 @@ export function SpaceChatLayout() {
         panelPane={
           <div className={cn("flex h-full min-h-0 flex-col overflow-hidden", MOBILE_APP_BG)}>
             {projectId ? (
-              <div key={projectId} className="cander-surface-enter flex h-full min-h-0 flex-col">
+              <div
+                key={projectId}
+                className="cander-surface-enter flex h-full min-h-0 flex-col"
+              >
                 <ProjectBrowserPanel />
               </div>
             ) : (
               <SpaceRenderModeProvider mode="page">
                 <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
-                  <SpaceDashboard />
+                  <SpaceDashboard enterDirection={getMobilePanelStackDirection()} />
                 </div>
               </SpaceRenderModeProvider>
             )}
@@ -178,11 +199,14 @@ export function SpaceChatLayout() {
             )}
           >
             {projectId ? (
-              <div key={projectId} className="cander-surface-enter flex min-h-0 flex-1 flex-col">
+              <div
+                key={projectId}
+                className="cander-surface-enter flex min-h-0 flex-1 flex-col"
+              >
                 <ProjectBrowserPanel />
               </div>
             ) : (
-              <SpaceDashboard />
+              <SpaceDashboard enterDirection={getMobilePanelStackDirection()} />
             )}
           </div>
         </SpaceRenderModeProvider>
