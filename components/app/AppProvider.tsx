@@ -1656,26 +1656,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           workspaceId: matched?.workspaceId ?? workspaceId,
           projectId: replyProjectId,
           projectSpace: replyProjectSpace,
-        }).then((result) => {
-          setThreads((current) =>
-            current.map((item) =>
-              item.id !== activeId
-                ? item
-                : {
-                    ...item,
-                    aiChatId: result.aiChatId,
-                    messages: item.messages.map((message) =>
-                      message.id !== assistantId
-                        ? message
-                        : {
-                            ...message,
-                            content: result.content,
-                          },
-                    ),
-                  },
-            ),
-          );
-        });
+        })
+          .then((result) => {
+            setThreads((current) =>
+              current.map((item) =>
+                item.id !== activeId
+                  ? item
+                  : {
+                      ...item,
+                      aiChatId: result.aiChatId.startsWith("local-")
+                        ? item.aiChatId
+                        : result.aiChatId,
+                      messages: item.messages.map((message) =>
+                        message.id !== assistantId
+                          ? message
+                          : {
+                              ...message,
+                              content: result.content,
+                            },
+                      ),
+                    },
+              ),
+            );
+          })
+          .catch(() => {
+            setThreads((current) =>
+              current.map((item) =>
+                item.id !== activeId
+                  ? item
+                  : {
+                      ...item,
+                      messages: item.messages.map((message) =>
+                        message.id !== assistantId
+                          ? message
+                          : {
+                              ...message,
+                              content:
+                                "I couldn't reach the AI bridge. Check that Ollama, the local bridge, and the HTTPS tunnel are running.",
+                            },
+                      ),
+                    },
+              ),
+            );
+          });
       };
 
       if (view === "browser") {

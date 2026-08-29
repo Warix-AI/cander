@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
     if (action === "create_chat") {
       const id = newId("aic");
       const now = new Date().toISOString();
-      const row = {
+      let row = {
         id,
         owner_id: user.id,
         workspace_id: payload.workspaceId ?? null,
@@ -114,15 +114,28 @@ Deno.serve(async (req) => {
         created_at: now,
         updated_at: now,
       };
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("ai_chats")
         .insert(row)
         .select("*")
         .single();
+      // Invalid/foreign workspace id should not block chat creation.
+      if (error && row.workspace_id) {
+        row = { ...row, workspace_id: null };
+        ({ data, error } = await supabase
+          .from("ai_chats")
+          .insert(row)
+          .select("*")
+          .single());
+      }
       if (error) throw error;
 
       if (payload.contextRefs?.length) {
-        await upsertContextRefs(supabase, user.id, id, payload.contextRefs);
+        try {
+          await upsertContextRefs(supabase, user.id, id, payload.contextRefs);
+        } catch (refErr) {
+          console.error("[ai-chat] context refs skipped", refErr);
+        }
       }
       return json(200, { chat: data });
     }

@@ -52,20 +52,19 @@ export async function fetchPrivateAiReply(opts: {
   });
 
   let chatId = opts.aiChatId?.trim() || null;
-  if (!chatId) {
-    const { chat } = await createAiChat({
-      title: opts.title.slice(0, 80) || "New chat",
-      workspaceId: opts.workspaceId,
-      contextRefs,
-    });
-    chatId = chat.id;
-  } else {
-    await setAiChatContext(chatId, contextRefs).catch(() => {
-      // Non-fatal — send still works without refreshed context.
-    });
-  }
-
   try {
+    if (!chatId) {
+      // Create without context first — bad refs must not block the reply.
+      const { chat } = await createAiChat({
+        title: opts.title.slice(0, 80) || "New chat",
+        workspaceId: opts.workspaceId,
+      });
+      chatId = chat.id;
+    }
+    await setAiChatContext(chatId, contextRefs).catch(() => {
+      // Non-fatal — send still works without context.
+    });
+
     const result = await sendAiChatMessage(chatId, opts.content);
     return {
       aiChatId: chatId,
@@ -74,10 +73,13 @@ export async function fetchPrivateAiReply(opts: {
         (result.offline ? OFFLINE_REPLY : "(empty reply)"),
       offline: Boolean(result.offline),
     };
-  } catch {
+  } catch (err) {
     return {
-      aiChatId: chatId,
-      content: OFFLINE_REPLY,
+      aiChatId: chatId ?? `local-${Date.now()}`,
+      content:
+        err instanceof Error && /unauthorized|auth|sign.?in/i.test(err.message)
+          ? "Sign in again to use AI chat."
+          : OFFLINE_REPLY,
       offline: true,
     };
   }

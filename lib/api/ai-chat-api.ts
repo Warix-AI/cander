@@ -42,7 +42,17 @@ async function invokeAiChat<T>(body: AiChatAction): Promise<T> {
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase.functions.invoke("ai-chat", { body });
   if (error) {
-    throw new Error(error.message || "AI chat request failed");
+    let detail = error.message || "AI chat request failed";
+    try {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.json === "function") {
+        const bodyJson = await ctx.json();
+        if (bodyJson?.error) detail = String(bodyJson.error);
+      }
+    } catch {
+      // keep detail
+    }
+    throw new Error(detail);
   }
   if (data?.error) {
     throw new Error(String(data.error));
