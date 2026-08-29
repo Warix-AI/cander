@@ -13,6 +13,7 @@ import { useApp } from "@/components/app/AppProvider";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
 import { ToolCallBlock } from "@/components/chat/ToolCallBlock";
+import { formatClarificationAnswersForDisplay } from "@/lib/ai/clarification/schema";
 import type { ChatBlock, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -169,10 +170,10 @@ function BlockView({ block }: { block: ChatBlock }) {
         <div className="my-1 rounded-[10px] border border-border/80 bg-muted/30 px-3 py-2 text-[13px]">
           <p className="font-medium tracking-[-0.01em]">{block.title}</p>
           <ul className="mt-1 space-y-0.5 text-muted-foreground">
-            {Object.entries(block.answers).map(([key, value]) => (
-              <li key={key}>
-                <span className="text-foreground/80">{key}</span>:{" "}
-                {typeof value === "string" ? value : JSON.stringify(value)}
+            {formatClarificationAnswersForDisplay(block.answers).map((row) => (
+              <li key={`${row.label}-${row.value}`}>
+                <span className="text-foreground/80">{row.label}</span>:{" "}
+                {row.value}
               </li>
             ))}
           </ul>

@@ -91,7 +91,9 @@ export function SpaceChatLayout() {
         panelPane={
           <div className={cn("flex h-full min-h-0 flex-col overflow-hidden", MOBILE_APP_BG)}>
             {projectId ? (
-              <ProjectBrowserPanel />
+              <div key={projectId} className="cander-surface-enter flex h-full min-h-0 flex-col">
+                <ProjectBrowserPanel />
+              </div>
             ) : (
               <SpaceRenderModeProvider mode="page">
                 <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
@@ -175,7 +177,13 @@ export function SpaceChatLayout() {
               projectId ? "overflow-hidden" : "overflow-y-auto",
             )}
           >
-            {projectId ? <ProjectBrowserPanel /> : <SpaceDashboard />}
+            {projectId ? (
+              <div key={projectId} className="cander-surface-enter flex min-h-0 flex-1 flex-col">
+                <ProjectBrowserPanel />
+              </div>
+            ) : (
+              <SpaceDashboard />
+            )}
           </div>
         </SpaceRenderModeProvider>
       </div>

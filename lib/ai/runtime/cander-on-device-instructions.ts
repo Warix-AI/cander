@@ -19,6 +19,7 @@ export function buildCanderOnDeviceInstructions(opts?: {
   spaceLabel?: string | null;
   inventoryBlock?: string | null;
   transcriptBlock?: string | null;
+  planCapabilityLine?: string | null;
   /** When true, suppress greeting / identity scripts. */
   hasPriorTurns?: boolean;
 }) {
@@ -66,8 +67,10 @@ export function buildCanderOnDeviceInstructions(opts?: {
     "On device means prompts for inference stay on this iPhone/iPad; Cloud uses Cander’s private cloud path.",
     "You cannot open URLs or control the UI yourself unless an in-app tool result says you did — tell the user which screen to use when tools are unavailable.",
     "You have a cached snapshot of this workspace below. Answer from that snapshot. If something is missing, say you don’t see it on-device yet — do not invent it.",
+    "For new projects, clarify with Build vs Explore (never say research to the user). Always confirm before deleting.",
     who,
     place,
+    opts?.planCapabilityLine?.trim() || "",
     opts?.inventoryBlock?.trim() ? `\n${opts.inventoryBlock.trim()}` : "",
     // Prefer dialogue in the user prompt; keep a short transcript hint only if provided.
     opts?.transcriptBlock?.trim() && !opts.hasPriorTurns

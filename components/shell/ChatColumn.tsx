@@ -30,9 +30,51 @@ const homePromptIcons = {
   p2: Telescope,
 } as const;
 
+function ComposerDock({
+  onSend,
+  hideSpaceTools,
+}: {
+  onSend: (
+    text: string,
+    opts?: { attachments?: ChatImageAttachment[] },
+  ) => void;
+  hideSpaceTools?: boolean;
+}) {
+  const { thread, continueAfterClarification } = useApp();
+  const mobile = useMobileShell();
+  const floating = useShellStyle() === "floating";
+  const centered = useChatCanvasCentered();
+
+  return (
+    <div
+      className={cn(
+        "composer-keyboard-pad shrink-0",
+        floating && !mobile
+          ? centered
+            ? "px-4 sm:px-6"
+            : "pr-2.5 pl-1.5 sm:pr-3 sm:pl-2"
+          : "px-4 sm:px-6",
+        "pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.35rem))] sm:pb-4",
+      )}
+    >
+      <div
+        className={cn(
+          "w-full max-w-[38rem]",
+          (!floating || centered || mobile) && "mx-auto",
+        )}
+      >
+        <ClarificationCardSlot
+          threadId={thread?.id}
+          onSubmitted={continueAfterClarification}
+        />
+        <Composer onSend={onSend} hideSpaceTools={hideSpaceTools} inDock />
+      </div>
+    </div>
+  );
+}
+
 export function ChatColumn() {
-  const { thread, spaceId, sendMessage, drafting, view, continueAfterClarification } =
-    useApp();
+  const { thread, spaceId, sendMessage, drafting, view } = useApp();
   const browserMode = view === "browser";
   const mobile = useMobileShell();
   const hasChatTurns = Boolean(
@@ -122,11 +164,7 @@ export function ChatColumn() {
             <div ref={endRef} />
           )}
         </div>
-        <ClarificationCardSlot
-          threadId={thread?.id}
-          onSubmitted={continueAfterClarification}
-        />
-        <Composer onSend={send} hideSpaceTools />
+        <ComposerDock onSend={send} hideSpaceTools />
       </section>
     );
   }
@@ -157,11 +195,7 @@ export function ChatColumn() {
           )}
         </div>
         <div className={cn("shrink-0", MOBILE_APP_BG)}>
-          <ClarificationCardSlot
-            threadId={thread?.id}
-            onSubmitted={continueAfterClarification}
-          />
-          <Composer onSend={send} />
+          <ComposerDock onSend={send} />
         </div>
       </section>
     );
@@ -203,15 +237,7 @@ export function ChatColumn() {
         </div>
       )}
 
-      {showLanding ? null : (
-        <>
-          <ClarificationCardSlot
-            threadId={thread?.id}
-            onSubmitted={continueAfterClarification}
-          />
-          <Composer onSend={send} />
-        </>
-      )}
+      {showLanding ? null : <ComposerDock onSend={send} />}
     </section>
   );
 }

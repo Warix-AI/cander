@@ -4,6 +4,7 @@ import {
   buildDialoguePrompt,
   hasPriorConversationTurns,
 } from "@/lib/ai/assistant-behavior";
+import { buildPlanCapabilityLine } from "@/lib/ai/plan-capability";
 import { buildCanderOnDeviceInstructions } from "@/lib/ai/runtime/cander-on-device-instructions";
 import {
   ensureOnDeviceIdentity,
@@ -22,6 +23,8 @@ import {
   type AiRuntimeCapabilities,
   type AiRuntimeProvider,
 } from "@/lib/ai/runtime/types";
+import { getActorSnapshot } from "@/lib/session";
+import { getMembersSnapshot } from "@/lib/workspace-policy";
 
 /**
  * Apple on-device provider via Capacitor → Foundation Models.
@@ -75,6 +78,10 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
           currentContent: request.content,
         });
         const toolBlock = formatToolsForPrompt();
+        const actorId = getActorSnapshot();
+        const member =
+          getMembersSnapshot().find((m) => m.id === actorId) ??
+          getMembersSnapshot()[0];
         const instructions = [
           buildCanderOnDeviceInstructions({
             shortName: identity?.shortName ?? snap.shortName,
@@ -85,6 +92,7 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
             spaceLabel: snap.spaceLabel,
             inventoryBlock: snap.inventoryBlock,
             transcriptBlock: priorTurns ? null : snap.transcriptBlock,
+            planCapabilityLine: buildPlanCapabilityLine(member),
             hasPriorTurns: priorTurns,
           }),
           toolBlock,

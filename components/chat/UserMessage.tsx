@@ -1,6 +1,7 @@
 "use client";
 
 import type { ChatBlock } from "@/lib/types";
+import { formatClarificationAnswersForDisplay } from "@/lib/ai/clarification/schema";
 
 export function UserMessage({
   content,
@@ -49,12 +50,13 @@ export function UserMessage({
           >
             <p className="font-medium">{block.title}</p>
             <ul className="mt-1 space-y-0.5 text-muted-foreground">
-              {Object.entries(block.answers).map(([key, value]) => (
-                <li key={key}>
-                  {key}:{" "}
-                  {typeof value === "string" ? value : JSON.stringify(value)}
-                </li>
-              ))}
+              {formatClarificationAnswersForDisplay(block.answers).map(
+                (row) => (
+                  <li key={`${row.label}-${row.value}`}>
+                    {row.label}: {row.value}
+                  </li>
+                ),
+              )}
             </ul>
           </div>
         ))}

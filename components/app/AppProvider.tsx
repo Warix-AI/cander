@@ -12,7 +12,11 @@ import {
 } from "react";
 import { accountPresets } from "@/lib/data";
 import {
+  CREATE_PROJECT_SPACE_QUESTIONS,
   formatClarificationAnswersForModel,
+  looksLikeBrokenCreateProjectCard,
+  normalizeProjectCreateFromClarification,
+  sanitizeClarificationQuestions,
   type ClarificationQuestion,
   type ClarificationSubmitResult,
 } from "@/lib/ai/clarification/schema";
@@ -22,6 +26,7 @@ import {
 } from "@/lib/ai/clarification/store";
 import { registerAppActionHandlers } from "@/lib/ai/runtime/app-actions";
 import { executeAuthorizedTool } from "@/lib/ai/runtime/tools";
+import { createApiBundle } from "@/lib/api";
 import {
   getChatStoreServerSnapshot,
   getChatStoreSnapshot,
@@ -37,6 +42,7 @@ import {
   localSpaceEntityStore,
   subscribeSpaceEntityStore,
 } from "@/lib/api/space-entity-store";
+import { getDataBackend, isSupabaseConfigured } from "@/lib/data-backend";
 import {
   deleteWorkspace as deleteCustomWorkspace,
   getWorkspaceCatalogServerSnapshot,
@@ -148,7 +154,6 @@ import {
 } from "@/lib/persistent-chat";
 import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
-import { isSupabaseConfigured } from "@/lib/data-backend";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
 import { typewriterReveal } from "@/lib/ai/typewriter";
 import { openProjectImageTab } from "@/lib/chat-image-attach";
@@ -457,6 +462,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [],
   );
   const [threadId, setThreadId] = useState<string | null>(null);
+  const threadIdRef = useRef<string | null>(null);
+  threadIdRef.current = threadId;
   const [spaceId, setSpaceId] = useState<NavDestinationId | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>("collapsed");
@@ -2036,17 +2043,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ...result.answers,
           };
           if (result.resumeTool === "project.create") {
-            if (!merged.title) {
-              merged.title =
-                result.answers.project_name ??
-                result.answers.name ??
-                result.answers.title ??
-                "Untitled project";
-            }
-            if (typeof merged.space === "string") {
-              const s = String(merged.space).toLowerCase();
-              if (s === "explore") merged.space = "research";
-            }
+            const normalized = normalizeProjectCreateFromClarification(
+              result.answers,
+              result.resumeArguments,
+            );
+            merged.title = normalized.title;
+            if (normalized.space) merged.space = normalized.space;
+            else delete merged.space;
           }
           if (
             result.resumeTool === "project.open" &&
@@ -2735,7 +2738,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               ? "general"
               : "app");
         try {
-          const project = localSpaceEntityStore.createProject(
+          const api = createApiBundle(getDataBackend());
+          const project = await api.entities.createProject(
             { workspaceId, actorId: actor.id },
             {
               space,
@@ -2776,13 +2780,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         };
       },
       askClarification: (opts) => {
-        const tid = threadId;
+        const tid = (opts.threadId?.trim() || threadIdRef.current || "").trim();
         if (!tid) {
           return { ok: false, detail: "No active chat to attach a card to." };
         }
-        const questions = (opts.questions ?? []) as ClarificationQuestion[];
+        let questions = sanitizeClarificationQuestions(
+          (opts.questions ?? []) as ClarificationQuestion[],
+        );
         if (!questions.length) {
           return { ok: false, detail: "Clarification requires questions." };
+        }
+        const resumeTool = opts.resumeTool;
+        if (
+          resumeTool === "project.create" ||
+          looksLikeBrokenCreateProjectCard({
+            title: opts.title,
+            questions,
+          })
+        ) {
+          const knownTitle =
+            typeof opts.resumeArguments?.title === "string"
+              ? opts.resumeArguments.title.trim()
+              : "";
+          questions = knownTitle
+            ? [CREATE_PROJECT_SPACE_QUESTIONS[0]!]
+            : [...CREATE_PROJECT_SPACE_QUESTIONS];
+          openClarificationCard({
+            threadId: tid,
+            title: "New project",
+            description: knownTitle
+              ? `We’ll create “${knownTitle}” once you pick a space.`
+              : "Pick a space, then give it a name.",
+            questions,
+            resumeTool: "project.create",
+            resumeArguments: knownTitle
+              ? { ...(opts.resumeArguments ?? {}), title: knownTitle }
+              : opts.resumeArguments,
+          });
+          return { ok: true, detail: "Clarification card opened." };
         }
         openClarificationCard({
           threadId: tid,

@@ -9,7 +9,7 @@ Rules:
 - Never invent workspace_id, UUIDs, or ask the user for them.
 - Navigate spaces with nav.open: target one of new_chat, work, build, research, recents, connectors, settings. "Explore" means research.
 - panel.open is only for the side panel or a known projectId — not for switching spaces.
-- Create projects with project.create only after you know title and space (build or research). If missing, use ui.ask_clarification with real questions (id, type, label, choices).
+- Create projects with project.create only after you know title and space (build or research). If missing, use ui.ask_clarification with single_choice questions: space choices Build (id build) and Explore (id research), plus a title text field when needed. Never say “research” in user-facing copy — say Explore. Never use a free-text field for space.
 - Open a project by searching workspace.search then project.open with the matched id.
 - One JSON object only. No trailing commas. Do not append {"error":...}.
 - Prefer a short human sentence plus the tool JSON. If no tool is needed, reply normally with no JSON.`;

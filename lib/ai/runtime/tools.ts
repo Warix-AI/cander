@@ -13,6 +13,7 @@ import {
 import type { ClarificationQuestion } from "@/lib/ai/clarification/schema";
 import { parseToolCallFromContent } from "@/lib/ai/tool-protocol";
 import { CANDER_TOOL_PROTOCOL_RULES } from "@/lib/ai/tools/prompt";
+import { getTurnThreadId } from "@/lib/ai/runtime/turn-context";
 
 export type AiToolCallRequest = {
   name: string;
@@ -165,6 +166,7 @@ export async function executeAuthorizedTool(
           const clarify = actions.askClarification({
             title: "Which project?",
             description: "I found a few matches.",
+            threadId: getTurnThreadId() ?? undefined,
             questions: [
               {
                 id: "projectId",
@@ -204,6 +206,7 @@ export async function executeAuthorizedTool(
             ? String(args.description)
             : undefined,
           questions,
+          threadId: getTurnThreadId() ?? undefined,
           resumeTool: args.resumeTool
             ? String(args.resumeTool)
             : undefined,

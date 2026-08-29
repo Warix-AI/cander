@@ -54,6 +54,8 @@ export function Composer({
   landing = false,
   compact = false,
   hideSpaceTools = false,
+  /** Parent owns horizontal padding + keyboard lift (card + composer). */
+  inDock = false,
   placeholder,
   onFocus,
   autoFocus = false,
@@ -65,6 +67,7 @@ export function Composer({
   landing?: boolean;
   compact?: boolean;
   hideSpaceTools?: boolean;
+  inDock?: boolean;
   placeholder?: string;
   onFocus?: () => void;
   autoFocus?: boolean;
@@ -296,7 +299,7 @@ export function Composer({
     <div className={cn(showUsageBar && "composer-dock-stack")}>
     <form
       className={
-        compact
+        compact || inDock
           ? "w-full"
           : landing
             ? "w-full"
@@ -325,8 +328,8 @@ export function Composer({
         ref={wrapRef}
         className={cn(
           "relative w-full",
-          landing || compact ? "max-w-none" : "max-w-[38rem]",
-          !landing && !compact && (!floating || centered) && "mx-auto",
+          landing || compact || inDock ? "max-w-none" : "max-w-[38rem]",
+          !landing && !compact && !inDock && (!floating || centered) && "mx-auto",
           !stayInPlace && "composer-dock",
         )}
       >

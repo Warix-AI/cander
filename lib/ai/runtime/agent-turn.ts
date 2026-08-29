@@ -10,6 +10,7 @@ import {
 } from "@/lib/ai/runtime/tools";
 import { tryIntentShortcut } from "@/lib/ai/runtime/intent-actions";
 import { buildCreateProjectClarification } from "@/lib/ai/runtime/intent-actions";
+import { setTurnThreadId } from "@/lib/ai/runtime/turn-context";
 import { stripToolJsonFromText } from "@/lib/ai/tool-protocol";
 import { generateWithAiRuntime } from "@/lib/ai/runtime/runtime";
 import type {
@@ -29,7 +30,26 @@ function safeContent(text: string, fallback: string): string {
   return cleaned || fallback;
 }
 
+function shouldForceCreateProjectCard(
+  userContent: string,
+  callTitle?: unknown,
+): boolean {
+  const blob = `${userContent} ${String(callTitle ?? "")}`.toLowerCase();
+  return /\bproject\b/.test(blob) && /\b(create|new|make)\b/.test(blob);
+}
+
 export async function runAssistantTurn(
+  request: AiGenerateRequest,
+): Promise<AgentTurnResult> {
+  setTurnThreadId(request.threadId);
+  try {
+    return await runAssistantTurnInner(request);
+  } finally {
+    setTurnThreadId(null);
+  }
+}
+
+async function runAssistantTurnInner(
   request: AiGenerateRequest,
 ): Promise<AgentTurnResult> {
   const shortcut = await tryIntentShortcut(request.content, {
@@ -64,6 +84,34 @@ export async function runAssistantTurn(
         ),
         toolResults: toolResults.length ? toolResults : undefined,
       };
+    }
+
+    if (
+      call.name === "ui.ask_clarification" &&
+      request.threadId &&
+      shouldForceCreateProjectCard(request.content, call.arguments?.title)
+    ) {
+      const card = buildCreateProjectClarification({
+        threadId: request.threadId,
+      });
+      if (card.opened) {
+        return {
+          ...last,
+          content: safeContent(
+            text,
+            "Sure — what space should this project live in, and what should we name it?",
+          ),
+          toolResults: [
+            {
+              name: "ui.ask_clarification",
+              ok: true,
+              output: card.detail,
+              pauseForUser: true,
+            },
+          ],
+          pausedForUser: true,
+        };
+      }
     }
 
     const result = await executeAuthorizedTool(call);

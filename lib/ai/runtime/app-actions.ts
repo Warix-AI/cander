@@ -33,6 +33,8 @@ export type AppActionHandlers = {
     title: string;
     description?: string;
     questions: unknown[];
+    /** Prefer the turn's thread id — React state can lag after newChat. */
+    threadId?: string;
     resumeTool?: string;
     resumeArguments?: Record<string, unknown>;
   }) => { ok: boolean; detail: string };

@@ -13,7 +13,11 @@ import {
 } from "../lib/ai/assistant-behavior.ts";
 import {
   createClarificationCard,
+  formatClarificationAnswersForDisplay,
   formatClarificationAnswersForModel,
+  looksLikeBrokenCreateProjectCard,
+  normalizeProjectCreateFromClarification,
+  sanitizeClarificationQuestions,
   validateAllClarificationAnswers,
   validateClarificationStep,
   validateQuestionAnswer,
@@ -139,6 +143,46 @@ describe("clarification cards", () => {
     });
     assert.equal(card.questions[0]?.choices?.length, 2);
     assert.equal(card.resumeArguments?.title, "Hello Dude");
+  });
+
+  it("normalizes explore answers and hides undefined keys in display", () => {
+    const normalized = normalizeProjectCreateFromClarification(
+      { undefined: "Explore", name: "Hey Dude" },
+      {},
+    );
+    assert.equal(normalized.space, "research");
+    assert.equal(normalized.title, "Hey Dude");
+
+    const rows = formatClarificationAnswersForDisplay({
+      undefined: "Explore",
+    });
+    assert.equal(rows[0]?.label, "Space");
+    assert.equal(rows[0]?.value, "Explore");
+
+    const sanitized = sanitizeClarificationQuestions([
+      {
+        id: undefined as unknown as string,
+        type: "text",
+        label: "Specify project type (build or research) and title.",
+        required: true,
+      },
+    ]);
+    assert.equal(sanitized[0]?.type, "single_choice");
+    assert.equal(sanitized[0]?.id, "space");
+
+    assert.equal(
+      looksLikeBrokenCreateProjectCard({
+        title: "New project",
+        questions: [
+          {
+            id: "q0",
+            type: "text",
+            label: "build or research and title",
+          },
+        ],
+      }),
+      true,
+    );
   });
 });
 

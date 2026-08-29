@@ -8,9 +8,20 @@ import { useApp } from "@/components/app/AppProvider";
 
 export function SpaceDashboard() {
   const { spaceId } = useApp();
-  if (spaceId === "work") return <WorkDashboard />;
-  if (spaceId === "build") return <BuildDashboard />;
-  if (spaceId === "research") return <ResearchDashboard />;
-  if (spaceId === "connectors") return <ConnectorsDashboard />;
-  return null;
+  const body =
+    spaceId === "work" ? (
+      <WorkDashboard />
+    ) : spaceId === "build" ? (
+      <BuildDashboard />
+    ) : spaceId === "research" ? (
+      <ResearchDashboard />
+    ) : spaceId === "connectors" ? (
+      <ConnectorsDashboard />
+    ) : null;
+  if (!body) return null;
+  return (
+    <div key={spaceId ?? "none"} className="cander-surface-enter min-h-0 flex-1">
+      {body}
+    </div>
+  );
 }

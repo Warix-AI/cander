@@ -285,9 +285,8 @@ function ClarificationCardView({
   return (
     <div
       className={cn(
-        "relative z-10 -mb-2 border border-border bg-card shadow-sm dark:bg-card",
+        "cander-clarify-enter relative z-10 mb-[10px] border border-border bg-card shadow-sm dark:bg-card",
         SHELL_G3_RADIUS,
-        "rounded-b-none border-b-0",
       )}
     >
       <div className="flex items-start justify-between gap-3 border-b border-border/60 px-4 py-3">

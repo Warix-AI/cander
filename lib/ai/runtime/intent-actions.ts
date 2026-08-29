@@ -3,6 +3,7 @@
  */
 
 import type { ClarificationQuestion } from "@/lib/ai/clarification/schema";
+import { CREATE_PROJECT_SPACE_QUESTIONS } from "@/lib/ai/clarification/schema";
 import { getAppActionHandlers } from "@/lib/ai/runtime/app-actions";
 import {
   matchCreateProjectIntent,
@@ -27,28 +28,14 @@ export function buildCreateProjectClarification(opts: {
   if (!actions) return { opened: false, detail: "App actions unavailable." };
 
   const questions: ClarificationQuestion[] = [
-    {
-      id: "space",
-      type: "single_choice",
-      label: "Which space should this live in?",
-      required: true,
-      choices: [
-        { id: "build", label: "Build" },
-        { id: "research", label: "Explore" },
-      ],
-    },
+    CREATE_PROJECT_SPACE_QUESTIONS[0]!,
   ];
   if (!opts.title?.trim()) {
-    questions.push({
-      id: "title",
-      type: "text",
-      label: "What should we name it?",
-      required: true,
-      placeholder: "Project name",
-    });
+    questions.push(CREATE_PROJECT_SPACE_QUESTIONS[1]!);
   }
 
   const result = actions.askClarification({
+    threadId: opts.threadId,
     title: "New project",
     description: opts.title?.trim()
       ? `We’ll create “${opts.title.trim()}” once you pick a space.`
