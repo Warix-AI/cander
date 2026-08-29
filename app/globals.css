@@ -1090,7 +1090,7 @@ html:not(.dark) .shell-panel :is(.bg-sidebar, .bg-background) {
 }
 
 .thinking-shimmer {
-  display: inline-block;
+  display: inline;
   background-image: linear-gradient(
     90deg,
     var(--muted-foreground) 0%,

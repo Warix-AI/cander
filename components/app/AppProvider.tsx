@@ -1415,16 +1415,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           kind === "research");
 
       if (useLiveAi) {
-        const about = displayText.replace(/\s+/g, " ").trim().slice(0, 48);
+        // Casual chat: label only. Tool/complex turns add a detail line via onProgress.
         assistantMsg = {
           ...assistantMsg,
           content: "",
           status: "pending",
           activity: {
             label: "Thinking",
-            detail: about
-              ? `Thinking about “${about}${displayText.trim().length > 48 ? "…" : ""}”`
-              : "Working on your request…",
           },
         };
       }

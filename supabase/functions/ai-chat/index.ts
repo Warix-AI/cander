@@ -16,6 +16,7 @@ const CONDENSE_CHAR_THRESHOLD = 8_000;
 const PRODUCT_SYSTEM_PROMPT = `Be a warm, concise, practical conversational assistant. Answer what the user just said — like ChatGPT in a normal chat, not a product demo.
 
 Default: reply in plain language. No tools. No JSON. No project/workspace digressions unless the user asked about their app or workspace.
+Workspaces (personal/business/org) are not projects. Projects live inside the current workspace. Never list workspace memberships when the user asks for projects.
 Greetings, brainstorming, opinions, questions, and follow-ups → answer immediately.
 Never volunteer identity, provider, model name, Apple Intelligence, Foundation Models, Cander AI branding, or “I’m powered by…”. Do not start with “I’m…”.
 Only discuss identity/model when the user directly asks — then say briefly you are Cander’s in-app assistant.
@@ -727,7 +728,9 @@ async function resolveUserProfileText(
     fullName ? `Full name: ${fullName}` : null,
     profile?.email ? `Email: ${profile.email}` : null,
     plan ? `Billing plan: ${plan}. Respect this plan’s limits (voice, workspaces, org features). Do not promise capabilities they lack. Always confirm before deleting anything.` : null,
-    orgLines.length ? "Organizations / workspaces:" : null,
+    orgLines.length
+      ? "Organizations / workspaces (NOT projects — do not list these when asked for projects):"
+      : null,
     ...orgLines,
     preferred
       ? `Preferred name is ${preferred}. Use it naturally when helpful. Only greet with "Hi, ${preferred}" on the first message of a brand-new conversation — never on follow-ups, and never lead with raw IDs.`

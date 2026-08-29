@@ -58,17 +58,6 @@ function shouldForceCreateProjectCard(
   return /\bproject\b/.test(blob) && /\b(create|new|make)\b/.test(blob);
 }
 
-function truncateForDetail(text: string, max = 48): string {
-  const one = text.replace(/\s+/g, " ").trim();
-  if (one.length <= max) return one;
-  return `${one.slice(0, max - 1).trimEnd()}…`;
-}
-
-function detailForUserQuestion(content: string): string {
-  const q = truncateForDetail(content);
-  return q ? `Thinking about “${q}”` : "Working on your request…";
-}
-
 function detailForTool(name: string): string {
   switch (name) {
     case "project.create":
@@ -92,6 +81,18 @@ function detailForTool(name: string): string {
       return "Preparing publish…";
     default:
       return "Calling tool…";
+  }
+}
+
+function detailForComplexWork(taskType: string): string | undefined {
+  switch (taskType) {
+    case "coding":
+    case "research":
+    case "multi_step":
+    case "release":
+      return "Working on your request…";
+    default:
+      return undefined;
   }
 }
 
@@ -126,7 +127,6 @@ async function runAssistantTurnInner(
   report({
     phase: "thinking",
     label: "Thinking",
-    detail: detailForUserQuestion(request.content),
   });
 
   const taskState = getThreadTaskState(request.threadId);
@@ -148,6 +148,16 @@ async function runAssistantTurnInner(
 
   const allowedToolNames = decision.toolNames;
   const allowTools = allowedToolNames.length > 0;
+
+  // Only show a second line for tool-capable / complex work — not casual chat.
+  const complexDetail = detailForComplexWork(decision.taskType);
+  if (allowTools || complexDetail) {
+    report({
+      phase: "thinking",
+      label: "Thinking",
+      detail: complexDetail,
+    });
+  }
 
   if (allowTools && request.threadId && decision.domains.length) {
     upsertThreadTaskState(request.threadId, {
@@ -204,7 +214,9 @@ async function runAssistantTurnInner(
       label: "Thinking",
       detail:
         round === 0
-          ? detailForUserQuestion(request.content)
+          ? allowTools || complexDetail
+            ? complexDetail
+            : undefined
           : "Using the result…",
     });
     last = await generateWithAiRuntime(working);

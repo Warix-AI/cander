@@ -453,6 +453,8 @@ describe("tool vs conversation intent gate", () => {
     assert.equal(isInAppToolIntent("create a new project called CRM"), true);
     assert.equal(isInAppToolIntent("go to the build space"), true);
     assert.equal(isInAppToolIntent("search my projects for CRM"), true);
+    assert.equal(isInAppToolIntent("what projects do i have"), true);
+    assert.equal(isInAppToolIntent("What projects do I have?"), true);
     assert.equal(isConversationOnlyTurn("create a new project"), false);
   });
 });
@@ -525,6 +527,19 @@ describe("domain tool gating foundation", () => {
     assert.ok(create.toolNames.includes("ui.ask_clarification"));
     assert.ok(!create.toolNames.includes("create_work_task"));
     assert.ok(!create.toolNames.includes("nav.open"));
+
+    const listProjects = resolveAllowedToolsForTurn({
+      content: "what projects do i have",
+    });
+    assert.ok(listProjects.domains.includes("search"));
+    assert.ok(listProjects.domains.includes("projects"));
+    assert.ok(listProjects.toolNames.includes("workspace.search"));
+    assert.ok(!listProjects.toolNames.includes("create_work_task"));
+
+    const showProjects = resolveAllowedToolsForTurn({
+      content: "show me my projects",
+    });
+    assert.ok(showProjects.toolNames.includes("workspace.search"));
   });
 
   it("unrelated tool sets are not loaded for casual conversation", () => {

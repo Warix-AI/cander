@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Cursor-style thinking line: shimmer title + optional activity subtitle.
+ * Cursor-style thinking: shimmer title on its own line, optional detail below.
  */
 export function ThinkingIndicator({
   className,
@@ -14,17 +14,20 @@ export function ThinkingIndicator({
   label?: string;
   detail?: string | null;
 }) {
+  const detailText = detail?.trim() || "";
+
   return (
-    <div className={cn("space-y-1", className)} aria-live="polite">
-      <p
-        className="thinking-shimmer text-[14.5px] leading-relaxed tracking-[-0.01em]"
-        aria-label={label}
-      >
-        {label}
+    <div
+      className={cn("flex flex-col items-start gap-1", className)}
+      aria-live="polite"
+      aria-label={detailText ? `${label}. ${detailText}` : label}
+    >
+      <p className="m-0 block w-full text-[14.5px] leading-relaxed tracking-[-0.01em]">
+        <span className="thinking-shimmer">{label}</span>
       </p>
-      {detail?.trim() ? (
-        <p className="thinking-shimmer text-[13px] leading-snug tracking-[-0.01em] text-muted-foreground opacity-90">
-          {detail.trim()}
+      {detailText ? (
+        <p className="m-0 block w-full text-[13px] leading-snug tracking-[-0.01em] text-muted-foreground">
+          <span className="thinking-shimmer opacity-90">{detailText}</span>
         </p>
       ) : null}
     </div>

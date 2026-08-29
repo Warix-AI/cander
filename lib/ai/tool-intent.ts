@@ -9,6 +9,8 @@ const IN_APP_PATTERNS: RegExp[] = [
   /\b(open|go to|take me|navigate|switch to|show me)\b[\s\S]{0,48}\b(build|explore|work|settings|connectors|recents|chat|project)\b/i,
   /\b(build|explore|work|settings|connectors|recents)\b[\s\S]{0,24}\b(space|panel|screen|page)\b/i,
   /\b(search|find|list|show)\b[\s\S]{0,40}\b(my |the )?(projects?|workspace|recents)\b/i,
+  /\b(what|which|any)\b[\s\S]{0,48}\bprojects?\b/i,
+  /\bprojects?\b[\s\S]{0,40}\b(do i have|do we have|have i|are there|exist)\b/i,
   /\b(delete|remove|archive)\b[\s\S]{0,40}\bproject\b/i,
   /\b(publish|deploy|preview)\b/i,
   /\b(connect|connector)\b[\s\S]{0,24}\b(gmail|slack|calendar|notion)\b/i,

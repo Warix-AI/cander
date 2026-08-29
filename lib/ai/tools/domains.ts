@@ -57,6 +57,9 @@ const IN_APP_PATTERNS: RegExp[] = [
   /\b(open|go to|take me|navigate|switch to|show me)\b[\s\S]{0,48}\b(build|explore|work|settings|connectors|recents|chat|project)\b/i,
   /\b(build|explore|work|settings|connectors|recents)\b[\s\S]{0,24}\b(space|panel|screen|page)\b/i,
   /\b(search|find|list|show)\b[\s\S]{0,40}\b(my |the )?(projects?|workspace|recents)\b/i,
+  // "what projects do I have?" / "which projects are there?" — inventory, not chitchat
+  /\b(what|which|any)\b[\s\S]{0,48}\bprojects?\b/i,
+  /\bprojects?\b[\s\S]{0,40}\b(do i have|do we have|have i|are there|exist)\b/i,
   /\b(delete|remove|archive)\b[\s\S]{0,40}\bproject\b/i,
   /\b(publish|deploy|preview)\b/i,
   /\b(connect|connector)\b[\s\S]{0,24}\b(gmail|slack|calendar|notion)\b/i,
@@ -206,7 +209,11 @@ export function resolveAllowedToolsForTurn(opts: {
       domains.add("navigation");
     }
     if (
-      /\b(search|find|list)\b[\s\S]{0,40}\b(my |the )?(projects?|workspace|recents)\b/i.test(
+      /\b(search|find|list|show)\b[\s\S]{0,40}\b(my |the )?(projects?|workspace|recents)\b/i.test(
+        content,
+      ) ||
+      /\b(what|which|any)\b[\s\S]{0,48}\bprojects?\b/i.test(content) ||
+      /\bprojects?\b[\s\S]{0,40}\b(do i have|do we have|have i|are there|exist)\b/i.test(
         content,
       ) ||
       /\b(open|take me to|find)\b[\s\S]{0,40}\bproject\b/i.test(content)
