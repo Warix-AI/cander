@@ -1,14 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Check,
-  Circle,
-  Copy,
-  ThumbsDown,
-  ThumbsUp,
-  Undo2,
-} from "lucide-react";
+import { Check, Circle, Copy } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
@@ -52,9 +45,7 @@ export function AssistantMessage({ message }: { message: Message }) {
 }
 
 function MessageActions({ message }: { message: Message }) {
-  const { sendMessage } = useApp();
   const [copied, setCopied] = useState(false);
-  const [vote, setVote] = useState<"up" | "down" | null>(null);
 
   const copy = async () => {
     const parts = [
@@ -75,26 +66,6 @@ function MessageActions({ message }: { message: Message }) {
 
   return (
     <div className="-ml-1.5 flex items-center gap-0.5 text-muted-foreground">
-      <ActionBtn
-        label="Revert"
-        onClick={() => sendMessage("Undo what you just did")}
-      >
-        <Undo2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-      </ActionBtn>
-      <ActionBtn
-        label="Good response"
-        active={vote === "up"}
-        onClick={() => setVote((current) => (current === "up" ? null : "up"))}
-      >
-        <ThumbsUp className="h-3.5 w-3.5" strokeWidth={1.6} />
-      </ActionBtn>
-      <ActionBtn
-        label="Bad response"
-        active={vote === "down"}
-        onClick={() => setVote((current) => (current === "down" ? null : "down"))}
-      >
-        <ThumbsDown className="h-3.5 w-3.5" strokeWidth={1.6} />
-      </ActionBtn>
       <ActionBtn label={copied ? "Copied" : "Copy"} onClick={() => void copy()}>
         {copied ? (
           <Check className="h-3.5 w-3.5" strokeWidth={1.8} />
