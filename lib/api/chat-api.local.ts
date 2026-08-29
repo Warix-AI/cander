@@ -30,7 +30,7 @@ function createThreadRecord(
     workspaceId: ctx.workspaceId,
     projectId: input.projectId,
     spaceId: input.spaceId,
-    updatedAt: "Just now",
+    updatedAt: new Date().toISOString(),
     snippet: "",
     messages: [],
   };
@@ -117,7 +117,7 @@ export function createLocalChatApi(): ChatApi {
           ...existing,
           title: existing.messages.length ? existing.title : trimmed.slice(0, 48),
           snippet: trimmed,
-          updatedAt: "Just now",
+          updatedAt: new Date().toISOString(),
           sessionSummary: null,
           messages: [...existing.messages, userMsg, assistantMsg],
         };
@@ -130,7 +130,7 @@ export function createLocalChatApi(): ChatApi {
         title: trimmed.slice(0, 52),
         workspaceId: ctx.workspaceId,
         spaceId: undefined,
-        updatedAt: "Just now",
+        updatedAt: new Date().toISOString(),
         snippet: trimmed,
         messages: [userMsg, assistantMsg],
         sessionSummary: null,

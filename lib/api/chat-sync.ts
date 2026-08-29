@@ -78,11 +78,39 @@ export async function bootstrapSupabaseChat(api: ChatApi, ctx: WorkspaceCtx) {
   await hydrateChatFromRemote(api, ctx);
 }
 
+function threadSyncSig(thread: {
+  id: string;
+  updatedAt: string;
+  title: string;
+  snippet: string;
+  sessionSummary?: string | null;
+  messages: { id: string; content: string; status?: string }[];
+}) {
+  const last = thread.messages[thread.messages.length - 1];
+  return [
+    thread.updatedAt,
+    thread.title,
+    thread.snippet,
+    thread.sessionSummary ?? "",
+    thread.messages.length,
+    last?.id ?? "",
+    last?.content?.slice(0, 80) ?? "",
+    last?.status ?? "",
+  ].join("|");
+}
+
 /** Debounced push of local store → Supabase after AppProvider mutations. */
 export function startChatRemoteSync(ctx: WorkspaceCtx) {
   let lastRevision = getChatStoreSnapshot().revision;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let syncing = false;
+  /** Avoid re-upserting every thread (and stomping timestamps) on each edit. */
+  const lastSyncedSig = new Map<string, string>();
+  for (const thread of getChatStoreSnapshot().threads) {
+    if (thread.workspaceId === ctx.workspaceId) {
+      lastSyncedSig.set(thread.id, threadSyncSig(thread));
+    }
+  }
 
   const push = () => {
     if (syncing || skipRemoteSync) return;
@@ -92,8 +120,18 @@ export function startChatRemoteSync(ctx: WorkspaceCtx) {
     if (hasPendingAiThinking(threads)) {
       return;
     }
+    const dirty = threads.filter((thread) => {
+      if (thread.workspaceId !== ctx.workspaceId) return false;
+      return lastSyncedSig.get(thread.id) !== threadSyncSig(thread);
+    });
+    if (!dirty.length) return;
     syncing = true;
-    void syncThreadsToSupabase(ctx, threads)
+    void syncThreadsToSupabase(ctx, dirty)
+      .then(() => {
+        for (const thread of dirty) {
+          lastSyncedSig.set(thread.id, threadSyncSig(thread));
+        }
+      })
       .catch((err) => {
         console.warn("[cander] chat sync failed", err);
       })

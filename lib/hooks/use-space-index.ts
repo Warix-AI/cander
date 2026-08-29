@@ -66,6 +66,18 @@ function readIndexSeed(ctx: WorkspaceCtx) {
   };
 }
 
+function threadImageCover(thread: Thread): string | undefined {
+  for (let i = thread.messages.length - 1; i >= 0; i--) {
+    const blocks = thread.messages[i]?.blocks;
+    if (!blocks?.length) continue;
+    for (let j = blocks.length - 1; j >= 0; j--) {
+      const block = blocks[j];
+      if (block?.type === "image" && block.url) return block.url;
+    }
+  }
+  return undefined;
+}
+
 export function useSpaceIndex(opts?: {
   space?: SpaceId | "all";
   query?: string;
@@ -179,6 +191,7 @@ export function useSpaceIndex(opts?: {
         rank: recencyRank(thread.updatedAt),
         badge: "Chat",
         snippet: thread.snippet,
+        cover: threadImageCover(thread),
         createdById: thread.createdBy,
         createdByName: creator ?? undefined,
       });

@@ -214,19 +214,26 @@ export async function upsertThreadsToSupabase(
   const ids = threads.map((thread) => thread.id);
   const { data: existingRows } = await supabase
     .from("threads")
-    .select("id, created_by")
+    .select("id, created_by, created_at")
     .in("id", ids);
-  const existingCreatedBy = new Map(
+  const existingMeta = new Map(
     (existingRows ?? []).map((row) => [
       String(row.id),
-      row.created_by ? String(row.created_by) : null,
+      {
+        createdBy: row.created_by ? String(row.created_by) : null,
+        createdAt: row.created_at ? String(row.created_at) : null,
+      },
     ]),
   );
 
   const threadRows = threads.map((thread) => {
-    const createdBy =
-      existingCreatedBy.get(thread.id) ?? thread.createdBy ?? ctx.actorId;
-    return threadToRow({ ...thread, createdBy }, createdBy);
+    const meta = existingMeta.get(thread.id);
+    const createdBy = meta?.createdBy ?? thread.createdBy ?? ctx.actorId;
+    return threadToRow(
+      { ...thread, createdBy },
+      createdBy,
+      meta?.createdAt ?? null,
+    );
   });
   const { error: threadError } = await supabase
     .from("threads")

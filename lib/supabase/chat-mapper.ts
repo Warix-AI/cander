@@ -64,8 +64,13 @@ export function threadRowToThread(
 export function threadToRow(
   thread: Thread,
   createdBy?: string | null,
+  existingCreatedAt?: string | null,
 ): ThreadRow {
   const updated = threadUpdatedAtIso(thread);
+  const created =
+    existingCreatedAt && isIsoTimestamp(existingCreatedAt)
+      ? new Date(existingCreatedAt).toISOString()
+      : updated;
   return {
     id: thread.id,
     workspace_id: thread.workspaceId,
@@ -77,7 +82,7 @@ export function threadToRow(
     persistent: Boolean(thread.persistent),
     session_summary: thread.sessionSummary ?? null,
     created_by: createdBy ?? thread.createdBy ?? null,
-    created_at: updated,
+    created_at: created,
     updated_at: updated,
   };
 }

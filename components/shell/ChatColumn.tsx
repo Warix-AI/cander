@@ -92,14 +92,18 @@ export function ChatColumn() {
           <div
             key={message.id}
             ref={pin ? latestUserRef : undefined}
-            className={pin ? "scroll-mt-3" : undefined}
+            className={
+              pin
+                ? "scroll-mt-[-25px] md:scroll-mt-[-100px]"
+                : undefined
+            }
           >
             <ChatMessage message={message} />
           </div>
         );
       })}
       {/* Room below the latest turn so it can sit near the top like ChatGPT. */}
-      <div className="min-h-[42vh]" aria-hidden />
+      <div className="min-h-[58vh]" aria-hidden />
       <div ref={endRef} />
     </>
   );
@@ -131,7 +135,7 @@ export function ChatColumn() {
           MOBILE_APP_BG,
         )}
       >
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 touch-pan-y">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-1 pb-4 touch-pan-y">
           {hasChatTurns || thread ? (
             <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-5">
               {thread?.sessionSummary ? (
@@ -164,7 +168,7 @@ export function ChatColumn() {
       ) : (
         <div
           className={cn(
-            "flex-1 overflow-y-auto py-5",
+            "flex-1 overflow-y-auto pt-1 pb-5",
             floating
               ? centered
                 ? "px-4 sm:px-6"

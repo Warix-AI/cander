@@ -1266,18 +1266,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         opts?.space ?? (isChatSpace(spaceId) ? spaceId : null);
       const allowed = memberSpaces(workspaceId, actor.id, workspacePolicies);
       const planOpts = { billingPlan };
-      const inferredChat =
-        intent.resolved &&
-        isChatSpace(intent.space) &&
-        spaceAllowed(intent.space, allowed, planOpts)
-          ? intent.space
-          : null;
       const entityContext =
         Boolean(connectorId) ||
         Boolean(projectId) ||
         Boolean(jobId) ||
         Boolean(skillId);
+      // Home New Chat: never auto-enter a Space from keyword intent.
+      const hasExplicitSpace = Boolean(currentChat) || Boolean(opts?.space);
+      const onUnscopedChat =
+        !hasExplicitSpace && !entityContext && view === "chat";
+      const inferredChat =
+        hasExplicitSpace &&
+        intent.resolved &&
+        isChatSpace(intent.space) &&
+        spaceAllowed(intent.space, allowed, planOpts)
+          ? intent.space
+          : null;
       const stayInChat =
+        onUnscopedChat ||
         kind !== "chat" ||
         Boolean(currentChat) ||
         Boolean(inferredChat) ||
@@ -1312,20 +1318,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const space =
-        inferredChat ??
-        currentChat ??
-        (connectorId
-          ? "connectors"
-          : jobId || skillId
-            ? "build"
-            : project
-              ? project.space
-              : null) ??
-        (intent.resolved ? intent.space : null);
-      const matched = intent.projectId
-        ? findProjectInWorkspace(workspaceId, intent.projectId)
-        : undefined;
+      const space = onUnscopedChat
+        ? null
+        : (inferredChat ??
+          currentChat ??
+          (connectorId
+            ? "connectors"
+            : jobId || skillId
+              ? "build"
+              : project
+                ? project.space
+                : null) ??
+          (intent.resolved ? intent.space : null));
+      const matched =
+        onUnscopedChat || !intent.projectId
+          ? undefined
+          : findProjectInWorkspace(workspaceId, intent.projectId);
       if (matched && matched.workspaceId !== workspaceId) {
         persistWorkspace(matched.workspaceId);
       }
@@ -1821,21 +1829,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setView(keepSpace ? "space" : "chat");
       setSpaceId(space ?? spaceId);
       setProjectId(
-        projectId ??
-          (intent.projectId ?? null),
+        onUnscopedChat
+          ? projectId
+          : (projectId ?? intent.projectId ?? null),
       );
       setSkillId(
         skillId ?? opts?.skillId ?? null,
       );
       setPanelIntent("execute");
-      setConnectorId(intent.connectorId ?? connectorId);
-      setJobId(intent.jobId ?? jobId);
-      if (space && intent.buildTool) setBuildTool(intent.buildTool);
-      if (space === "build") setBuildTool("preview");
-      if (space === "research") setResearchTool("browser");
-      if (space && (kind === "build" || kind === "refine" || kind === "fix"))
+      setConnectorId(
+        onUnscopedChat ? connectorId : (intent.connectorId ?? connectorId),
+      );
+      setJobId(onUnscopedChat ? jobId : (intent.jobId ?? jobId));
+      if (!onUnscopedChat && space && intent.buildTool) setBuildTool(intent.buildTool);
+      if (!onUnscopedChat && space === "build") setBuildTool("preview");
+      if (!onUnscopedChat && space === "research") setResearchTool("browser");
+      if (!onUnscopedChat && space && (kind === "build" || kind === "refine" || kind === "fix"))
         setBuildTool("preview");
-      if (space && kind === "changes") setBuildTool("activity");
+      if (!onUnscopedChat && space && kind === "changes") setBuildTool("activity");
       // First turn from an empty chat opens the right panel; later turns
       // respect a user-collapsed panel (full-window chat stays full-window).
       const nextPanelMode =
@@ -1848,13 +1859,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         view: keepSpace ? "space" : "chat",
         spaceId: space ?? spaceId,
         threadId: activeId,
-        projectId:
-          projectId ??
-          (intent.projectId ?? null),
+        projectId: onUnscopedChat
+          ? projectId
+          : (projectId ?? intent.projectId ?? null),
         panelMode: nextPanelMode,
         panelIntent: "execute",
-        connectorId: intent.connectorId ?? connectorId,
-        jobId: intent.jobId ?? jobId,
+        connectorId: onUnscopedChat
+          ? connectorId
+          : (intent.connectorId ?? connectorId),
+        jobId: onUnscopedChat ? jobId : (intent.jobId ?? jobId),
         skillId: skillId ?? opts?.skillId ?? null,
       });
       kickLiveAi();

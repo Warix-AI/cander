@@ -96,9 +96,7 @@ export function useMobileSwipeGestures() {
         return;
       }
 
-      const withPanel =
-        panelAvailable &&
-        (panelMode !== "collapsed" || view === "space");
+      const withPanel = panelAvailable;
 
       // Swipe right → toward menu
       if (dx > 0) {
