@@ -154,12 +154,12 @@ html.cander-narrow {
 }
 
 .mobile-slide-forward {
-  animation: mobile-slide-in-from-right 0.32s cubic-bezier(0.32, 0.72, 0, 1)
+  animation: mobile-slide-in-from-right 0.5s cubic-bezier(0.32, 0.72, 0, 1)
     both;
 }
 
 .mobile-slide-back {
-  animation: mobile-slide-in-from-left 0.32s cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: mobile-slide-in-from-left 0.5s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 /* ── Mobile glass materials (Apple-style vibrancy) ── */
@@ -1168,12 +1168,23 @@ html:not(.dark) .shell-panel :is(.bg-sidebar, .bg-background) {
   }
 }
 
+/* Subtle desktop/in-panel enter (short nudge). */
 .cander-surface-enter {
   animation: cander-surface-enter 240ms ease-out;
 }
 
 .cander-surface-enter-back {
   animation: cander-surface-enter-back 240ms ease-out;
+}
+
+/* Full mobile push/pop — matches chat ↔ panel pager timing. */
+.cander-mobile-push {
+  animation: mobile-slide-in-from-right 0.5s cubic-bezier(0.32, 0.72, 0, 1)
+    both;
+}
+
+.cander-mobile-pop {
+  animation: mobile-slide-in-from-left 0.5s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 /* Chat transcript scrollers: keep overflow scroll, hide scrollbar chrome */

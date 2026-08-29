@@ -80,6 +80,7 @@ export function BuildDashboard() {
       <MobileFilterBar
         active={hoistFilters}
         onNewChat={() => newChat("build")}
+        newChatLabel="New build"
         layout={{ value: spaceLayout, onChange: setSpaceLayout }}
       >
         <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />

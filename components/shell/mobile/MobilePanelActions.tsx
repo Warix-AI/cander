@@ -14,11 +14,9 @@ import {
   MobileBottomSheet,
   SheetAction,
 } from "@/components/browser/ProjectMobileSheets";
+import { mobileChromeButtonClass } from "@/lib/mobile-menu-styles";
 import type { SpaceLayout } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-const clusterBtnClass =
-  "inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--mobile-chrome-surface)] text-foreground transition-colors duration-200 hover:bg-muted";
 
 export type MobilePanelScopeConfig = {
   value: string;
@@ -153,6 +151,10 @@ export function MobileFilterBar({
   );
 }
 
+/**
+ * Single ⋯ control on space panels — New build/explore + filters/layout live
+ * in one bottom sheet (replaces the old pen + ellipsis cluster).
+ */
 export function MobilePanelActionsCluster({
   config,
   onCompose,
@@ -164,38 +166,36 @@ export function MobilePanelActionsCluster({
   const scope = config.scope;
   const layout = config.layout;
   const extras = config.extras ?? [];
-  const hasMenu = Boolean(scope || layout || extras.length);
+  const composeLabel = config.newChatLabel ?? "New";
 
   return (
     <>
-      <div className="inline-flex max-w-full shrink-0 items-center rounded-full bg-[var(--mobile-chrome-surface)] p-1">
-        <button
-          type="button"
-          aria-label={config.newChatLabel ?? "New"}
-          onClick={onCompose}
-          className={clusterBtnClass}
-        >
-          <SquarePen className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-        </button>
-        {hasMenu ? (
-          <button
-            type="button"
-            aria-label="View options"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen(true)}
-            className={cn(clusterBtnClass, menuOpen && "bg-muted")}
-          >
-            <Ellipsis className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-          </button>
-        ) : null}
-      </div>
+      <button
+        type="button"
+        aria-label="Space actions"
+        aria-expanded={menuOpen}
+        onClick={() => setMenuOpen(true)}
+        className={cn(mobileChromeButtonClass, menuOpen && "bg-muted")}
+      >
+        <Ellipsis className="h-5 w-5" strokeWidth={1.8} />
+      </button>
 
       <MobileBottomSheet
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         mode="space"
       >
-        <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-1">
+        <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
+          <div className="mb-3 space-y-0.5">
+            <SheetAction
+              icon={SquarePen}
+              label={composeLabel}
+              onClick={() => {
+                setMenuOpen(false);
+                onCompose();
+              }}
+            />
+          </div>
           {scope ? (
             <div className="mb-3">
               <p className="px-1 pb-1.5 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
@@ -241,7 +241,10 @@ export function MobilePanelActionsCluster({
                   key={item.id}
                   label={item.label}
                   selected={item.active}
-                  onClick={() => item.onClick()}
+                  onClick={() => {
+                    item.onClick();
+                    setMenuOpen(false);
+                  }}
                 />
               ))}
             </div>

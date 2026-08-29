@@ -60,6 +60,7 @@ export function ResearchDashboard() {
       <MobileFilterBar
         active={hoistFilters}
         onNewChat={() => newChat("research")}
+        newChatLabel="New explore"
         layout={{ value: spaceLayout, onChange: setSpaceLayout }}
       >
         <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />

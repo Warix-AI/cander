@@ -9,9 +9,12 @@ import { cn } from "@/lib/utils";
 
 export function SpaceDashboard({
   enterDirection = "forward",
+  animateEnter = true,
 }: {
   /** forward = enter from right; back = enter from left (leave project). */
   enterDirection?: "forward" | "back";
+  /** Set false when a parent already plays the full mobile push/pop. */
+  animateEnter?: boolean;
 }) {
   const { spaceId } = useApp();
   const body =
@@ -30,9 +33,10 @@ export function SpaceDashboard({
       key={spaceId ?? "none"}
       className={cn(
         "min-h-0 flex-1",
-        enterDirection === "back"
-          ? "cander-surface-enter-back"
-          : "cander-surface-enter",
+        animateEnter &&
+          (enterDirection === "back"
+            ? "cander-surface-enter-back"
+            : "cander-surface-enter"),
       )}
     >
       {body}

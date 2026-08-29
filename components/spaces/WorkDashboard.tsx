@@ -68,6 +68,7 @@ export function WorkDashboard() {
       <MobileFilterBar
         active={hoistFilters}
         onNewChat={() => newChat("work")}
+        newChatLabel="Ask"
         layout={{ value: spaceLayout, onChange: setSpaceLayout }}
         extras={[
           {

@@ -247,6 +247,7 @@ export function ConnectorsDashboard() {
         <MobileFilterBar
           active={hoistFilters}
           onNewChat={() => newChat()}
+          newChatLabel="New chat"
           scope={{
             value: catalogView,
             onChange: (value) => setCatalogView(value as ConnectorsView),

@@ -211,7 +211,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
           "",
       });
       openProject(created.id);
-      setMobileSurface("panel");
     } finally {
       setNewProjectBusy(false);
     }
@@ -229,7 +228,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
         summary: item.summary,
       });
       openProject(created.id);
-      setMobileSurface("panel");
     } finally {
       setNewProjectBusy(false);
     }

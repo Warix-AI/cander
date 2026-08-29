@@ -90,6 +90,7 @@ export function RecentsView() {
         <MobileFilterBar
           active={mobile}
           onNewChat={() => newChat()}
+          newChatLabel="New chat"
           scope={{ value: scope, onChange: setScope, options: scopeOptions }}
           layout={{ value: spaceLayout, onChange: setSpaceLayout }}
         >

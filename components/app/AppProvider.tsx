@@ -160,8 +160,7 @@ import {
 } from "@/lib/persistent-chat";
 import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import {
-  setMobilePanelStackDirection,
-  skipMobilePagerTransitionOnce,
+  requestMobileSurfaceEnter,
 } from "@/lib/mobile-nav-transition";
 import { useMobileShell } from "@/lib/use-media-query";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
@@ -2650,7 +2649,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (space === "build") setBuildTool("preview");
     if (space === "research") setResearchTool("browser");
     setPanelMode("split");
-    setMobileSurface("panel");
+    // Mobile: land on project chat first (Build/Explore via the labeled arrow).
+    requestMobileSurfaceEnter("forward");
+    setMobileSurface("chat");
     pushTarget({
       view: "space",
       spaceId: space,
@@ -2668,9 +2669,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   /** Leave a project/entity and return to the space directory on the panel. */
   const backToSpaceHome = useCallback(() => {
     if (!spaceId) return;
-    // Back affordance: space enters from the left; skip forward chat→panel swipe.
-    setMobilePanelStackDirection("back");
-    skipMobilePagerTransitionOnce();
+    // Same 500ms push/pop curve as chat ↔ Build/Explore (enter from left).
+    requestMobileSurfaceEnter("back");
     const chatSpace = chatSpaceId(spaceId);
     const chatWasOpen = Boolean(threadId) || drafting;
     let tid: string | null = threadId;
