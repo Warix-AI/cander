@@ -281,6 +281,9 @@ export function Composer({
     const snippetNote = fileSnippets.join("\n\n");
     const payload = `${refPrefix}${value}`.trim();
     const body = [payload, fileNote, snippetNote].filter(Boolean).join("\n");
+    // #region agent log
+    fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'E',location:'Composer.tsx:submit',message:'submit body composition',data:{filesCount:files.length,fileNames:files.slice(0,3),snippetsCount:fileSnippets.length,snippetPrefixes:fileSnippets.map(s=>s.slice(0,40)),imagesCount:images.length,bodyPrefix:body.slice(0,120),valueLen:value.length},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!body && !images.length) return;
     speechRef.current?.stop();
     speechRef.current = null;
@@ -446,6 +449,9 @@ export function Composer({
                     setMenu(null);
                     void (async () => {
                       const result = await pickWithCapacitorCamera("camera");
+                      // #region agent log
+                      fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'B',location:'Composer.tsx:Camera',message:'camera pick result',data:{ok:result.ok,cancelled:'cancelled' in result?result.cancelled:false,message:result.ok?'':result.message},timestamp:Date.now()})}).catch(()=>{});
+                      // #endregion
                       if (result.ok) {
                         setImages((current) =>
                           [...current, result.image].slice(0, 4),
@@ -464,6 +470,9 @@ export function Composer({
                     setMenu(null);
                     void (async () => {
                       const result = await pickWithCapacitorCamera("photos");
+                      // #region agent log
+                      fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'A',location:'Composer.tsx:Photos',message:'photos pick result',data:{ok:result.ok,cancelled:'cancelled' in result?result.cancelled:false,message:result.ok?'':result.message},timestamp:Date.now()})}).catch(()=>{});
+                      // #endregion
                       if (result.ok) {
                         setImages((current) =>
                           [...current, result.image].slice(0, 4),

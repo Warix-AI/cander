@@ -131,23 +131,52 @@ async function webPathToAttachment(
   try {
     const res = await fetch(webPath);
     const blob = await res.blob();
+    // #region agent log
+    fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'A',location:'composer-attach.ts:webPathToAttachment',message:'fetch webPath result',data:{webPathPrefix:webPath.slice(0,80),ok:res.ok,status:res.status,blobSize:blob.size,blobType:blob.type||'empty',overMax:blob.size>MAX_IMAGE_BYTES},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (blob.size > MAX_IMAGE_BYTES) return null;
     const file = new File([blob], name, {
       type: blob.type || "image/jpeg",
     });
-    return imageFileToAttachment(file);
-  } catch {
+    const att = await imageFileToAttachment(file);
+    // #region agent log
+    fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'D',location:'composer-attach.ts:webPathToAttachment',message:'imageFileToAttachment after fetch',data:{fileType:file.type,fileSize:file.size,attOk:Boolean(att)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return att;
+  } catch (err) {
+    // #region agent log
+    fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'A',location:'composer-attach.ts:webPathToAttachment',message:'fetch webPath threw',data:{webPathPrefix:webPath.slice(0,80),err:err instanceof Error?err.message:String(err)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     return null;
   }
 }
 
 export type CapImagePickResult =
   | { ok: true; image: ChatImageAttachment }
-  | { ok: false; cancelled?: boolean; message: string };
+  | { ok: false; cancelled?: boolean; message: string; debug?: string };
 
 function isUserCancel(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err ?? "");
   return /cancel|cancelled|canceled|user denied|No image picked/i.test(msg);
+}
+
+function failPick(
+  message: string,
+  debug: Record<string, unknown>,
+  cancelled?: boolean,
+): CapImagePickResult {
+  const token = Object.entries(debug)
+    .map(([k, v]) => `${k}=${String(v)}`)
+    .join("|");
+  // #region agent log
+  fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'A',location:'composer-attach.ts:failPick',message,data:debug,timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  return {
+    ok: false,
+    cancelled,
+    message: `${message} [${token}]`,
+    debug: token,
+  };
 }
 
 /** Native-only: Camera or Photos via @capacitor/camera (never HTML file input). */
@@ -193,9 +222,15 @@ export async function pickWithCapacitorCamera(
       if (!first?.webPath) {
         return { ok: false, cancelled: true, message: "No photo selected." };
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'A',location:'composer-attach.ts:pickImages',message:'pickImages first photo',data:{hasWebPath:Boolean(first.webPath),webPathPrefix:first.webPath?.slice(0,80)??null,format:first.format??null,photoKeys:Object.keys(first||{})},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const image = await webPathToAttachment(first.webPath, "photo.jpeg");
       if (!image) {
-        return { ok: false, message: "Couldn’t read that photo." };
+        return failPick("Couldn’t read that photo.", {
+          path: "pickImages",
+          webPath: first.webPath.slice(0, 48),
+        });
       }
       return { ok: true, image };
     }
@@ -210,11 +245,18 @@ export async function pickWithCapacitorCamera(
       source: source === "camera" ? "CAMERA" : "PHOTOS",
     });
 
+    // #region agent log
+    fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'B',location:'composer-attach.ts:getPhoto',message:'Camera.getPhoto raw result',data:{source,hasWebPath:Boolean(photo.webPath),webPathPrefix:photo.webPath?.slice(0,80)??null,hasDataUrl:Boolean(photo.dataUrl),dataUrlLen:photo.dataUrl?.length??0,hasBase64:Boolean(photo.base64String),base64Len:photo.base64String?.length??0,format:photo.format??null,keys:Object.keys(photo||{})},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     if (photo.webPath) {
       const image = await webPathToAttachment(
         photo.webPath,
         source === "camera" ? "camera.jpeg" : "photo.jpeg",
       );
+      // #region agent log
+      fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'B',location:'composer-attach.ts:getPhoto',message:'webPath conversion outcome',data:{source,imageOk:Boolean(image)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       if (image) return { ok: true, image };
     }
 
@@ -235,7 +277,14 @@ export async function pickWithCapacitorCamera(
       if (image) return { ok: true, image };
     }
 
-    return { ok: false, message: "No image returned from the camera." };
+    return failPick("No image returned from the camera.", {
+      path: "getPhoto",
+      source,
+      keys: Object.keys(photo || {}).join(","),
+      hasWebPath: Boolean(photo.webPath),
+      hasDataUrl: Boolean(photo.dataUrl),
+      hasBase64: Boolean(photo.base64String),
+    });
   } catch (err) {
     if (isUserCancel(err)) {
       return { ok: false, cancelled: true, message: "Cancelled." };
