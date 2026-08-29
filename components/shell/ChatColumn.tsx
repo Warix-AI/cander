@@ -75,7 +75,7 @@ function ComposerDock({
 }
 
 export function ChatColumn() {
-  const { thread, spaceId, sendMessage, drafting, view } = useApp();
+  const { thread, spaceId, sendMessage, drafting, view, projectId } = useApp();
   const browserMode = view === "browser";
   const mobile = useMobileShell();
   const hasChatTurns = Boolean(
@@ -89,6 +89,7 @@ export function ChatColumn() {
     !browserMode && !hasChatTurns && (!thread || drafting) && !showSpaceNewPrompt;
   const endRef = useRef<HTMLDivElement>(null);
   const latestUserRef = useRef<HTMLDivElement>(null);
+  const prevThreadId = useRef<string | null>(null);
   const last = thread?.messages.at(-1);
   const lastUserId = [...(thread?.messages ?? [])]
     .reverse()
@@ -97,11 +98,28 @@ export function ChatColumn() {
   const { centered } = useChatCanvasCentered();
 
   useLayoutEffect(() => {
+    const threadId = thread?.id ?? null;
+    const threadSwitched = prevThreadId.current !== threadId;
+    prevThreadId.current = threadId;
+
+    // Mobile project/thread switches: jump to the latest turn instantly.
+    // Smooth scroll looks like a second "slide" after the surface push.
+    if (mobile) {
+      if (!hasChatTurns) return;
+      const el = latestUserRef.current ?? endRef.current;
+      if (!el) return;
+      el.scrollIntoView({ block: "start", behavior: "auto" });
+      return;
+    }
+
     if (!lastUserId) return;
     const el = latestUserRef.current;
     if (!el) return;
-    el.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [lastUserId, last?.id]);
+    el.scrollIntoView({
+      block: "start",
+      behavior: threadSwitched ? "auto" : "smooth",
+    });
+  }, [lastUserId, last?.id, thread?.id, mobile, hasChatTurns, projectId]);
 
   useEffect(() => {
     // While the assistant is typing, keep the growing reply in view without

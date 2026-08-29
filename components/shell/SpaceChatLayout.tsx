@@ -15,7 +15,6 @@ import {
   consumeMobileSurfaceEnter,
   getMobilePanelStackDirection,
   setMobilePanelStackDirection,
-  type MobileSurfaceEnter,
 } from "@/lib/mobile-nav-transition";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
@@ -56,10 +55,12 @@ export function SpaceChatLayout() {
   const [spacePct, setSpacePct] = useState(targetSpacePct);
   const wasOpen = useRef(spaceOpen);
   const prevProjectId = useRef<string | null>(projectId);
+  /** Full-screen push into project chat (no remount — class only). */
   const [chatPush, setChatPush] = useState(false);
+  /** Full-screen pop back to space home (no remount — class only). */
   const [panelPop, setPanelPop] = useState(false);
-  const chatPushKey = useRef(0);
-  const panelPopKey = useRef(0);
+  /** After a pop, suppress SpaceDashboard's short enter so it doesn't double-animate. */
+  const suppressSpaceEnter = useRef(false);
 
   useEffect(() => {
     const prev = prevProjectId.current;
@@ -77,13 +78,13 @@ export function SpaceChatLayout() {
     const enter = consumeMobileSurfaceEnter();
     if (!enter) return;
     if (enter === "forward") {
-      chatPushKey.current += 1;
-      setChatPush(true);
+      suppressSpaceEnter.current = false;
       setPanelPop(false);
+      setChatPush(true);
     } else {
-      panelPopKey.current += 1;
-      setPanelPop(true);
+      suppressSpaceEnter.current = true;
       setChatPush(false);
+      setPanelPop(true);
     }
   }, [mobileSurface, projectId]);
 
@@ -115,7 +116,6 @@ export function SpaceChatLayout() {
   if (mobile) {
     const active: MobileSurface =
       mobileSurface === "panel" ? "panel" : "chat";
-    const spaceEnter: MobileSurfaceEnter = getMobilePanelStackDirection();
 
     return (
       <MobileContentPager
@@ -123,13 +123,15 @@ export function SpaceChatLayout() {
         active={active}
         chatPane={
           <div
-            key={chatPush ? `chat-push-${chatPushKey.current}` : "chat"}
             className={cn(
               "flex h-full min-h-0 flex-col overflow-hidden",
               MOBILE_APP_BG,
               chatPush && "cander-mobile-push",
             )}
-            onAnimationEnd={() => setChatPush(false)}
+            onAnimationEnd={(event) => {
+              if (event.target !== event.currentTarget) return;
+              setChatPush(false);
+            }}
           >
             <ChatColumn />
           </div>
@@ -139,27 +141,27 @@ export function SpaceChatLayout() {
             {projectId ? (
               <div
                 key={projectId}
-                className="cander-surface-enter flex h-full min-h-0 flex-col"
+                className="flex h-full min-h-0 flex-col"
               >
                 <ProjectBrowserPanel />
               </div>
             ) : (
               <SpaceRenderModeProvider mode="page">
                 <div
-                  key={
-                    panelPop
-                      ? `space-pop-${panelPopKey.current}`
-                      : "space-home"
-                  }
                   className={cn(
                     "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain",
                     panelPop && "cander-mobile-pop",
                   )}
-                  onAnimationEnd={() => setPanelPop(false)}
+                  onAnimationEnd={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    setPanelPop(false);
+                  }}
                 >
                   <SpaceDashboard
-                    enterDirection={spaceEnter}
-                    animateEnter={!panelPop}
+                    enterDirection={getMobilePanelStackDirection()}
+                    animateEnter={
+                      !panelPop && !suppressSpaceEnter.current
+                    }
                   />
                 </div>
               </SpaceRenderModeProvider>
