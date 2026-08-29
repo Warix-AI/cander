@@ -3,6 +3,8 @@
  * Keep in sync with supabase/functions/_shared/agent/router.ts
  */
 
+import { detectLiveInformation } from "./policy.ts";
+
 export type RouteKind =
   | "answer_direct"
   | "web_retrieve"
@@ -27,22 +29,6 @@ const REWRITE =
   /\b(rewrite|rephrase|summarize|shorten|expand|fix (grammar|spelling)|proofread)\b/i;
 const EXPLAIN_CONCEPT =
   /\b(explain|what (is|are)|define|tell me about)\b[\s\S]{0,80}\b(recursion|algorithm|function|variable|api|http|json|typescript|react)\b/i;
-
-const WEB_EXPLICIT =
-  /\b(search|look\s*up|google|bing|brave)\b[\s\S]{0,40}\b(online|web|internet|the\s+web)\b/i;
-/** Either order: "today's weather" OR "weather today" / "current price" OR "price today". */
-const WEB_LIVE =
-  /\b(latest|current|today'?s?|this\s+week|yesterday|breaking|tonight|right\s+now|live)\b[\s\S]{0,64}\b(news|weather|forecast|temperature|temp|humidity|price|stock|score|headline|ceo|announce)/i;
-const WEB_LIVE_REVERSE =
-  /\b(news|weather|forecast|temperature|temp|humidity|price|stock|score|headline)\b[\s\S]{0,64}\b(latest|current|today'?s?|this\s+week|yesterday|breaking|tonight|right\s+now|live)\b/i;
-/** Weather / forecast alone is always live — never answer from parametric memory. */
-const WEB_WEATHER =
-  /\b(weather|forecast|temperature|humidity|radar|precip(itation)?|how\s+hot|how\s+cold|rain(ing)?|snow(ing)?)\b/i;
-const WEB_WHO_ENTITY =
-  /\bwho\s+(is|are|was|were)\s+(the\s+)?(ceo|cto|cfo|founder|president|mayor|prime\s+minister)\b/i;
-const WEB_NEWS = /\b(news|headlines?|weather|forecast|stock\s+price|box\s+score)\b/i;
-const WEB_LOOKUP =
-  /\b(look\s*up|search\s+for|find\s+out|google|check|what'?s|whats)\b/i;
 
 const KNOWLEDGE =
   /\b(knowledge\s*bases?|internal\s+docs?|our\s+(pricing|policy|policies|customers?))\b/i;
@@ -74,6 +60,15 @@ export function routeDeterministic(content: string): DeterministicRoute {
     return { kind: "answer_direct", reason: "deterministic:rewrite_or_explain" };
   }
 
+  const live = detectLiveInformation(t);
+  if (live.needsWeb) {
+    return {
+      kind: "web_retrieve",
+      reason: `deterministic:${live.reason}`,
+      needsWeb: true,
+    };
+  }
+
   if (CLIENT_PROJECT.test(t)) {
     return {
       kind: "client_action",
@@ -88,7 +83,7 @@ export function routeDeterministic(content: string): DeterministicRoute {
       clientActions: ["nav.open"],
     };
   }
-  if (CLIENT_WORKSPACE.test(t) && !WEB_LIVE.test(t) && !WEB_WEATHER.test(t)) {
+  if (CLIENT_WORKSPACE.test(t)) {
     return {
       kind: "client_action",
       reason: "deterministic:workspace_inventory",
@@ -105,28 +100,7 @@ export function routeDeterministic(content: string): DeterministicRoute {
     };
   }
 
-  if (
-    WEB_EXPLICIT.test(t) ||
-    WEB_WEATHER.test(t) ||
-    WEB_LIVE.test(t) ||
-    WEB_LIVE_REVERSE.test(t) ||
-    WEB_WHO_ENTITY.test(t) ||
-    (WEB_NEWS.test(t) &&
-      (WEB_LOOKUP.test(t) || WEB_LIVE.test(t) || WEB_LIVE_REVERSE.test(t)))
-  ) {
-    return {
-      kind: "web_retrieve",
-      reason: WEB_WEATHER.test(t)
-        ? "deterministic:weather_or_live"
-        : "deterministic:explicit_or_live_web",
-      needsWeb: true,
-    };
-  }
-
-  if (
-    WEB_WHO_ENTITY.test(t) ||
-    (AMBIGUOUS_PUBLIC.test(t) && UNKNOWN_ENTITY.test(t))
-  ) {
+  if (AMBIGUOUS_PUBLIC.test(t) && UNKNOWN_ENTITY.test(t)) {
     return {
       kind: "web_retrieve",
       reason: "deterministic:unresolved_public_entity",

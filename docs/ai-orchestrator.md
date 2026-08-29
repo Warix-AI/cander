@@ -33,6 +33,10 @@ Covers A/D/F/H routing, AcmeWhatever CEO → web, sufficiency, context newest-tu
 - Cancel / new turn → no stale assistant write
 - Refresh → conversational history without Internal-result blobs
 
+## Product rule
+
+The **model does not decide** whether Cander has internet. The orchestrator detects live/current intent, forces Brave when available, and **blocks finalization** on knowledge-cutoff / “check CNN” deflections until retrieval has run (then regenerates from sources). Broad world-news asks use a bounded multi-query search plan.
+
 ## Remaining limits
 
 - Semantic history retrieval later (interface ready)

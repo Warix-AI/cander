@@ -7,5 +7,13 @@
  */
 
 export { isAgentOrchestratorEnabled } from "./flags";
-export { runOrchestratedTurn, cancelActiveOrchestratorTurn } from "./run-turn";
+export {
+  runOrchestratedTurn,
+  cancelActiveOrchestratorTurn,
+} from "./run-turn";
 export { routeDeterministic } from "./router";
+export {
+  detectLiveInformation,
+  isModelLimitationDeflection,
+  mustContinueToWeb,
+} from "./policy";

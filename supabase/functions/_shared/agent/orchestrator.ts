@@ -21,6 +21,15 @@ import {
   applyPlannerDecision,
   routeDeterministic,
 } from "./router.ts";
+import {
+  assertiveGroundedAnswerPolicy,
+  broadNewsSearchQueries,
+  detectLiveInformation,
+  isModelLimitationDeflection,
+  mustContinueToWeb,
+  primarySearchQuery,
+  scrubLimitationBoilerplate,
+} from "./policy.ts";
 import { checkRetrievalSufficiency } from "./sufficiency.ts";
 import type {
   ClientActionRequest,
@@ -37,10 +46,11 @@ import {
   RESEARCH_TURN_BUDGET,
 } from "./types.ts";
 
-const PRODUCT_SYSTEM = `You are Cander, a private AI assistant.
+const PRODUCT_SYSTEM = `You are Cander, a private AI assistant with tools (web search, knowledge, app actions).
 Be clear and concise. Prefer plain language.
 When source IDs are provided, attribute claims only to those sources (cite by id or real URL).
 Never invent headlines, URLs, or search results. Never claim you searched unless sources were provided.
+Never tell the user your training cutoff or that you lack internet — Cander's orchestrator handles live retrieval.
 Do not emit tool JSON unless the user is being asked to confirm a client action.`;
 
 function newId(prefix: string) {
@@ -388,43 +398,46 @@ export async function runTurnOrchestrator(
       });
     }
 
+    // Live-info policy (hard): model cannot opt out of available web retrieval.
+    const live = detectLiveInformation(userContent);
+    const webAvailable = Boolean(Deno.env.get("BRAVE_SEARCH_API_KEY"));
+
     // Web retrieval loop
     failureStage = "retrieve";
     let retrievalRounds = 0;
-    const needsWeb =
+    let needsWeb =
+      live.needsWeb ||
       route.needsWeb ||
       route.kind === "web_retrieve" ||
       (route.ambiguous && sources.length === 0);
 
-    let query = userContent.slice(0, 200);
-    while (
-      needsWeb &&
-      webSearches < budget.maxWebSearches &&
-      retrievalRounds < budget.maxRetrievalRounds
+    // Resourcefulness: current + public + web available + not attempted → MUST retrieve
+    if (
+      mustContinueToWeb({
+        live,
+        webAvailable,
+        webAttempted: webSearches > 0,
+      })
     ) {
+      needsWeb = true;
+      if (!route.needsWeb) {
+        route = {
+          ...route,
+          kind: "web_retrieve",
+          needsWeb: true,
+          reason: live.reason || route.reason,
+        };
+      }
+    }
+
+    const runOneSearch = async (query: string): Promise<boolean> => {
+      if (webSearches >= budget.maxWebSearches) return false;
       await assertNotCancelled(deps.supabase, input.turnId);
-      retrievalRounds++;
       pushStatus({
         phase: "searching",
         label: "Thinking",
         detail: "Searching the web…",
       });
-
-      if (webSearches > 0 && modelGens < budget.maxModelGenerations) {
-        modelGens++;
-        const rewritten = await deps.provider.complete({
-          purpose: "rewrite",
-          messages: [
-            {
-              role: "user",
-              content: `Rewrite as a better web search query:\n${userContent}`,
-            },
-          ],
-        });
-        query = rewritten.text.replace(/^["']|["']$/g, "").trim().slice(0, 200) ||
-          query;
-      }
-
       try {
         webSearches++;
         const { sources: hits, raw } = await braveWebSearch({ query, count: 5 });
@@ -464,10 +477,11 @@ export async function runTurnOrchestrator(
           payload: {
             query,
             resultCount: hits.length,
-            sourceIds: hits.map((h) => h.id),
+            sourceIds: hits.map((_, i) => `web_${webSearches}_${i + 1}`),
             sessionId: searchSessionId,
           },
         });
+        return hits.length > 0;
       } catch (searchErr) {
         console.error("[TURN_OBS]", {
           ...obs(),
@@ -475,20 +489,74 @@ export async function runTurnOrchestrator(
           message:
             searchErr instanceof Error ? searchErr.message : String(searchErr),
         });
-        break;
+        return false;
       }
+    };
 
-      pushStatus({
-        phase: "reading",
-        label: "Thinking",
-        detail: "Reading sources…",
+    if (needsWeb && webAvailable) {
+      const queries: string[] = live.broadNews
+        ? broadNewsSearchQueries(userContent)
+        : [primarySearchQuery(userContent, live)];
+
+      for (const q of queries) {
+        if (
+          webSearches >= budget.maxWebSearches ||
+          retrievalRounds >= budget.maxRetrievalRounds
+        ) {
+          break;
+        }
+        retrievalRounds++;
+        await runOneSearch(q);
+
+        pushStatus({
+          phase: "reading",
+          label: "Thinking",
+          detail: "Reading sources…",
+        });
+
+        if (!live.broadNews) {
+          const sufficiency = checkRetrievalSufficiency({
+            query: userContent,
+            sources: sources.filter((s) => s.kind === "web"),
+          });
+          if (sufficiency.sufficient) break;
+
+          // Rewrite once and search again if budget remains
+          if (
+            webSearches < budget.maxWebSearches &&
+            modelGens < budget.maxModelGenerations
+          ) {
+            modelGens++;
+            const rewritten = await deps.provider.complete({
+              purpose: "rewrite",
+              messages: [
+                {
+                  role: "user",
+                  content: `Rewrite as a better web search query:\n${userContent}`,
+                },
+              ],
+            });
+            const nextQ =
+              rewritten.text.replace(/^["']|["']$/g, "").trim().slice(0, 200) ||
+              q;
+            if (nextQ !== q) {
+              retrievalRounds++;
+              await runOneSearch(nextQ);
+              const again = checkRetrievalSufficiency({
+                query: userContent,
+                sources: sources.filter((s) => s.kind === "web"),
+              });
+              if (again.sufficient) break;
+            }
+          }
+        }
+      }
+    } else if (needsWeb && !webAvailable) {
+      console.error("[TURN_OBS]", {
+        ...obs(),
+        stage: "web_unavailable",
+        message: "BRAVE_SEARCH_API_KEY missing",
       });
-      const sufficiency = checkRetrievalSufficiency({
-        query: userContent,
-        sources: sources.filter((s) => s.kind === "web"),
-      });
-      if (sufficiency.sufficient) break;
-      // continue loop for rewrite + another search
     }
 
     // History retrieval
@@ -522,28 +590,29 @@ export async function runTurnOrchestrator(
       state,
     });
 
-    const searchEventsText = [
-      refHint,
-      sources.length
-        ? formatSourcesForPrompt(sources)
-        : needsWeb
-          ? "Web search was attempted but returned no usable sources."
+    const rebuildSearchEventsText = () =>
+      [
+        refHint,
+        sources.length
+          ? formatSourcesForPrompt(sources)
+          : needsWeb
+            ? "Web search was attempted but returned no usable sources."
+            : null,
+        input.clientActionResults?.length
+          ? `Client action results:\n${input.clientActionResults
+              .map((r) => `${r.name}: ${r.ok ? r.output : `ERROR ${r.output}`}`)
+              .join("\n")}`
           : null,
-      input.clientActionResults?.length
-        ? `Client action results:\n${input.clientActionResults
-            .map((r) => `${r.name}: ${r.ok ? r.output : `ERROR ${r.output}`}`)
-            .join("\n")}`
-        : null,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+      ]
+        .filter(Boolean)
+        .join("\n\n");
 
     failureStage = "context_build";
-    const built = buildContext({
+    let built = buildContext({
       systemPrompt: PRODUCT_SYSTEM,
       conversationState: state,
       retrievedHistory: retrieved,
-      searchEventsText,
+      searchEventsText: rebuildSearchEventsText(),
       sources,
       recentMessages: recent,
       maxContextTokens: deps.provider.capabilities.maxContextTokens,
@@ -559,30 +628,29 @@ export async function runTurnOrchestrator(
 
     await assertNotCancelled(deps.supabase, input.turnId);
 
+    const generateAnswer = async () => {
+      modelGens++;
+      pushStatus({
+        phase: "generating",
+        label: "Thinking",
+        detail: "Generating…",
+      });
+      const answerPromptExtra = assertiveGroundedAnswerPolicy(
+        sources.length > 0,
+      );
+      const genMessages = [
+        ...built.messages,
+        { role: "system" as const, content: answerPromptExtra },
+      ];
+      return deps.provider.complete({
+        purpose: "answer",
+        messages: genMessages,
+        images: input.images,
+      });
+    };
+
     failureStage = "generate";
-    pushStatus({
-      phase: "generating",
-      label: "Thinking",
-      detail: "Generating…",
-    });
-    modelGens++;
-    const answerPromptExtra =
-      sources.length > 0
-        ? "You HAVE live retrieved sources below (or in prior system context). Answer the user's question from those sources now. Do NOT say you lack real-time access, cannot check the weather/news, or that you are only a language model without tools. Cite source ids or their real URLs only. If sources conflict, say so briefly."
-        : needsWeb
-          ? "Live web retrieval did not yield usable sources. Say you could not find reliable live information — do not invent. Do not invent weather, scores, or headlines."
-          : "Answer helpfully from conversation context.";
-
-    const genMessages = [
-      ...built.messages,
-      { role: "system" as const, content: answerPromptExtra },
-    ];
-
-    let answered = await deps.provider.complete({
-      purpose: "answer",
-      messages: genMessages,
-      images: input.images,
-    });
+    let answered = await generateAnswer();
     ttfToken = Date.now() - started;
 
     await assertNotCancelled(deps.supabase, input.turnId);
@@ -594,30 +662,96 @@ export async function runTurnOrchestrator(
     });
     let assistantContent = validated.text.trim() || "(empty reply)";
 
-    // Model sometimes ignores sources and claims no real-time access — one forced rewrite.
-    const falseNoRealtime =
+    // Post-model safety: limitation deflection MUST NOT finalize when web can still run.
+    let deflection = isModelLimitationDeflection(assistantContent);
+    if (
+      deflection &&
+      mustContinueToWeb({
+        live: live.needsWeb ? live : detectLiveInformation(userContent),
+        webAvailable,
+        webAttempted: webSearches > 0,
+        draftIsDeflection: true,
+      })
+    ) {
+      failureStage = "post_model_retrieve";
+      needsWeb = true;
+      const rescueQueries = live.broadNews
+        ? broadNewsSearchQueries(userContent)
+        : [
+            primarySearchQuery(userContent, live),
+            "top world news today",
+          ];
+      for (const q of rescueQueries) {
+        if (webSearches >= budget.maxWebSearches) break;
+        retrievalRounds++;
+        await runOneSearch(q);
+      }
+      built = buildContext({
+        systemPrompt: PRODUCT_SYSTEM,
+        conversationState: state,
+        retrievedHistory: retrieved,
+        searchEventsText: rebuildSearchEventsText(),
+        sources,
+        recentMessages: recent,
+        maxContextTokens: deps.provider.capabilities.maxContextTokens,
+      });
+      logContextBuild({
+        turnId: input.turnId,
+        chatId: input.chatId,
+        tokenEstimate: built.tokenEstimate,
+        counts: built.counts,
+        recentIds: built.recentIds,
+        sourceIds: sources.map((s) => s.id),
+      });
+      answered = await generateAnswer();
+      validated = validateCitations({
+        answer: answered.text || "(empty reply)",
+        sources,
+      });
+      assistantContent = validated.text.trim() || assistantContent;
+      deflection = isModelLimitationDeflection(assistantContent);
+    }
+
+    // Sources exist but model still deflects → forced rewrite (discard draft).
+    if (
+      deflection &&
       sources.length > 0 &&
-      /\b(don'?t|do not|cannot|can'?t|no)\b[\s\S]{0,40}\b(real[- ]?time|current (weather|conditions)|access to (the )?(internet|web|live))\b/i.test(
-        assistantContent,
-      );
-    if (falseNoRealtime && modelGens < budget.maxModelGenerations) {
+      modelGens < budget.maxModelGenerations
+    ) {
+      failureStage = "post_model_rewrite";
       modelGens++;
       answered = await deps.provider.complete({
         purpose: "answer",
         messages: [
-          ...genMessages,
+          ...built.messages,
+          {
+            role: "system",
+            content: assertiveGroundedAnswerPolicy(true),
+          },
           {
             role: "system",
             content:
-              "Your previous draft incorrectly claimed no live access. Rewrite using ONLY the retrieved sources. Lead with the answer (e.g. temperature/conditions).",
+              "Your previous draft incorrectly claimed no live access or told the user to check websites. Discard that. Rewrite using ONLY the retrieved sources. Lead with the facts.",
           },
         ],
+        images: input.images,
       });
       validated = validateCitations({
         answer: answered.text || assistantContent,
         sources,
       });
       assistantContent = validated.text.trim() || assistantContent;
+      deflection = isModelLimitationDeflection(assistantContent);
+    }
+
+    if (sources.length > 0) {
+      assistantContent = scrubLimitationBoilerplate(assistantContent);
+      // Last resort: still deflecting with sources — strip deflection sentences
+      if (isModelLimitationDeflection(assistantContent)) {
+        const sentences = assistantContent.split(/(?<=[.!?])\s+/);
+        const kept = sentences.filter((s) => !isModelLimitationDeflection(s));
+        if (kept.length) assistantContent = kept.join(" ").trim();
+      }
     }
 
     // Never claim search without sources

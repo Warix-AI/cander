@@ -1,11 +1,20 @@
 /**
- * Orchestrator unit tests: router, sufficiency, context, citations, history, AcmeWhatever.
+ * Orchestrator unit tests: router, policy, sufficiency, context, citations, history.
  * Run: npm run test:orchestrator
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { routeDeterministic, isInternalResultBlob } from "../lib/ai/orchestrator/router.ts";
+import {
+  routeDeterministic,
+  isInternalResultBlob,
+} from "../lib/ai/orchestrator/router.ts";
+import {
+  detectLiveInformation,
+  isModelLimitationDeflection,
+  mustContinueToWeb,
+  broadNewsSearchQueries,
+} from "../lib/ai/orchestrator/policy.ts";
 import { checkRetrievalSufficiency } from "../lib/ai/orchestrator/sufficiency.ts";
 import { buildContext } from "../lib/ai/orchestrator/context-builder.ts";
 import { validateCitations } from "../lib/ai/orchestrator/citations.ts";
@@ -59,6 +68,54 @@ describe("deterministic router", () => {
     const r = routeDeterministic("create a new project called Demo");
     assert.equal(r.kind, "client_action");
   });
+
+  it("latest events in the world → web_retrieve (regression)", () => {
+    const q = "whats the latest events going on in the world";
+    const live = detectLiveInformation(q);
+    assert.equal(live.needsWeb, true);
+    assert.equal(live.broadNews, true);
+    const r = routeDeterministic(q);
+    assert.equal(r.kind, "web_retrieve");
+    assert.equal(r.needsWeb, true);
+    assert.ok(
+      mustContinueToWeb({
+        live,
+        webAvailable: true,
+        webAttempted: false,
+      }),
+    );
+    assert.ok(broadNewsSearchQueries(q).length >= 2);
+  });
+});
+
+describe("resourcefulness policy", () => {
+  it("blocks knowledge-cutoff deflection when web unused", () => {
+    const draft =
+      "I don't have real-time access to the latest news. My knowledge cutoff is December 2023. Check CNN.";
+    assert.equal(isModelLimitationDeflection(draft), true);
+    assert.ok(
+      mustContinueToWeb({
+        live: detectLiveInformation(
+          "whats the latest events going on in the world",
+        ),
+        webAvailable: true,
+        webAttempted: false,
+        draftIsDeflection: true,
+      }),
+    );
+  });
+
+  it("does not force unused-web gate after search already ran", () => {
+    assert.equal(
+      mustContinueToWeb({
+        live: detectLiveInformation("latest news"),
+        webAvailable: true,
+        webAttempted: true,
+        draftIsDeflection: true,
+      }),
+      false,
+    );
+  });
 });
 
 describe("sufficiency", () => {
@@ -75,7 +132,8 @@ describe("sufficiency", () => {
         {
           id: "web_1",
           title: "Acme Corp names Jane Doe CEO",
-          snippet: "Jane Doe was appointed chief executive officer of Acme Corp.",
+          snippet:
+            "Jane Doe was appointed chief executive officer of Acme Corp.",
           kind: "web",
         },
       ],
@@ -101,10 +159,10 @@ describe("context builder", () => {
       maxContextTokens: 2000,
     });
     assert.ok(built.counts.recent >= 2);
-    assert.ok(
-      !built.messages.some((m) => isInternalResultBlob(m.content)),
-    );
-    const lastUser = [...built.messages].reverse().find((m) => m.role === "user");
+    assert.ok(!built.messages.some((m) => isInternalResultBlob(m.content)));
+    const lastUser = [...built.messages]
+      .reverse()
+      .find((m) => m.role === "user");
     assert.equal(lastUser?.content, "who is that?");
   });
 });
