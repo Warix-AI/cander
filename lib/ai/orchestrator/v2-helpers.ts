@@ -16,7 +16,7 @@ export function tryFastPathAction(
 }
 
 export function liveInfoHint(content: string): boolean {
-  return /\b(latest|current|today|tonight|now|news|weather|forecast|price|score|ceo|announc|going on|happening|this week|out yet|released)\b/i.test(
+  return /\b(latest|current|today|tonight|now|news|weather|forecast|price|score|ceo|announc|going on|happening|this week|out yet|released|yesterday|this morning|right now|internet|online|search the web|look up online)\b/i.test(
     content,
   );
 }

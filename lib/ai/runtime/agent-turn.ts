@@ -27,6 +27,7 @@ import type {
 import { AiRuntimeError } from "@/lib/ai/runtime/types";
 import { isAgentOrchestratorEnabled } from "@/lib/ai/orchestrator/flags";
 import { getAiRuntimeMode } from "@/lib/ai/runtime/mode-store";
+import { shouldPreferOnDeviceForTurn } from "@/lib/ai/runtime/on-device-routing";
 
 const MAX_TOOL_ROUNDS = 3;
 
@@ -140,14 +141,16 @@ async function runAssistantTurnInner(
   request: AiGenerateRequest,
   opts?: AgentTurnOptions,
 ): Promise<AgentTurnResult> {
-  // Phase 1+ cutover: cloud path uses Edge TurnOrchestrator (Cap/web/desktop identical).
-  // Local/on-device keeps the legacy loop. Set NEXT_PUBLIC_AI_AGENT_ORCHESTRATOR=0 to force legacy cloud.
-  // Images always use cloud vision — on-device Apple/Android text models cannot see pixels.
+  // Phase 1+ cutover: cloud orchestrator for web/vision/complex work.
+  // Auto + Local use Foundation Models for conversational turns when available.
   const hasImages = Boolean(request.images?.length);
   if (isAgentOrchestratorEnabled()) {
     const mode = getAiRuntimeMode();
-    const forceLocal = mode === "local" && !hasImages;
-    if (!forceLocal) {
+    const preferOnDevice =
+      !hasImages &&
+      (mode === "local" ||
+        (mode === "auto" && (await shouldPreferOnDeviceForTurn(request))));
+    if (!preferOnDevice) {
       const { runOrchestratedTurn } = await import(
         "@/lib/ai/orchestrator/run-turn"
       );

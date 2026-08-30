@@ -9,6 +9,7 @@ import {
   prepareTurnVisionImages,
   VisionInputError,
 } from "../_shared/agent/vision-input.ts";
+import { bridgeHttpFailureMessage } from "../_shared/agent/bridge-errors.ts";
 
 const MODEL = "llama3.2";
 const VISION_MODEL =
@@ -557,11 +558,7 @@ Deno.serve(async (req) => {
 
         if (!bridgeRes.ok) {
           const detail = await bridgeRes.text().catch(() => "");
-          throw new Error(
-            bridgeRes.status === 401
-              ? "AI bridge rejected credentials"
-              : detail || `AI bridge error (${bridgeRes.status})`,
-          );
+          throw new Error(bridgeHttpFailureMessage(bridgeRes.status, detail));
         }
         const data = (await bridgeRes.json()) as { content?: string };
         assistantContent = data.content?.trim() || "(empty reply)";
@@ -969,7 +966,7 @@ async function callBridge(
   });
   if (!bridgeRes.ok) {
     const detail = await bridgeRes.text().catch(() => "");
-    throw new Error(detail || `AI bridge error (${bridgeRes.status})`);
+    throw new Error(bridgeHttpFailureMessage(bridgeRes.status, detail));
   }
   const data = (await bridgeRes.json()) as { content?: string };
   return data.content?.trim() || "";

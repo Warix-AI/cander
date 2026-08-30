@@ -7,7 +7,7 @@ const DEFAULT_URL = "https://cander.app";
 const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Bumped when the native shell changes — visible on <html data-cander-shell>. */
-const SHELL_BUILD = "2026-08-29-fm-bridge";
+const SHELL_BUILD = "2026-08-29-prod-fm";
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
 /** Classic Mac titlebar / chrome row height (traffic-light axis). */
 const TITLEBAR_PX = 52;
@@ -158,6 +158,9 @@ async function createWindow() {
       html.cander-desktop {
         --desktop-titlebar: ${TITLEBAR_PX}px !important;
         --desktop-traffic-clear: ${TRAFFIC_CLEAR_PX}px !important;
+      }
+      html.cander-desktop nextjs-portal {
+        display: none !important;
       }
       html.cander-desktop::before,
       html.cander-desktop::after {

@@ -32,6 +32,7 @@ import {
   scrubLimitationBoilerplate,
 } from "./policy.ts";
 import { checkRetrievalSufficiency } from "./sufficiency.ts";
+import { userFacingTurnError } from "./bridge-errors.ts";
 import type {
   ClientActionRequest,
   ConversationState,
@@ -875,10 +876,8 @@ export async function runTurnOrchestrator(
       };
     }
 
-    const offline = /bridge|tunnel|not configured|fetch/i.test(message);
-    const assistantContent = offline
-      ? "I couldn't reach the AI bridge. Check that Ollama, the local bridge, and the HTTPS tunnel are running."
-      : `Something went wrong: ${message}`;
+    const facing = userFacingTurnError(message);
+    const assistantContent = facing.content;
 
     // Only persist error assistant if turn wasn't cancelled
     let assistantMessageId: string | null = null;
@@ -906,7 +905,7 @@ export async function runTurnOrchestrator(
           content: assistantContent,
           status: "error",
           sort_order: nextOrder,
-          error: message.slice(0, 500),
+          error: facing.detail,
           created_at: new Date().toISOString(),
         });
       }
@@ -921,13 +920,13 @@ export async function runTurnOrchestrator(
       assistantMessageId,
       content: assistantContent,
       status: "failed",
-      offline,
+      offline: facing.offline,
       condensationOccurred: false,
       citations: sources,
       clientActions: [],
       statusEvents: [
         ...statusEvents,
-        { phase: "error", label: "Error", detail: message.slice(0, 120) },
+        { phase: "error", label: "Error", detail: facing.detail },
       ],
       observability: { ...obs(), failureStage },
     };

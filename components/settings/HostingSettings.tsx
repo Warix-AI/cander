@@ -33,10 +33,10 @@ export function HostingSettings() {
         >
           <HostingModePicker onModeChange={onModeChange} />
           <SettingsFootnote>
-            On device requires the Cander iOS app on hardware that supports Apple
-            Intelligence. Web and unsupported devices stay on Cloud. LOCAL never
-            silently falls back to cloud. Change this anytime in Settings →
-            Hosting.
+            On device requires Apple Intelligence on the Cander iOS app or Mac
+            desktop app (with the Foundation Models helper built). Web and
+            unsupported devices stay on Cloud. LOCAL never silently falls back to
+            cloud. Change this anytime in Settings → Hosting.
           </SettingsFootnote>
         </SettingsSection>
       </SettingsPanel>

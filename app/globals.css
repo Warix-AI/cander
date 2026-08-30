@@ -118,6 +118,11 @@ html.cander-desktop {
   --desktop-traffic-clear: 84px;
 }
 
+/* next dev only — hide the floating Next.js badge in the desktop shell */
+html.cander-desktop nextjs-portal {
+  display: none !important;
+}
+
 /* Capacitor iOS / Android — fixed app canvas; inner panels scroll only */
 html.cander-mobile,
 html.cander-narrow {

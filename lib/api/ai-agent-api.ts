@@ -68,7 +68,15 @@ type AgentAction =
 
 async function invokeAiAgent<T>(body: AgentAction): Promise<T> {
   const supabase = createSupabaseBrowserClient();
-  const { data, error } = await supabase.functions.invoke("ai-agent", { body });
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const { data, error } = await supabase.functions.invoke("ai-agent", {
+    body,
+    headers: session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : undefined,
+  });
   if (error) {
     let detail = error.message || "AI agent request failed";
     try {
@@ -112,8 +120,7 @@ export async function runAgentTurnStream(
   } = await supabase.auth.getSession();
   const token = session?.access_token;
   if (!token) {
-    // fallback
-    return runAgentTurn(body);
+    throw new Error("Sign in to use cloud AI and web search.");
   }
 
   const url = `${supabaseUrl()}/functions/v1/ai-agent`;

@@ -6,11 +6,13 @@
   "main": "src/main.js",
   "author": "Warix AI",
   "scripts": {
-    "dev": "env -u ELECTRON_RUN_AS_NODE CANDER_URL=http://localhost:3000 electron .",
-    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
-    "pack": "env -u ELECTRON_RUN_AS_NODE electron-builder --dir",
-    "dist": "env -u ELECTRON_RUN_AS_NODE electron-builder --mac dmg",
-    "dist:unsigned": "env -u ELECTRON_RUN_AS_NODE CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg",
+    "prepare-dev-app": "node scripts/prepare-dev-app.js",
+    "build:fm-helper": "node scripts/build-fm-helper.js",
+    "dev": "node scripts/prepare-dev-app.js && env -u ELECTRON_RUN_AS_NODE CANDER_URL=http://localhost:3000 .dev/Cander.app/Contents/MacOS/Electron .",
+    "start": "node scripts/prepare-dev-app.js && env -u ELECTRON_RUN_AS_NODE .dev/Cander.app/Contents/MacOS/Electron .",
+    "pack": "npm run build:fm-helper && env -u ELECTRON_RUN_AS_NODE electron-builder --dir",
+    "dist": "npm run build:fm-helper && env -u ELECTRON_RUN_AS_NODE electron-builder --mac dmg",
+    "dist:unsigned": "npm run build:fm-helper && env -u ELECTRON_RUN_AS_NODE CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg",
     "postinstall": "node scripts/ensure-electron.js"
   },
   "build": {
@@ -24,6 +26,12 @@
       "src/**/*",
       "assets/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "native/FoundationModelsHelper/FoundationModelsHelper",
+        "to": "FoundationModelsHelper/FoundationModelsHelper"
+      }
     ],
     "mac": {
       "category": "public.app-category.productivity",

@@ -69,6 +69,7 @@ import {
   visionImagesToDataUrls,
   assertVisionProvider,
 } from "../vision-input.ts";
+import { userFacingTurnError } from "../bridge-errors.ts";
 
 const PRODUCT_SYSTEM = `You are Cander, a capable private assistant with tools.
 Be clear and direct. Never expose backend model names, training cutoffs, or provider limitations as Cander limitations.
@@ -1167,12 +1168,8 @@ export async function runTurnOrchestratorV2(
       };
     }
 
-    const offline = /bridge|tunnel|not configured/i.test(message);
-    const content = visionErr
-      ? message
-      : offline
-        ? "I couldn't reach the AI service right now. Please try again shortly."
-        : `Something went wrong: ${message}`;
+    const offline = userFacingTurnError(message);
+    const content = visionErr ? message : offline.content;
 
     const failed: V2RunResult = {
       turnId: input.turnId,
@@ -1181,11 +1178,11 @@ export async function runTurnOrchestratorV2(
       assistantMessageId: null,
       content,
       status: "failed",
-      offline,
+      offline: visionErr ? false : offline.offline,
       condensationOccurred: false,
       citations: [],
       clientActions: [],
-      statusEvents: [{ phase: "error", label: "Error", detail: message.slice(0, 120) }],
+      statusEvents: [{ phase: "error", label: "Error", detail: offline.detail }],
       observability: { ...obs(), failureStage },
       orchestratorVersion: "v2",
     };

@@ -13,9 +13,10 @@ import {
   type AiContextRefInput,
 } from "@/lib/api/ai-chat-api";
 import type { SpaceId } from "@/lib/types";
+import { userFacingTurnError } from "@/lib/ai/bridge-errors";
 
 const OFFLINE_REPLY =
-  "I couldn't reach the AI bridge. Check that Ollama, the local bridge, and the HTTPS tunnel are running.";
+  "I couldn't reach the AI service right now. Please try again shortly.";
 
 function buildAiContextRefs(opts: {
   workspaceId: string;
@@ -99,12 +100,11 @@ export function createCloudProvider(): AiRuntimeProvider {
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        const offline =
-          /failed to fetch|network|offline|bridge|tunnel|503|504/i.test(message);
+        const facing = userFacingTurnError(message);
         return {
           aiChatId: chatId,
-          content: offline ? OFFLINE_REPLY : `Something went wrong: ${message}`,
-          offline,
+          content: facing.content,
+          offline: facing.offline,
           condensationOccurred: false,
           runtime: "cloud",
         };

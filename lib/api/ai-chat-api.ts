@@ -40,7 +40,15 @@ type AiChatAction =
 
 async function invokeAiChat<T>(body: AiChatAction): Promise<T> {
   const supabase = createSupabaseBrowserClient();
-  const { data, error } = await supabase.functions.invoke("ai-chat", { body });
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const { data, error } = await supabase.functions.invoke("ai-chat", {
+    body,
+    headers: session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : undefined,
+  });
   if (error) {
     let detail = error.message || "AI chat request failed";
     try {

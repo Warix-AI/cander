@@ -15,6 +15,7 @@ import {
   prepareTurnVisionImages,
   VisionInputError,
 } from "./vision-input.ts";
+import { bridgeHttpFailureMessage } from "./bridge-errors.ts";
 
 export interface ModelProvider {
   id: string;
@@ -171,11 +172,7 @@ export function createOllamaBridgeProvider(opts?: {
 
       if (!bridgeRes.ok) {
         const detail = await bridgeRes.text().catch(() => "");
-        throw new Error(
-          bridgeRes.status === 401
-            ? "AI bridge rejected credentials"
-            : detail || `AI bridge error (${bridgeRes.status})`,
-        );
+        throw new Error(bridgeHttpFailureMessage(bridgeRes.status, detail));
       }
       const data = (await bridgeRes.json()) as { content?: string };
       return {

@@ -1,4 +1,5 @@
 # Built artifacts
 release/
+.dev/
 native/FoundationModelsHelper/FoundationModelsHelper
 node_modules/
