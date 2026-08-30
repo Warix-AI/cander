@@ -1,0 +1,29 @@
+{
+  "id": "Y04-exclude-sf",
+  "category": "Y",
+  "tags": [
+    "exclusions"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Find a CRM."
+    },
+    {
+      "role": "assistant",
+      "content": "...",
+      "emit": {
+        "intent": "crm_recommend"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Nothing from Salesforce.",
+      "expect": {
+        "exclusions": [
+          "Salesforce"
+        ]
+      }
+    }
+  ]
+}

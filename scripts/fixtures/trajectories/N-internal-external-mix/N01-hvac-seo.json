@@ -1,0 +1,36 @@
+{
+  "id": "N01-hvac-seo",
+  "category": "N",
+  "tags": [
+    "internal",
+    "external"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Open my HVAC website project."
+    },
+    {
+      "role": "assistant",
+      "content": "Opened HVAC site project.",
+      "emit": {
+        "intent": "open_project",
+        "entities": [
+          {
+            "label": "HVAC website",
+            "type": "project"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "How does its SEO compare with competitors?",
+      "expect": {
+        "activeEntityLabels": [
+          "HVAC website"
+        ]
+      }
+    }
+  ]
+}

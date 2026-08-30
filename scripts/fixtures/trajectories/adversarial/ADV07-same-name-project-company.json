@@ -1,0 +1,33 @@
+{
+  "id": "ADV07-same-name-project-company",
+  "category": "ADV",
+  "tags": [
+    "adversarial",
+    "clarification"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Tell me about Acme SEO competitors.",
+      "candidates": {
+        "entities": [
+          {
+            "id": "proj",
+            "type": "project",
+            "label": "Acme",
+            "contextClass": "ACTIVE"
+          },
+          {
+            "id": "co",
+            "type": "company",
+            "label": "Acme",
+            "contextClass": "AVAILABLE"
+          }
+        ]
+      },
+      "expect": {
+        "clarificationRequired": true
+      }
+    }
+  ]
+}

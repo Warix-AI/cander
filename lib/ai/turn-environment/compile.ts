@@ -31,6 +31,7 @@ import type {
   TurnProfile,
 } from "./types.ts";
 import { MAX_TOOLS_PER_TURN } from "./types.ts";
+import type { ConversationTurnState } from "./conversation-types.ts";
 
 export type CompileTurnOptions = {
   content: string;
@@ -47,6 +48,8 @@ export type CompileTurnOptions = {
   isDesktop?: boolean;
   uiResume?: TurnStateInput["uiResume"];
   outputSchema?: TurnProfile["outputSchema"];
+  /** Resolved conversation state from delta pipeline. */
+  conversationState?: ConversationTurnState | null;
 };
 
 function buildPreRunTasks(content: string): PreRunTask[] {
@@ -93,7 +96,14 @@ export function resolveClarificationRequired(opts: {
   content: string;
   taskState?: TaskStateLike;
   domains: string[];
+  conversationState?: ConversationTurnState | null;
 }): { clarificationRequired: boolean; reason?: string } {
+  if (opts.conversationState?.clarificationRequired) {
+    return {
+      clarificationRequired: true,
+      reason: "unresolved_low_confidence_ambiguity",
+    };
+  }
   const t = opts.content.trim();
   const task = opts.taskState;
   if (task?.pendingClarification) {
@@ -132,7 +142,29 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     uiResume: opts.uiResume,
   });
 
-  const preRunTasks = buildPreRunTasks(content);
+  let preRunTasks = buildPreRunTasks(content);
+  const conv = opts.conversationState;
+  // Freshness / dissatisfaction / external flags from conversation state force retrieval.
+  if (
+    conv &&
+    (conv.freshnessRequirement ||
+      conv.externalRetrievalRequired ||
+      conv.dissatisfactionSignal) &&
+    !preRunTasks.some((t) => t.name === "web.search") &&
+    !conv.internalDataRequired
+  ) {
+    preRunTasks = [
+      {
+        name: "web.search",
+        arguments: { query: content.slice(0, 400) },
+        reason: conv.freshnessRequirement
+          ? "conversation_freshness"
+          : "conversation_external_required",
+      },
+      ...preRunTasks,
+    ];
+  }
+
   const allowed = resolveAllowedToolsForTurn({
     content,
     taskState: opts.taskState,
@@ -154,10 +186,17 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     toolNames = [...toolNames, "workspace.search"];
   }
 
+  if (conv?.internalDataRequired) {
+    if (!toolNames.includes("workspace.search")) {
+      toolNames = [...toolNames, "workspace.search"];
+    }
+  }
+
   const clarification = resolveClarificationRequired({
     content,
     taskState: opts.taskState,
     domains: allowed.domains,
+    conversationState: conv,
   });
 
   const toolMode = resolveToolMode({
@@ -180,6 +219,15 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     cards = cards.slice(0, 3);
   }
 
+  // Density from conversation answer shape when present
+  const densityFromShape =
+    conv?.desiredAnswerShape === "brief" ||
+    conv?.desiredAnswerShape === "key_points"
+      ? ("brief" as const)
+      : conv?.desiredAnswerShape === "detailed"
+        ? ("detailed" as const)
+        : null;
+
   const budgetName: BudgetProfileName =
     opts.budgetProfile ??
     (opts.isDesktop ? "on_device_large" : "on_device_small");
@@ -193,10 +241,20 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     content: String(m.content ?? "").slice(0, 800),
   }));
 
+  const pendingBits = [opts.pendingStateText ?? ""];
+  if (conv?.constraints && Object.keys(conv.constraints).length) {
+    pendingBits.push(
+      `Resolved constraints: ${JSON.stringify(conv.constraints)}`,
+    );
+  }
+  if (conv?.freshnessRequirement) {
+    pendingBits.push("Freshness required — do not reuse stale prior answers.");
+  }
+
   const contextPacket: ContextPacket = {
     currentRequest: content,
     recentTurns: recent,
-    pendingStateText: opts.pendingStateText ?? "",
+    pendingStateText: pendingBits.filter(Boolean).join("\n"),
     attachmentSummaries: opts.attachmentSummaries ?? [],
     memorySnippets:
       opts.memorySnippets ??
@@ -225,7 +283,7 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
         ? ["select_one", "text_input", "confirm"]
         : [],
     },
-    density: inferDensity(content),
+    density: densityFromShape ?? inferDensity(content),
     outputSchema: opts.outputSchema ?? "semantic_blocks_v1",
     budgets,
     domains: allowed.domains,

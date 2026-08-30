@@ -1,0 +1,53 @@
+{
+  "id": "A04-mont-blanc-feet",
+  "category": "A",
+  "tags": [
+    "coreference",
+    "follow-up",
+    "unit"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "How tall is Mont Blanc?"
+    },
+    {
+      "role": "assistant",
+      "content": "Mont Blanc is 4808 meters.",
+      "emit": {
+        "intent": "height_query",
+        "entities": [
+          {
+            "label": "Mont Blanc",
+            "type": "place"
+          }
+        ],
+        "constraints": {
+          "attribute": "height",
+          "unit": "meters"
+        },
+        "topic": {
+          "label": "Mont Blanc height"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "What about in feet?",
+      "expect": {
+        "activeEntityLabels": [
+          "Mont Blanc"
+        ],
+        "constraints": {
+          "attribute": "height",
+          "unit": "feet"
+        },
+        "clarificationRequired": false,
+        "answerContract": {
+          "mustAnswerDirectly": true,
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

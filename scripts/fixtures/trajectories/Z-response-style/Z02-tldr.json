@@ -1,0 +1,27 @@
+{
+  "id": "Z02-tldr",
+  "category": "Z",
+  "tags": [
+    "response-shape"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Explain TLS."
+    },
+    {
+      "role": "assistant",
+      "content": "Long...",
+      "emit": {
+        "intent": "explain"
+      }
+    },
+    {
+      "role": "user",
+      "content": "TLDR",
+      "expect": {
+        "desiredAnswerShape": "brief"
+      }
+    }
+  ]
+}

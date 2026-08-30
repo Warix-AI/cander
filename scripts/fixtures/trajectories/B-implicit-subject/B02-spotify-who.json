@@ -1,0 +1,41 @@
+{
+  "id": "B02-spotify-who",
+  "category": "B",
+  "tags": [
+    "coreference"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Tell me about Spotify."
+    },
+    {
+      "role": "assistant",
+      "content": "Spotify is...",
+      "emit": {
+        "intent": "entity_info",
+        "entities": [
+          {
+            "label": "Spotify",
+            "type": "company"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "Who founded it?",
+      "expect": {
+        "activeEntityLabels": [
+          "Spotify"
+        ],
+        "constraints": {
+          "attribute": "founder"
+        },
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

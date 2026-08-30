@@ -1,0 +1,32 @@
+{
+  "id": "K02-provo",
+  "category": "K",
+  "tags": [
+    "constraint-replacement"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Find sushi in Salt Lake City."
+    },
+    {
+      "role": "assistant",
+      "content": "...",
+      "emit": {
+        "intent": "find_restaurants",
+        "constraints": {
+          "location": "Salt Lake City"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Actually Provo.",
+      "expect": {
+        "constraints": {
+          "location": "Provo"
+        }
+      }
+    }
+  ]
+}

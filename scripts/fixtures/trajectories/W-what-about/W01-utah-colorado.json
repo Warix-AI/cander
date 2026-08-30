@@ -1,0 +1,46 @@
+{
+  "id": "W01-utah-colorado",
+  "category": "W",
+  "tags": [
+    "follow-up",
+    "entity-swap"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "What's the population of Utah?"
+    },
+    {
+      "role": "assistant",
+      "content": "About 3.4M.",
+      "emit": {
+        "intent": "population_query",
+        "entities": [
+          {
+            "label": "Utah",
+            "type": "place"
+          }
+        ],
+        "constraints": {
+          "attribute": "population"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "What about Colorado?",
+      "expect": {
+        "activeEntityLabels": [
+          "Colorado"
+        ],
+        "constraints": {
+          "attribute": "population"
+        },
+        "externalRetrievalRequired": true,
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

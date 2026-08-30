@@ -1,0 +1,43 @@
+{
+  "id": "U03-price-mac",
+  "category": "U",
+  "tags": [
+    "constraint-inheritance"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Find me a laptop."
+    },
+    {
+      "role": "assistant",
+      "content": "Sure.",
+      "emit": {
+        "intent": "find_laptop"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Under $1200.",
+      "expect": {
+        "constraints": {
+          "maxPrice": "1200"
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "OK.",
+      "emit": {}
+    },
+    {
+      "role": "user",
+      "content": "Mac.",
+      "expect": {
+        "constraints": {
+          "platform": "Mac"
+        }
+      }
+    }
+  ]
+}

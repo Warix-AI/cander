@@ -1,0 +1,18 @@
+{
+  "id": "S02-stripe",
+  "category": "S",
+  "tags": [
+    "tool-autonomy"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "What does Stripe do?",
+      "expect": {
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

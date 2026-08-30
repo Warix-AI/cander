@@ -1,0 +1,38 @@
+{
+  "id": "Q03-cheaper",
+  "category": "Q",
+  "tags": [
+    "coreference"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Compare iPhone and Pixel."
+    },
+    {
+      "role": "assistant",
+      "content": "...",
+      "emit": {
+        "entities": [
+          {
+            "label": "iPhone",
+            "type": "product"
+          },
+          {
+            "label": "Pixel",
+            "type": "product"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "Which is cheaper?",
+      "expect": {
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

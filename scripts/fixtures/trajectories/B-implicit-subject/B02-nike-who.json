@@ -1,0 +1,41 @@
+{
+  "id": "B02-nike-who",
+  "category": "B",
+  "tags": [
+    "coreference"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Tell me about Nike."
+    },
+    {
+      "role": "assistant",
+      "content": "Nike is...",
+      "emit": {
+        "intent": "entity_info",
+        "entities": [
+          {
+            "label": "Nike",
+            "type": "company"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "Who founded it?",
+      "expect": {
+        "activeEntityLabels": [
+          "Nike"
+        ],
+        "constraints": {
+          "attribute": "founder"
+        },
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

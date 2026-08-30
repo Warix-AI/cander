@@ -1,0 +1,46 @@
+{
+  "id": "C01-mcdonalds-us",
+  "category": "C",
+  "tags": [
+    "constraint-replacement",
+    "geography"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "How many McDonald's locations are there?"
+    },
+    {
+      "role": "assistant",
+      "content": "Approximately 40,000 worldwide.",
+      "emit": {
+        "intent": "location_count",
+        "entities": [
+          {
+            "label": "McDonald's",
+            "type": "company"
+          }
+        ],
+        "constraints": {
+          "metric": "locations"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "In the US?",
+      "expect": {
+        "activeEntityLabels": [
+          "McDonald's"
+        ],
+        "constraints": {
+          "geography": "United States"
+        },
+        "externalRetrievalRequired": true,
+        "answerContract": {
+          "mustAnswerDirectly": true
+        }
+      }
+    }
+  ]
+}

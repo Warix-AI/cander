@@ -1,0 +1,30 @@
+{
+  "id": "ADV03-same-cheaper",
+  "category": "ADV",
+  "tags": [
+    "adversarial"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Find me a laptop."
+    },
+    {
+      "role": "assistant",
+      "content": "MacBook Pro...",
+      "emit": {
+        "intent": "find_laptop"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Same thing but cheaper.",
+      "expect": {
+        "constraints": {
+          "cheaper": "true"
+        },
+        "externalRetrievalRequired": true
+      }
+    }
+  ]
+}

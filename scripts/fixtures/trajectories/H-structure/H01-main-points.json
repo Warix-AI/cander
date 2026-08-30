@@ -1,0 +1,30 @@
+{
+  "id": "H01-main-points",
+  "category": "H",
+  "tags": [
+    "response-shape"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Explain this article."
+    },
+    {
+      "role": "assistant",
+      "content": "Long explanation...",
+      "emit": {
+        "intent": "explain"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Just give me the main points.",
+      "expect": {
+        "desiredAnswerShape": "key_points",
+        "answerContract": {
+          "mustAnswerDirectly": true
+        }
+      }
+    }
+  ]
+}

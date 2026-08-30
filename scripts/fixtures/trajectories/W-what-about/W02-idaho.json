@@ -1,0 +1,37 @@
+{
+  "id": "W02-idaho",
+  "category": "W",
+  "tags": [
+    "entity-swap"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Population of Utah?"
+    },
+    {
+      "role": "assistant",
+      "content": "...",
+      "emit": {
+        "entities": [
+          {
+            "label": "Utah",
+            "type": "place"
+          }
+        ],
+        "constraints": {
+          "attribute": "population"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "What about Idaho?",
+      "expect": {
+        "activeEntityLabels": [
+          "Idaho"
+        ]
+      }
+    }
+  ]
+}

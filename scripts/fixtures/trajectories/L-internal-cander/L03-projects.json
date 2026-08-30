@@ -1,0 +1,16 @@
+{
+  "id": "L03-projects",
+  "category": "L",
+  "tags": [
+    "internal"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "What projects do I have?",
+      "expect": {
+        "internalDataRequired": true
+      }
+    }
+  ]
+}

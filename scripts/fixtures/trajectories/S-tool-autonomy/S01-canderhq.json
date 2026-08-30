@@ -1,0 +1,19 @@
+{
+  "id": "S01-canderhq",
+  "category": "S",
+  "tags": [
+    "tool-autonomy"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "What does CanderHQ do?",
+      "expect": {
+        "answerContract": {
+          "mustAnswerDirectly": true,
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

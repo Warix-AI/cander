@@ -1,0 +1,28 @@
+{
+  "id": "P03-dashboard",
+  "category": "P",
+  "tags": [
+    "topic-reset"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Help me build a landing page."
+    },
+    {
+      "role": "assistant",
+      "content": "Sure.",
+      "emit": {
+        "intent": "build_landing_page",
+        "topic": {
+          "label": "landing page"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Actually make it an internal dashboard instead.",
+      "expect": {}
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "id": "O02-pricing-recall",
+  "category": "O",
+  "tags": [
+    "evidence-reuse"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Read https://example.com/pricing"
+    },
+    {
+      "role": "assistant",
+      "content": "Pricing starts at $10.",
+      "emit": {
+        "evidence": [
+          {
+            "url": "https://example.com/pricing",
+            "title": "Pricing",
+            "sourceType": "web"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "What did you say earlier about pricing?",
+      "expect": {
+        "answerContract": {
+          "mustAnswerDirectly": true
+        }
+      }
+    }
+  ]
+}

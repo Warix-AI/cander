@@ -1,0 +1,39 @@
+{
+  "id": "V01-bigmac-fries",
+  "category": "V",
+  "tags": [
+    "follow-up"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "How many calories are in a Big Mac?"
+    },
+    {
+      "role": "assistant",
+      "content": "About 590.",
+      "emit": {
+        "intent": "calorie_query",
+        "entities": [
+          {
+            "label": "Big Mac",
+            "type": "food"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "And fries?",
+      "expect": {
+        "constraints": {
+          "addItem": "fries"
+        },
+        "externalRetrievalRequired": true,
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

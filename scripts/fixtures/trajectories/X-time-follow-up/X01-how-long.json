@@ -1,0 +1,38 @@
+{
+  "id": "X01-how-long",
+  "category": "X",
+  "tags": [
+    "follow-up"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "When does the game start?"
+    },
+    {
+      "role": "assistant",
+      "content": "7 PM.",
+      "emit": {
+        "intent": "event_time",
+        "constraints": {
+          "eventTime": "7 PM"
+        },
+        "entities": [
+          {
+            "label": "the game",
+            "type": "event"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "How long until then?",
+      "expect": {
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

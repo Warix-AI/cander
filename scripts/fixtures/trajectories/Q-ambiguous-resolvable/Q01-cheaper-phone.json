@@ -1,0 +1,51 @@
+{
+  "id": "Q01-cheaper-phone",
+  "category": "Q",
+  "tags": [
+    "coreference"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Compare iPhone and Pixel."
+    },
+    {
+      "role": "assistant",
+      "content": "Comparison...",
+      "emit": {
+        "intent": "compare",
+        "entities": [
+          {
+            "label": "iPhone",
+            "type": "product"
+          },
+          {
+            "label": "Pixel",
+            "type": "product"
+          }
+        ],
+        "resultSet": {
+          "items": [
+            {
+              "label": "iPhone",
+              "ordinal": 1
+            },
+            {
+              "label": "Pixel",
+              "ordinal": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Which is cheaper?",
+      "expect": {
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

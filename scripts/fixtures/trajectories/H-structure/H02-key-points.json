@@ -1,0 +1,27 @@
+{
+  "id": "H02-key-points",
+  "category": "H",
+  "tags": [
+    "response-shape"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Explain OAuth."
+    },
+    {
+      "role": "assistant",
+      "content": "Detailed...",
+      "emit": {
+        "intent": "explain"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Key points",
+      "expect": {
+        "desiredAnswerShape": "key_points"
+      }
+    }
+  ]
+}

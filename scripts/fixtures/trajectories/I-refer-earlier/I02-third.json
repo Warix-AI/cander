@@ -1,0 +1,42 @@
+{
+  "id": "I02-third",
+  "category": "I",
+  "tags": [
+    "ordinal"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "List three options."
+    },
+    {
+      "role": "assistant",
+      "content": "1 Alpha 2 Beta 3 Gamma",
+      "emit": {
+        "resultSet": {
+          "items": [
+            {
+              "label": "Alpha",
+              "ordinal": 1
+            },
+            {
+              "label": "Beta",
+              "ordinal": 2
+            },
+            {
+              "label": "Gamma",
+              "ordinal": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "The third one.",
+      "expect": {
+        "referencedItemLabel": "Gamma"
+      }
+    }
+  ]
+}

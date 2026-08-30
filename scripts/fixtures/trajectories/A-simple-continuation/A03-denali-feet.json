@@ -1,0 +1,53 @@
+{
+  "id": "A03-denali-feet",
+  "category": "A",
+  "tags": [
+    "coreference",
+    "follow-up",
+    "unit"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "How tall is Denali?"
+    },
+    {
+      "role": "assistant",
+      "content": "Denali is 6190 meters.",
+      "emit": {
+        "intent": "height_query",
+        "entities": [
+          {
+            "label": "Denali",
+            "type": "place"
+          }
+        ],
+        "constraints": {
+          "attribute": "height",
+          "unit": "meters"
+        },
+        "topic": {
+          "label": "Denali height"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "What about in feet?",
+      "expect": {
+        "activeEntityLabels": [
+          "Denali"
+        ],
+        "constraints": {
+          "attribute": "height",
+          "unit": "feet"
+        },
+        "clarificationRequired": false,
+        "answerContract": {
+          "mustAnswerDirectly": true,
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

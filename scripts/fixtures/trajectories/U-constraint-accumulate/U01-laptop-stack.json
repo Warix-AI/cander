@@ -1,0 +1,60 @@
+{
+  "id": "U01-laptop-stack",
+  "category": "U",
+  "tags": [
+    "constraint-inheritance"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Find me a laptop."
+    },
+    {
+      "role": "assistant",
+      "content": "What matters?",
+      "emit": {
+        "intent": "find_laptop"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Under $1500.",
+      "expect": {
+        "constraints": {
+          "maxPrice": "1500"
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "OK.",
+      "emit": {}
+    },
+    {
+      "role": "user",
+      "content": "Mac.",
+      "expect": {
+        "constraints": {
+          "maxPrice": "1500",
+          "platform": "Mac"
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "OK.",
+      "emit": {}
+    },
+    {
+      "role": "user",
+      "content": "14 inch.",
+      "expect": {
+        "constraints": {
+          "maxPrice": "1500",
+          "platform": "Mac",
+          "screenSize": "14 inch"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "S02-vercel",
+  "category": "S",
+  "tags": [
+    "tool-autonomy"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "What does Vercel do?",
+      "expect": {
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

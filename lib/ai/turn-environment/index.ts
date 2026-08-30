@@ -56,3 +56,42 @@ export {
 export { semanticBlocksToChatBlocks } from "./render-blocks.ts";
 export { toDynamicProfilePayload } from "./dynamic-profile.ts";
 export type { DynamicProfilePayload } from "./dynamic-profile.ts";
+
+export type {
+  AnswerShapeKind,
+  ContextClass,
+  ConversationDelta,
+  ConversationEmit,
+  ConversationTurnState,
+  EntityRef,
+  EvidenceRef,
+  ResolutionConfidence,
+  ResolutionMethod,
+  ResultSetRef,
+  TopicRef,
+} from "./conversation-types.ts";
+export {
+  emptyConversationTurnState,
+  emptyDelta,
+  nextConvId,
+  resetConvIdSeq,
+} from "./conversation-types.ts";
+export {
+  activeEntities,
+  activeResultSet,
+  applyConversationDelta,
+  applyConversationEmit,
+} from "./apply-delta.ts";
+export { resolveDeterministicDelta } from "./deterministic-delta.ts";
+export type { DeltaResolverInput } from "./deterministic-delta.ts";
+export {
+  resolveConversationDelta,
+  resolveSemanticDelta,
+  resolveSemanticDeltaHeuristic,
+} from "./semantic-delta.ts";
+export type { SemanticDeltaGenerator } from "./semantic-delta.ts";
+export {
+  clearConversationTurnState,
+  getConversationTurnState,
+  setConversationTurnState,
+} from "./conversation-store.ts";

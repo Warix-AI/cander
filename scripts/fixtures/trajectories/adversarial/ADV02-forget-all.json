@@ -1,0 +1,34 @@
+{
+  "id": "ADV02-forget-all",
+  "category": "ADV",
+  "tags": [
+    "adversarial"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Find Italian in SLC."
+    },
+    {
+      "role": "assistant",
+      "content": "...",
+      "emit": {
+        "intent": "find_restaurants",
+        "constraints": {
+          "cuisine": "Italian"
+        },
+        "entities": [
+          {
+            "label": "search",
+            "type": "task"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "Actually forget all that.",
+      "expect": {}
+    }
+  ]
+}

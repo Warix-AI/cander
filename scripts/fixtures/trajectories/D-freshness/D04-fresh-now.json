@@ -1,0 +1,41 @@
+{
+  "id": "D04-fresh-now",
+  "category": "D",
+  "tags": [
+    "freshness"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "What's the population of Utah?"
+    },
+    {
+      "role": "assistant",
+      "content": "About 3.4 million as of 2022.",
+      "emit": {
+        "intent": "population_query",
+        "entities": [
+          {
+            "label": "Utah",
+            "type": "place"
+          }
+        ],
+        "constraints": {
+          "attribute": "population",
+          "timeframe": "2022"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Latest?",
+      "expect": {
+        "freshnessRequirement": true,
+        "externalRetrievalRequired": true,
+        "answerContract": {
+          "mustUseFreshEvidence": true
+        }
+      }
+    }
+  ]
+}

@@ -52,7 +52,27 @@ Key rules:
 - **Semantic blocks v1** (8 types) — optional structured output; Cander renders
 - **`toDynamicProfilePayload`** ready for future Apple DynamicInstructions
 
-Trajectory tests: `scripts/turn-environment.test.ts` (included in `npm run test:orchestrator`).
+Trajectory tests: `scripts/turn-environment.test.ts` and **`scripts/trajectory-eval.test.ts`** (included in `npm run test:orchestrator`).
+
+## Conversation delta / state (multi-turn)
+
+Cander resolves **what changed** before compiling tools:
+
+```text
+New turn → deterministic delta (high confidence?)
+        ↘ no → tiny FM semantic delta (classify only; never answer)
+             → ConversationDelta
+             → previous State + Delta → ConversationTurnState
+             → capability compiler
+```
+
+- **IR:** `lib/ai/turn-environment/conversation-types.ts` — `ConversationDelta` vs `ConversationTurnState`
+- **Per-item** `ACTIVE` / `AVAILABLE` / `EXPIRED` on entities, topics, evidence, result sets
+- **Stable refs** (`id`/`type`/`label`, evidence IDs, resultSet/item IDs)
+- **Confidence** → clarification only for unresolved low-confidence ambiguity
+- **Fixtures:** `scripts/fixtures/trajectories/` (≥100 A–Z + adversarial); catalog at `catalog.md`
+- Regenerate: `npm run generate:trajectories`
+- Run suite on every orchestration change: `npm run test:orchestrator`
 
 ## Flags
 

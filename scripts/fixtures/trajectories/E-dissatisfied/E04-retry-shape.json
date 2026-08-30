@@ -1,0 +1,27 @@
+{
+  "id": "E04-retry-shape",
+  "category": "E",
+  "tags": [
+    "dissatisfaction"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Recommend a CRM."
+    },
+    {
+      "role": "assistant",
+      "content": "Salesforce...",
+      "emit": {
+        "intent": "crm_recommend"
+      }
+    },
+    {
+      "role": "user",
+      "content": "No, for a tiny plumbing company.",
+      "expect": {
+        "dissatisfactionSignal": true
+      }
+    }
+  ]
+}

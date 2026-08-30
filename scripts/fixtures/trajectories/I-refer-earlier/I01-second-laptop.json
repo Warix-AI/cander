@@ -1,0 +1,54 @@
+{
+  "id": "I01-second-laptop",
+  "category": "I",
+  "tags": [
+    "coreference",
+    "ordinal"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Give me three laptops."
+    },
+    {
+      "role": "assistant",
+      "content": "A) MacBook  B) XPS  C) ThinkPad",
+      "emit": {
+        "intent": "list_laptops",
+        "resultSet": {
+          "resultSetId": "laptops1",
+          "items": [
+            {
+              "label": "MacBook",
+              "ordinal": 1,
+              "itemId": "lap_a"
+            },
+            {
+              "label": "XPS",
+              "ordinal": 2,
+              "itemId": "lap_b"
+            },
+            {
+              "label": "ThinkPad",
+              "ordinal": 3,
+              "itemId": "lap_c"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Tell me more about the second one.",
+      "expect": {
+        "referencedItemLabel": "XPS",
+        "activeEntityLabels": [
+          "XPS"
+        ],
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

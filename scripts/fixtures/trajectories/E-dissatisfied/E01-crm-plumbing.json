@@ -1,0 +1,35 @@
+{
+  "id": "E01-crm-plumbing",
+  "category": "E",
+  "tags": [
+    "dissatisfaction",
+    "constraint-replacement"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "What are the best CRM tools?"
+    },
+    {
+      "role": "assistant",
+      "content": "Salesforce, HubSpot...",
+      "emit": {
+        "intent": "crm_recommend"
+      }
+    },
+    {
+      "role": "user",
+      "content": "No, for a tiny plumbing company.",
+      "expect": {
+        "constraints": {
+          "businessSize": "tiny",
+          "industry": "plumbing"
+        },
+        "dissatisfactionSignal": true,
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

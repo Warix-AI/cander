@@ -1,0 +1,20 @@
+{
+  "id": "L01-projects",
+  "category": "L",
+  "tags": [
+    "internal"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "What projects do I have in Build?",
+      "expect": {
+        "internalDataRequired": true,
+        "externalRetrievalRequired": false,
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

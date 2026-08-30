@@ -1,0 +1,36 @@
+{
+  "id": "C02-costco-us",
+  "category": "C",
+  "tags": [
+    "geography"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "How many Costco locations are there?"
+    },
+    {
+      "role": "assistant",
+      "content": "Many worldwide.",
+      "emit": {
+        "intent": "location_count",
+        "entities": [
+          {
+            "label": "Costco",
+            "type": "company"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "In the US?",
+      "expect": {
+        "constraints": {
+          "geography": "United States"
+        },
+        "externalRetrievalRequired": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "id": "G01-longer",
+  "category": "G",
+  "tags": [
+    "response-shape"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Summarize example.com"
+    },
+    {
+      "role": "assistant",
+      "content": "Short summary.",
+      "emit": {
+        "intent": "summarize",
+        "evidence": [
+          {
+            "url": "https://example.com",
+            "title": "Example",
+            "sourceType": "web"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "Longer.",
+      "expect": {
+        "desiredAnswerShape": "detailed",
+        "clarificationRequired": false,
+        "answerContract": {
+          "mustAnswerDirectly": true
+        }
+      }
+    }
+  ]
+}

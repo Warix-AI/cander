@@ -1,0 +1,44 @@
+{
+  "id": "M01-recent-edit",
+  "category": "M",
+  "tags": [
+    "internal"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "What projects do I have in Build?"
+    },
+    {
+      "role": "assistant",
+      "content": "A B C",
+      "emit": {
+        "intent": "list_projects",
+        "resultSet": {
+          "items": [
+            {
+              "label": "Project A",
+              "ordinal": 1
+            },
+            {
+              "label": "Project B",
+              "ordinal": 2
+            },
+            {
+              "label": "Project C",
+              "ordinal": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Which one did I edit most recently?",
+      "expect": {
+        "internalDataRequired": true,
+        "externalRetrievalRequired": false
+      }
+    }
+  ]
+}

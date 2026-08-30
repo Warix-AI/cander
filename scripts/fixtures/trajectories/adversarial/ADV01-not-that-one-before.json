@@ -1,0 +1,41 @@
+{
+  "id": "ADV01-not-that-one-before",
+  "category": "ADV",
+  "tags": [
+    "adversarial",
+    "ordinal"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Give three options."
+    },
+    {
+      "role": "assistant",
+      "content": "1 Red 2 Blue 3 Green",
+      "emit": {
+        "resultSet": {
+          "items": [
+            {
+              "label": "Red",
+              "ordinal": 1
+            },
+            {
+              "label": "Blue",
+              "ordinal": 2
+            },
+            {
+              "label": "Green",
+              "ordinal": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "No not that one, the one before it.",
+      "expect": {}
+    }
+  ]
+}

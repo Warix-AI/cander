@@ -1,0 +1,39 @@
+{
+  "id": "F01-calories-retry",
+  "category": "F",
+  "tags": [
+    "dissatisfaction",
+    "freshness"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Find the calories in a Big Mac."
+    },
+    {
+      "role": "assistant",
+      "content": "I'm not sure, maybe around 500?",
+      "emit": {
+        "intent": "calorie_query",
+        "entities": [
+          {
+            "label": "Big Mac",
+            "type": "food"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "Try again.",
+      "expect": {
+        "dissatisfactionSignal": true,
+        "freshnessRequirement": true,
+        "externalRetrievalRequired": true,
+        "answerContract": {
+          "mustNotRepeatPreviousAnswer": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "id": "D01-mcdonalds-2026",
+  "category": "D",
+  "tags": [
+    "freshness"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "How many McDonald's locations are there?"
+    },
+    {
+      "role": "assistant",
+      "content": "Around 39,000 worldwide as of 2023.",
+      "emit": {
+        "intent": "location_count",
+        "entities": [
+          {
+            "label": "McDonald's",
+            "type": "company"
+          }
+        ],
+        "constraints": {
+          "timeframe": "2023"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "In 2026.",
+      "expect": {
+        "freshnessRequirement": true,
+        "externalRetrievalRequired": true,
+        "constraints": {
+          "timeframe": "2026"
+        },
+        "answerContract": {
+          "mustUseFreshEvidence": true,
+          "mustNotRepeatPreviousAnswer": true
+        }
+      }
+    }
+  ]
+}

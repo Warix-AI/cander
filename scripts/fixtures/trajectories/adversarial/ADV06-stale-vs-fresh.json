@@ -1,0 +1,41 @@
+{
+  "id": "ADV06-stale-vs-fresh",
+  "category": "ADV",
+  "tags": [
+    "adversarial",
+    "freshness"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "McDonald's location count?"
+    },
+    {
+      "role": "assistant",
+      "content": "39k in 2023.",
+      "emit": {
+        "intent": "location_count",
+        "constraints": {
+          "timeframe": "2023"
+        },
+        "evidence": [
+          {
+            "evidenceId": "old",
+            "title": "2023 report",
+            "sourceType": "web"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "In 2026.",
+      "expect": {
+        "freshnessRequirement": true,
+        "answerContract": {
+          "mustUseFreshEvidence": true
+        }
+      }
+    }
+  ]
+}

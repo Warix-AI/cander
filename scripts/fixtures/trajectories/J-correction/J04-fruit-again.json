@@ -1,0 +1,34 @@
+{
+  "id": "J04-fruit-again",
+  "category": "J",
+  "tags": [
+    "correction"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Tell me about Apple."
+    },
+    {
+      "role": "assistant",
+      "content": "Apple Inc...",
+      "emit": {
+        "entities": [
+          {
+            "label": "Apple",
+            "type": "company"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "No, the fruit.",
+      "expect": {
+        "activeEntityLabels": [
+          "apple (fruit)"
+        ]
+      }
+    }
+  ]
+}

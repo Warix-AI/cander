@@ -1,0 +1,43 @@
+{
+  "id": "T01-reuters",
+  "category": "T",
+  "tags": [
+    "evidence-reuse"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Research Acme Corp."
+    },
+    {
+      "role": "assistant",
+      "content": "Found sources including Reuters...",
+      "emit": {
+        "intent": "research",
+        "evidence": [
+          {
+            "evidenceId": "reut1",
+            "url": "https://reuters.com/acme",
+            "title": "Reuters: Acme",
+            "sourceType": "news"
+          },
+          {
+            "evidenceId": "bbc1",
+            "url": "https://bbc.com/acme",
+            "title": "BBC",
+            "sourceType": "news"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "What did the Reuters source say?",
+      "expect": {
+        "answerContract": {
+          "mustAnswerDirectly": true
+        }
+      }
+    }
+  ]
+}

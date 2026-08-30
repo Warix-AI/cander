@@ -1,0 +1,53 @@
+{
+  "id": "A01-mount-everest-feet",
+  "category": "A",
+  "tags": [
+    "coreference",
+    "follow-up",
+    "unit"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "How tall is Mount Everest?"
+    },
+    {
+      "role": "assistant",
+      "content": "Mount Everest is 8848.86 meters.",
+      "emit": {
+        "intent": "height_query",
+        "entities": [
+          {
+            "label": "Mount Everest",
+            "type": "place"
+          }
+        ],
+        "constraints": {
+          "attribute": "height",
+          "unit": "meters"
+        },
+        "topic": {
+          "label": "Mount Everest height"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "What about in feet?",
+      "expect": {
+        "activeEntityLabels": [
+          "Mount Everest"
+        ],
+        "constraints": {
+          "attribute": "height",
+          "unit": "feet"
+        },
+        "clarificationRequired": false,
+        "answerContract": {
+          "mustAnswerDirectly": true,
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

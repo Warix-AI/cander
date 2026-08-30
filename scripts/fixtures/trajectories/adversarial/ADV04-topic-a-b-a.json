@@ -1,0 +1,56 @@
+{
+  "id": "ADV04-topic-a-b-a",
+  "category": "ADV",
+  "tags": [
+    "adversarial",
+    "topic-reset"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Tell me about laptops."
+    },
+    {
+      "role": "assistant",
+      "content": "...",
+      "emit": {
+        "topic": {
+          "id": "topic_laptop",
+          "label": "laptops"
+        },
+        "entities": [
+          {
+            "label": "laptop",
+            "type": "product",
+            "id": "ent_laptop"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "Actually, what's the weather in Austin?"
+    },
+    {
+      "role": "assistant",
+      "content": "Sunny.",
+      "emit": {
+        "topic": {
+          "id": "topic_weather",
+          "label": "weather"
+        },
+        "entities": [
+          {
+            "label": "Austin",
+            "type": "place"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "Go back to the laptop we discussed earlier.",
+      "expect": {}
+    }
+  ]
+}

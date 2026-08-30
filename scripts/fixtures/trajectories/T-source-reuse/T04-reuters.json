@@ -1,0 +1,36 @@
+{
+  "id": "T04-reuters",
+  "category": "T",
+  "tags": [
+    "evidence-reuse"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Research Acme."
+    },
+    {
+      "role": "assistant",
+      "content": "...",
+      "emit": {
+        "evidence": [
+          {
+            "evidenceId": "reut1",
+            "url": "https://reuters.com/acme",
+            "title": "Reuters",
+            "sourceType": "news"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "What did the Reuters source say?",
+      "expect": {
+        "answerContract": {
+          "mustAnswerDirectly": true
+        }
+      }
+    }
+  ]
+}

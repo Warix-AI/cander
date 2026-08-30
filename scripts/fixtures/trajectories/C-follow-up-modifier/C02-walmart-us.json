@@ -1,0 +1,36 @@
+{
+  "id": "C02-walmart-us",
+  "category": "C",
+  "tags": [
+    "geography"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "How many Walmart locations are there?"
+    },
+    {
+      "role": "assistant",
+      "content": "Many worldwide.",
+      "emit": {
+        "intent": "location_count",
+        "entities": [
+          {
+            "label": "Walmart",
+            "type": "company"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "In the US?",
+      "expect": {
+        "constraints": {
+          "geography": "United States"
+        },
+        "externalRetrievalRequired": true
+      }
+    }
+  ]
+}

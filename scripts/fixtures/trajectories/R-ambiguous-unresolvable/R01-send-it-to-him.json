@@ -1,0 +1,48 @@
+{
+  "id": "R01-send-it-to-him",
+  "category": "R",
+  "tags": [
+    "clarification",
+    "adversarial"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Send it to him.",
+      "candidates": {
+        "entities": [
+          {
+            "id": "doc1",
+            "type": "file",
+            "label": "Report.pdf",
+            "contextClass": "ACTIVE"
+          },
+          {
+            "id": "doc2",
+            "type": "file",
+            "label": "Invoice.pdf",
+            "contextClass": "AVAILABLE"
+          },
+          {
+            "id": "p1",
+            "type": "person",
+            "label": "Matt",
+            "contextClass": "ACTIVE"
+          },
+          {
+            "id": "p2",
+            "type": "person",
+            "label": "Jon",
+            "contextClass": "AVAILABLE"
+          }
+        ]
+      },
+      "expect": {
+        "clarificationRequired": true,
+        "answerContract": {
+          "mustNotAskClarification": false
+        }
+      }
+    }
+  ]
+}

@@ -68,14 +68,18 @@ import {
   citationsFromAtoms,
   compileTurnProfile,
   formatTurnProfileInstructions,
+  getConversationTurnState,
   mergeProvenanceAtoms,
   normalizeWebPageResult,
   normalizeWebSearchResult,
   parseSemanticResponse,
   runParallelTasks,
+  applyConversationDelta,
+  resolveConversationDelta,
   semanticBlocksInstruction,
   semanticBlocksToChatBlocks,
   semanticBlocksToMarkdown,
+  setConversationTurnState,
   toDynamicProfilePayload,
   type ProvenanceAtom,
   type TurnProfile,
@@ -594,11 +598,20 @@ async function runLocalTurnOrchestratorInner(
     }
 
     const taskState = getThreadTaskState(request.threadId);
+    const priorConv = getConversationTurnState(request.threadId);
+    const convDelta = await resolveConversationDelta({
+      previous: priorConv,
+      userMessage: request.content,
+    });
+    const conversationState = applyConversationDelta(priorConv, convDelta);
+    setConversationTurnState(request.threadId, conversationState);
+
     let profile = compileTurnProfile({
       content: request.content,
       taskState,
       messages: request.messages,
       pendingStateText: formatTaskStateForPrompt(taskState),
+      conversationState,
       isDesktop:
         typeof navigator !== "undefined" &&
         /Mac|Win|Linux/i.test(navigator.platform || ""),
@@ -771,6 +784,7 @@ async function runLocalTurnOrchestratorInner(
         messages: request.messages,
         pendingStateText: formatTaskStateForPrompt(taskState),
         evidence,
+        conversationState,
         isDesktop:
           typeof navigator !== "undefined" &&
           /Mac|Win|Linux/i.test(navigator.platform || ""),
@@ -1118,6 +1132,7 @@ async function runLocalTurnOrchestratorInner(
         taskState,
         messages: request.messages,
         evidence,
+        conversationState,
       });
     }
 

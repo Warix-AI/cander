@@ -1,0 +1,30 @@
+{
+  "id": "Y01-no-salesforce",
+  "category": "Y",
+  "tags": [
+    "exclusions"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Find me a CRM for my company."
+    },
+    {
+      "role": "assistant",
+      "content": "Salesforce, HubSpot...",
+      "emit": {
+        "intent": "crm_recommend"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Nothing from Salesforce.",
+      "expect": {
+        "exclusions": [
+          "Salesforce"
+        ],
+        "dissatisfactionSignal": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "id": "V02-and-nuggets",
+  "category": "V",
+  "tags": [
+    "follow-up"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Calories in a Big Mac?"
+    },
+    {
+      "role": "assistant",
+      "content": "590.",
+      "emit": {
+        "intent": "calorie_query",
+        "entities": [
+          {
+            "label": "Big Mac",
+            "type": "food"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "And nuggets?",
+      "expect": {
+        "constraints": {
+          "addItem": "nuggets"
+        }
+      }
+    }
+  ]
+}

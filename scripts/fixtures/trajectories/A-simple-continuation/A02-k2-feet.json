@@ -1,0 +1,53 @@
+{
+  "id": "A02-k2-feet",
+  "category": "A",
+  "tags": [
+    "coreference",
+    "follow-up",
+    "unit"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "How tall is K2?"
+    },
+    {
+      "role": "assistant",
+      "content": "K2 is 8611 meters.",
+      "emit": {
+        "intent": "height_query",
+        "entities": [
+          {
+            "label": "K2",
+            "type": "place"
+          }
+        ],
+        "constraints": {
+          "attribute": "height",
+          "unit": "meters"
+        },
+        "topic": {
+          "label": "K2 height"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "What about in feet?",
+      "expect": {
+        "activeEntityLabels": [
+          "K2"
+        ],
+        "constraints": {
+          "attribute": "height",
+          "unit": "feet"
+        },
+        "clarificationRequired": false,
+        "answerContract": {
+          "mustAnswerDirectly": true,
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

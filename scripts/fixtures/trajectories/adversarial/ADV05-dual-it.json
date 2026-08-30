@@ -1,0 +1,33 @@
+{
+  "id": "ADV05-dual-it",
+  "category": "ADV",
+  "tags": [
+    "adversarial",
+    "clarification"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Open it.",
+      "candidates": {
+        "entities": [
+          {
+            "id": "p1",
+            "type": "project",
+            "label": "Acme",
+            "contextClass": "ACTIVE"
+          },
+          {
+            "id": "c1",
+            "type": "company",
+            "label": "Acme",
+            "contextClass": "AVAILABLE"
+          }
+        ]
+      },
+      "expect": {
+        "clarificationRequired": true
+      }
+    }
+  ]
+}

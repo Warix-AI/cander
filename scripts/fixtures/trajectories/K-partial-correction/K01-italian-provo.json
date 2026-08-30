@@ -1,0 +1,37 @@
+{
+  "id": "K01-italian-provo",
+  "category": "K",
+  "tags": [
+    "constraint-replacement"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Find Italian restaurants in Salt Lake City."
+    },
+    {
+      "role": "assistant",
+      "content": "Here are some in SLC...",
+      "emit": {
+        "intent": "find_restaurants",
+        "constraints": {
+          "cuisine": "Italian",
+          "location": "Salt Lake City"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Actually Provo.",
+      "expect": {
+        "constraints": {
+          "location": "Provo"
+        },
+        "externalRetrievalRequired": true,
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "id": "J01-apple-fruit",
+  "category": "J",
+  "tags": [
+    "correction"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Tell me about Apple."
+    },
+    {
+      "role": "assistant",
+      "content": "Apple Inc. makes iPhones...",
+      "emit": {
+        "intent": "entity_info",
+        "entities": [
+          {
+            "label": "Apple",
+            "type": "company",
+            "id": "apple_inc"
+          }
+        ]
+      }
+    },
+    {
+      "role": "user",
+      "content": "No, the fruit.",
+      "expect": {
+        "activeEntityLabels": [
+          "apple (fruit)"
+        ],
+        "answerContract": {
+          "mustAnswerDirectly": true
+        }
+      }
+    }
+  ]
+}

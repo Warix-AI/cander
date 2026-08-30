@@ -1,0 +1,18 @@
+{
+  "id": "S02-openai",
+  "category": "S",
+  "tags": [
+    "tool-autonomy"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "What does OpenAI do?",
+      "expect": {
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

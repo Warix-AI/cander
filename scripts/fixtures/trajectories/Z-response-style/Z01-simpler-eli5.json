@@ -1,0 +1,42 @@
+{
+  "id": "Z01-simpler-eli5",
+  "category": "Z",
+  "tags": [
+    "response-shape"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Explain OAuth."
+    },
+    {
+      "role": "assistant",
+      "content": "Detailed OAuth explanation...",
+      "emit": {
+        "intent": "explain"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Simpler.",
+      "expect": {
+        "desiredAnswerShape": "brief"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "Simpler version...",
+      "emit": {}
+    },
+    {
+      "role": "user",
+      "content": "Like I'm five.",
+      "expect": {
+        "desiredAnswerShape": "brief",
+        "answerContract": {
+          "mustAnswerDirectly": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "R02-it-ambiguous",
+  "category": "R",
+  "tags": [
+    "clarification",
+    "adversarial"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Forward it.",
+      "candidates": {
+        "entities": [
+          {
+            "id": "a",
+            "type": "file",
+            "label": "A",
+            "contextClass": "ACTIVE"
+          },
+          {
+            "id": "b",
+            "type": "file",
+            "label": "B",
+            "contextClass": "ACTIVE"
+          }
+        ]
+      },
+      "expect": {
+        "clarificationRequired": true
+      }
+    }
+  ]
+}

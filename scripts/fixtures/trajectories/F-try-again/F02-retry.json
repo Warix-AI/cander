@@ -1,0 +1,28 @@
+{
+  "id": "F02-retry",
+  "category": "F",
+  "tags": [
+    "dissatisfaction"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Calories in a Whopper?"
+    },
+    {
+      "role": "assistant",
+      "content": "Uncertain.",
+      "emit": {
+        "intent": "calorie_query"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Retry",
+      "expect": {
+        "dissatisfactionSignal": true,
+        "externalRetrievalRequired": true
+      }
+    }
+  ]
+}

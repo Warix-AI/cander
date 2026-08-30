@@ -1,0 +1,94 @@
+{
+  "id": "B01-tesla-who-when-where",
+  "category": "B",
+  "tags": [
+    "coreference",
+    "ellipsis"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Tell me about Tesla."
+    },
+    {
+      "role": "assistant",
+      "content": "Tesla is an EV company...",
+      "emit": {
+        "intent": "entity_info",
+        "entities": [
+          {
+            "label": "Tesla",
+            "type": "company"
+          }
+        ],
+        "topic": {
+          "label": "Tesla"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Who founded it?",
+      "expect": {
+        "activeEntityLabels": [
+          "Tesla"
+        ],
+        "constraints": {
+          "attribute": "founder"
+        },
+        "externalRetrievalRequired": true,
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "Elon Musk is commonly associated...",
+      "emit": {
+        "constraints": {
+          "attribute": "founder"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "When?",
+      "expect": {
+        "activeEntityLabels": [
+          "Tesla"
+        ],
+        "constraints": {
+          "attribute": "founding_date"
+        },
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "Tesla was incorporated in 2003.",
+      "emit": {
+        "constraints": {
+          "attribute": "founding_date"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Where?",
+      "expect": {
+        "activeEntityLabels": [
+          "Tesla"
+        ],
+        "constraints": {
+          "attribute": "location"
+        },
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

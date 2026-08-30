@@ -1,0 +1,27 @@
+{
+  "id": "G02-more-detail",
+  "category": "G",
+  "tags": [
+    "response-shape"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Summarize the page."
+    },
+    {
+      "role": "assistant",
+      "content": "Brief.",
+      "emit": {
+        "intent": "summarize"
+      }
+    },
+    {
+      "role": "user",
+      "content": "More detail",
+      "expect": {
+        "desiredAnswerShape": "detailed"
+      }
+    }
+  ]
+}
