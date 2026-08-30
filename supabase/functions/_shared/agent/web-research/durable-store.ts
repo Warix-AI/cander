@@ -3,8 +3,8 @@
  * Never use process-local Maps for quotas or cache.
  */
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import type { WebEvidence, WebResearchMode } from "../web-research-contract/types.ts";
-import { WEB_RESEARCH_LIMITS } from "../web-research-contract/types.ts";
+import type { WebEvidence, WebResearchMode } from "../../web-research-contract/types.ts";
+import { WEB_RESEARCH_LIMITS } from "../../web-research-contract/types.ts";
 
 export function createServiceSupabase(): SupabaseClient | null {
   const url = Deno.env.get("SUPABASE_URL") ?? "";
