@@ -131,6 +131,7 @@ Do NOT mention knowledge cutoffs, Ollama, Brave, being a language model, or "acc
 Do NOT tell the user to check websites Cander can/should check itself.
 Cite only source IDs listed below when attributing facts.
 If evidence is genuinely insufficient after retrieval, say you could not retrieve reliable live information — never invent a cutoff date.
+${state.images?.length ? `\nThe user attached ${state.images.length} image(s). Describe and interpret what you see in the image pixels — do not guess from filenames alone.` : ""}
 
 Server now: ${state.capabilities.serverNowIso}
 User request: ${state.userRequest}

@@ -98,7 +98,7 @@ export async function fetchPrivateAiReply(opts: {
         content: err.message,
         offline: err.code === "local_unavailable",
         condensationOccurred: false,
-        runtime: "unavailable",
+        runtime: err.code === "vision_requires_cloud" ? "cloud" : "unavailable",
       };
     }
     throw err;

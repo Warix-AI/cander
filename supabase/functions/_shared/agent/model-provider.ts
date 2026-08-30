@@ -99,7 +99,7 @@ export function createOllamaBridgeProvider(opts?: {
       if (req.images?.length) {
         const lastUser = [...messages].reverse().find((m) => m.role === "user");
         if (lastUser) {
-          lastUser.images = req.images.slice(0, 2).map((img) => {
+          lastUser.images = req.images.slice(0, 4).map((img) => {
             const match = img.match(/^data:image\/[^;]+;base64,(.+)$/i);
             return (match?.[1] ?? img).replace(/\s/g, "");
           });

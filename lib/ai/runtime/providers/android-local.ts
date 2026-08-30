@@ -33,7 +33,13 @@ export function createAndroidLocalProvider(): AiRuntimeProvider {
       return false;
     },
 
-    async generate(_request: AiGenerateRequest): Promise<AiGenerateResult> {
+    async generate(request: AiGenerateRequest): Promise<AiGenerateResult> {
+      if (request.images?.length) {
+        throw new AiRuntimeError(
+          "vision_requires_cloud",
+          "On-device Android AI can't view images yet. Switch to Auto or Cloud to analyze photos.",
+        );
+      }
       throw new AiRuntimeError(
         "local_unavailable",
         "On-device Android AI is not implemented yet.",

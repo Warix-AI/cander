@@ -63,6 +63,12 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
     },
 
     async generate(request: AiGenerateRequest): Promise<AiGenerateResult> {
+      if (request.images?.length) {
+        throw new AiRuntimeError(
+          "vision_requires_cloud",
+          "On-device Apple Intelligence can't view images yet. Switch to Auto or Cloud to analyze photos and screenshots.",
+        );
+      }
       const avail = await getFoundationModelsAvailability();
       if (!avail.available) {
         throw new AiRuntimeError(

@@ -167,6 +167,7 @@ import {
 import { useMobileShell } from "@/lib/use-media-query";
 import {
   collectRecentImageDataUrls,
+  imageTurnHint,
   modelContentFromMessage,
 } from "@/lib/ai/attachment-context";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
@@ -1478,9 +1479,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ? `File “${f.name}” contents:\n${f.text.trim()}`
             : `File attached: ${f.name}`,
         ),
-        ...(imageUrls.length
-          ? [`(${imageUrls.length} image(s) attached — inspect the image pixels.)`]
-          : []),
+        ...(imageUrls.length ? [imageTurnHint(imageUrls.length)] : []),
       ]
         .filter(Boolean)
         .join("\n\n");

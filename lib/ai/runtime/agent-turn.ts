@@ -24,6 +24,7 @@ import type {
   AiGenerateRequest,
   AiGenerateResult,
 } from "@/lib/ai/runtime/types";
+import { AiRuntimeError } from "@/lib/ai/runtime/types";
 import { isAgentOrchestratorEnabled } from "@/lib/ai/orchestrator/flags";
 import { getAiRuntimeMode } from "@/lib/ai/runtime/mode-store";
 
@@ -141,15 +142,24 @@ async function runAssistantTurnInner(
 ): Promise<AgentTurnResult> {
   // Phase 1+ cutover: cloud path uses Edge TurnOrchestrator (Cap/web/desktop identical).
   // Local/on-device keeps the legacy loop. Set NEXT_PUBLIC_AI_AGENT_ORCHESTRATOR=0 to force legacy cloud.
+  // Images always use cloud vision — on-device Apple/Android text models cannot see pixels.
+  const hasImages = Boolean(request.images?.length);
   if (isAgentOrchestratorEnabled()) {
     const mode = getAiRuntimeMode();
-    const forceLocal = mode === "local";
+    const forceLocal = mode === "local" && !hasImages;
     if (!forceLocal) {
       const { runOrchestratedTurn } = await import(
         "@/lib/ai/orchestrator/run-turn"
       );
       return runOrchestratedTurn(request, { onProgress: opts?.onProgress });
     }
+  }
+
+  if (hasImages) {
+    throw new AiRuntimeError(
+      "vision_requires_cloud",
+      "Photos and images need Cloud or Auto mode — on-device Apple Intelligence can't interpret images yet. Switch runtime mode and try again.",
+    );
   }
 
   const report = (progress: AgentTurnProgress) => {

@@ -20,6 +20,8 @@ export type AiRuntimeCapabilities = {
   streaming: boolean;
   tools: boolean;
   structuredOutput: boolean;
+  /** Can interpret attached images (cloud vision path). */
+  vision?: boolean;
   contextWindow?: number;
 };
 

@@ -6,6 +6,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { resolveAllowedToolsForTurn } from "../_shared/tool-domains.ts";
 
 const MODEL = "llama3.2";
+const VISION_MODEL =
+  Deno.env.get("OLLAMA_VISION_MODEL")?.trim() || "llava";
 const PROVIDER = "ollama-bridge";
 /** Verbatim turns after the condensation watermark (short-term continuity). */
 const RECENT_MESSAGE_LIMIT = 25;
@@ -519,12 +521,13 @@ Deno.serve(async (req) => {
         const rawImages = Array.isArray(payload.images)
           ? payload.images.filter((x): x is string => typeof x === "string")
           : [];
+        const visionModel = rawImages.length ? VISION_MODEL : MODEL;
         if (rawImages.length) {
           const lastUser = [...modelMessages]
             .reverse()
             .find((m) => m.role === "user");
           if (lastUser) {
-            lastUser.images = rawImages.slice(0, 2).map((img) => {
+            lastUser.images = rawImages.slice(0, 4).map((img) => {
               const m = img.match(/^data:image\/[^;]+;base64,(.+)$/i);
               return (m?.[1] ?? img).replace(/\s/g, "");
             });
@@ -537,7 +540,7 @@ Deno.serve(async (req) => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${bridgeSecret}`,
           },
-          body: JSON.stringify({ model: MODEL, messages: modelMessages }),
+          body: JSON.stringify({ model: visionModel, messages: modelMessages }),
           signal: AbortSignal.timeout(rawImages.length ? 90_000 : 45_000),
         });
 

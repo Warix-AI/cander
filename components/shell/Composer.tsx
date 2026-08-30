@@ -778,7 +778,7 @@ export function Composer({
       multiple
       accept={
         nativeShell
-          ? DOCUMENT_ACCEPT
+          ? `${DOCUMENT_ACCEPT},image/*,.heic,.heif`
           : `${DOCUMENT_ACCEPT},image/*`
       }
       tabIndex={-1}

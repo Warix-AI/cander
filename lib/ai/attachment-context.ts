@@ -7,6 +7,29 @@ export function toOllamaImageBase64(dataUrlOrBase64: string): string {
   return (match?.[1] ?? raw).replace(/\s/g, "");
 }
 
+/** Validate and normalize image payloads before sending to vision models. */
+export function normalizeVisionImages(
+  urls: string[],
+  limit = 4,
+): string[] {
+  const out: string[] = [];
+  for (const raw of urls) {
+    const trimmed = (raw || "").trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith("data:image/")) {
+      const b64 = toOllamaImageBase64(trimmed);
+      if (b64.length < 32) continue;
+      out.push(trimmed);
+      continue;
+    }
+    // Raw base64 without prefix — wrap as JPEG for downstream consistency.
+    if (/^[A-Za-z0-9+/=\s]+$/.test(trimmed) && trimmed.replace(/\s/g, "").length >= 32) {
+      out.push(`data:image/jpeg;base64,${trimmed.replace(/\s/g, "")}`);
+    }
+  }
+  return out.slice(0, limit);
+}
+
 /** Text the model sees for a stored UI message (includes attach notes / file bodies). */
 export function modelContentFromMessage(message: Message): string {
   const parts: string[] = [];
@@ -29,26 +52,31 @@ export function modelContentFromMessage(message: Message): string {
   return parts.join("\n\n").trim();
 }
 
-/** Collect recent image data-URLs from the thread + current attachments (max 2). */
+/** Collect recent image data-URLs from the thread + current attachments. */
 export function collectRecentImageDataUrls(
   messages: Message[] | undefined,
   currentUrls: string[] = [],
-  limit = 2,
+  limit = 4,
 ): string[] {
-  const out: string[] = [];
+  const candidates: string[] = [];
   const push = (url: string) => {
     if (!url.startsWith("data:image/")) return;
-    if (out.includes(url)) return;
-    if (out.length >= limit) return;
-    out.push(url);
+    if (candidates.includes(url)) return;
+    candidates.push(url);
   };
   for (const url of currentUrls) push(url);
   for (const message of [...(messages ?? [])].reverse()) {
-    if (out.length >= limit) break;
     for (const block of message.blocks ?? []) {
       if (block.type === "image") push(block.url);
-      if (out.length >= limit) break;
     }
   }
-  return out;
+  return normalizeVisionImages(candidates, limit);
+}
+
+/** User-visible hint when image bytes are present for the current turn. */
+export function imageTurnHint(count: number): string {
+  if (count <= 0) return "";
+  return count === 1
+    ? "(1 image attached — describe and interpret what you see in the image pixels.)"
+    : `(${count} images attached — describe and interpret what you see in the image pixels.)`;
 }
