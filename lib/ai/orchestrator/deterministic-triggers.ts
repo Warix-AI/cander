@@ -2,6 +2,12 @@
  * Deterministic safeguards — assist the agent, do not replace reasoning.
  */
 
+import {
+  prefersBrowserMetadataOnly,
+  prefersViewportCapture,
+  refersToActiveBrowserSurface,
+  refersToPageSelection,
+} from "../../browser-context/routing.ts";
 import { extractRequestedUrl } from "./web-retrieval.ts";
 import { liveInfoHint } from "./v2-helpers.ts";
 
@@ -17,6 +23,7 @@ export function requiresExternalEvidence(content: string): boolean {
   if (!t) return false;
   if (extractRequestedUrl(t)) return true;
   if (liveInfoHint(t)) return true;
+  if (refersToActiveBrowserSurface(t)) return true;
   if (/\b(search|look\s*up|google|find)\b[\s\S]{0,40}\b(web|online|internet)\b/i.test(t)) {
     return true;
   }
@@ -38,6 +45,49 @@ export function initialDeterministicToolCalls(content: string): QueuedToolCall[]
       },
     ];
   }
+
+  if (refersToActiveBrowserSurface(content)) {
+    if (refersToPageSelection(content)) {
+      return [
+        {
+          name: "browser.current.get_selection",
+          arguments: {},
+          reason: "active_browser_selection",
+        },
+      ];
+    }
+    if (prefersBrowserMetadataOnly(content)) {
+      return [
+        {
+          name: "browser.current.get_metadata",
+          arguments: {},
+          reason: "active_browser_metadata",
+        },
+      ];
+    }
+    if (prefersViewportCapture(content)) {
+      return [
+        {
+          name: "browser.current.capture_viewport",
+          arguments: {},
+          reason: "active_browser_visual",
+        },
+        {
+          name: "browser.current.get_context",
+          arguments: { includeScreenshot: false },
+          reason: "active_browser_context_with_visual",
+        },
+      ];
+    }
+    return [
+      {
+        name: "browser.current.get_context",
+        arguments: {},
+        reason: "active_browser_surface_reference",
+      },
+    ];
+  }
+
   return [];
 }
 

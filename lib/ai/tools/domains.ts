@@ -6,6 +6,7 @@
  * with this file (copy when domains / resolveAllowedToolsForTurn change).
  */
 
+import { refersToActiveBrowserSurface } from "../../browser-context/routing.ts";
 import { extractRequestedUrl } from "../orchestrator/web-retrieval.ts";
 
 export type ToolDomain =
@@ -17,6 +18,7 @@ export type ToolDomain =
   | "knowledge"
   | "web"
   | "computer"
+  | "browser"
   | "scheduling"
   | "comms"
   | "cloud_work"
@@ -36,6 +38,12 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "computer.browser.click",
     "computer.browser.fill",
     "computer.browser.requestUserControl",
+  ],
+  browser: [
+    "browser.current.get_context",
+    "browser.current.get_selection",
+    "browser.current.capture_viewport",
+    "browser.current.get_metadata",
   ],
   scheduling: [],
   comms: [],
@@ -202,6 +210,10 @@ export function resolveAllowedToolsForTurn(opts: {
     for (const d of opts.forceDomains) domains.add(d);
   }
 
+  if (refersToActiveBrowserSurface(content)) {
+    domains.add("browser");
+  }
+
   const taskActive =
     Boolean(task) &&
     task!.status !== "idle" &&
@@ -312,7 +324,11 @@ export function resolveAllowedToolsForTurn(opts: {
     if (/\b(connect|connector)\b/i.test(content)) {
       domains.add("navigation");
     }
-  } else if (!taskActive && (isConversationOnly(content) || !content)) {
+  } else if (
+    !taskActive &&
+    !domains.size &&
+    (isConversationOnly(content) || !content)
+  ) {
     return { domains: [], toolNames: [] };
   }
 

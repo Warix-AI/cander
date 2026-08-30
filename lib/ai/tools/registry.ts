@@ -24,6 +24,7 @@ export type AiToolDefinition = {
     | "knowledge"
     | "web"
     | "computer"
+    | "browser"
     | "scheduling"
     | "comms"
     | "cloud_work"
@@ -378,6 +379,54 @@ registerAiTool({
     type: "object",
     properties: { sessionId: { type: "string" }, reason: { type: "string" } },
   },
+});
+
+registerAiTool({
+  name: "browser.current.get_context",
+  description:
+    "Read the active right-panel browser/preview tab (selected tab only): URL, title, visible text, headings, links. Use when the user refers to this page, preview, screen, website, or what's on the right. Do not claim you cannot see the page until you have called this (or get_metadata).",
+  permission: { requireWorkspaceMember: true },
+  domain: "browser",
+  enabled: true,
+  parameters: {
+    type: "object",
+    properties: {
+      includeScreenshot: {
+        type: "boolean",
+        description: "Also capture viewport when appearance/layout matters",
+      },
+    },
+  },
+});
+
+registerAiTool({
+  name: "browser.current.get_selection",
+  description:
+    "Get the current text selection in the active right-panel browser tab.",
+  permission: { requireWorkspaceMember: true },
+  domain: "browser",
+  enabled: true,
+  parameters: { type: "object", properties: {} },
+});
+
+registerAiTool({
+  name: "browser.current.capture_viewport",
+  description:
+    "Capture a screenshot of the active right-panel viewport. Prefer for layout, appearance, images, animation, or when text extraction is insufficient.",
+  permission: { requireWorkspaceMember: true },
+  domain: "browser",
+  enabled: true,
+  parameters: { type: "object", properties: {} },
+});
+
+registerAiTool({
+  name: "browser.current.get_metadata",
+  description:
+    "Get lightweight metadata for the active right-panel tab (kind, title, URL/domain, project) without fetching full page text.",
+  permission: { requireWorkspaceMember: true },
+  domain: "browser",
+  enabled: true,
+  parameters: { type: "object", properties: {} },
 });
 
 registerAiTool({

@@ -53,6 +53,16 @@ export type CanderDesktopBridge = {
     forward: (tabId: string) => Promise<void>;
     reload: (tabId: string) => Promise<void>;
     stop: (tabId: string) => Promise<void>;
+    readPage?: (tabId: string) => Promise<Record<string, unknown>>;
+    getSelection?: (
+      tabId: string,
+    ) => Promise<{ text?: string; url?: string }>;
+    captureViewport?: (tabId: string) => Promise<{
+      dataBase64: string;
+      mimeType?: string;
+      width?: number;
+      height?: number;
+    }>;
     onEvent?: (handler: (event: Record<string, unknown>) => void) => () => void;
   };
 };

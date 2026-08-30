@@ -12,6 +12,7 @@ export type ToolDomain =
   | "knowledge"
   | "web"
   | "computer"
+  | "browser"
   | "scheduling"
   | "comms"
   | "cloud_work"

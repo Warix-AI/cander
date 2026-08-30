@@ -41,6 +41,13 @@ import {
   setActiveComputerControlMode,
   subscribeActiveComputerSession,
 } from "@/lib/computer/active-session";
+import {
+  setActiveBrowserContextTab,
+  subscribeBrowserContextReading,
+  isBrowserContextReading,
+} from "@/lib/browser-context";
+import { hasDesktopBrowserBridge, isDesktopShell } from "@/lib/desktop-shell";
+import { isCapacitorNative } from "@/lib/composer-attach";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { Dropdown } from "@/components/ui/Controls";
@@ -301,6 +308,58 @@ export function ProjectBrowserPanel() {
   const projectTitle = project?.name ?? entity?.title ?? active.title ?? "Project";
   const canRename = spaceId === "build" || spaceId === "research";
 
+  // Selected tab only — chat browser-context tools read this pointer.
+  // Keep it while chat is open (mobile) so the user can ask about the page
+  // they just left; native views remain registered even when hidden.
+  useEffect(() => {
+    if (!active) {
+      setActiveBrowserContextTab(null);
+      return;
+    }
+    const url =
+      active.kind === "agent-browser"
+        ? (computerSession?.currentUrl ?? active.url)
+        : address;
+    const canNative =
+      (typeof window !== "undefined" &&
+        isDesktopShell() &&
+        hasDesktopBrowserBridge()) ||
+      (typeof window !== "undefined" && isCapacitorNative());
+    setActiveBrowserContextTab({
+      tabId: active.id,
+      tabKind: active.kind,
+      title: active.title,
+      url: url || active.url,
+      projectId: active.projectId ?? projectId ?? undefined,
+      sessionId: active.computerSessionId ?? computerSession?.sessionId,
+      canReadText: true,
+      canCaptureViewport: active.kind === "agent-browser" ? false : canNative,
+    });
+  }, [
+    active?.id,
+    active?.kind,
+    active?.title,
+    active?.url,
+    active?.projectId,
+    active?.computerSessionId,
+    address,
+    projectId,
+    computerSession?.currentUrl,
+    computerSession?.sessionId,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      setActiveBrowserContextTab(null);
+    };
+  }, []);
+
+  const readingPage = useSyncExternalStore(
+    subscribeBrowserContextReading,
+    isBrowserContextReading,
+    () => false,
+  );
+
   useEffect(() => {
     setRenameValue(projectTitle);
     setRenameError(null);
@@ -471,6 +530,14 @@ export function ProjectBrowserPanel() {
             onAddProject={addProjectTab}
             extraProjects={extraProjects}
           />
+          {readingPage ? (
+            <span
+              className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground"
+              title="Cander is reading the active page"
+            >
+              Reading page
+            </span>
+          ) : null}
           <span className="ml-auto flex shrink-0 items-center gap-0.5">
             {chatArmed ? (
               <button

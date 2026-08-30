@@ -16,6 +16,7 @@ export type ToolDomain =
   | "knowledge"
   | "web"
   | "computer"
+  | "browser"
   | "scheduling"
   | "comms"
   | "cloud_work"
@@ -35,6 +36,12 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "computer.browser.click",
     "computer.browser.fill",
     "computer.browser.requestUserControl",
+  ],
+  browser: [
+    "browser.current.get_context",
+    "browser.current.get_selection",
+    "browser.current.capture_viewport",
+    "browser.current.get_metadata",
   ],
   scheduling: [],
   comms: [],
@@ -141,6 +148,29 @@ function isConversationOnly(text: string): boolean {
   return false;
 }
 
+/** Keep in sync with lib/browser-context/routing.ts */
+function refersToActiveBrowserSurface(content: string): boolean {
+  const t = content.trim();
+  if (!t) return false;
+  return (
+    /\b(this|the|that)\s+(page|website|site|preview|screen|tab|window|viewport|ui|layout|button|headline|header|cta)\b/i.test(
+      t,
+    ) ||
+    /\b(on|to)\s+the\s+right\b/i.test(t) ||
+    /\bwhat\s+(i'?m|i\s+am)\s+looking\s+at\b/i.test(t) ||
+    /\b(my|the)\s+screen\b/i.test(t) ||
+    /\bcan\s+you\s+see\b[\s\S]{0,40}\b(screen|page|right|preview|this|what)\b/i.test(
+      t,
+    ) ||
+    /\b(see|look\s+at|describe|summarize|read)\b[\s\S]{0,48}\b(the\s+)?(page|website|preview|screen|right\s+panel)\b/i.test(
+      t,
+    ) ||
+    /\b(selected|highlighted)\s+text\b/i.test(t) ||
+    /\bwhat\s+does\s+(this|the)\s+(button|link|text|selection)\b/i.test(t) ||
+    /\bwhy\s+does\s+(this|the)\s+(button|layout|page|ui)\b/i.test(t)
+  );
+}
+
 /** Complex coding / research / multi-step work → cloud_work only. */
 export function isComplexWorkIntent(text: string): boolean {
   const t = (text || "").trim();
@@ -199,6 +229,10 @@ export function resolveAllowedToolsForTurn(opts: {
 
   if (opts.forceDomains?.length) {
     for (const d of opts.forceDomains) domains.add(d);
+  }
+
+  if (refersToActiveBrowserSurface(content)) {
+    domains.add("browser");
   }
 
   const taskActive =
@@ -311,7 +345,11 @@ export function resolveAllowedToolsForTurn(opts: {
     if (/\b(connect|connector)\b/i.test(content)) {
       domains.add("navigation");
     }
-  } else if (!taskActive && (isConversationOnly(content) || !content)) {
+  } else if (
+    !taskActive &&
+    !domains.size &&
+    (isConversationOnly(content) || !content)
+  ) {
     return { domains: [], toolNames: [] };
   }
 

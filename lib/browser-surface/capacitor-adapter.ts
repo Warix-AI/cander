@@ -27,6 +27,18 @@ type CapacitorBrowserPlugin = {
   reload: (opts: { tabId: string }) => Promise<void>;
   stop: (opts: { tabId: string }) => Promise<void>;
   hideAll?: () => Promise<void>;
+  readPage?: (opts: { tabId: string }) => Promise<Record<string, unknown>>;
+  getSelection?: (opts: {
+    tabId: string;
+  }) => Promise<{ text?: string; url?: string }>;
+  captureViewport?: (opts: {
+    tabId: string;
+  }) => Promise<{
+    dataBase64?: string;
+    mimeType?: string;
+    width?: number;
+    height?: number;
+  }>;
   addListener?: (
     eventName: string,
     handler: (event: BrowserSurfaceEvent) => void,

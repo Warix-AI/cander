@@ -64,6 +64,10 @@ import { shouldEscalateToBrowser } from "@/lib/computer/tool-routing";
 export const LOCAL_ORCHESTRATOR_TOOLS = [
   "web.search",
   "web.open",
+  "browser.current.get_context",
+  "browser.current.get_selection",
+  "browser.current.capture_viewport",
+  "browser.current.get_metadata",
   "computer.browser.open",
   "computer.browser.observe",
   "computer.browser.click",
@@ -95,6 +99,14 @@ function detailForTool(name: string): string {
     case "computer.browser.click":
     case "computer.browser.fill":
       return "Using browser…";
+    case "browser.current.get_context":
+      return "Reading the page on the right…";
+    case "browser.current.get_selection":
+      return "Reading selection…";
+    case "browser.current.capture_viewport":
+      return "Capturing the viewport…";
+    case "browser.current.get_metadata":
+      return "Checking the active tab…";
     case "workspace.search":
       return "Searching workspace…";
     case "knowledge.search":
@@ -174,6 +186,28 @@ function evidenceFromToolResult(
       title: obs?.title,
       snapshot: obs?.snapshot ?? result.output,
       sessionId: data?.sessionId,
+      error: result.ok ? undefined : result.output,
+    });
+  }
+  if (result.name.startsWith("browser.current.")) {
+    const data = result.data as
+      | {
+          page?: { url?: string; title?: string; visibleText?: string };
+          selection?: { url?: string; text?: string };
+          screenshot?: { url?: string };
+        }
+      | undefined;
+    const page = data?.page;
+    const content =
+      page?.visibleText ||
+      data?.selection?.text ||
+      result.output;
+    return evidenceFromBrowserObservation({
+      ok: result.ok,
+      sourceTool: result.name,
+      url: page?.url || data?.selection?.url || data?.screenshot?.url,
+      title: page?.title || "Active browser tab",
+      snapshot: content,
       error: result.ok ? undefined : result.output,
     });
   }
@@ -291,6 +325,29 @@ async function buildFmPrompt(
   });
   const includeInventory = Boolean(pkg.inventoryText);
   const evidenceBlock = formatEvidenceForPrompt(evidence);
+  let activeBrowserMeta = "";
+  try {
+    const { getActiveBrowserContextTab } = await import(
+      "@/lib/browser-context/active-tab"
+    );
+    const tab = getActiveBrowserContextTab();
+    if (tab) {
+      let domain = tab.url;
+      try {
+        domain = new URL(tab.url).hostname.replace(/^www\./, "");
+      } catch {
+        // keep raw
+      }
+      activeBrowserMeta = [
+        "## Active right-panel browser (metadata only — not full page text)",
+        `kind=${tab.tabKind}; title=${tab.title}; domain=${domain}; project=${tab.projectId ?? "none"}`,
+        `canReadText=${tab.canReadText}; canCaptureViewport=${tab.canCaptureViewport}`,
+        "When the user refers to this page/screen/preview/selection, call browser.current.get_context (or capture_viewport for visual questions) before saying you cannot see it. Only the selected tab is readable.",
+      ].join("\n");
+    }
+  } catch {
+    // ignore
+  }
   const instructions = [
     buildCanderOnDeviceInstructions({
       shortName: identity?.shortName ?? snap.shortName,
@@ -309,10 +366,11 @@ async function buildFmPrompt(
     }),
     pkg.taskStateText,
     pkg.toolCatalog,
+    activeBrowserMeta,
     evidenceBlock,
     extraInstruction,
     requiresExternalEvidence(request.content)
-      ? "This turn needs live or external facts. Prefer web.search for discovery, web.open for readable public pages, and computer.browser.open only for JavaScript, interaction, auth, scrolling, or visual inspection. Never invent URLs, headlines, or page content — only cite evidence above or from tool results."
+      ? "This turn needs live or external facts. Prefer web.search for discovery, web.open for readable public pages, browser.current.* for the active right-panel tab, and computer.browser.open only for JavaScript, interaction, auth, scrolling, or visual inspection of remote pages. Never invent URLs, headlines, or page content — only cite evidence above or from tool results."
       : "",
   ]
     .filter(Boolean)

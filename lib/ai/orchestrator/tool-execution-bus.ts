@@ -85,6 +85,14 @@ function detailForToolName(name: string): string {
     case "computer.browser.click":
     case "computer.browser.fill":
       return "Using browser…";
+    case "browser.current.get_context":
+      return "Reading the page on the right…";
+    case "browser.current.get_selection":
+      return "Reading selection…";
+    case "browser.current.capture_viewport":
+      return "Capturing the viewport…";
+    case "browser.current.get_metadata":
+      return "Checking the active tab…";
     case "workspace.search":
       return "Searching workspace…";
     case "knowledge.search":

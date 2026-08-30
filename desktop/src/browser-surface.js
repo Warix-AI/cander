@@ -1,5 +1,6 @@
 const { WebContentsView, session, shell } = require("electron");
 const { partitionFor, isAllowedUrl } = require("./browser-security");
+const { PAGE_EXTRACT_SCRIPT, SELECTION_SCRIPT } = require("./page-extract");
 
 /**
  * Local Chromium tab surfaces for the right-panel browser workspace.
@@ -321,6 +322,46 @@ function destroyAll() {
   }
 }
 
+async function readPage(tabId) {
+  const entry = tabs.get(tabId);
+  if (!entry) throw new Error("Unknown browser tab");
+  const result = await entry.view.webContents.executeJavaScript(
+    PAGE_EXTRACT_SCRIPT,
+    true,
+  );
+  return result || {};
+}
+
+async function getSelection(tabId) {
+  const entry = tabs.get(tabId);
+  if (!entry) throw new Error("Unknown browser tab");
+  const result = await entry.view.webContents.executeJavaScript(
+    SELECTION_SCRIPT,
+    true,
+  );
+  return result || { text: "", url: entry.lastUrl };
+}
+
+async function captureViewport(tabId) {
+  const entry = tabs.get(tabId);
+  if (!entry) throw new Error("Unknown browser tab");
+  const image = await entry.view.webContents.capturePage();
+  const size = image.getSize();
+  let out = image;
+  const maxW = 1280;
+  if (size.width > maxW) {
+    out = image.resize({ width: maxW });
+  }
+  const jpeg = out.toJPEG(72);
+  const finalSize = out.getSize();
+  return {
+    dataBase64: jpeg.toString("base64"),
+    mimeType: "image/jpeg",
+    width: finalSize.width,
+    height: finalSize.height,
+  };
+}
+
 module.exports = {
   setHostWindow,
   createTab,
@@ -335,4 +376,7 @@ module.exports = {
   reload,
   stop,
   destroyAll,
+  readPage,
+  getSelection,
+  captureViewport,
 };

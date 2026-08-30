@@ -195,7 +195,7 @@ export function BrowserSurfaceHost({
         <p className="max-w-sm text-sm text-muted-foreground">
           This Cander desktop build is out of date for in-panel browsing.
           Quit the app and install the latest{" "}
-          <code className="text-xs">Cander-*.dmg</code> (0.1.2+), or run{" "}
+          <code className="text-xs">Cander-*.dmg</code> (0.1.3+), or run{" "}
           <code className="text-xs">npm run desktop</code> from the repo.
         </p>
         <a
@@ -251,6 +251,7 @@ export function BrowserSurfaceHost({
         <iframe
           key={`${tabId}-${reloadKey}-${recoverToken}-${url}`}
           title={title}
+          data-tab-id={tabId}
           src={url}
           sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin"
           referrerPolicy="no-referrer"

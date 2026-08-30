@@ -24,6 +24,9 @@ public class CanderBrowserPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDeleg
         CAPPluginMethod(name: "reload", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "hideAll", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "readPage", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getSelection", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "captureViewport", returnType: CAPPluginReturnPromise),
     ]
 
     private struct TabEntry {
@@ -223,13 +226,151 @@ public class CanderBrowserPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDeleg
 
     @objc func hideAll(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            for (id, entry) in self.tabs {
+            for (_, entry) in self.tabs {
                 entry.webView.isHidden = true
             }
             self.activeTabId = nil
             call.resolve()
         }
     }
+
+    @objc func readPage(_ call: CAPPluginCall) {
+        guard let tabId = call.getString("tabId"),
+              let webView = tabs[tabId]?.webView else {
+            call.reject("Unknown tab")
+            return
+        }
+        DispatchQueue.main.async {
+            webView.evaluateJavaScript(Self.pageExtractScript) { result, error in
+                if let error {
+                    call.reject(error.localizedDescription)
+                    return
+                }
+                if let dict = result as? [String: Any] {
+                    call.resolve(dict)
+                } else {
+                    call.resolve([
+                        "url": webView.url?.absoluteString ?? "",
+                        "title": webView.title ?? "",
+                        "visibleText": "",
+                    ])
+                }
+            }
+        }
+    }
+
+    @objc func getSelection(_ call: CAPPluginCall) {
+        guard let tabId = call.getString("tabId"),
+              let webView = tabs[tabId]?.webView else {
+            call.reject("Unknown tab")
+            return
+        }
+        DispatchQueue.main.async {
+            webView.evaluateJavaScript(Self.selectionScript) { result, error in
+                if let error {
+                    call.reject(error.localizedDescription)
+                    return
+                }
+                if let dict = result as? [String: Any] {
+                    call.resolve(dict)
+                } else {
+                    call.resolve(["text": "", "url": webView.url?.absoluteString ?? ""])
+                }
+            }
+        }
+    }
+
+    @objc func captureViewport(_ call: CAPPluginCall) {
+        guard let tabId = call.getString("tabId"),
+              let webView = tabs[tabId]?.webView else {
+            call.reject("Unknown tab")
+            return
+        }
+        DispatchQueue.main.async {
+            let config = WKSnapshotConfiguration()
+            if #available(iOS 13.0, *) {
+                config.afterScreenUpdates = true
+            }
+            webView.takeSnapshot(with: config) { image, error in
+                if let error {
+                    call.reject(error.localizedDescription)
+                    return
+                }
+                guard let image,
+                      let data = image.jpegData(compressionQuality: 0.72) else {
+                    call.reject("Snapshot failed")
+                    return
+                }
+                call.resolve([
+                    "dataBase64": data.base64EncodedString(),
+                    "mimeType": "image/jpeg",
+                    "width": Int(image.size.width * image.scale),
+                    "height": Int(image.size.height * image.scale),
+                ])
+            }
+        }
+    }
+
+    private static let pageExtractScript = """
+    (() => {
+      const MAX = 12000;
+      const isHidden = (el) => {
+        if (!el || el.nodeType !== 1) return true;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return true;
+        if (el.getAttribute('aria-hidden') === 'true') return true;
+        const type = (el.getAttribute('type') || '').toLowerCase();
+        if (type === 'password' || type === 'hidden') return true;
+        if (el.closest('script,style,noscript,template')) return true;
+        return false;
+      };
+      const parts = [];
+      let truncated = false;
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          const parent = node.parentElement;
+          if (!parent || isHidden(parent)) return NodeFilter.FILTER_REJECT;
+          const t = (node.textContent || '').replace(/\\s+/g, ' ').trim();
+          if (!t) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        },
+      });
+      while (walker.nextNode()) {
+        const t = (walker.currentNode.textContent || '').replace(/\\s+/g, ' ').trim();
+        if (parts.join(' ').length + t.length > MAX) { truncated = true; break; }
+        parts.push(t);
+      }
+      const headings = Array.from(document.querySelectorAll('h1,h2,h3'))
+        .filter((el) => !isHidden(el)).slice(0, 40)
+        .map((el) => (el.textContent || '').replace(/\\s+/g, ' ').trim()).filter(Boolean);
+      const links = Array.from(document.querySelectorAll('a[href]'))
+        .filter((el) => !isHidden(el)).slice(0, 40)
+        .map((el) => ({ text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 120), href: el.href || '' }))
+        .filter((l) => l.href && l.text);
+      const main = document.querySelector('main,article,[role="main"]') || document.body;
+      const mainContent = main ? (main.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, MAX) : '';
+      const sel = (window.getSelection && window.getSelection().toString()) || '';
+      return {
+        url: location.href,
+        title: document.title || '',
+        visibleText: parts.join(' ').slice(0, MAX),
+        mainContent: mainContent || undefined,
+        headings,
+        links,
+        selectedText: sel.trim().slice(0, 4000) || undefined,
+        viewport: { width: window.innerWidth || 0, height: window.innerHeight || 0, scrollX: window.scrollX || 0, scrollY: window.scrollY || 0 },
+        truncated,
+      };
+    })()
+    """
+
+    private static let selectionScript = """
+    (() => {
+      const sel = (window.getSelection && window.getSelection().toString()) || '';
+      return { text: sel.trim().slice(0, 4000), url: location.href };
+    })()
+    """
+
 
     // MARK: - WKNavigationDelegate
 
