@@ -158,7 +158,7 @@ function ComposerStopVoiceButton({
 }
 
 export function ComposerTrailingActions({
-  hasText,
+  canSend,
   hasVoice,
   voiceActive = false,
   compact = false,
@@ -166,7 +166,8 @@ export function ComposerTrailingActions({
   onStopVoice,
   onStartDictation,
 }: {
-  hasText: boolean;
+  /** True when there is text, images, or files to send. */
+  canSend: boolean;
   hasVoice: boolean;
   voiceActive?: boolean;
   compact?: boolean;
@@ -175,10 +176,10 @@ export function ComposerTrailingActions({
   onStartDictation: () => void;
 }) {
   if (!hasVoice) {
-    return hasText ? <ComposerSendButton compact={compact} /> : null;
+    return canSend ? <ComposerSendButton compact={compact} /> : null;
   }
 
-  if (hasText) {
+  if (canSend) {
     return (
       <>
         {voiceActive ? (

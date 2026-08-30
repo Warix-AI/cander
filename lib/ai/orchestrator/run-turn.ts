@@ -19,6 +19,7 @@ import {
   type AiContextRefInput,
 } from "@/lib/api/ai-chat-api";
 import { preferOrchestratorV2 } from "@/lib/ai/orchestrator/flags";
+import { collectTurnVisionImages } from "@/lib/ai/attachment-context";
 import {
   executeAuthorizedTool,
   type AiToolCallResult,
@@ -219,11 +220,19 @@ export async function runOrchestratedTurn(
         }>;
       },
     ) => {
+      let turnImages: string[] | undefined;
+      if (request.images?.length) {
+        const validated = collectTurnVisionImages(request.images);
+        if (!validated.ok) {
+          throw new Error(validated.error);
+        }
+        turnImages = validated.urls;
+      }
       const payload = {
         turnId,
         chatId,
         content: request.content,
-        images: request.images,
+        images: turnImages,
         clientActionResults: extra?.clientActionResults,
         orchestratorVersion: useV2 ? ("v2" as const) : ("v1" as const),
       };

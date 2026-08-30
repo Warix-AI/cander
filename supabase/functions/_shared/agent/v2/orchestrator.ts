@@ -48,6 +48,12 @@ import type {
 } from "./types.ts";
 import { validateAnswerDeterministic } from "./validator.ts";
 import { fetchReadablePage } from "./web-open.ts";
+import {
+  prepareTurnVisionImages,
+  VisionInputError,
+  visionImagesToDataUrls,
+  assertVisionProvider,
+} from "../vision-input.ts";
 
 const PRODUCT_SYSTEM = `You are Cander, a capable private assistant with tools.
 Be clear and direct. Never expose backend model names, training cutoffs, or provider limitations as Cander limitations.
@@ -220,9 +226,16 @@ export async function runTurnOrchestratorV2(
     }
 
     const userContent = input.content.trim();
-    if (!userContent || isInternalResultBlob(userContent)) {
+    const visionPrep = prepareTurnVisionImages(input.images ?? []);
+    if (!visionPrep.ok) {
+      throw new VisionInputError(visionPrep.code, visionPrep.error);
+    }
+    const turnImages = visionImagesToDataUrls(visionPrep.images);
+
+    if ((!userContent && turnImages.length === 0) || isInternalResultBlob(userContent)) {
       throw new Error("Invalid user content");
     }
+    const persistedUserContent = userContent || "(image attached)";
 
     failureStage = "persist_user";
     let userMsgId = existingTurn?.user_message_id as string | null;
@@ -249,7 +262,7 @@ export async function runTurnOrchestratorV2(
         chat_id: input.chatId,
         owner_id: deps.ownerId,
         role: "user",
-        content: userContent,
+        content: persistedUserContent,
         status: "complete",
         sort_order: nextOrder,
         error: null,
@@ -277,7 +290,7 @@ export async function runTurnOrchestratorV2(
     );
 
     const capabilities = buildCapabilities({
-      hasImages: Boolean(input.images?.length),
+      hasImages: turnImages.length > 0,
       locationHint: input.locationHint,
       userTimezone: input.userTimezone,
     });
@@ -285,11 +298,12 @@ export async function runTurnOrchestratorV2(
     const workingMemory = (chat.conversation_state ??
       {}) as ConversationWorkingMemory;
 
-    const ref = resolveReference(userContent, workingMemory);
+    const effectiveUserContent = userContent || persistedUserContent;
+    const ref = resolveReference(effectiveUserContent, workingMemory);
     const enrichedRequest = ref
-      ? `${userContent}\n\n[Resolved reference: ${ref}]`
-      : userContent;
-    const referenceIntent = detectReferenceIntent(userContent);
+      ? `${effectiveUserContent}\n\n[Resolved reference: ${ref}]`
+      : effectiveUserContent;
+    const referenceIntent = detectReferenceIntent(effectiveUserContent);
 
     const complexity = input.researchMode
       ? "research"
@@ -304,7 +318,7 @@ export async function runTurnOrchestratorV2(
       userRequest: enrichedRequest,
       userMessageId: userMsgId!,
       nextSortOrder: nextOrder,
-      images: input.images,
+      images: turnImages,
       capabilities,
       workingMemory,
       recentMessages: historyRows.slice(-20),
@@ -955,7 +969,7 @@ export async function runTurnOrchestratorV2(
 
     const memoryAfterTurn = buildMemoryDelta({
       prior: workingMemory,
-      userText: userContent,
+      userText: persistedUserContent,
       assistantText: finalAnswer,
       evidence: state.evidence,
       briefing: state.briefing,
@@ -1042,6 +1056,7 @@ export async function runTurnOrchestratorV2(
     return result;
   } catch (err) {
     const cancelled = err instanceof Error && err.message === "TURN_CANCELLED";
+    const visionErr = err instanceof VisionInputError;
     const message = err instanceof Error ? err.message : String(err);
     console.error("[TURN_OBS]", { ...obs(), error: cancelled ? "cancelled" : message.slice(0, 200) });
 
@@ -1078,9 +1093,11 @@ export async function runTurnOrchestratorV2(
     }
 
     const offline = /bridge|tunnel|not configured/i.test(message);
-    const content = offline
-      ? "I couldn't reach the AI service right now. Please try again shortly."
-      : `Something went wrong: ${message}`;
+    const content = visionErr
+      ? message
+      : offline
+        ? "I couldn't reach the AI service right now. Please try again shortly."
+        : `Something went wrong: ${message}`;
 
     const failed: V2RunResult = {
       turnId: input.turnId,
@@ -1258,6 +1275,8 @@ async function generateAnswer(
   extra: string[] = [],
 ): Promise<string> {
   state.budgets.modelGens += 1;
+  const hasImages = Boolean(state.images?.length);
+  assertVisionProvider(deps.provider.capabilities, hasImages);
   const built = buildContext({
     systemPrompt: PRODUCT_SYSTEM,
     conversationState: state.workingMemory,

@@ -166,7 +166,7 @@ import {
 } from "@/lib/mobile-nav-transition";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
-  collectRecentImageDataUrls,
+  collectTurnVisionImages,
   imageTurnHint,
   modelContentFromMessage,
 } from "@/lib/ai/attachment-context";
@@ -1467,10 +1467,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         };
       }
 
-      const imageUrls = collectRecentImageDataUrls(
-        undefined,
-        attachments.map((a) => a.url),
-      );
+      const turnVision = collectTurnVisionImages(attachments.map((a) => a.url));
+      const imageUrls = turnVision.ok ? turnVision.urls : [];
       // Only mention images to the model when real bytes will be sent.
       const aiUserContent = [
         trimmed,
@@ -1828,10 +1826,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           project?.space ??
           (isChatSpace(space) ? space : null) ??
           null;
-        const imageUrls = collectRecentImageDataUrls(
-          liveThread?.messages,
-          attachments.map((a) => a.url),
-        );
+        const turnVision = collectTurnVisionImages(attachments.map((a) => a.url));
+        const imageUrls = turnVision.ok ? turnVision.urls : [];
         // Prefer current-turn bytes; never call the model with name-only image claims.
         if (attachments.length > 0 && imageUrls.length === 0) {
           setThreads((current) =>
@@ -1844,7 +1840,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                       status: "complete" as const,
                       activity: null,
                       content:
-                        "I couldn’t read that photo’s bytes. Try again, or send a JPEG/PNG screenshot.",
+                        turnVision.ok
+                          ? "I couldn’t read that photo’s bytes. Try again, or send a JPEG/PNG screenshot."
+                          : turnVision.error,
                     }
                   : message,
               ),
@@ -2282,7 +2280,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        const resumeImages = collectRecentImageDataUrls(live?.messages);
         const reply = await fetchPrivateAiReply({
           aiChatId: live?.aiChatId ?? null,
           threadId: activeId,
@@ -2292,7 +2289,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectId,
           projectSpace: (spaceId as SpaceId | null) ?? null,
           messages: historyMessages,
-          ...(resumeImages.length ? { images: resumeImages } : {}),
           onProgress: (progress) => {
             const detailRaw = progress.detail?.trim() || "";
             const isLegacyAbout = /^Thinking about\b/i.test(detailRaw);

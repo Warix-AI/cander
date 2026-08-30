@@ -4,10 +4,15 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { resolveAllowedToolsForTurn } from "../_shared/tool-domains.ts";
+import {
+  assertVisionModelSelected,
+  prepareTurnVisionImages,
+  VisionInputError,
+} from "../_shared/agent/vision-input.ts";
 
 const MODEL = "llama3.2";
 const VISION_MODEL =
-  Deno.env.get("OLLAMA_VISION_MODEL")?.trim() || "llava";
+  Deno.env.get("OLLAMA_VISION_MODEL")?.trim() || "llama3.2-vision";
 const PROVIDER = "ollama-bridge";
 /** Verbatim turns after the condensation watermark (short-term continuity). */
 const RECENT_MESSAGE_LIMIT = 25;
@@ -521,16 +526,22 @@ Deno.serve(async (req) => {
         const rawImages = Array.isArray(payload.images)
           ? payload.images.filter((x): x is string => typeof x === "string")
           : [];
-        const visionModel = rawImages.length ? VISION_MODEL : MODEL;
-        if (rawImages.length) {
+        const visionPrep = rawImages.length
+          ? prepareTurnVisionImages(rawImages)
+          : { ok: true as const, images: [], meta: { imageCount: 0, mimes: [], byteSizes: [], visionRouting: false } };
+        if (!visionPrep.ok) {
+          throw new VisionInputError(visionPrep.code, visionPrep.error);
+        }
+        const hasVision = visionPrep.images.length > 0;
+        const visionModel = hasVision ? VISION_MODEL : MODEL;
+        assertVisionModelSelected(hasVision, visionModel, MODEL);
+        if (hasVision) {
           const lastUser = [...modelMessages]
             .reverse()
             .find((m) => m.role === "user");
+          const ollamaImages = visionPrep.images.map((img) => img.base64);
           if (lastUser) {
-            lastUser.images = rawImages.slice(0, 4).map((img) => {
-              const m = img.match(/^data:image\/[^;]+;base64,(.+)$/i);
-              return (m?.[1] ?? img).replace(/\s/g, "");
-            });
+            lastUser.images = ollamaImages;
           }
         }
 

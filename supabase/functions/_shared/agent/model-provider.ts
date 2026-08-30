@@ -8,6 +8,13 @@ import type {
   ModelCompleteRequest,
   ModelCompleteResult,
 } from "./types.ts";
+import {
+  assertVisionModelSelected,
+  assertVisionProvider,
+  logVisionRouting,
+  prepareTurnVisionImages,
+  VisionInputError,
+} from "./vision-input.ts";
 
 export interface ModelProvider {
   id: string;
@@ -40,15 +47,15 @@ export function createOllamaBridgeProvider(opts?: {
     .replace(/\/$/, "");
   const bridgeSecret =
     opts?.bridgeSecret ?? Deno.env.get("CANDER_AI_BRIDGE_SECRET") ?? "";
-  const model =
+  const textModel =
     opts?.model ?? Deno.env.get("OLLAMA_MODEL") ?? "llama3.2";
   const visionModel =
     opts?.visionModel ??
     Deno.env.get("OLLAMA_VISION_MODEL") ??
-    "llava";
+    "llama3.2-vision";
   const controllerModel =
-    Deno.env.get("OLLAMA_CONTROLLER_MODEL") ?? model;
-  const answerModel = Deno.env.get("OLLAMA_ANSWER_MODEL") ?? model;
+    Deno.env.get("OLLAMA_CONTROLLER_MODEL") ?? textModel;
+  const answerModel = Deno.env.get("OLLAMA_ANSWER_MODEL") ?? textModel;
 
   return {
     id: "ollama",
@@ -69,10 +76,28 @@ export function createOllamaBridgeProvider(opts?: {
         );
       }
 
-      const hasImages =
-        Boolean(req.images?.length) ||
-        req.messages.some((m) => (m.images?.length ?? 0) > 0);
-      let modelId = hasImages ? visionModel : model;
+      const rawTurnImages = req.images ?? [];
+      const prepared = rawTurnImages.length
+        ? prepareTurnVisionImages(rawTurnImages)
+        : { ok: true as const, images: [], meta: { imageCount: 0, mimes: [], byteSizes: [], visionRouting: false } };
+
+      if (!prepared.ok) {
+        throw new VisionInputError(prepared.code, prepared.error);
+      }
+
+      const turnImages = prepared.images;
+      const hasImages = turnImages.length > 0;
+
+      if (rawTurnImages.length > 0 && !hasImages) {
+        throw new VisionInputError(
+          "VISION_MISSING_BYTES",
+          "Image bytes could not be validated for this turn.",
+        );
+      }
+
+      assertVisionProvider({ vision: true }, hasImages);
+
+      let modelId = hasImages ? visionModel : textModel;
       if (!hasImages) {
         if (req.purpose === "plan" || req.purpose === "sufficiency") {
           modelId = controllerModel;
@@ -81,27 +106,39 @@ export function createOllamaBridgeProvider(opts?: {
         }
       }
 
+      assertVisionModelSelected(hasImages, modelId, textModel);
+
+      logVisionRouting({
+        ...prepared.meta,
+        selectedModel: modelId,
+        visionRouting: hasImages,
+      });
+
+      const ollamaB64 = turnImages.map((img) => img.base64);
+
       const messages = req.messages.map((m) => {
         const row: { role: string; content: string; images?: string[] } = {
           role: m.role,
           content: m.content,
         };
         if (m.images?.length) {
-          row.images = m.images.map((img) => {
-            const match = img.match(/^data:image\/[^;]+;base64,(.+)$/i);
-            return (match?.[1] ?? img).replace(/\s/g, "");
-          });
+          const embedded = prepareTurnVisionImages(m.images);
+          if (embedded.ok && embedded.images.length) {
+            row.images = embedded.images.map((img) => img.base64);
+          }
         }
         return row;
       });
 
-      // Attach top-level images to last user message if provided
-      if (req.images?.length) {
+      if (hasImages) {
         const lastUser = [...messages].reverse().find((m) => m.role === "user");
         if (lastUser) {
-          lastUser.images = req.images.slice(0, 4).map((img) => {
-            const match = img.match(/^data:image\/[^;]+;base64,(.+)$/i);
-            return (match?.[1] ?? img).replace(/\s/g, "");
+          lastUser.images = ollamaB64;
+        } else {
+          messages.push({
+            role: "user",
+            content: req.messages.at(-1)?.content ?? "Describe the attached image(s).",
+            images: ollamaB64,
           });
         }
       }
@@ -165,8 +202,9 @@ export function resolveModelProvider(
     return createOllamaBridgeProvider();
   }
 
-  // OpenAI / Anthropic adapters ship when product needs them — not fake stubs.
   throw new Error(
     `Inference provider "${key}" is not configured. Supported: ollama`,
   );
 }
+
+export { VisionInputError };

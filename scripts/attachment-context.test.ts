@@ -5,11 +5,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  collectRecentImageDataUrls,
+  collectTurnVisionImages,
   imageTurnHint,
-  normalizeVisionImages,
   toOllamaImageBase64,
 } from "../lib/ai/attachment-context.ts";
+
+const JPEG_DATA = `data:image/jpeg;base64,${"a".repeat(120)}`;
 
 describe("vision attachments", () => {
   it("strips data URL prefix for Ollama", () => {
@@ -19,19 +20,11 @@ describe("vision attachments", () => {
     );
   });
 
-  it("normalizes raw base64 into data URLs", () => {
-    const b64 = "a".repeat(40);
-    const out = normalizeVisionImages([b64]);
-    assert.equal(out.length, 1);
-    assert.match(out[0]!, /^data:image\/jpeg;base64,/);
-  });
-
-  it("collects up to 4 recent images", () => {
-    const urls = Array.from({ length: 5 }, (_, i) =>
-      `data:image/jpeg;base64,${"x".repeat(40)}${i}`,
-    );
-    const collected = collectRecentImageDataUrls(undefined, urls, 4);
-    assert.equal(collected.length, 4);
+  it("validates turn-scoped JPEG", () => {
+    const out = collectTurnVisionImages([JPEG_DATA]);
+    assert.equal(out.ok, true);
+    if (!out.ok) return;
+    assert.equal(out.urls.length, 1);
   });
 
   it("builds image turn hint", () => {

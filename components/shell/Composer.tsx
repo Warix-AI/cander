@@ -549,7 +549,7 @@ export function Composer({
                 />
                 <ComposerTrailingActions
                   compact
-                  hasText={hasPayload}
+                  canSend={hasPayload}
                   hasVoice={entitlements.hasVoice}
                   voiceActive={voiceActive}
                   onStartVoice={startVoice}
@@ -752,8 +752,8 @@ export function Composer({
                 )}
               />
               <div className="flex shrink-0 items-center gap-0.5 self-end md:self-start">
-              <ComposerTrailingActions
-                hasText={hasPayload}
+                <ComposerTrailingActions
+                  canSend={hasPayload}
                 hasVoice={entitlements.hasVoice}
                 voiceActive={voiceActive}
                 onStartVoice={startVoice}
@@ -812,7 +812,7 @@ function ComposerMenu({ children }: { children: ReactNode }) {
   return (
     <div
       role="menu"
-      className="absolute inset-x-0 bottom-[calc(100%+8px)] z-40 max-h-[min(24rem,50vh)] overflow-y-auto light-surface shell-g3-radius bg-popover p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.08)] dark:bg-transparent"
+      className="absolute inset-x-0 bottom-[calc(100%+8px)] z-40 max-h-[min(24rem,50vh)] overflow-y-auto light-surface shell-g3-radius bg-popover p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.08)] dark:bg-muted"
     >
       {children}
     </div>
@@ -833,7 +833,7 @@ function MenuRow({
       type="button"
       role="menuitem"
       onClick={onClick}
-      className="menu-row-hover flex w-full items-center gap-3 rounded-[14px] px-2 py-2 text-left transition-colors duration-200"
+      className="menu-row-hover flex w-full items-center gap-3 rounded-[14px] px-2 py-2 text-left transition-colors duration-200 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
     >
       <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
         {icon}

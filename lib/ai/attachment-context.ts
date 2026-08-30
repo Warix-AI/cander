@@ -1,33 +1,17 @@
 import type { Message } from "@/lib/types";
+import {
+  prepareTurnVisionImages,
+  stripDataUrlPrefix,
+  visionImagesToDataUrls,
+} from "./vision-input.ts";
 
-/** Strip data-URL prefix for Ollama `images` fields. */
-export function toOllamaImageBase64(dataUrlOrBase64: string): string {
-  const raw = (dataUrlOrBase64 || "").trim();
-  const match = raw.match(/^data:image\/[a-z0-9.+-]+;base64,(.+)$/i);
-  return (match?.[1] ?? raw).replace(/\s/g, "");
-}
+export { prepareTurnVisionImages, stripDataUrlPrefix as toOllamaImageBase64 } from "./vision-input.ts";
 
-/** Validate and normalize image payloads before sending to vision models. */
-export function normalizeVisionImages(
-  urls: string[],
-  limit = 4,
-): string[] {
-  const out: string[] = [];
-  for (const raw of urls) {
-    const trimmed = (raw || "").trim();
-    if (!trimmed) continue;
-    if (trimmed.startsWith("data:image/")) {
-      const b64 = toOllamaImageBase64(trimmed);
-      if (b64.length < 32) continue;
-      out.push(trimmed);
-      continue;
-    }
-    // Raw base64 without prefix — wrap as JPEG for downstream consistency.
-    if (/^[A-Za-z0-9+/=\s]+$/.test(trimmed) && trimmed.replace(/\s/g, "").length >= 32) {
-      out.push(`data:image/jpeg;base64,${trimmed.replace(/\s/g, "")}`);
-    }
-  }
-  return out.slice(0, limit);
+/** @deprecated Use prepareTurnVisionImages for turn-scoped vision input. */
+export function normalizeVisionImages(urls: string[], limit = 4): string[] {
+  const result = prepareTurnVisionImages(urls, limit);
+  if (!result.ok) return [];
+  return visionImagesToDataUrls(result.images);
 }
 
 /** Text the model sees for a stored UI message (includes attach notes / file bodies). */
@@ -37,7 +21,6 @@ export function modelContentFromMessage(message: Message): string {
   if (text) parts.push(text);
   for (const block of message.blocks ?? []) {
     if (block.type === "image") {
-      // Pixels travel via `images[]` — never imply vision from the filename alone.
       if (block.url?.startsWith("data:image/")) {
         parts.push("(Image attached — see image input.)");
       }
@@ -52,28 +35,31 @@ export function modelContentFromMessage(message: Message): string {
   return parts.join("\n\n").trim();
 }
 
-/** Collect recent image data-URLs from the thread + current attachments. */
+/**
+ * Turn-scoped vision images for the current send only — never reuse prior turns.
+ */
+export function collectTurnVisionImages(
+  currentUrls: string[],
+  limit = 4,
+): { ok: true; urls: string[] } | { ok: false; error: string } {
+  const result = prepareTurnVisionImages(currentUrls, limit);
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+  return { ok: true, urls: visionImagesToDataUrls(result.images) };
+}
+
+/** @deprecated Turn-scoped only — do not pass thread history. */
 export function collectRecentImageDataUrls(
-  messages: Message[] | undefined,
+  _messages: Message[] | undefined,
   currentUrls: string[] = [],
   limit = 4,
 ): string[] {
-  const candidates: string[] = [];
-  const push = (url: string) => {
-    if (!url.startsWith("data:image/")) return;
-    if (candidates.includes(url)) return;
-    candidates.push(url);
-  };
-  for (const url of currentUrls) push(url);
-  for (const message of [...(messages ?? [])].reverse()) {
-    for (const block of message.blocks ?? []) {
-      if (block.type === "image") push(block.url);
-    }
-  }
-  return normalizeVisionImages(candidates, limit);
+  const result = prepareTurnVisionImages(currentUrls, limit);
+  if (!result.ok) return [];
+  return visionImagesToDataUrls(result.images);
 }
 
-/** User-visible hint when image bytes are present for the current turn. */
 export function imageTurnHint(count: number): string {
   if (count <= 0) return "";
   return count === 1
