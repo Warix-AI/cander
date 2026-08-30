@@ -9,6 +9,7 @@ import type {
   RunTurnResult,
   StatusEvent,
 } from "../types.ts";
+import type { TurnRetrievalState } from "./web-retrieval.ts";
 
 export type ControllerAction =
   | "answer"
@@ -192,6 +193,8 @@ export type TurnState = {
   knowledgeQuery?: string | null;
   clarifyText?: string | null;
   failureStage: string;
+  /** Per-turn web retrieval tracking (dedup, exact URL, session reuse). */
+  retrieval: TurnRetrievalState;
 };
 
 export type V2RunResult = RunTurnResult & {

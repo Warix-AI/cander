@@ -49,6 +49,21 @@ import type {
 import { validateAnswerDeterministic } from "./validator.ts";
 import { fetchReadablePage } from "./web-open.ts";
 import {
+  checkWebEvidenceSufficiency,
+  dedupeQueries,
+  exactUrlFailureMessage,
+  hydrateEvidenceFromSession,
+  initTurnRetrieval,
+  normalizeUrlKey,
+  pageToEvidence,
+  rankSearchHits,
+  refineSearchQueries,
+  searchHitToEvidence,
+  selectSourcesToOpen,
+  shouldReuseSearchSession,
+  type CachedSearchSession,
+} from "./web-retrieval.ts";
+import {
   prepareTurnVisionImages,
   VisionInputError,
   visionImagesToDataUrls,
@@ -338,7 +353,75 @@ export async function runTurnOrchestratorV2(
       knowledgeQuery: null,
       clarifyText: null,
       failureStage: "loop",
+      retrieval: initTurnRetrieval(userContent),
     };
+
+    // Reuse fresh search session on follow-up questions when still relevant
+    const sessionId =
+      (chat.last_search_session_id as string | null) ??
+      workingMemory.relevantSearchSessionIds?.slice(-1)[0] ??
+      null;
+    if (sessionId && capabilities.webSearch) {
+      const { data: priorSession } = await deps.supabase
+        .from("ai_chat_search_sessions")
+        .select("id, queries, results, created_at")
+        .eq("id", sessionId)
+        .eq("owner_id", deps.ownerId)
+        .maybeSingle();
+      if (priorSession?.results) {
+        const cached: CachedSearchSession = {
+          id: priorSession.id,
+          queries: (priorSession.queries as string[]) ?? [],
+          results: (priorSession.results as CachedSearchSession["results"]) ?? [],
+          createdAt: priorSession.created_at ?? new Date().toISOString(),
+        };
+        if (
+          shouldReuseSearchSession({
+            userRequest: userContent,
+            priorTopic: workingMemory.activeTopic ?? null,
+            session: cached,
+          })
+        ) {
+          for (const item of hydrateEvidenceFromSession(
+            cached,
+            userContent,
+            state.retrieval.exactUrlDomain,
+          )) {
+            state.evidence.push(item);
+          }
+          state.searchSessions.push({
+            id: cached.id,
+            queries: cached.queries,
+            resultIds: state.evidence.map((e) => e.id),
+            at: cached.createdAt,
+          });
+          console.info("[WEB_RETRIEVAL]", {
+            turnId: input.turnId,
+            reusedSession: cached.id,
+            evidenceCount: state.evidence.length,
+          });
+        }
+      }
+    }
+
+    // Exact URL/domain requests: fetch that page first — never infer from a similar name
+    if (
+      state.retrieval.requestedExactUrl &&
+      capabilities.webRead &&
+      !state.evidence.some((e) =>
+        e.kind === "web_page" &&
+        normalizeUrlKey(e.url ?? "") === normalizeUrlKey(state.retrieval.requestedExactUrl!)
+      )
+    ) {
+      emitStatus(state, {
+        phase: "reading",
+        label: "Thinking",
+        detail: "Opening requested page…",
+      }, deps.onEvent);
+      await openWebPages(deps, state, userMsgId!, [
+        { url: state.retrieval.requestedExactUrl, fromId: "exact_url" },
+      ]);
+    }
 
     const workspaceId = (chat.workspace_id as string | null) ?? null;
     const { data: contextRefs } = await deps.supabase
@@ -534,80 +617,25 @@ export async function runTurnOrchestratorV2(
             label: "Thinking",
             detail: "Searching the web…",
           }, deps.onEvent);
-          const queries =
+          const rawQueries =
             d.queries?.length
               ? d.queries
               : bootstrapQueries(userContent, capabilities.locationHint);
+          const { queries, skipped } = dedupeQueries(
+            rawQueries,
+            state.retrieval.searchedQueries,
+          );
+          if (!queries.length && skipped.length) {
+            decision = await chainRetrievalAfterSearch(deps, state, userMsgId!, userContent, capabilities);
+            continue;
+          }
           for (const q of queries) {
             if (state.budgets.webSearches >= state.budgets.maxWebSearches) break;
             await assertNotCancelled(deps.supabase, input.turnId);
-            state.budgets.webSearches += 1;
-            try {
-              const { sources: hits, raw } = await braveWebSearch({
-                query: q,
-                count: 5,
-              });
-              const ids: string[] = [];
-              for (let i = 0; i < hits.length; i++) {
-                const id = `web_${state.budgets.webSearches}_${i + 1}`;
-                ids.push(id);
-                state.evidence.push({
-                  id,
-                  kind: "web_search",
-                  title: hits[i].title,
-                  url: hits[i].url,
-                  content: hits[i].snippet ?? "",
-                  retrievedAt: new Date().toISOString(),
-                });
-              }
-              const { data: session } = await deps.supabase
-                .from("ai_chat_search_sessions")
-                .insert({
-                  chat_id: input.chatId,
-                  owner_id: deps.ownerId,
-                  originating_message_id: userMsgId,
-                  turn_id: input.turnId,
-                  queries: [q],
-                  results: raw,
-                })
-                .select("id")
-                .single();
-              if (session?.id) {
-                state.searchSessions.push({
-                  id: session.id,
-                  queries: [q],
-                  resultIds: ids,
-                  at: new Date().toISOString(),
-                });
-                await deps.supabase
-                  .from("ai_chats")
-                  .update({ last_search_session_id: session.id })
-                  .eq("id", input.chatId)
-                  .eq("owner_id", deps.ownerId);
-              }
-              await deps.supabase.from("ai_chat_turn_events").insert({
-                chat_id: input.chatId,
-                owner_id: deps.ownerId,
-                turn_id: input.turnId,
-                message_id: userMsgId,
-                kind: "web_search",
-                payload: { query: q, resultCount: hits.length, version: "v2" },
-              });
-            } catch (e) {
-              console.error("[TURN_OBS]", {
-                ...obs(state),
-                stage: "web_search_error",
-                message: e instanceof Error ? e.message : String(e),
-              });
-            }
+            state.retrieval.searchedQueries.push(q);
+            await runBraveSearch(deps, state, userMsgId!, q, userContent);
           }
-          emitStatus(state, {
-            phase: "reading",
-            label: "Thinking",
-            detail: "Reading sources…",
-          }, deps.onEvent);
-          // Extract briefing after search
-          await maybeBrief(deps, state);
+          decision = await chainRetrievalAfterSearch(deps, state, userMsgId!, userContent, capabilities);
           continue;
         }
       }
@@ -622,33 +650,14 @@ export async function runTurnOrchestratorV2(
         const ids =
           d.sourceIdsToRead?.length
             ? d.sourceIdsToRead
-            : state.evidence
-                .filter((e) => e.kind === "web_search" && e.url)
-                .slice(0, 2)
-                .map((e) => e.id);
-        for (const id of ids) {
-          if (state.budgets.webOpens >= state.budgets.maxWebOpens) break;
-          const src = state.evidence.find((e) => e.id === id);
-          if (!src?.url) continue;
-          if (state.evidence.some((e) => e.kind === "web_page" && e.url === src.url)) {
-            continue;
-          }
-          await assertNotCancelled(deps.supabase, input.turnId);
-          state.budgets.webOpens += 1;
-          const page = await fetchReadablePage(src.url);
-          if (page.ok && page.text) {
-            state.evidence.push({
-              id: `page_${state.budgets.webOpens}`,
-              kind: "web_page",
-              title: page.title || src.title,
-              url: page.finalUrl,
-              content: page.text,
-              retrievedAt: new Date().toISOString(),
-              metadata: { from: id },
-            });
-          }
-        }
-        await maybeBrief(deps, state);
+            : selectSourcesToOpen(
+                userContent,
+                state.evidence,
+                state.retrieval.openedUrls,
+                3,
+              );
+        await openWebPagesFromEvidence(deps, state, userMsgId!, ids);
+        decision = await chainRetrievalAfterSearch(deps, state, userMsgId!, userContent, capabilities);
         continue;
       }
 
@@ -784,6 +793,70 @@ export async function runTurnOrchestratorV2(
       // answer path
       if (d.action === "answer" || d.canAnswerNow) {
         failureStage = "generate";
+
+        if (
+          state.retrieval.exactUrlRequired &&
+          state.retrieval.exactUrlFailed &&
+          !state.evidence.some((e) =>
+            e.kind === "web_page" &&
+            normalizeUrlKey(e.url ?? "") === normalizeUrlKey(state.retrieval.requestedExactUrl ?? "")
+          )
+        ) {
+          finalAnswer = exactUrlFailureMessage(state.retrieval.requestedExactUrl ?? "that URL");
+          break;
+        }
+
+        const preAnswerSuff = checkWebEvidenceSufficiency({
+          userRequest: userContent,
+          evidence: state.evidence,
+          retrieval: state.retrieval,
+        });
+        if (!preAnswerSuff.sufficient) {
+          if (
+            preAnswerSuff.reason === "exact_url_unavailable" &&
+            state.retrieval.requestedExactUrl
+          ) {
+            finalAnswer = exactUrlFailureMessage(state.retrieval.requestedExactUrl);
+            break;
+          }
+          if (
+            preAnswerSuff.needsOpen &&
+            capabilities.webRead &&
+            state.budgets.webOpens < state.budgets.maxWebOpens
+          ) {
+            const ids = selectSourcesToOpen(
+              userContent,
+              state.evidence,
+              state.retrieval.openedUrls,
+              3,
+            );
+            if (ids.length) {
+              decision = {
+                action: "web_open",
+                reasonCode: "PRE_ANSWER_OPEN",
+                sourceIdsToRead: ids,
+              };
+              continue;
+            }
+          }
+          if (
+            preAnswerSuff.needsMoreSearch &&
+            capabilities.webSearch &&
+            state.budgets.webSearches < state.budgets.maxWebSearches
+          ) {
+            decision = {
+              action: "web_search",
+              reasonCode: "PRE_ANSWER_SEARCH",
+              queries: refineSearchQueries(
+                userContent,
+                state.retrieval.searchedQueries,
+                preAnswerSuff.reason,
+              ),
+            };
+            continue;
+          }
+        }
+
         // If live likely, web available, never searched — force retrieve instead
         if (
           liveInfoHint(userContent) &&
@@ -855,10 +928,12 @@ export async function runTurnOrchestratorV2(
             decision = {
               action: "web_open",
               reasonCode: "VALIDATOR_OPEN_SOURCES",
-              sourceIdsToRead: state.evidence
-                .filter((e) => e.kind === "web_search")
-                .slice(0, 2)
-                .map((e) => e.id),
+              sourceIdsToRead: selectSourcesToOpen(
+                userContent,
+                state.evidence,
+                state.retrieval.openedUrls,
+                3,
+              ),
             };
             continue;
           }
@@ -1262,11 +1337,292 @@ async function maybeBrief(deps: V2Deps, state: TurnState) {
     messages: [
       {
         role: "user",
-        content: buildEvidencePrompt(state.userRequest, state.evidence.slice(-8)),
+        content: buildEvidencePrompt(
+          state.userRequest,
+          evidenceForBriefing(state.evidence),
+        ),
       },
     ],
   });
   state.briefing = parseEvidenceBriefing(raw.text);
+}
+
+function evidenceForBriefing(evidence: TurnState["evidence"]): TurnState["evidence"] {
+  const pages = evidence.filter((e) => e.kind === "web_page");
+  const nonDiscovery = evidence.filter(
+    (e) => e.kind !== "web_search" || !e.metadata?.discoveryOnly,
+  );
+  const snippets = evidence.filter(
+    (e) => e.kind === "web_search" && e.metadata?.discoveryOnly,
+  );
+  return [...pages, ...nonDiscovery, ...snippets.slice(0, 2)].slice(-10);
+}
+
+async function runBraveSearch(
+  deps: V2Deps,
+  state: TurnState,
+  userMsgId: string,
+  query: string,
+  userContent: string,
+): Promise<void> {
+  state.budgets.webSearches += 1;
+  try {
+    const { raw } = await braveWebSearch({ query, count: 6 });
+    const ranked = rankSearchHits(userContent, raw, {
+      requestedDomain: state.retrieval.exactUrlDomain,
+      startId: `web_${state.budgets.webSearches}`,
+    });
+    const ids: string[] = [];
+    for (const hit of ranked) {
+      ids.push(hit.id);
+      state.evidence.push(searchHitToEvidence(hit));
+    }
+    const { data: session } = await deps.supabase
+      .from("ai_chat_search_sessions")
+      .insert({
+        chat_id: state.chatId,
+        owner_id: state.ownerId,
+        originating_message_id: userMsgId,
+        turn_id: state.turnId,
+        queries: [query],
+        results: raw,
+      })
+      .select("id")
+      .single();
+    if (session?.id) {
+      for (const item of state.evidence.slice(-ranked.length)) {
+        item.sourceSessionId = session.id;
+      }
+      state.searchSessions.push({
+        id: session.id,
+        queries: [query],
+        resultIds: ids,
+        at: new Date().toISOString(),
+      });
+      await deps.supabase
+        .from("ai_chats")
+        .update({ last_search_session_id: session.id })
+        .eq("id", state.chatId)
+        .eq("owner_id", state.ownerId);
+    }
+    await deps.supabase.from("ai_chat_turn_events").insert({
+      chat_id: state.chatId,
+      owner_id: state.ownerId,
+      turn_id: state.turnId,
+      message_id: userMsgId,
+      kind: "web_search",
+      payload: {
+        query,
+        resultCount: ranked.length,
+        version: "v2",
+        topUrls: ranked.slice(0, 3).map((h) => h.url),
+      },
+    });
+    console.info("[WEB_RETRIEVAL]", {
+      turnId: state.turnId,
+      query,
+      resultCount: ranked.length,
+      topHost: ranked[0]?.url ? new URL(ranked[0].url).hostname : null,
+    });
+  } catch (e) {
+    console.error("[WEB_RETRIEVAL]", {
+      turnId: state.turnId,
+      stage: "web_search_error",
+      message: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
+
+async function openWebPagesFromEvidence(
+  deps: V2Deps,
+  state: TurnState,
+  userMsgId: string,
+  sourceIds: string[],
+): Promise<void> {
+  const targets = sourceIds
+    .map((id) => state.evidence.find((e) => e.id === id))
+    .filter((e): e is NonNullable<typeof e> => Boolean(e?.url))
+    .map((e) => ({ url: e.url!, fromId: e.id }));
+  await openWebPages(deps, state, userMsgId, targets);
+}
+
+async function openWebPages(
+  deps: V2Deps,
+  state: TurnState,
+  userMsgId: string,
+  targets: Array<{ url: string; fromId?: string }>,
+): Promise<void> {
+  for (const target of targets) {
+    if (state.budgets.webOpens >= state.budgets.maxWebOpens) break;
+    const key = normalizeUrlKey(target.url);
+    if (state.retrieval.openedUrls.includes(key)) continue;
+    if (
+      state.evidence.some(
+        (e) => e.kind === "web_page" && normalizeUrlKey(e.url ?? "") === key,
+      )
+    ) {
+      state.retrieval.openedUrls.push(key);
+      continue;
+    }
+    await assertNotCancelled(deps.supabase, state.turnId);
+    state.budgets.webOpens += 1;
+    state.retrieval.openedUrls.push(key);
+    const page = await fetchReadablePage(target.url);
+    if (page.ok && page.text.trim()) {
+      state.evidence.push(
+        pageToEvidence({
+          id: `page_${state.budgets.webOpens}`,
+          url: target.url,
+          finalUrl: page.finalUrl,
+          title: page.title,
+          text: page.text,
+          fromSourceId: target.fromId,
+        }),
+      );
+      await deps.supabase.from("ai_chat_turn_events").insert({
+        chat_id: state.chatId,
+        owner_id: state.ownerId,
+        turn_id: state.turnId,
+        message_id: userMsgId,
+        kind: "web_open",
+        payload: {
+          url: target.url,
+          finalUrl: page.finalUrl,
+          ok: true,
+          bytes: page.text.length,
+          version: "v2",
+        },
+      });
+      console.info("[WEB_RETRIEVAL]", {
+        turnId: state.turnId,
+        opened: page.finalUrl,
+        bytes: page.text.length,
+      });
+    } else {
+      if (
+        state.retrieval.requestedExactUrl &&
+        normalizeUrlKey(target.url) === normalizeUrlKey(state.retrieval.requestedExactUrl)
+      ) {
+        state.retrieval.exactUrlFailed = true;
+      }
+      await deps.supabase.from("ai_chat_turn_events").insert({
+        chat_id: state.chatId,
+        owner_id: state.ownerId,
+        turn_id: state.turnId,
+        message_id: userMsgId,
+        kind: "web_open",
+        payload: {
+          url: target.url,
+          ok: false,
+          error: page.error ?? "fetch_failed",
+          version: "v2",
+        },
+      });
+      console.info("[WEB_RETRIEVAL]", {
+        turnId: state.turnId,
+        openFailed: target.url,
+        error: page.error,
+      });
+    }
+  }
+}
+
+async function chainRetrievalAfterSearch(
+  deps: V2Deps,
+  state: TurnState,
+  userMsgId: string,
+  userContent: string,
+  capabilities: TurnState["capabilities"],
+): Promise<ControllerDecision | null> {
+  emitStatus(state, {
+    phase: "reading",
+    label: "Thinking",
+    detail: "Reading sources…",
+  }, deps.onEvent);
+
+  const suff = checkWebEvidenceSufficiency({
+    userRequest: userContent,
+    evidence: state.evidence,
+    retrieval: state.retrieval,
+  });
+
+  if (
+    suff.needsOpen &&
+    capabilities.webRead &&
+    state.budgets.webOpens < state.budgets.maxWebOpens
+  ) {
+    const ids = selectSourcesToOpen(
+      userContent,
+      state.evidence,
+      state.retrieval.openedUrls,
+      3,
+    );
+    if (ids.length) {
+      await openWebPagesFromEvidence(deps, state, userMsgId, ids);
+    }
+  }
+
+  await maybeBrief(deps, state);
+
+  const after = checkWebEvidenceSufficiency({
+    userRequest: userContent,
+    evidence: state.evidence,
+    retrieval: state.retrieval,
+  });
+
+  if (after.sufficient) return null;
+
+  if (
+    after.reason === "exact_url_unavailable" &&
+    state.retrieval.requestedExactUrl
+  ) {
+    return {
+      action: "answer",
+      reasonCode: "EXACT_URL_FAILED",
+      canAnswerNow: true,
+    };
+  }
+
+  if (
+    after.needsMoreSearch &&
+    capabilities.webSearch &&
+    state.budgets.webSearches < state.budgets.maxWebSearches
+  ) {
+    const queries = refineSearchQueries(
+      userContent,
+      state.retrieval.searchedQueries,
+      after.reason,
+    );
+    if (queries.length) {
+      return {
+        action: "web_search",
+        reasonCode: "SUFFICIENCY_RETRY",
+        queries,
+      };
+    }
+  }
+
+  if (
+    after.needsOpen &&
+    capabilities.webRead &&
+    state.budgets.webOpens < state.budgets.maxWebOpens
+  ) {
+    const ids = selectSourcesToOpen(
+      userContent,
+      state.evidence,
+      state.retrieval.openedUrls,
+      2,
+    );
+    if (ids.length) {
+      return {
+        action: "web_open",
+        reasonCode: "SUFFICIENCY_OPEN_MORE",
+        sourceIdsToRead: ids,
+      };
+    }
+  }
+
+  return null;
 }
 
 async function generateAnswer(
