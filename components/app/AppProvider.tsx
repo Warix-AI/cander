@@ -2011,7 +2011,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               }
             });
           })
-          .catch(() => {
+          .catch((err: unknown) => {
+            const detail =
+              err instanceof Error && err.message.trim()
+                ? err.message.trim().slice(0, 280)
+                : "Something went wrong generating a reply.";
+            console.error("[PRIVATE_AI_REPLY_ERROR]", {
+              message: detail,
+              name: err instanceof Error ? err.name : typeof err,
+            });
             setThreads((current) =>
               current.map((item) => ({
                 ...item,
@@ -2026,15 +2034,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     ? {
                         ...message,
                         status: "error" as const,
-                        content:
-                          "I couldn't reach the AI bridge. Check that Ollama, the local bridge, and the HTTPS tunnel are running.",
+                        content: detail,
                       }
                     : message;
                 }),
               })),
             );
           });
-      };
+        };
 
       if (view === "browser") {
         pushTarget({

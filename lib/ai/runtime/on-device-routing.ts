@@ -22,8 +22,8 @@ export function preferOnDeviceForTurnContent(opts: {
   // Right-panel browser reads must stay on-device / client — Electron IPC.
   if (refersToActiveBrowserSurface(opts.content)) return true;
 
-  // Live / web retrieval always uses the cloud orchestrator (Brave on Edge),
-  // same as desktop without a local FM helper — critical for iOS Auto + Apple Intelligence.
+  // Live / web retrieval can stay on-device when FM is available (tools → Exa Edge).
+  // Cloud is used when FM is unavailable or the turn is Build/complex.
   if (liveInfoHint(opts.content)) return false;
 
   const taskState = getThreadTaskState(opts.threadId);

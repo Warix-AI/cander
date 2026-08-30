@@ -103,6 +103,17 @@ export async function fetchPrivateAiReply(opts: {
         runtime: err.code === "vision_requires_cloud" ? "cloud" : "unavailable",
       };
     }
-    throw err;
+    const message =
+      err instanceof Error && err.message.trim()
+        ? err.message.trim().slice(0, 280)
+        : "Something went wrong generating a reply.";
+    console.error("[PRIVATE_AI_REPLY_THROW]", { message });
+    return {
+      aiChatId: opts.aiChatId ?? "",
+      content: message,
+      offline: false,
+      condensationOccurred: false,
+      runtime: "error",
+    };
   }
 }

@@ -578,7 +578,42 @@ async function runLocalTurnOrchestratorInner(
     const { prompt, instructions } = await buildFmPrompt(request, evidence);
     emitToolExecution({ type: "model_generate_start", round });
     report({ phase: "generating", label: "Thinking", detail: "Generating…" });
-    const fm = await generateFmTurn({ prompt, instructions });
+    let fm: Awaited<ReturnType<typeof generateFmTurn>>;
+    try {
+      fm = await generateFmTurn({ prompt, instructions });
+    } catch (err) {
+      const detail =
+        err instanceof Error ? err.message.slice(0, 200) : "On-device model failed.";
+      console.error("[LOCAL_ORCH_FM_ERROR]", { round, message: detail });
+      const cites = collectCitationsFromToolResults(toolResults);
+      if (evidence.length || cites.length) {
+        const lines = cites.slice(0, 5).map((c, i) => {
+          const excerpt = c.excerpt ? `\n${c.excerpt.slice(0, 160)}` : "";
+          return `${i + 1}. ${c.title}\n${c.url}${excerpt}`;
+        });
+        return {
+          content: safeContent(
+            "",
+            `I found web sources, but the on-device model couldn’t finish the answer (${detail}). Here’s what came back:\n\n${lines.join("\n\n") || "Sources were retrieved — try again in a moment."}`,
+          ),
+          runtime: "apple-local",
+          offline: false,
+          condensationOccurred: false,
+          aiChatId: request.aiChatId ?? null,
+          toolResults: toolResults.length ? toolResults : undefined,
+          citations: cites,
+        };
+      }
+      return {
+        content: `I couldn’t finish that on-device reply (${detail}). Try again, or switch runtime to Cloud.`,
+        runtime: "apple-local",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+        toolResults: toolResults.length ? toolResults : undefined,
+        citations: cites,
+      };
+    }
     emitToolExecution({
       type: "model_generate_end",
       round,
