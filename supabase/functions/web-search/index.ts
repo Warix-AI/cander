@@ -1,18 +1,16 @@
 /**
- * Authenticated Brave web search Edge Function.
- * Secret: BRAVE_SEARCH_API_KEY (Supabase Edge secrets — never NEXT_PUBLIC).
+ * Authenticated web search / research Edge Function.
+ * Secrets: EXA_API_KEY (default). WEB_RESEARCH_PROVIDER selects provider.
+ * Never NEXT_PUBLIC_. .env.local does not configure deployed Edge secrets.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { getWebResearchProvider } from "../_shared/agent/web-research/index.ts";
+import {
+  exaDeepSearchEnabled,
+  webResearchEnabled,
+} from "../_shared/web-research-contract/flags.ts";
 
 type Json = Record<string, unknown>;
-
-type NormalizedHit = {
-  title: string;
-  url: string;
-  description: string;
-  publishedAt: string | null;
-  source: string | null;
-};
 
 function corsHeaders() {
   return {
@@ -33,14 +31,6 @@ function requestId() {
   return `ws_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function sourceFromUrl(url: string): string | null {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "") || null;
-  } catch {
-    return null;
-  }
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders() });
@@ -50,9 +40,15 @@ Deno.serve(async (req) => {
   const started = Date.now();
 
   try {
+    if (!webResearchEnabled()) {
+      return json(503, {
+        error: "Web research is disabled.",
+        requestId: id,
+      });
+    }
+
     const authHeader = req.headers.get("Authorization") ?? "";
     if (!authHeader.startsWith("Bearer ")) {
-      console.error("[WEB_SEARCH_ERROR]", { requestId: id, status: 401, message: "Missing authorization" });
       return json(401, { error: "Missing authorization", requestId: id });
     }
 
@@ -66,113 +62,117 @@ Deno.serve(async (req) => {
       error: userError,
     } = await supabase.auth.getUser();
     if (userError || !user) {
-      console.error("[WEB_SEARCH_ERROR]", { requestId: id, status: 401, message: "Unauthorized" });
       return json(401, { error: "Unauthorized", requestId: id });
     }
 
-    const apiKey = Deno.env.get("BRAVE_SEARCH_API_KEY") ?? "";
-    if (!apiKey) {
-      console.error("[WEB_SEARCH_ERROR]", {
-        requestId: id,
-        status: 503,
-        message: "BRAVE_SEARCH_API_KEY missing",
-      });
-      return json(503, {
-        error:
-          "Web search is not configured. Set BRAVE_SEARCH_API_KEY in Edge secrets.",
-        requestId: id,
-      });
-    }
-
     const body = await req.json().catch(() => ({}));
+    const mode = String(body?.mode ?? "search").toLowerCase();
     const query = String(body?.query ?? "").trim().slice(0, 400);
+    const count = Math.min(Number(body?.count) || 5, 8);
+    const workspaceId =
+      typeof body?.workspaceId === "string" ? body.workspaceId : null;
+
     if (!query) {
-      console.error("[WEB_SEARCH_ERROR]", { requestId: id, status: 400, message: "query required" });
       return json(400, { error: "query required", requestId: id });
     }
 
-    const count = Math.min(Number(body?.count) || 5, 8);
     console.log("[WEB_SEARCH_REQUEST]", {
       requestId: id,
+      mode,
       query: query.slice(0, 120),
       count,
       ts: Date.now(),
     });
 
-    const url = new URL("https://api.search.brave.com/res/v1/web/search");
-    url.searchParams.set("q", query);
-    url.searchParams.set("count", String(count));
+    const provider = getWebResearchProvider();
 
-    const braveRes = await fetch(url.toString(), {
-      headers: {
-        Accept: "application/json",
-        "X-Subscription-Token": apiKey,
-      },
-      signal: AbortSignal.timeout(20_000),
-    });
-
-    if (!braveRes.ok) {
-      const detail = await braveRes.text().catch(() => "");
-      console.error("[WEB_SEARCH_ERROR]", {
-        requestId: id,
-        status: braveRes.status,
-        message: "Brave search failed",
-        durationMs: Date.now() - started,
+    if (mode === "research" || mode === "deep") {
+      if (!exaDeepSearchEnabled()) {
+        return json(503, {
+          error:
+            "Deep research is not enabled. Set EXA_DEEP_SEARCH_ENABLED on Edge secrets after validating cost.",
+          requestId: id,
+        });
+      }
+      const evidence = await provider.research({
+        query,
+        count,
+        level: body?.level === "deep-lite" || body?.level === "deep-reasoning"
+          ? body.level
+          : "deep",
+        ownerId: user.id,
+        workspaceId,
       });
-      return json(502, {
-        error: "Brave search failed",
-        detail: detail.slice(0, 300),
+      const results = evidence.sources.map((s) => ({
+        title: s.title,
+        url: s.url,
+        description: s.excerpt ?? "",
+        publishedAt: s.publishedAt ?? null,
+        source: s.domain || null,
+      }));
+      console.log("[WEB_SEARCH_RESPONSE]", {
         requestId: id,
+        mode: "research",
+        status: 200,
+        resultCount: results.length,
+        durationMs: Date.now() - started,
+        exaRequestId: evidence.requestId ?? null,
+      });
+      return json(200, {
+        query,
+        results,
+        requestId: id,
+        exaRequestId: evidence.requestId ?? null,
+        citations: evidence.sources,
+        mode: "deep",
+        provider: evidence.provider,
       });
     }
 
-    const data = (await braveRes.json()) as {
-      web?: {
-        results?: Array<{
-          title?: string;
-          url?: string;
-          description?: string;
-          age?: string;
-          page_age?: string;
-          meta_url?: { hostname?: string };
-        }>;
-      };
-    };
-
-    const results: NormalizedHit[] = (data.web?.results ?? [])
-      .slice(0, count)
-      .map((row) => {
-        const href = String(row.url ?? "");
-        return {
-          title: String(row.title ?? "").slice(0, 200),
-          url: href,
-          description: String(row.description ?? "").slice(0, 400),
-          publishedAt: row.page_age || row.age || null,
-          source:
-            row.meta_url?.hostname?.replace(/^www\./, "") ||
-            sourceFromUrl(href),
-        };
-      })
-      .filter((row) => row.title && row.url);
+    const evidence = await provider.search({
+      query,
+      count,
+      ownerId: user.id,
+      workspaceId,
+    });
+    const results = evidence.sources.map((s) => ({
+      title: s.title,
+      url: s.url,
+      description: s.excerpt ?? "",
+      publishedAt: s.publishedAt ?? null,
+      source: s.domain || null,
+    }));
 
     console.log("[WEB_SEARCH_RESPONSE]", {
       requestId: id,
+      mode: "search",
       status: 200,
       resultCount: results.length,
       durationMs: Date.now() - started,
+      exaRequestId: evidence.requestId ?? null,
     });
 
-    return json(200, { query, results, requestId: id });
+    return json(200, {
+      query,
+      results,
+      requestId: id,
+      exaRequestId: evidence.requestId ?? null,
+      citations: evidence.sources,
+      mode: "search",
+      provider: evidence.provider,
+    });
   } catch (err) {
+    const message = err instanceof Error ? err.message : "web search error";
     console.error("[WEB_SEARCH_ERROR]", {
       requestId: id,
       status: 500,
-      message: err instanceof Error ? err.message : "web search error",
+      message: message.slice(0, 200),
       durationMs: Date.now() - started,
     });
-    return json(500, {
-      error: err instanceof Error ? err.message : "web search error",
-      requestId: id,
-    });
+    const status =
+      /limit reached|budget reached|disabled|not enabled|missing/i.test(message)
+        ? 503
+        : 500;
+    return json(status, { error: message, requestId: id });
   }
 });

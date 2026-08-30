@@ -60,11 +60,14 @@ import {
   mapToolEventToProgressLabel,
   setTurnToolExecutionListener,
 } from "@/lib/ai/orchestrator/tool-execution-bus";
+import { collectCitationsFromToolResults } from "@/lib/ai/orchestrator/collect-citations";
 import { shouldEscalateToBrowser } from "@/lib/computer/tool-routing";
 
 export const LOCAL_ORCHESTRATOR_TOOLS = [
   "web.search",
   "web.open",
+  "web.read",
+  "web.research",
   "browser.current.get_context",
   "browser.current.get_selection",
   "browser.current.capture_viewport",
@@ -92,7 +95,10 @@ function detailForTool(name: string): string {
     case "web.search":
       return "Searching the web…";
     case "web.open":
-      return "Opening page…";
+    case "web.read":
+      return "Reading page…";
+    case "web.research":
+      return "Researching…";
     case "computer.browser.open":
       return "Opening remote browser…";
     case "computer.browser.observe":
@@ -133,7 +139,7 @@ function safeContent(text: string, fallback: string): string {
 function evidenceFromToolResult(
   result: AiToolCallResult,
 ): TurnEvidence | TurnEvidence[] | null {
-  if (result.name === "web.search") {
+  if (result.name === "web.search" || result.name === "web.research") {
     const rows =
       (result.data?.results as Array<{
         title: string;
@@ -151,7 +157,7 @@ function evidenceFromToolResult(
       })),
     );
   }
-  if (result.name === "web.open") {
+  if (result.name === "web.open" || result.name === "web.read") {
     const data = result.data as
       | {
           url?: string;
@@ -235,7 +241,7 @@ function appendEvidence(
   else bucket.push(item);
 }
 
-/** Brave/fetch → agent-browser when the page needs JS, interaction, or returned thin/empty text. */
+/** Page fetch → agent-browser when the page needs JS, interaction, or returned thin/empty text. */
 async function escalateWebOpenIfNeeded(opts: {
   result: AiToolCallResult;
   userMessage: string;
@@ -243,7 +249,7 @@ async function escalateWebOpenIfNeeded(opts: {
   evidence: TurnEvidence[];
   report: (progress: AgentTurnProgress) => void;
 }): Promise<void> {
-  if (opts.result.name !== "web.open") return;
+  if (opts.result.name !== "web.open" && opts.result.name !== "web.read") return;
   if (opts.toolResults.some((r) => r.name === "computer.browser.open")) return;
   const data = opts.result.data as
     | { url?: string; finalUrl?: string; text?: string }
@@ -444,6 +450,7 @@ async function runLocalTurnOrchestratorInner(
       condensationOccurred: false,
       aiChatId: request.aiChatId ?? null,
       toolResults: shortcut.toolResults,
+      citations: collectCitationsFromToolResults(shortcut.toolResults),
       pausedForUser: shortcut.pausedForUser,
     };
   }
@@ -474,6 +481,8 @@ async function runLocalTurnOrchestratorInner(
       retrievalAttempted ||
       queued.name === "web.search" ||
       queued.name === "web.open" ||
+      queued.name === "web.read" ||
+      queued.name === "web.research" ||
       queued.name.startsWith("browser.current.");
     const started = Date.now();
     const result = await executeAuthorizedTool({
@@ -512,10 +521,11 @@ async function runLocalTurnOrchestratorInner(
         condensationOccurred: false,
         aiChatId: request.aiChatId ?? null,
         toolResults,
+        citations: collectCitationsFromToolResults(toolResults),
       };
     }
     if (
-      queued.name === "web.open" &&
+      (queued.name === "web.open" || queued.name === "web.read") &&
       !result.ok &&
       requiresExternalEvidence(request.content)
     ) {
@@ -540,9 +550,10 @@ async function runLocalTurnOrchestratorInner(
         condensationOccurred: false,
         aiChatId: request.aiChatId ?? null,
         toolResults,
+        citations: collectCitationsFromToolResults(toolResults),
       };
     }
-    if (queued.name === "web.open") {
+    if (queued.name === "web.open" || queued.name === "web.read") {
       await escalateWebOpenIfNeeded({
         result,
         userMessage: request.content,
@@ -598,12 +609,14 @@ async function runLocalTurnOrchestratorInner(
           ...lastGenerate,
           content: failClosedMessage(grounding.issues),
           toolResults: toolResults.length ? toolResults : undefined,
+          citations: collectCitationsFromToolResults(toolResults),
         };
       }
       return {
         ...lastGenerate,
         content: answer,
         toolResults: toolResults.length ? toolResults : undefined,
+        citations: collectCitationsFromToolResults(toolResults),
       };
     }
 
@@ -618,6 +631,7 @@ async function runLocalTurnOrchestratorInner(
           ...lastGenerate,
           content: cleaned,
           toolResults: toolResults.length ? toolResults : undefined,
+          citations: collectCitationsFromToolResults(toolResults),
         };
       }
       continue;
@@ -634,7 +648,9 @@ async function runLocalTurnOrchestratorInner(
     retrievalAttempted =
       retrievalAttempted ||
       call.name === "web.search" ||
-      call.name === "web.open";
+      call.name === "web.open" ||
+      call.name === "web.read" ||
+      call.name === "web.research";
     const toolStarted = Date.now();
     const result = await executeAuthorizedTool({
       name: call.name,
@@ -660,7 +676,7 @@ async function runLocalTurnOrchestratorInner(
       });
     }
 
-    if (call.name === "web.open") {
+    if (call.name === "web.open" || call.name === "web.read") {
       await escalateWebOpenIfNeeded({
         result,
         userMessage: request.content,
@@ -678,6 +694,7 @@ async function runLocalTurnOrchestratorInner(
           "I need a few details — fill in the card above the message box.",
         ),
         toolResults,
+        citations: collectCitationsFromToolResults(toolResults),
         pausedForUser: true,
       };
     }
@@ -694,11 +711,17 @@ async function runLocalTurnOrchestratorInner(
         ...lastGenerate,
         content: safeContent(fm.text, result.output),
         toolResults,
+        citations: collectCitationsFromToolResults(toolResults),
       };
     }
 
     if (!result.ok) {
-      if (call.name === "web.search" || call.name === "web.open") {
+      if (
+        call.name === "web.search" ||
+        call.name === "web.open" ||
+        call.name === "web.read" ||
+        call.name === "web.research"
+      ) {
         if (requiresExternalEvidence(request.content)) {
           return {
             ...lastGenerate,
@@ -708,6 +731,7 @@ async function runLocalTurnOrchestratorInner(
                 "I couldn't retrieve live information for that request.",
             ),
             toolResults,
+            citations: collectCitationsFromToolResults(toolResults),
           };
         }
       } else {
@@ -718,6 +742,7 @@ async function runLocalTurnOrchestratorInner(
             "I couldn't complete that. Try again in a different way?",
           ),
           toolResults,
+          citations: collectCitationsFromToolResults(toolResults),
         };
       }
     }
@@ -738,12 +763,14 @@ async function runLocalTurnOrchestratorInner(
       ...(lastGenerate as AiGenerateResult),
       content: failClosedMessage(grounding.issues),
       toolResults,
+      citations: collectCitationsFromToolResults(toolResults),
     };
   }
   return {
     ...(lastGenerate as AiGenerateResult),
     content: fallback,
     toolResults,
+    citations: collectCitationsFromToolResults(toolResults),
   };
   } finally {
     setTurnToolExecutionListener(null);

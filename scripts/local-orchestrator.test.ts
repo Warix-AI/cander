@@ -35,12 +35,12 @@ describe("requiresExternalEvidence", () => {
 });
 
 describe("initialDeterministicToolCalls", () => {
-  it("queues web.open for explicit URL requests", () => {
+  it("queues web.read for explicit URL requests", () => {
     const calls = initialDeterministicToolCalls(
       "view https://canderhq.com and tell me about it",
     );
     assert.equal(calls.length, 1);
-    assert.equal(calls[0]!.name, "web.open");
+    assert.equal(calls[0]!.name, "web.read");
     assert.match(String(calls[0]!.arguments.url), /^https:\/\/canderhq\.com\/?$/);
     assert.equal(calls[0]!.reason, "explicit_url_in_request");
   });

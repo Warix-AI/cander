@@ -46,7 +46,7 @@ const WEATHER =
   /\b(weather|forecast|temperature|humidity|radar|precip(itation)?|how\s+hot|how\s+cold|rain(ing)?|snow(ing)?)\b/i;
 
 const EXPLICIT_WEB =
-  /\b(search|look\s*up|google|bing|brave)\b[\s\S]{0,40}\b(online|web|internet|the\s+web)\b/i;
+  /\b(search|look\s*up|google|bing)\b[\s\S]{0,40}\b(online|web|internet|the\s+web)\b/i;
 
 const WHO_ROLE =
   /\bwho\s+(is|are|was|were)\s+(the\s+)?(ceo|cto|cfo|founder|president|mayor|prime\s+minister)\b/i;

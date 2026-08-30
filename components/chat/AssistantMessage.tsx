@@ -37,9 +37,67 @@ export function AssistantMessage({ message }: { message: Message }) {
         .map((block, index) => (
           <BlockView key={index} block={block} />
         ))}
+      {!pending && !streaming ? (
+        <SourcesStrip citations={message.citations} />
+      ) : null}
       {!pending && !streaming && visibleContent ? (
         <MessageActions message={message} />
       ) : null}
+    </div>
+  );
+}
+
+function SourcesStrip({
+  citations,
+}: {
+  citations?: Message["citations"];
+}) {
+  if (!citations?.length) return null;
+  const safe = citations.filter((c) => {
+    try {
+      const u = new URL(c.url);
+      return u.protocol === "http:" || u.protocol === "https:";
+    } catch {
+      return false;
+    }
+  });
+  if (!safe.length) return null;
+  const seen = new Set<string>();
+  const unique = safe.filter((c) => {
+    const key = (c.canonicalUrl || c.url).replace(/\/$/, "").toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return (
+    <div className="pt-1">
+      <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground/80">
+        Sources
+      </p>
+      <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+        {unique.map((c) => {
+          const label = c.domain || (() => {
+            try {
+              return new URL(c.url).hostname.replace(/^www\./, "");
+            } catch {
+              return c.title;
+            }
+          })();
+          return (
+            <li key={c.id}>
+              <a
+                href={c.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[12.5px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                title={c.title}
+              >
+                {label}
+              </a>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

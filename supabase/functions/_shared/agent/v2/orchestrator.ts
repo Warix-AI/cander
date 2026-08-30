@@ -48,6 +48,8 @@ import type {
 } from "./types.ts";
 import { validateAnswerDeterministic } from "./validator.ts";
 import { fetchReadablePage } from "./web-open.ts";
+import { getWebResearchProvider } from "../web-research/index.ts";
+import { webOpenDirectFetchEnabled } from "../../web-research-contract/flags.ts";
 import {
   checkWebEvidenceSufficiency,
   dedupeQueries,
@@ -355,6 +357,7 @@ export async function runTurnOrchestratorV2(
       clarifyText: null,
       failureStage: "loop",
       retrieval: initTurnRetrieval(userContent),
+      workspaceId: (chat.workspace_id as string | null) ?? null,
     };
 
     // Reuse fresh search session on follow-up questions when still relevant
@@ -634,7 +637,7 @@ export async function runTurnOrchestratorV2(
             if (state.budgets.webSearches >= state.budgets.maxWebSearches) break;
             await assertNotCancelled(deps.supabase, input.turnId);
             state.retrieval.searchedQueries.push(q);
-            await runBraveSearch(deps, state, userMsgId!, q, userContent);
+            await runWebSearch(deps, state, userMsgId!, q, userContent);
           }
           decision = await chainRetrievalAfterSearch(deps, state, userMsgId!, userContent, capabilities);
           continue;
@@ -1019,6 +1022,33 @@ export async function runTurnOrchestratorV2(
 
     failureStage = "persist_assistant";
     const assistantId = newId("aim");
+    const citations = state.evidence
+      .filter((e) => e.kind === "web_search" || e.kind === "web_page" || e.kind === "knowledge")
+      .map((e) => ({
+        id: e.id,
+        title: e.title ?? e.id,
+        url: e.url ?? undefined,
+        canonicalUrl: e.url ?? undefined,
+        domain: e.url
+          ? (() => {
+            try {
+              return new URL(e.url).hostname.replace(/^www\./, "");
+            } catch {
+              return undefined;
+            }
+          })()
+          : undefined,
+        excerpt: e.content.slice(0, 240),
+        retrievedAt: e.retrievedAt,
+        sourceType:
+          e.kind === "web_page"
+            ? "page"
+            : e.kind === "knowledge"
+              ? "search"
+              : "search",
+        snippet: e.content.slice(0, 240),
+        kind: (e.kind === "knowledge" ? "knowledge" : "web") as "web" | "knowledge",
+      }));
     await deps.supabase.from("ai_chat_messages").insert({
       id: assistantId,
       chat_id: input.chatId,
@@ -1028,20 +1058,11 @@ export async function runTurnOrchestratorV2(
       status: "complete",
       sort_order: nextOrder + 1,
       error: null,
+      citations,
       created_at: new Date().toISOString(),
     });
 
     emitStatus(state, { phase: "done", label: "Done" }, deps.onEvent);
-
-    const citations = state.evidence
-      .filter((e) => e.kind === "web_search" || e.kind === "web_page" || e.kind === "knowledge")
-      .map((e) => ({
-        id: e.id,
-        title: e.title ?? e.id,
-        url: e.url,
-        snippet: e.content.slice(0, 240),
-        kind: (e.kind === "knowledge" ? "knowledge" : "web") as "web" | "knowledge",
-      }));
 
     const memoryAfterTurn = buildMemoryDelta({
       prior: workingMemory,
@@ -1355,7 +1376,7 @@ function evidenceForBriefing(evidence: TurnState["evidence"]): TurnState["eviden
   return [...pages, ...nonDiscovery, ...snippets.slice(0, 2)].slice(-10);
 }
 
-async function runBraveSearch(
+async function runWebSearch(
   deps: V2Deps,
   state: TurnState,
   userMsgId: string,
@@ -1364,7 +1385,12 @@ async function runBraveSearch(
 ): Promise<void> {
   state.budgets.webSearches += 1;
   try {
-    const { raw } = await braveWebSearch({ query, count: 6 });
+    const { raw } = await braveWebSearch({
+      query,
+      count: 6,
+      ownerId: deps.ownerId,
+      workspaceId: state.workspaceId ?? null,
+    });
     const ranked = rankSearchHits(userContent, raw, {
       requestedDomain: state.retrieval.exactUrlDomain,
       startId: `web_${state.budgets.webSearches}`,
@@ -1464,15 +1490,53 @@ async function openWebPages(
     await assertNotCancelled(deps.supabase, state.turnId);
     state.budgets.webOpens += 1;
     state.retrieval.openedUrls.push(key);
-    const page = await fetchReadablePage(target.url);
-    if (page.ok && page.text.trim()) {
+
+    let ok = false;
+    let finalUrl = target.url;
+    let title = "";
+    let text = "";
+    let error: string | undefined;
+
+    try {
+      const evidence = await getWebResearchProvider().read({
+        urls: [target.url],
+        ownerId: deps.ownerId,
+        workspaceId: state.workspaceId ?? null,
+      });
+      const primary = evidence.sources[0];
+      text = evidence.evidenceText || primary?.excerpt || "";
+      if (primary && text.trim()) {
+        ok = true;
+        finalUrl = primary.url || target.url;
+        title = primary.title || "";
+      } else {
+        error = "empty_contents";
+      }
+    } catch (exaErr) {
+      error = exaErr instanceof Error ? exaErr.message : "exa_contents_failed";
+      // No silent Brave/direct fallback — emergency flag only.
+      if (webOpenDirectFetchEnabled()) {
+        const page = await fetchReadablePage(target.url);
+        if (page.ok && page.text.trim()) {
+          ok = true;
+          finalUrl = page.finalUrl;
+          title = page.title;
+          text = page.text;
+          error = undefined;
+        } else {
+          error = page.error || error;
+        }
+      }
+    }
+
+    if (ok && text.trim()) {
       state.evidence.push(
         pageToEvidence({
           id: `page_${state.budgets.webOpens}`,
           url: target.url,
-          finalUrl: page.finalUrl,
-          title: page.title,
-          text: page.text,
+          finalUrl,
+          title,
+          text,
           fromSourceId: target.fromId,
         }),
       );
@@ -1484,16 +1548,17 @@ async function openWebPages(
         kind: "web_open",
         payload: {
           url: target.url,
-          finalUrl: page.finalUrl,
+          finalUrl,
           ok: true,
-          bytes: page.text.length,
+          bytes: text.length,
           version: "v2",
+          provider: "exa",
         },
       });
       console.info("[WEB_RETRIEVAL]", {
         turnId: state.turnId,
-        opened: page.finalUrl,
-        bytes: page.text.length,
+        opened: finalUrl,
+        bytes: text.length,
       });
     } else {
       if (
@@ -1511,14 +1576,14 @@ async function openWebPages(
         payload: {
           url: target.url,
           ok: false,
-          error: page.error ?? "fetch_failed",
+          error: error ?? "fetch_failed",
           version: "v2",
         },
       });
       console.info("[WEB_RETRIEVAL]", {
         turnId: state.turnId,
         openFailed: target.url,
-        error: page.error,
+        error,
       });
     }
   }

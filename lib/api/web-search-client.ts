@@ -1,6 +1,7 @@
 "use client";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { normalizeMessageCitations } from "@/lib/ai/orchestrator/collect-citations";
 
 export type WebSearchHit = {
   title: string;
@@ -29,13 +30,17 @@ function normalizeResults(raw: unknown): WebSearchHit[] {
 }
 
 /**
- * Call Brave via the authenticated Edge Function.
- * Passes the user JWT explicitly — invoke() alone can drop auth on Cap/WebView.
+ * Call Exa (via Edge web-search) with the authenticated user JWT.
+ * Passes JWT explicitly — invoke() alone can drop auth on Cap/WebView.
  */
-export async function searchWeb(query: string): Promise<{
+export async function searchWeb(
+  query: string,
+  opts?: { mode?: "search" | "research"; level?: string; workspaceId?: string },
+): Promise<{
   ok: boolean;
   detail: string;
   results: WebSearchHit[];
+  citations?: ReturnType<typeof normalizeMessageCitations>;
   requestId?: string;
 }> {
   const q = query.trim();
@@ -44,8 +49,10 @@ export async function searchWeb(query: string): Promise<{
   }
   const id = requestId();
   const started = Date.now();
+  const mode = opts?.mode ?? "search";
   console.log("[WEB_SEARCH_REQUEST]", {
     requestId: id,
+    mode,
     query: q.slice(0, 120),
     ts: Date.now(),
   });
@@ -70,14 +77,18 @@ export async function searchWeb(query: string): Promise<{
     }
 
     const { data, error } = await supabase.functions.invoke("web-search", {
-      body: { query: q, count: 5 },
+      body: {
+        query: q,
+        count: mode === "research" ? 8 : 5,
+        mode,
+        ...(opts?.level ? { level: opts.level } : {}),
+        ...(opts?.workspaceId ? { workspaceId: opts.workspaceId } : {}),
+      },
       headers: {
         Authorization: `Bearer ${session.access_token}`,
       },
     });
 
-    // Non-2xx: supabase-js often puts FunctionsHttpError in `error` and
-    // may still include a JSON body on `data`.
     if (error) {
       const bodyError =
         data && typeof data === "object" && "error" in data
@@ -112,6 +123,17 @@ export async function searchWeb(query: string): Promise<{
     }
 
     const results = normalizeResults(data?.results);
+    const citations = normalizeMessageCitations(
+      data?.citations ??
+        results.map((r, i) => ({
+          id: `web_${i + 1}`,
+          title: r.title,
+          url: r.url,
+          excerpt: r.description,
+          domain: r.source ?? undefined,
+          sourceType: mode === "research" ? "deep-research" : "search",
+        })),
+    );
     console.log("[WEB_SEARCH_RESPONSE]", {
       requestId: id,
       status: 200,
@@ -125,6 +147,7 @@ export async function searchWeb(query: string): Promise<{
         ? `Found ${results.length} result(s).`
         : "No web results.",
       results,
+      citations,
       requestId: id,
     };
   } catch (err) {
@@ -140,4 +163,12 @@ export async function searchWeb(query: string): Promise<{
       requestId: id,
     };
   }
+}
+
+/** Deep research mode — requires EXA_DEEP_SEARCH_ENABLED on Edge. */
+export async function researchWeb(
+  query: string,
+  opts?: { level?: string; workspaceId?: string },
+) {
+  return searchWeb(query, { mode: "research", ...opts });
 }

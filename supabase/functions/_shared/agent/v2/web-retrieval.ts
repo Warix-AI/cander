@@ -5,7 +5,7 @@
 
 import type { EvidenceItem } from "./types.ts";
 
-export type BraveHitLite = {
+export type SearchHitLite = {
   title: string;
   url: string;
   description: string;
@@ -19,7 +19,7 @@ export type RequestedUrl = {
   required: boolean;
 };
 
-export type RankedHit = BraveHitLite & {
+export type RankedHit = SearchHitLite & {
   score: number;
   id: string;
 };
@@ -201,10 +201,10 @@ function recencyScore(publishedAt?: string | null): number {
   return 0.05;
 }
 
-/** Rank Brave hits — snippets are discovery metadata, not final evidence. */
+/** Rank search hits — snippets are discovery metadata, not final evidence. */
 export function rankSearchHits(
   userRequest: string,
-  hits: BraveHitLite[],
+  hits: SearchHitLite[],
   opts?: {
     requestedDomain?: string | null;
     startId?: string;
@@ -235,7 +235,7 @@ export function rankSearchHits(
       if (host.startsWith(`${t}.`) || host === `${t}.com`) score += 0.35;
     }
 
-    // Slight preference for earlier Brave order as tie-breaker
+    // Slight preference for earlier result order as tie-breaker
     score += Math.max(0, 0.08 - index * 0.015);
 
     return {
@@ -485,7 +485,7 @@ export function refineSearchQueries(
 export type CachedSearchSession = {
   id: string;
   queries: string[];
-  results: BraveHitLite[];
+  results: SearchHitLite[];
   createdAt: string;
 };
 

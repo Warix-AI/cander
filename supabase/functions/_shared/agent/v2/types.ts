@@ -195,6 +195,8 @@ export type TurnState = {
   failureStage: string;
   /** Per-turn web retrieval tracking (dedup, exact URL, session reuse). */
   retrieval: TurnRetrievalState;
+  /** Workspace scope for durable web-research quotas (nullable). */
+  workspaceId?: string | null;
 };
 
 export type V2RunResult = RunTurnResult & {

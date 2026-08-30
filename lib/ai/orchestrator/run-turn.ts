@@ -34,6 +34,7 @@ export type OrchestratedTurnResult = AiGenerateResult & {
   toolResults?: AiToolCallResult[];
   pausedForUser?: boolean;
   turnId?: string;
+  citations?: AiGenerateResult["citations"];
 };
 
 let activeTurnId: string | null = null;
@@ -333,5 +334,14 @@ function toGenerateResult(
     condensationOccurred: result.condensationOccurred,
     aiChatId: chatId,
     turnId,
+    citations: result.citations?.length
+      ? result.citations.map((c, i) => ({
+          id: c.id || `src_${i + 1}`,
+          title: c.title,
+          url: c.url ?? "",
+          excerpt: c.snippet,
+          sourceType: c.kind,
+        })).filter((c) => c.url)
+      : undefined,
   };
 }

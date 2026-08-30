@@ -62,7 +62,7 @@ describe("rankSearchHits", () => {
 });
 
 describe("checkWebEvidenceSufficiency", () => {
-  it("requires opening pages when only Brave snippets exist", () => {
+  it("requires opening pages when only search snippets exist", () => {
     const retrieval = initTurnRetrieval("Who is the CEO of Acme Corp?");
     const r = checkWebEvidenceSufficiency({
       userRequest: "Who is the CEO of Acme Corp?",

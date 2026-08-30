@@ -83,6 +83,7 @@ export type RunTurnInput = {
   chatId: string;
   content: string;
   images?: string[];
+  workspaceId?: string | null;
   workspaceKnowledgeHits?: Array<{
     title: string;
     snippet: string;
@@ -402,7 +403,15 @@ export async function runTurnOrchestrator(
 
     // Live-info policy (hard): model cannot opt out of available web retrieval.
     const live = detectLiveInformation(userContent);
-    const webAvailable = Boolean(Deno.env.get("BRAVE_SEARCH_API_KEY"));
+    const webEnabled = (Deno.env.get("WEB_RESEARCH_ENABLED") ?? "true").toLowerCase();
+    const webProvider = (Deno.env.get("WEB_RESEARCH_PROVIDER") ?? "exa").toLowerCase();
+    const webAvailable =
+      webEnabled !== "0" &&
+      webEnabled !== "false" &&
+      webEnabled !== "off" &&
+      (webProvider === "brave"
+        ? Boolean(Deno.env.get("BRAVE_SEARCH_API_KEY"))
+        : Boolean(Deno.env.get("EXA_API_KEY")));
 
     // Web retrieval loop
     failureStage = "retrieve";
@@ -442,7 +451,15 @@ export async function runTurnOrchestrator(
       });
       try {
         webSearches++;
-        const { sources: hits, raw } = await braveWebSearch({ query, count: 5 });
+        const { sources: hits, raw } = await braveWebSearch({
+          query,
+          count: 5,
+          ownerId: deps.ownerId,
+          workspaceId:
+            input.workspaceId ??
+            (chat.workspace_id as string | null) ??
+            null,
+        });
         sources.push(
           ...hits.map((h, i) => ({
             ...h,
@@ -557,7 +574,7 @@ export async function runTurnOrchestrator(
       console.error("[TURN_OBS]", {
         ...obs(),
         stage: "web_unavailable",
-        message: "BRAVE_SEARCH_API_KEY missing",
+        message: "Web research API key missing (EXA_API_KEY or BRAVE_SEARCH_API_KEY)",
       });
     }
 
@@ -776,6 +793,7 @@ export async function runTurnOrchestrator(
       status: "complete",
       sort_order: nextOrder + 1,
       error: null,
+      citations: sources,
       created_at: new Date().toISOString(),
     };
     const { error: asstErr } = await deps.supabase

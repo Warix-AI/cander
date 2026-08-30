@@ -24,6 +24,7 @@ export type MessageRow = {
   at_label: string;
   blocks: Message["blocks"] | null;
   space_switch: Message["spaceSwitch"] | null;
+  citations: Message["citations"] | null;
   sort_order: number;
   created_at: string;
 };
@@ -102,6 +103,7 @@ export function messageToRow(
     at_label: message.at,
     blocks: message.blocks ?? null,
     space_switch: message.spaceSwitch ?? null,
+    citations: message.citations ?? [],
     sort_order: sortOrder,
     created_at: new Date().toISOString(),
   };
@@ -116,6 +118,7 @@ export function messageRowToMessage(row: MessageRow): Message {
     at: row.at_label,
     blocks: row.blocks ?? undefined,
     spaceSwitch: row.space_switch ?? undefined,
+    citations: row.citations?.length ? row.citations : undefined,
     event: condensed ? "condensed" : undefined,
   };
 }

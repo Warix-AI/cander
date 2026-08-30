@@ -1,5 +1,6 @@
 /**
  * Citation validation — client mirror for tests.
+ * Never invents URLs; only allows http(s) URLs present in retrieved sources.
  */
 
 export type CitationSource = {
@@ -8,6 +9,22 @@ export type CitationSource = {
   url?: string | null;
 };
 
+function normalizeUrl(raw: string): string {
+  return raw
+    .replace(/[.,;:!?)]+$/, "")
+    .replace(/\/$/, "")
+    .toLowerCase();
+}
+
+function isSafeHttpUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function validateCitations(opts: {
   answer: string;
   sources: CitationSource[];
@@ -15,8 +32,8 @@ export function validateCitations(opts: {
   const allowedUrls = new Set(
     opts.sources
       .map((s) => (s.url ?? "").trim())
-      .filter(Boolean)
-      .map((u) => u.replace(/\/$/, "").toLowerCase()),
+      .filter((u) => u && isSafeHttpUrl(u))
+      .map((u) => normalizeUrl(u)),
   );
 
   const urlRe = /https?:\/\/[^\s)\]>"']+/gi;
@@ -25,10 +42,13 @@ export function validateCitations(opts: {
   let text = opts.answer;
 
   for (const raw of found) {
-    const norm = raw
-      .replace(/[.,;:!?)]+$/, "")
-      .replace(/\/$/, "")
-      .toLowerCase();
+    const cleaned = raw.replace(/[.,;:!?)]+$/, "");
+    if (!isSafeHttpUrl(cleaned)) {
+      strippedUrls.push(raw);
+      text = text.split(raw).join("[source omitted]");
+      continue;
+    }
+    const norm = normalizeUrl(cleaned);
     const ok = [...allowedUrls].some(
       (a) => a === norm || norm.startsWith(a) || a.startsWith(norm),
     );

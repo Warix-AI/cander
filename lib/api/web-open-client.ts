@@ -10,6 +10,7 @@ export type WebOpenResult = {
   text: string;
   error?: string;
   requestId?: string;
+  citations?: unknown[];
 };
 
 function requestId() {
@@ -90,6 +91,7 @@ export async function openWebPage(url: string): Promise<WebOpenResult> {
       text: String(data?.text ?? ""),
       error: data?.error ? String(data.error) : undefined,
       requestId: id,
+      citations: Array.isArray(data?.citations) ? data.citations : undefined,
     };
 
     if (result.ok) {

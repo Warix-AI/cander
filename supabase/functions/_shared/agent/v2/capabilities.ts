@@ -43,15 +43,25 @@ const CLIENT_TOOLS: AvailableTool[] = [
   },
 ];
 
+function webResearchAvailable(): boolean {
+  const enabled = (Deno.env.get("WEB_RESEARCH_ENABLED") ?? "true").toLowerCase();
+  if (enabled === "0" || enabled === "false" || enabled === "off") return false;
+  const provider = (Deno.env.get("WEB_RESEARCH_PROVIDER") ?? "exa").toLowerCase();
+  if (provider === "brave") {
+    return Boolean(Deno.env.get("BRAVE_SEARCH_API_KEY"));
+  }
+  return Boolean(Deno.env.get("EXA_API_KEY"));
+}
+
 export function buildCapabilities(opts: {
   hasImages?: boolean;
   locationHint?: string | null;
   userTimezone?: string | null;
 }): TurnCapabilities {
-  const webSearch = Boolean(Deno.env.get("BRAVE_SEARCH_API_KEY"));
+  const webSearch = webResearchAvailable();
   return {
     webSearch,
-    webRead: webSearch, // same network egress; gated by SSRF helper
+    webRead: webSearch, // Exa Contents; gated by public-URL checks
     workspaceKnowledge: true, // via client pause/resume
     historyRetrieval: true,
     clientTools: CLIENT_TOOLS,

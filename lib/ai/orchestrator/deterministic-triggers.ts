@@ -17,6 +17,21 @@ export type QueuedToolCall = {
   reason: string;
 };
 
+/** Explicit deep-research / compare / verify phrasing. */
+export function wantsDeepResearch(content: string): boolean {
+  const t = content.trim();
+  if (!t) return false;
+  return (
+    /\b(deep\s+research|research\s+(this|that|whether|if|how)|thorough\s+(look|research|comparison))\b/i.test(
+      t,
+    ) ||
+    /\b(compare|verify|fact[- ]?check|multi[- ]source)\b[\s\S]{0,60}\b(sources?|web|online|internet|sites?)\b/i.test(
+      t,
+    ) ||
+    /\b(compare|vs\.?|versus)\b.+\b(and|vs\.?|versus)\b/i.test(t)
+  );
+}
+
 /** User turn likely needs live/external evidence before answering. */
 export function requiresExternalEvidence(content: string): boolean {
   const t = content.trim();
@@ -24,6 +39,7 @@ export function requiresExternalEvidence(content: string): boolean {
   if (extractRequestedUrl(t)) return true;
   if (liveInfoHint(t)) return true;
   if (refersToActiveBrowserSurface(t)) return true;
+  if (wantsDeepResearch(t)) return true;
   if (/\b(search|look\s*up|google|find)\b[\s\S]{0,40}\b(web|online|internet)\b/i.test(t)) {
     return true;
   }
@@ -39,7 +55,7 @@ export function initialDeterministicToolCalls(content: string): QueuedToolCall[]
   if (requested?.url) {
     return [
       {
-        name: browseIntent ? "computer.browser.open" : "web.open",
+        name: browseIntent ? "computer.browser.open" : "web.read",
         arguments: { url: requested.url },
         reason: browseIntent ? "explicit_browse_intent" : "explicit_url_in_request",
       },
@@ -84,6 +100,33 @@ export function initialDeterministicToolCalls(content: string): QueuedToolCall[]
         name: "browser.current.get_context",
         arguments: {},
         reason: "active_browser_surface_reference",
+      },
+    ];
+  }
+
+  if (wantsDeepResearch(content)) {
+    const query = content.trim().slice(0, 400);
+    // Deep Search is Edge-gated (EXA_DEEP_SEARCH_ENABLED=false initially).
+    // Deterministic path uses web.search; model may still call web.research.
+    return [
+      {
+        name: "web.search",
+        arguments: { query },
+        reason: "deep_research_intent_degraded_to_search",
+      },
+    ];
+  }
+
+  if (
+    /\b(search|look\s*up|google|find)\b[\s\S]{0,40}\b(web|online|internet)\b/i.test(
+      content,
+    )
+  ) {
+    return [
+      {
+        name: "web.search",
+        arguments: { query: content.trim().slice(0, 400) },
+        reason: "explicit_web_search_intent",
       },
     ];
   }

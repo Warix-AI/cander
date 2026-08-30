@@ -11,7 +11,7 @@ import {
   type AgentTurnProgress,
 } from "@/lib/ai/runtime/agent-turn";
 import type { AiToolCallResult } from "@/lib/ai/runtime/tools";
-import { AiRuntimeError } from "@/lib/ai/runtime/types";
+import { AiRuntimeError, type AiGenerateResult } from "@/lib/ai/runtime/types";
 import type { SpaceId } from "@/lib/types";
 
 export function buildAiContextRefs(opts: {
@@ -66,6 +66,7 @@ export async function fetchPrivateAiReply(opts: {
   runtime?: string;
   pausedForUser?: boolean;
   toolResults?: AiToolCallResult[];
+  citations?: AiGenerateResult["citations"];
 }> {
   try {
     const result = await runAssistantTurn(
@@ -90,6 +91,7 @@ export async function fetchPrivateAiReply(opts: {
       runtime: result.runtime,
       pausedForUser: result.pausedForUser,
       toolResults: result.toolResults,
+      citations: result.citations,
     };
   } catch (err) {
     if (err instanceof AiRuntimeError) {

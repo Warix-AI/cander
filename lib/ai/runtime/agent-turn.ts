@@ -167,9 +167,17 @@ async function runAssistantTurnInner(
       onProgress: opts?.onProgress,
     });
     if (pre.toolResults.length) {
+      const { collectCitationsFromToolResults } = await import(
+        "@/lib/ai/orchestrator/collect-citations"
+      );
+      const mergedTools = [...pre.toolResults, ...(cloud.toolResults ?? [])];
       return {
         ...cloud,
-        toolResults: [...pre.toolResults, ...(cloud.toolResults ?? [])],
+        toolResults: mergedTools,
+        citations:
+          cloud.citations?.length
+            ? cloud.citations
+            : collectCitationsFromToolResults(mergedTools),
       };
     }
     return cloud;

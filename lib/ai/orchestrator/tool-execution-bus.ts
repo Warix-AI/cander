@@ -77,7 +77,10 @@ function detailForToolName(name: string): string {
     case "web.search":
       return "Searching the web…";
     case "web.open":
-      return "Opening page…";
+    case "web.read":
+      return "Reading page…";
+    case "web.research":
+      return "Researching…";
     case "computer.browser.open":
       return "Opening remote browser…";
     case "computer.browser.observe":

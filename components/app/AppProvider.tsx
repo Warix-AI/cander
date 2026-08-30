@@ -1922,6 +1922,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               content: string,
               status: "streaming" | "complete",
               condensationOccurred: boolean,
+              citations?: Message["citations"],
             ) => {
               setThreads((current) => {
                 const apply = (item: Thread): Thread => {
@@ -1937,6 +1938,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                                 blocks: (message.blocks ?? []).filter(
                                   (b) => b.type !== "tool",
                                 ),
+                                ...(citations?.length
+                                  ? { citations }
+                                  : {}),
                               }
                             : {}),
                         }
@@ -1987,6 +1991,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 result.content,
                 "complete",
                 result.condensationOccurred,
+                result.citations,
               );
               if (voiceActive) {
                 speakText(sanitizeAssistantVisibleText(result.content));
@@ -1999,6 +2004,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 partial,
                 done ? "complete" : "streaming",
                 done && result.condensationOccurred,
+                done ? result.citations : undefined,
               );
               if (done && voiceActive) {
                 speakText(sanitizeAssistantVisibleText(result.content));
@@ -2338,6 +2344,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                           ? ("complete" as const)
                           : ("streaming" as const),
                         activity: done ? null : m.activity,
+                        ...(done && reply.citations?.length
+                          ? { citations: reply.citations }
+                          : {}),
                       }
                     : m,
                 ),
@@ -3057,7 +3066,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       webSearch: async (query) => {
         const { searchWeb } = await import("@/lib/api/web-search-client");
-        return searchWeb(query);
+        const result = await searchWeb(query, { workspaceId });
+        return result;
       },
       webOpen: async (url) => {
         const { openWebPage } = await import("@/lib/api/web-open-client");
@@ -3069,7 +3079,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           finalUrl: page.finalUrl,
           title: page.title,
           text: page.text,
+          citations: page.citations,
         };
+      },
+      webResearch: async ({ query, level }) => {
+        const { researchWeb } = await import("@/lib/api/web-search-client");
+        return researchWeb(query, { level, workspaceId });
       },
       askClarification: (opts) => {
         const tid = (opts.threadId?.trim() || threadIdRef.current || "").trim();

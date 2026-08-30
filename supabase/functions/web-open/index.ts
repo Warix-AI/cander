@@ -1,7 +1,14 @@
 /**
- * Authenticated SSRF-safe page fetch for client local orchestrator.
+ * Authenticated page read via Exa Contents (exclusive public-page reader).
+ * Legacy direct fetch only when WEB_OPEN_DIRECT_FETCH_ENABLED=true (emergency).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { getWebResearchProvider } from "../_shared/agent/web-research/index.ts";
+import {
+  webOpenDirectFetchEnabled,
+  webResearchEnabled,
+} from "../_shared/web-research-contract/flags.ts";
+import { assertPublicHttpUrl } from "../_shared/web-research-contract/types.ts";
 import { fetchReadablePage } from "../_shared/agent/v2/web-open.ts";
 
 type Json = Record<string, unknown>;
@@ -34,6 +41,13 @@ Deno.serve(async (req) => {
   const started = Date.now();
 
   try {
+    if (!webResearchEnabled()) {
+      return json(503, {
+        error: "Web research is disabled.",
+        requestId: id,
+      });
+    }
+
     const authHeader = req.headers.get("Authorization") ?? "";
     if (!authHeader.startsWith("Bearer ")) {
       return json(401, { error: "Missing authorization", requestId: id });
@@ -53,9 +67,19 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const url = String(body?.url ?? "").trim().slice(0, 2048);
-    if (!url) {
+    const rawUrl = String(body?.url ?? "").trim().slice(0, 2048);
+    if (!rawUrl) {
       return json(400, { error: "url required", requestId: id });
+    }
+
+    let url: string;
+    try {
+      url = assertPublicHttpUrl(rawUrl);
+    } catch (err) {
+      return json(400, {
+        error: err instanceof Error ? err.message : "Invalid URL",
+        requestId: id,
+      });
     }
 
     console.log("[WEB_OPEN_START]", {
@@ -64,32 +88,85 @@ Deno.serve(async (req) => {
       ts: Date.now(),
     });
 
-    const page = await fetchReadablePage(url);
-
-    if (page.ok) {
+    // Exclusive Exa Contents path (default).
+    try {
+      const provider = getWebResearchProvider();
+      const evidence = await provider.read({
+        urls: [url],
+        query: typeof body?.query === "string" ? body.query : undefined,
+        ownerId: user.id,
+        workspaceId:
+          typeof body?.workspaceId === "string" ? body.workspaceId : null,
+      });
+      const primary = evidence.sources[0];
+      const text = evidence.evidenceText || primary?.excerpt || "";
       console.log("[WEB_OPEN_SUCCESS]", {
         requestId: id,
-        finalUrl: page.finalUrl,
-        bytes: page.text.length,
+        finalUrl: primary?.url ?? url,
+        bytes: text.length,
         durationMs: Date.now() - started,
+        provider: evidence.provider,
+        exaRequestId: evidence.requestId ?? null,
       });
-    } else {
-      console.error("[WEB_OPEN_FAILURE]", {
+      return json(200, {
+        ok: true,
+        url,
+        finalUrl: primary?.url ?? url,
+        title: primary?.title ?? "",
+        text,
         requestId: id,
-        error: page.error,
-        durationMs: Date.now() - started,
+        exaRequestId: evidence.requestId ?? null,
+        citations: evidence.sources,
+        provider: evidence.provider,
+      });
+    } catch (exaErr) {
+      const exaMessage =
+        exaErr instanceof Error ? exaErr.message : "Exa Contents failed";
+      // No silent fallback — only emergency flag.
+      if (!webOpenDirectFetchEnabled()) {
+        console.error("[WEB_OPEN_FAILURE]", {
+          requestId: id,
+          error: exaMessage.slice(0, 200),
+          durationMs: Date.now() - started,
+          fallback: false,
+        });
+        return json(502, {
+          ok: false,
+          url,
+          finalUrl: url,
+          title: "",
+          text: "",
+          error: exaMessage,
+          requestId: id,
+        });
+      }
+
+      console.error("[WEB_OPEN_FALLBACK_DIRECT]", {
+        requestId: id,
+        exaError: exaMessage.slice(0, 120),
+      });
+      const page = await fetchReadablePage(url);
+      if (page.ok) {
+        return json(200, {
+          ok: true,
+          url,
+          finalUrl: page.finalUrl,
+          title: page.title,
+          text: page.text,
+          requestId: id,
+          provider: "direct-fetch",
+        });
+      }
+      return json(502, {
+        ok: false,
+        url,
+        finalUrl: url,
+        title: "",
+        text: "",
+        error: page.error || exaMessage,
+        requestId: id,
       });
     }
-
-    return json(page.ok ? 200 : 502, {
-      ok: page.ok,
-      url: page.url,
-      finalUrl: page.finalUrl,
-      title: page.title,
-      text: page.text,
-      error: page.error ?? null,
-      requestId: id,
-    });
   } catch (err) {
     console.error("[WEB_OPEN_FAILURE]", {
       requestId: id,
@@ -97,6 +174,7 @@ Deno.serve(async (req) => {
       durationMs: Date.now() - started,
     });
     return json(500, {
+      ok: false,
       error: err instanceof Error ? err.message : "web open error",
       requestId: id,
     });

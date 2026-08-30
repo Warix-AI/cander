@@ -73,6 +73,18 @@ export type AiGenerateResult = {
   offline: boolean;
   condensationOccurred: boolean;
   aiChatId?: string | null;
+  /** Durable web sources for Sources UI (not visible answer text). */
+  citations?: Array<{
+    id: string;
+    title: string;
+    url: string;
+    canonicalUrl?: string;
+    domain?: string;
+    excerpt?: string;
+    publishedAt?: string;
+    retrievedAt?: string;
+    sourceType?: string;
+  }>;
 };
 
 export class AiRuntimeError extends Error {

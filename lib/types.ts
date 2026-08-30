@@ -170,6 +170,18 @@ export type Message = {
   content: string;
   at: string;
   blocks?: ChatBlock[];
+  /** Normalized web sources for grounded answers (survives reload). */
+  citations?: Array<{
+    id: string;
+    title: string;
+    url: string;
+    canonicalUrl?: string;
+    domain?: string;
+    excerpt?: string;
+    publishedAt?: string;
+    retrievedAt?: string;
+    sourceType?: string;
+  }>;
   /** In-flight / stream status for live AI turns. */
   status?: MessageStatus;
   /** Cursor-style activity while pending (thinking / tool). */

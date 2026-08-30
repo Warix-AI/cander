@@ -283,7 +283,7 @@ registerAiTool({
 registerAiTool({
   name: "web.search",
   description:
-    "Search the public internet via Brave for current facts, news, weather, scores, and general web results. Use when the answer needs live or external information.",
+    "Search the public internet for current facts, news, weather, scores, and general web results. Use when the answer needs live or external information.",
   permission: { requireWorkspaceMember: true },
   domain: "web",
   enabled: true,
@@ -297,7 +297,7 @@ registerAiTool({
 registerAiTool({
   name: "web.open",
   description:
-    "Fetch and read a public web page by URL. Use when the user names a URL or you need full page content beyond search snippets.",
+    "Read a public web page by URL via Exa Contents. Use when the user names a URL or you need full page content beyond search snippets. Alias: web.read.",
   permission: { requireWorkspaceMember: true },
   domain: "web",
   enabled: true,
@@ -305,6 +305,41 @@ registerAiTool({
     type: "object",
     required: ["url"],
     properties: { url: { type: "string", description: "HTTPS URL to open" } },
+  },
+});
+
+registerAiTool({
+  name: "web.read",
+  description:
+    "Read a public web page by URL (same as web.open). Prefer when summarizing a known URL or public active-tab URL.",
+  permission: { requireWorkspaceMember: true },
+  domain: "web",
+  enabled: true,
+  parameters: {
+    type: "object",
+    required: ["url"],
+    properties: { url: { type: "string", description: "HTTPS URL to read" } },
+  },
+});
+
+registerAiTool({
+  name: "web.research",
+  description:
+    "Multi-source deep research for complex comparisons or verification. Use sparingly; ordinary questions should use web.search.",
+  permission: { requireWorkspaceMember: true },
+  domain: "web",
+  enabled: true,
+  parameters: {
+    type: "object",
+    required: ["query"],
+    properties: {
+      query: { type: "string" },
+      level: {
+        type: "string",
+        enum: ["deep-lite", "deep", "deep-reasoning"],
+        description: "Deep research intensity",
+      },
+    },
   },
 });
 

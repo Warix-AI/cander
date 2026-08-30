@@ -50,6 +50,7 @@ export type AppActionHandlers = {
       /** @deprecated use description */
       snippet?: string;
     }>;
+    citations?: unknown[];
   }>;
   webOpen: (url: string) => Promise<{
     ok: boolean;
@@ -58,6 +59,22 @@ export type AppActionHandlers = {
     finalUrl: string;
     title: string;
     text: string;
+    citations?: unknown[];
+  }>;
+  webResearch: (opts: {
+    query: string;
+    level?: string;
+  }) => Promise<{
+    ok: boolean;
+    detail: string;
+    results: Array<{
+      title: string;
+      url: string;
+      description: string;
+      publishedAt: string | null;
+      source: string | null;
+    }>;
+    citations?: unknown[];
   }>;
   askClarification: (opts: {
     title: string;

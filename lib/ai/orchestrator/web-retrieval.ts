@@ -3,7 +3,7 @@
  * supabase/functions/_shared/agent/v2/web-retrieval.ts
  */
 
-export type BraveHitLite = {
+export type SearchHitLite = {
   title: string;
   url: string;
   description: string;
@@ -17,7 +17,7 @@ export type RequestedUrl = {
   required: boolean;
 };
 
-export type RankedHit = BraveHitLite & {
+export type RankedHit = SearchHitLite & {
   score: number;
   id: string;
 };
@@ -209,7 +209,7 @@ function recencyScore(publishedAt?: string | null): number {
 
 export function rankSearchHits(
   userRequest: string,
-  hits: BraveHitLite[],
+  hits: SearchHitLite[],
   opts?: {
     requestedDomain?: string | null;
     startId?: string;
@@ -444,7 +444,7 @@ export function refineSearchQueries(
 export type CachedSearchSession = {
   id: string;
   queries: string[];
-  results: BraveHitLite[];
+  results: SearchHitLite[];
   createdAt: string;
 };
 

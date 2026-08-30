@@ -11,14 +11,14 @@ import {
 } from "../lib/ai/orchestrator/tool-execution-bus.ts";
 
 describe("mapToolEventToProgressLabel", () => {
-  it("maps web.open to opening page detail", () => {
+  it("maps web.open to reading page detail", () => {
     const mapped = mapToolEventToProgressLabel({
       type: "tool_start",
       name: "web.open",
     });
     assert.ok(mapped);
     assert.equal(mapped!.phase, "tool");
-    assert.match(mapped!.detail, /opening page/i);
+    assert.match(mapped!.detail, /reading page/i);
     assert.equal(mapped!.toolName, "web.open");
   });
 

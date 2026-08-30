@@ -25,13 +25,13 @@ Set any to `0`/`false`/`off` to roll back that layer.
 
 When `shouldUseLocalTurnOrchestrator()` is true:
 
-- **Deterministic URL trigger** — explicit URLs auto-run `web.open` before the first FM call
+- **Deterministic URL trigger** — explicit URLs auto-run `web.read` before the first FM call
 - **Evidence objects** — `lib/ai/orchestrator/evidence.ts`
 - **Grounding validator** — fail-closed when live info required but retrieval failed
 - **ToolExecutionBus** — `[TOOL_*]` events drive Thinking UI detail lines
 - **Structured FM output** — native `generateStructured` (@Generable) when bridge supports it; else JSON-in-prose fallback
 
-Client `web.open` → Edge `web-open` → SSRF-safe `fetchReadablePage`.
+Client `web.search` / `web.read` / `web.open` → Edge → Exa (`WEB_RESEARCH_PROVIDER=exa`). Legacy direct fetch only if `WEB_OPEN_DIRECT_FETCH_ENABLED=true`.
 
 ## V2 loop (cloud — what changed)
 
