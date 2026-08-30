@@ -1,6 +1,6 @@
 "use client";
 
-import { isDesktopShell } from "@/lib/desktop-shell";
+import { hasDesktopBrowserBridge, isDesktopShell } from "@/lib/desktop-shell";
 import { isCapacitorNative } from "@/lib/composer-attach";
 import { createCapacitorBrowserSurfaceAdapter } from "@/lib/browser-surface/capacitor-adapter";
 import { createElectronBrowserSurfaceAdapter } from "@/lib/browser-surface/electron-adapter";
@@ -14,7 +14,13 @@ export function getBrowserSurfaceAdapter(): BrowserSurfaceAdapter {
   if (cached) {
     return cached;
   }
-  if (typeof window !== "undefined" && isDesktopShell()) {
+  // Only use the Electron adapter when this shell build exposes the browser IPC.
+  // Stale .app installs still look like Electron but lack window.canderDesktop.browser.
+  if (
+    typeof window !== "undefined" &&
+    isDesktopShell() &&
+    hasDesktopBrowserBridge()
+  ) {
     cached = createElectronBrowserSurfaceAdapter();
     return cached;
   }

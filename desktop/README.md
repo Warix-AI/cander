@@ -37,7 +37,8 @@ npm run dist:unsigned
 
 Output: `desktop/release/Cander-<version>.dmg` — install to `/Applications`. The bundle includes:
 
-- Cander-branded Electron shell (`2026-08-29-prod-fm`)
+- Cander-branded Electron shell (`2026-08-29-browser-surface`, v0.1.1+)
+- Local `WebContentsView` browser bridge for right-panel web / preview tabs
 - `FoundationModelsHelper` binary (Apple Intelligence CLI)
 - Loads `https://cander.app` (not localhost)
 

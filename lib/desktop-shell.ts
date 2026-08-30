@@ -4,6 +4,8 @@ import { useSyncExternalStore, type CSSProperties } from "react";
 
 export type CanderDesktopBridge = {
   platform: string;
+  shellBuild?: string;
+  shellVersion?: string;
   window?: {
     minimize: () => void;
     maximize: () => void;
@@ -68,6 +70,12 @@ export function isDesktopShell() {
 export function getCanderDesktopBridge(): CanderDesktopBridge | undefined {
   if (typeof window === "undefined") return undefined;
   return window.canderDesktop;
+}
+
+/** True when preload exposes the local browser WebContentsView bridge. */
+export function hasDesktopBrowserBridge() {
+  const bridge = getCanderDesktopBridge();
+  return Boolean(bridge?.browser?.createTab);
 }
 
 /** Electron on macOS with custom frameless traffic lights. */

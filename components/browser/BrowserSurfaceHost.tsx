@@ -6,6 +6,10 @@ import {
   getBrowserSurfaceAdapter,
   type BrowserSurfaceBounds,
 } from "@/lib/browser-surface";
+import {
+  hasDesktopBrowserBridge,
+  isDesktopShell,
+} from "@/lib/desktop-shell";
 import { isGoogleUrl } from "@/lib/preview-url";
 import { GoogleHome } from "@/components/browser/GoogleHome";
 import { ExternalLink } from "lucide-react";
@@ -159,6 +163,32 @@ export function BrowserSurfaceHost({
     return (
       <div className="h-full min-h-0 overflow-y-auto bg-white">
         <GoogleHome />
+      </div>
+    );
+  }
+
+  // Installed Electron app is older than the browser-surface bridge.
+  if (isDesktopShell() && !hasDesktopBrowserBridge()) {
+    return (
+      <div
+        ref={hostRef}
+        className="flex h-full flex-col items-center justify-center gap-3 bg-muted/20 px-6 text-center"
+      >
+        <p className="max-w-sm text-sm text-muted-foreground">
+          This Cander desktop build is out of date for in-panel browsing.
+          Quit the app and install the latest{" "}
+          <code className="text-xs">Cander-*.dmg</code> (0.1.1+), or run{" "}
+          <code className="text-xs">npm run desktop</code> from the repo.
+        </p>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-medium text-background"
+        >
+          <ExternalLink className="size-3.5" />
+          Open in browser
+        </a>
       </div>
     );
   }
