@@ -6,7 +6,7 @@
 import { braveWebSearch } from "../brave-search.ts";
 import { validateCitations } from "../citations.ts";
 import { buildContext, logContextBuild } from "../context-builder.ts";
-import { createKeywordHistoryRetriever } from "../history-retriever.ts";
+import { createKeywordHistoryRetriever, createLayeredMemoryRetriever } from "../history-retriever.ts";
 import type { ModelProvider } from "../model-provider.ts";
 import { isInternalResultBlob } from "../types.ts";
 import type { StatusEvent } from "../types.ts";
@@ -22,8 +22,15 @@ import {
 } from "./fast-path.ts";
 import {
   buildMemoryDelta,
+  buildMemoryIndexPayload,
   resolveReference,
 } from "./memory.ts";
+import {
+  buildRetrievalQueries,
+  detectReferenceIntent,
+  formatCrossChatForContext,
+  mergeHistoryRows,
+} from "./memory-retrieval.ts";
 import {
   buildAnswerPrompt,
   buildControllerPrompt,
@@ -281,6 +288,7 @@ export async function runTurnOrchestratorV2(
     const enrichedRequest = ref
       ? `${userContent}\n\n[Resolved reference: ${ref}]`
       : userContent;
+    const referenceIntent = detectReferenceIntent(userContent);
 
     const complexity = input.researchMode
       ? "research"
@@ -300,6 +308,7 @@ export async function runTurnOrchestratorV2(
       workingMemory,
       recentMessages: historyRows.slice(-20),
       retrievedHistory: [],
+      crossChatMemory: [],
       evidence: [],
       toolHistory: [],
       searchSessions: [],
@@ -315,6 +324,28 @@ export async function runTurnOrchestratorV2(
       clarifyText: null,
       failureStage: "loop",
     };
+
+    const workspaceId = (chat.workspace_id as string | null) ?? null;
+    const { data: contextRefs } = await deps.supabase
+      .from("ai_chat_context_refs")
+      .select("ref_id, ref_kind")
+      .eq("chat_id", input.chatId)
+      .eq("owner_id", deps.ownerId);
+    const projectRefIds = (contextRefs ?? [])
+      .filter(
+        (r: { ref_kind: string }) =>
+          r.ref_kind === "project" || r.ref_kind === "research",
+      )
+      .map((r: { ref_id: string }) => r.ref_id);
+
+    // Layered memory: resolve references + pull older in-chat / cross-chat context
+    await prepareLayeredMemory(deps, state, {
+      userContent,
+      resolvedRef: ref,
+      referenceIntent,
+      workspaceId,
+      projectRefIds,
+    });
 
     // Resume: ingest prior client results / knowledge hits
     if (input.workspaceKnowledgeHits?.length) {
@@ -360,6 +391,11 @@ export async function runTurnOrchestratorV2(
 
     // Fast path / bootstrap for first controller decision
     let decision: ControllerDecision | null = tryFastPath(userContent);
+    const followUpEntity =
+      ref ??
+      workingMemory.activeEntity ??
+      workingMemory.entities?.[workingMemory.entities.length - 1] ??
+      null;
 
     if (
       !decision &&
@@ -378,7 +414,28 @@ export async function runTurnOrchestratorV2(
     } else if (
       !decision &&
       !input.clientActionResults?.length &&
+      referenceIntent.entityFollowUp &&
+      followUpEntity &&
+      capabilities.webSearch &&
+      state.evidence.filter((e) => e.kind === "web_search" || e.kind === "web_page")
+        .length === 0
+    ) {
+      decision = {
+        action: "web_search",
+        reasonCode: "ENTITY_FOLLOW_UP",
+        queries: buildRetrievalQueries(
+          userContent,
+          workingMemory,
+          followUpEntity,
+        ).slice(0, 4),
+        complexity: "normal",
+      };
+    } else if (
+      !decision &&
+      !input.clientActionResults?.length &&
       internalKnowledgeHint(userContent) &&
+      !referenceIntent.entityFollowUp &&
+      !ref &&
       state.evidence.every((e) => e.kind !== "knowledge")
     ) {
       decision = {
@@ -880,6 +937,15 @@ export async function runTurnOrchestratorV2(
         kind: (e.kind === "knowledge" ? "knowledge" : "web") as "web" | "knowledge",
       }));
 
+    const memoryAfterTurn = buildMemoryDelta({
+      prior: workingMemory,
+      userText: userContent,
+      assistantText: finalAnswer,
+      evidence: state.evidence,
+      briefing: state.briefing,
+      searchSessionIds: state.searchSessions.map((s) => s.id),
+    });
+
     const result: V2RunResult = {
       turnId: input.turnId,
       chatId: input.chatId,
@@ -896,6 +962,12 @@ export async function runTurnOrchestratorV2(
         ...obs(state),
         complexity: state.budgets.complexity,
         briefingFacts: state.briefing?.facts.length ?? 0,
+        memoryRetrieval: {
+          retrievedHistoryCount: state.retrievedHistory.length,
+          crossChatCount: state.crossChatMemory.length,
+          resolvedRef: ref,
+          activeEntity: memoryAfterTurn.activeEntity ?? null,
+        },
       },
       orchestratorVersion: "v2",
       evidenceCount: state.evidence.length,
@@ -917,21 +989,31 @@ export async function runTurnOrchestratorV2(
       .eq("turn_id", input.turnId);
 
     try {
-      const nextMem = buildMemoryDelta({
-        prior: workingMemory,
-        userText: userContent,
-        assistantText: finalAnswer,
-        evidence: state.evidence,
-        briefing: state.briefing,
-        searchSessionIds: state.searchSessions.map((s) => s.id),
-      });
       await deps.supabase
         .from("ai_chats")
-        .update({ conversation_state: nextMem })
+        .update({ conversation_state: memoryAfterTurn })
         .eq("id", input.chatId)
         .eq("owner_id", deps.ownerId);
     } catch (e) {
       console.warn("[conversation_state] v2 update skipped", e);
+    }
+
+    try {
+      const indexPayload = buildMemoryIndexPayload({
+        chatId: input.chatId,
+        ownerId: deps.ownerId,
+        workspaceId,
+        title: String(chat.title ?? "New chat"),
+        memory: memoryAfterTurn,
+        messageCount: historyRows.length + 1,
+        lastMessageAt: new Date().toISOString(),
+        projectRefIds,
+      });
+      await deps.supabase
+        .from("ai_chat_memory_index")
+        .upsert(indexPayload, { onConflict: "chat_id" });
+    } catch (e) {
+      console.warn("[memory_index] upsert skipped", e);
     }
 
     failureStage = "done";
@@ -1018,6 +1100,87 @@ export async function runTurnOrchestratorV2(
   }
 }
 
+async function prepareLayeredMemory(
+  deps: V2Deps,
+  state: TurnState,
+  opts: {
+    userContent: string;
+    resolvedRef: string | null;
+    referenceIntent: ReturnType<typeof detectReferenceIntent>;
+    workspaceId: string | null;
+    projectRefIds: string[];
+  },
+): Promise<void> {
+  const { referenceIntent } = opts;
+  if (!referenceIntent.hasReference && !referenceIntent.entityFollowUp) return;
+
+  emitStatus(
+    state,
+    {
+      phase: "retrieving",
+      label: "Recalling context",
+      detail: "Searching conversation memory…",
+    },
+    deps.onEvent,
+  );
+
+  const retriever = createLayeredMemoryRetriever(deps.supabase, deps.ownerId);
+  const queries = buildRetrievalQueries(
+    opts.userContent,
+    state.workingMemory,
+    opts.resolvedRef,
+  );
+  const excludeIds = new Set(
+    state.recentMessages.map((m) => m.id).filter(Boolean) as string[],
+  );
+
+  if (referenceIntent.needsInChatHistory && state.capabilities.historyRetrieval) {
+    try {
+      const inChat = await retriever.searchInChat({
+        chatId: state.chatId,
+        queries,
+        limit: 8,
+        excludeIds,
+      });
+      state.retrievedHistory = mergeHistoryRows(state.retrievedHistory, inChat);
+      for (const h of inChat) {
+        state.evidence.push({
+          id: `hist_${h.id}`,
+          kind: "history",
+          content: h.content.slice(0, 1500),
+          retrievedAt: new Date().toISOString(),
+        });
+      }
+    } catch (e) {
+      console.warn("[memory] in-chat retrieval skipped", e);
+    }
+  }
+
+  if (referenceIntent.needsCrossChat && queries.length) {
+    try {
+      const cross = await retriever.searchCrossChat({
+        currentChatId: state.chatId,
+        queries,
+        workspaceId: opts.workspaceId,
+        projectRefIds: opts.projectRefIds,
+        limit: 3,
+      });
+      state.crossChatMemory = cross;
+      for (const c of cross) {
+        state.evidence.push({
+          id: `xchat_${c.chatId}`,
+          kind: "history",
+          title: c.chatTitle,
+          content: c.snippet.slice(0, 1500),
+          retrievedAt: new Date().toISOString(),
+        });
+      }
+    } catch (e) {
+      console.warn("[memory] cross-chat retrieval skipped", e);
+    }
+  }
+}
+
 function bootstrapQueries(
   userContent: string,
   locationHint?: string | null,
@@ -1083,6 +1246,7 @@ async function generateAnswer(
     systemPrompt: PRODUCT_SYSTEM,
     conversationState: state.workingMemory,
     retrievedHistory: state.retrievedHistory,
+    crossChatMemoryText: formatCrossChatForContext(state.crossChatMemory),
     searchEventsText: buildAnswerPrompt(state),
     recentMessages: state.recentMessages,
     maxContextTokens: deps.provider.capabilities.maxContextTokens,

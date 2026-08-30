@@ -66,7 +66,10 @@ web_search ${state.budgets.webSearches}/${state.budgets.maxWebSearches}
 web_open ${state.budgets.webOpens}/${state.budgets.maxWebOpens}
 knowledge ${state.budgets.knowledgeSearches}/${state.budgets.maxKnowledgeSearches}
 
+Working memory active entity: ${state.workingMemory.activeEntity ?? "none"}
 Working memory entities: ${(state.workingMemory.entities ?? []).slice(-12).join(", ") || "none"}
+Retrieved older turns: ${state.retrievedHistory.length}
+Cross-chat memories: ${state.crossChatMemory.length}
 Recent lists:
 ${lists || "none"}
 Open information needs: ${unresolved || "none"}
@@ -81,7 +84,7 @@ Guidance:
 - Current/public/changing facts → web_search then optionally web_open promising sources.
 - Broad "what's going on in the world" → several diverse queries (not one vague phrase).
 - Internal plan/pricing/"our …" → knowledge_search.
-- Pronouns/ordinals ("the second one", "that") → use lists/memory; history_search or answer with context.
+- Pronouns/ordinals ("the second one", "that", "their") → use lists/memory; retrieved history is already injected when relevant.
 - Only clarify if location/entity is required and truly unknown.
 - When evidence is enough → action=answer, canAnswerNow=true.`;
 }

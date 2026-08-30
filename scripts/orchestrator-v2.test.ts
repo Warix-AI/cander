@@ -5,14 +5,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { preferOrchestratorV2 } from "../lib/ai/orchestrator/flags.ts";
+import { extractEntityFromDomain } from "../lib/ai/orchestrator/memory-retrieval.ts";
 import {
+  detectReferenceIntent,
   liveInfoHint,
   resolveReference,
   simulateControllerLoop,
   tryFastPathAction,
   validateAnswerLite,
 } from "../lib/ai/orchestrator/v2-helpers.ts";
-import { preferOrchestratorV2 } from "../lib/ai/orchestrator/flags.ts";
+
+describe("memory entity extraction", () => {
+  it("extracts brand from domain in user message", () => {
+    assert.equal(extractEntityFromDomain("check out vercel.com"), "Vercel");
+  });
+});
 
 describe("orchestrator v2 fast path", () => {
   it("greetings answer directly", () => {
@@ -46,11 +54,42 @@ describe("orchestrator v2 reference resolution", () => {
     assert.equal(label, "Story B");
   });
 
+  it("resolves the second option from recentLists", () => {
+    const label = resolveReference("I'll take the second option", {
+      recentLists: [
+        {
+          id: "l1",
+          items: [
+            { ordinal: 1, label: "Plan A" },
+            { ordinal: 2, label: "Plan B" },
+          ],
+        },
+      ],
+    });
+    assert.equal(label, "Plan B");
+  });
+
   it("resolves that from recentReferences", () => {
     const label = resolveReference("Has that changed?", {
       recentReferences: ["Netflix subscription price"],
     });
     assert.equal(label, "Netflix subscription price");
+  });
+
+  it("resolves their to activeEntity (Vercel follow-up)", () => {
+    const label = resolveReference(
+      "What does their sandbox program entail and how do we set up?",
+      { activeEntity: "Vercel", entities: ["Vercel"] },
+    );
+    assert.equal(label, "Vercel");
+  });
+
+  it("detects entity follow-up intent for possessive questions", () => {
+    const intent = detectReferenceIntent(
+      "What does their sandbox program entail and how do we set up?",
+    );
+    assert.equal(intent.hasReference, true);
+    assert.equal(intent.entityFollowUp, true);
   });
 });
 

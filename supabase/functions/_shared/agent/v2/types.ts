@@ -126,6 +126,9 @@ export type AnswerValidation = {
 };
 
 export type ConversationWorkingMemory = ConversationState & {
+  /** Primary entity/topic the conversation is currently about */
+  activeEntity?: string;
+  activeTopic?: string;
   recentLists?: Array<{
     id: string;
     items: Array<{
@@ -163,6 +166,15 @@ export type TurnState = {
     role: string;
     content: string;
     sort_order: number;
+  }>;
+  /** Snippets from other chats (workspace/Space scoped) */
+  crossChatMemory: Array<{
+    chatId: string;
+    chatTitle: string;
+    summary: string;
+    snippet: string;
+    scope: "chat" | "workspace" | "project" | "owner";
+    score: number;
   }>;
   evidence: EvidenceItem[];
   toolHistory: ToolExecutionSummary[];

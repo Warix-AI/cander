@@ -15,8 +15,8 @@ Set any to `0`/`false`/`off` to roll back that layer.
 ## V2 loop (what changed)
 
 ```
-controller → web_search → web_open → evidence briefing → answer → validate
-                ↑______________________________________________|
+memory retrieval → controller → web_search → web_open → evidence briefing → answer → validate
+        ↑__________________________________________________________________________|
 ```
 
 - Capability manifest (web/knowledge/tools/location/time)
@@ -29,6 +29,26 @@ controller → web_search → web_open → evidence briefing → answer → vali
 - Purpose-specific Ollama models (`OLLAMA_CONTROLLER_MODEL`, `OLLAMA_ANSWER_MODEL`)
 
 V1 remains as fallback code path (not a third permanent stack).
+
+## Layered memory (just-in-time retrieval)
+
+Each turn assembles context from **five layers** — the model is never expected to remember everything itself:
+
+| Layer | What | When |
+|-------|------|------|
+| **1. Recent verbatim** | Newest ~20 turns, 45% token reserve | Always |
+| **2. Structured working memory** | `conversation_state`: active entity/topic, entities, lists, references, facts, decisions | Always (JSON in system context) |
+| **3. In-chat history search** | Keyword retrieval over older messages in this chat | Auto when pronouns, ordinals, temporal callbacks (“their”, “what you said earlier”) |
+| **4. Cross-chat / Space memory** | `ai_chat_memory_index` FTS + project ref overlap | Auto when user hints at other chats; scoped workspace → project → owner |
+| **5. Live / knowledge evidence** | Web search, workspace knowledge, tool results | Controller loop |
+
+Reference resolution runs **before** the controller loop:
+
+- “their sandbox program” → resolves to `activeEntity` (e.g. Vercel) → enriches request + triggers entity follow-up web search
+- “the second option” → `recentLists` ordinal resolution
+- “is that still true?” → `activeTopic` / retrieved older turns
+
+After each turn, `buildMemoryDelta` updates `conversation_state` and upserts `ai_chat_memory_index` for cross-chat retrieval.
 
 ## Product rule
 
@@ -52,6 +72,6 @@ Token-level answer deltas still depend on bridge streaming (not required for liv
 
 ## Remaining limits
 
-- Semantic/pgvector history not required; keyword + working memory first
+- Cross-chat retrieval uses keyword + Postgres FTS on the memory index (pgvector semantic search is a future upgrade)
 - Answer quality still depends on configured Ollama models (`OLLAMA_ANSWER_MODEL`)
 - V1 orchestrator remains as emergency fallback only (`AI_ORCHESTRATOR_V2=0`)

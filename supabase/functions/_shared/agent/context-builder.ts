@@ -26,6 +26,7 @@ export type ContextBuildInput = {
   systemPrompt: string;
   conversationState?: ConversationState | null;
   retrievedHistory?: HistoryMessage[];
+  crossChatMemoryText?: string | null;
   searchEventsText?: string;
   sources?: RetrievalSource[];
   recentMessages: HistoryMessage[];
@@ -64,6 +65,7 @@ export function buildContext(input: ContextBuildInput): ContextBuildResult {
     system: 0,
     state: 0,
     retrieved: 0,
+    crossChat: 0,
     events: 0,
     recent: 0,
   };
@@ -112,6 +114,14 @@ export function buildContext(input: ContextBuildInput): ContextBuildResult {
     });
     used += cost;
     counts.retrieved++;
+  }
+
+  if (input.crossChatMemoryText?.trim()) {
+    const t = input.crossChatMemoryText.trim();
+    if (used + estimateTokens(t) < budgetHead) {
+      used += pushSystem(messages, t);
+      counts.crossChat++;
+    }
   }
 
   if (input.searchEventsText?.trim()) {

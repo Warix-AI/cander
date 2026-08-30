@@ -24,6 +24,7 @@ export type ContextBuildResult = {
     system: number;
     state: number;
     retrieved: number;
+    crossChat: number;
     events: number;
     recent: number;
   };
@@ -34,6 +35,7 @@ export function buildContext(input: {
   systemPrompt: string;
   conversationState?: Record<string, unknown> | null;
   retrievedHistory?: HistoryMessage[];
+  crossChatMemoryText?: string | null;
   searchEventsText?: string;
   recentMessages: HistoryMessage[];
   maxContextTokens: number;
@@ -44,6 +46,7 @@ export function buildContext(input: {
     system: 0,
     state: 0,
     retrieved: 0,
+    crossChat: 0,
     events: 0,
     recent: 0,
   };
@@ -77,6 +80,15 @@ export function buildContext(input: {
     });
     used += cost;
     counts.retrieved++;
+  }
+
+  if (input.crossChatMemoryText?.trim()) {
+    const t = input.crossChatMemoryText.trim();
+    if (used + estimateTokens(t) < budgetHead) {
+      messages.push({ role: "system", content: t });
+      used += estimateTokens(t);
+      counts.crossChat++;
+    }
   }
 
   if (input.searchEventsText?.trim()) {

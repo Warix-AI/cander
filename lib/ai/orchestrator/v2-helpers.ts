@@ -22,42 +22,22 @@ export function liveInfoHint(content: string): boolean {
 }
 
 export type WorkingMemoryLite = {
+  activeEntity?: string;
+  activeTopic?: string;
   recentLists?: Array<{
     id: string;
     items: Array<{ ordinal: number; label: string }>;
   }>;
   recentReferences?: string[];
   entities?: string[];
+  references?: Array<{ phrase: string; resolvesTo: string }>;
 };
 
-export function resolveReference(
-  userText: string,
-  memory: WorkingMemoryLite,
-): string | null {
-  const t = userText.trim().toLowerCase();
-  const ordinalMatch = t.match(
-    /\b(?:the\s+)?(first|second|third|fourth|fifth|\d+)(?:st|nd|rd|th)?\s+(?:one|item|result|story|article)\b/i,
-  );
-  if (ordinalMatch) {
-    const word = ordinalMatch[1].toLowerCase();
-    const map: Record<string, number> = {
-      first: 1,
-      second: 2,
-      third: 3,
-      fourth: 4,
-      fifth: 5,
-    };
-    const n = map[word] ?? Number(word);
-    const list = memory.recentLists?.[memory.recentLists.length - 1];
-    const item = list?.items.find((i) => i.ordinal === n);
-    if (item) return item.label;
-  }
-  if (/\b(that|this|it|them|those)\b/i.test(t)) {
-    const refs = memory.recentReferences ?? [];
-    if (refs.length) return refs[refs.length - 1];
-  }
-  return null;
-}
+export {
+  detectReferenceIntent,
+  extractEntityFromDomain,
+  resolveReference,
+} from "./memory-retrieval.ts";
 
 export function validateAnswerLite(opts: {
   answer: string;

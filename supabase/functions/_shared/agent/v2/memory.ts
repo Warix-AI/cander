@@ -4,6 +4,71 @@ import type {
   EvidenceItem,
 } from "./types.ts";
 
+const ENTITY_STOP = new Set([
+  "The",
+  "This",
+  "That",
+  "What",
+  "When",
+  "Where",
+  "How",
+  "Why",
+  "Can",
+  "Could",
+  "Would",
+  "Should",
+  "Please",
+  "Thanks",
+  "Hello",
+  "Hey",
+  "Yes",
+  "No",
+  "They",
+  "Their",
+  "There",
+  "Here",
+  "Also",
+  "However",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+]);
+
+function capitalizeWord(s: string): string {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
+function extractEntitiesFromText(text: string): string[] {
+  const found = new Set<string>();
+  for (const c of text.match(/\b[A-Z][a-zA-Z0-9]+(?:\.[a-z]+)?\b/g) ?? []) {
+    if (!ENTITY_STOP.has(c) && c.length > 1) found.add(c);
+  }
+  for (const domain of text.match(
+    /\b([a-z0-9][a-z0-9-]*)\.(com|io|dev|org|net|app|ai|co)\b/gi,
+  ) ?? []) {
+    const base = domain.split(".")[0];
+    if (base.length > 2) found.add(capitalizeWord(base));
+  }
+  return [...found];
+}
+
 /** Compact memory delta after a successful answer — no raw pages. */
 export function buildMemoryDelta(opts: {
   prior: ConversationWorkingMemory;
@@ -23,10 +88,10 @@ export function buildMemoryDelta(opts: {
   ];
   const recentLists = [...(prior.recentLists ?? [])];
   const references = [...(prior.references ?? [])];
+  const decisions = [...(prior.decisions ?? [])];
 
-  const caps =
-    opts.userText.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\b/g) ?? [];
-  for (const c of caps.slice(0, 8)) entities.add(c);
+  for (const e of extractEntitiesFromText(opts.userText)) entities.add(e);
+  for (const e of extractEntitiesFromText(opts.assistantText)) entities.add(e);
 
   const topic = opts.userText.replace(/[^\p{L}\p{N}\s]/gu, " ").trim().slice(0, 80);
   if (topic) topics.add(topic);
@@ -63,7 +128,21 @@ export function buildMemoryDelta(opts: {
         phrase: `the ${ordinalWord(item.ordinal)} one`,
         resolvesTo: item.label,
       });
+      references.push({
+        phrase: `the ${ordinalWord(item.ordinal)} option`,
+        resolvesTo: item.label,
+      });
       recentReferences.push(item.label);
+    }
+  }
+
+  // Track primary entity from web evidence titles / URLs
+  for (const ev of opts.evidence) {
+    if (ev.title) {
+      for (const e of extractEntitiesFromText(ev.title)) entities.add(e);
+    }
+    if (ev.url) {
+      for (const e of extractEntitiesFromText(ev.url)) entities.add(e);
     }
   }
 
@@ -71,18 +150,60 @@ export function buildMemoryDelta(opts: {
     if (sid) relevantSearchSessionIds.push(sid);
   }
 
+  const entityList = [...entities].slice(-24);
+  const activeEntity =
+    entityList[entityList.length - 1] ?? prior.activeEntity ?? undefined;
+  const activeTopic = topic || prior.activeTopic || entityList[entityList.length - 1];
+
+  if (activeEntity) {
+    recentReferences.push(activeEntity);
+  }
+
   return {
     ...prior,
+    activeEntity,
+    activeTopic: activeTopic?.slice(0, 120),
     topics: [...topics].slice(-12),
-    entities: [...entities].slice(-24),
+    entities: entityList,
+    decisions: decisions.slice(-12),
     facts: facts.slice(-20),
-    recentReferences: recentReferences.slice(-16),
+    recentReferences: [...new Set(recentReferences)].slice(-16),
     relevantSearchSessionIds: [...new Set(relevantSearchSessionIds)].slice(-10),
     recentLists: recentLists.slice(-4),
-    references: references.slice(-20),
+    references: references.slice(-24),
     unresolvedThreads: opts.briefing?.unresolved?.length
       ? opts.briefing.unresolved.slice(0, 5)
       : prior.unresolvedThreads ?? [],
+  };
+}
+
+/** Payload for cross-chat memory index upsert. */
+export function buildMemoryIndexPayload(opts: {
+  chatId: string;
+  ownerId: string;
+  workspaceId: string | null;
+  title: string;
+  memory: ConversationWorkingMemory;
+  messageCount: number;
+  lastMessageAt: string | null;
+  projectRefIds: string[];
+}): Record<string, unknown> {
+  const summaryParts = [
+    ...(opts.memory.facts ?? []).slice(-3),
+    ...(opts.memory.decisions ?? []).slice(-2),
+  ].filter(Boolean);
+  return {
+    chat_id: opts.chatId,
+    owner_id: opts.ownerId,
+    workspace_id: opts.workspaceId,
+    title: opts.title.slice(0, 200),
+    summary: summaryParts.join(" · ").slice(0, 600),
+    entities: (opts.memory.entities ?? []).slice(-16),
+    topics: (opts.memory.topics ?? []).slice(-8),
+    project_ref_ids: opts.projectRefIds.slice(0, 12),
+    message_count: opts.messageCount,
+    last_message_at: opts.lastMessageAt,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -90,14 +211,14 @@ function ordinalWord(n: number): string {
   return ["", "first", "second", "third", "fourth", "fifth"][n] ?? `${n}th`;
 }
 
-/** Resolve “the second one” / “that” from working memory. */
+/** Resolve “the second one” / “that” / “their” from working memory. */
 export function resolveReference(
   userText: string,
   memory: ConversationWorkingMemory,
 ): string | null {
   const t = userText.trim().toLowerCase();
   const ordinalMatch = t.match(
-    /\b(?:the\s+)?(first|second|third|fourth|fifth|\d+)(?:st|nd|rd|th)?\s+(?:one|item|result|story|article)\b/i,
+    /\b(?:the\s+)?(first|second|third|fourth|fifth|\d+)(?:st|nd|rd|th)?\s+(?:one|item|result|story|article|option|choice|alternative)\b/i,
   );
   if (ordinalMatch) {
     const word = ordinalMatch[1].toLowerCase();
@@ -113,11 +234,36 @@ export function resolveReference(
     const item = list?.items.find((i) => i.ordinal === n);
     if (item) return item.label;
   }
-  if (/\b(that|this|it|them|those)\b/i.test(t)) {
+
+  // Explicit phrase → entity mappings
+  for (const ref of memory.references ?? []) {
+    if (t.includes(ref.phrase.toLowerCase())) return ref.resolvesTo;
+  }
+
+  if (/\b(their|they|them|its|his|her)\b/i.test(t)) {
+    if (memory.activeEntity) return memory.activeEntity;
+    const ents = memory.entities ?? [];
+    if (ents.length) return ents[ents.length - 1];
+  }
+
+  if (/\b(that|this|it|those)\b/i.test(t)) {
     const refs = memory.recentReferences ?? [];
     if (refs.length) return refs[refs.length - 1];
+    if (memory.activeEntity) return memory.activeEntity;
     const entities = memory.entities ?? [];
     if (entities.length) return entities[entities.length - 1];
   }
+
+  if (
+    /\b(what you said|you mentioned|earlier|before|previously|still true|is that still)\b/i.test(
+      t,
+    )
+  ) {
+    if (memory.activeTopic) return memory.activeTopic;
+    if (memory.activeEntity) return memory.activeEntity;
+    const topics = memory.topics ?? [];
+    if (topics.length) return topics[topics.length - 1];
+  }
+
   return null;
 }
