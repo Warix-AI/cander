@@ -1,0 +1,245 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import {
+  canEmbedInPwa,
+  getBrowserSurfaceAdapter,
+  type BrowserSurfaceBounds,
+} from "@/lib/browser-surface";
+import { isGoogleUrl } from "@/lib/preview-url";
+import { GoogleHome } from "@/components/browser/GoogleHome";
+import { ExternalLink } from "lucide-react";
+
+type BrowserSurfaceHostProps = {
+  tabId: string;
+  url: string;
+  /** Project preview / build preview — prefer iframe when embeddable. */
+  previewOnly?: boolean;
+  isolatedPartition?: boolean;
+  reloadKey?: number;
+  title?: string;
+  userId?: string;
+  projectId?: string | null;
+  onUrlChange?: (url: string) => void;
+  onTitleChange?: (title: string) => void;
+};
+
+/**
+ * Hosts a platform browser surface for web / preview tabs.
+ * Electron & Capacitor use native views over this placeholder bounds region.
+ * Web PWA uses iframe only when embedding is permitted.
+ */
+export function BrowserSurfaceHost({
+  tabId,
+  url,
+  previewOnly = false,
+  isolatedPartition = false,
+  reloadKey = 0,
+  title = "Browser",
+  userId,
+  projectId = null,
+  onUrlChange,
+  onTitleChange,
+}: BrowserSurfaceHostProps) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [embedBlocked, setEmbedBlocked] = useState(false);
+  const [adapterId, setAdapterId] = useState<string>("web-pwa");
+  const [error, setError] = useState<string | null>(null);
+  const [recoverToken, setRecoverToken] = useState(0);
+  const onUrlChangeRef = useRef(onUrlChange);
+  const onTitleChangeRef = useRef(onTitleChange);
+  onUrlChangeRef.current = onUrlChange;
+  onTitleChangeRef.current = onTitleChange;
+
+  useEffect(() => {
+    const adapter = getBrowserSurfaceAdapter();
+    setAdapterId(adapter.id);
+    let cancelled = false;
+
+    const syncBounds = (): BrowserSurfaceBounds | null => {
+      const el = hostRef.current;
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        x: Math.round(rect.left),
+        y: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+
+    void (async () => {
+      try {
+        await adapter.createTab(tabId, url, {
+          previewOnly,
+          isolatedPartition,
+          userId,
+          projectId,
+        });
+        const bounds = syncBounds();
+        if (bounds) {
+          await adapter.showTab(tabId, bounds);
+        }
+        await adapter.navigate(tabId, url);
+        if (
+          adapter.id === "web-pwa" &&
+          !isGoogleUrl(url) &&
+          !canEmbedInPwa(url, previewOnly)
+        ) {
+          if (!cancelled) setEmbedBlocked(true);
+        } else if (!cancelled) {
+          setEmbedBlocked(false);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      }
+    })();
+
+    const unsub = adapter.subscribe((event) => {
+      if (event.tabId !== tabId) return;
+      if (event.type === "embedBlocked") {
+        setEmbedBlocked(true);
+      }
+      if (event.type === "navigationFailed") {
+        setError(
+          "error" in event ? String(event.error) : "Navigation failed",
+        );
+      }
+      if (event.type === "url" && "url" in event) {
+        onUrlChangeRef.current?.(String(event.url));
+      }
+      if (event.type === "title" && "title" in event) {
+        onTitleChangeRef.current?.(String(event.title));
+      }
+      if (event.type === "processGone") {
+        setRecoverToken((n) => n + 1);
+      }
+    });
+
+    const onResize = () => {
+      const bounds = syncBounds();
+      if (bounds) {
+        void adapter.showTab(tabId, bounds);
+      }
+    };
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    const ro =
+      typeof ResizeObserver !== "undefined" && hostRef.current
+        ? new ResizeObserver(onResize)
+        : null;
+    if (hostRef.current && ro) {
+      ro.observe(hostRef.current);
+    }
+
+    return () => {
+      cancelled = true;
+      unsub();
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+      ro?.disconnect();
+      void adapter.hideTab(tabId);
+      void adapter.destroyTab(tabId);
+    };
+  }, [
+    tabId,
+    url,
+    previewOnly,
+    isolatedPartition,
+    reloadKey,
+    recoverToken,
+    userId,
+    projectId,
+  ]);
+
+  if (isGoogleUrl(url)) {
+    return (
+      <div className="h-full min-h-0 overflow-y-auto bg-white">
+        <GoogleHome />
+      </div>
+    );
+  }
+
+  if (adapterId === "web-pwa" && (embedBlocked || !canEmbedInPwa(url, previewOnly))) {
+    return (
+      <div
+        ref={hostRef}
+        className="flex h-full flex-col items-center justify-center gap-3 bg-muted/20 px-6 text-center"
+      >
+        <p className="max-w-sm text-sm text-muted-foreground">
+          This site can&apos;t be embedded in the web app. Open it in your
+          system browser, or use the macOS / iOS app for in-panel browsing.
+        </p>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-medium text-background"
+        >
+          <ExternalLink className="size-3.5" />
+          Open in browser
+        </a>
+      </div>
+    );
+  }
+
+  if (error && adapterId !== "web-pwa") {
+    return (
+      <div
+        ref={hostRef}
+        className="flex h-full items-center justify-center bg-muted/20 px-6 text-center text-sm text-muted-foreground"
+      >
+        {error}
+      </div>
+    );
+  }
+
+  if (adapterId === "web-pwa") {
+    return (
+      <div ref={hostRef} className="h-full w-full bg-white">
+        <iframe
+          key={`${tabId}-${reloadKey}-${recoverToken}-${url}`}
+          title={title}
+          src={url}
+          sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+          referrerPolicy="no-referrer"
+          className="h-full w-full border-0 bg-white"
+          onError={() => setEmbedBlocked(true)}
+          onLoad={(event) => {
+            // Cross-origin frames throw on contentDocument access when blocked
+            // by X-Frame-Options / CSP frame-ancestors — treat as embed failure.
+            try {
+              const frame = event.currentTarget;
+              void frame.contentWindow?.location.href;
+            } catch {
+              setEmbedBlocked(true);
+              return;
+            }
+            try {
+              const doc = event.currentTarget.contentDocument;
+              if (doc && doc.location.href === "about:blank" && url !== "about:blank") {
+                setEmbedBlocked(true);
+              }
+            } catch {
+              // Opaque cross-origin document is expected for successful embeds.
+            }
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Native Electron / Capacitor views are composited over this host region.
+  return (
+    <div
+      ref={hostRef}
+      className="h-full w-full bg-black/5"
+      data-browser-surface={adapterId}
+      data-tab-id={tabId}
+      aria-label={title}
+    />
+  );
+}

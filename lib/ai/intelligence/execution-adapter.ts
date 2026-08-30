@@ -1,10 +1,5 @@
 /**
- * Cloud execution adapter — Vercel Sandbox / eve plug-in point.
- * Durable task + revision stores remain Cander-owned.
- *
- * ADR: Prefer a thin custom adapter first; evaluate Vercel eve before growing
- * a large orchestration framework. Sandbox sessions are ephemeral checkpoints,
- * never the permanent draft record.
+ * Cloud execution adapter — client-side enqueue delegates to server API when sandbox enabled.
  */
 
 import type { DurableAiTask } from "./durable-tasks";
@@ -17,11 +12,6 @@ export type CloudExecutionAdapter = {
   enqueue: (task: DurableAiTask) => Promise<void>;
 };
 
-/**
- * Stub adapter: advances task through reviewing → building → verifying → ready
- * without a real sandbox when the flag is off. When sandbox_enabled, still
- * stubs until Vercel credentials exist — but records the intent.
- */
 const stubAdapter: CloudExecutionAdapter = {
   id: "cander-stub",
   async enqueue(task) {
@@ -33,7 +23,6 @@ const stubAdapter: CloudExecutionAdapter = {
         : "Building the draft…",
     });
 
-    // Simulated Builder → Verifier pipeline (no real sandbox yet).
     await delay(40);
     if (task.projectId && task.workspaceId) {
       await createCandidateChangeSet({
@@ -57,6 +46,44 @@ const stubAdapter: CloudExecutionAdapter = {
   },
 };
 
+const apiAdapter: CloudExecutionAdapter = {
+  id: "vercel_sandbox_api",
+  async enqueue(task) {
+    await patchDurableAiTask(task.id, {
+      status: "running",
+      progressNote: "Starting build environment…",
+    });
+
+    const { createSupabaseBrowserClient } = await import("@/lib/supabase/client");
+    const supabase = createSupabaseBrowserClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    const response = await fetch("/api/computer/build", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : {}),
+      },
+      body: JSON.stringify({ taskId: task.id }),
+    });
+
+    const data = (await response.json()) as { ok?: boolean; error?: string; resultSummary?: string };
+    if (!response.ok || !data.ok) {
+      throw new Error(data.error ?? "Build failed.");
+    }
+
+    await patchDurableAiTask(task.id, {
+      status: "ready_for_review",
+      progressNote: "Build complete.",
+      resultSummary: data.resultSummary ?? "Build finished in sandbox.",
+    });
+  },
+};
+
 let active: CloudExecutionAdapter = stubAdapter;
 
 export function setCloudExecutionAdapter(next: CloudExecutionAdapter) {
@@ -64,12 +91,15 @@ export function setCloudExecutionAdapter(next: CloudExecutionAdapter) {
 }
 
 export function getCloudExecutionAdapter(): CloudExecutionAdapter {
+  if (isSandboxEnabled()) {
+    return apiAdapter;
+  }
   return active;
 }
 
 export async function enqueueExecutionJob(task: DurableAiTask) {
   try {
-    await active.enqueue(task);
+    await getCloudExecutionAdapter().enqueue(task);
   } catch (err) {
     console.warn("[cander] execution enqueue failed", err);
     await patchDurableAiTask(task.id, {

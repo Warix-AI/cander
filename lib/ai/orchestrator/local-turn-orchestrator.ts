@@ -42,6 +42,7 @@ import { getMembersSnapshot } from "@/lib/workspace-policy";
 import {
   evidenceFromWebOpen,
   evidenceFromWebSearch,
+  evidenceFromBrowserObservation,
   formatEvidenceForPrompt,
   type TurnEvidence,
 } from "@/lib/ai/orchestrator/evidence";
@@ -58,10 +59,16 @@ import {
   mapToolEventToProgressLabel,
   setTurnToolExecutionListener,
 } from "@/lib/ai/orchestrator/tool-execution-bus";
+import { shouldEscalateToBrowser } from "@/lib/computer/tool-routing";
 
 export const LOCAL_ORCHESTRATOR_TOOLS = [
   "web.search",
   "web.open",
+  "computer.browser.open",
+  "computer.browser.observe",
+  "computer.browser.click",
+  "computer.browser.fill",
+  "computer.browser.requestUserControl",
   "workspace.search",
   "knowledge.search",
   "nav.open",
@@ -81,6 +88,13 @@ function detailForTool(name: string): string {
       return "Searching the web…";
     case "web.open":
       return "Opening page…";
+    case "computer.browser.open":
+      return "Opening remote browser…";
+    case "computer.browser.observe":
+      return "Reading page structure…";
+    case "computer.browser.click":
+    case "computer.browser.fill":
+      return "Using browser…";
     case "workspace.search":
       return "Searching workspace…";
     case "knowledge.search":
@@ -142,6 +156,27 @@ function evidenceFromToolResult(
       error: result.ok ? undefined : result.output,
     });
   }
+  if (
+    result.name.startsWith("computer.browser.") &&
+    result.name !== "computer.browser.requestUserControl"
+  ) {
+    const data = result.data as
+      | {
+          sessionId?: string;
+          observation?: { url?: string; title?: string; snapshot?: string };
+        }
+      | undefined;
+    const obs = data?.observation;
+    return evidenceFromBrowserObservation({
+      ok: result.ok,
+      sourceTool: result.name,
+      url: obs?.url,
+      title: obs?.title,
+      snapshot: obs?.snapshot ?? result.output,
+      sessionId: data?.sessionId,
+      error: result.ok ? undefined : result.output,
+    });
+  }
   if (result.ok && result.output.trim()) {
     return {
       id: `tool_${Date.now()}`,
@@ -163,6 +198,58 @@ function appendEvidence(
   if (!item) return;
   if (Array.isArray(item)) bucket.push(...item);
   else bucket.push(item);
+}
+
+/** Brave/fetch → agent-browser when the page needs JS, interaction, or returned thin/empty text. */
+async function escalateWebOpenIfNeeded(opts: {
+  result: AiToolCallResult;
+  userMessage: string;
+  toolResults: AiToolCallResult[];
+  evidence: TurnEvidence[];
+  report: (progress: AgentTurnProgress) => void;
+}): Promise<void> {
+  if (opts.result.name !== "web.open") return;
+  if (opts.toolResults.some((r) => r.name === "computer.browser.open")) return;
+  const data = opts.result.data as
+    | { url?: string; finalUrl?: string; text?: string }
+    | undefined;
+  const url = String(data?.finalUrl || data?.url || "").trim();
+  if (!url) return;
+  const textLen = String(data?.text ?? "").length;
+  if (
+    !shouldEscalateToBrowser({
+      webOpenOk: opts.result.ok,
+      textLength: textLen,
+      userMessage: opts.userMessage,
+    })
+  ) {
+    return;
+  }
+  emitToolExecution({
+    type: "tool_start",
+    name: "computer.browser.open",
+    reason: "escalate_after_web_open",
+    deterministic: true,
+  });
+  opts.report({
+    phase: "tool",
+    label: "Thinking",
+    detail: detailForTool("computer.browser.open"),
+    toolName: "computer.browser.open",
+  });
+  const started = Date.now();
+  const escalated = await executeAuthorizedTool({
+    name: "computer.browser.open",
+    arguments: { url },
+  });
+  emitToolExecution({
+    type: "tool_end",
+    name: escalated.name,
+    ok: escalated.ok,
+    durationMs: Date.now() - started,
+  });
+  opts.toolResults.push(escalated);
+  appendEvidence(opts.evidence, evidenceFromToolResult(escalated));
 }
 
 async function buildFmPrompt(
@@ -225,7 +312,7 @@ async function buildFmPrompt(
     evidenceBlock,
     extraInstruction,
     requiresExternalEvidence(request.content)
-      ? "This turn needs live or external facts. Use web.open or web.search when needed. Never invent URLs, headlines, or page content — only cite evidence above or from tool results."
+      ? "This turn needs live or external facts. Prefer web.search for discovery, web.open for readable public pages, and computer.browser.open only for JavaScript, interaction, auth, scrolling, or visual inspection. Never invent URLs, headlines, or page content — only cite evidence above or from tool results."
       : "",
   ]
     .filter(Boolean)
@@ -247,6 +334,7 @@ export async function runLocalTurnOrchestrator(
     threadId: request.threadId,
     workspaceId: request.workspaceId,
     projectId: request.projectId,
+    userMessage: request.content,
   });
   try {
     return await runLocalTurnOrchestratorInner(request, opts);
@@ -350,6 +438,16 @@ async function runLocalTurnOrchestratorInner(
       !result.ok &&
       requiresExternalEvidence(request.content)
     ) {
+      await escalateWebOpenIfNeeded({
+        result,
+        userMessage: request.content,
+        toolResults,
+        evidence,
+        report,
+      });
+      if (toolResults.some((r) => r.name === "computer.browser.open" && r.ok)) {
+        continue;
+      }
       return {
         content: safeContent(
           "",
@@ -362,6 +460,15 @@ async function runLocalTurnOrchestratorInner(
         aiChatId: request.aiChatId ?? null,
         toolResults,
       };
+    }
+    if (queued.name === "web.open") {
+      await escalateWebOpenIfNeeded({
+        result,
+        userMessage: request.content,
+        toolResults,
+        evidence,
+        report,
+      });
     }
   }
 
@@ -469,6 +576,16 @@ async function runLocalTurnOrchestratorInner(
         type: "evidence_added",
         count: items.length,
         kinds: items.map((e) => e.kind),
+      });
+    }
+
+    if (call.name === "web.open") {
+      await escalateWebOpenIfNeeded({
+        result,
+        userMessage: request.content,
+        toolResults,
+        evidence,
+        report,
       });
     }
 

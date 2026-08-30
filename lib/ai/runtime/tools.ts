@@ -16,9 +16,11 @@ import { CANDER_NO_TOOLS_THIS_TURN, CANDER_TOOL_PROTOCOL_RULES } from "@/lib/ai/
 import {
   getTurnProjectId,
   getTurnThreadId,
+  getTurnUserMessage,
   getTurnWorkspaceId,
 } from "@/lib/ai/runtime/turn-context";
 import { getThreadTaskState, upsertThreadTaskState } from "@/lib/ai/task-state";
+import { shouldOpenVisibleResearchTab } from "@/lib/computer/tool-routing";
 
 export type AiToolCallRequest = {
   name: string;
@@ -434,6 +436,186 @@ export async function executeAuthorizedTool(
           output: result.detail,
           pauseForUser: true,
           data: { confirmed: result.confirmed },
+        };
+      }
+      case "computer.browser.open": {
+        const { createComputerSession } = await import("@/lib/api/computer-client");
+        const { setActiveComputerSession } = await import("@/lib/computer/active-session");
+        const { formatObservationForModel } = await import(
+          "@/lib/computer/browser-observation"
+        );
+        const threadId = getTurnThreadId() ?? `turn-${Date.now()}`;
+        const projectId = getTurnProjectId();
+        const workspaceId = getTurnWorkspaceId();
+        const userMessage = getTurnUserMessage() ?? "";
+        // Build/project verification always shows the stream. Chat/Explore research
+        // keeps the session in the background unless the user asked to see the page.
+        const showTab =
+          Boolean(projectId) || shouldOpenVisibleResearchTab(userMessage);
+        const openResult = await createComputerSession({
+          scopeType: projectId ? "project" : "chat",
+          scopeId: projectId ?? threadId,
+          chatId: threadId,
+          projectId: projectId ?? undefined,
+          workspaceId: workspaceId ?? undefined,
+          url: String(args.url),
+        });
+        if (!openResult.ok || !openResult.session) {
+          return {
+            name: tool.name,
+            ok: false,
+            output: openResult.error ?? "Could not open remote browser.",
+          };
+        }
+        setActiveComputerSession(
+          {
+            sessionId: openResult.session.id,
+            controlMode: openResult.session.controlMode,
+            streamUrl: openResult.session.streamUrl,
+            currentUrl: openResult.session.currentUrl ?? String(args.url),
+          },
+          { focus: showTab },
+        );
+        if (showTab) {
+          if (projectId) {
+            actions.panelOpen({ projectId, mode: "browse" });
+          } else {
+            actions.panelOpen({ mode: "browse" });
+          }
+        }
+        const { computerBrowserAction } = await import("@/lib/api/computer-client");
+        const observed = await computerBrowserAction({
+          sessionId: openResult.session.id,
+          action: "observe",
+        });
+        const observation = observed.observation;
+        if (observation?.url) {
+          const { updateActiveComputerUrl } = await import(
+            "@/lib/computer/active-session"
+          );
+          updateActiveComputerUrl(observation.url);
+        }
+        return {
+          name: tool.name,
+          ok: true,
+          output: observation
+            ? formatObservationForModel(observation)
+            : `Opened ${args.url} in remote browser (session ${openResult.session.id}).`,
+          data: {
+            sessionId: openResult.session.id,
+            observation,
+            visible: showTab,
+          },
+        };
+      }
+      case "computer.browser.observe": {
+        const { computerBrowserAction } = await import("@/lib/api/computer-client");
+        const { formatObservationForModel } = await import(
+          "@/lib/computer/browser-observation"
+        );
+        const { getActiveComputerSession } = await import(
+          "@/lib/computer/active-session"
+        );
+        const sessionId =
+          (args.sessionId ? String(args.sessionId) : null) ??
+          getActiveComputerSession()?.sessionId;
+        if (!sessionId) {
+          return {
+            name: tool.name,
+            ok: false,
+            output: "No active computer browser session.",
+          };
+        }
+        const result = await computerBrowserAction({
+          sessionId,
+          action: "observe",
+        });
+        if (!result.ok || !result.observation) {
+          return {
+            name: tool.name,
+            ok: false,
+            output: result.error ?? "Browser observation failed.",
+          };
+        }
+        const { updateActiveComputerUrl } = await import(
+          "@/lib/computer/active-session"
+        );
+        updateActiveComputerUrl(result.observation.url);
+        return {
+          name: tool.name,
+          ok: true,
+          output: formatObservationForModel(result.observation),
+          data: { sessionId, observation: result.observation },
+        };
+      }
+      case "computer.browser.click":
+      case "computer.browser.fill": {
+        const { computerBrowserAction } = await import("@/lib/api/computer-client");
+        const { formatObservationForModel } = await import(
+          "@/lib/computer/browser-observation"
+        );
+        const { getActiveComputerSession } = await import(
+          "@/lib/computer/active-session"
+        );
+        const sessionId =
+          (args.sessionId ? String(args.sessionId) : null) ??
+          getActiveComputerSession()?.sessionId;
+        if (!sessionId) {
+          return {
+            name: tool.name,
+            ok: false,
+            output: "No active computer browser session.",
+          };
+        }
+        const result = await computerBrowserAction({
+          sessionId,
+          action: tool.name === "computer.browser.click" ? "click" : "fill",
+          ref: String(args.ref),
+          value: args.value ? String(args.value) : undefined,
+        });
+        if (!result.ok || !result.observation) {
+          return {
+            name: tool.name,
+            ok: false,
+            output: result.error ?? "Browser action failed.",
+          };
+        }
+        const { updateActiveComputerUrl } = await import(
+          "@/lib/computer/active-session"
+        );
+        updateActiveComputerUrl(result.observation.url);
+        return {
+          name: tool.name,
+          ok: true,
+          output: formatObservationForModel(result.observation),
+          data: { sessionId, observation: result.observation },
+        };
+      }
+      case "computer.browser.requestUserControl": {
+        const { setComputerControlMode } = await import("@/lib/api/computer-client");
+        const { getActiveComputerSession, setActiveComputerControlMode } =
+          await import("@/lib/computer/active-session");
+        const sessionId =
+          (args.sessionId ? String(args.sessionId) : null) ??
+          getActiveComputerSession()?.sessionId;
+        if (!sessionId) {
+          return {
+            name: tool.name,
+            ok: false,
+            output: "No active computer browser session.",
+          };
+        }
+        await setComputerControlMode(sessionId, "user");
+        setActiveComputerControlMode("user");
+        return {
+          name: tool.name,
+          ok: true,
+          output:
+            args.reason && String(args.reason).trim()
+              ? `Please take control of the browser: ${String(args.reason)}`
+              : "Please take control of the browser to continue.",
+          pauseForUser: true,
+          data: { sessionId },
         };
       }
       default:

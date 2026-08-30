@@ -131,6 +131,7 @@ export async function runAssistantTurn(
     threadId: request.threadId,
     workspaceId: request.workspaceId,
     projectId: request.projectId,
+    userMessage: request.content,
   });
   try {
     return await runAssistantTurnInner(request, opts);

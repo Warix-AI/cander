@@ -23,6 +23,7 @@ export type AiToolDefinition = {
     | "search"
     | "knowledge"
     | "web"
+    | "computer"
     | "scheduling"
     | "comms"
     | "cloud_work"
@@ -303,6 +304,79 @@ registerAiTool({
     type: "object",
     required: ["url"],
     properties: { url: { type: "string", description: "HTTPS URL to open" } },
+  },
+});
+
+registerAiTool({
+  name: "computer.browser.open",
+  description:
+    "Open a URL in the shared remote browser (Vercel Sandbox + Chrome). Use for JS-heavy sites, login, clicks, or when web.open is insufficient.",
+  permission: { requireWorkspaceMember: true },
+  domain: "computer",
+  enabled: true,
+  parameters: {
+    type: "object",
+    required: ["url"],
+    properties: { url: { type: "string" } },
+  },
+});
+
+registerAiTool({
+  name: "computer.browser.observe",
+  description:
+    "Get accessibility snapshot of the active remote browser (refs like @e1). Agent reasons from this, not pixels.",
+  permission: { requireWorkspaceMember: true },
+  domain: "computer",
+  enabled: true,
+  parameters: {
+    type: "object",
+    properties: { sessionId: { type: "string" } },
+  },
+});
+
+registerAiTool({
+  name: "computer.browser.click",
+  description: "Click an element in the remote browser by ref (@eN from observe snapshot).",
+  permission: { requireWorkspaceMember: true },
+  domain: "computer",
+  enabled: true,
+  parameters: {
+    type: "object",
+    required: ["ref"],
+    properties: {
+      sessionId: { type: "string" },
+      ref: { type: "string" },
+    },
+  },
+});
+
+registerAiTool({
+  name: "computer.browser.fill",
+  description: "Fill an input in the remote browser by ref (@eN).",
+  permission: { requireWorkspaceMember: true },
+  domain: "computer",
+  enabled: true,
+  parameters: {
+    type: "object",
+    required: ["ref", "value"],
+    properties: {
+      sessionId: { type: "string" },
+      ref: { type: "string" },
+      value: { type: "string" },
+    },
+  },
+});
+
+registerAiTool({
+  name: "computer.browser.requestUserControl",
+  description:
+    "Ask the user to take control of the remote browser (login, MFA, sensitive input).",
+  permission: { requireWorkspaceMember: true },
+  domain: "computer",
+  enabled: true,
+  parameters: {
+    type: "object",
+    properties: { sessionId: { type: "string" }, reason: { type: "string" } },
   },
 });
 

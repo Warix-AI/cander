@@ -5,15 +5,19 @@
 let turnThreadId: string | null = null;
 let turnWorkspaceId: string | null = null;
 let turnProjectId: string | null = null;
+let turnUserMessage: string | null = null;
 
 export function setTurnContext(opts: {
   threadId?: string | null;
   workspaceId?: string | null;
   projectId?: string | null;
+  userMessage?: string | null;
 }) {
   turnThreadId = opts.threadId?.trim() || null;
   turnWorkspaceId = opts.workspaceId?.trim() || null;
   turnProjectId = opts.projectId?.trim() || null;
+  turnUserMessage =
+    typeof opts.userMessage === "string" ? opts.userMessage : null;
 }
 
 /** @deprecated Prefer setTurnContext */
@@ -33,8 +37,13 @@ export function getTurnProjectId(): string | null {
   return turnProjectId;
 }
 
+export function getTurnUserMessage(): string | null {
+  return turnUserMessage;
+}
+
 export function clearTurnContext() {
   turnThreadId = null;
   turnWorkspaceId = null;
   turnProjectId = null;
+  turnUserMessage = null;
 }

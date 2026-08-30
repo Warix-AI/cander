@@ -137,6 +137,7 @@ export async function runOrchestratedTurn(
     threadId: request.threadId,
     workspaceId: request.workspaceId,
     projectId: request.projectId,
+    userMessage: request.content,
   });
 
   const report = (p: AgentTurnProgress) => {

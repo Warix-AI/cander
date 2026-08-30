@@ -13,4 +13,23 @@ contextBridge.exposeInMainWorld("canderDesktop", {
     generateStructured: (opts) =>
       ipcRenderer.invoke("cander:fm-generate-structured", opts),
   },
+  browser: {
+    createTab: (tabId, initialUrl, options) =>
+      ipcRenderer.invoke("cander:browser-create", tabId, initialUrl, options),
+    destroyTab: (tabId) => ipcRenderer.invoke("cander:browser-destroy", tabId),
+    showTab: (tabId, bounds) =>
+      ipcRenderer.invoke("cander:browser-show", tabId, bounds),
+    hideTab: (tabId) => ipcRenderer.invoke("cander:browser-hide", tabId),
+    navigate: (tabId, url) =>
+      ipcRenderer.invoke("cander:browser-navigate", tabId, url),
+    back: (tabId) => ipcRenderer.invoke("cander:browser-back", tabId),
+    forward: (tabId) => ipcRenderer.invoke("cander:browser-forward", tabId),
+    reload: (tabId) => ipcRenderer.invoke("cander:browser-reload", tabId),
+    stop: (tabId) => ipcRenderer.invoke("cander:browser-stop", tabId),
+    onEvent: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on("cander:browser-event", listener);
+      return () => ipcRenderer.removeListener("cander:browser-event", listener);
+    },
+  },
 });

@@ -5,6 +5,7 @@
 
 export type EvidenceKind =
   | "web_page"
+  | "browser"
   | "search_result"
   | "file"
   | "memory"
@@ -21,6 +22,7 @@ export type TurnEvidence = {
   sourceTool: string;
   ok: boolean;
   error?: string;
+  sessionId?: string;
 };
 
 let evidenceSeq = 0;
@@ -82,5 +84,28 @@ export function evidenceFromWebOpen(opts: {
     sourceTool: "web.open",
     ok: opts.ok && Boolean(opts.text?.trim()),
     error: opts.error,
+  };
+}
+
+export function evidenceFromBrowserObservation(opts: {
+  ok: boolean;
+  sourceTool: string;
+  url?: string;
+  title?: string;
+  snapshot?: string;
+  sessionId?: string;
+  error?: string;
+}): TurnEvidence {
+  return {
+    id: newEvidenceId("browser"),
+    kind: "browser",
+    title: opts.title || opts.url || "Remote browser",
+    url: opts.url ?? null,
+    content: opts.snapshot?.slice(0, 12_000) ?? "",
+    retrievedAt: new Date().toISOString(),
+    sourceTool: opts.sourceTool,
+    ok: opts.ok && Boolean(opts.snapshot?.trim()),
+    error: opts.error,
+    sessionId: opts.sessionId,
   };
 }

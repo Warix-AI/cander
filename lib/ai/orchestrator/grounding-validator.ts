@@ -28,7 +28,10 @@ export function validateLocalGrounding(opts: {
   const needsExternal = requiresExternalEvidence(opts.userRequest);
   const okEvidence = opts.evidence.filter((e) => e.ok && e.content.trim());
   const webEvidence = okEvidence.filter(
-    (e) => e.kind === "web_page" || e.kind === "search_result",
+    (e) =>
+      e.kind === "web_page" ||
+      e.kind === "search_result" ||
+      e.kind === "browser",
   );
 
   if (!answer) {

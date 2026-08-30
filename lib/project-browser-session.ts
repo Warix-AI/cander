@@ -5,7 +5,18 @@ import {
 } from "@/lib/preview-url";
 import type { SpaceId } from "@/lib/types";
 
-export type ProjectBrowserTabKind = "project" | "url";
+/**
+ * Intent-based tab kinds. Do not conflate ordinary browsing with sandboxes.
+ * - build-preview: current project's sandbox/dev preview
+ * - project-preview: another Cander project's preview
+ * - web: user-controlled platform browser surface
+ * - agent-browser: Vercel/hosted computer stream for agent visual work
+ */
+export type ProjectBrowserTabKind =
+  | "build-preview"
+  | "project-preview"
+  | "web"
+  | "agent-browser";
 
 export type ProjectBrowserTab = {
   id: string;
@@ -14,6 +25,8 @@ export type ProjectBrowserTab = {
   url: string;
   pinned?: boolean;
   projectId?: string;
+  /** Durable computer_sessions id for agent-browser or build sandbox metadata. */
+  computerSessionId?: string;
   history: string[];
   historyIndex: number;
 };
@@ -76,14 +89,37 @@ function withHistory(url: string, prior?: string[]): Pick<
   return { history, historyIndex: history.length - 1 };
 }
 
-export function makePinnedProjectTab(input: {
+/** Migrate legacy `project` / `url` kinds from saved state. */
+export function normalizeTabKind(
+  raw: string | undefined,
+  opts?: { pinned?: boolean; spaceId?: SpaceId },
+): ProjectBrowserTabKind {
+  if (
+    raw === "build-preview" ||
+    raw === "project-preview" ||
+    raw === "web" ||
+    raw === "agent-browser"
+  ) {
+    return raw;
+  }
+  if (raw === "project") {
+    if (opts?.pinned && opts.spaceId === "build") {
+      return "build-preview";
+    }
+    return "project-preview";
+  }
+  // Legacy url (and unknown) → web
+  return "web";
+}
+
+export function makePinnedBuildPreviewTab(input: {
   projectId: string;
   title: string;
   url: string;
 }): ProjectBrowserTab {
   return {
     id: pinnedProjectTabId(input.projectId),
-    kind: "project",
+    kind: "build-preview",
     title: input.title,
     url: input.url,
     pinned: true,
@@ -92,27 +128,65 @@ export function makePinnedProjectTab(input: {
   };
 }
 
-export function makeUrlTab(url = "https://www.google.com"): ProjectBrowserTab {
+/** @deprecated Use makePinnedBuildPreviewTab or makeProjectPreviewTab */
+export function makePinnedProjectTab(input: {
+  projectId: string;
+  title: string;
+  url: string;
+}): ProjectBrowserTab {
+  return makePinnedBuildPreviewTab(input);
+}
+
+export function makeWebTab(url = "https://www.google.com"): ProjectBrowserTab {
   return {
     id: newBrowserTabId(),
-    kind: "url",
+    kind: "web",
     title: isGoogleUrl(url) ? "Google" : titleFromUrl(url),
     url,
     ...withHistory(url),
   };
 }
 
-export function makeProjectTab(input: {
+/** @deprecated Use makeWebTab */
+export function makeUrlTab(url = "https://www.google.com"): ProjectBrowserTab {
+  return makeWebTab(url);
+}
+
+export function makeProjectPreviewTab(input: {
   projectId: string;
   title: string;
   url: string;
 }): ProjectBrowserTab {
   return {
     id: `tab-project-${input.projectId}-${Math.random().toString(36).slice(2, 6)}`,
-    kind: "project",
+    kind: "project-preview",
     title: input.title,
     url: input.url,
     projectId: input.projectId,
+    ...withHistory(input.url),
+  };
+}
+
+/** @deprecated Use makeProjectPreviewTab */
+export function makeProjectTab(input: {
+  projectId: string;
+  title: string;
+  url: string;
+}): ProjectBrowserTab {
+  return makeProjectPreviewTab(input);
+}
+
+export function makeAgentBrowserTab(input: {
+  url: string;
+  computerSessionId: string;
+  title?: string;
+}): ProjectBrowserTab {
+  return {
+    id: `tab-agent-${input.computerSessionId.slice(0, 12)}`,
+    kind: "agent-browser",
+    title: input.title ?? titleFromUrl(input.url) ?? "Agent browser",
+    url: input.url,
+    computerSessionId: input.computerSessionId,
     ...withHistory(input.url),
   };
 }
@@ -121,22 +195,47 @@ export function defaultProjectBrowserSession(input: {
   projectId: string;
   title: string;
   publishedUrl?: string | null;
+  spaceId?: SpaceId;
 }): ProjectBrowserSession {
   const url = previewUrlForProject(input.projectId, input.publishedUrl);
-  const pinned = makePinnedProjectTab({
+  const spaceId = input.spaceId ?? "build";
+
+  if (spaceId === "research") {
+    const web = makeWebTab();
+    return { tabs: [web], activeTabId: web.id };
+  }
+
+  if (spaceId === "build") {
+    const pinned = makePinnedBuildPreviewTab({
+      projectId: input.projectId,
+      title: input.title,
+      url,
+    });
+    return { tabs: [pinned], activeTabId: pinned.id };
+  }
+
+  // Work / other: project preview of the open project
+  const preview = makeProjectPreviewTab({
     projectId: input.projectId,
     title: input.title,
     url,
   });
-  return { tabs: [pinned], activeTabId: pinned.id };
+  preview.pinned = true;
+  preview.id = pinnedProjectTabId(input.projectId);
+  return { tabs: [preview], activeTabId: preview.id };
 }
 
-function parseTab(raw: unknown): ProjectBrowserTab | null {
+function parseTab(
+  raw: unknown,
+  spaceId?: SpaceId,
+): ProjectBrowserTab | null {
   if (!raw || typeof raw !== "object") return null;
-  const data = raw as Partial<ProjectBrowserTab>;
+  const data = raw as Partial<ProjectBrowserTab> & { kind?: string };
   if (!data.id || !data.title) return null;
-  const kind: ProjectBrowserTabKind =
-    data.kind === "project" || data.kind === "url" ? data.kind : "url";
+  const kind = normalizeTabKind(data.kind, {
+    pinned: Boolean(data.pinned),
+    spaceId,
+  });
   const url = String(data.url ?? "");
   const history = Array.isArray(data.history)
     ? data.history.map((item) => String(item)).filter(Boolean)
@@ -156,16 +255,22 @@ function parseTab(raw: unknown): ProjectBrowserTab | null {
     url: history[historyIndex] ?? url,
     pinned: Boolean(data.pinned),
     projectId: data.projectId ? String(data.projectId) : undefined,
+    computerSessionId: data.computerSessionId
+      ? String(data.computerSessionId)
+      : undefined,
     history: history.length ? history : [url],
     historyIndex,
   };
 }
 
-function parseSession(raw: string | null): ProjectBrowserSession | null {
+function parseSession(
+  raw: string | null,
+  spaceId?: SpaceId,
+): ProjectBrowserSession | null {
   if (!raw) return null;
   try {
     const data = JSON.parse(raw) as Partial<ProjectBrowserSession>;
-    return coerceProjectBrowserSession(data);
+    return coerceProjectBrowserSession(data, spaceId);
   } catch {
     return null;
   }
@@ -173,10 +278,20 @@ function parseSession(raw: string | null): ProjectBrowserSession | null {
 
 export function coerceProjectBrowserSession(
   data: Partial<ProjectBrowserSession> | null | undefined,
+  spaceId?: SpaceId,
 ): ProjectBrowserSession | null {
   if (!data) return null;
   const tabs = Array.isArray(data.tabs)
-    ? data.tabs.map(parseTab).filter((tab): tab is ProjectBrowserTab => Boolean(tab))
+    ? data.tabs
+        .map((tab) => parseTab(tab, spaceId))
+        .filter((tab): tab is ProjectBrowserTab => Boolean(tab))
+        // Agent-browser sessions are ephemeral remote streams — never restore them.
+        .filter((tab) => tab.kind !== "agent-browser")
+        .map((tab) => ({
+          ...tab,
+          // Never persist portable platform surface ids or computer session refs.
+          computerSessionId: undefined,
+        }))
     : [];
   if (!tabs.length) return null;
   const activeTabId =
@@ -188,10 +303,31 @@ export function coerceProjectBrowserSession(
 }
 
 function persistKey(key: string, session: ProjectBrowserSession) {
+  // Strip ephemeral agent-browser tabs before writing — cookies live in platform
+  // partitions keyed by user/project, never in this JSON blob.
+  const durable: ProjectBrowserSession = {
+    ...session,
+    tabs: session.tabs
+      .filter((tab) => tab.kind !== "agent-browser")
+      .map((tab) => ({
+        ...tab,
+        computerSessionId: undefined,
+      })),
+  };
+  if (
+    !durable.tabs.some((tab) => tab.id === durable.activeTabId) &&
+    durable.tabs[0]
+  ) {
+    durable.activeTabId = durable.tabs[0].id;
+  }
+  // Keep in-memory cache as the live session (including agent-browser).
   cache.set(key, session);
   lastChangedKey = key;
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(`${STORAGE_PREFIX}:${key}`, JSON.stringify(session));
+    window.localStorage.setItem(
+      `${STORAGE_PREFIX}:${key}`,
+      JSON.stringify(durable),
+    );
   }
   revision += 1;
   emit();
@@ -209,6 +345,7 @@ function hydrateKey(key: ProjectBrowserKey, fallback: ProjectBrowserSession) {
   }
   const stored = parseSession(
     window.localStorage.getItem(`${STORAGE_PREFIX}:${storageKey}`),
+    key.spaceId,
   );
   const session = stored
     ? ensurePinnedTab(stored, fallback.tabs[0])
@@ -228,8 +365,8 @@ export function ensurePinnedTab(
         ? {
             ...tab,
             pinned: true,
-            kind: "project" as const,
-            projectId: pinned.projectId,
+            kind: pinned.kind,
+            projectId: pinned.projectId ?? tab.projectId,
             title: tab.title || pinned.title,
             url: tab.url || pinned.url,
           }
@@ -243,6 +380,34 @@ export function ensurePinnedTab(
   return {
     tabs: [pinned, ...session.tabs],
     activeTabId: session.activeTabId || pinned.id,
+  };
+}
+
+/**
+ * Focus or create an agent-browser tab for the given computer session.
+ * Does not replace build-preview / project-preview identity.
+ */
+export function focusAgentBrowserTab(
+  session: ProjectBrowserSession,
+  input: { url: string; computerSessionId: string; title?: string },
+): ProjectBrowserSession {
+  const existing = session.tabs.find(
+    (tab) =>
+      tab.kind === "agent-browser" &&
+      tab.computerSessionId === input.computerSessionId,
+  );
+  if (existing) {
+    const tabs = session.tabs.map((tab) =>
+      tab.id === existing.id
+        ? navigateProjectBrowserTab(tab, input.url, input.title)
+        : tab,
+    );
+    return { tabs, activeTabId: existing.id };
+  }
+  const tab = makeAgentBrowserTab(input);
+  return {
+    tabs: [...session.tabs, tab],
+    activeTabId: tab.id,
   };
 }
 
@@ -342,6 +507,10 @@ export function updateProjectBrowserTab(
   };
 }
 
+export function isPreviewTabKind(kind: ProjectBrowserTabKind) {
+  return kind === "build-preview" || kind === "project-preview";
+}
+
 export function navigateProjectBrowserTab(
   tab: ProjectBrowserTab,
   url: string,
@@ -351,10 +520,9 @@ export function navigateProjectBrowserTab(
   if (nextHistory[nextHistory.length - 1] !== url) {
     nextHistory.push(url);
   }
-  // Keep the human project name for project tabs — preview hosts are UUIDs.
   const nextTitle =
     title ??
-    (tab.kind === "project"
+    (isPreviewTabKind(tab.kind)
       ? tab.title
       : isGoogleUrl(url)
         ? "Google"
@@ -378,12 +546,11 @@ export function stepProjectBrowserTab(
   return {
     ...tab,
     url,
-    title:
-      tab.kind === "project"
-        ? tab.title
-        : isGoogleUrl(url)
-          ? "Google"
-          : titleFromUrl(url) || tab.title,
+    title: isPreviewTabKind(tab.kind)
+      ? tab.title
+      : isGoogleUrl(url)
+        ? "Google"
+        : titleFromUrl(url) || tab.title,
     historyIndex: nextIndex,
   };
 }

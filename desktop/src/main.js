@@ -1,13 +1,14 @@
 const { app, BrowserWindow, shell, Menu, session, ipcMain } = require("electron");
 const path = require("path");
 const foundationModels = require("./foundation-models-bridge");
+const browserSurface = require("./browser-surface");
 
 const APP_NAME = "Cander";
 const DEFAULT_URL = "https://cander.app";
 const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Bumped when the native shell changes — visible on <html data-cander-shell>. */
-const SHELL_BUILD = "2026-08-29-prod-fm";
+const SHELL_BUILD = "2026-08-29-browser-surface";
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
 /** Classic Mac titlebar / chrome row height (traffic-light axis). */
 const TITLEBAR_PX = 52;
@@ -223,7 +224,11 @@ async function createWindow() {
   loadAttempts = 0;
   loadApp(START_URL);
 
+  browserSurface.setHostWindow(mainWindow);
+
   mainWindow.on("closed", () => {
+    browserSurface.destroyAll();
+    browserSurface.setHostWindow(null);
     mainWindow = null;
   });
 }
@@ -339,6 +344,34 @@ app.whenReady().then(() => {
       prompt: payload?.prompt,
       instructions: payload?.instructions,
     });
+  });
+
+  ipcMain.handle("cander:browser-create", async (_e, tabId, url, options) => {
+    browserSurface.createTab(tabId, url, options || {});
+  });
+  ipcMain.handle("cander:browser-destroy", async (_e, tabId) => {
+    browserSurface.destroyTab(tabId);
+  });
+  ipcMain.handle("cander:browser-show", async (_e, tabId, bounds) => {
+    browserSurface.showTab(tabId, bounds || {});
+  });
+  ipcMain.handle("cander:browser-hide", async (_e, tabId) => {
+    browserSurface.hideTab(tabId);
+  });
+  ipcMain.handle("cander:browser-navigate", async (_e, tabId, url) => {
+    browserSurface.navigate(tabId, url);
+  });
+  ipcMain.handle("cander:browser-back", async (_e, tabId) => {
+    browserSurface.back(tabId);
+  });
+  ipcMain.handle("cander:browser-forward", async (_e, tabId) => {
+    browserSurface.forward(tabId);
+  });
+  ipcMain.handle("cander:browser-reload", async (_e, tabId) => {
+    browserSurface.reload(tabId);
+  });
+  ipcMain.handle("cander:browser-stop", async (_e, tabId) => {
+    browserSurface.stop(tabId);
   });
 
   buildMenu();

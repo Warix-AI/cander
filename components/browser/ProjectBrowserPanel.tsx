@@ -23,13 +23,19 @@ import {
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
-import { GoogleHome } from "@/components/browser/GoogleHome";
+import { BrowserSurfaceHost } from "@/components/browser/BrowserSurfaceHost";
 import {
   MobileBottomSheet,
   ProjectAddSheetHeader,
   ProjectRenameSheetBody,
 } from "@/components/browser/ProjectMobileSheets";
 import { AppViewport } from "@/components/preview/AppViewport";
+import { ComputerBrowserViewport } from "@/components/browser/ComputerBrowserViewport";
+import {
+  getActiveComputerSessionSnapshot,
+  setActiveComputerControlMode,
+  subscribeActiveComputerSession,
+} from "@/lib/computer/active-session";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { Dropdown } from "@/components/ui/Controls";
@@ -42,10 +48,12 @@ import {
 } from "@/lib/api/space-entity-store";
 import {
   defaultProjectBrowserSession,
+  focusAgentBrowserTab,
   getProjectBrowserSession,
   getProjectBrowserSessionRevision,
-  makeProjectTab,
-  makeUrlTab,
+  isPreviewTabKind,
+  makeProjectPreviewTab,
+  makeWebTab,
   navigateProjectBrowserTab,
   setProjectBrowserSession,
   stepProjectBrowserTab,
@@ -142,14 +150,19 @@ export function ProjectBrowserPanel() {
 
   const fallback = useMemo(() => {
     if (!projectId) {
-      return defaultProjectBrowserSession({ projectId: "project", title: "Project" });
+      return defaultProjectBrowserSession({
+        projectId: "project",
+        title: "Project",
+        spaceId: spaceId === "connectors" ? "build" : (spaceId ?? "build"),
+      });
     }
     return defaultProjectBrowserSession({
       projectId,
       title: project?.name ?? entity?.title ?? "Project",
       publishedUrl: entity?.publishedUrl,
+      spaceId: spaceId === "connectors" ? "build" : (spaceId ?? "build"),
     });
-  }, [projectId, project?.name, entity?.title, entity?.publishedUrl]);
+  }, [projectId, project?.name, entity?.title, entity?.publishedUrl, spaceId]);
 
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
@@ -163,13 +176,28 @@ export function ProjectBrowserPanel() {
 
   const active =
     session.tabs.find((tab) => tab.id === session.activeTabId) ?? session.tabs[0];
+  const computerSession = useSyncExternalStore(
+    subscribeActiveComputerSession,
+    getActiveComputerSessionSnapshot,
+    getActiveComputerSessionSnapshot,
+  );
   const [urlDraft, setUrlDraft] = useState(active?.url ?? "");
   const [reloadKey, setReloadKey] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
-    setUrlDraft(active?.url ?? "");
-  }, [active?.id, active?.url, sessionRevision]);
+    const next =
+      active?.kind === "agent-browser"
+        ? (computerSession?.currentUrl ?? active.url)
+        : (active?.url ?? "");
+    setUrlDraft(next);
+  }, [
+    active?.id,
+    active?.url,
+    active?.kind,
+    computerSession?.currentUrl,
+    sessionRevision,
+  ]);
 
   const allProjects = useMemo(
     () =>
@@ -201,7 +229,7 @@ export function ProjectBrowserPanel() {
   };
 
   const addUrlTab = (url?: string) => {
-    const tab = makeUrlTab();
+    const tab = makeWebTab();
     const next = url
       ? navigateProjectBrowserTab(tab, normalizeBrowserUrl(url))
       : tab;
@@ -213,13 +241,15 @@ export function ProjectBrowserPanel() {
 
   const addProjectTab = (item: SpaceProject) => {
     const existing = session.tabs.find(
-      (tab) => tab.kind === "project" && tab.projectId === item.id,
+      (tab) =>
+        (tab.kind === "project-preview" || tab.kind === "build-preview") &&
+        tab.projectId === item.id,
     );
     if (existing) {
       selectTab(existing.id);
       return;
     }
-    const tab = makeProjectTab({
+    const tab = makeProjectPreviewTab({
       projectId: item.id,
       title: item.title,
       url: previewUrlForProject(item.id, item.publishedUrl),
@@ -253,9 +283,11 @@ export function ProjectBrowserPanel() {
   const canForward = active.historyIndex < active.history.length - 1;
   const extraProjects = allProjects.filter((item) => item.id !== projectId);
   const address =
-    liveUrl ??
-    active.url ??
-    previewUrlForProject(projectId ?? "project", entity?.publishedUrl);
+    active.kind === "agent-browser"
+      ? (computerSession?.currentUrl ?? active.url)
+      : (liveUrl ??
+        active.url ??
+        previewUrlForProject(projectId ?? "project", entity?.publishedUrl));
   const projectTitle = project?.name ?? entity?.title ?? active.title ?? "Project";
   const canRename = spaceId === "build" || spaceId === "research";
 
@@ -270,7 +302,7 @@ export function ProjectBrowserPanel() {
     const current = getProjectBrowserSession(key, fallback);
     const needsSync = current.tabs.some(
       (tab) =>
-        tab.kind === "project" &&
+        isPreviewTabKind(tab.kind) &&
         tab.projectId === projectId &&
         tab.title !== projectTitle,
     );
@@ -278,12 +310,60 @@ export function ProjectBrowserPanel() {
     setProjectBrowserSession(key, {
       ...current,
       tabs: current.tabs.map((tab) =>
-        tab.kind === "project" && tab.projectId === projectId
+        isPreviewTabKind(tab.kind) && tab.projectId === projectId
           ? { ...tab, title: projectTitle }
           : tab,
       ),
     });
   }, [key, projectId, projectTitle, fallback, sessionRevision]);
+
+  // Focus / create agent-browser tab only when the computer session requests focus.
+  // Background research updates URL on an existing agent-browser tab without stealing the active tab.
+  useEffect(() => {
+    if (!key) return;
+    let appliedFocusRevision = 0;
+    const apply = () => {
+      const computer = getActiveComputerSessionSnapshot();
+      if (!computer?.sessionId) return;
+      const current = getProjectBrowserSession(key, fallback);
+      if (computer.focusRevision > appliedFocusRevision) {
+        appliedFocusRevision = computer.focusRevision;
+        setProjectBrowserSession(
+          key,
+          focusAgentBrowserTab(current, {
+            url: computer.currentUrl ?? "about:blank",
+            computerSessionId: computer.sessionId,
+            title: "Agent browser",
+          }),
+        );
+        return;
+      }
+      const existing = current.tabs.find(
+        (tab) =>
+          tab.kind === "agent-browser" &&
+          tab.computerSessionId === computer.sessionId,
+      );
+      if (
+        existing &&
+        computer.currentUrl &&
+        existing.url !== computer.currentUrl
+      ) {
+        setProjectBrowserSession(key, {
+          ...current,
+          tabs: current.tabs.map((tab) =>
+            tab.id === existing.id
+              ? navigateProjectBrowserTab(tab, computer.currentUrl!)
+              : tab,
+          ),
+        });
+      }
+    };
+    const unsub = subscribeActiveComputerSession(apply);
+    apply();
+    return () => {
+      unsub();
+    };
+  }, [key, fallback]);
 
   const saveProjectName = async () => {
     if (!projectId || !canRename) return;
@@ -307,7 +387,7 @@ export function ProjectBrowserPanel() {
         setProjectBrowserSession(key, {
           ...current,
           tabs: current.tabs.map((tab) =>
-            tab.kind === "project" && tab.projectId === projectId
+            isPreviewTabKind(tab.kind) && tab.projectId === projectId
               ? { ...tab, title: next }
               : tab,
           ),
@@ -517,6 +597,8 @@ export function ProjectBrowserPanel() {
           fallbackName={project?.name ?? "Project"}
           fallbackSummary={project?.summary ?? ""}
           reloadKey={reloadKey}
+          userId={actor.id}
+          browserKey={key}
         />
         {mobile && mobileNavOpen ? (
           <MobileBrowserNavSheet
@@ -605,33 +687,105 @@ function ProjectBrowserBody({
   fallbackName,
   fallbackSummary,
   reloadKey,
+  userId,
+  browserKey,
 }: {
   tab: ProjectBrowserTab;
   projects: SpaceProject[];
   fallbackName: string;
   fallbackSummary: string;
   reloadKey: number;
+  userId: string;
+  browserKey: ProjectBrowserKey;
 }) {
-  if (tab.kind === "url" && isGoogleUrl(tab.url)) {
+  const computerSession = useSyncExternalStore(
+    subscribeActiveComputerSession,
+    getActiveComputerSessionSnapshot,
+    getActiveComputerSessionSnapshot,
+  );
+
+  const syncSurfaceMeta = (patch: { url?: string; title?: string }) => {
+    const current = getProjectBrowserSession(
+      browserKey,
+      defaultProjectBrowserSession({
+        projectId: browserKey.projectId,
+        title: fallbackName,
+        spaceId: browserKey.spaceId,
+      }),
+    );
+    const nextTabs = current.tabs.map((item) => {
+      if (item.id !== tab.id) return item;
+      let next = item;
+      if (patch.url && patch.url !== item.url) {
+        next = navigateProjectBrowserTab(next, patch.url, patch.title);
+      } else if (patch.title && patch.title !== item.title) {
+        next = { ...next, title: patch.title };
+      }
+      return next;
+    });
+    if (nextTabs.some((item, i) => item !== current.tabs[i])) {
+      setProjectBrowserSession(browserKey, {
+        ...current,
+        tabs: nextTabs,
+      });
+    }
+  };
+
+  // Agent-browser tabs always use the computer stream — never overload a web tab.
+  if (tab.kind === "agent-browser") {
+    const sessionId =
+      tab.computerSessionId ?? computerSession?.sessionId ?? null;
+    if (!sessionId) {
+      return (
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+          Waiting for agent browser session…
+        </div>
+      );
+    }
     return (
-      <div className="h-full min-h-0 overflow-y-auto bg-white">
-        <GoogleHome />
-      </div>
+      <ComputerBrowserViewport
+        sessionId={sessionId}
+        controlMode={computerSession?.controlMode ?? "agent"}
+        onTakeControl={() => setActiveComputerControlMode("user")}
+        onGiveBack={() => setActiveComputerControlMode("agent")}
+      />
     );
   }
 
-  if (tab.kind === "project") {
+  if (tab.kind === "web") {
+    return (
+      <BrowserSurfaceHost
+        tabId={tab.id}
+        url={tab.url}
+        reloadKey={reloadKey}
+        title={tab.title}
+        userId={userId}
+        onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
+        onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
+      />
+    );
+  }
+
+  if (tab.kind === "build-preview" || tab.kind === "project-preview") {
     const match =
       projects.find((item) => item.id === tab.projectId) ?? null;
-    if (match?.publishedUrl && isHttpUrl(match.publishedUrl)) {
+    const previewUrl =
+      match?.publishedUrl && isHttpUrl(match.publishedUrl)
+        ? match.publishedUrl
+        : tab.url;
+    if (previewUrl && isHttpUrl(previewUrl) && !isGoogleUrl(previewUrl)) {
       return (
-        <iframe
-          key={`${tab.id}-${reloadKey}-${match.publishedUrl}`}
+        <BrowserSurfaceHost
+          tabId={tab.id}
+          url={previewUrl}
+          previewOnly
+          isolatedPartition
+          reloadKey={reloadKey}
           title={tab.title}
-          src={match.publishedUrl}
-          sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-          referrerPolicy="no-referrer"
-          className="h-full w-full border-0 bg-white"
+          userId={userId}
+          projectId={tab.projectId ?? null}
+          onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
+          onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
         />
       );
     }
@@ -645,20 +799,21 @@ function ProjectBrowserBody({
 
   if (isHttpUrl(tab.url) && tab.url !== "https://" && tab.url !== "http://") {
     return (
-      <iframe
-        key={`${tab.id}-${reloadKey}-${tab.url}`}
+      <BrowserSurfaceHost
+        tabId={tab.id}
+        url={tab.url}
+        reloadKey={reloadKey}
         title={tab.title}
-        src={tab.url}
-        sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-        referrerPolicy="no-referrer"
-        className="h-full w-full border-0 bg-white"
+        userId={userId}
+        onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
+        onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
       />
     );
   }
 
   return (
-    <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">
-      Enter a URL to open a page.
+    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      Enter a URL to browse
     </div>
   );
 }
@@ -721,7 +876,7 @@ function ProjectMobileTabBar({
   onAdd: () => void;
 }) {
   const labelFor = (tab: ProjectBrowserTab) => {
-    if (tab.kind !== "project") return tab.title;
+    if (!isPreviewTabKind(tab.kind)) return tab.title;
     if (tab.id === activeId && projectTitle) return projectTitle;
     const match = projects.find((item) => item.id === tab.projectId);
     return match?.title || tab.title;
@@ -1072,12 +1227,12 @@ function AddTabMenu({
             className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] hover:bg-muted"
           >
             <Globe className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.6} />
-            New tab
+            New browser tab
           </button>
           {extraProjects.length ? (
             <>
               <p className="px-2.5 pt-2 pb-1 font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
-                Projects
+                Project previews
               </p>
               {extraProjects.map((item) => (
                 <button
@@ -1111,7 +1266,10 @@ function TabGlyph({
   kind?: ProjectKind;
   className?: string;
 }) {
-  if (tab.kind === "url") {
+  if (tab.kind === "agent-browser") {
+    return <MousePointer2 className={cn("h-3.5 w-3.5 shrink-0", className)} strokeWidth={1.6} />;
+  }
+  if (tab.kind === "web") {
     if (isGoogleUrl(tab.url)) {
       return (
         <span

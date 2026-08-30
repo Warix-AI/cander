@@ -32,6 +32,25 @@ export type CanderDesktopBridge = {
       structured?: boolean;
     }>;
   };
+  browser?: {
+    createTab: (
+      tabId: string,
+      initialUrl: string,
+      options?: Record<string, unknown>,
+    ) => Promise<void>;
+    destroyTab: (tabId: string) => Promise<void>;
+    showTab: (
+      tabId: string,
+      bounds: { x: number; y: number; width: number; height: number },
+    ) => Promise<void>;
+    hideTab: (tabId: string) => Promise<void>;
+    navigate: (tabId: string, url: string) => Promise<void>;
+    back: (tabId: string) => Promise<void>;
+    forward: (tabId: string) => Promise<void>;
+    reload: (tabId: string) => Promise<void>;
+    stop: (tabId: string) => Promise<void>;
+    onEvent?: (handler: (event: Record<string, unknown>) => void) => () => void;
+  };
 };
 
 declare global {

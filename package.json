@@ -12,7 +12,7 @@
     "test:isolation": "node --experimental-strip-types scripts/security-isolation-probe.ts",
     "test:assistant": "node --experimental-strip-types --test scripts/assistant-behavior.test.ts",
     "test:intelligence": "node --experimental-strip-types --test scripts/intelligence.test.ts",
-    "test:orchestrator": "node --experimental-strip-types --test scripts/orchestrator.test.ts scripts/orchestrator-v2.test.ts scripts/attachment-context.test.ts scripts/vision-input.test.ts scripts/web-retrieval.test.ts scripts/bridge-errors.test.ts scripts/on-device-routing.test.ts scripts/local-orchestrator.test.ts scripts/tool-execution-bus.test.ts",
+    "test:orchestrator": "node --experimental-strip-types --test scripts/orchestrator.test.ts scripts/orchestrator-v2.test.ts scripts/attachment-context.test.ts scripts/vision-input.test.ts scripts/web-retrieval.test.ts scripts/bridge-errors.test.ts scripts/on-device-routing.test.ts scripts/local-orchestrator.test.ts scripts/tool-execution-bus.test.ts scripts/computer.test.ts scripts/browser-surface.test.ts",
     "seed:supabase": "node --experimental-strip-types scripts/seed.ts 2>/dev/null || npx --yes tsx scripts/seed.ts",
     "desktop": "npm --prefix desktop run start",
     "desktop:prod": "npm --prefix desktop run start",
@@ -26,21 +26,25 @@
     "mobile:android:dev": "npm --prefix mobile run android:dev"
   },
   "dependencies": {
+    "@agent-browser/sandbox": "^0.35.1",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.8",
+    "@vercel/sandbox": "^3.2.1",
     "lucide-react": "^1.31.0",
     "next": "16.3.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "stripe": "^22.6.0"
+    "stripe": "^22.6.0",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
     "tailwindcss": "^4",

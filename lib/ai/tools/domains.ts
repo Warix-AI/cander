@@ -16,6 +16,7 @@ export type ToolDomain =
   | "search"
   | "knowledge"
   | "web"
+  | "computer"
   | "scheduling"
   | "comms"
   | "cloud_work"
@@ -28,7 +29,14 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
   projects: ["project.create", "project.open"],
   search: ["workspace.search"],
   knowledge: ["knowledge.search"],
-  web: ["web.search"],
+  web: ["web.search", "web.open"],
+  computer: [
+    "computer.browser.open",
+    "computer.browser.observe",
+    "computer.browser.click",
+    "computer.browser.fill",
+    "computer.browser.requestUserControl",
+  ],
   scheduling: [],
   comms: [],
   cloud_work: [

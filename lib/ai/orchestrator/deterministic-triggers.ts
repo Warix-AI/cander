@@ -26,12 +26,15 @@ export function requiresExternalEvidence(content: string): boolean {
 /** Tools to run before the first model call (obvious cases). */
 export function initialDeterministicToolCalls(content: string): QueuedToolCall[] {
   const requested = extractRequestedUrl(content.trim());
+  const browseIntent =
+    /\b(go to|visit|open in browser|browse to|navigate to)\b/i.test(content);
+
   if (requested?.url) {
     return [
       {
-        name: "web.open",
+        name: browseIntent ? "computer.browser.open" : "web.open",
         arguments: { url: requested.url },
-        reason: "explicit_url_in_request",
+        reason: browseIntent ? "explicit_browse_intent" : "explicit_url_in_request",
       },
     ];
   }
