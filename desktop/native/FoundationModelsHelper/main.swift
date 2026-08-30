@@ -210,7 +210,8 @@ struct FoundationModelsHelper {
       } else {
         session = LanguageModelSession()
       }
-      let turn = try await session.respond(to: prompt, generating: CanderStructuredTurn.self)
+      let response = try await session.respond(to: prompt, generating: CanderStructuredTurn.self)
+      let turn = response.content
       var payload: [String: Any] = [
         "structured": true,
         "runtime": "apple-local",
