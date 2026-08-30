@@ -74,7 +74,13 @@ export function normalizeWebSearchResult(opts: {
     if (u) citeByUrl.set(u, c);
   }
 
-  const rows = opts.results?.length
+  const rows: Array<{
+    title?: string;
+    url?: string;
+    description?: string;
+    snippet?: string;
+    id?: string;
+  }> = opts.results?.length
     ? opts.results
     : (opts.citations ?? []).map((c) => ({
         title: c.title,

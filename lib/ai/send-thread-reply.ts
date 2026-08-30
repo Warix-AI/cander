@@ -67,6 +67,7 @@ export async function fetchPrivateAiReply(opts: {
   pausedForUser?: boolean;
   toolResults?: AiToolCallResult[];
   citations?: AiGenerateResult["citations"];
+  blocks?: AiGenerateResult["blocks"];
 }> {
   try {
     const result = await runAssistantTurn(
@@ -92,6 +93,7 @@ export async function fetchPrivateAiReply(opts: {
       pausedForUser: result.pausedForUser,
       toolResults: result.toolResults,
       citations: result.citations,
+      blocks: result.blocks,
     };
   } catch (err) {
     if (err instanceof AiRuntimeError) {
