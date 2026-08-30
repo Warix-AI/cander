@@ -33,6 +33,7 @@ const homePromptIcons = {
 function ComposerDock({
   onSend,
   hideSpaceTools,
+  autoFocus = false,
 }: {
   onSend: (
     text: string,
@@ -42,11 +43,12 @@ function ComposerDock({
     },
   ) => void;
   hideSpaceTools?: boolean;
+  autoFocus?: boolean;
 }) {
   const { thread, continueAfterClarification } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
-  const centered = useChatCanvasCentered();
+  const { centered } = useChatCanvasCentered();
 
   return (
     <div
@@ -71,14 +73,20 @@ function ComposerDock({
           threadId={thread?.id}
           onSubmitted={continueAfterClarification}
         />
-        <Composer onSend={onSend} hideSpaceTools={hideSpaceTools} inDock />
+        <Composer
+          onSend={onSend}
+          hideSpaceTools={hideSpaceTools}
+          inDock
+          autoFocus={autoFocus}
+        />
       </div>
     </div>
   );
 }
 
 export function ChatColumn() {
-  const { thread, spaceId, sendMessage, drafting, view, projectId } = useApp();
+  const { thread, spaceId, sendMessage, drafting, view, projectId, overlay } =
+    useApp();
   const browserMode = view === "browser";
   const mobile = useMobileShell();
   const hasChatTurns = Boolean(
@@ -86,6 +94,9 @@ export function ChatColumn() {
       (item) => item.role === "user" || item.role === "assistant",
     ),
   );
+  // Empty new chat → autofocus composer (Capacitor). Reading an existing
+  // thread or any overlay/browser surface must not steal focus.
+  const autofocusComposer = !browserMode && !hasChatTurns && !overlay;
   const showSpaceNewPrompt =
     drafting && Boolean(spaceId) && !hasChatTurns && !browserMode;
   const showLanding =
@@ -198,7 +209,7 @@ export function ChatColumn() {
             <div ref={endRef} />
           )}
         </div>
-        <ComposerDock onSend={send} hideSpaceTools />
+        <ComposerDock onSend={send} hideSpaceTools autoFocus={autofocusComposer} />
       </section>
     );
   }
@@ -229,7 +240,7 @@ export function ChatColumn() {
           )}
         </div>
         <div className={cn("shrink-0", MOBILE_APP_BG)}>
-          <ComposerDock onSend={send} />
+          <ComposerDock onSend={send} autoFocus={autofocusComposer} />
         </div>
       </section>
     );
@@ -242,7 +253,7 @@ export function ChatColumn() {
       )}
     >
       {showLanding ? (
-        <EmptyChat spaceId={chatSpaceId(spaceId)} drafting={drafting} onPrompt={send} />
+        <EmptyChat spaceId={chatSpaceId(spaceId)} drafting={drafting} onPrompt={send} autoFocusComposer={autofocusComposer} />
       ) : (
         <div
           className={cn(
@@ -271,7 +282,9 @@ export function ChatColumn() {
         </div>
       )}
 
-      {showLanding ? null : <ComposerDock onSend={send} />}
+      {showLanding ? null : (
+        <ComposerDock onSend={send} autoFocus={autofocusComposer} />
+      )}
     </section>
   );
 }
@@ -287,10 +300,12 @@ function EmptyChat({
   spaceId,
   drafting,
   onPrompt,
+  autoFocusComposer = false,
 }: {
   spaceId: SpaceId | null;
   drafting: boolean;
   onPrompt: (text: string) => void;
+  autoFocusComposer?: boolean;
 }) {
   const copy = drafting ? emptyCopy(spaceId) : null;
   const homePrompts = copy ? [] : homeSuggestions();
@@ -363,7 +378,7 @@ function EmptyChat({
           </h1>
         )}
         <div className="mt-8 w-full">
-          <Composer onSend={onPrompt} landing />
+          <Composer onSend={onPrompt} landing autoFocus={autoFocusComposer} />
         </div>
         {homePrompts.length ? (
           <div className="landing-suggestions mt-3 grid w-full grid-cols-3 gap-2.5">

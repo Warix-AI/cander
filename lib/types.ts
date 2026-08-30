@@ -152,13 +152,25 @@ export type PlatformDeployment = {
 
 export type MessageStatus = "complete" | "pending" | "streaming" | "error";
 
-/** Live activity under Thinking while a reply is pending. */
+/** Live activity while a reply is pending — one phase, one timer. */
 export type MessageActivity = {
-  /** Primary shimmer line — always "Thinking" for pending replies */
-  label: string;
+  /** Calm user-facing phase (Generating / Searching / …). */
+  phase?:
+    | "generating"
+    | "searching"
+    | "reading"
+    | "checking"
+    | "building"
+    | "updating";
+  /** Wall-clock start of this turn — elapsed time must not reset on phase change. */
+  startedAt?: number;
   /**
-   * Optional second line under Thinking (tools / deep work only).
-   * Never a “Thinking about …” echo of the user message.
+   * @deprecated Prefer `phase`. Kept for older persisted messages.
+   * Primary shimmer line when `phase` is absent.
+   */
+  label?: string;
+  /**
+   * @deprecated Never show a second stacked status line.
    */
   detail?: string;
   kind?: "idle" | "tool" | "work";

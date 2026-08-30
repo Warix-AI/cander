@@ -51,6 +51,7 @@ import {
   pickWithCapacitorCamera,
   toSendAttachments,
 } from "@/lib/composer-attach";
+import { dismissNativeKeyboard } from "@/lib/mobile-shell";
 import {
   isSpeechToTextSupported,
   startSpeechToText,
@@ -118,6 +119,7 @@ export function Composer({
     pinTier,
     setPin,
     clearPin,
+    overlay,
   } = useApp();
   const floating = useShellStyle() === "floating";
   const mobile = useMobileShell();
@@ -128,8 +130,8 @@ export function Composer({
   const [menu, setMenu] = useState<MenuId>(null);
   const [files, setFiles] = useState<ChatFileAttachment[]>([]);
   const [images, setImages] = useState<ChatImageAttachment[]>([]);
-  const [dictateError, setDictateError] = useState<string | null>(null);
-  const [attachError, setAttachError] = useState<string | null>(null);
+  const [dictateError, setDictateError] = useState(null as string | null);
+  const [attachError, setAttachError] = useState(null as string | null);
   const fileRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -138,6 +140,8 @@ export function Composer({
   /** Keep the + menu visible while the native file sheet is open (iOS). */
   const awaitingFilePickRef = useRef(false);
   const nativeShell = isCapacitorNative();
+  /** Prevent re-opening keyboard after send until the user taps the composer. */
+  const suppressAutoFocusRef = useRef(false);
 
   useEffect(() => {
     const apply = () => {
@@ -156,6 +160,24 @@ export function Composer({
     if (peekComposerSeed()) apply();
     return subscribeComposerSeed(apply);
   }, []);
+
+  // New / empty chat on Capacitor: open keyboard once. Never force after send
+  // or when a modal needs focus elsewhere.
+  useEffect(() => {
+    suppressAutoFocusRef.current = false;
+  }, [thread?.id]);
+
+  useEffect(() => {
+    if (!autoFocus || !nativeShell) return;
+    if (suppressAutoFocusRef.current) return;
+    if (overlay) return;
+    if (view === "browser") return;
+    const id = window.requestAnimationFrame(() => {
+      if (suppressAutoFocusRef.current) return;
+      textRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [autoFocus, nativeShell, overlay, view, thread?.id]);
 
   const LINE_HEIGHT = 20;
   const MAX_LINES = 10;
@@ -290,6 +312,9 @@ export function Composer({
     speechRef.current?.stop();
     speechRef.current = null;
     const sendAttachments = toSendAttachments(images, files);
+    // Give the reply the screen: dismiss keyboard immediately on Capacitor.
+    suppressAutoFocusRef.current = true;
+    dismissNativeKeyboard();
     onSend(body || "", {
       ...(images.length ? { attachments: images } : {}),
       ...(files.length ? { files } : {}),
@@ -534,7 +559,10 @@ export function Composer({
                   rows={1}
                   placeholder={hint}
                   autoFocus={autoFocus}
-                  onFocus={onFocus}
+                  onFocus={() => {
+                    suppressAutoFocusRef.current = false;
+                    onFocus?.();
+                  }}
                   onChange={(event) => setValue(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
@@ -714,6 +742,7 @@ export function Composer({
                 enterKeyHint="send"
                 autoComplete="off"
                 onFocus={(event) => {
+                  suppressAutoFocusRef.current = false;
                   onFocus?.();
                   window.setTimeout(() => {
                     event.target.scrollIntoView({

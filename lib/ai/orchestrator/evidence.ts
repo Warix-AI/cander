@@ -4,9 +4,10 @@
  */
 
 import {
+  answerShapeFromContract,
   buildSynthesisInstruction,
   compressEvidenceForSynthesis,
-  inferAnswerShape,
+  inferResponseContract,
   type CompactEvidenceItem,
 } from "../answer-shape/index.ts";
 
@@ -66,7 +67,8 @@ export function prepareSynthesisEvidence(
   items: TurnEvidence[],
   profile: "onDevice" | "cloud" = "onDevice",
 ): { instruction: string; compact: CompactEvidenceItem[]; shapeKind: string } {
-  const shape = inferAnswerShape(question);
+  const contract = inferResponseContract(question);
+  const shape = answerShapeFromContract(question, contract);
   const webby = items.filter(
     (e) =>
       e.ok &&

@@ -18,7 +18,7 @@ describe("mapToolEventToProgressLabel", () => {
     });
     assert.ok(mapped);
     assert.equal(mapped!.phase, "tool");
-    assert.match(mapped!.detail, /reading page/i);
+    assert.match(mapped!.detail, /reading/i);
     assert.equal(mapped!.toolName, "web.open");
   });
 

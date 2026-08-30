@@ -7,6 +7,19 @@ export type {
 export { ANSWER_SHAPE_BUDGETS } from "./types.ts";
 export { inferAnswerShape } from "./infer.ts";
 export {
+  answerShapeFromContract,
+  buildCompletionRepairInstruction,
+  countListItems,
+  extractRequestedItemCount,
+  inferResponseContract,
+  inferResponseDepth,
+  mergeCompletionDraft,
+  validateResponseContract,
+  type ResponseContract,
+  type ResponseDepth,
+  type ResponseValidation,
+} from "./response-contract.ts";
+export {
   authorityScore,
   compressEvidenceForSynthesis,
   extractRelevantExcerpt,

@@ -23,6 +23,8 @@ export type TurnBudgets = {
   earlySynthesizeWhenSufficient: boolean;
   /** Soft char budget for prompt assembly (derived from contextTokens). */
   maxPromptChars: number;
+  /** Soft generation budget — raised dynamically for N-item / detailed asks. */
+  maxOutputTokens: number;
 };
 
 export type ToolCard = {

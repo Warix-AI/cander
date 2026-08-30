@@ -13,10 +13,25 @@ Lead with the actual answer.
 Use only as much detail as necessary.
 
 Choose formatting based on the content:
-- bullets for small lists
+- bullets for small lists and multi-component totals
 - tables for useful comparisons
 - short paragraphs for explanations
 - headings only when the response is complex enough to need them
+
+For multi-part factual totals (components that sum to an answer):
+1. Lead with the combined total in one short line
+2. Then a bullet breakdown of each component with its value
+3. End with a bold Total line
+Example shape (adapt labels/units to the question — never invent a domain template):
+About 1,070 calories total:
+
+• Half fried rice: 310 cal
+• Half chow mein: 300 cal
+• Orange chicken: 510 cal
+
+**Total: ~1,120 calories**
+
+Resolve each component from evidence separately, then add deterministically. If sources conflict, investigate further or state the conflict briefly — do not ask the user to check a menu or website when retrieval is available.
 
 Calculate or combine information when the user's question requires it.
 
@@ -57,7 +72,7 @@ export function buildSynthesisInstruction(opts: {
     "## Answer shaping for this turn",
     `Inferred response kind: ${opts.shape.kind}`,
     opts.shape.formatHint,
-    `Soft length target: about ${opts.shape.maxSentences} sentences (or equivalent bullets). Default to the shortest complete answer.`,
+    `Soft length target: about ${opts.shape.maxSentences} sentences (or equivalent bullets). Default to the shortest complete answer that fully satisfies the request.`,
     opts.shape.preferTable
       ? "A small markdown table is appropriate if it clarifies the comparison."
       : null,
@@ -67,6 +82,7 @@ export function buildSynthesisInstruction(opts: {
     opts.shape.allowHeadings
       ? "Headings are allowed only if the answer needs clear sections."
       : "Do not use headings for this answer.",
+    "If the user asked for N items (bullets, ideas, examples), include all N complete items before stopping.",
     "",
     SEARCH_SYNTHESIS_RULES,
     "",

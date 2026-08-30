@@ -10,8 +10,24 @@ export type {
   EvidenceBudgetProfile,
 } from "../../../supabase/functions/_shared/answer-shape/types.ts";
 
+export type {
+  ResponseContract,
+  ResponseDepth,
+  ResponseValidation,
+} from "../../../supabase/functions/_shared/answer-shape/response-contract.ts";
+
 export { ANSWER_SHAPE_BUDGETS } from "../../../supabase/functions/_shared/answer-shape/types.ts";
 export { inferAnswerShape } from "../../../supabase/functions/_shared/answer-shape/infer.ts";
+export {
+  answerShapeFromContract,
+  buildCompletionRepairInstruction,
+  countListItems,
+  extractRequestedItemCount,
+  inferResponseContract,
+  inferResponseDepth,
+  mergeCompletionDraft,
+  validateResponseContract,
+} from "../../../supabase/functions/_shared/answer-shape/response-contract.ts";
 export {
   authorityScore,
   compressEvidenceForSynthesis,

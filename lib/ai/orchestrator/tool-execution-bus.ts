@@ -60,12 +60,12 @@ export function mapToolEventToProgressLabel(
         toolName: event.name,
       };
     case "model_generate_start":
-      return { phase: "generating", detail: "Generating…" };
+      return { phase: "generating", detail: "Generating" };
     case "model_generate_end":
       return null;
     case "tool_end":
       return event.ok
-        ? { phase: "follow_up", detail: "Reading sources…", toolName: event.name }
+        ? { phase: "follow_up", detail: "Reading", toolName: event.name }
         : null;
     default:
       return null;
@@ -75,40 +75,29 @@ export function mapToolEventToProgressLabel(
 function detailForToolName(name: string): string {
   switch (name) {
     case "web.search":
-      return "Searching the web…";
+    case "web.research":
+    case "workspace.search":
+    case "knowledge.search":
+      return "Searching";
     case "web.open":
     case "web.read":
-      return "Reading page…";
-    case "web.research":
-      return "Researching…";
     case "computer.browser.open":
-      return "Opening remote browser…";
     case "computer.browser.observe":
-      return "Reading page structure…";
+    case "browser.current.get_context":
+    case "browser.current.get_selection":
+    case "browser.current.capture_viewport":
+      return "Reading";
     case "computer.browser.click":
     case "computer.browser.fill":
-      return "Using browser…";
-    case "browser.current.get_context":
-      return "Reading the page on the right…";
-    case "browser.current.get_selection":
-      return "Reading selection…";
-    case "browser.current.capture_viewport":
-      return "Capturing the viewport…";
+      return "Updating";
     case "browser.current.get_metadata":
-      return "Checking the active tab…";
-    case "workspace.search":
-      return "Searching workspace…";
-    case "knowledge.search":
-      return "Searching knowledge…";
-    case "project.create":
-      return "Creating project…";
-    case "project.open":
-      return "Opening project…";
     case "ui.ask_clarification":
-      return "Preparing questions…";
+      return "Checking";
+    case "project.create":
+    case "project.open":
     case "nav.open":
-      return "Navigating…";
+      return "Building";
     default:
-      return "Calling tool…";
+      return "Updating";
   }
 }

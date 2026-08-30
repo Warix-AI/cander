@@ -11,6 +11,12 @@ import {
   requiresExternalEvidence,
 } from "../orchestrator/deterministic-triggers.ts";
 import { liveInfoHint } from "../orchestrator/v2-helpers.ts";
+import { inferResponseContract } from "../answer-shape/index.ts";
+import {
+  deeperResearchQueries,
+  extractFactualComponents,
+  isCorrectionRetry,
+} from "../orchestrator/research-quality.ts";
 import { budgetsForProfile } from "./budgets.ts";
 import {
   formatToolCardsForPrompt,
@@ -144,6 +150,11 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
 
   let preRunTasks = buildPreRunTasks(content);
   const conv = opts.conversationState;
+  const deepRetry =
+    Boolean(conv?.dissatisfactionSignal) ||
+    Boolean(conv?.freshnessRequirement) ||
+    isCorrectionRetry(content);
+
   // Freshness / dissatisfaction / external flags from conversation state force retrieval.
   if (
     conv &&
@@ -163,6 +174,25 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
       },
       ...preRunTasks,
     ];
+  }
+
+  // Deeper first-pass / retry: component searches + official queries.
+  if (
+    (deepRetry || extractFactualComponents(content).length >= 2) &&
+    !conv?.internalDataRequired
+  ) {
+    const prior = preRunTasks
+      .map((t) => String(t.arguments.query ?? ""))
+      .filter(Boolean);
+    const extras = deeperResearchQueries(content, prior);
+    for (const query of extras) {
+      if (preRunTasks.length >= 5) break;
+      preRunTasks.push({
+        name: "web.search",
+        arguments: { query },
+        reason: deepRetry ? "correction_deeper_research" : "multi_component_research",
+      });
+    }
   }
 
   const allowed = resolveAllowedToolsForTurn({
@@ -236,6 +266,29 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     budgets.concurrency = Math.max(budgets.concurrency, 4);
   }
 
+  const responseContract = inferResponseContract(content);
+  budgets.maxOutputTokens = Math.max(
+    budgets.maxOutputTokens,
+    responseContract.outputTokenBudget,
+  );
+  if (responseContract.depth === "detailed" || responseContract.requestedItemCount) {
+    budgets.maxPromptChars = Math.max(
+      budgets.maxPromptChars,
+      Math.min(budgets.maxPromptChars + 4_000, budgets.contextTokens * 4),
+    );
+  }
+  if (deepRetry || extractFactualComponents(content).length >= 2) {
+    budgets.earlySynthesizeWhenSufficient = false;
+    budgets.maxToolRounds = Math.max(budgets.maxToolRounds, 3);
+  }
+
+  const densityFromContract =
+    responseContract.depth === "detailed"
+      ? ("detailed" as const)
+      : responseContract.depth === "brief"
+        ? ("brief" as const)
+        : null;
+
   const recent = (opts.messages ?? []).slice(-12).map((m) => ({
     role: m.role,
     content: String(m.content ?? "").slice(0, 800),
@@ -249,6 +302,11 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
   }
   if (conv?.freshnessRequirement) {
     pendingBits.push("Freshness required — do not reuse stale prior answers.");
+  }
+  if (conv?.dissatisfactionSignal || deepRetry) {
+    pendingBits.push(
+      "Prior answer was wrong or incomplete. Do deeper retrieval and reconciliation before answering. Never tell the user to check the menu or website themselves when tools can investigate.",
+    );
   }
 
   const contextPacket: ContextPacket = {
@@ -283,7 +341,7 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
         ? ["select_one", "text_input", "confirm"]
         : [],
     },
-    density: densityFromShape ?? inferDensity(content),
+    density: densityFromShape ?? densityFromContract ?? inferDensity(content),
     outputSchema: opts.outputSchema ?? "semantic_blocks_v1",
     budgets,
     domains: allowed.domains,
@@ -296,7 +354,7 @@ export function formatTurnProfileInstructions(
 ): string {
   const parts: string[] = [
     "## Turn profile",
-    `toolMode=${profile.toolMode}; density=${profile.density}; maxToolRounds=${profile.budgets.maxToolRounds}`,
+    `toolMode=${profile.toolMode}; density=${profile.density}; maxToolRounds=${profile.budgets.maxToolRounds}; maxOutputTokens≈${profile.budgets.maxOutputTokens}`,
     profile.clarificationPolicy.clarificationRequired
       ? `Clarification allowed (${profile.clarificationPolicy.reason ?? "ambiguous"}). Use the smallest UI tool.`
       : "Do not ask clarifying questions or call ui.ask_clarification this turn.",

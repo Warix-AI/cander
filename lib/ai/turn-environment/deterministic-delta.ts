@@ -22,14 +22,18 @@ export type DeltaResolverInput = {
   };
 };
 
-const RETRY = /^(try again|retry|redo( it)?|again)[.!]?$/i;
+const RETRY =
+  /^(try again|retry|redo( it)?|again)[.!]?$/i;
+const RETRY_INCORRECT =
+  /\b(that'?s|that is|this is)\s+(incorrect|wrong|not right|inaccurate)\b|\b(incorrect|wrong)\b[\s\S]{0,40}\b(try again|retry)\b/i;
+const TRY_AGAIN_WEAK =
+  /\b(that'?s not what I asked|not what I (meant|asked)|wrong|look again|check again)\b/i;
 const LONGER = /\b(longer|more detail|expand|in detail|walk me through)\b/i;
 const SHORTER =
   /\b(shorter|briefly|tl;?dr|main points|key points|just (the )?bullets?|simpler|like I'?m five|eli5)\b/i;
 const FORGET_ALL =
   /\b(forget (all )?that|start over|never\s*mind all (of )?that|scratch that( whole)?)\b/i;
 const ACTUALLY = /^\s*(actually|no[,.]?\s+)/i;
-const TRY_AGAIN_WEAK = /\b(that'?s not what I asked|not what I (meant|asked)|wrong)\b/i;
 const UNIT_FEET = /\b(in feet|into feet|how many feet)\b/i;
 const UNIT_METERS = /\b(in meters?|into meters?)\b/i;
 const GEO_US = /\b(in the (us|u\.s\.|united states)|us only|domestically)\b/i;
@@ -101,7 +105,11 @@ export function resolveDeterministicDelta(
   const prev = input.previous;
   const actives = activeEntities(prev);
 
-  if (RETRY.test(content) || TRY_AGAIN_WEAK.test(content)) {
+  if (
+    RETRY.test(content) ||
+    RETRY_INCORRECT.test(content) ||
+    TRY_AGAIN_WEAK.test(content)
+  ) {
     return high({
       resolutionMethod: "deterministic",
       dissatisfaction: true,

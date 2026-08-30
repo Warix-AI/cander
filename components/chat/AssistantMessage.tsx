@@ -26,8 +26,9 @@ export function AssistantMessage({ message }: { message: Message }) {
     <div className="w-full space-y-2">
       {showThinking ? (
         <ThinkingIndicator
-          label={message.activity?.label || "Thinking"}
-          detail={message.activity?.detail}
+          phase={message.activity?.phase}
+          startedAt={message.activity?.startedAt}
+          label={message.activity?.label}
         />
       ) : visibleContent ? (
         <MarkdownRenderer content={visibleContent} />
@@ -38,23 +39,44 @@ export function AssistantMessage({ message }: { message: Message }) {
           <BlockView key={index} block={block} />
         ))}
       {!pending && !streaming ? (
-        <SourcesStrip citations={message.citations} />
-      ) : null}
-      {!pending && !streaming && visibleContent ? (
-        <MessageActions message={message} />
+        <MessageFooter message={message} visibleContent={visibleContent} />
       ) : null}
     </div>
   );
 }
 
-function SourcesStrip({
-  citations,
+function MessageFooter({
+  message,
+  visibleContent,
 }: {
+  message: Message;
+  visibleContent: string;
+}) {
+  const citations = message.citations;
+  const hasCopy = Boolean(visibleContent);
+  const hasSources = Boolean(citations?.length);
+  if (!hasCopy && !hasSources) return null;
+
+  return (
+    <div className="pt-1.5">
+      <ActionSourcesRow message={message} citations={citations} showCopy={hasCopy} />
+    </div>
+  );
+}
+
+function ActionSourcesRow({
+  message,
+  citations,
+  showCopy,
+}: {
+  message: Message;
   citations?: Message["citations"];
+  showCopy: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  if (!citations?.length) return null;
-  const safe = citations.filter((c) => {
+  const [copied, setCopied] = useState(false);
+
+  const safe = (citations ?? []).filter((c) => {
     try {
       const u = new URL(c.url);
       return u.protocol === "http:" || u.protocol === "https:";
@@ -62,7 +84,6 @@ function SourcesStrip({
       return false;
     }
   });
-  if (!safe.length) return null;
   const seen = new Set<string>();
   const unique = safe.filter((c) => {
     const key = (c.canonicalUrl || c.url).replace(/\/$/, "").toLowerCase();
@@ -89,51 +110,83 @@ function SourcesStrip({
     }
   };
 
+  const copy = async () => {
+    const parts = [
+      message.content,
+      ...(message.blocks ?? []).flatMap((block) => {
+        if (block.type === "text") return [block.text];
+        if (block.type === "plan") return [block.title, ...block.steps];
+        if (block.type === "build")
+          return [block.title, ...block.items.map((item) => item.label)];
+        if (block.type === "tool") return [block.label];
+        return [];
+      }),
+    ].filter(Boolean);
+    await navigator.clipboard.writeText(parts.join("\n"));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  };
+
   return (
-    <div className="pt-2">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="shrink-0 text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground/80 hover:text-foreground"
-          aria-expanded={expanded}
-        >
-          Sources · {unique.length}
-        </button>
-        {!expanded ? (
-          <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <ul className="flex flex-nowrap items-center gap-1.5 pr-1">
-              {unique.map((c) => {
+    <div>
+      <div className="flex items-center gap-1.5">
+        {showCopy ? (
+          <button
+            type="button"
+            title={copied ? "Copied" : "Copy"}
+            aria-label={copied ? "Copied" : "Copy"}
+            onClick={() => void copy()}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5" strokeWidth={1.8} />
+            ) : (
+              <Copy className="h-3.5 w-3.5" strokeWidth={1.6} />
+            )}
+          </button>
+        ) : null}
+
+        {unique.length ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="inline-flex h-7 items-center gap-2 rounded-lg px-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-expanded={expanded}
+            aria-label={`Sources, ${unique.length}`}
+          >
+            <span className="flex items-center pl-0.5">
+              {unique.slice(0, 4).map((c, i) => {
                 const favicon = faviconFor(c.url);
                 return (
-                  <li key={c.id} className="shrink-0">
-                    <a
-                      href={c.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={c.title}
-                      className="inline-flex max-w-[9.5rem] items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-[12px] text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground"
-                    >
-                      {favicon ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={favicon}
-                          alt=""
-                          width={14}
-                          height={14}
-                          className="h-3.5 w-3.5 rounded-[3px]"
-                        />
-                      ) : null}
-                      <span className="truncate">{labelFor(c)}</span>
-                    </a>
-                  </li>
+                  <span
+                    key={c.id}
+                    className="relative inline-flex h-5 w-5 items-center justify-center overflow-hidden rounded-full border border-background bg-muted ring-1 ring-border/60"
+                    style={{ marginLeft: i === 0 ? 0 : -6, zIndex: 4 - i }}
+                  >
+                    {favicon ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={favicon}
+                        alt=""
+                        width={14}
+                        height={14}
+                        className="h-3.5 w-3.5"
+                      />
+                    ) : (
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+                    )}
+                  </span>
                 );
               })}
-            </ul>
-          </div>
+            </span>
+            <span className="text-[12px] font-medium tracking-[-0.01em]">
+              Sources
+            </span>
+          </button>
         ) : null}
       </div>
-      {expanded ? (
+
+      {expanded && unique.length ? (
         <ul className="mt-2 space-y-1.5 rounded-[10px] border border-border/70 bg-muted/20 px-2.5 py-2">
           {unique.map((c) => {
             const favicon = faviconFor(c.url);
@@ -177,66 +230,6 @@ function SourcesStrip({
         </ul>
       ) : null}
     </div>
-  );
-}
-
-function MessageActions({ message }: { message: Message }) {
-  const [copied, setCopied] = useState(false);
-
-  const copy = async () => {
-    const parts = [
-      message.content,
-      ...(message.blocks ?? []).flatMap((block) => {
-        if (block.type === "text") return [block.text];
-        if (block.type === "plan") return [block.title, ...block.steps];
-        if (block.type === "build")
-          return [block.title, ...block.items.map((item) => item.label)];
-        if (block.type === "tool") return [block.label];
-        return [];
-      }),
-    ].filter(Boolean);
-    await navigator.clipboard.writeText(parts.join("\n"));
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1400);
-  };
-
-  return (
-    <div className="-ml-1.5 flex items-center gap-0.5 text-muted-foreground">
-      <ActionBtn label={copied ? "Copied" : "Copy"} onClick={() => void copy()}>
-        {copied ? (
-          <Check className="h-3.5 w-3.5" strokeWidth={1.8} />
-        ) : (
-          <Copy className="h-3.5 w-3.5" strokeWidth={1.6} />
-        )}
-      </ActionBtn>
-    </div>
-  );
-}
-
-function ActionBtn({
-  label,
-  active,
-  onClick,
-  children,
-}: {
-  label: string;
-  active?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-150 hover:bg-muted hover:text-foreground",
-        active && "text-foreground",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 

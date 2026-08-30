@@ -18,6 +18,10 @@ import type {
 } from "@/lib/space-entities";
 import { bumpVersion, newEntityTimestamps, newId } from "@/lib/space-entities";
 import { assertUniqueProjectTitle } from "@/lib/project-name";
+import {
+  filterRealBriefingItems,
+  isLegacySyntheticBriefingId,
+} from "@/lib/briefing-real";
 import type { SpaceId } from "@/lib/types";
 import {
   attachWorkApp,
@@ -381,6 +385,15 @@ export const localSpaceEntityStore = {
 
   listBriefingItems(ctx: WorkspaceCtx, filter?: BriefingFilter) {
     hydrate();
+    // Drop legacy demo briefing rows so Recents/Work never resurface them from
+    // localStorage after briefing-sync stopped seeding samples.
+    if (state.briefingItems.some((item) => isLegacySyntheticBriefingId(item.id))) {
+      state = {
+        ...state,
+        briefingItems: filterRealBriefingItems(state.briefingItems),
+      };
+      persist();
+    }
     return state.briefingItems.filter((item) => {
       if (item.workspaceId !== ctx.workspaceId) return false;
       if (filter?.tone && item.tone !== filter.tone) return false;

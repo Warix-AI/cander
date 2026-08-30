@@ -87,34 +87,34 @@ function mapStatus(
       return {
         phase: "tool",
         label: "Thinking",
-        detail: detail ?? "Searching the web…",
+        detail: detail ?? "Searching",
         toolName: toolName ?? "web.search",
       };
     case "reading":
       return {
         phase: "follow_up",
         label: "Thinking",
-        detail: detail ?? "Reading sources…",
+        detail: detail ?? "Reading",
         toolName: "web.search",
       };
     case "generating":
       return {
         phase: "generating",
         label: "Thinking",
-        detail: detail ?? "Generating…",
+        detail: detail ?? "Generating",
       };
     case "client_action":
       return {
         phase: "tool",
         label: "Thinking",
-        detail: detail ?? "Running app action…",
+        detail: detail ?? "Updating",
         toolName,
       };
     case "routing":
       return {
         phase: "thinking",
         label: "Thinking",
-        detail: detail ?? "Planning next step…",
+        detail: detail ?? "Checking",
       };
     case "retrieving":
     case "thinking":
@@ -122,7 +122,7 @@ function mapStatus(
       return {
         phase: "thinking",
         label: "Thinking",
-        detail,
+        detail: detail ?? "Generating",
       };
   }
 }

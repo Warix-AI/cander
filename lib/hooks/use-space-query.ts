@@ -16,6 +16,7 @@ import type {
   SpaceSource,
 } from "@/lib/space-entities";
 import type { SpaceId } from "@/lib/types";
+import { filterRealBriefingItems } from "@/lib/briefing-real";
 
 /** Stable dependency for optional filter objects passed inline from components. */
 function filterDepKey(filter: unknown) {
@@ -146,9 +147,14 @@ export function useSpaceBriefingItems(filter?: BriefingFilter) {
   }, [api.connectors, ctx, filterKey]);
 
   return useAsyncQuery(
-    () => api.entities.listBriefingItems(ctx, filter),
+    async () =>
+      filterRealBriefingItems(await api.entities.listBriefingItems(ctx, filter)),
     [api.entities, ctx, filterKey],
-    snap.seeded ? localSpaceEntityStore.listBriefingItems(ctx, filter) : [],
+    snap.seeded
+      ? filterRealBriefingItems(
+          localSpaceEntityStore.listBriefingItems(ctx, filter),
+        )
+      : [],
     snap.seeded,
   );
 }

@@ -14,6 +14,7 @@ const PROFILES: Record<BudgetProfileName, TurnBudgets> = {
     toolTimeoutMs: 12_000,
     earlySynthesizeWhenSufficient: true,
     maxPromptChars: 14_000,
+    maxOutputTokens: 512,
   },
   on_device_large: {
     profile: "on_device_large",
@@ -23,6 +24,7 @@ const PROFILES: Record<BudgetProfileName, TurnBudgets> = {
     toolTimeoutMs: 15_000,
     earlySynthesizeWhenSufficient: true,
     maxPromptChars: 28_000,
+    maxOutputTokens: 768,
   },
   pcc: {
     profile: "pcc",
@@ -32,6 +34,7 @@ const PROFILES: Record<BudgetProfileName, TurnBudgets> = {
     toolTimeoutMs: 20_000,
     earlySynthesizeWhenSufficient: true,
     maxPromptChars: 96_000,
+    maxOutputTokens: 1200,
   },
 };
 

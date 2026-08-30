@@ -57,12 +57,23 @@ import {
 } from "@/lib/ai/orchestrator/tool-execution-bus";
 import { collectCitationsFromToolResults } from "@/lib/ai/orchestrator/collect-citations";
 import {
+  answerShapeFromContract,
+  buildSynthesisInstruction,
   deterministicAnswerFromEvidence,
   inferAnswerShape,
   looksLikeContextOverflow,
   shrinkEvidenceForRetry,
-  buildSynthesisInstruction,
 } from "../answer-shape/index.ts";
+import { ensureCompleteAnswer } from "@/lib/ai/orchestrator/ensure-complete-answer";
+import {
+  deeperResearchQueries,
+  evaluateResearchQuality,
+  extractFactualComponents,
+  formatComponentBreakdown,
+  resolveComponentFacts,
+  sumVerifiedComponents,
+  type EvidenceSnippet,
+} from "@/lib/ai/orchestrator/research-quality";
 import { shouldEscalateToBrowser } from "@/lib/computer/tool-routing";
 import {
   citationsFromAtoms,
@@ -115,41 +126,30 @@ export const LOCAL_ORCHESTRATOR_TOOLS = [
 function detailForTool(name: string): string {
   switch (name) {
     case "web.search":
-      return "Searching the web…";
+    case "web.research":
+    case "workspace.search":
+    case "knowledge.search":
+      return "Searching";
     case "web.open":
     case "web.read":
-      return "Reading page…";
-    case "web.research":
-      return "Researching…";
     case "computer.browser.open":
-      return "Opening remote browser…";
     case "computer.browser.observe":
-      return "Reading page structure…";
+    case "browser.current.get_context":
+    case "browser.current.get_selection":
+    case "browser.current.capture_viewport":
+      return "Reading";
     case "computer.browser.click":
     case "computer.browser.fill":
-      return "Using browser…";
-    case "browser.current.get_context":
-      return "Reading the page on the right…";
-    case "browser.current.get_selection":
-      return "Reading selection…";
-    case "browser.current.capture_viewport":
-      return "Capturing the viewport…";
+      return "Updating";
     case "browser.current.get_metadata":
-      return "Checking the active tab…";
-    case "workspace.search":
-      return "Searching workspace…";
-    case "knowledge.search":
-      return "Searching knowledge…";
-    case "project.create":
-      return "Creating project…";
-    case "project.open":
-      return "Opening project…";
     case "ui.ask_clarification":
-      return "Preparing questions…";
+      return "Checking";
+    case "project.create":
+    case "project.open":
     case "nav.open":
-      return "Navigating…";
+      return "Building";
     default:
-      return "Calling tool…";
+      return "Updating";
   }
 }
 
@@ -163,8 +163,10 @@ function narrowDeterministicFallback(opts: {
   question: string;
   evidence: TurnEvidence[];
 }): string | null {
+  const breakdown = tryDeterministicComponentAnswer(opts.question, opts.evidence);
+  if (breakdown) return breakdown;
   if (!hasUsableEvidenceSnippets(opts.evidence)) return null;
-  const shape = inferAnswerShape(opts.question);
+  const shape = answerShapeFromContract(opts.question);
   const synthesis = prepareSynthesisEvidence(
     opts.question,
     opts.evidence,
@@ -182,6 +184,129 @@ function narrowDeterministicFallback(opts: {
     shape,
     evidence: strong.length ? strong : synthesis.compact.slice(0, 3),
   });
+}
+
+function evidenceAsSnippets(items: TurnEvidence[]): EvidenceSnippet[] {
+  return items
+    .filter((e) => e.ok && e.content.trim())
+    .map((e) => ({
+      id: e.id,
+      title: e.title,
+      url: e.url,
+      content: e.content,
+      kind: e.kind,
+    }));
+}
+
+function tryDeterministicComponentAnswer(
+  question: string,
+  evidence: TurnEvidence[],
+): string | null {
+  const components = extractFactualComponents(question);
+  if (components.length < 2) return null;
+  const facts = resolveComponentFacts({
+    components,
+    evidence: evidenceAsSnippets(evidence),
+  });
+  const sum = sumVerifiedComponents(facts);
+  if (!sum?.verified) return null;
+  return formatComponentBreakdown({
+    leadLabel: "total",
+    facts,
+    total: sum.total,
+  });
+}
+
+async function deepenRetrievalIfNeeded(opts: {
+  question: string;
+  evidence: TurnEvidence[];
+  toolResults: AiToolCallResult[];
+  provenanceBatches: ProvenanceAtom[][];
+  conversationState: ReturnType<typeof applyConversationDelta>;
+  report: (progress: AgentTurnProgress) => void;
+  deeper: boolean;
+}): Promise<void> {
+  const gate = evaluateResearchQuality({
+    question: opts.question,
+    evidence: evidenceAsSnippets(opts.evidence),
+    deeper: opts.deeper,
+  });
+  if (!gate.needsMoreInvestigation) return;
+
+  // Open top search URLs when we only have snippets.
+  const urls: string[] = [];
+  for (const r of opts.toolResults) {
+    if (r.name !== "web.search" && r.name !== "web.research") continue;
+    const rows =
+      (r.data?.results as Array<{ url?: string; title?: string }> | undefined) ??
+      [];
+    for (const row of rows) {
+      if (!row.url) continue;
+      if (urls.includes(row.url)) continue;
+      urls.push(row.url);
+      if (urls.length >= 3) break;
+    }
+    if (urls.length >= 3) break;
+  }
+
+  for (const url of urls.slice(0, 3)) {
+    if (
+      opts.evidence.some(
+        (e) =>
+          e.ok &&
+          (e.kind === "web_page" || e.kind === "browser") &&
+          e.url &&
+          e.url.replace(/\/$/, "") === url.replace(/\/$/, ""),
+      )
+    ) {
+      continue;
+    }
+    opts.report({
+      phase: "tool",
+      label: "Thinking",
+      detail: "Reading",
+      toolName: "web.read",
+    });
+    const result = await executeAuthorizedTool({
+      name: "web.read",
+      arguments: { url },
+    });
+    opts.toolResults.push(result);
+    const mapped = evidenceFromToolResult(result);
+    appendEvidence(opts.evidence, mapped.evidence);
+    opts.provenanceBatches.push(mapped.atoms);
+  }
+
+  // Extra searches when still weak / conflicting / correction retry.
+  const stillWeak = evaluateResearchQuality({
+    question: opts.question,
+    evidence: evidenceAsSnippets(opts.evidence),
+    deeper: true,
+  });
+  if (!stillWeak.needsMoreInvestigation && !stillWeak.conflictingEvidence) {
+    return;
+  }
+
+  const prior = opts.toolResults
+    .filter((r) => r.name === "web.search")
+    .map((r) => String(r.data?.query ?? ""))
+    .filter(Boolean);
+  for (const query of deeperResearchQueries(opts.question, prior).slice(0, 2)) {
+    opts.report({
+      phase: "tool",
+      label: "Thinking",
+      detail: "Searching",
+      toolName: "web.search",
+    });
+    const result = await executeAuthorizedTool({
+      name: "web.search",
+      arguments: { query },
+    });
+    opts.toolResults.push(result);
+    const mapped = evidenceFromToolResult(result);
+    appendEvidence(opts.evidence, mapped.evidence);
+    opts.provenanceBatches.push(mapped.atoms);
+  }
 }
 
 function evidenceFromToolResult(
@@ -681,13 +806,15 @@ async function runLocalTurnOrchestratorInner(
           if (!profile.budgets.earlySynthesizeWhenSufficient) return false;
           const oks = completed.filter((c) => c.ok && c.value);
           if (!oks.length) return false;
-          // Early exit once one successful web.search/read returns
+          // Never early-exit on a lone search for multi-component / live facts —
+          // wait for the batch so deepenRetrieval can open pages.
+          if (extractFactualComponents(request.content).length >= 2) return false;
+          if (conversationState.dissatisfactionSignal) return false;
           return oks.some((c) => {
             const r = c.value as AiToolCallResult;
             return (
               r.ok &&
-              (r.name === "web.search" ||
-                r.name === "web.read" ||
+              (r.name === "web.read" ||
                 r.name === "web.open" ||
                 r.name.startsWith("browser.current."))
             );
@@ -777,6 +904,39 @@ async function runLocalTurnOrchestratorInner(
         }
       }
 
+      await deepenRetrievalIfNeeded({
+        question: request.content,
+        evidence,
+        toolResults,
+        provenanceBatches,
+        conversationState,
+        report,
+        deeper: Boolean(
+          conversationState.dissatisfactionSignal ||
+            conversationState.freshnessRequirement,
+        ),
+      });
+
+      // Prefer verified multi-component arithmetic over FM guesswork.
+      const deterministicBreakdown = tryDeterministicComponentAnswer(
+        request.content,
+        evidence,
+      );
+      if (deterministicBreakdown) {
+        return {
+          content: deterministicBreakdown,
+          runtime: "apple-local",
+          offline: false,
+          condensationOccurred: false,
+          aiChatId: request.aiChatId ?? null,
+          toolResults: toolResults.length ? toolResults : undefined,
+          citations: finalizeCitations(
+            toolResults,
+            mergeProvenanceAtoms(provenanceBatches),
+          ),
+        };
+      }
+
       // Recompile after pre-run: usually disallowed tools → synthesis-only.
       profile = compileTurnProfile({
         content: request.content,
@@ -789,8 +949,18 @@ async function runLocalTurnOrchestratorInner(
           typeof navigator !== "undefined" &&
           /Mac|Win|Linux/i.test(navigator.platform || ""),
       });
-      // Force synthesis path when we already retrieved for live-info.
-      if (evidence.some((e) => e.ok && e.content.trim()) && requiresExternalEvidence(request.content)) {
+      // Force synthesis path when we already retrieved for live-info —
+      // but only if quality gate says evidence is enough (or we already deepened).
+      const gate = evaluateResearchQuality({
+        question: request.content,
+        evidence: evidenceAsSnippets(evidence),
+        deeper: true,
+      });
+      if (
+        evidence.some((e) => e.ok && e.content.trim()) &&
+        requiresExternalEvidence(request.content) &&
+        (gate.evidenceSufficient || !gate.needsMoreInvestigation)
+      ) {
         profile = {
           ...profile,
           toolMode: "disallowed",
@@ -819,7 +989,7 @@ async function runLocalTurnOrchestratorInner(
         profile,
       );
       emitToolExecution({ type: "model_generate_start", round });
-      report({ phase: "generating", label: "Thinking", detail: "Generating…" });
+      report({ phase: "generating", label: "Thinking", detail: "Generating" });
       let fm: Awaited<ReturnType<typeof generateFmTurn>>;
       try {
         fm = await generateFmTurn({ prompt, instructions });
@@ -962,9 +1132,25 @@ async function runLocalTurnOrchestratorInner(
             citations: finalizeCitations(toolResults, atoms()),
           };
         }
+        report({
+          phase: "generating",
+          label: "Thinking",
+          detail: "Generating",
+        });
+        const completed = await ensureCompleteAnswer({
+          question: request.content,
+          draft: answer,
+          generate: async (instruction) => {
+            const repair = await generateFmTurn({
+              prompt: request.content,
+              instructions: instruction,
+            });
+            return repair.text;
+          },
+        });
         return {
           ...lastGenerate,
-          content: answer,
+          content: completed.content,
           toolResults: toolResults.length ? toolResults : undefined,
           citations: finalizeCitations(toolResults, atoms()),
           ...(parsed.blocks?.length ? { blocks: parsed.blocks } : {}),

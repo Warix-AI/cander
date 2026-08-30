@@ -18,6 +18,7 @@ import {
   type SpaceIndexEntry,
 } from "@/lib/space-index";
 import type { SpaceId, Thread } from "@/lib/types";
+import { filterRealBriefingItems } from "@/lib/briefing-real";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { threadHasTurns } from "@/lib/persistent-chat";
 import { navLabel } from "@/lib/use-main-nav-items";
@@ -61,7 +62,9 @@ function readIndexSeed(ctx: WorkspaceCtx) {
     ready: entity.seeded,
     projects: entity.seeded ? localSpaceEntityStore.listAllProjects(ctx) : [],
     sources: entity.seeded ? localSpaceEntityStore.listSources(ctx) : [],
-    briefing: entity.seeded ? localSpaceEntityStore.listBriefingItems(ctx) : [],
+    briefing: entity.seeded
+      ? filterRealBriefingItems(localSpaceEntityStore.listBriefingItems(ctx))
+      : [],
     threads: filterThreads(chat.threads, ctx.workspaceId),
   };
 }
@@ -146,7 +149,7 @@ export function useSpaceIndex(opts?: {
         if (cancelled) return;
         setProjects(nextProjects);
         setSources(nextSources);
-        setBriefing(nextBriefing);
+        setBriefing(filterRealBriefingItems(nextBriefing));
         setThreads(nextThreads);
       })
       .catch((err: unknown) => {
@@ -241,7 +244,8 @@ export function useSpaceIndex(opts?: {
       });
     }
 
-    for (const item of briefing) {
+    // Only real connector briefing activity — never legacy demo templates.
+    for (const item of filterRealBriefingItems(briefing)) {
       items.push({
         key: item.id,
         kind: "briefing",

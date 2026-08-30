@@ -174,6 +174,7 @@ import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
 import { speakText, stopTextToSpeech } from "@/lib/voice/text-to-speech";
 import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
 import { typewriterReveal } from "@/lib/ai/typewriter";
+import { phaseFromProgress } from "@/lib/ai/turn-activity";
 import { openProjectImageTab } from "@/lib/chat-image-attach";
 import {
   getSupabaseUserServerSnapshot,
@@ -1455,13 +1456,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           kind === "research");
 
       if (useLiveAi) {
-        // Always show the primary Thinking line; detail only arrives for tools/work.
+        // One activity row for the whole turn — timer starts here.
         assistantMsg = {
           ...assistantMsg,
           content: "",
           status: "pending",
           activity: {
-            label: "Thinking",
+            phase: "generating",
+            startedAt: Date.now(),
             kind: "idle",
           },
         };
@@ -1868,26 +1870,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           messages: historyMessages,
           ...(imageUrls.length ? { images: imageUrls } : {}),
           onProgress: (progress) => {
-            const detailRaw = progress.detail?.trim() || "";
-            const isLegacyAbout = /^Thinking about\b/i.test(detailRaw);
-            const showDetail =
-              !isLegacyAbout &&
-              Boolean(detailRaw) &&
-              (progress.phase === "tool" ||
-                progress.phase === "follow_up" ||
-                progress.phase === "generating" ||
-                (progress.phase === "thinking" &&
-                  detailRaw !== "" &&
-                  !isLegacyAbout));
-            const nextActivity = {
-              label: "Thinking",
-              kind: (progress.phase === "tool"
-                ? "tool"
-                : showDetail
-                  ? "work"
-                  : "idle") as "idle" | "tool" | "work",
-              ...(showDetail ? { detail: detailRaw } : {}),
-            };
+            const phase = phaseFromProgress(progress);
             setThreads((current) =>
               current.map((item) => ({
                 ...item,
@@ -1898,12 +1881,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                       (message.status === "pending" ||
                         message.status === "streaming") &&
                       !message.content);
-                  return isTarget
-                    ? {
-                        ...message,
-                        activity: nextActivity,
-                      }
-                    : message;
+                  if (!isTarget) return message;
+                  const startedAt =
+                    message.activity?.startedAt ?? Date.now();
+                  return {
+                    ...message,
+                    activity: {
+                      phase,
+                      startedAt,
+                      kind:
+                        progress.phase === "tool"
+                          ? ("tool" as const)
+                          : ("work" as const),
+                    },
+                  };
                 }),
               })),
             );
@@ -1989,21 +1980,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               });
             };
 
-            // Apple on-device is already slow — skip fake typewriter lag.
-            if (result.runtime === "apple-local") {
-              patchAssistant(
-                result.content,
-                "complete",
-                result.condensationOccurred,
-                result.citations,
-                result.blocks,
-              );
-              if (voiceActive) {
-                speakText(sanitizeAssistantVisibleText(result.content));
-              }
-              return;
-            }
-
+            // Presentation buffer only — model already finished; smooth visual pace.
             typewriterReveal(result.content, (partial, done) => {
               patchAssistant(
                 partial,
@@ -2182,6 +2159,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 content: "",
                 at: nowTime(),
                 status: "pending" as const,
+                activity: {
+                  phase: "generating" as const,
+                  startedAt: Date.now(),
+                  kind: "idle" as const,
+                },
               },
             ],
           };
@@ -2309,32 +2291,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectSpace: (spaceId as SpaceId | null) ?? null,
           messages: historyMessages,
           onProgress: (progress) => {
-            const detailRaw = progress.detail?.trim() || "";
-            const isLegacyAbout = /^Thinking about\b/i.test(detailRaw);
-            const showDetail =
-              !isLegacyAbout &&
-              Boolean(detailRaw) &&
-              (progress.phase === "tool" || progress.phase === "follow_up");
-            const nextActivity = {
-              label: "Thinking",
-              kind: (progress.phase === "tool"
-                ? "tool"
-                : showDetail
-                  ? "work"
-                  : "idle") as "idle" | "tool" | "work",
-              ...(showDetail ? { detail: detailRaw } : {}),
-            };
+            const phase = phaseFromProgress(progress);
             setThreads((current) =>
               current.map((item) => ({
                 ...item,
-                messages: item.messages.map((m) =>
-                  m.id === assistantId
-                    ? {
-                        ...m,
-                        activity: nextActivity,
-                      }
-                    : m,
-                ),
+                messages: item.messages.map((m) => {
+                  if (m.id !== assistantId) return m;
+                  const startedAt = m.activity?.startedAt ?? Date.now();
+                  return {
+                    ...m,
+                    activity: {
+                      phase,
+                      startedAt,
+                      kind:
+                        progress.phase === "tool"
+                          ? ("tool" as const)
+                          : ("work" as const),
+                    },
+                  };
+                }),
               })),
             );
           },

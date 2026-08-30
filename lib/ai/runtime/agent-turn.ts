@@ -344,7 +344,7 @@ async function runAssistantTurnInner(
       detail: "Generating…",
     });
     // Phase 0: keep the real user utterance; inject compressed evidence (not raw Exa dumps).
-    const { compressEvidenceForSynthesis, buildSynthesisInstruction, inferAnswerShape } =
+    const { compressEvidenceForSynthesis, buildSynthesisInstruction, answerShapeFromContract } =
       await import("@/lib/ai/answer-shape");
     const rows =
       (searchResult.data?.results as Array<{
@@ -353,7 +353,7 @@ async function runAssistantTurnInner(
         description?: string;
         snippet?: string;
       }>) ?? [];
-    const shape = inferAnswerShape(request.content);
+    const shape = answerShapeFromContract(request.content);
     const compact = compressEvidenceForSynthesis({
       question: request.content,
       shape,
@@ -382,12 +382,33 @@ async function runAssistantTurnInner(
         { role: "user", content: request.content },
       ],
     });
-    return {
-      ...answered,
-      content: safeContent(
+    const { ensureCompleteAnswer } = await import(
+      "@/lib/ai/orchestrator/ensure-complete-answer"
+    );
+    const completed = await ensureCompleteAnswer({
+      question: request.content,
+      draft: safeContent(
         answered.content,
         "I found sources but couldn’t summarize them. Try asking again.",
       ),
+      generate: async (instruction) => {
+        const again = await generateWithAiRuntime({
+          ...gatedRequest,
+          allowTools: false,
+          allowedToolNames: [],
+          content: request.content.trim(),
+          toolContext: instruction,
+          messages: [
+            ...(request.messages ?? []),
+            { role: "user", content: request.content },
+          ],
+        });
+        return again.content;
+      },
+    });
+    return {
+      ...answered,
+      content: completed.content,
       toolResults: [searchResult],
     };
   }

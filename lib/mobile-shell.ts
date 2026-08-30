@@ -8,6 +8,8 @@ type KeyboardPlugin = {
   setAccessoryBarVisible?: (opts: { isVisible: boolean }) => Promise<void>;
   setScroll?: (opts: { isDisabled: boolean }) => Promise<void>;
   setStyle?: (opts: { style: "LIGHT" | "DARK" | "DEFAULT" }) => Promise<void>;
+  show?: () => Promise<void>;
+  hide?: () => Promise<void>;
   addListener?: (
     event:
       | "keyboardWillShow"
@@ -247,6 +249,26 @@ export function syncNativeKeyboardStyle(theme?: "light" | "dark") {
     style: resolved === "dark" ? "DARK" : "LIGHT",
   }).catch(() => {
     // Older Capacitor builds may not support setStyle.
+  });
+}
+
+/** Dismiss the native keyboard (Capacitor). Safe no-op on web. */
+export function dismissNativeKeyboard() {
+  if (typeof document !== "undefined") {
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLElement &&
+      (active.tagName === "TEXTAREA" ||
+        active.tagName === "INPUT" ||
+        active.isContentEditable)
+    ) {
+      active.blur();
+    }
+  }
+  const keyboard = getCapacitor()?.Plugins?.Keyboard;
+  if (!keyboard?.hide) return;
+  void keyboard.hide().catch(() => {
+    // ignore
   });
 }
 

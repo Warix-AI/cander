@@ -39,7 +39,7 @@ function shapeFor(
       maxEvidenceItems: 5,
       maxEvidenceChars: 2000,
       formatHint:
-        "State the relevant values briefly, then the calculated result. Show arithmetic only when it clarifies the answer.",
+        "Lead with the combined total. Then bullet each component with its value. End with a bold Total line. Add numbers deterministically from evidence — never invent. Prefer this breakdown over a paragraph.",
     },
     comparison: {
       kind: "comparison",
@@ -115,7 +115,10 @@ export function inferAnswerShape(userQuestion: string): AnswerShape {
   if (
     /\b(total|sum|add(?:\s+up)?|calculate|how much (in total|altogether)|combined|times |multipl|divid|percent|% of)\b/i.test(
       lower,
-    )
+    ) ||
+    (lower.includes(",") &&
+      /\b(half|calories?|cal|bowl|combo|with)\b/i.test(lower) &&
+      lower.split(/,/).length >= 2)
   ) {
     return shapeFor("calculation");
   }
