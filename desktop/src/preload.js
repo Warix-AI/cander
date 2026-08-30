@@ -2,8 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("canderDesktop", {
   platform: process.platform,
-  shellBuild: "2026-08-29-browser-surface",
-  shellVersion: "0.1.1",
+  shellBuild: "2026-08-30-traffic-lights",
+  shellVersion: "0.1.2",
   window: {
     minimize: () => ipcRenderer.send("cander:window-minimize"),
     maximize: () => ipcRenderer.send("cander:window-toggle-maximize"),
@@ -28,6 +28,9 @@ contextBridge.exposeInMainWorld("canderDesktop", {
     forward: (tabId) => ipcRenderer.invoke("cander:browser-forward", tabId),
     reload: (tabId) => ipcRenderer.invoke("cander:browser-reload", tabId),
     stop: (tabId) => ipcRenderer.invoke("cander:browser-stop", tabId),
+    hideAll: () => ipcRenderer.invoke("cander:browser-hide-all"),
+    setChromeOverlay: (active) =>
+      ipcRenderer.invoke("cander:browser-chrome-overlay", active),
     onEvent: (handler) => {
       const listener = (_event, payload) => handler(payload);
       ipcRenderer.on("cander:browser-event", listener);

@@ -54,6 +54,10 @@ export interface BrowserSurfaceAdapter {
   destroyTab(tabId: string): Promise<void> | void;
   showTab(tabId: string, bounds: BrowserSurfaceBounds): Promise<void> | void;
   hideTab(tabId: string): Promise<void> | void;
+  /** Hide every native surface (panel off-screen / chat covering). */
+  hideAll?(): Promise<void> | void;
+  /** Temporarily collapse views so React overlays receive pointer events. */
+  setChromeOverlay?(active: boolean): Promise<void> | void;
   navigate(tabId: string, url: string): Promise<void> | void;
   back(tabId: string): Promise<void> | void;
   forward(tabId: string): Promise<void> | void;

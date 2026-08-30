@@ -44,3 +44,9 @@ export {
   isAllowedLocalBrowserUrl,
   localBrowserPartition,
 } from "@/lib/browser-surface/local-browsing";
+export {
+  areNativeBrowserSurfacesSuppressed,
+  resumeNativeBrowserSurfaces,
+  subscribeNativeBrowserSurfaceSuppress,
+  suppressNativeBrowserSurfaces,
+} from "@/lib/browser-surface/native-overlay";

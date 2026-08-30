@@ -26,6 +26,7 @@ type CapacitorBrowserPlugin = {
   forward: (opts: { tabId: string }) => Promise<void>;
   reload: (opts: { tabId: string }) => Promise<void>;
   stop: (opts: { tabId: string }) => Promise<void>;
+  hideAll?: () => Promise<void>;
   addListener?: (
     eventName: string,
     handler: (event: BrowserSurfaceEvent) => void,
@@ -116,6 +117,10 @@ export function createCapacitorBrowserSurfaceAdapter(): BrowserSurfaceAdapter {
 
     async stop(tabId) {
       await getPlugin()?.stop({ tabId });
+    },
+
+    async hideAll() {
+      await getPlugin()?.hideAll?.();
     },
 
     subscribe(listener) {

@@ -60,7 +60,7 @@ export function ResearchDashboard() {
       <MobileFilterBar
         active={hoistFilters}
         onNewChat={() => newChat("research")}
-        newChatLabel="New explore"
+        newChatLabel="New search"
         layout={{ value: spaceLayout, onChange: setSpaceLayout }}
       >
         <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
@@ -75,7 +75,7 @@ export function ResearchDashboard() {
             kind="paper"
             items={projectItems}
             onOpen={openProject}
-            empty="No Explore projects yet. Create one to get started."
+            empty="No searches yet. Start a new search to open a tab group."
           />
         )}
       </div>

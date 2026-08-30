@@ -25,6 +25,11 @@ import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { BrowserSurfaceHost } from "@/components/browser/BrowserSurfaceHost";
 import {
+  getBrowserSurfaceAdapter,
+  resumeNativeBrowserSurfaces,
+  suppressNativeBrowserSurfaces,
+} from "@/lib/browser-surface";
+import {
   MobileBottomSheet,
   ProjectAddSheetHeader,
   ProjectRenameSheetBody,
@@ -99,6 +104,7 @@ export function ProjectBrowserPanel() {
     setSelectMode,
     refreshPreview,
     liveUrl,
+    mobileSurface,
   } = useApp();
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
@@ -282,6 +288,10 @@ export function ProjectBrowserPanel() {
   const canBack = active.historyIndex > 0;
   const canForward = active.historyIndex < active.history.length - 1;
   const extraProjects = allProjects.filter((item) => item.id !== projectId);
+  // Native WKWebView / WebContentsView must hide when chat covers the panel.
+  const surfaceActive =
+    panelMode !== "collapsed" &&
+    (!mobile || mobileSurface === "panel");
   const address =
     active.kind === "agent-browser"
       ? (computerSession?.currentUrl ?? active.url)
@@ -599,6 +609,7 @@ export function ProjectBrowserPanel() {
           reloadKey={reloadKey}
           userId={actor.id}
           browserKey={key}
+          surfaceActive={surfaceActive}
         />
         {mobile && mobileNavOpen ? (
           <MobileBrowserNavSheet
@@ -689,6 +700,7 @@ function ProjectBrowserBody({
   reloadKey,
   userId,
   browserKey,
+  surfaceActive,
 }: {
   tab: ProjectBrowserTab;
   projects: SpaceProject[];
@@ -697,6 +709,7 @@ function ProjectBrowserBody({
   reloadKey: number;
   userId: string;
   browserKey: ProjectBrowserKey;
+  surfaceActive: boolean;
 }) {
   const computerSession = useSyncExternalStore(
     subscribeActiveComputerSession,
@@ -760,6 +773,7 @@ function ProjectBrowserBody({
         reloadKey={reloadKey}
         title={tab.title}
         userId={userId}
+        active={surfaceActive}
         onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
         onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
       />
@@ -784,6 +798,7 @@ function ProjectBrowserBody({
           title={tab.title}
           userId={userId}
           projectId={tab.projectId ?? null}
+          active={surfaceActive}
           onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
           onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
         />
@@ -805,6 +820,7 @@ function ProjectBrowserBody({
         reloadKey={reloadKey}
         title={tab.title}
         userId={userId}
+        active={surfaceActive}
         onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
         onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
       />
@@ -1184,6 +1200,21 @@ function ProjectTabButton({
   );
 }
 
+function NativeOverlayGate({ open }: { open: boolean }) {
+  useEffect(() => {
+    if (!open) return;
+    // Native WebContentsView sits above React portals — collapse it while menus are open.
+    suppressNativeBrowserSurfaces();
+    const adapter = getBrowserSurfaceAdapter();
+    void adapter.setChromeOverlay?.(true);
+    return () => {
+      resumeNativeBrowserSurfaces();
+      void adapter.setChromeOverlay?.(false);
+    };
+  }, [open]);
+  return null;
+}
+
 function AddTabMenu({
   extraProjects,
   onAddUrl,
@@ -1200,19 +1231,22 @@ function AddTabMenu({
       align="start"
       matchTrigger={false}
       menuClassName="min-w-[14rem] max-h-[min(20rem,50vh)] overflow-y-auto"
-      trigger={({ toggle }) => (
-        <button
-          type="button"
-          aria-label="New tab"
-          title="New tab"
-          onClick={toggle}
-          className={cn(
-            "inline-flex shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground",
-            compact ? "h-9 w-9 rounded-full" : "h-7 w-7 rounded-lg",
-          )}
-        >
-          <Plus className={compact ? "h-4 w-4" : "h-3.5 w-3.5"} strokeWidth={1.8} />
-        </button>
+      trigger={({ open, toggle }) => (
+        <>
+          <NativeOverlayGate open={open} />
+          <button
+            type="button"
+            aria-label="New tab"
+            title="New tab"
+            onClick={toggle}
+            className={cn(
+              "inline-flex shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground",
+              compact ? "h-9 w-9 rounded-full" : "h-7 w-7 rounded-lg",
+            )}
+          >
+            <Plus className={compact ? "h-4 w-4" : "h-3.5 w-3.5"} strokeWidth={1.8} />
+          </button>
+        </>
       )}
     >
       {(close) => (
@@ -1232,7 +1266,7 @@ function AddTabMenu({
           {extraProjects.length ? (
             <>
               <p className="px-2.5 pt-2 pb-1 font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
-                Project previews
+                Other projects
               </p>
               {extraProjects.map((item) => (
                 <button

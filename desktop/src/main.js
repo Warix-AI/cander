@@ -8,7 +8,7 @@ const DEFAULT_URL = "https://cander.app";
 const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Bumped when the native shell changes — visible on <html data-cander-shell>. */
-const SHELL_BUILD = "2026-08-29-browser-surface";
+const SHELL_BUILD = "2026-08-30-traffic-lights";
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
 /** Classic Mac titlebar / chrome row height (traffic-light axis). */
 const TITLEBAR_PX = 52;
@@ -120,13 +120,14 @@ async function createWindow() {
     title: "",
     backgroundColor: "#ffffff",
     show: false,
-    // Frameless on macOS — custom traffic lights stay visible when unfocused.
-    frame: !isMac,
+    // macOS: keep the system traffic lights; hide only the title-bar chrome.
     ...(isMac
-      ? {}
-      : {
+      ? {
           titleBarStyle: "hidden",
           trafficLightPosition: { x: 16, y: 18 },
+        }
+      : {
+          frame: true,
         }),
     icon: ICON_PATH,
     webPreferences: {
@@ -372,6 +373,12 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("cander:browser-stop", async (_e, tabId) => {
     browserSurface.stop(tabId);
+  });
+  ipcMain.handle("cander:browser-hide-all", async () => {
+    browserSurface.hideAll();
+  });
+  ipcMain.handle("cander:browser-chrome-overlay", async (_e, active) => {
+    browserSurface.setChromeOverlay(Boolean(active));
   });
 
   buildMenu();

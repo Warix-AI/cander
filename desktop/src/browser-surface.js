@@ -8,11 +8,13 @@ const { partitionFor, isAllowedUrl } = require("./browser-security");
  * Keep partition + URL allow rules aligned with lib/browser-surface/local-browsing.ts.
  */
 
-/** @type {Map<string, { view: import('electron').WebContentsView, lastUrl: string, options: object }>} */
+/** @type {Map<string, { view: import('electron').WebContentsView, lastUrl: string, options: object, lastBounds: { x:number,y:number,width:number,height:number } | null, visible: boolean }>} */
 const tabs = new Map();
 
 /** @type {import('electron').BrowserWindow | null} */
 let hostWindow = null;
+/** When React chrome (dropdowns) needs hit-testing over the native view. */
+let chromeOverlay = false;
 
 function setHostWindow(win) {
   hostWindow = win;
@@ -180,6 +182,8 @@ function recoverTab(tabId, lastUrl, options) {
     view,
     lastUrl: lastUrl || "about:blank",
     options: options || {},
+    lastBounds: prev?.lastBounds ?? null,
+    visible: false,
   });
 }
 
@@ -202,6 +206,8 @@ function createTab(tabId, initialUrl, options = {}) {
     view,
     lastUrl: initialUrl || "about:blank",
     options,
+    lastBounds: null,
+    visible: false,
   });
 }
 
@@ -226,22 +232,53 @@ function destroyTab(tabId) {
 function showTab(tabId, bounds) {
   const entry = tabs.get(tabId);
   if (!entry || !hostWindow || hostWindow.isDestroyed()) return;
-  for (const [id, other] of tabs) {
-    if (id === tabId) continue;
-    other.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
-  }
-  entry.view.setBounds({
+  const nextBounds = {
     x: Math.max(0, Math.round(bounds.x || 0)),
     y: Math.max(0, Math.round(bounds.y || 0)),
     width: Math.max(1, Math.round(bounds.width || 1)),
     height: Math.max(1, Math.round(bounds.height || 1)),
-  });
+  };
+  entry.lastBounds = nextBounds;
+  entry.visible = true;
+  for (const [id, other] of tabs) {
+    if (id === tabId) continue;
+    other.visible = false;
+    other.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+  }
+  if (chromeOverlay) {
+    entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+    return;
+  }
+  entry.view.setBounds(nextBounds);
 }
 
 function hideTab(tabId) {
   const entry = tabs.get(tabId);
   if (!entry) return;
+  entry.visible = false;
   entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+}
+
+/** Collapse all views so React overlays receive clicks (dropdown menus, etc.). */
+function setChromeOverlay(active) {
+  chromeOverlay = Boolean(active);
+  if (chromeOverlay) {
+    for (const entry of tabs.values()) {
+      entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+    }
+    return;
+  }
+  for (const entry of tabs.values()) {
+    if (entry.visible && entry.lastBounds) {
+      entry.view.setBounds(entry.lastBounds);
+    }
+  }
+}
+
+function hideAll() {
+  for (const tabId of tabs.keys()) {
+    hideTab(tabId);
+  }
 }
 
 function navigate(tabId, url) {
@@ -290,6 +327,8 @@ module.exports = {
   destroyTab,
   showTab,
   hideTab,
+  hideAll,
+  setChromeOverlay,
   navigate,
   back,
   forward,

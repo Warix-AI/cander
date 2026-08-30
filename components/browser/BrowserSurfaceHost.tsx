@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
+  areNativeBrowserSurfacesSuppressed,
   canEmbedInPwa,
   getBrowserSurfaceAdapter,
+  subscribeNativeBrowserSurfaceSuppress,
   type BrowserSurfaceBounds,
 } from "@/lib/browser-surface";
 import {
@@ -24,6 +26,8 @@ type BrowserSurfaceHostProps = {
   title?: string;
   userId?: string;
   projectId?: string | null;
+  /** False when the right panel / mobile panel surface is off-screen. */
+  active?: boolean;
   onUrlChange?: (url: string) => void;
   onTitleChange?: (title: string) => void;
 };
@@ -42,6 +46,7 @@ export function BrowserSurfaceHost({
   title = "Browser",
   userId,
   projectId = null,
+  active = true,
   onUrlChange,
   onTitleChange,
 }: BrowserSurfaceHostProps) {
@@ -54,6 +59,12 @@ export function BrowserSurfaceHost({
   const onTitleChangeRef = useRef(onTitleChange);
   onUrlChangeRef.current = onUrlChange;
   onTitleChangeRef.current = onTitleChange;
+
+  const suppressed = useSyncExternalStore(
+    subscribeNativeBrowserSurfaceSuppress,
+    areNativeBrowserSurfacesSuppressed,
+    () => false,
+  );
 
   useEffect(() => {
     const adapter = getBrowserSurfaceAdapter();
@@ -72,6 +83,17 @@ export function BrowserSurfaceHost({
       };
     };
 
+    const paint = async () => {
+      if (!active || suppressed) {
+        await adapter.hideTab(tabId);
+        return;
+      }
+      const bounds = syncBounds();
+      if (bounds && bounds.width > 1 && bounds.height > 1) {
+        await adapter.showTab(tabId, bounds);
+      }
+    };
+
     void (async () => {
       try {
         await adapter.createTab(tabId, url, {
@@ -80,11 +102,8 @@ export function BrowserSurfaceHost({
           userId,
           projectId,
         });
-        const bounds = syncBounds();
-        if (bounds) {
-          await adapter.showTab(tabId, bounds);
-        }
         await adapter.navigate(tabId, url);
+        await paint();
         if (
           adapter.id === "web-pwa" &&
           !isGoogleUrl(url) &&
@@ -124,10 +143,7 @@ export function BrowserSurfaceHost({
     });
 
     const onResize = () => {
-      const bounds = syncBounds();
-      if (bounds) {
-        void adapter.showTab(tabId, bounds);
-      }
+      void paint();
     };
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
@@ -157,6 +173,8 @@ export function BrowserSurfaceHost({
     recoverToken,
     userId,
     projectId,
+    active,
+    suppressed,
   ]);
 
   if (isGoogleUrl(url)) {
@@ -177,7 +195,7 @@ export function BrowserSurfaceHost({
         <p className="max-w-sm text-sm text-muted-foreground">
           This Cander desktop build is out of date for in-panel browsing.
           Quit the app and install the latest{" "}
-          <code className="text-xs">Cander-*.dmg</code> (0.1.1+), or run{" "}
+          <code className="text-xs">Cander-*.dmg</code> (0.1.2+), or run{" "}
           <code className="text-xs">npm run desktop</code> from the repo.
         </p>
         <a
@@ -239,8 +257,6 @@ export function BrowserSurfaceHost({
           className="h-full w-full border-0 bg-white"
           onError={() => setEmbedBlocked(true)}
           onLoad={(event) => {
-            // Cross-origin frames throw on contentDocument access when blocked
-            // by X-Frame-Options / CSP frame-ancestors — treat as embed failure.
             try {
               const frame = event.currentTarget;
               void frame.contentWindow?.location.href;

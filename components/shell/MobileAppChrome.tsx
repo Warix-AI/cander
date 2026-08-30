@@ -543,10 +543,12 @@ export function MobileAppChrome({ className }: { className?: string }) {
       >
         <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-1">
           <p className="px-1 text-[17px] font-medium tracking-[-0.02em]">
-            {spaceId === "research" ? "New explore" : "New build"}
+            {spaceId === "research" ? "New search" : "New build"}
           </p>
           <p className="mt-1 px-1 text-[13px] text-muted-foreground">
-            Choose what to create in this space.
+            {spaceId === "research"
+              ? "Create a tab group for browsing and research."
+              : "Choose what to create in this space."}
           </p>
           <div className="mt-4 space-y-0.5">
             {spaceId === "research"

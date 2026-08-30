@@ -23,6 +23,7 @@ public class CanderBrowserPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDeleg
         CAPPluginMethod(name: "forward", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "reload", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "hideAll", returnType: CAPPluginReturnPromise),
     ]
 
     private struct TabEntry {
@@ -216,6 +217,16 @@ public class CanderBrowserPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDeleg
         }
         DispatchQueue.main.async {
             webView.stopLoading()
+            call.resolve()
+        }
+    }
+
+    @objc func hideAll(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            for (id, entry) in self.tabs {
+                entry.webView.isHidden = true
+            }
+            self.activeTabId = nil
             call.resolve()
         }
     }
