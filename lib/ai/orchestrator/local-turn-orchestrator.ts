@@ -2,7 +2,7 @@
 
 /**
  * Unified client turn orchestrator for Apple Foundation Models.
- * FM reasons; Cander executes tools and collects evidence in a multi-step loop.
+ * Compiles a tiny TurnProfile per turn; FM synthesizes — runtime owns tools/retrieval.
  */
 
 import {
@@ -19,7 +19,6 @@ import {
 } from "@/lib/ai/runtime/on-device-workspace-cache";
 import {
   executeAuthorizedTool,
-  formatToolsForPrompt,
   type AiToolCallResult,
 } from "@/lib/ai/runtime/tools";
 import { tryIntentShortcut } from "@/lib/ai/runtime/intent-actions";
@@ -40,19 +39,15 @@ import type { AiGenerateRequest, AiGenerateResult } from "@/lib/ai/runtime/types
 import { getActorSnapshot } from "@/lib/session";
 import { getMembersSnapshot } from "@/lib/workspace-policy";
 import {
-  evidenceFromWebOpen,
-  evidenceFromWebSearch,
   evidenceFromBrowserObservation,
   prepareSynthesisEvidence,
   type TurnEvidence,
 } from "@/lib/ai/orchestrator/evidence";
-import {
-  initialDeterministicToolCalls,
-  requiresExternalEvidence,
-} from "@/lib/ai/orchestrator/deterministic-triggers";
+import { requiresExternalEvidence } from "@/lib/ai/orchestrator/deterministic-triggers";
 import { refersToActiveBrowserSurface } from "@/lib/browser-context/routing";
 import {
   failClosedMessage,
+  hasUsableEvidenceSnippets,
   validateLocalGrounding,
 } from "@/lib/ai/orchestrator/grounding-validator";
 import {
@@ -69,7 +64,25 @@ import {
   buildSynthesisInstruction,
 } from "../answer-shape/index.ts";
 import { shouldEscalateToBrowser } from "@/lib/computer/tool-routing";
+import {
+  citationsFromAtoms,
+  compileTurnProfile,
+  formatTurnProfileInstructions,
+  mergeProvenanceAtoms,
+  normalizeWebPageResult,
+  normalizeWebSearchResult,
+  parseSemanticResponse,
+  runParallelTasks,
+  semanticBlocksInstruction,
+  semanticBlocksToChatBlocks,
+  semanticBlocksToMarkdown,
+  toDynamicProfilePayload,
+  type ProvenanceAtom,
+  type TurnProfile,
+} from "@/lib/ai/turn-environment";
+import type { ChatBlock } from "@/lib/types";
 
+/** @deprecated Prefer compileTurnProfile — kept for tests/compat. */
 export const LOCAL_ORCHESTRATOR_TOOLS = [
   "web.search",
   "web.open",
@@ -94,8 +107,6 @@ export const LOCAL_ORCHESTRATOR_TOOLS = [
   "ui.ask_clarification",
   "ui.confirm",
 ] as const;
-
-const MAX_TOOL_ROUNDS = 5;
 
 function detailForTool(name: string): string {
   switch (name) {
@@ -143,9 +154,35 @@ function safeContent(text: string, fallback: string): string {
   return cleaned || fallback;
 }
 
+/** Narrow deterministic fallback — strong structured evidence only, not a second answer engine. */
+function narrowDeterministicFallback(opts: {
+  question: string;
+  evidence: TurnEvidence[];
+}): string | null {
+  if (!hasUsableEvidenceSnippets(opts.evidence)) return null;
+  const shape = inferAnswerShape(opts.question);
+  const synthesis = prepareSynthesisEvidence(
+    opts.question,
+    opts.evidence,
+    "onDevice",
+  );
+  if (!synthesis.compact.length) return null;
+  const strong = synthesis.compact.filter(
+    (c) =>
+      c.excerpt.length >= 40 &&
+      (/\d/.test(c.excerpt) || shape.kind === "fact" || shape.kind === "calculation"),
+  );
+  if (!strong.length && shape.kind !== "comparison") return null;
+  return deterministicAnswerFromEvidence({
+    question: opts.question,
+    shape,
+    evidence: strong.length ? strong : synthesis.compact.slice(0, 3),
+  });
+}
+
 function evidenceFromToolResult(
   result: AiToolCallResult,
-): TurnEvidence | TurnEvidence[] | null {
+): { evidence: TurnEvidence[]; atoms: ProvenanceAtom[] } {
   if (result.name === "web.search" || result.name === "web.research") {
     const rows =
       (result.data?.results as Array<{
@@ -153,16 +190,24 @@ function evidenceFromToolResult(
         url: string;
         description?: string;
         snippet?: string;
+        id?: string;
       }>) ?? [];
-    if (!rows.length) return null;
-    return evidenceFromWebSearch(
-      result.name,
-      rows.map((r) => ({
-        title: r.title,
-        url: r.url,
-        description: r.description || r.snippet || "",
-      })),
-    );
+    const cites = Array.isArray(result.data?.citations)
+      ? (result.data?.citations as Array<{
+          id?: string;
+          title?: string;
+          url?: string;
+          excerpt?: string;
+          description?: string;
+        }>)
+      : [];
+    const normalized = normalizeWebSearchResult({
+      toolName: result.name,
+      ok: result.ok,
+      results: rows,
+      citations: cites,
+    });
+    return { evidence: normalized.evidence, atoms: normalized.atoms };
   }
   if (result.name === "web.open" || result.name === "web.read") {
     const data = result.data as
@@ -173,7 +218,8 @@ function evidenceFromToolResult(
           text?: string;
         }
       | undefined;
-    return evidenceFromWebOpen({
+    const normalized = normalizeWebPageResult({
+      toolName: result.name,
       ok: result.ok,
       url: String(data?.url ?? ""),
       finalUrl: data?.finalUrl,
@@ -181,6 +227,7 @@ function evidenceFromToolResult(
       text: data?.text,
       error: result.ok ? undefined : result.output,
     });
+    return { evidence: normalized.evidence, atoms: normalized.atoms };
   }
   if (
     result.name.startsWith("computer.browser.") &&
@@ -193,7 +240,7 @@ function evidenceFromToolResult(
         }
       | undefined;
     const obs = data?.observation;
-    return evidenceFromBrowserObservation({
+    const ev = evidenceFromBrowserObservation({
       ok: result.ok,
       sourceTool: result.name,
       url: obs?.url,
@@ -202,6 +249,21 @@ function evidenceFromToolResult(
       sessionId: data?.sessionId,
       error: result.ok ? undefined : result.output,
     });
+    return {
+      evidence: [ev],
+      atoms: ev.ok
+        ? [
+            {
+              sourceId: ev.id,
+              title: ev.title,
+              url: ev.url,
+              excerpt: ev.content.slice(0, 400),
+              kind: "browser",
+              sourceTool: result.name,
+            },
+          ]
+        : [],
+    };
   }
   if (result.name.startsWith("browser.current.")) {
     const data = result.data as
@@ -213,10 +275,8 @@ function evidenceFromToolResult(
       | undefined;
     const page = data?.page;
     const content =
-      page?.visibleText ||
-      data?.selection?.text ||
-      result.output;
-    return evidenceFromBrowserObservation({
+      page?.visibleText || data?.selection?.text || result.output;
+    const ev = evidenceFromBrowserObservation({
       ok: result.ok,
       sourceTool: result.name,
       url: page?.url || data?.selection?.url || data?.screenshot?.url,
@@ -224,28 +284,77 @@ function evidenceFromToolResult(
       snapshot: content,
       error: result.ok ? undefined : result.output,
     });
-  }
-  if (result.ok && result.output.trim()) {
     return {
-      id: `tool_${Date.now()}`,
-      kind: "tool",
-      title: result.name,
-      content: result.output.slice(0, 8000),
-      retrievedAt: new Date().toISOString(),
-      sourceTool: result.name,
-      ok: true,
+      evidence: [ev],
+      atoms: ev.ok
+        ? [
+            {
+              sourceId: ev.id,
+              title: ev.title,
+              url: ev.url,
+              excerpt: ev.content.slice(0, 400),
+              kind: "browser",
+              sourceTool: result.name,
+            },
+          ]
+        : [],
     };
   }
-  return null;
+  if (result.ok && result.output.trim()) {
+    const id = `tool_${Date.now()}`;
+    return {
+      evidence: [
+        {
+          id,
+          kind: "tool",
+          title: result.name,
+          content: result.output.slice(0, 8000),
+          retrievedAt: new Date().toISOString(),
+          sourceTool: result.name,
+          ok: true,
+        },
+      ],
+      atoms: [],
+    };
+  }
+  return { evidence: [], atoms: [] };
 }
 
-function appendEvidence(
-  bucket: TurnEvidence[],
-  item: TurnEvidence | TurnEvidence[] | null,
+function appendEvidence(bucket: TurnEvidence[], items: TurnEvidence[]) {
+  bucket.push(...items);
+}
+
+function finalizeCitations(
+  toolResults: AiToolCallResult[],
+  atoms: ProvenanceAtom[],
 ) {
-  if (!item) return;
-  if (Array.isArray(item)) bucket.push(...item);
-  else bucket.push(item);
+  const fromAtoms = citationsFromAtoms(atoms);
+  if (fromAtoms.length) return fromAtoms;
+  return collectCitationsFromToolResults(toolResults);
+}
+
+function answerFromFmText(text: string): {
+  content: string;
+  blocks?: ChatBlock[];
+} {
+  const trimmed = text.trim();
+  const jsonMatch = trimmed.match(/\{[\s\S]*"blocks"\s*:\s*\[[\s\S]*\]\s*\}\s*$/);
+  if (jsonMatch) {
+    try {
+      const parsed = parseSemanticResponse(JSON.parse(jsonMatch[0]!));
+      if (parsed) {
+        const md = semanticBlocksToMarkdown(parsed.blocks);
+        const prose = trimmed.slice(0, jsonMatch.index).trim();
+        return {
+          content: prose || md || trimmed,
+          blocks: semanticBlocksToChatBlocks(parsed.blocks),
+        };
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return { content: trimmed };
 }
 
 /** Page fetch → agent-browser when the page needs JS, interaction, or returned thin/empty text. */
@@ -254,6 +363,7 @@ async function escalateWebOpenIfNeeded(opts: {
   userMessage: string;
   toolResults: AiToolCallResult[];
   evidence: TurnEvidence[];
+  atoms: ProvenanceAtom[];
   report: (progress: AgentTurnProgress) => void;
 }): Promise<void> {
   if (opts.result.name !== "web.open" && opts.result.name !== "web.read") return;
@@ -297,14 +407,17 @@ async function escalateWebOpenIfNeeded(opts: {
     durationMs: Date.now() - started,
   });
   opts.toolResults.push(escalated);
-  appendEvidence(opts.evidence, evidenceFromToolResult(escalated));
+  const mapped = evidenceFromToolResult(escalated);
+  appendEvidence(opts.evidence, mapped.evidence);
+  opts.atoms.push(...mapped.atoms);
 }
 
 async function buildFmPrompt(
   request: AiGenerateRequest,
   evidence: TurnEvidence[],
+  profile: TurnProfile,
   extraInstruction?: string,
-): Promise<{ prompt: string; instructions: string }> {
+): Promise<{ prompt: string; instructions: string; profile: TurnProfile }> {
   const [identity] = await Promise.all([
     ensureOnDeviceIdentity(),
     refreshOnDeviceInventoryCache(request.workspaceId),
@@ -323,19 +436,19 @@ async function buildFmPrompt(
     threadId: request.threadId,
     currentContent: request.content,
   });
-  const toolBlock = formatToolsForPrompt([...LOCAL_ORCHESTRATOR_TOOLS]);
   const actorId = getActorSnapshot();
   const member =
     getMembersSnapshot().find((m) => m.id === actorId) ??
     getMembersSnapshot()[0];
   const taskBlock = formatTaskStateForPrompt(taskState);
+  const toolBlock = formatTurnProfileInstructions(profile);
   const pkg = buildContextPackage({
     route: "on_device",
     taskStateText: taskBlock,
     recentMessages: request.messages,
     inventoryText: snap.inventoryBlock ?? "",
     toolCatalog: toolBlock,
-    allowTools: true,
+    allowTools: profile.tools.length > 0,
   });
   const includeInventory = Boolean(pkg.inventoryText);
   const synthesis = prepareSynthesisEvidence(
@@ -344,29 +457,32 @@ async function buildFmPrompt(
     "onDevice",
   );
   const evidenceBlock = synthesis.instruction;
-  let activeBrowserMeta = "";
-  try {
-    const { getActiveBrowserContextTab } = await import(
-      "@/lib/browser-context/active-tab"
-    );
-    const tab = getActiveBrowserContextTab();
-    if (tab) {
-      let domain = tab.url;
-      try {
-        domain = new URL(tab.url).hostname.replace(/^www\./, "");
-      } catch {
-        // keep raw
+  let activeBrowserMeta = profile.contextPacket.activeBrowserMeta;
+  if (!activeBrowserMeta) {
+    try {
+      const { getActiveBrowserContextTab } = await import(
+        "@/lib/browser-context/active-tab"
+      );
+      const tab = getActiveBrowserContextTab();
+      if (tab) {
+        let domain = tab.url;
+        try {
+          domain = new URL(tab.url).hostname.replace(/^www\./, "");
+        } catch {
+          // keep raw
+        }
+        activeBrowserMeta = [
+          "## Active right-panel browser (metadata only — not full page text)",
+          `kind=${tab.tabKind}; title=${tab.title}; domain=${domain}; project=${tab.projectId ?? "none"}`,
+          `canReadText=${tab.canReadText}; canCaptureViewport=${tab.canCaptureViewport}`,
+          "When the user refers to this page/screen/preview/selection, call browser.current.get_context (or capture_viewport for visual questions) before saying you cannot see it. Only the selected tab is readable.",
+        ].join("\n");
       }
-      activeBrowserMeta = [
-        "## Active right-panel browser (metadata only — not full page text)",
-        `kind=${tab.tabKind}; title=${tab.title}; domain=${domain}; project=${tab.projectId ?? "none"}`,
-        `canReadText=${tab.canReadText}; canCaptureViewport=${tab.canCaptureViewport}`,
-        "When the user refers to this page/screen/preview/selection, call browser.current.get_context (or capture_viewport for visual questions) before saying you cannot see it. Only the selected tab is readable.",
-      ].join("\n");
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
+  const toolsEnabled = profile.toolMode !== "disallowed" && profile.tools.length > 0;
   const instructions = [
     buildCanderOnDeviceInstructions({
       shortName: identity?.shortName ?? snap.shortName,
@@ -380,27 +496,37 @@ async function buildFmPrompt(
       planCapabilityLine: buildPlanCapabilityLine(member),
       hasPriorTurns: priorTurns,
       includeInventory,
-      toolsEnabled: true,
+      toolsEnabled,
       identityAsked: isIdentityQuestion(request.content),
     }),
     pkg.taskStateText,
-    pkg.toolCatalog,
+    toolBlock,
     activeBrowserMeta,
     evidenceBlock,
-    extraInstruction,
-    requiresExternalEvidence(request.content)
-      ? "This turn needs live or external facts. Prefer web.search for discovery, web.open for readable public pages, browser.current.* for the active right-panel tab, and computer.browser.open only for JavaScript, interaction, auth, scrolling, or visual inspection of remote pages. Never invent URLs, headlines, or page content — only synthesize from compact evidence above. Do not narrate search results."
+    profile.outputSchema === "semantic_blocks_v1"
+      ? semanticBlocksInstruction()
       : "",
+    extraInstruction,
+    requiresExternalEvidence(request.content) && evidence.length
+      ? "Evidence was retrieved for this turn. Answer from compact evidence only. Never invent facts. Do not tell the user to check a website or nutrition calculator when evidence is present."
+      : requiresExternalEvidence(request.content)
+        ? "This turn needs live facts. Prefer tools only if still listed above."
+        : "",
   ]
     .filter(Boolean)
-    .join("\n\n");
+    .join("\n\n")
+    .slice(0, profile.budgets.maxPromptChars);
+
+  // Expose DynamicProfile payload for native bridges (no-op today).
+  void toDynamicProfilePayload(profile, evidenceBlock);
+
   const prompt = buildDialoguePrompt(
     (pkg.messages.length ? pkg.messages : request.messages) as
       | Array<{ role: "user" | "assistant" | "system"; content: string }>
       | undefined,
     request.content,
   );
-  return { prompt, instructions };
+  return { prompt, instructions, profile };
 }
 
 export async function runLocalTurnOrchestrator(
@@ -447,198 +573,324 @@ async function runLocalTurnOrchestratorInner(
   try {
     report({ phase: "thinking", label: "Thinking" });
 
-  const shortcut = await tryIntentShortcut(request.content, {
-    threadId: request.threadId,
-    recentText: (request.messages ?? [])
-      .slice(-24)
-      .map((m) => m.content)
-      .join("\n"),
-  });
-  if (shortcut) {
-    return {
-      content: shortcut.content,
-      runtime: "apple-local",
-      offline: false,
-      condensationOccurred: false,
-      aiChatId: request.aiChatId ?? null,
-      toolResults: shortcut.toolResults,
-      citations: collectCitationsFromToolResults(shortcut.toolResults),
-      pausedForUser: shortcut.pausedForUser,
-    };
-  }
-
-  const evidence: TurnEvidence[] = [];
-  const toolResults: AiToolCallResult[] = [];
-  let retrievalAttempted = false;
-
-  for (const queued of initialDeterministicToolCalls(request.content)) {
-    emitToolExecution({
-      type: "tool_start",
-      name: queued.name,
-      reason: queued.reason,
-      deterministic: true,
+    const shortcut = await tryIntentShortcut(request.content, {
+      threadId: request.threadId,
+      recentText: (request.messages ?? [])
+        .slice(-24)
+        .map((m) => m.content)
+        .join("\n"),
     });
-    console.log("[TOOL_REQUEST]", {
-      name: queued.name,
-      reason: queued.reason,
-      deterministic: true,
-    });
-    report({
-      phase: "tool",
-      label: "Thinking",
-      detail: detailForTool(queued.name),
-      toolName: queued.name,
-    });
-    retrievalAttempted =
-      retrievalAttempted ||
-      queued.name === "web.search" ||
-      queued.name === "web.open" ||
-      queued.name === "web.read" ||
-      queued.name === "web.research" ||
-      queued.name.startsWith("browser.current.");
-    const started = Date.now();
-    const result = await executeAuthorizedTool({
-      name: queued.name,
-      arguments: queued.arguments,
-    });
-    emitToolExecution({
-      type: "tool_end",
-      name: result.name,
-      ok: result.ok,
-      durationMs: Date.now() - started,
-    });
-    console.log("[TOOL_RESULT]", {
-      name: result.name,
-      ok: result.ok,
-      deterministic: true,
-    });
-    toolResults.push(result);
-    appendEvidence(evidence, evidenceFromToolResult(result));
-
-    // If the user asked about the right-panel page and we couldn't read it,
-    // say so clearly — do not let the model invent "I can't see screens."
-    if (
-      queued.name.startsWith("browser.current.") &&
-      !result.ok &&
-      refersToActiveBrowserSurface(request.content)
-    ) {
+    if (shortcut) {
       return {
-        content: safeContent(
-          "",
-          result.output ||
-            "I couldn't read the active browser tab. Make sure a tab is selected in the right panel and you're on the latest desktop shell (0.1.3+).",
-        ),
+        content: shortcut.content,
         runtime: "apple-local",
         offline: false,
         condensationOccurred: false,
         aiChatId: request.aiChatId ?? null,
-        toolResults,
-        citations: collectCitationsFromToolResults(toolResults),
+        toolResults: shortcut.toolResults,
+        citations: collectCitationsFromToolResults(shortcut.toolResults),
+        pausedForUser: shortcut.pausedForUser,
       };
     }
-    if (
-      (queued.name === "web.open" || queued.name === "web.read") &&
-      !result.ok &&
-      requiresExternalEvidence(request.content)
-    ) {
-      await escalateWebOpenIfNeeded({
-        result,
-        userMessage: request.content,
-        toolResults,
-        evidence,
-        report,
-      });
-      if (toolResults.some((r) => r.name === "computer.browser.open" && r.ok)) {
-        continue;
-      }
-      return {
-        content: safeContent(
-          "",
-          result.output ||
-            "I couldn't open that page, so I won't guess what's on it. Try again in a moment.",
-        ),
-        runtime: "apple-local",
-        offline: false,
-        condensationOccurred: false,
-        aiChatId: request.aiChatId ?? null,
-        toolResults,
-        citations: collectCitationsFromToolResults(toolResults),
-      };
-    }
-    if (queued.name === "web.open" || queued.name === "web.read") {
-      await escalateWebOpenIfNeeded({
-        result,
-        userMessage: request.content,
-        toolResults,
-        evidence,
-        report,
-      });
-    }
-  }
 
-  let lastGenerate: AiGenerateResult | null = null;
+    const taskState = getThreadTaskState(request.threadId);
+    let profile = compileTurnProfile({
+      content: request.content,
+      taskState,
+      messages: request.messages,
+      pendingStateText: formatTaskStateForPrompt(taskState),
+      isDesktop:
+        typeof navigator !== "undefined" &&
+        /Mac|Win|Linux/i.test(navigator.platform || ""),
+    });
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    if (round > 0) {
-      report({
-        phase: "follow_up",
-        label: "Thinking",
-        detail: "Using the result…",
-      });
-    }
+    const evidence: TurnEvidence[] = [];
+    const toolResults: AiToolCallResult[] = [];
+    const provenanceBatches: ProvenanceAtom[][] = [];
+    let retrievalAttempted = false;
 
-    const { prompt, instructions } = await buildFmPrompt(request, evidence);
-    emitToolExecution({ type: "model_generate_start", round });
-    report({ phase: "generating", label: "Thinking", detail: "Generating…" });
-    let fm: Awaited<ReturnType<typeof generateFmTurn>>;
-    try {
-      fm = await generateFmTurn({ prompt, instructions });
-    } catch (err) {
-      const detail =
-        err instanceof Error ? err.message.slice(0, 200) : "On-device model failed.";
-      console.error("[LOCAL_ORCH_FM_ERROR]", { round, message: detail });
-      const cites = collectCitationsFromToolResults(toolResults);
-      const shape = inferAnswerShape(request.content);
-      let synthesis = prepareSynthesisEvidence(
-        request.content,
-        evidence,
-        "onDevice",
-      );
-
-      // Context overflow: shrink evidence and retry once — never dump raw search.
-      if (looksLikeContextOverflow(detail) && synthesis.compact.length) {
-        const shrunk = shrinkEvidenceForRetry(synthesis.compact);
-        const retryInstructions = [
-          instructions.replace(synthesis.instruction, ""),
-          buildSynthesisInstruction({
-            question: request.content,
-            shape,
-            evidence: shrunk,
-          }),
-        ]
-          .filter(Boolean)
-          .join("\n\n");
-        try {
-          report({
-            phase: "generating",
-            label: "Thinking",
-            detail: "Condensing sources…",
+    // —— Pre-run: bypass FM for obvious retrieval ——
+    if (profile.preRunTasks.length) {
+      emitToolExecution({ type: "model_generate_start", round: -1 });
+      const parallel = await runParallelTasks({
+        tasks: profile.preRunTasks.map((task, i) => ({
+          id: `${task.name}_${i}`,
+          run: async (signal) => {
+            if (signal.aborted) throw new Error("cancelled");
+            emitToolExecution({
+              type: "tool_start",
+              name: task.name,
+              reason: task.reason,
+              deterministic: true,
+            });
+            console.log("[TOOL_REQUEST]", {
+              name: task.name,
+              reason: task.reason,
+              deterministic: true,
+            });
+            report({
+              phase: "tool",
+              label: "Thinking",
+              detail: detailForTool(task.name),
+              toolName: task.name,
+            });
+            const started = Date.now();
+            const result = await executeAuthorizedTool({
+              name: task.name,
+              arguments: task.arguments,
+            });
+            if (signal.aborted) {
+              emitToolExecution({
+                type: "tool_end",
+                name: result.name,
+                ok: false,
+                durationMs: Date.now() - started,
+              });
+              throw new Error("cancelled");
+            }
+            emitToolExecution({
+              type: "tool_end",
+              name: result.name,
+              ok: result.ok,
+              durationMs: Date.now() - started,
+            });
+            console.log("[TOOL_RESULT]", {
+              name: result.name,
+              ok: result.ok,
+              deterministic: true,
+            });
+            return result;
+          },
+        })),
+        concurrency: profile.budgets.concurrency,
+        timeoutMs: profile.budgets.toolTimeoutMs,
+        isSufficient: (completed) => {
+          if (!profile.budgets.earlySynthesizeWhenSufficient) return false;
+          const oks = completed.filter((c) => c.ok && c.value);
+          if (!oks.length) return false;
+          // Early exit once one successful web.search/read returns
+          return oks.some((c) => {
+            const r = c.value as AiToolCallResult;
+            return (
+              r.ok &&
+              (r.name === "web.search" ||
+                r.name === "web.read" ||
+                r.name === "web.open" ||
+                r.name.startsWith("browser.current."))
+            );
           });
-          fm = await generateFmTurn({ prompt, instructions: retryInstructions });
-        } catch (retryErr) {
-          const fallback = deterministicAnswerFromEvidence({
-            question: request.content,
-            shape,
-            evidence: shrunk,
-          });
-          console.error("[LOCAL_ORCH_FM_RETRY_FAILED]", {
-            message:
-              retryErr instanceof Error
-                ? retryErr.message.slice(0, 160)
-                : "retry_failed",
-          });
+        },
+      });
+
+      for (const item of parallel) {
+        if (!item.ok || !item.value) continue;
+        const result = item.value;
+        toolResults.push(result);
+        retrievalAttempted =
+          retrievalAttempted ||
+          result.name === "web.search" ||
+          result.name === "web.open" ||
+          result.name === "web.read" ||
+          result.name === "web.research" ||
+          result.name.startsWith("browser.current.");
+        const mapped = evidenceFromToolResult(result);
+        appendEvidence(evidence, mapped.evidence);
+        provenanceBatches.push(mapped.atoms);
+
+        if (
+          result.name.startsWith("browser.current.") &&
+          !result.ok &&
+          refersToActiveBrowserSurface(request.content)
+        ) {
           return {
-            content: fallback,
+            content: safeContent(
+              "",
+              result.output ||
+                "I couldn't read the active browser tab. Make sure a tab is selected in the right panel and you're on the latest desktop shell (0.1.3+).",
+            ),
+            runtime: "apple-local",
+            offline: false,
+            condensationOccurred: false,
+            aiChatId: request.aiChatId ?? null,
+            toolResults,
+            citations: finalizeCitations(
+              toolResults,
+              mergeProvenanceAtoms(provenanceBatches),
+            ),
+          };
+        }
+        if (
+          (result.name === "web.open" || result.name === "web.read") &&
+          !result.ok &&
+          requiresExternalEvidence(request.content)
+        ) {
+          await escalateWebOpenIfNeeded({
+            result,
+            userMessage: request.content,
+            toolResults,
+            evidence,
+            atoms: provenanceBatches[provenanceBatches.length - 1] ?? [],
+            report,
+          });
+          if (toolResults.some((r) => r.name === "computer.browser.open" && r.ok)) {
+            continue;
+          }
+          return {
+            content: safeContent(
+              "",
+              result.output ||
+                "I couldn't open that page, so I won't guess what's on it. Try again in a moment.",
+            ),
+            runtime: "apple-local",
+            offline: false,
+            condensationOccurred: false,
+            aiChatId: request.aiChatId ?? null,
+            toolResults,
+            citations: finalizeCitations(
+              toolResults,
+              mergeProvenanceAtoms(provenanceBatches),
+            ),
+          };
+        }
+        if (result.name === "web.open" || result.name === "web.read") {
+          await escalateWebOpenIfNeeded({
+            result,
+            userMessage: request.content,
+            toolResults,
+            evidence,
+            atoms: provenanceBatches[provenanceBatches.length - 1] ?? [],
+            report,
+          });
+        }
+      }
+
+      // Recompile after pre-run: usually disallowed tools → synthesis-only.
+      profile = compileTurnProfile({
+        content: request.content,
+        taskState,
+        messages: request.messages,
+        pendingStateText: formatTaskStateForPrompt(taskState),
+        evidence,
+        isDesktop:
+          typeof navigator !== "undefined" &&
+          /Mac|Win|Linux/i.test(navigator.platform || ""),
+      });
+      // Force synthesis path when we already retrieved for live-info.
+      if (evidence.some((e) => e.ok && e.content.trim()) && requiresExternalEvidence(request.content)) {
+        profile = {
+          ...profile,
+          toolMode: "disallowed",
+          tools: [],
+        };
+      }
+    }
+
+    const atoms = () => mergeProvenanceAtoms(provenanceBatches);
+    const allowedToolNames = new Set(profile.tools.map((t) => t.name));
+    const maxRounds = profile.budgets.maxToolRounds;
+    let lastGenerate: AiGenerateResult | null = null;
+
+    for (let round = 0; round < maxRounds; round++) {
+      if (round > 0) {
+        report({
+          phase: "follow_up",
+          label: "Thinking",
+          detail: "Using the result…",
+        });
+      }
+
+      const { prompt, instructions } = await buildFmPrompt(
+        request,
+        evidence,
+        profile,
+      );
+      emitToolExecution({ type: "model_generate_start", round });
+      report({ phase: "generating", label: "Thinking", detail: "Generating…" });
+      let fm: Awaited<ReturnType<typeof generateFmTurn>>;
+      try {
+        fm = await generateFmTurn({ prompt, instructions });
+      } catch (err) {
+        const detail =
+          err instanceof Error
+            ? err.message.slice(0, 200)
+            : "On-device model failed.";
+        console.error("[LOCAL_ORCH_FM_ERROR]", { round, message: detail });
+        const cites = finalizeCitations(toolResults, atoms());
+        const shape = inferAnswerShape(request.content);
+        let synthesis = prepareSynthesisEvidence(
+          request.content,
+          evidence,
+          "onDevice",
+        );
+
+        if (looksLikeContextOverflow(detail) && synthesis.compact.length) {
+          const shrunk = shrinkEvidenceForRetry(synthesis.compact);
+          const retryInstructions = [
+            instructions.replace(synthesis.instruction, ""),
+            buildSynthesisInstruction({
+              question: request.content,
+              shape,
+              evidence: shrunk,
+            }),
+          ]
+            .filter(Boolean)
+            .join("\n\n");
+          try {
+            report({
+              phase: "generating",
+              label: "Thinking",
+              detail: "Condensing sources…",
+            });
+            fm = await generateFmTurn({
+              prompt,
+              instructions: retryInstructions,
+            });
+          } catch (retryErr) {
+            const fallback =
+              narrowDeterministicFallback({
+                question: request.content,
+                evidence,
+              }) ||
+              deterministicAnswerFromEvidence({
+                question: request.content,
+                shape,
+                evidence: shrunk,
+              });
+            console.error("[LOCAL_ORCH_FM_RETRY_FAILED]", {
+              message:
+                retryErr instanceof Error
+                  ? retryErr.message.slice(0, 160)
+                  : "retry_failed",
+            });
+            return {
+              content: fallback,
+              runtime: "apple-local",
+              offline: false,
+              condensationOccurred: false,
+              aiChatId: request.aiChatId ?? null,
+              toolResults: toolResults.length ? toolResults : undefined,
+              citations: cites,
+            };
+          }
+        } else {
+          const narrow = narrowDeterministicFallback({
+            question: request.content,
+            evidence,
+          });
+          if (narrow) {
+            return {
+              content: narrow,
+              runtime: "apple-local",
+              offline: false,
+              condensationOccurred: false,
+              aiChatId: request.aiChatId ?? null,
+              toolResults: toolResults.length ? toolResults : undefined,
+              citations: cites,
+            };
+          }
+          return {
+            content:
+              "I couldn’t finish that reply right now. Please try again in a moment.",
             runtime: "apple-local",
             offline: false,
             condensationOccurred: false,
@@ -647,226 +899,266 @@ async function runLocalTurnOrchestratorInner(
             citations: cites,
           };
         }
-      } else if (synthesis.compact.length) {
-        return {
-          content: deterministicAnswerFromEvidence({
-            question: request.content,
-            shape,
-            evidence: synthesis.compact,
-          }),
-          runtime: "apple-local",
-          offline: false,
-          condensationOccurred: false,
-          aiChatId: request.aiChatId ?? null,
-          toolResults: toolResults.length ? toolResults : undefined,
-          citations: cites,
-        };
-      } else {
-        return {
-          content:
-            "I couldn’t finish that reply right now. Please try again in a moment.",
-          runtime: "apple-local",
-          offline: false,
-          condensationOccurred: false,
-          aiChatId: request.aiChatId ?? null,
-          toolResults: toolResults.length ? toolResults : undefined,
-          citations: cites,
-        };
       }
-    }
-    emitToolExecution({
-      type: "model_generate_end",
-      round,
-      structured: fm.structured,
-    });
-    lastGenerate = {
-      content: fm.text,
-      runtime: "apple-local",
-      offline: false,
-      condensationOccurred: false,
-      aiChatId: request.aiChatId ?? null,
-    };
-
-    const call = fm.toolCall;
-    if (!call) {
-      const answer = safeContent(
-        fm.text,
-        "I'm here — tell me what you'd like to do.",
-      );
-      const grounding = validateLocalGrounding({
-        answer,
-        userRequest: request.content,
-        evidence,
-        retrievalAttempted,
-      });
-      if (!grounding.valid && grounding.recommendedAction === "fail_closed") {
-        return {
-          ...lastGenerate,
-          content: failClosedMessage(grounding.issues),
-          toolResults: toolResults.length ? toolResults : undefined,
-          citations: collectCitationsFromToolResults(toolResults),
-        };
-      }
-      return {
-        ...lastGenerate,
-        content: answer,
-        toolResults: toolResults.length ? toolResults : undefined,
-        citations: collectCitationsFromToolResults(toolResults),
-      };
-    }
-
-    if (
-      !LOCAL_ORCHESTRATOR_TOOLS.includes(
-        call.name as (typeof LOCAL_ORCHESTRATOR_TOOLS)[number],
-      )
-    ) {
-      const cleaned = safeContent(fm.text, "");
-      if (cleaned) {
-        return {
-          ...lastGenerate,
-          content: cleaned,
-          toolResults: toolResults.length ? toolResults : undefined,
-          citations: collectCitationsFromToolResults(toolResults),
-        };
-      }
-      continue;
-    }
-
-    emitToolExecution({ type: "tool_start", name: call.name, round });
-    console.log("[TOOL_REQUEST]", { name: call.name, round });
-    report({
-      phase: "tool",
-      label: "Thinking",
-      detail: detailForTool(call.name),
-      toolName: call.name,
-    });
-    retrievalAttempted =
-      retrievalAttempted ||
-      call.name === "web.search" ||
-      call.name === "web.open" ||
-      call.name === "web.read" ||
-      call.name === "web.research";
-    const toolStarted = Date.now();
-    const result = await executeAuthorizedTool({
-      name: call.name,
-      arguments: call.arguments,
-    });
-    emitToolExecution({
-      type: "tool_end",
-      name: result.name,
-      ok: result.ok,
-      durationMs: Date.now() - toolStarted,
-      round,
-    });
-    console.log("[TOOL_RESULT]", { name: result.name, ok: result.ok, round });
-    toolResults.push(result);
-    appendEvidence(evidence, evidenceFromToolResult(result));
-    const added = evidenceFromToolResult(result);
-    if (added) {
-      const items = Array.isArray(added) ? added : [added];
       emitToolExecution({
-        type: "evidence_added",
-        count: items.length,
-        kinds: items.map((e) => e.kind),
+        type: "model_generate_end",
+        round,
+        structured: fm.structured,
       });
-    }
+      lastGenerate = {
+        content: fm.text,
+        runtime: "apple-local",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+      };
 
-    if (call.name === "web.open" || call.name === "web.read") {
-      await escalateWebOpenIfNeeded({
-        result,
-        userMessage: request.content,
-        toolResults,
-        evidence,
-        report,
+      const call = fm.toolCall;
+      if (!call) {
+        const parsed = answerFromFmText(fm.text);
+        const answer = safeContent(
+          parsed.content,
+          "I'm here — tell me what you'd like to do.",
+        );
+        const grounding = validateLocalGrounding({
+          answer,
+          userRequest: request.content,
+          evidence,
+          retrievalAttempted,
+        });
+        if (grounding.recommendedAction === "use_evidence_fallback") {
+          const narrow = narrowDeterministicFallback({
+            question: request.content,
+            evidence,
+          });
+          if (narrow) {
+            return {
+              ...lastGenerate,
+              content: narrow,
+              toolResults: toolResults.length ? toolResults : undefined,
+              citations: finalizeCitations(toolResults, atoms()),
+            };
+          }
+        }
+        if (!grounding.valid && grounding.recommendedAction === "fail_closed") {
+          return {
+            ...lastGenerate,
+            content: failClosedMessage(grounding.issues),
+            toolResults: toolResults.length ? toolResults : undefined,
+            citations: finalizeCitations(toolResults, atoms()),
+          };
+        }
+        return {
+          ...lastGenerate,
+          content: answer,
+          toolResults: toolResults.length ? toolResults : undefined,
+          citations: finalizeCitations(toolResults, atoms()),
+          ...(parsed.blocks?.length ? { blocks: parsed.blocks } : {}),
+        };
+      }
+
+      // Enforce profile allowlist + clarification gate
+      const clarifyBlocked =
+        (call.name === "ui.ask_clarification" || call.name === "ui.confirm") &&
+        !profile.clarificationPolicy.clarificationRequired;
+      const notAllowed =
+        profile.toolMode === "disallowed" ||
+        !allowedToolNames.has(call.name) ||
+        clarifyBlocked;
+
+      if (notAllowed) {
+        // Model tried a tool outside this turn's profile — do not execute.
+        if (hasUsableEvidenceSnippets(evidence)) {
+          const narrow = narrowDeterministicFallback({
+            question: request.content,
+            evidence,
+          });
+          const parsed = answerFromFmText(fm.text);
+          const content =
+            safeContent(parsed.content, "") ||
+            narrow ||
+            "I found sources for that — try asking again for a clearer answer.";
+          return {
+            ...lastGenerate,
+            content,
+            toolResults: toolResults.length ? toolResults : undefined,
+            citations: finalizeCitations(toolResults, atoms()),
+            ...(parsed.blocks?.length ? { blocks: parsed.blocks } : {}),
+          };
+        }
+        const cleaned = safeContent(fm.text, "");
+        if (cleaned) {
+          return {
+            ...lastGenerate,
+            content: cleaned,
+            toolResults: toolResults.length ? toolResults : undefined,
+            citations: finalizeCitations(toolResults, atoms()),
+          };
+        }
+        continue;
+      }
+
+      emitToolExecution({ type: "tool_start", name: call.name, round });
+      console.log("[TOOL_REQUEST]", { name: call.name, round });
+      report({
+        phase: "tool",
+        label: "Thinking",
+        detail: detailForTool(call.name),
+        toolName: call.name,
       });
-    }
-
-    if (result.pauseForUser) {
-      return {
-        ...lastGenerate,
-        content: safeContent(
-          fm.text,
-          "I need a few details — fill in the card above the message box.",
-        ),
-        toolResults,
-        citations: collectCitationsFromToolResults(toolResults),
-        pausedForUser: true,
-      };
-    }
-
-    if (
-      result.ok &&
-      (call.name === "nav.open" ||
-        call.name === "project.open" ||
-        call.name === "project.create" ||
-        call.name === "panel.open" ||
-        call.name === "panel.close")
-    ) {
-      return {
-        ...lastGenerate,
-        content: safeContent(fm.text, result.output),
-        toolResults,
-        citations: collectCitationsFromToolResults(toolResults),
-      };
-    }
-
-    if (!result.ok) {
-      if (
+      retrievalAttempted =
+        retrievalAttempted ||
         call.name === "web.search" ||
         call.name === "web.open" ||
         call.name === "web.read" ||
-        call.name === "web.research"
-      ) {
-        if (requiresExternalEvidence(request.content)) {
-          return {
-            ...lastGenerate,
-            content: safeContent(
-              fm.text,
-              result.output ||
-                "I couldn't retrieve live information for that request.",
-            ),
-            toolResults,
-            citations: collectCitationsFromToolResults(toolResults),
-          };
+        call.name === "web.research";
+      const toolStarted = Date.now();
+      const result = await executeAuthorizedTool({
+        name: call.name,
+        arguments: call.arguments,
+      });
+      emitToolExecution({
+        type: "tool_end",
+        name: result.name,
+        ok: result.ok,
+        durationMs: Date.now() - toolStarted,
+        round,
+      });
+      console.log("[TOOL_RESULT]", { name: result.name, ok: result.ok, round });
+      toolResults.push(result);
+      const mapped = evidenceFromToolResult(result);
+      appendEvidence(evidence, mapped.evidence);
+      provenanceBatches.push(mapped.atoms);
+      if (mapped.evidence.length) {
+        emitToolExecution({
+          type: "evidence_added",
+          count: mapped.evidence.length,
+          kinds: mapped.evidence.map((e) => e.kind),
+        });
+      }
+
+      if (call.name === "web.open" || call.name === "web.read") {
+        await escalateWebOpenIfNeeded({
+          result,
+          userMessage: request.content,
+          toolResults,
+          evidence,
+          atoms: provenanceBatches[provenanceBatches.length - 1] ?? [],
+          report,
+        });
+      }
+
+      if (result.pauseForUser) {
+        if (!profile.clarificationPolicy.clarificationRequired) {
+          continue;
         }
-      } else {
         return {
           ...lastGenerate,
           content: safeContent(
             fm.text,
-            "I couldn't complete that. Try again in a different way?",
+            "I need a few details — fill in the card above the message box.",
           ),
           toolResults,
-          citations: collectCitationsFromToolResults(toolResults),
+          citations: finalizeCitations(toolResults, atoms()),
+          pausedForUser: true,
+        };
+      }
+
+      if (
+        result.ok &&
+        (call.name === "nav.open" ||
+          call.name === "project.open" ||
+          call.name === "project.create" ||
+          call.name === "panel.open" ||
+          call.name === "panel.close")
+      ) {
+        return {
+          ...lastGenerate,
+          content: safeContent(fm.text, result.output),
+          toolResults,
+          citations: finalizeCitations(toolResults, atoms()),
+        };
+      }
+
+      if (!result.ok) {
+        if (
+          call.name === "web.search" ||
+          call.name === "web.open" ||
+          call.name === "web.read" ||
+          call.name === "web.research"
+        ) {
+          if (requiresExternalEvidence(request.content)) {
+            return {
+              ...lastGenerate,
+              content: safeContent(
+                fm.text,
+                result.output ||
+                  "I couldn't retrieve live information for that request.",
+              ),
+              toolResults,
+              citations: finalizeCitations(toolResults, atoms()),
+            };
+          }
+        } else {
+          return {
+            ...lastGenerate,
+            content: safeContent(
+              fm.text,
+              "I couldn't complete that. Try again in a different way?",
+            ),
+            toolResults,
+            citations: finalizeCitations(toolResults, atoms()),
+          };
+        }
+      }
+
+      // Recompile allowlist after model-chosen tools
+      profile = compileTurnProfile({
+        content: request.content,
+        taskState,
+        messages: request.messages,
+        evidence,
+      });
+    }
+
+    const fallback = safeContent(
+      lastGenerate?.content ?? "",
+      "I hit a step limit — try a shorter request.",
+    );
+    const grounding = validateLocalGrounding({
+      answer: fallback,
+      userRequest: request.content,
+      evidence,
+      retrievalAttempted,
+    });
+    if (grounding.recommendedAction === "use_evidence_fallback") {
+      const narrow = narrowDeterministicFallback({
+        question: request.content,
+        evidence,
+      });
+      if (narrow) {
+        return {
+          ...(lastGenerate as AiGenerateResult),
+          content: narrow,
+          toolResults,
+          citations: finalizeCitations(toolResults, atoms()),
         };
       }
     }
-  }
-
-  const fallback = safeContent(
-    lastGenerate?.content ?? "",
-    "I hit a step limit — try a shorter request.",
-  );
-  const grounding = validateLocalGrounding({
-    answer: fallback,
-    userRequest: request.content,
-    evidence,
-    retrievalAttempted,
-  });
-  if (!grounding.valid && grounding.recommendedAction === "fail_closed") {
+    if (!grounding.valid && grounding.recommendedAction === "fail_closed") {
+      return {
+        ...(lastGenerate as AiGenerateResult),
+        content: failClosedMessage(grounding.issues),
+        toolResults,
+        citations: finalizeCitations(toolResults, atoms()),
+      };
+    }
     return {
       ...(lastGenerate as AiGenerateResult),
-      content: failClosedMessage(grounding.issues),
+      content: fallback,
       toolResults,
-      citations: collectCitationsFromToolResults(toolResults),
+      citations: finalizeCitations(toolResults, atoms()),
     };
-  }
-  return {
-    ...(lastGenerate as AiGenerateResult),
-    content: fallback,
-    toolResults,
-    citations: collectCitationsFromToolResults(toolResults),
-  };
   } finally {
     setTurnToolExecutionListener(null);
   }

@@ -1923,6 +1923,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               status: "streaming" | "complete",
               condensationOccurred: boolean,
               citations?: Message["citations"],
+              blocks?: Message["blocks"],
             ) => {
               setThreads((current) => {
                 const apply = (item: Thread): Thread => {
@@ -1935,9 +1936,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                           activity: status === "complete" ? null : message.activity,
                           ...(status === "complete"
                             ? {
-                                blocks: (message.blocks ?? []).filter(
-                                  (b) => b.type !== "tool",
-                                ),
+                                blocks: [
+                                  ...(blocks ?? []),
+                                  ...(message.blocks ?? []).filter(
+                                    (b) => b.type !== "tool",
+                                  ),
+                                ],
                                 ...(citations?.length
                                   ? { citations }
                                   : {}),
@@ -1992,6 +1996,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 "complete",
                 result.condensationOccurred,
                 result.citations,
+                result.blocks,
               );
               if (voiceActive) {
                 speakText(sanitizeAssistantVisibleText(result.content));
@@ -2005,6 +2010,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 done ? "complete" : "streaming",
                 done && result.condensationOccurred,
                 done ? result.citations : undefined,
+                done ? result.blocks : undefined,
               );
               if (done && voiceActive) {
                 speakText(sanitizeAssistantVisibleText(result.content));

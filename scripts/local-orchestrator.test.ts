@@ -45,6 +45,14 @@ describe("initialDeterministicToolCalls", () => {
     assert.equal(calls[0]!.reason, "explicit_url_in_request");
   });
 
+  it("pre-runs web.search for live calorie / nutrition questions", () => {
+    const calls = initialDeterministicToolCalls(
+      "How many calories are in a In-N-Out double double protein style",
+    );
+    assert.ok(calls.some((c) => c.name === "web.search"));
+    assert.equal(calls[0]!.reason, "live_info_prerun");
+  });
+
   it("returns empty for conversational turns", () => {
     assert.deepEqual(initialDeterministicToolCalls("hello there"), []);
   });

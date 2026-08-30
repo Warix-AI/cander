@@ -11,11 +11,27 @@ const CLAIMED_BROWSE =
 const DELEGATION =
   /\b(you (can|should)|try )?(check|visit|look up|search( online)?|go to)\b[\s\S]{0,40}\b(website|site|cnn|bbc|weather\.com)\b/i;
 
+/** FM hedges as if no data despite usable retrieved snippets. */
+const HEDGE_NO_DATA =
+  /\b(don'?t have|do not have|no (live )?calorie|no (live )?nutrition|couldn'?t (find|retrieve|get)|unable to (find|retrieve)|check the .{0,40}(nutrition|website|page|calculator)|use their online calculator|i don'?t have live)\b/i;
+
 export type GroundingValidation = {
   valid: boolean;
   issues: string[];
-  recommendedAction: "show" | "fail_closed" | "retry_tools";
+  recommendedAction: "show" | "fail_closed" | "retry_tools" | "use_evidence_fallback";
 };
+
+export function hasUsableEvidenceSnippets(evidence: TurnEvidence[]): boolean {
+  return evidence.some(
+    (e) =>
+      e.ok &&
+      e.content.trim().length >= 20 &&
+      (e.kind === "web_page" ||
+        e.kind === "search_result" ||
+        e.kind === "browser" ||
+        e.kind === "knowledge"),
+  );
+}
 
 export function validateLocalGrounding(opts: {
   answer: string;
@@ -34,6 +50,7 @@ export function validateLocalGrounding(opts: {
       e.kind === "browser",
   );
   const retrievalDone = opts.retrievalAttempted || webEvidence.length > 0;
+  const usable = hasUsableEvidenceSnippets(opts.evidence);
 
   if (!answer) {
     return { valid: false, issues: ["EMPTY_ANSWER"], recommendedAction: "fail_closed" };
@@ -60,6 +77,15 @@ export function validateLocalGrounding(opts: {
 
   if (DELEGATION.test(answer) && needsExternal) {
     issues.push("UNNECESSARY_DELEGATION");
+  }
+
+  if (usable && HEDGE_NO_DATA.test(answer)) {
+    issues.push("HEDGE_DESPITE_EVIDENCE");
+    return {
+      valid: false,
+      issues,
+      recommendedAction: "use_evidence_fallback",
+    };
   }
 
   if (issues.includes("MISSING_RETRIEVAL") || issues.includes("UNRESOLVED_EXTERNAL_FACT")) {

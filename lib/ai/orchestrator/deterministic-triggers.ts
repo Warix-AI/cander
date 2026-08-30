@@ -131,6 +131,18 @@ export function initialDeterministicToolCalls(content: string): QueuedToolCall[]
     ];
   }
 
+  // Obvious live-info / nutrition / "today" facts: runtime retrieves, FM synthesizes.
+  // Do not wait for the model to choose web.search.
+  if (liveInfoHint(content)) {
+    return [
+      {
+        name: "web.search",
+        arguments: { query: content.trim().slice(0, 400) },
+        reason: "live_info_prerun",
+      },
+    ];
+  }
+
   return [];
 }
 

@@ -78,7 +78,9 @@ export function buildSynthesisInstruction(opts: {
 
 /**
  * Deterministic structured fallback when the model cannot synthesize
- * (context overflow / empty generation). Never dumps raw Exa JSON.
+ * (context overflow / empty generation / hedge-despite-evidence).
+ * Narrow use only — not a second general answer engine.
+ * Prefer FM synthesis whenever it produces a grounded reply.
  */
 export function deterministicAnswerFromEvidence(opts: {
   question: string;

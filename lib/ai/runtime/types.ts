@@ -73,6 +73,8 @@ export type AiGenerateResult = {
   offline: boolean;
   condensationOccurred: boolean;
   aiChatId?: string | null;
+  /** Optional structured chat blocks (semantic response renderer). */
+  blocks?: import("@/lib/types").ChatBlock[];
   /** Durable web sources for Sources UI (not visible answer text). */
   citations?: Array<{
     id: string;

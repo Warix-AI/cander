@@ -11,6 +11,49 @@ Canonical paths:
 User → Context → Turn Orchestrator → FM (reason) ⇄ Cander tools (web.search, web.open, …) → validate → answer
 ```
 
+## Apple-first turn environment (small-model compiler)
+
+Local FM turns compile a `TurnProfile` (`lib/ai/turn-environment/`) **before** every Apple FM request. The ~3B model does not orchestrate Cander — the runtime does.
+
+Four paths:
+
+```text
+Simple
+User → Context → FM → Stream
+
+Obvious retrieval
+User → Context → Pre-run tools in parallel (timeouts / cancel late branches)
+     → Normalize (provenance-preserving)
+     → FM synthesis
+     → Stream
+
+Ambiguous (blocking)
+User → Context
+     → compiler sets clarificationRequired
+     → FM constructs smallest allowed clarification
+     → user resumes same pending turn
+
+Model-chosen tool
+User → Context → FM
+     → allowed tool(s) (0–5 cards)
+     → normalize
+     → FM
+     → answer
+     MAX 2 rounds
+```
+
+Key rules:
+
+- **Budget profiles** (`on_device_small` ≈ 4k tokens initially, `on_device_large`, `pcc`) — not a hardcoded architecture constant
+- **≤5 tools** exposed (prefer 0–3); domain gating via `resolveAllowedToolsForTurn`
+- **Pre-run bypasses FM** for live-info / URL / browser deixis
+- **`clarificationRequired` gate** — no free-form modals
+- **Provenance-first citations** — `sourceId` through normalize → synthesis → Sources UI
+- **Semantic blocks v1** (8 types) — optional structured output; Cander renders
+- **`toDynamicProfilePayload`** ready for future Apple DynamicInstructions
+
+Trajectory tests: `scripts/turn-environment.test.ts` (included in `npm run test:orchestrator`).
+
 ## Flags
 
 | Flag | Default | Meaning |
@@ -25,10 +68,11 @@ Set any to `0`/`false`/`off` to roll back that layer.
 
 When `shouldUseLocalTurnOrchestrator()` is true:
 
-- **Deterministic URL trigger** — explicit URLs auto-run `web.read` before the first FM call
-- **Evidence objects** — `lib/ai/orchestrator/evidence.ts`
-- **Grounding validator** — fail-closed when live info required but retrieval failed
-- **ToolExecutionBus** — `[TOOL_*]` events drive Thinking UI detail lines
+- **TurnProfile compiler** — capability filter, pre-run tasks, clarification gate, density
+- **Deterministic pre-run** — live-info / URLs / browser refs run before FM synthesis
+- **Evidence + provenance** — `lib/ai/orchestrator/evidence.ts` + `turn-environment/normalize.ts`
+- **Grounding validator** — fail-closed / anti-hedge when evidence exists
+- **ToolExecutionBus** — real progress events only
 - **Structured FM output** — native `generateStructured` (@Generable) when bridge supports it; else JSON-in-prose fallback
 
 Client `web.search` / `web.read` / `web.open` → Edge → Exa (`WEB_RESEARCH_PROVIDER=exa`). Legacy direct fetch only if `WEB_OPEN_DIRECT_FETCH_ENABLED=true`.
@@ -63,6 +107,8 @@ Each turn assembles context from **five layers** — the model is never expected
 | **4. Cross-chat / Space memory** | `ai_chat_memory_index` FTS + project ref overlap | Auto when user hints at other chats; scoped workspace → project → owner |
 | **5. Live / knowledge evidence** | Web search, workspace knowledge, tool results | Controller loop |
 
+On the **local FM path**, memory snippets are auto-injected into the context packet when available; a memory **tool** is only exposed for explicit deep references (“find what I said three months ago”).
+
 Reference resolution runs **before** the controller loop:
 
 - “their sandbox program” → resolves to `activeEntity` (e.g. Vercel) → enriches request + triggers entity follow-up web search
@@ -96,3 +142,4 @@ Token-level answer deltas still depend on bridge streaming (not required for liv
 - Cross-chat retrieval uses keyword + Postgres FTS on the memory index (pgvector semantic search is a future upgrade)
 - Answer quality still depends on configured Ollama models (`OLLAMA_ANSWER_MODEL`)
 - V1 orchestrator remains as emergency fallback only (`AI_ORCHESTRATOR_V2=0`)
+- Native Apple DynamicInstructions wiring uses `toDynamicProfilePayload` when OS support is ready

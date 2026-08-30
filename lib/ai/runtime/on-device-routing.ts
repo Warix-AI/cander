@@ -22,9 +22,9 @@ export function preferOnDeviceForTurnContent(opts: {
   // Right-panel browser reads must stay on-device / client — Electron IPC.
   if (refersToActiveBrowserSurface(opts.content)) return true;
 
-  // Live / web retrieval can stay on-device when FM is available (tools → Exa Edge).
-  // Cloud is used when FM is unavailable or the turn is Build/complex.
-  if (liveInfoHint(opts.content)) return false;
+  // Live web retrieval stays on-device when FM is available: TurnProfile pre-runs
+  // Exa via Edge tools, then FM synthesizes. Cloud only when FM unavailable.
+  if (liveInfoHint(opts.content)) return true;
 
   const taskState = getThreadTaskState(opts.threadId);
   const taskType = classifyTaskType({
@@ -46,11 +46,12 @@ export function preferOnDeviceForTurnContent(opts: {
     content: opts.content,
     taskState,
   });
-  if (gated.domains.includes("web") || gated.domains.includes("cloud_work")) {
+  // cloud_work stays off-device; simple web domains can use local FM + tools.
+  if (gated.domains.includes("cloud_work")) {
     return false;
   }
 
-  return taskType === "conversational" || taskType === "local_action";
+  return taskType === "conversational" || taskType === "local_action" || gated.domains.includes("web");
 }
 
 /** Auto mode: use Foundation Models for simple on-device turns when ready. */

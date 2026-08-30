@@ -27,33 +27,33 @@ describe("preferOnDeviceForTurnContent", () => {
     );
   });
 
-  it("routes live web questions to cloud orchestrator", () => {
+  it("routes live web questions to on-device FM with pre-run tools", () => {
     assert.equal(
       preferOnDeviceForTurnContent({
         content: "What's the weather today in Austin?",
         fmAvailable: true,
       }),
-      false,
+      true,
     );
   });
 
-  it("routes latest news to cloud orchestrator", () => {
+  it("routes latest news to on-device FM with pre-run tools", () => {
     assert.equal(
       preferOnDeviceForTurnContent({
         content: "What's the latest news today?",
         fmAvailable: true,
       }),
-      false,
+      true,
     );
   });
 
-  it("routes tell-me-about with live-info cues to cloud orchestrator", () => {
+  it("routes tell-me-about with live-info cues to on-device FM", () => {
     assert.equal(
       preferOnDeviceForTurnContent({
         content: "tell me about the latest OpenAI announcements",
         fmAvailable: true,
       }),
-      false,
+      true,
     );
   });
 
