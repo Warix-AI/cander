@@ -343,16 +343,40 @@ async function runAssistantTurnInner(
       label: "Thinking",
       detail: "Generating…",
     });
-    // Phase 0: keep the real user utterance; inject search via toolContext (not persisted).
+    // Phase 0: keep the real user utterance; inject compressed evidence (not raw Exa dumps).
+    const { compressEvidenceForSynthesis, buildSynthesisInstruction, inferAnswerShape } =
+      await import("@/lib/ai/answer-shape");
+    const rows =
+      (searchResult.data?.results as Array<{
+        title?: string;
+        url?: string;
+        description?: string;
+        snippet?: string;
+      }>) ?? [];
+    const shape = inferAnswerShape(request.content);
+    const compact = compressEvidenceForSynthesis({
+      question: request.content,
+      shape,
+      profile: "onDevice",
+      items: rows.map((r, i) => ({
+        id: `legacy_${i + 1}`,
+        title: r.title,
+        url: r.url,
+        content: r.description || r.snippet || "",
+        kind: "search_result",
+        ok: true,
+      })),
+    });
     const answered = await generateWithAiRuntime({
       ...gatedRequest,
       allowTools: false,
       allowedToolNames: [],
       content: request.content.trim(),
-      toolContext: [
-        `Live web.search results:\n${searchResult.output}`,
-        "Answer using only these live results. Cite real URLs. Do not invent headlines or sources.",
-      ].join("\n\n"),
+      toolContext: buildSynthesisInstruction({
+        question: request.content,
+        shape,
+        evidence: compact,
+      }),
       messages: [
         ...(request.messages ?? []),
         { role: "user", content: request.content },

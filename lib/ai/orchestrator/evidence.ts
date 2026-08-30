@@ -3,6 +3,13 @@
  * Mirror server TurnState.evidence where practical.
  */
 
+import {
+  buildSynthesisInstruction,
+  compressEvidenceForSynthesis,
+  inferAnswerShape,
+  type CompactEvidenceItem,
+} from "../answer-shape/index.ts";
+
 export type EvidenceKind =
   | "web_page"
   | "browser"
@@ -32,6 +39,7 @@ export function newEvidenceId(prefix: string): string {
   return `${prefix}_${evidenceSeq}`;
 }
 
+/** Legacy dump formatter — prefer formatCompressedEvidenceForPrompt for synthesis. */
 export function formatEvidenceForPrompt(items: TurnEvidence[]): string {
   if (!items.length) return "";
   const lines = ["## Evidence collected this turn", ""];
@@ -45,9 +53,66 @@ export function formatEvidenceForPrompt(items: TurnEvidence[]): string {
     const header = e.url
       ? `[${e.id}] ${e.kind}: ${e.title} (${e.url})`
       : `[${e.id}] ${e.kind}: ${e.title}`;
-    lines.push(header, e.content.slice(0, 4000), "");
+    lines.push(header, e.content.slice(0, 1200), "");
   }
   return lines.join("\n").trim();
+}
+
+/**
+ * Compress + shape evidence for FM synthesis. Never injects raw Exa dumps.
+ */
+export function prepareSynthesisEvidence(
+  question: string,
+  items: TurnEvidence[],
+  profile: "onDevice" | "cloud" = "onDevice",
+): { instruction: string; compact: CompactEvidenceItem[]; shapeKind: string } {
+  const shape = inferAnswerShape(question);
+  const webby = items.filter(
+    (e) =>
+      e.ok &&
+      (e.kind === "web_page" ||
+        e.kind === "search_result" ||
+        e.kind === "knowledge" ||
+        e.kind === "browser"),
+  );
+  const other = items.filter(
+    (e) => e.ok && !webby.includes(e) && e.content.trim(),
+  );
+
+  const compact = compressEvidenceForSynthesis({
+    question,
+    shape,
+    profile,
+    items: [
+      ...webby.map((e) => ({
+        id: e.id,
+        title: e.title,
+        url: e.url,
+        content: e.content,
+        kind: e.kind,
+        ok: e.ok,
+      })),
+      // Keep a thin slice of non-web tool evidence if present
+      ...other.slice(0, 2).map((e) => ({
+        id: e.id,
+        title: e.title,
+        url: e.url,
+        content: e.content.slice(0, 600),
+        kind: e.kind,
+        ok: e.ok,
+      })),
+    ],
+  });
+
+  return {
+    instruction: buildSynthesisInstruction({
+      question,
+      shape,
+      evidence: compact,
+    }),
+    compact,
+    shapeKind: shape.kind,
+  };
 }
 
 export function evidenceFromWebSearch(

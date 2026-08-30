@@ -12,7 +12,7 @@
     "test:isolation": "node --experimental-strip-types scripts/security-isolation-probe.ts",
     "test:assistant": "node --experimental-strip-types --test scripts/assistant-behavior.test.ts",
     "test:intelligence": "node --experimental-strip-types --test scripts/intelligence.test.ts",
-    "test:orchestrator": "node --experimental-strip-types --test scripts/orchestrator.test.ts scripts/orchestrator-v2.test.ts scripts/attachment-context.test.ts scripts/vision-input.test.ts scripts/web-retrieval.test.ts scripts/web-research.test.ts scripts/bridge-errors.test.ts scripts/on-device-routing.test.ts scripts/local-orchestrator.test.ts scripts/tool-execution-bus.test.ts scripts/computer.test.ts scripts/browser-surface.test.ts scripts/browser-context-routing.test.ts",
+    "test:orchestrator": "node --experimental-strip-types --test scripts/orchestrator.test.ts scripts/orchestrator-v2.test.ts scripts/attachment-context.test.ts scripts/vision-input.test.ts scripts/web-retrieval.test.ts scripts/web-research.test.ts scripts/answer-shape.test.ts scripts/bridge-errors.test.ts scripts/on-device-routing.test.ts scripts/local-orchestrator.test.ts scripts/tool-execution-bus.test.ts scripts/computer.test.ts scripts/browser-surface.test.ts scripts/browser-context-routing.test.ts",
     "seed:supabase": "node --experimental-strip-types scripts/seed.ts 2>/dev/null || npx --yes tsx scripts/seed.ts",
     "desktop": "npm --prefix desktop run start",
     "desktop:prod": "npm --prefix desktop run start",

@@ -52,6 +52,7 @@ function SourcesStrip({
 }: {
   citations?: Message["citations"];
 }) {
+  const [expanded, setExpanded] = useState(false);
   if (!citations?.length) return null;
   const safe = citations.filter((c) => {
     try {
@@ -69,35 +70,112 @@ function SourcesStrip({
     seen.add(key);
     return true;
   });
+
+  const labelFor = (c: NonNullable<Message["citations"]>[number]) => {
+    if (c.domain) return c.domain;
+    try {
+      return new URL(c.url).hostname.replace(/^www\./, "");
+    } catch {
+      return c.title.slice(0, 24) || "Source";
+    }
+  };
+
+  const faviconFor = (url: string) => {
+    try {
+      const host = new URL(url).hostname;
+      return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`;
+    } catch {
+      return null;
+    }
+  };
+
   return (
-    <div className="pt-1">
-      <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground/80">
-        Sources
-      </p>
-      <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-        {unique.map((c) => {
-          const label = c.domain || (() => {
-            try {
-              return new URL(c.url).hostname.replace(/^www\./, "");
-            } catch {
-              return c.title;
-            }
-          })();
-          return (
-            <li key={c.id}>
-              <a
-                href={c.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[12.5px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                title={c.title}
-              >
-                {label}
-              </a>
-            </li>
-          );
-        })}
-      </ul>
+    <div className="pt-2">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="shrink-0 text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground/80 hover:text-foreground"
+          aria-expanded={expanded}
+        >
+          Sources · {unique.length}
+        </button>
+        {!expanded ? (
+          <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <ul className="flex flex-nowrap items-center gap-1.5 pr-1">
+              {unique.map((c) => {
+                const favicon = faviconFor(c.url);
+                return (
+                  <li key={c.id} className="shrink-0">
+                    <a
+                      href={c.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={c.title}
+                      className="inline-flex max-w-[9.5rem] items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-[12px] text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground"
+                    >
+                      {favicon ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={favicon}
+                          alt=""
+                          width={14}
+                          height={14}
+                          className="h-3.5 w-3.5 rounded-[3px]"
+                        />
+                      ) : null}
+                      <span className="truncate">{labelFor(c)}</span>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+      {expanded ? (
+        <ul className="mt-2 space-y-1.5 rounded-[10px] border border-border/70 bg-muted/20 px-2.5 py-2">
+          {unique.map((c) => {
+            const favicon = faviconFor(c.url);
+            return (
+              <li key={c.id}>
+                <a
+                  href={c.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start gap-2 rounded-lg px-1.5 py-1.5 hover:bg-muted/50"
+                >
+                  {favicon ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={favicon}
+                      alt=""
+                      width={16}
+                      height={16}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded-[3px]"
+                    />
+                  ) : (
+                    <span className="mt-0.5 h-4 w-4 shrink-0 rounded-[3px] bg-muted" />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-medium tracking-[-0.01em] text-foreground">
+                      {c.title || labelFor(c)}
+                    </span>
+                    <span className="block truncate text-[12px] text-muted-foreground">
+                      {labelFor(c)}
+                    </span>
+                    {c.excerpt ? (
+                      <span className="mt-0.5 line-clamp-2 block text-[12px] leading-snug text-muted-foreground/90">
+                        {c.excerpt}
+                      </span>
+                    ) : null}
+                  </span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
     </div>
   );
 }

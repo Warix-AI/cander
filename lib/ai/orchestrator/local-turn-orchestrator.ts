@@ -43,7 +43,7 @@ import {
   evidenceFromWebOpen,
   evidenceFromWebSearch,
   evidenceFromBrowserObservation,
-  formatEvidenceForPrompt,
+  prepareSynthesisEvidence,
   type TurnEvidence,
 } from "@/lib/ai/orchestrator/evidence";
 import {
@@ -61,6 +61,13 @@ import {
   setTurnToolExecutionListener,
 } from "@/lib/ai/orchestrator/tool-execution-bus";
 import { collectCitationsFromToolResults } from "@/lib/ai/orchestrator/collect-citations";
+import {
+  deterministicAnswerFromEvidence,
+  inferAnswerShape,
+  looksLikeContextOverflow,
+  shrinkEvidenceForRetry,
+  buildSynthesisInstruction,
+} from "../answer-shape/index.ts";
 import { shouldEscalateToBrowser } from "@/lib/computer/tool-routing";
 
 export const LOCAL_ORCHESTRATOR_TOOLS = [
@@ -331,7 +338,12 @@ async function buildFmPrompt(
     allowTools: true,
   });
   const includeInventory = Boolean(pkg.inventoryText);
-  const evidenceBlock = formatEvidenceForPrompt(evidence);
+  const synthesis = prepareSynthesisEvidence(
+    request.content,
+    evidence,
+    "onDevice",
+  );
+  const evidenceBlock = synthesis.instruction;
   let activeBrowserMeta = "";
   try {
     const { getActiveBrowserContextTab } = await import(
@@ -377,7 +389,7 @@ async function buildFmPrompt(
     evidenceBlock,
     extraInstruction,
     requiresExternalEvidence(request.content)
-      ? "This turn needs live or external facts. Prefer web.search for discovery, web.open for readable public pages, browser.current.* for the active right-panel tab, and computer.browser.open only for JavaScript, interaction, auth, scrolling, or visual inspection of remote pages. Never invent URLs, headlines, or page content — only cite evidence above or from tool results."
+      ? "This turn needs live or external facts. Prefer web.search for discovery, web.open for readable public pages, browser.current.* for the active right-panel tab, and computer.browser.open only for JavaScript, interaction, auth, scrolling, or visual inspection of remote pages. Never invent URLs, headlines, or page content — only synthesize from compact evidence above. Do not narrate search results."
       : "",
   ]
     .filter(Boolean)
@@ -586,16 +598,73 @@ async function runLocalTurnOrchestratorInner(
         err instanceof Error ? err.message.slice(0, 200) : "On-device model failed.";
       console.error("[LOCAL_ORCH_FM_ERROR]", { round, message: detail });
       const cites = collectCitationsFromToolResults(toolResults);
-      if (evidence.length || cites.length) {
-        const lines = cites.slice(0, 5).map((c, i) => {
-          const excerpt = c.excerpt ? `\n${c.excerpt.slice(0, 160)}` : "";
-          return `${i + 1}. ${c.title}\n${c.url}${excerpt}`;
-        });
+      const shape = inferAnswerShape(request.content);
+      let synthesis = prepareSynthesisEvidence(
+        request.content,
+        evidence,
+        "onDevice",
+      );
+
+      // Context overflow: shrink evidence and retry once — never dump raw search.
+      if (looksLikeContextOverflow(detail) && synthesis.compact.length) {
+        const shrunk = shrinkEvidenceForRetry(synthesis.compact);
+        const retryInstructions = [
+          instructions.replace(synthesis.instruction, ""),
+          buildSynthesisInstruction({
+            question: request.content,
+            shape,
+            evidence: shrunk,
+          }),
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        try {
+          report({
+            phase: "generating",
+            label: "Thinking",
+            detail: "Condensing sources…",
+          });
+          fm = await generateFmTurn({ prompt, instructions: retryInstructions });
+        } catch (retryErr) {
+          const fallback = deterministicAnswerFromEvidence({
+            question: request.content,
+            shape,
+            evidence: shrunk,
+          });
+          console.error("[LOCAL_ORCH_FM_RETRY_FAILED]", {
+            message:
+              retryErr instanceof Error
+                ? retryErr.message.slice(0, 160)
+                : "retry_failed",
+          });
+          return {
+            content: fallback,
+            runtime: "apple-local",
+            offline: false,
+            condensationOccurred: false,
+            aiChatId: request.aiChatId ?? null,
+            toolResults: toolResults.length ? toolResults : undefined,
+            citations: cites,
+          };
+        }
+      } else if (synthesis.compact.length) {
         return {
-          content: safeContent(
-            "",
-            `I found web sources, but the on-device model couldn’t finish the answer (${detail}). Here’s what came back:\n\n${lines.join("\n\n") || "Sources were retrieved — try again in a moment."}`,
-          ),
+          content: deterministicAnswerFromEvidence({
+            question: request.content,
+            shape,
+            evidence: synthesis.compact,
+          }),
+          runtime: "apple-local",
+          offline: false,
+          condensationOccurred: false,
+          aiChatId: request.aiChatId ?? null,
+          toolResults: toolResults.length ? toolResults : undefined,
+          citations: cites,
+        };
+      } else {
+        return {
+          content:
+            "I couldn’t finish that reply right now. Please try again in a moment.",
           runtime: "apple-local",
           offline: false,
           condensationOccurred: false,
@@ -604,15 +673,6 @@ async function runLocalTurnOrchestratorInner(
           citations: cites,
         };
       }
-      return {
-        content: `I couldn’t finish that on-device reply (${detail}). Try again, or switch runtime to Cloud.`,
-        runtime: "apple-local",
-        offline: false,
-        condensationOccurred: false,
-        aiChatId: request.aiChatId ?? null,
-        toolResults: toolResults.length ? toolResults : undefined,
-        citations: cites,
-      };
     }
     emitToolExecution({
       type: "model_generate_end",
