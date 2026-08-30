@@ -317,9 +317,16 @@ function stop(tabId) {
 }
 
 function destroyAll() {
+  chromeOverlay = false;
   for (const tabId of [...tabs.keys()]) {
     destroyTab(tabId);
   }
+}
+
+/** Reset native surfaces when the shell renderer reloads (Cmd+R). */
+function resetForShellReload() {
+  chromeOverlay = false;
+  destroyAll();
 }
 
 async function readPage(tabId) {
@@ -376,6 +383,7 @@ module.exports = {
   reload,
   stop,
   destroyAll,
+  resetForShellReload,
   readPage,
   getSelection,
   captureViewport,

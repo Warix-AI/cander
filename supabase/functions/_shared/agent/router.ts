@@ -55,6 +55,27 @@ export function routeDeterministic(content: string): DeterministicRoute {
     };
   }
 
+  // Active right-panel page / screen / preview — client must read the webview.
+  if (
+    /\b(this|the|that)\s+(page|website|site|preview|screen|tab|window|viewport|ui|layout|button)\b/i.test(
+      t,
+    ) ||
+    /\b(on|to)\s+the\s+right\b/i.test(t) ||
+    /\b(my|the)\s+screen\b/i.test(t) ||
+    /\bcan\s+you\s+see\b[\s\S]{0,40}\b(screen|page|right|preview|this|what)\b/i.test(
+      t,
+    ) ||
+    /\b(see|look\s+at|describe|summarize|read)\b[\s\S]{0,48}\b(the\s+)?(page|website|preview|screen|right\s+panel)\b/i.test(
+      t,
+    )
+  ) {
+    return {
+      kind: "client_action",
+      reason: "deterministic:active_browser_context",
+      clientActions: ["browser.current.get_context"],
+    };
+  }
+
   if (CLIENT_PROJECT.test(t)) {
     return {
       kind: "client_action",

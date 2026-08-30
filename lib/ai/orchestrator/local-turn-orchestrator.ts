@@ -50,6 +50,7 @@ import {
   initialDeterministicToolCalls,
   requiresExternalEvidence,
 } from "@/lib/ai/orchestrator/deterministic-triggers";
+import { refersToActiveBrowserSurface } from "@/lib/browser-context/routing";
 import {
   failClosedMessage,
   validateLocalGrounding,
@@ -472,7 +473,8 @@ async function runLocalTurnOrchestratorInner(
     retrievalAttempted =
       retrievalAttempted ||
       queued.name === "web.search" ||
-      queued.name === "web.open";
+      queued.name === "web.open" ||
+      queued.name.startsWith("browser.current.");
     const started = Date.now();
     const result = await executeAuthorizedTool({
       name: queued.name,
@@ -491,6 +493,27 @@ async function runLocalTurnOrchestratorInner(
     });
     toolResults.push(result);
     appendEvidence(evidence, evidenceFromToolResult(result));
+
+    // If the user asked about the right-panel page and we couldn't read it,
+    // say so clearly — do not let the model invent "I can't see screens."
+    if (
+      queued.name.startsWith("browser.current.") &&
+      !result.ok &&
+      refersToActiveBrowserSurface(request.content)
+    ) {
+      return {
+        content: safeContent(
+          "",
+          result.output ||
+            "I couldn't read the active browser tab. Make sure a tab is selected in the right panel and you're on the latest desktop shell (0.1.3+).",
+        ),
+        runtime: "apple-local",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+        toolResults,
+      };
+    }
     if (
       queued.name === "web.open" &&
       !result.ok &&

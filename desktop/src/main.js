@@ -8,7 +8,7 @@ const DEFAULT_URL = "https://cander.app";
 const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Bumped when the native shell changes — visible on <html data-cander-shell>. */
-const SHELL_BUILD = "2026-08-30-browser-context";
+const SHELL_BUILD = "2026-08-30-browser-context-fix";
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
 /** Classic Mac titlebar / chrome row height (traffic-light axis). */
 const TITLEBAR_PX = 52;
@@ -148,10 +148,21 @@ async function createWindow() {
     markDesktopShell();
   });
 
+  // Renderer refresh (Cmd+R) leaves orphaned WebContentsViews / stuck chromeOverlay.
+  mainWindow.webContents.on(
+    "did-start-navigation",
+    (_event, url, _isInPlace, isMainFrame) => {
+      if (!isMainFrame) return;
+      if (!url || url.startsWith("data:")) return;
+      browserSurface.resetForShellReload();
+    },
+  );
+
   mainWindow.webContents.on("did-finish-load", () => {
     const current = mainWindow?.webContents.getURL() || "";
     if (current.startsWith("data:")) return;
     loadAttempts = 0;
+    browserSurface.setChromeOverlay(false);
     markDesktopShell();
     console.log(
       `[cander-desktop] loaded ${current} (shell ${SHELL_BUILD}, titleBarStyle=hidden)`,

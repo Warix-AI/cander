@@ -154,10 +154,25 @@ async function runAssistantTurnInner(
       );
       return runLocalTurnOrchestrator(request, opts);
     }
+    // Cloud path cannot touch Electron/Capacitor — preflight browser reads here.
+    const { preflightActiveBrowserContext } = await import(
+      "@/lib/ai/orchestrator/browser-context-preflight"
+    );
+    const pre = await preflightActiveBrowserContext(request, opts);
+    if (pre.earlyReturn) return pre.earlyReturn;
     const { runOrchestratedTurn } = await import(
       "@/lib/ai/orchestrator/run-turn"
     );
-    return runOrchestratedTurn(request, { onProgress: opts?.onProgress });
+    const cloud = await runOrchestratedTurn(pre.request, {
+      onProgress: opts?.onProgress,
+    });
+    if (pre.toolResults.length) {
+      return {
+        ...cloud,
+        toolResults: [...pre.toolResults, ...(cloud.toolResults ?? [])],
+      };
+    }
+    return cloud;
   }
 
   // Legacy path — only when NEXT_PUBLIC_AI_AGENT_ORCHESTRATOR is off.

@@ -82,7 +82,7 @@ describe("validateLocalGrounding", () => {
 
   it("fail-closed message is user-safe", () => {
     const msg = failClosedMessage(["UNRESOLVED_EXTERNAL_FACT"]);
-    assert.match(msg, /couldn't retrieve live information/i);
+    assert.match(msg, /couldn't read the active page|retrieve live information/i);
     assert.doesNotMatch(msg, /UNRESOLVED/);
   });
 });

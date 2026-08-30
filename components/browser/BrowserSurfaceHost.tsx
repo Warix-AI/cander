@@ -103,6 +103,7 @@ export function BrowserSurfaceHost({
           projectId,
         });
         await adapter.navigate(tabId, url);
+        if (cancelled) return;
         await paint();
         if (
           adapter.id === "web-pwa" &&
@@ -117,6 +118,7 @@ export function BrowserSurfaceHost({
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
+          void adapter.hideTab(tabId);
         }
       }
     })();
@@ -130,9 +132,11 @@ export function BrowserSurfaceHost({
         setError(
           "error" in event ? String(event.error) : "Navigation failed",
         );
+        void adapter.hideTab(tabId);
       }
       if (event.type === "url" && "url" in event) {
         onUrlChangeRef.current?.(String(event.url));
+        setError(null);
       }
       if (event.type === "title" && "title" in event) {
         onTitleChangeRef.current?.(String(event.title));

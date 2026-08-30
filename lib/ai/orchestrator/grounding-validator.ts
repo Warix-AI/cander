@@ -33,20 +33,21 @@ export function validateLocalGrounding(opts: {
       e.kind === "search_result" ||
       e.kind === "browser",
   );
+  const retrievalDone = opts.retrievalAttempted || webEvidence.length > 0;
 
   if (!answer) {
     return { valid: false, issues: ["EMPTY_ANSWER"], recommendedAction: "fail_closed" };
   }
 
-  if (needsExternal && !opts.retrievalAttempted) {
+  if (needsExternal && !retrievalDone) {
     issues.push("MISSING_RETRIEVAL");
   }
 
   if (
     needsExternal &&
-    opts.retrievalAttempted &&
+    retrievalDone &&
     webEvidence.length === 0 &&
-    !/couldn'?t (retrieve|open|find)|unable to (retrieve|open|find)|no (live )?sources/i.test(
+    !/couldn'?t (retrieve|open|find|read)|unable to (retrieve|open|find|read|view)|no (live )?sources|no active browser/i.test(
       answer,
     )
   ) {
@@ -74,7 +75,7 @@ export function validateLocalGrounding(opts: {
 
 export function failClosedMessage(issues: string[]): string {
   if (issues.includes("MISSING_RETRIEVAL") || issues.includes("UNRESOLVED_EXTERNAL_FACT")) {
-    return "I couldn't retrieve live information for that request, so I won't guess. Check your connection or try again in a moment.";
+    return "I couldn't read the active page or retrieve live information for that, so I won't guess. Select a tab in the right panel and try again.";
   }
   return "I couldn't verify that answer against retrieved sources.";
 }

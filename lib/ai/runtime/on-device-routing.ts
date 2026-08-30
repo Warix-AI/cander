@@ -8,6 +8,7 @@ import { isComplexWorkIntent } from "../tools/domains.ts";
 import { getAiRuntimeMode } from "./mode-store.ts";
 import { getFoundationModelsAvailability } from "./native/foundation-models.ts";
 import type { AiGenerateRequest } from "./types.ts";
+import { refersToActiveBrowserSurface } from "../../browser-context/routing.ts";
 
 /** Pure routing logic — testable without native FM. */
 export function preferOnDeviceForTurnContent(opts: {
@@ -17,6 +18,9 @@ export function preferOnDeviceForTurnContent(opts: {
   projectId?: string | null;
 }): boolean {
   if (!opts.fmAvailable) return false;
+
+  // Right-panel browser reads must stay on-device / client — Electron IPC.
+  if (refersToActiveBrowserSurface(opts.content)) return true;
 
   // Live / web retrieval always uses the cloud orchestrator (Brave on Edge),
   // same as desktop without a local FM helper — critical for iOS Auto + Apple Intelligence.
@@ -74,6 +78,16 @@ export async function shouldUseLocalTurnOrchestrator(
 
   const mode = getAiRuntimeMode();
   if (mode === "cloud") return false;
+
+  // Active right-panel inspection requires client Electron/Capacitor tools.
+  if (refersToActiveBrowserSurface(request.content)) {
+    const avail = await getFoundationModelsAvailability();
+    if (avail.available || mode === "local") return true;
+    // Even without FM, prefer local path so deterministic browser tools run
+    // before any cloud guess. Local orchestrator needs FM for the answer step —
+    // if FM missing, fall through and let cloud + client_action handle it.
+    if (!avail.available) return false;
+  }
 
   const avail = await getFoundationModelsAvailability();
   if (!avail.available) return false;

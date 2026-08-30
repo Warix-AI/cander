@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("canderDesktop", {
   platform: process.platform,
-  shellBuild: "2026-08-30-browser-context",
+  shellBuild: "2026-08-30-browser-context-fix",
   shellVersion: "0.1.3",
   window: {
     minimize: () => ipcRenderer.send("cander:window-minimize"),
