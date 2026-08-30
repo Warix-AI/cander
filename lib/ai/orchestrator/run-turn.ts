@@ -9,16 +9,16 @@ import {
   cancelAgentTurn,
   newTurnId,
   runAgentTurn,
+  runAgentTurnStream,
   type AgentRunTurnResult,
+  type AgentStreamEvent,
 } from "@/lib/api/ai-agent-api";
 import {
   createAiChat,
   setAiChatContext,
   type AiContextRefInput,
 } from "@/lib/api/ai-chat-api";
-import { routeDeterministic } from "@/lib/ai/orchestrator/router";
 import { preferOrchestratorV2 } from "@/lib/ai/orchestrator/flags";
-import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
 import {
   executeAuthorizedTool,
   type AiToolCallResult,
@@ -186,26 +186,8 @@ export async function runOrchestratedTurn(
       }),
     ).catch(() => {});
 
-    const route = routeDeterministic(request.content);
-    // V2: server requests knowledge via paused_for_client — do not pre-decide.
-    // Keep optional pre-hits only as a warm cache when client already knows.
-    let workspaceKnowledgeHits:
-      | Array<{ title: string; snippet: string; id?: string }>
-      | undefined;
-    if (route.needsKnowledge || route.kind === "knowledge_retrieve") {
-      // Soft hint only; V2 controller may still request knowledge.search
-      const hits = searchWorkspaceKnowledge(
-        request.workspaceId,
-        request.content,
-      );
-      if (hits.length) {
-        workspaceKnowledgeHits = hits.map((h) => ({
-          id: `kb_${h.fileId}`,
-          title: `${h.knowledgeBaseName} / ${h.fileName}`,
-          snippet: h.excerpt,
-        }));
-      }
-    }
+    // V2: server decides knowledge via paused_for_client — no client pre-routing.
+    const useV2 = preferOrchestratorV2();
 
     const turnId = newTurnId();
     // Cancel any abandoned in-flight turn before starting a new one
@@ -222,19 +204,44 @@ export async function runOrchestratedTurn(
     };
     opts?.signal?.addEventListener("abort", onAbort);
 
-    try {
-      let result = await runAgentTurn({
+    const handleStreamEvent = (ev: AgentStreamEvent) => {
+      if (ev.type === "status") {
+        report(mapStatus(ev.phase, ev.detail));
+      }
+    };
+
+    const invokeTurn = async (
+      extra?: {
+        clientActionResults?: Array<{
+          name: string;
+          output: string;
+          ok: boolean;
+        }>;
+      },
+    ) => {
+      const payload = {
         turnId,
         chatId,
         content: request.content,
         images: request.images,
-        workspaceKnowledgeHits,
-        orchestratorVersion: preferOrchestratorV2() ? "v2" : "v1",
-      });
-
+        clientActionResults: extra?.clientActionResults,
+        orchestratorVersion: useV2 ? ("v2" as const) : ("v1" as const),
+      };
+      if (useV2) {
+        return runAgentTurnStream(payload, {
+          onEvent: handleStreamEvent,
+          signal: opts?.signal,
+        });
+      }
+      const result = await runAgentTurn(payload);
       for (const ev of result.statusEvents ?? []) {
         report(mapStatus(ev.phase, ev.detail));
       }
+      return result;
+    };
+
+    try {
+      let result = await invokeTurn();
 
       // Execute client_actions and resume once
       if (
@@ -281,18 +288,7 @@ export async function runOrchestratedTurn(
           };
         }
 
-        result = await runAgentTurn({
-          turnId,
-          chatId,
-          content: request.content,
-          images: request.images,
-          workspaceKnowledgeHits,
-          clientActionResults: actionResults,
-          orchestratorVersion: preferOrchestratorV2() ? "v2" : "v1",
-        });
-        for (const ev of result.statusEvents ?? []) {
-          report(mapStatus(ev.phase, ev.detail));
-        }
+        result = await invokeTurn({ clientActionResults: actionResults });
       }
 
       return toGenerateResult(result, chatId, turnId);

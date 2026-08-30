@@ -1,7 +1,7 @@
 /**
  * Edge Agent API — canonical TurnOrchestrator entry.
- * Actions: run_turn | cancel_turn | get_turn
- * Default: Orchestrator V2 (bounded autonomous loop). Set AI_ORCHESTRATOR_V2=0 for V1.
+ * Actions: run_turn | run_turn_stream | cancel_turn | get_turn
+ * Default: Orchestrator V2. Set AI_ORCHESTRATOR_V2=0 for V1.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { resolveModelProvider } from "../_shared/agent/model-provider.ts";
@@ -9,15 +9,17 @@ import { runTurnOrchestrator } from "../_shared/agent/orchestrator.ts";
 import {
   isOrchestratorV2Enabled,
   runTurnOrchestratorV2,
+  type StreamEvent,
 } from "../_shared/agent/v2/orchestrator.ts";
 
 type Json = Record<string, unknown>;
 
-function corsHeaders() {
+function corsHeaders(extra: Record<string, string> = {}) {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type",
+    ...extra,
   };
 }
 
@@ -26,6 +28,42 @@ function json(status: number, body: Json) {
     status,
     headers: { ...corsHeaders(), "Content-Type": "application/json" },
   });
+}
+
+function parseRunTurnBody(body: Record<string, unknown>) {
+  const turnId = String(body?.turnId ?? "").trim();
+  const chatId = String(body?.chatId ?? "").trim();
+  const content = String(body?.content ?? "").trim();
+  const images = Array.isArray(body?.images)
+    ? body.images.filter((x: unknown): x is string => typeof x === "string")
+    : [];
+  const workspaceKnowledgeHits = Array.isArray(body?.workspaceKnowledgeHits)
+    ? body.workspaceKnowledgeHits
+    : [];
+  const clientActionResults = Array.isArray(body?.clientActionResults)
+    ? body.clientActionResults
+    : undefined;
+  const useV2 =
+    body?.orchestratorVersion === "v1"
+      ? false
+      : body?.orchestratorVersion === "v2"
+        ? true
+        : isOrchestratorV2Enabled();
+  return {
+    turnId,
+    chatId,
+    content,
+    images,
+    workspaceKnowledgeHits,
+    clientActionResults,
+    researchMode: Boolean(body?.researchMode),
+    locationHint:
+      typeof body?.locationHint === "string" ? body.locationHint : null,
+    userTimezone:
+      typeof body?.userTimezone === "string" ? body.userTimezone : null,
+    useV2,
+    inferenceProvider: body?.inferenceProvider,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -52,7 +90,7 @@ Deno.serve(async (req) => {
       return json(401, { error: "Unauthorized" });
     }
 
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const action = String(body?.action ?? "run_turn");
 
     if (action === "cancel_turn") {
@@ -98,55 +136,105 @@ Deno.serve(async (req) => {
       return json(200, { turn: data });
     }
 
-    if (action === "run_turn") {
-      const turnId = String(body?.turnId ?? "").trim();
-      const chatId = String(body?.chatId ?? "").trim();
-      const content = String(body?.content ?? "").trim();
-      if (!turnId || !chatId || !content) {
+    if (action === "run_turn" || action === "run_turn_stream") {
+      const parsed = parseRunTurnBody(body);
+      if (!parsed.turnId || !parsed.chatId || !parsed.content) {
         return json(400, { error: "turnId, chatId, and content required" });
       }
 
-      const images = Array.isArray(body?.images)
-        ? body.images.filter((x: unknown): x is string => typeof x === "string")
-        : [];
-      const workspaceKnowledgeHits = Array.isArray(body?.workspaceKnowledgeHits)
-        ? body.workspaceKnowledgeHits
-        : [];
-      const clientActionResults = Array.isArray(body?.clientActionResults)
-        ? body.clientActionResults
-        : undefined;
-
       let provider;
       try {
-        provider = resolveModelProvider(body?.inferenceProvider);
+        provider = resolveModelProvider(parsed.inferenceProvider as string | undefined);
       } catch (e) {
         return json(503, {
           error: e instanceof Error ? e.message : "Provider unavailable",
         });
       }
 
-      const useV2 =
-        body?.orchestratorVersion === "v1"
-          ? false
-          : body?.orchestratorVersion === "v2"
-            ? true
-            : isOrchestratorV2Enabled();
+      const stream = action === "run_turn_stream";
 
-      if (useV2) {
+      if (stream && parsed.useV2) {
+        const encoder = new TextEncoder();
+        let closed = false;
+        const readable = new ReadableStream<Uint8Array>({
+          async start(controller) {
+            const write = (ev: StreamEvent) => {
+              if (closed) return;
+              controller.enqueue(encoder.encode(`${JSON.stringify(ev)}\n`));
+            };
+            try {
+              const result = await runTurnOrchestratorV2(
+                {
+                  supabase,
+                  ownerId: user.id,
+                  provider,
+                  onEvent: write,
+                },
+                {
+                  turnId: parsed.turnId,
+                  chatId: parsed.chatId,
+                  content: parsed.content,
+                  images: parsed.images,
+                  workspaceKnowledgeHits: parsed.workspaceKnowledgeHits,
+                  researchMode: parsed.researchMode,
+                  clientActionResults: parsed.clientActionResults,
+                  locationHint: parsed.locationHint,
+                  userTimezone: parsed.userTimezone,
+                },
+              );
+              // Ensure terminal event even if orchestrator forgot
+              if (result.status === "paused_for_client") {
+                write({ type: "turn.paused", result });
+              } else if (result.status === "cancelled") {
+                write({ type: "turn.cancelled", turnId: parsed.turnId });
+              } else if (result.status === "failed") {
+                write({
+                  type: "turn.failed",
+                  error: "turn_failed",
+                  result,
+                });
+              } else {
+                write({ type: "turn.completed", result });
+              }
+            } catch (err) {
+              const message =
+                err instanceof Error ? err.message : "Internal error";
+              write({ type: "turn.failed", error: message });
+            } finally {
+              closed = true;
+              try {
+                controller.close();
+              } catch {
+                // ignore
+              }
+            }
+          },
+        });
+
+        return new Response(readable, {
+          status: 200,
+          headers: corsHeaders({
+            "Content-Type": "application/x-ndjson; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+            "X-Content-Type-Options": "nosniff",
+          }),
+        });
+      }
+
+      // Non-streaming (V2 or V1)
+      if (parsed.useV2) {
         const result = await runTurnOrchestratorV2(
           { supabase, ownerId: user.id, provider },
           {
-            turnId,
-            chatId,
-            content,
-            images,
-            workspaceKnowledgeHits,
-            researchMode: Boolean(body?.researchMode),
-            clientActionResults,
-            locationHint:
-              typeof body?.locationHint === "string" ? body.locationHint : null,
-            userTimezone:
-              typeof body?.userTimezone === "string" ? body.userTimezone : null,
+            turnId: parsed.turnId,
+            chatId: parsed.chatId,
+            content: parsed.content,
+            images: parsed.images,
+            workspaceKnowledgeHits: parsed.workspaceKnowledgeHits,
+            researchMode: parsed.researchMode,
+            clientActionResults: parsed.clientActionResults,
+            locationHint: parsed.locationHint,
+            userTimezone: parsed.userTimezone,
           },
         );
         return json(200, result);
@@ -155,13 +243,13 @@ Deno.serve(async (req) => {
       const result = await runTurnOrchestrator(
         { supabase, ownerId: user.id, provider, authHeader },
         {
-          turnId,
-          chatId,
-          content,
-          images,
-          workspaceKnowledgeHits,
-          researchMode: Boolean(body?.researchMode),
-          clientActionResults,
+          turnId: parsed.turnId,
+          chatId: parsed.chatId,
+          content: parsed.content,
+          images: parsed.images,
+          workspaceKnowledgeHits: parsed.workspaceKnowledgeHits,
+          researchMode: parsed.researchMode,
+          clientActionResults: parsed.clientActionResults,
         },
       );
       return json(200, result);

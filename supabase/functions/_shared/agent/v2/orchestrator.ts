@@ -50,8 +50,25 @@ function newId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function pushStatus(state: TurnState, e: StatusEvent) {
+export type StreamEvent =
+  | (StatusEvent & { type: "status" })
+  | { type: "turn.started"; turnId: string; chatId: string }
+  | { type: "turn.completed"; result: V2RunResult }
+  | { type: "turn.paused"; result: V2RunResult }
+  | { type: "turn.failed"; error: string; result?: V2RunResult }
+  | { type: "turn.cancelled"; turnId: string };
+
+function emitStatus(
+  state: TurnState,
+  e: StatusEvent,
+  onEvent?: (ev: StreamEvent) => void,
+) {
   state.statusEvents.push(e);
+  try {
+    onEvent?.({ type: "status", ...e });
+  } catch {
+    // never break the turn on stream callback failure
+  }
 }
 
 async function assertNotCancelled(
@@ -74,6 +91,8 @@ export type V2Deps = {
   supabase: any;
   ownerId: string;
   provider: ModelProvider;
+  /** Progressive turn events (streaming). */
+  onEvent?: (ev: StreamEvent) => void;
 };
 
 export type V2Input = {
@@ -119,6 +138,15 @@ export async function runTurnOrchestratorV2(
 
   try {
     failureStage = "load_chat";
+    try {
+      deps.onEvent?.({
+        type: "turn.started",
+        turnId: input.turnId,
+        chatId: input.chatId,
+      });
+    } catch {
+      // ignore
+    }
     const { data: chat, error: chatError } = await deps.supabase
       .from("ai_chats")
       .select("*")
@@ -372,11 +400,11 @@ export async function runTurnOrchestratorV2(
       decision = null;
       if (!d) {
         failureStage = "controller";
-        pushStatus(state, {
+        emitStatus(state, {
           phase: "routing",
           label: "Thinking",
           detail: "Planning next step…",
-        });
+        }, deps.onEvent);
         state.budgets.controllerCycles += 1;
         state.budgets.modelGens += 1;
         const ctrl = await deps.provider.complete({
@@ -414,11 +442,11 @@ export async function runTurnOrchestratorV2(
         if (state.budgets.webSearches >= state.budgets.maxWebSearches) {
           d = { action: "answer", reasonCode: "SEARCH_BUDGET", canAnswerNow: true };
         } else {
-          pushStatus(state, {
+          emitStatus(state, {
             phase: "searching",
             label: "Thinking",
             detail: "Searching the web…",
-          });
+          }, deps.onEvent);
           const queries =
             d.queries?.length
               ? d.queries
@@ -486,11 +514,11 @@ export async function runTurnOrchestratorV2(
               });
             }
           }
-          pushStatus(state, {
+          emitStatus(state, {
             phase: "reading",
             label: "Thinking",
             detail: "Reading sources…",
-          });
+          }, deps.onEvent);
           // Extract briefing after search
           await maybeBrief(deps, state);
           continue;
@@ -499,11 +527,11 @@ export async function runTurnOrchestratorV2(
 
       if (d.action === "web_open") {
         failureStage = "web_open";
-        pushStatus(state, {
+        emitStatus(state, {
           phase: "reading",
           label: "Thinking",
           detail: "Reading sources…",
-        });
+        }, deps.onEvent);
         const ids =
           d.sourceIdsToRead?.length
             ? d.sourceIdsToRead
@@ -553,11 +581,11 @@ export async function runTurnOrchestratorV2(
             name: "knowledge.search",
             arguments: { query: state.knowledgeQuery },
           });
-          pushStatus(state, {
+          emitStatus(state, {
             phase: "client_action",
             label: "Thinking",
             detail: "Searching your workspace…",
-          });
+          }, deps.onEvent);
           const paused: V2RunResult = {
             turnId: input.turnId,
             chatId: input.chatId,
@@ -584,6 +612,11 @@ export async function runTurnOrchestratorV2(
               updated_at: new Date().toISOString(),
             })
             .eq("turn_id", input.turnId);
+          try {
+            deps.onEvent?.({ type: "turn.paused", result: paused });
+          } catch {
+            // ignore
+          }
           return paused;
         }
         state.budgets.knowledgeSearches += 1;
@@ -646,6 +679,11 @@ export async function runTurnOrchestratorV2(
             updated_at: new Date().toISOString(),
           })
           .eq("turn_id", input.turnId);
+        try {
+          deps.onEvent?.({ type: "turn.paused", result: paused });
+        } catch {
+          // ignore
+        }
         return paused;
       }
 
@@ -673,11 +711,11 @@ export async function runTurnOrchestratorV2(
           continue;
         }
 
-        pushStatus(state, {
+        emitStatus(state, {
           phase: "generating",
           label: "Thinking",
           detail: "Generating…",
-        });
+        }, deps.onEvent);
         if (!state.briefing && state.evidence.length) {
           await maybeBrief(deps, state);
         }
@@ -830,7 +868,7 @@ export async function runTurnOrchestratorV2(
       created_at: new Date().toISOString(),
     });
 
-    pushStatus(state, { phase: "done", label: "Done" });
+    emitStatus(state, { phase: "done", label: "Done" }, deps.onEvent);
 
     const citations = state.evidence
       .filter((e) => e.kind === "web_search" || e.kind === "web_page" || e.kind === "knowledge")
@@ -898,6 +936,11 @@ export async function runTurnOrchestratorV2(
 
     failureStage = "done";
     console.log("[TURN_OBS]", result.observability);
+    try {
+      deps.onEvent?.({ type: "turn.completed", result });
+    } catch {
+      // ignore
+    }
     return result;
   } catch (err) {
     const cancelled = err instanceof Error && err.message === "TURN_CANCELLED";
@@ -914,6 +957,11 @@ export async function runTurnOrchestratorV2(
           updated_at: new Date().toISOString(),
         })
         .eq("turn_id", input.turnId);
+      try {
+        deps.onEvent?.({ type: "turn.cancelled", turnId: input.turnId });
+      } catch {
+        // ignore
+      }
       return {
         turnId: input.turnId,
         chatId: input.chatId,
@@ -961,6 +1009,11 @@ export async function runTurnOrchestratorV2(
         updated_at: new Date().toISOString(),
       })
       .eq("turn_id", input.turnId);
+    try {
+      deps.onEvent?.({ type: "turn.failed", error: message, result: failed });
+    } catch {
+      // ignore
+    }
     return failed;
   }
 }

@@ -1,5 +1,6 @@
 /**
- * TurnOrchestrator — plan / retrieve / act / answer.
+ * TurnOrchestrator V1 — plan / retrieve / act / answer (retrieve-once pipeline).
+ * @deprecated Prefer V2 (`v2/orchestrator.ts`). Kept as `AI_ORCHESTRATOR_V2=0` fallback only.
  * Models are pluggable backends via ModelProvider.
  */
 

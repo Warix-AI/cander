@@ -40,9 +40,18 @@ The **model does not decide** whether Cander has internet. The orchestrator owns
 npm run test:orchestrator
 ```
 
+## Streaming
+
+V2 supports progressive NDJSON via `action: "run_turn_stream"`:
+
+- Events: `turn.started`, `status`, `turn.completed` / `turn.paused` / `turn.failed` / `turn.cancelled`
+- Client uses authenticated `fetch` (`runAgentTurnStream`) so Thinking UI updates mid-turn
+- Falls back to classic `run_turn` if streaming is unavailable
+
+Token-level answer deltas still depend on bridge streaming (not required for live status).
+
 ## Remaining limits
 
-- True SSE/token streaming still pending (status events still returned with the HTTP response; UI maps them when the call completes). Prefer next: `run_turn_stream` NDJSON.
-- Small local models still limit synthesis quality — use stronger `OLLAMA_ANSWER_MODEL` when available.
-- Semantic/pgvector history not required for V2; keyword + working memory first.
-- Knowledge still executes on-device when server pauses for `knowledge.search`.
+- Semantic/pgvector history not required; keyword + working memory first
+- Answer quality still depends on configured Ollama models (`OLLAMA_ANSWER_MODEL`)
+- V1 orchestrator remains as emergency fallback only (`AI_ORCHESTRATOR_V2=0`)

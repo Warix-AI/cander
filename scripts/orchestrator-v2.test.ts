@@ -109,3 +109,16 @@ describe("orchestrator v2 flag", () => {
     assert.equal(preferOrchestratorV2(), true);
   });
 });
+
+describe("orchestrator v2 stream event shape", () => {
+  it("status and terminal event types are distinct", () => {
+    const status = { type: "status", phase: "searching", label: "Thinking" };
+    const done = {
+      type: "turn.completed",
+      result: { status: "completed", content: "ok" },
+    };
+    assert.equal(status.type, "status");
+    assert.equal(done.type, "turn.completed");
+    assert.notEqual(status.type, done.type);
+  });
+});
