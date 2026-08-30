@@ -293,6 +293,20 @@ registerAiTool({
 });
 
 registerAiTool({
+  name: "web.open",
+  description:
+    "Fetch and read a public web page by URL. Use when the user names a URL or you need full page content beyond search snippets.",
+  permission: { requireWorkspaceMember: true },
+  domain: "web",
+  enabled: true,
+  parameters: {
+    type: "object",
+    required: ["url"],
+    properties: { url: { type: "string", description: "HTTPS URL to open" } },
+  },
+});
+
+registerAiTool({
   name: "ui.ask_clarification",
   description:
     "Show an inline clarification card above the chat composer to collect structured answers.",

@@ -10,5 +10,7 @@ contextBridge.exposeInMainWorld("canderDesktop", {
   foundationModels: {
     getAvailability: () => ipcRenderer.invoke("cander:fm-availability"),
     generate: (opts) => ipcRenderer.invoke("cander:fm-generate", opts),
+    generateStructured: (opts) =>
+      ipcRenderer.invoke("cander:fm-generate-structured", opts),
   },
 });

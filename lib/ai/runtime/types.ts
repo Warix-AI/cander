@@ -8,6 +8,7 @@ export type AiRuntimeMode = "auto" | "local" | "cloud";
 export type AiRuntimeId =
   | "cloud"
   | "apple-local"
+  | "apple-cloud-future"
   | "android-local"
   | "unavailable";
 

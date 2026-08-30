@@ -4,6 +4,8 @@ import { liveInfoHint } from "../orchestrator/v2-helpers.ts";
 import { classifyTaskType } from "../intelligence/classifier.ts";
 import { getThreadTaskState } from "../task-state.ts";
 import { resolveAllowedToolsForTurn } from "../tools/domains.ts";
+import { isComplexWorkIntent } from "../tools/domains.ts";
+import { getAiRuntimeMode } from "./mode-store.ts";
 import { getFoundationModelsAvailability } from "./native/foundation-models.ts";
 import type { AiGenerateRequest } from "./types.ts";
 
@@ -58,4 +60,39 @@ export async function shouldPreferOnDeviceForTurn(
     threadId: request.threadId,
     projectId: request.projectId,
   });
+}
+
+/**
+ * Unified architecture: FM orchestrator on Apple devices for normal chat.
+ * Cloud orchestrator handles images, Build/complex work, and Auto without FM.
+ */
+export async function shouldUseLocalTurnOrchestrator(
+  request: AiGenerateRequest,
+): Promise<boolean> {
+  if (request.images?.length) return false;
+  if (isComplexWorkIntent(request.content)) return false;
+
+  const mode = getAiRuntimeMode();
+  if (mode === "cloud") return false;
+
+  const avail = await getFoundationModelsAvailability();
+  if (!avail.available) return false;
+  if (mode === "local") return true;
+
+  const taskState = getThreadTaskState(request.threadId);
+  const taskType = classifyTaskType({
+    content: request.content,
+    taskState,
+    projectId: request.projectId,
+  });
+  if (
+    taskType === "research" ||
+    taskType === "execution" ||
+    taskType === "release" ||
+    taskType === "reasoning_heavy"
+  ) {
+    return false;
+  }
+
+  return true;
 }

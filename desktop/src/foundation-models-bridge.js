@@ -138,8 +138,31 @@ async function generate({ prompt, instructions }) {
   return { content, runtime: "apple-local" };
 }
 
+async function generateStructured({ prompt, instructions }) {
+  if (process.platform !== "darwin") {
+    throw new Error("Apple Foundation Models are only available on macOS.");
+  }
+  const payload = JSON.stringify({
+    prompt: String(prompt || ""),
+    ...(instructions?.trim() ? { instructions: String(instructions.trim()) } : {}),
+  });
+  const result = await runHelper(["generate-structured"], {
+    stdinText: payload,
+    timeoutMs: 180_000,
+  });
+  if (result.error && !result.structured) {
+    throw new Error(String(result.message || result.error || "Structured generation failed."));
+  }
+  return {
+    ...result,
+    structured: Boolean(result.structured),
+    runtime: "apple-local",
+  };
+}
+
 module.exports = {
   getAvailability,
   generate,
+  generateStructured,
   resolveHelperPath,
 };

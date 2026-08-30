@@ -365,6 +365,34 @@ export async function executeAuthorizedTool(
           data: { results },
         };
       }
+      case "web.open": {
+        const result = await actions.webOpen(String(args.url));
+        if (!result.ok) {
+          return {
+            name: tool.name,
+            ok: false,
+            output: result.detail || "Could not open that page.",
+            data: {
+              url: result.url,
+              finalUrl: result.finalUrl,
+              title: result.title,
+              text: result.text,
+            },
+          };
+        }
+        const preview = result.text.slice(0, 8000);
+        return {
+          name: tool.name,
+          ok: true,
+          output: `Page: ${result.title || result.finalUrl}\nURL: ${result.finalUrl}\n\n${preview}`,
+          data: {
+            url: result.url,
+            finalUrl: result.finalUrl,
+            title: result.title,
+            text: result.text,
+          },
+        };
+      }
       case "ui.ask_clarification": {
         const questions = Array.isArray(args.questions)
           ? (args.questions as ClarificationQuestion[])

@@ -14,6 +14,7 @@ import FoundationModels
  * Usage:
  *   FoundationModelsHelper availability
  *   echo '{"prompt":"…","instructions":"…"}' | FoundationModelsHelper generate
+ *   echo '{"prompt":"…","instructions":"…"}' | FoundationModelsHelper generate-structured
  *
  * PRIVACY: Runs entirely on-device. Do not network prompts from this binary.
  */
@@ -47,6 +48,24 @@ struct FoundationModelsHelper {
           "content": content,
           "runtime": "apple-local",
         ])
+      } catch {
+        emitError(error.localizedDescription, code: "generation_failed")
+        exit(1)
+      }
+    case "generate-structured":
+      let body = readStdinJSON()
+      let prompt = stringValue(body["prompt"])?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let instructions = stringValue(body["instructions"])?.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !prompt.isEmpty else {
+        emitError("Prompt is required", code: "invalid_prompt")
+        exit(2)
+      }
+      do {
+        let payload = try await generateStructuredOnDevice(
+          prompt: prompt,
+          instructions: (instructions?.isEmpty == false) ? instructions : nil,
+        )
+        emit(payload)
       } catch {
         emitError(error.localizedDescription, code: "generation_failed")
         exit(1)
@@ -157,6 +176,72 @@ struct FoundationModelsHelper {
       ],
     )
   }
+
+  #if canImport(FoundationModels)
+  @available(macOS 26.0, *)
+  @Generable
+  struct CanderStructuredTurn {
+    @Guide(description: "Plain-language reply for the user when no tool is needed.")
+    var reply: String?
+
+    @Guide(description: "Exact tool name from the catalog when a Cander tool must run before answering.")
+    var toolName: String?
+
+    @Guide(description: "JSON object string of arguments for the tool.")
+    var toolArgumentsJson: String?
+  }
+
+  static func generateStructuredOnDevice(
+    prompt: String,
+    instructions: String?,
+  ) async throws -> [String: Any] {
+    if #available(macOS 26.0, *) {
+      let model = SystemLanguageModel.default
+      guard case .available = model.availability else {
+        throw NSError(
+          domain: "CanderFoundationModels",
+          code: 1,
+          userInfo: [NSLocalizedDescriptionKey: "On-device model is not available."],
+        )
+      }
+      let session: LanguageModelSession
+      if let instructions, !instructions.isEmpty {
+        session = LanguageModelSession(instructions: instructions)
+      } else {
+        session = LanguageModelSession()
+      }
+      let turn = try await session.respond(to: prompt, generating: CanderStructuredTurn.self)
+      var payload: [String: Any] = [
+        "structured": true,
+        "runtime": "apple-local",
+      ]
+      if let reply = turn.reply?.trimmingCharacters(in: .whitespacesAndNewlines), !reply.isEmpty {
+        payload["reply"] = reply
+        payload["content"] = reply
+      }
+      if let toolName = turn.toolName?.trimmingCharacters(in: .whitespacesAndNewlines), !toolName.isEmpty {
+        payload["toolName"] = toolName
+        if let argsJson = turn.toolArgumentsJson?.trimmingCharacters(in: .whitespacesAndNewlines), !argsJson.isEmpty {
+          payload["toolArgumentsJson"] = argsJson
+          if let data = argsJson.data(using: .utf8),
+             let obj = try? JSONSerialization.jsonObject(with: data),
+             let dict = obj as? [String: Any] {
+            payload["toolArguments"] = dict
+          }
+        }
+      }
+      return payload
+    }
+    throw NSError(
+      domain: "CanderFoundationModels",
+      code: 2,
+      userInfo: [
+        NSLocalizedDescriptionKey:
+          "Structured on-device output is not available on this OS/Mac.",
+      ],
+    )
+  }
+  #endif
 
   static func emit(_ payload: [String: Any]) {
     guard

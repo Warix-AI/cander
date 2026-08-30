@@ -27,7 +27,7 @@ import type {
 import { AiRuntimeError } from "@/lib/ai/runtime/types";
 import { isAgentOrchestratorEnabled } from "@/lib/ai/orchestrator/flags";
 import { getAiRuntimeMode } from "@/lib/ai/runtime/mode-store";
-import { shouldPreferOnDeviceForTurn } from "@/lib/ai/runtime/on-device-routing";
+import { shouldUseLocalTurnOrchestrator } from "@/lib/ai/runtime/on-device-routing";
 
 const MAX_TOOL_ROUNDS = 3;
 
@@ -91,6 +91,8 @@ function detailForTool(name: string): string {
       return "Searching knowledge…";
     case "web.search":
       return "Searching the web…";
+    case "web.open":
+      return "Opening page…";
     case "ui.ask_clarification":
       return "Preparing questions…";
     case "nav.open":
@@ -141,22 +143,24 @@ async function runAssistantTurnInner(
   request: AiGenerateRequest,
   opts?: AgentTurnOptions,
 ): Promise<AgentTurnResult> {
-  // Phase 1+ cutover: cloud orchestrator for web/vision/complex work.
-  // Auto + Local use Foundation Models for conversational turns when available.
+  // Unified orchestrator: local FM loop on Apple devices; cloud for vision/complex work.
   const hasImages = Boolean(request.images?.length);
   if (isAgentOrchestratorEnabled()) {
-    const mode = getAiRuntimeMode();
-    const preferOnDevice =
-      !hasImages &&
-      (mode === "local" ||
-        (mode === "auto" && (await shouldPreferOnDeviceForTurn(request))));
-    if (!preferOnDevice) {
-      const { runOrchestratedTurn } = await import(
-        "@/lib/ai/orchestrator/run-turn"
+    const useLocal = await shouldUseLocalTurnOrchestrator(request);
+    if (useLocal) {
+      const { runLocalTurnOrchestrator } = await import(
+        "@/lib/ai/orchestrator/local-turn-orchestrator"
       );
-      return runOrchestratedTurn(request, { onProgress: opts?.onProgress });
+      return runLocalTurnOrchestrator(request, opts);
     }
+    const { runOrchestratedTurn } = await import(
+      "@/lib/ai/orchestrator/run-turn"
+    );
+    return runOrchestratedTurn(request, { onProgress: opts?.onProgress });
   }
+
+  // Legacy path — only when NEXT_PUBLIC_AI_AGENT_ORCHESTRATOR is off.
+  // Prefer unified orchestrators above; this regex-gated loop is deprecated.
 
   if (hasImages) {
     throw new AiRuntimeError(

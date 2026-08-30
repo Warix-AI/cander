@@ -4,6 +4,9 @@
  *
  * Keep in sync with `lib/ai/tools/domains.ts`.
  */
+
+import { extractRequestedUrl } from "./agent/v2/web-retrieval.ts";
+
 export type ToolDomain =
   | "core"
   | "clarification"
@@ -214,6 +217,8 @@ export function resolveAllowedToolsForTurn(opts: {
 
   if (isComplexWorkIntent(content)) {
     domains.add("cloud_work");
+  } else if (extractRequestedUrl(content)) {
+    domains.add("web");
   } else if (isInApp(content)) {
     if (
       /\b(create|make|new|start)\b[\s\S]{0,40}\bproject\b/i.test(content) ||

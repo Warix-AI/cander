@@ -51,6 +51,14 @@ export type AppActionHandlers = {
       snippet?: string;
     }>;
   }>;
+  webOpen: (url: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    url: string;
+    finalUrl: string;
+    title: string;
+    text: string;
+  }>;
   askClarification: (opts: {
     title: string;
     description?: string;

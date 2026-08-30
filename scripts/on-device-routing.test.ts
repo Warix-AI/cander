@@ -67,3 +67,16 @@ describe("preferOnDeviceForTurnContent", () => {
     );
   });
 });
+
+describe("resolveAllowedToolsForTurn URL fallback", () => {
+  it("unlocks web tools for explicit URL requests (legacy path safety net)", async () => {
+    const { resolveAllowedToolsForTurn } = await import(
+      "../lib/ai/tools/domains.ts"
+    );
+    const gated = resolveAllowedToolsForTurn({
+      content: "view https://canderhq.com and tell me about it",
+    });
+    assert.ok(gated.domains.includes("web"));
+    assert.ok(gated.toolNames.includes("web.search") || gated.toolNames.includes("web.open"));
+  });
+});

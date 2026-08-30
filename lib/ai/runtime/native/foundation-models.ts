@@ -22,6 +22,17 @@ type FoundationModelsNative = {
     prompt: string;
     instructions?: string;
   }) => Promise<{ content?: string }>;
+  generateStructured?: (opts: {
+    prompt: string;
+    instructions?: string;
+  }) => Promise<{
+    content?: string;
+    reply?: string;
+    toolName?: string;
+    toolArguments?: Record<string, unknown>;
+    toolArgumentsJson?: string;
+    structured?: boolean;
+  }>;
 };
 
 type CapacitorBridge = {
@@ -52,7 +63,7 @@ function getDesktopFoundationModels(): FoundationModelsNative | null {
     typeof fm.getAvailability === "function" &&
     typeof fm.generate === "function"
   ) {
-    return fm;
+    return fm as FoundationModelsNative;
   }
   return null;
 }
@@ -167,4 +178,53 @@ export async function generateWithFoundationModels(
   const content = result.content?.trim();
   if (!content) throw new Error("On-device model returned an empty reply.");
   return content;
+}
+
+export type FoundationModelsStructuredResult = {
+  reply: string;
+  toolName: string | null;
+  toolArguments: Record<string, unknown> | null;
+  structured: boolean;
+};
+
+/** Native @Generable structured turn when the bridge supports it. */
+export async function generateStructuredWithFoundationModels(
+  prompt: string,
+  instructions?: string,
+): Promise<FoundationModelsStructuredResult | null> {
+  const plugin = getPlugin();
+  if (!plugin?.generateStructured) return null;
+  const result = await plugin.generateStructured({
+    prompt,
+    ...(instructions?.trim() ? { instructions: instructions.trim() } : {}),
+  });
+  const toolName = result.toolName?.trim() || null;
+  let toolArguments: Record<string, unknown> | null = null;
+  if (toolName) {
+    if (result.toolArguments && typeof result.toolArguments === "object") {
+      toolArguments = result.toolArguments;
+    } else if (result.toolArgumentsJson?.trim()) {
+      try {
+        toolArguments = JSON.parse(result.toolArgumentsJson) as Record<
+          string,
+          unknown
+        >;
+      } catch {
+        toolArguments = {};
+      }
+    } else {
+      toolArguments = {};
+    }
+  }
+  return {
+    reply: String(result.reply ?? result.content ?? "").trim(),
+    toolName,
+    toolArguments,
+    structured: Boolean(result.structured ?? true),
+  };
+}
+
+export function hasStructuredFoundationModelsBridge(): boolean {
+  const plugin = getPlugin();
+  return Boolean(plugin?.generateStructured);
 }

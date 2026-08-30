@@ -16,6 +16,7 @@ import { formatToolsForPrompt } from "@/lib/ai/runtime/tools";
 import {
   generateWithFoundationModels,
   getFoundationModelsAvailability,
+  hasStructuredFoundationModelsBridge,
 } from "@/lib/ai/runtime/native/foundation-models";
 import { buildContextPackage } from "@/lib/ai/intelligence/context-budget";
 import {
@@ -53,7 +54,7 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
         offline: true,
         streaming: avail.streaming,
         tools: true,
-        structuredOutput: false,
+        structuredOutput: hasStructuredFoundationModelsBridge(),
       };
     },
 

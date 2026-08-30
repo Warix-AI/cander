@@ -3059,6 +3059,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const { searchWeb } = await import("@/lib/api/web-search-client");
         return searchWeb(query);
       },
+      webOpen: async (url) => {
+        const { openWebPage } = await import("@/lib/api/web-open-client");
+        const page = await openWebPage(url);
+        return {
+          ok: page.ok,
+          detail: page.error || (page.ok ? "Page opened." : "Could not open page."),
+          url: page.url,
+          finalUrl: page.finalUrl,
+          title: page.title,
+          text: page.text,
+        };
+      },
       askClarification: (opts) => {
         const tid = (opts.threadId?.trim() || threadIdRef.current || "").trim();
         if (!tid) {

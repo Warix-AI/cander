@@ -18,6 +18,7 @@ public class CanderFoundationModelsPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "getAvailability", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "generate", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "generateStructured", returnType: CAPPluginReturnPromise),
     ]
 
     @objc func getAvailability(_ call: CAPPluginCall) {
@@ -68,7 +69,50 @@ public class CanderFoundationModelsPlugin: CAPPlugin, CAPBridgedPlugin {
         )
     }
 
+    @objc func generateStructured(_ call: CAPPluginCall) {
+        let prompt = call.getString("prompt")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let instructions = call.getString("instructions")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else {
+            call.reject("Prompt is required", "invalid_prompt")
+            return
+        }
+
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            Task {
+                do {
+                    let payload = try await Self.generateStructuredOnDevice(
+                        prompt: prompt,
+                        instructions: instructions
+                    )
+                    call.resolve(payload)
+                } catch {
+                    call.reject(error.localizedDescription, "generation_failed")
+                }
+            }
+            return
+        }
+        #endif
+        call.reject(
+            "Structured on-device output is not available on this OS/device.",
+            "local_unavailable"
+        )
+    }
+
     #if canImport(FoundationModels)
+    @available(iOS 26.0, *)
+    @Generable
+    struct CanderStructuredTurn {
+        @Guide(description: "Plain-language reply for the user when no tool is needed.")
+        var reply: String?
+
+        @Guide(description: "Exact tool name from the catalog when a Cander tool must run before answering.")
+        var toolName: String?
+
+        @Guide(description: "JSON object string of arguments for the tool.")
+        var toolArgumentsJson: String?
+    }
+
     @available(iOS 26.0, *)
     private static func availabilityPayload() -> [String: Any] {
         let model = SystemLanguageModel.default
@@ -131,6 +175,48 @@ public class CanderFoundationModelsPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         let response = try await session.respond(to: prompt)
         return response.content
+    }
+
+    @available(iOS 26.0, *)
+    private static func generateStructuredOnDevice(
+        prompt: String,
+        instructions: String?
+    ) async throws -> [String: Any] {
+        let model = SystemLanguageModel.default
+        guard case .available = model.availability else {
+            throw NSError(
+                domain: "CanderFoundationModels",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "On-device model is not available."]
+            )
+        }
+        let session: LanguageModelSession
+        if let instructions, !instructions.isEmpty {
+            session = LanguageModelSession(instructions: instructions)
+        } else {
+            session = LanguageModelSession()
+        }
+        let turn = try await session.respond(to: prompt, generating: CanderStructuredTurn.self)
+        var payload: [String: Any] = [
+            "structured": true,
+            "runtime": "apple-local",
+        ]
+        if let reply = turn.reply?.trimmingCharacters(in: .whitespacesAndNewlines), !reply.isEmpty {
+            payload["reply"] = reply
+            payload["content"] = reply
+        }
+        if let toolName = turn.toolName?.trimmingCharacters(in: .whitespacesAndNewlines), !toolName.isEmpty {
+            payload["toolName"] = toolName
+            if let argsJson = turn.toolArgumentsJson?.trimmingCharacters(in: .whitespacesAndNewlines), !argsJson.isEmpty {
+                payload["toolArgumentsJson"] = argsJson
+                if let data = argsJson.data(using: .utf8),
+                   let obj = try? JSONSerialization.jsonObject(with: data),
+                   let dict = obj as? [String: Any] {
+                    payload["toolArguments"] = dict
+                }
+            }
+        }
+        return payload
     }
     #endif
 }

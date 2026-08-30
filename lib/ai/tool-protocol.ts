@@ -9,10 +9,10 @@ export type ParsedToolCall = {
 };
 
 const KNOWN_TOOLS =
-  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|knowledge\\.search|web\\.search|ui\\.(?:ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval";
+  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|knowledge\\.search|web\\.(?:search|open)|ui\\.(?:ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval";
 
 const KNOWN_TOOL_NAME_RE =
-  /^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|knowledge\.search|web\.search|ui\.(ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval)$/;
+  /^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|knowledge\.search|web\.(search|open)|ui\.(ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval)$/;
 
 /** Soft-repair common model JSON mistakes (trailing commas). */
 export function repairJson(raw: string): string {

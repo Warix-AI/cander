@@ -334,6 +334,12 @@ app.whenReady().then(() => {
       instructions: payload?.instructions,
     });
   });
+  ipcMain.handle("cander:fm-generate-structured", async (_event, payload) => {
+    return foundationModels.generateStructured({
+      prompt: payload?.prompt,
+      instructions: payload?.instructions,
+    });
+  });
 
   buildMenu();
   void createWindow();

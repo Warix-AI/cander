@@ -1,6 +1,15 @@
 # AI Turn Orchestrator
 
-Canonical path: **Cap / web / desktop** → `runOrchestratedTurn` → Edge `ai-agent` (`run_turn`) → **Orchestrator V2** (bounded autonomous loop) → `ModelProvider` (Ollama/bridge).
+Canonical paths:
+
+| Host | Normal chat (FM available) | Vision / Build / complex |
+|------|---------------------------|--------------------------|
+| Mac / iOS | `runLocalTurnOrchestrator` → FM + Cander tools | `runOrchestratedTurn` → Edge V2 |
+| Web / no FM | `runOrchestratedTurn` → Edge V2 | same |
+
+```
+User → Context → Turn Orchestrator → FM (reason) ⇄ Cander tools (web.search, web.open, …) → validate → answer
+```
 
 ## Flags
 
@@ -12,7 +21,19 @@ Canonical path: **Cap / web / desktop** → `runOrchestratedTurn` → Edge `ai-a
 
 Set any to `0`/`false`/`off` to roll back that layer.
 
-## V2 loop (what changed)
+## Local FM orchestrator (Apple-first)
+
+When `shouldUseLocalTurnOrchestrator()` is true:
+
+- **Deterministic URL trigger** — explicit URLs auto-run `web.open` before the first FM call
+- **Evidence objects** — `lib/ai/orchestrator/evidence.ts`
+- **Grounding validator** — fail-closed when live info required but retrieval failed
+- **ToolExecutionBus** — `[TOOL_*]` events drive Thinking UI detail lines
+- **Structured FM output** — native `generateStructured` (@Generable) when bridge supports it; else JSON-in-prose fallback
+
+Client `web.open` → Edge `web-open` → SSRF-safe `fetchReadablePage`.
+
+## V2 loop (cloud — what changed)
 
 ```
 memory retrieval → controller → web_search → web_open → evidence briefing → answer → validate

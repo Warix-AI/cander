@@ -20,6 +20,17 @@ export type CanderDesktopBridge = {
       prompt: string;
       instructions?: string;
     }) => Promise<{ content?: string }>;
+    generateStructured?: (opts: {
+      prompt: string;
+      instructions?: string;
+    }) => Promise<{
+      content?: string;
+      reply?: string;
+      toolName?: string;
+      toolArguments?: Record<string, unknown>;
+      toolArgumentsJson?: string;
+      structured?: boolean;
+    }>;
   };
 };
 
