@@ -13,7 +13,8 @@ export type FinalAnswerSource =
   | "fm_synthesis"
   | "exa_agent"
   | "work_task"
-  | "research_incomplete";
+  | "research_incomplete"
+  | "pcc_synthesis";
 
 export type TurnRetrievalTrace = {
   turnIntent?: string;

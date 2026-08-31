@@ -21,10 +21,23 @@ type FoundationModelsNative = {
   generate: (opts: {
     prompt: string;
     instructions?: string;
+    sessionId?: string;
   }) => Promise<{ content?: string }>;
+  generateStream?: (opts: {
+    prompt: string;
+    instructions?: string;
+    sessionId?: string;
+    onDelta: (chunk: string) => void;
+  }) => Promise<{ content?: string }>;
+  prewarm?: (opts: {
+    sessionId: string;
+    instructions?: string;
+    dynamicPayloadJson?: string;
+  }) => Promise<{ ok?: boolean }>;
   generateStructured?: (opts: {
     prompt: string;
     instructions?: string;
+    sessionId?: string;
   }) => Promise<{
     content?: string;
     reply?: string;
@@ -166,6 +179,7 @@ export async function getFoundationModelsAvailability(): Promise<FoundationModel
 export async function generateWithFoundationModels(
   prompt: string,
   instructions?: string,
+  sessionId?: string,
 ): Promise<string> {
   const plugin = getPlugin();
   if (!plugin) {
@@ -174,10 +188,61 @@ export async function generateWithFoundationModels(
   const result = await plugin.generate({
     prompt,
     ...(instructions?.trim() ? { instructions: instructions.trim() } : {}),
+    ...(sessionId ? { sessionId } : {}),
   });
   const content = result.content?.trim();
   if (!content) throw new Error("On-device model returned an empty reply.");
   return content;
+}
+
+export async function generateStreamWithFoundationModels(opts: {
+  prompt: string;
+  instructions?: string;
+  sessionId?: string;
+  onDelta: (chunk: string) => void;
+}): Promise<string> {
+  const plugin = getPlugin();
+  if (!plugin) {
+    throw new Error("On-device Apple AI plugin is not available.");
+  }
+  if (plugin.generateStream) {
+    const result = await plugin.generateStream({
+      prompt: opts.prompt,
+      ...(opts.instructions?.trim()
+        ? { instructions: opts.instructions.trim() }
+        : {}),
+      ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
+      onDelta: opts.onDelta,
+    });
+    const content = result.content?.trim();
+    if (!content) throw new Error("On-device model returned an empty reply.");
+    return content;
+  }
+  const full = await generateWithFoundationModels(
+    opts.prompt,
+    opts.instructions,
+    opts.sessionId,
+  );
+  opts.onDelta(full);
+  return full;
+}
+
+export async function prewarmFoundationModelsSession(opts: {
+  sessionId: string;
+  instructions?: string;
+  dynamicPayload?: { version: number; instructions: string };
+}): Promise<void> {
+  const plugin = getPlugin();
+  if (!plugin?.prewarm) return;
+  await plugin.prewarm({
+    sessionId: opts.sessionId,
+    ...(opts.instructions?.trim()
+      ? { instructions: opts.instructions.trim() }
+      : {}),
+    ...(opts.dynamicPayload
+      ? { dynamicPayloadJson: JSON.stringify(opts.dynamicPayload) }
+      : {}),
+  });
 }
 
 export type FoundationModelsStructuredResult = {
@@ -191,12 +256,14 @@ export type FoundationModelsStructuredResult = {
 export async function generateStructuredWithFoundationModels(
   prompt: string,
   instructions?: string,
+  sessionId?: string,
 ): Promise<FoundationModelsStructuredResult | null> {
   const plugin = getPlugin();
   if (!plugin?.generateStructured) return null;
   const result = await plugin.generateStructured({
     prompt,
     ...(instructions?.trim() ? { instructions: instructions.trim() } : {}),
+    ...(sessionId ? { sessionId } : {}),
   });
   const toolName = result.toolName?.trim() || null;
   let toolArguments: Record<string, unknown> | null = null;

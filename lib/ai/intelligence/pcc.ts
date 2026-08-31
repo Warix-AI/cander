@@ -13,6 +13,20 @@ export type PccAvailability = {
 
 export type PccSessionProfile = "plan" | "execute" | "review";
 
+export type PccReasoningLevel = "none" | "low" | "medium" | "high";
+
+export type PccReasoningMatrix = Record<
+  PccReasoningLevel,
+  { maxTokens: number; temperature: number }
+>;
+
+export const DEFAULT_PCC_REASONING_MATRIX: PccReasoningMatrix = {
+  none: { maxTokens: 512, temperature: 0.2 },
+  low: { maxTokens: 1024, temperature: 0.25 },
+  medium: { maxTokens: 2048, temperature: 0.3 },
+  high: { maxTokens: 4096, temperature: 0.35 },
+};
+
 /**
  * Future: PrivateCloudComputeLanguageModel via Apple LanguageModel bridge.
  * Dynamic Profiles (plan/execute/review) stay within the Apple session only.
@@ -24,6 +38,7 @@ export type PccLanguageModel = {
     prompt: string;
     instructions?: string;
     profile?: PccSessionProfile;
+    reasoningLevel?: PccReasoningLevel;
   }) => Promise<{ content: string }>;
 };
 
@@ -53,7 +68,7 @@ export function createPccLanguageModel(): PccLanguageModel {
       const a = await getPccAvailability();
       return a.available;
     },
-    async generate() {
+    async generate(opts) {
       const a = await getPccAvailability();
       throw new Error(
         a.message || "Private Cloud Compute is not available.",

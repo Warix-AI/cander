@@ -183,6 +183,9 @@ export function patchMessageWithProgress(
       : message.blocks;
   return {
     ...message,
+    ...(progress.contentDelta
+      ? { content: progress.contentDelta, status: "streaming" as const }
+      : {}),
     activity: {
       phase,
       startedAt,

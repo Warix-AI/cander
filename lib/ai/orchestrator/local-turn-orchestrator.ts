@@ -24,6 +24,20 @@ import {
 import { tryIntentShortcut } from "@/lib/ai/runtime/intent-actions";
 import { clearTurnContext, setTurnContext } from "@/lib/ai/runtime/turn-context";
 import { generateFmTurn } from "@/lib/ai/runtime/native/fm-generate";
+import {
+  renderNarrowEvidenceFallback,
+  tryDeterministicRender,
+} from "@/lib/ai/orchestrator/deterministic-render.ts";
+import {
+  evaluatePccEscalation,
+  tryPccGeneration,
+} from "@/lib/ai/orchestrator/pcc-escalation.ts";
+import { emitContentDelta } from "@/lib/ai/orchestrator/stream-content.ts";
+import {
+  invalidateFmSessionsOnTurnRelation,
+  prewarmFmSession,
+  resolveFmSession,
+} from "@/lib/ai/runtime/native/fm-session.ts";
 import { buildContextPackage } from "@/lib/ai/intelligence/context-budget";
 import {
   formatTaskStateForPrompt,
@@ -58,15 +72,11 @@ import {
 import { collectCitationsFromToolResults } from "@/lib/ai/orchestrator/collect-citations";
 import {
   normalizeAssistantProse,
-  stripInlineCitationMarkers,
 } from "@/lib/ai/orchestrator/citations.ts";
 import {
-  answerShapeFromContract,
   buildSynthesisInstruction,
   deterministicAnswerFromEvidence,
-  extractRequestedItemCount,
   inferAnswerShape,
-  inferResponseContract,
   looksLikeContextOverflow,
   shrinkEvidenceForRetry,
 } from "../answer-shape/index.ts";
@@ -75,9 +85,6 @@ import {
   deeperResearchQueries,
   evaluateResearchQuality,
   extractFactualComponents,
-  formatComponentBreakdown,
-  resolveComponentFacts,
-  sumVerifiedComponents,
   type EvidenceSnippet,
 } from "@/lib/ai/orchestrator/research-quality";
 import { shouldEscalateToBrowser } from "@/lib/computer/tool-routing";
@@ -230,56 +237,7 @@ function narrowDeterministicFallback(opts: {
   question: string;
   evidence: TurnEvidence[];
 }): string | null {
-  const direct = opts.evidence.find(
-    (e) => e.ok && e.kind === "exa_synthesis" && e.content.trim(),
-  );
-  if (direct) return direct.content.trim();
-
-  const breakdown = tryDeterministicComponentAnswer(opts.question, opts.evidence);
-  if (breakdown) return breakdown;
-  if (!hasUsableEvidenceSnippets(opts.evidence)) return null;
-  const shape = answerShapeFromContract(opts.question);
-  const synthesis = prepareSynthesisEvidence(
-    opts.question,
-    opts.evidence,
-    "onDevice",
-  );
-  if (!synthesis.compact.length) return null;
-  const strong = synthesis.compact.filter(
-    (c) =>
-      c.excerpt.length >= 40 &&
-      (/\d/.test(c.excerpt) || shape.kind === "fact" || shape.kind === "calculation"),
-  );
-  if (!strong.length && shape.kind !== "comparison") return null;
-  return deterministicAnswerFromEvidence({
-    question: opts.question,
-    shape,
-    evidence: strong.length ? strong : synthesis.compact.slice(0, 3),
-  });
-}
-
-function tryExaDirectAnswer(
-  question: string,
-  evidence: TurnEvidence[],
-): string | null {
-  const direct = evidence.find(
-    (e) =>
-      e.ok &&
-      e.kind === "exa_synthesis" &&
-      e.content.trim().length >= 8 &&
-      e.groundingConfidence !== "low",
-  );
-  if (!direct) return null;
-  const contract = inferResponseContract(question);
-  if (
-    contract.presentation === "list" ||
-    contract.presentation === "bullet_list" ||
-    extractRequestedItemCount(question) != null ||
-    /\b(list\s+(every|all|each)|show\s+(me\s+)?(all|every))\b/i.test(question)
-  ) {
-    return null;
-  }
-  return stripInlineCitationMarkers(direct.content.trim());
+  return renderNarrowEvidenceFallback(opts.question, opts.evidence);
 }
 
 function evidenceAsSnippets(items: TurnEvidence[]): EvidenceSnippet[] {
@@ -292,25 +250,6 @@ function evidenceAsSnippets(items: TurnEvidence[]): EvidenceSnippet[] {
       content: e.content,
       kind: e.kind,
     }));
-}
-
-function tryDeterministicComponentAnswer(
-  question: string,
-  evidence: TurnEvidence[],
-): string | null {
-  const components = extractFactualComponents(question);
-  if (components.length < 2) return null;
-  const facts = resolveComponentFacts({
-    components,
-    evidence: evidenceAsSnippets(evidence),
-  });
-  const sum = sumVerifiedComponents(facts);
-  if (!sum?.verified) return null;
-  return formatComponentBreakdown({
-    leadLabel: "total",
-    facts,
-    total: sum.total,
-  });
 }
 
 async function runResearchCompletionLoop(opts: {
@@ -562,6 +501,22 @@ function finalizeTurnResult<T extends AiGenerateResult>(
   logTurnAudit();
   logRetrievalTrace();
   return result;
+}
+
+async function finalizeTurnWithStream<T extends AiGenerateResult>(
+  result: T,
+  source: FinalAnswerSource,
+  report: (progress: AgentTurnProgress) => void,
+  stream = true,
+): Promise<T & { presentationStreamed?: boolean }> {
+  if (stream && result.content?.trim()) {
+    emitContentDelta(report, result.content, true);
+    return {
+      ...finalizeTurnResult(result, source),
+      presentationStreamed: true,
+    };
+  }
+  return finalizeTurnResult(result, source);
 }
 
 function reportResearchProgress(
@@ -1390,6 +1345,19 @@ async function runLocalTurnOrchestratorInner(
     });
     markStageEnd("compile");
 
+    if (request.threadId) {
+      invalidateFmSessionsOnTurnRelation(
+        request.threadId,
+        relationResult.relation,
+      );
+      void prewarmFmSession({
+        threadId: request.threadId,
+        profile: "synthesis",
+        instructions: formatTurnProfileInstructions(profile),
+        dynamicPayload: toDynamicProfilePayload(profile),
+      });
+    }
+
     const requestLedger = scanRequest(request.content);
     let taskGraph = compileTaskGraph({
       ledger: requestLedger,
@@ -1719,15 +1687,24 @@ async function runLocalTurnOrchestratorInner(
         );
       }
 
-      // Prefer verified multi-component arithmetic over FM guesswork.
-      const deterministicBreakdown = tryDeterministicComponentAnswer(
-        request.content,
+      const deterministic = tryDeterministicRender({
+        question: request.content,
         evidence,
-      );
-      if (deterministicBreakdown) {
-        return finalizeTurnResult(
+        researchPlan: profile.researchPlan,
+        researchCompletion,
+      });
+      if (deterministic) {
+        const detSource =
+          profile.researchPlan &&
+          researchCompletion?.complete &&
+          profile.researchPlan.subtasks.length >= 2
+            ? "deterministic_render"
+            : evidence.some((e) => e.ok && e.kind === "exa_synthesis")
+              ? "exa_search_output"
+              : "deterministic_render";
+        return finalizeTurnWithStream(
           {
-            content: deterministicBreakdown,
+            content: deterministic,
             runtime: "apple-local",
             offline: false,
             condensationOccurred: false,
@@ -1738,26 +1715,8 @@ async function runLocalTurnOrchestratorInner(
               mergeProvenanceAtoms(provenanceBatches),
             ),
           },
-          "deterministic_render",
-        );
-      }
-
-      const exaDirect = tryExaDirectAnswer(request.content, evidence);
-      if (exaDirect) {
-        return finalizeTurnResult(
-          {
-            content: exaDirect,
-            runtime: "apple-local",
-            offline: false,
-            condensationOccurred: false,
-            aiChatId: request.aiChatId ?? null,
-            toolResults: toolResults.length ? toolResults : undefined,
-            citations: finalizeCitations(
-              toolResults,
-              mergeProvenanceAtoms(provenanceBatches),
-            ),
-          },
-          "exa_search_output",
+          detSource,
+          report,
         );
       }
 
@@ -1841,6 +1800,37 @@ async function runLocalTurnOrchestratorInner(
       const fmCategory = categoryForFmRound(round);
       const scheduler = ModelScheduler.current();
       if (scheduler && !scheduler.canCall(fmCategory)) {
+        const pccDecision = evaluatePccEscalation({
+          question: request.content,
+          modelBudgetExhausted: true,
+          multiSubtaskResearch: Boolean(
+            profile.researchPlan && profile.researchPlan.subtasks.length >= 2,
+          ),
+          evidenceTokenEstimate: prompt.length + instructions.length,
+        });
+        if (pccDecision) {
+          const pcc = await tryPccGeneration({
+            prompt,
+            instructions,
+            decision: pccDecision,
+          });
+          if (pcc?.content) {
+            emitContentDelta(report, pcc.content, true);
+            return finalizeTurnResult(
+              {
+                content: pcc.content,
+                runtime: "apple-local",
+                offline: false,
+                condensationOccurred: false,
+                aiChatId: request.aiChatId ?? null,
+                toolResults: toolResults.length ? toolResults : undefined,
+                citations: finalizeCitations(toolResults, atoms()),
+                presentationStreamed: true,
+              },
+              "pcc_synthesis",
+            );
+          }
+        }
         console.warn("[MODEL_SCHEDULER] budget exhausted", fmCategory);
         break;
       }
@@ -1854,9 +1844,21 @@ async function runLocalTurnOrchestratorInner(
               : "synthesis",
         round,
       });
+      const threadId = request.threadId ?? "anonymous";
+      const fmSession = resolveFmSession({
+        threadId,
+        profile: round === 0 ? "synthesis" : "delta",
+        instructions: instructions ?? "",
+      });
       let fm: Awaited<ReturnType<typeof generateFmTurn>>;
       try {
-        fm = await generateFmTurn({ prompt, instructions });
+        fm = await generateFmTurn({
+          prompt,
+          instructions,
+          sessionId: fmSession.sessionId,
+          preferStream: true,
+          onDelta: (partial) => emitContentDelta(report, partial, false),
+        });
       } catch (err) {
         const detail =
           err instanceof Error
@@ -1892,6 +1894,9 @@ async function runLocalTurnOrchestratorInner(
             fm = await generateFmTurn({
               prompt,
               instructions: retryInstructions,
+              sessionId: fmSession.sessionId,
+              preferStream: true,
+              onDelta: (partial) => emitContentDelta(report, partial, false),
             });
           } catch (retryErr) {
             const fallback =
@@ -2008,20 +2013,25 @@ async function runLocalTurnOrchestratorInner(
             const repair = await generateFmTurn({
               prompt: request.content,
               instructions: instruction,
+              sessionId: fmSession.sessionId,
+              onDelta: (partial) => emitContentDelta(report, partial, false),
             });
             return repair.text;
           },
         });
-        return finalizeTurnResult(
-          {
-            ...lastGenerate,
-            content: completed.content,
-            toolResults: toolResults.length ? toolResults : undefined,
-            citations: finalizeCitations(toolResults, atoms()),
-            ...(parsed.blocks?.length ? { blocks: parsed.blocks } : {}),
-          },
-          fmFinalSource(evidence),
-        );
+        return {
+          ...finalizeTurnResult(
+            {
+              ...lastGenerate,
+              content: completed.content,
+              toolResults: toolResults.length ? toolResults : undefined,
+              citations: finalizeCitations(toolResults, atoms()),
+              ...(parsed.blocks?.length ? { blocks: parsed.blocks } : {}),
+            },
+            fmFinalSource(evidence),
+          ),
+          presentationStreamed: fm.streamed,
+        };
       }
 
       // Enforce profile allowlist + clarification gate

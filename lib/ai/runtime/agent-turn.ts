@@ -34,6 +34,8 @@ const MAX_TOOL_ROUNDS = 3;
 export type AgentTurnResult = AiGenerateResult & {
   toolResults?: AiToolCallResult[];
   pausedForUser?: boolean;
+  /** Answer text was already streamed via onProgress contentDelta. */
+  presentationStreamed?: boolean;
 };
 
 /** Cursor-style live status while the agent thinks / calls tools. */
@@ -48,6 +50,9 @@ export type AgentTurnProgress = {
     label: string;
     status: "done" | "active" | "pending";
   }>;
+  /** Progressive answer text during FM streaming (Phase 3). */
+  contentDelta?: string;
+  contentStreaming?: boolean;
 };
 
 export type AgentTurnOptions = {

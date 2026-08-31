@@ -1968,6 +1968,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             };
 
             // Presentation buffer only — model already finished; smooth visual pace.
+            if (result.presentationStreamed) {
+              patchAssistant(
+                result.content,
+                "complete",
+                result.condensationOccurred,
+                result.citations,
+                result.blocks,
+              );
+              if (voiceActive) {
+                speakText(sanitizeAssistantVisibleText(result.content));
+              }
+              return;
+            }
             typewriterReveal(result.content, (partial, done) => {
               patchAssistant(
                 partial,

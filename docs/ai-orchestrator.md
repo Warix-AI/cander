@@ -174,7 +174,7 @@ Before restructuring behavior, local turns emit a unified **`[TURN_AUDIT]`** log
 
 **Eval harness:** `npm run test:orchestrator` includes `scripts/decomposition-eval.test.ts` and `scripts/orchestration-audit.test.ts`.
 
-Next phases (not yet implemented): `@Generable TaskGraph`, AskExtractor FM path, Coverage Ledger terminal states beyond research completion, write idempotency.
+Next phases (still deferred): `@Generable TaskGraph`, AskExtractor FM path, Coverage Ledger terminal states beyond research completion, write idempotency.
 
 ## Phase 1 — graph, gate, progressive status
 
@@ -189,7 +189,7 @@ Next phases (not yet implemented): `@Generable TaskGraph`, AskExtractor FM path,
 
 **Tests:** `scripts/orchestration-phase1.test.ts` (+ Phase 0 eval harness).
 
-Still deferred: `@Generable` plan compiler, AskExtractor FM escalation, PCC.
+Still deferred: `@Generable` plan compiler, AskExtractor FM escalation.
 
 ## Phase 2 — hardening
 
@@ -203,7 +203,26 @@ Still deferred: `@Generable` plan compiler, AskExtractor FM escalation, PCC.
 
 **Tests:** `scripts/orchestration-phase2.test.ts`
 
-Still deferred: PCC reasoning levels, Apple Evaluations CLI integration, full provider fallback matrix.
+Still deferred: Apple Evaluations CLI integration, full provider fallback matrix.
+
+## Phase 3 — streaming, deterministic expansion, sessions, PCC
+
+| Module | Role |
+|--------|------|
+| `lib/ai/orchestrator/deterministic-render.ts` | Central router: research completion, Exa direct, component breakdown |
+| `lib/ai/orchestrator/stream-content.ts` | `contentDelta` progress during FM / deterministic answers |
+| `lib/ai/runtime/native/fm-session.ts` | Profile-keyed session registry; invalidate on `topic_switch`; prewarm hook |
+| `lib/ai/runtime/native/fm-generate.ts` | Session id + streaming deltas when bridge supports `generateStream` |
+| `lib/ai/orchestrator/pcc-escalation.ts` | Reasoning-level escalation matrix when on-device budget is exhausted |
+| `lib/ai/intelligence/pcc.ts` | `PccReasoningLevel` + matrix (stub until entitlement) |
+
+**UI:** `AgentTurnProgress.contentDelta` patches assistant text during the turn; `presentationStreamed` skips post-turn typewriter when already streamed.
+
+**Native (future):** `prewarm` + `generateStream` + `sessionId` on Foundation Models bridge — TypeScript stubs fall back to blocking `generate` today.
+
+**Tests:** `scripts/orchestration-phase3.test.ts`
+
+Still deferred (native / entitlement): Swift bridge `prewarm` + `generateStream`, live PCC sessions, Apple Evaluations CLI.
 
 ## Remaining limits
 
