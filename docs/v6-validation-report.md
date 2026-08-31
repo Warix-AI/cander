@@ -48,12 +48,4 @@ Trajectory fixtures catalogued in `scripts/fixtures/v6-prompts.json`.
 
 ## 5. Recommendation: flip V6 to default?
 
-**Not yet.**
-
-Reasons:
-
-- Offline suite is green, but live Exa + FM + tenant prior-chat paths need a short device/prod smoke (flag ON) against the fixture list.
-- Grouped retrieval and richer KB/document upload flows are still thin.
-- Keep Simple Turn / TaskGraph / Edge as fallback until that smoke passes.
-
-Suggested next step: enable `NEXT_PUBLIC_AI_V6_RUNTIME=1` in a staging/desktop build, run the fixture prompts manually, then decide on default flip + old-runtime removal.
+**Done** — default flipped ON in a follow-up cutover. Rollback: `NEXT_PUBLIC_AI_V6_RUNTIME=0` or `localStorage['cander:v6-runtime']='0'`. Old Simple Turn / TaskGraph paths remain until a later removal PR.
