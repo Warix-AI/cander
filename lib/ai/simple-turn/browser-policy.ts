@@ -1,5 +1,5 @@
 /**
- * Browser mode policy for WEB lookups.
+ * Browser / Web composer mode: Auto | On | Off.
  */
 
 import type { BrowserMode, Lookup, Plan } from "./types.ts";
@@ -12,7 +12,18 @@ export function resolveBrowserMode(opts?: {
   hostingMode?: string | null;
 }): BrowserMode {
   if (opts?.preferred) return opts.preferred;
-  // v1: always auto — PLAN decision stands unless policy blocks.
+  if (typeof process !== "undefined") {
+    const env = process.env.NEXT_PUBLIC_CANDER_WEB_MODE?.toLowerCase();
+    if (env === "on" || env === "off" || env === "auto") return env;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const ls = window.localStorage?.getItem("cander:web-mode")?.toLowerCase();
+      if (ls === "on" || ls === "off" || ls === "auto") return ls;
+    } catch {
+      /* ignore */
+    }
+  }
   return "auto";
 }
 
@@ -24,7 +35,6 @@ export function allowWebLookup(opts: {
   if (opts.look.cap !== "WEB") return true;
   if (opts.browser === "on") return true;
   if (opts.browser === "auto") return true;
-  // browser=off: only when user explicitly requested search/browse
   return EXPLICIT_WEB.test(opts.userText);
 }
 
@@ -37,7 +47,9 @@ export function browserRequiresWeb(opts: {
   if (
     !opts.plan.freshnessRequired &&
     !opts.plan.fresh &&
-    !/\b(news|today|current|live|weather|score)\b/i.test(opts.userText)
+    !/\b(news|today|current|live|weather|score|calories?|price|schedule)\b/i.test(
+      opts.userText,
+    )
   ) {
     return false;
   }

@@ -73,6 +73,8 @@ export {
   buildCanonicalLookupQuery,
   looksLikeNarrativeQuery,
   heuristicCalorieIntents,
+  buildCoherentCalorieQuery,
+  isCoherentNutritionAsk,
 } from "./query-normalize.ts";
 export { webSearchArgsForLookup, executeLookup } from "./cap-router.ts";
 export {
@@ -81,6 +83,14 @@ export {
   lightFormatExaText,
   formatExaPassthroughAnswer,
 } from "./exa-deep.ts";
+export {
+  classifyKnowledgeRoute,
+  applyWebModeOverride,
+  routeNeedsExaDeep,
+} from "./knowledge-route.ts";
+export type { KnowledgeRoute, SplitDecision } from "./knowledge-route.ts";
+export { logWebTurnTrace, inferLossHint } from "./web-turn-trace.ts";
+export type { WebTurnTrace } from "./web-turn-trace.ts";
 export { answerTurn, mergeCommitNotes } from "./answer.ts";
 export { commitTurnNotes } from "./commit.ts";
 export {

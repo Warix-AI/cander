@@ -117,7 +117,54 @@ export function looksLikeNarrativeQuery(q: string): boolean {
 
 /**
  * Heuristic: multi-brand calorie / nutrition compound questions.
- * Returns null when not applicable.
+ * Prefer a single coherent Exa Deep query (Exa handles per-item + total).
+ * Per-item split is reserved for refine-after-verify-failure.
+ */
+export function isCoherentNutritionAsk(userText: string): boolean {
+  if (!/\bcalories?\b/i.test(userText)) return false;
+  const brands = countNutritionBrands(userText);
+  const items = heuristicCalorieIntents(userText);
+  return brands >= 2 || (items != null && items.length >= 2);
+}
+
+/** One Exa Deep query for a multi-item calorie ask — do not pre-split. */
+export function buildCoherentCalorieQuery(userText: string): string | null {
+  if (!isCoherentNutritionAsk(userText)) return null;
+  const cleaned = userText
+    .replace(/[?]+$/g, "")
+    .replace(/^(if i eat|how many calories (are|is) in)\s+/i, "")
+    .trim();
+  // Prefer a playground-style complete ask
+  if (/how many/i.test(userText) && /calories?/i.test(userText)) {
+    const body = userText
+      .replace(/[?]+$/g, "")
+      .replace(/^(can you tell me |please )/i, "")
+      .trim();
+    return `${body}? Give the per-item calorie values and total.`.slice(0, 400);
+  }
+  return `How many total calories are in ${cleaned}? Give the per-item calorie values and total.`.slice(
+    0,
+    400,
+  );
+}
+
+function countNutritionBrands(text: string): number {
+  const brands = [
+    /taco bell/i,
+    /mcdonald'?s/i,
+    /chick-?fil-?a/i,
+    /burger king/i,
+    /wendy'?s/i,
+    /starbucks/i,
+    /chipotle/i,
+    /subway/i,
+  ];
+  return brands.filter((re) => re.test(text)).length;
+}
+
+/**
+ * Per-item calorie intents — used when a single Deep query fails verification
+ * and we need a bounded split retry.
  */
 export function heuristicCalorieIntents(userText: string): Array<{
   entity: string;
@@ -128,10 +175,6 @@ export function heuristicCalorieIntents(userText: string): Array<{
 }> | null {
   if (!/\bcalories?\b/i.test(userText)) return null;
 
-  // "three regular tacos from Taco Bell" / "a medium Sprite from McDonald's"
-  const itemFromBrand =
-    /\b(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+((?:regular|medium|large|small)\s+)?([A-Za-z][\w'-]*)\s+from\s+([A-Z][\w'’&]*(?:\s+[A-Z][\w'’&]*)*)/g;
-
   const found: Array<{
     entity: string;
     subject: string;
@@ -139,6 +182,10 @@ export function heuristicCalorieIntents(userText: string): Array<{
     goal: string;
     q: string;
   }> = [];
+
+  // "three regular tacos from Taco Bell" / "a medium Sprite from McDonald's"
+  const itemFromBrand =
+    /\b(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+((?:regular|medium|large|small)\s+)?([A-Za-z][\w'-]*)\s+from\s+([A-Z][\w'’&]*(?:\s+[A-Z][\w'’&]*)*)/g;
 
   for (const m of userText.matchAll(itemFromBrand)) {
     const quantity = parseQuantity(m[1]!);
@@ -157,6 +204,30 @@ export function heuristicCalorieIntents(userText: string): Array<{
         subject,
       }),
     });
+  }
+
+  // "10 Taco Bell Spicy Potato Soft Tacos" / "one medium McDonald's Sprite"
+  if (found.length < 2) {
+    const brandFirst =
+      /\b(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+((?:regular|medium|large|small)\s+)?(Taco Bell|McDonald'?s|Chick-?fil-?A|Burger King|Wendy'?s|Starbucks|Chipotle)\s+([A-Za-z][\w' -]{1,60}?)(?=,|\band\b|$|\?)/gi;
+    for (const m of userText.matchAll(brandFirst)) {
+      const quantity = parseQuantity(m[1]!);
+      const size = (m[2] ?? "").trim();
+      const brand = m[3]!.trim().replace(/Mcdonald'?s/i, "McDonald's");
+      const item = singularizeFood(
+        `${size} ${m[4]!}`.trim().toLowerCase(),
+      );
+      if (found.some((f) => f.entity.toLowerCase() === brand.toLowerCase())) {
+        continue;
+      }
+      found.push({
+        entity: brand,
+        subject: `${item} calories`,
+        quantity,
+        goal: `find calories in one ${brand} ${item}`,
+        q: buildCanonicalLookupQuery({ entity: brand, subject: `${item} calories` }),
+      });
+    }
   }
 
   if (found.length >= 1) return found;

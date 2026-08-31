@@ -15,7 +15,7 @@ import type {
   SimpleEvidence,
 } from "./types.ts";
 import { syncPlanAliases } from "./types.ts";
-import { buildCanonicalLookupQuery } from "./query-normalize.ts";
+import { buildCanonicalLookupQuery, heuristicCalorieIntents } from "./query-normalize.ts";
 import { logExaDeep } from "./exa-deep.ts";
 
 const CURRENT_YEAR_RE = /\b(20\d{2})\b/g;
@@ -335,6 +335,23 @@ export function buildRefineLookups(opts: {
   const plan = syncPlanAliases(opts.plan);
 
   if (opts.failedIntents?.length) {
+    // If a coherent calorie single-query failed, split once into per-item Deep queries
+    const failed = opts.failedIntents;
+    const coherentFail = failed.some((i) =>
+      i.constraints.includes("coherent_single_exa_query"),
+    );
+    if (coherentFail) {
+      const items = heuristicCalorieIntents(opts.hydrate.userText);
+      if (items && items.length >= 2) {
+        return items.map((item, idx) => ({
+          cap: "WEB" as const,
+          q: item.q,
+          parallelGroup: "refine_split",
+          intentId: failed[0]?.id ?? String(idx + 1),
+          retrievalMode: "deep",
+        }));
+      }
+    }
     return opts.failedIntents.map((intent) => ({
       cap: "WEB" as const,
       q: buildCanonicalLookupQuery({
@@ -348,7 +365,6 @@ export function buildRefineLookups(opts: {
       }),
       parallelGroup: "refine",
       intentId: intent.id,
-      // Retry once with cleaner query — still Exa type=deep (no mode ladder)
       retrievalMode: "deep",
     }));
   }

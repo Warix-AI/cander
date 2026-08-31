@@ -25,11 +25,22 @@ import { answerTurn } from "./answer.ts";
 import { checkEvidence } from "./check.ts";
 import { commitTurnNotes } from "./commit.ts";
 import { hydrateTurn } from "./hydrate.ts";
+import {
+  applyWebModeOverride,
+  classifyKnowledgeRoute,
+  routeNeedsExaDeep,
+} from "./knowledge-route.ts";
 import { planTurn } from "./plan.ts";
 import { runLookups } from "./run.ts";
 import { loadSimpleState } from "./state-store.ts";
 import { validateAndRepairPlan } from "./validate-plan.ts";
-import type { Lookup, SimpleEvidence } from "./types.ts";
+import {
+  evidenceTraceRows,
+  logWebTurnTrace,
+  type WebTurnTrace,
+} from "./web-turn-trace.ts";
+import type { IntentPlan, Lookup, SimpleEvidence } from "./types.ts";
+import { intentPlanToPlan } from "./types.ts";
 
 function citationsFromEvidence(items: SimpleEvidence[]) {
   return items
@@ -65,10 +76,17 @@ export async function runSimpleTurnRuntime(
       threadId: request.threadId,
       text,
       attachments: [],
+      browser: request.browserMode,
     });
 
     // —— HYDRATE ——
     const hydrate = hydrateTurn(state);
+    const knowledgeRoute = classifyKnowledgeRoute(text, hydrate);
+    const routed = applyWebModeOverride({
+      route: knowledgeRoute,
+      browser: state.browser,
+      userText: text,
+    });
     trace?.recordStage("hydrate", {
       decision: "hydrated",
       output: {
@@ -76,6 +94,10 @@ export async function runSimpleTurnRuntime(
         unresolved: hydrate.unresolved,
         urls: hydrate.urls,
         topicHint: hydrate.topicHint,
+        knowledgeRoute: routed.route,
+        browserMode: state.browser,
+        allowWeb: routed.allowWeb,
+        routeReason: routed.reason,
       },
     });
 
@@ -170,12 +192,42 @@ export async function runSimpleTurnRuntime(
     }
 
     const intentPlan = validated.plan;
-    const plan = validated.flatPlan;
     let allEvidence: SimpleEvidence[] = [];
     let lookupsRun: Lookup[] = [];
     let intentResults = undefined as
       | import("./types.ts").IntentResult[]
       | undefined;
+    let corroborationDone = false;
+
+    // Knowledge route may strip WEB when Auto→LOCAL or Web:Off
+    let effectivePlan: IntentPlan = intentPlan;
+    if (!routed.allowWeb || !routeNeedsExaDeep(routed.route, routed.allowWeb)) {
+      const hasNonWeb = intentPlan.intents.some(
+        (i) => i.action !== "WEB" && i.action !== "ANSWER",
+      );
+      if (!hasNonWeb) {
+        effectivePlan = {
+          ...intentPlan,
+          intents: intentPlan.intents.map((i) =>
+            i.action === "WEB"
+              ? {
+                  ...i,
+                  action: "ANSWER" as const,
+                  lookup: undefined,
+                  freshnessRequired: false,
+                }
+              : i,
+          ),
+        };
+      } else {
+        effectivePlan = {
+          ...intentPlan,
+          intents: intentPlan.intents.filter((i) => i.action !== "WEB"),
+        };
+      }
+    }
+
+    const plan = intentPlanToPlan(effectivePlan);
     let check = checkEvidence({
       plan,
       hydrate,
@@ -183,11 +235,24 @@ export async function runSimpleTurnRuntime(
       lookupsRun: [],
       round: 0,
     });
-    let corroborationDone = false;
 
-    const needsRetrieval = intentPlan.intents.some(
+    const needsRetrieval = effectivePlan.intents.some(
       (i) => i.action !== "ANSWER",
     );
+    const splitDecision =
+      effectivePlan.intents.filter((i) => i.action === "WEB").length > 1
+        ? ("multiple_queries" as const)
+        : ("single_query" as const);
+
+    trace?.recordStage("knowledge_route", {
+      decision: routed.route,
+      output: {
+        allowWeb: routed.allowWeb,
+        reason: routed.reason,
+        splitDecision,
+        browserMode: state.browser,
+      },
+    });
 
     // —— RUN (dependency waves) + VERIFY ——
     if (needsRetrieval) {
@@ -215,7 +280,7 @@ export async function runSimpleTurnRuntime(
         });
 
         const run = await runLookups({
-          plan: intentPlan,
+          plan: effectivePlan,
           browser: state.browser,
           userText: hydrate.userText,
           cache: state.cache,
@@ -377,6 +442,34 @@ export async function runSimpleTurnRuntime(
     trace?.recordStage("answer_path", {
       decision: packet.path,
       output: { answerChars: packet.answer.length },
+    });
+
+    const webTrace: WebTurnTrace = {
+      rawUserText: text,
+      knowledgeRoute: routed.route,
+      browserMode: state.browser,
+      allowWeb: routed.allowWeb,
+      routeReason: routed.reason,
+      interpretedIntent: effectivePlan.overallIntent,
+      splitDecision,
+      exaQueries: lookupsRun
+        .filter((l) => l.cap === "WEB")
+        .map((l) => l.q),
+      rawExaResponses: allEvidence
+        .filter((e) => e.cap === "WEB")
+        .map((e) => ({
+          query: e.query,
+          preview: e.content.slice(0, 800),
+          ok: e.ok,
+        })),
+      acceptedEvidence: evidenceTraceRows(check.accepted, "accepted") as WebTurnTrace["acceptedEvidence"],
+      rejectedEvidence: evidenceTraceRows(check.rejected, "rejected") as WebTurnTrace["rejectedEvidence"],
+      finalAnswer: packet.answer,
+    };
+    logWebTurnTrace(webTrace);
+    trace?.recordStage("web_turn_trace", {
+      decision: webTrace.lossHint ?? "none",
+      output: webTrace,
     });
 
     // —— COMMIT ——

@@ -36,7 +36,14 @@ import {
   buildCanonicalLookupQuery,
   looksLikeNarrativeQuery,
   heuristicCalorieIntents,
+  buildCoherentCalorieQuery,
+  isCoherentNutritionAsk,
 } from "../lib/ai/simple-turn/query-normalize.ts";
+import {
+  classifyKnowledgeRoute,
+  applyWebModeOverride,
+} from "../lib/ai/simple-turn/knowledge-route.ts";
+import { inferLossHint } from "../lib/ai/simple-turn/web-turn-trace.ts";
 import {
   loadSimpleState,
   resetSimpleStateForTests,
@@ -60,6 +67,9 @@ const FILLER = [
 
 const CALORIE_PROMPT =
   "If I eat three regular tacos from Taco Bell and a medium Sprite from McDonald's, how many calories is that?";
+
+const CALORIE_PLAYGROUND_PROMPT =
+  "How many calories are in 10 Taco Bell Spicy Potato Soft Tacos, one medium McDonald's Sprite, and one Chick-fil-A Spicy Chicken Sandwich?";
 
 const BYU_CONDITIONAL =
   "When is BYU's next football game? Do they play Utah this year? If they do, add it to my calendar.";
@@ -97,9 +107,14 @@ describe("simple turn IntentPlan runtime", () => {
     );
   });
 
-  it("calorie compound prompt → 2 WEB + 1 CALC with deps and clean queries", () => {
-    const items = heuristicCalorieIntents(CALORIE_PROMPT);
-    assert.ok(items && items.length >= 2, "should detect two food items");
+  it("calorie compound prompt → one coherent Exa Deep WEB query (no pre-split)", () => {
+    assert.equal(isCoherentNutritionAsk(CALORIE_PROMPT), true);
+    const q = buildCoherentCalorieQuery(CALORIE_PROMPT);
+    assert.ok(q);
+    assert.match(q!, /taco bell/i);
+    assert.match(q!, /mcdonald/i);
+    assert.match(q!, /per-item/i);
+    assert.match(q!, /total/i);
 
     const state = loadSimpleState({ text: CALORIE_PROMPT });
     const hydrate = hydrateTurn(state);
@@ -107,39 +122,90 @@ describe("simple turn IntentPlan runtime", () => {
 
     const web = ip.intents.filter((i) => i.action === "WEB");
     const calc = ip.intents.filter((i) => i.action === "CALC");
-    assert.ok(web.length >= 2, `expected ≥2 WEB intents, got ${web.length}`);
-    assert.equal(calc.length, 1);
-
-    const taco = web.find((i) => /taco bell/i.test(i.entity ?? ""));
-    const sprite = web.find((i) => /mcdonald/i.test(i.entity ?? ""));
-    assert.ok(taco, "Taco Bell intent");
-    assert.ok(sprite, "McDonald's intent");
-    assert.equal(taco!.quantity, 3);
-    assert.equal(sprite!.quantity, 1);
-    assert.ok(
-      /taco bell/i.test(taco!.lookup!.q) && /calories/i.test(taco!.lookup!.q),
-    );
-    assert.ok(!/if i eat/i.test(taco!.lookup!.q));
-    assert.ok(
-      /mcdonald/i.test(sprite!.lookup!.q) && /calories/i.test(sprite!.lookup!.q),
-    );
-    assert.ok(!/i have/i.test(sprite!.lookup!.q));
-
-    assert.ok(
-      calc[0]!.dependsOn.includes(taco!.id) &&
-        calc[0]!.dependsOn.includes(sprite!.id),
-    );
+    assert.equal(web.length, 1, `expected 1 WEB intent, got ${web.length}`);
+    assert.equal(calc.length, 0, "Exa Deep should total — no CALC pre-split");
+    assert.ok(web[0]!.constraints.includes("coherent_single_exa_query"));
+    assert.ok(/taco bell/i.test(web[0]!.lookup!.q));
+    assert.ok(/mcdonald/i.test(web[0]!.lookup!.q));
+    assert.ok(/sprite/i.test(web[0]!.lookup!.q));
+    assert.ok(!/if i eat/i.test(web[0]!.lookup!.q) || /calories/i.test(web[0]!.lookup!.q));
 
     const waves = intentExecutionWaves(ip.intents);
-    assert.ok(waves.length >= 2, "CALC should be a later wave");
-    assert.ok(
-      waves[0]!.every((i) => i.action === "WEB"),
-      "first wave runs WEB in parallel",
-    );
-    assert.ok(waves.at(-1)!.some((i) => i.action === "CALC"));
+    assert.equal(waves.length, 1);
   });
 
-  it("runLookups executes independent WEB intents concurrently before CALC", async () => {
+  it("playground-style calorie prompt stays one Exa query covering Sprite", () => {
+    const q = buildCoherentCalorieQuery(CALORIE_PLAYGROUND_PROMPT);
+    assert.ok(q);
+    assert.match(q!, /sprite/i);
+    assert.match(q!, /chick-fil/i);
+    assert.match(q!, /spicy potato/i);
+    assert.match(q!, /per-item/i);
+
+    const ip = intentPlanFromHydrateHeuristic(
+      hydrateTurn(loadSimpleState({ text: CALORIE_PLAYGROUND_PROMPT })),
+    );
+    assert.equal(ip.intents.filter((i) => i.action === "WEB").length, 1);
+    assert.match(ip.intents[0]!.lookup!.q, /sprite/i);
+    assert.equal(
+      classifyKnowledgeRoute(CALORIE_PLAYGROUND_PROMPT),
+      "WEB_REQUIRED",
+    );
+  });
+
+  it("knowledge route + Web Auto/On/Off overrides", () => {
+    assert.equal(classifyKnowledgeRoute("What is 12 * 7?"), "LOCAL");
+    assert.equal(
+      classifyKnowledgeRoute("When does BYU play Utah this year?"),
+      "WEB_REQUIRED",
+    );
+    assert.equal(
+      classifyKnowledgeRoute("Who invented the clarinet?"),
+      "UNCERTAIN",
+    );
+
+    const off = applyWebModeOverride({
+      route: "WEB_REQUIRED",
+      browser: "off",
+      userText: "calories in a taco",
+    });
+    assert.equal(off.allowWeb, false);
+
+    const offExplicit = applyWebModeOverride({
+      route: "WEB_REQUIRED",
+      browser: "off",
+      userText: "please search the web for taco calories",
+    });
+    assert.equal(offExplicit.allowWeb, true);
+
+    const on = applyWebModeOverride({
+      route: "LOCAL",
+      browser: "on",
+      userText: "capital of France",
+    });
+    assert.equal(on.route, "WEB_REQUIRED");
+    assert.equal(on.allowWeb, true);
+  });
+
+  it("WEB_TURN_TRACE lossHint flags query splitting when Sprite missing from queries", () => {
+    const hint = inferLossHint({
+      rawUserText: CALORIE_PLAYGROUND_PROMPT,
+      knowledgeRoute: "WEB_REQUIRED",
+      browserMode: "auto",
+      allowWeb: true,
+      routeReason: "auto_web_required",
+      interpretedIntent: "calories",
+      splitDecision: "multiple_queries",
+      exaQueries: ["Taco Bell spicy potato soft taco calories"],
+      rawExaResponses: [],
+      acceptedEvidence: [],
+      rejectedEvidence: [],
+      finalAnswer: "About 170 calories per taco.",
+    });
+    assert.equal(hint, "query_splitting");
+  });
+
+  it("runLookups runs the single coherent calorie query with Exa deep", async () => {
     const state = loadSimpleState({ text: CALORIE_PROMPT });
     const hydrate = hydrateTurn(state);
     const ip = intentPlanFromHydrateHeuristic(hydrate);
@@ -155,22 +221,23 @@ describe("simple turn IntentPlan runtime", () => {
         return {
           name,
           ok: true,
-          output: "170 calories per serving according to nutrition data",
+          output:
+            "Taco Bell regular taco ~170 cal; McDonald's medium Sprite ~210 cal; total for 3 tacos + Sprite ≈ 720 calories.",
           data: {
             title: "Nutrition",
             url: "https://example.com",
-            text: "170 calories per serving according to nutrition data",
+            directAnswer:
+              "Taco Bell regular taco ~170 cal; McDonald's medium Sprite ~210 cal; total for 3 tacos + Sprite ≈ 720 calories.",
           },
         };
       },
     });
 
     const webCalls = order.filter((o) => o.startsWith("web."));
-    assert.ok(webCalls.length >= 2);
-    // Both brand queries present and clean
-    assert.ok(webCalls.some((c) => /taco bell/i.test(c) && /calories/i.test(c)));
-    assert.ok(webCalls.some((c) => /mcdonald/i.test(c) && /calories/i.test(c)));
-    assert.ok(!order.some((c) => /if i eat/i.test(c)));
+    assert.equal(webCalls.length, 1);
+    assert.ok(/taco bell/i.test(webCalls[0]!));
+    assert.ok(/mcdonald|sprite/i.test(webCalls[0]!));
+    assert.ok(!order.some((c) => /^web\.search:Taco Bell regular taco calories$/i.test(c)));
   });
 
   it("vercel.com inspect plans WEB without filler query", () => {
@@ -493,7 +560,6 @@ describe("simple turn IntentPlan runtime", () => {
   });
 
   it("does not instruct users to split multi-part prompts", () => {
-    // Guard: validation/repair must succeed for compound calorie ask
     const state = loadSimpleState({ text: CALORIE_PROMPT });
     const hydrate = hydrateTurn(state);
     const ip = intentPlanFromHydrateHeuristic(hydrate);
@@ -503,7 +569,7 @@ describe("simple turn IntentPlan runtime", () => {
       browser: "auto",
     });
     assert.equal(v.failed, false);
-    assert.ok(v.plan.intents.length >= 3);
+    assert.equal(v.plan.intents.filter((i) => i.action === "WEB").length, 1);
   });
 
   it("open-web WEB intents always use Exa type=deep; URL stays direct; Exa text passthrough", async () => {
@@ -541,7 +607,7 @@ describe("simple turn IntentPlan runtime", () => {
     assert.ok(calls[0]?.startsWith("web.read:"));
     assert.ok(!calls.some((c) => c.startsWith("web.search:")));
 
-    // Open-web concurrent intents pass deep + canonical queries
+    // Open-web coherent calorie → one deep query
     const state = loadSimpleState({ text: CALORIE_PROMPT });
     const hydrate = hydrateTurn(state);
     const ip = intentPlanFromHydrateHeuristic(hydrate);
@@ -566,11 +632,10 @@ describe("simple turn IntentPlan runtime", () => {
         };
       },
     });
-    assert.ok(searchCalls.length >= 2);
-    for (const c of searchCalls) {
-      assert.equal(c.retrievalMode, "deep");
-      assert.ok(!/if i eat|how many calories is that/i.test(String(c.query)));
-    }
+    assert.equal(searchCalls.length, 1);
+    assert.equal(searchCalls[0]!.retrievalMode, "deep");
+    assert.ok(/taco bell/i.test(String(searchCalls[0]!.query)));
+    assert.ok(/sprite|mcdonald/i.test(String(searchCalls[0]!.query)));
 
     // Validated Exa answer returned as-is (no FM rewrite)
     const packet = await answerTurn({

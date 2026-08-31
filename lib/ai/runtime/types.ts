@@ -61,6 +61,11 @@ export type AiGenerateRequest = {
   preferredRoute?: "on_device" | "pcc" | "cander_cloud";
   routingReason?: string;
   /**
+   * Composer Web override: Auto | On | Off.
+   * Auto = knowledge routing; On = force web for factual; Off = block unless explicit browse.
+   */
+  browserMode?: "auto" | "on" | "off";
+  /**
    * Ephemeral tool/search context for this turn only — never persisted as a user message.
    * Used by the legacy cloud path; orchestrator uses structured events instead.
    */

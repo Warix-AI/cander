@@ -21,7 +21,9 @@ import {
 } from "./types.ts";
 import {
   buildCanonicalLookupQuery,
+  buildCoherentCalorieQuery,
   heuristicCalorieIntents,
+  isCoherentNutritionAsk,
   looksLikeNarrativeQuery,
 } from "./query-normalize.ts";
 import {
@@ -248,37 +250,50 @@ export function intentPlanFromHydrateHeuristic(
   hydrate: HydrateResult,
 ): IntentPlan {
   const text = hydrate.userText;
-  const calorieItems = heuristicCalorieIntents(text);
-  if (calorieItems && calorieItems.length >= 1) {
-    const intents: Intent[] = calorieItems.map((item, i) => ({
-      id: String(i + 1),
-      goal: item.goal,
-      action: "WEB" as const,
-      entity: item.entity,
-      subject: item.subject,
-      quantity: item.quantity,
-      constraints: [],
-      resolvedRefs: hydrate.resolved,
-      unresolvedRefs: hydrate.unresolved,
-      freshnessRequired: false,
-      dependsOn: [],
-      lookup: { q: item.q },
-    }));
-    const calcId = String(intents.length + 1);
-    intents.push({
-      id: calcId,
-      goal: "calculate total calories",
-      action: "CALC",
-      constraints: [],
-      resolvedRefs: [],
-      unresolvedRefs: [],
-      freshnessRequired: false,
-      dependsOn: intents.filter((i) => i.action === "WEB").map((i) => i.id),
-      lookup: { q: "sum calories from prior intents" },
-    });
+  // Coherent multi-item nutrition → ONE Exa Deep query (do not pre-split)
+  const coherentCalorieQ = buildCoherentCalorieQuery(text);
+  if (coherentCalorieQ) {
     return normalizeIntentPlan({
       overallIntent: "total calories from listed food and drink items",
-      intents,
+      intents: [
+        {
+          id: "1",
+          goal: "find per-item and total calories for the listed foods and drinks",
+          action: "WEB",
+          entity: undefined,
+          subject: "combined nutrition calories",
+          constraints: ["coherent_single_exa_query"],
+          resolvedRefs: hydrate.resolved,
+          unresolvedRefs: hydrate.unresolved,
+          freshnessRequired: false,
+          dependsOn: [],
+          lookup: { q: coherentCalorieQ },
+        },
+      ],
+    });
+  }
+
+  const calorieItems = heuristicCalorieIntents(text);
+  if (calorieItems && calorieItems.length === 1) {
+    const item = calorieItems[0]!;
+    return normalizeIntentPlan({
+      overallIntent: item.goal,
+      intents: [
+        {
+          id: "1",
+          goal: item.goal,
+          action: "WEB",
+          entity: item.entity,
+          subject: item.subject,
+          quantity: item.quantity,
+          constraints: [],
+          resolvedRefs: hydrate.resolved,
+          unresolvedRefs: hydrate.unresolved,
+          freshnessRequired: false,
+          dependsOn: [],
+          lookup: { q: item.q },
+        },
+      ],
     });
   }
 
@@ -499,12 +514,21 @@ export function interpretSelfCheck(opts: {
   let plan = normalizeIntentPlan(opts.plan);
   const text = opts.hydrate.userText;
 
-  // Every meaningful ask → intent
+  // Every meaningful ask → intent (but coherent nutrition stays one WEB)
   const multi =
-    (text.match(/\?/g) ?? []).length >= 2 ||
-    /\b.+\band\b.+\b(what|when|how|calories|from)\b/i.test(text);
+    ((text.match(/\?/g) ?? []).length >= 2 ||
+      /\b.+\band\b.+\b(what|when|how|from)\b/i.test(text)) &&
+    !isCoherentNutritionAsk(text);
   if (multi && plan.intents.length < 2) {
     issues.push("missing_intent_coverage");
+  }
+
+  // Over-split coherent nutrition → collapse to one Exa query
+  if (
+    isCoherentNutritionAsk(text) &&
+    plan.intents.filter((i) => i.action === "WEB").length > 1
+  ) {
+    issues.push("over_split_coherent_web");
   }
 
   // Entities / URLs bound
@@ -640,6 +664,14 @@ export function interpretSelfCheck(opts: {
         plan: intentPlanFromHydrateHeuristic(opts.hydrate),
       };
     }
+  }
+
+  if (issues.includes("over_split_coherent_web")) {
+    return {
+      ok: false,
+      issues,
+      plan: intentPlanFromHydrateHeuristic(opts.hydrate),
+    };
   }
 
   if (issues.includes("missing_condition")) {
