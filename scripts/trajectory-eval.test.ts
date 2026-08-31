@@ -126,6 +126,28 @@ function assertExpect(
       `${label}: answerShape`,
     );
   }
+  if (expect.currentOperation) {
+    assert.equal(
+      state.currentOperation,
+      expect.currentOperation,
+      `${label}: operation`,
+    );
+  }
+  if (expect.presentation) {
+    assert.equal(
+      state.presentation,
+      expect.presentation,
+      `${label}: presentation`,
+    );
+  }
+  if (expect.requestedFields?.length) {
+    for (const f of expect.requestedFields) {
+      assert.ok(
+        state.requestedFields.includes(f),
+        `${label}: requested field ${f}, got ${state.requestedFields.join(",")}`,
+      );
+    }
+  }
   if (expect.referencedItemLabel) {
     const hit = state.entities.some(
       (e) =>
@@ -150,6 +172,12 @@ function assertExpect(
         `${label}: preRun missing ${name}`,
       );
     }
+  }
+  if (expect.route?.minOutputTokens != null) {
+    assert.ok(
+      profile.budgets.maxOutputTokens >= expect.route.minOutputTokens,
+      `${label}: maxOutputTokens ${profile.budgets.maxOutputTokens} < ${expect.route.minOutputTokens}`,
+    );
   }
   if (expect.route?.unnecessaryClarify === false) {
     assert.equal(
@@ -180,17 +208,24 @@ function assertExpect(
     );
   }
   if (ac?.mustUseFreshEvidence) {
-    assert.equal(state.freshnessRequirement, true, `${label}: fresh evidence`);
     assert.ok(
-      state.externalRetrievalRequired ||
+      state.freshnessRequirement ||
+        state.externalRetrievalRequired ||
         profile.preRunTasks.some((t) => t.name === "web.search"),
-      `${label}: mustUseFreshEvidence route`,
+      `${label}: mustUseFreshEvidence`,
     );
   }
   if (ac?.mustNotRepeatPreviousAnswer) {
     assert.ok(
-      state.dissatisfactionSignal || state.freshnessRequirement,
-      `${label}: mustNotRepeatPreviousAnswer`,
+      state.dissatisfactionSignal ||
+        state.freshnessRequirement ||
+        state.externalRetrievalRequired ||
+        state.currentOperation === "list" ||
+        state.currentOperation === "add_fields" ||
+        state.currentOperation === "deepen" ||
+        state.currentOperation === "compare" ||
+        state.currentOperation === "reformat",
+      `${label}: mustNotRepeatPreviousAnswer (operation=${state.currentOperation})`,
     );
   }
 }

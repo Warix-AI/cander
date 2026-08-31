@@ -1,0 +1,35 @@
+{
+  "id": "TT-add-fields",
+  "category": "turn-task",
+  "tags": ["fields", "generic"],
+  "turns": [
+    {
+      "role": "user",
+      "content": "How many workshops are offered this month?",
+      "expect": { "currentOperation": "count", "presentation": "short_answer" }
+    },
+    {
+      "role": "assistant",
+      "content": "There are 8 workshops this month.",
+      "emit": {
+        "intent": "count",
+        "entities": [{ "label": "workshops", "type": "topic" }]
+      }
+    },
+    {
+      "role": "user",
+      "content": "When are they and what time?",
+      "expect": {
+        "activeEntityLabels": ["workshops"],
+        "currentOperation": "add_fields",
+        "requestedFields": ["date", "time"],
+        "externalRetrievalRequired": true,
+        "route": { "preRunIncludes": ["web.search"], "minOutputTokens": 800 },
+        "answerContract": {
+          "mustNotRepeatPreviousAnswer": true,
+          "mustUseFreshEvidence": true
+        }
+      }
+    }
+  ]
+}

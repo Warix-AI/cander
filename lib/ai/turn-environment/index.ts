@@ -95,3 +95,14 @@ export {
   getConversationTurnState,
   setConversationTurnState,
 } from "./conversation-store.ts";
+export {
+  extractRequestedFields,
+  formatTurnTaskForPrompt,
+  presentationToSynthesisKind,
+  resolveTurnTask,
+} from "./turn-task.ts";
+export type {
+  AnswerPresentation as TurnAnswerPresentation,
+  TurnOperation,
+  TurnTaskResolution,
+} from "./turn-task.ts";

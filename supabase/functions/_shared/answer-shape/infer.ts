@@ -132,12 +132,36 @@ export function inferAnswerShape(userQuestion: string): AnswerShape {
   }
 
   if (
-    /\b(list|top \d+|which of|options|examples of|names of|what are the)\b/i.test(
+    /\b(list|top \d+|which of|options|examples of|names of|what are the|list\s+(every|all|each)|every\s+\w+|all\s+of\s+(them|it)|complete\s+(list|schedule)|full\s+(list|schedule)|show\s+(me\s+)?(all|every))\b/i.test(
       lower,
     ) ||
     /\bhow many (different|kinds|types)\b/i.test(lower)
   ) {
     return shapeFor("list");
+  }
+
+  if (
+    /\b(table|tabular|in\s+a\s+table|as\s+a\s+table)\b/i.test(lower)
+  ) {
+    return shapeFor("comparison", {
+      preferTable: true,
+      formatHint:
+        "Use a markdown table with a header row. One item per row.",
+    });
+  }
+
+  if (
+    /\b(paragraphs?|in\s+prose|explain\s+(that|it|this)|go\s+deeper|more\s+detail|expand|elaborate)\b/i.test(
+      lower,
+    )
+  ) {
+    return shapeFor("explanation", {
+      maxSentences: /\b(go\s+deeper|more\s+detail|expand|elaborate|thorough)\b/i.test(
+        lower,
+      )
+        ? 14
+        : 8,
+    });
   }
 
   if (
@@ -149,10 +173,11 @@ export function inferAnswerShape(userQuestion: string): AnswerShape {
   }
 
   // Short factual asks: who/what/when/where/how much/how many + short question
+  // Prefer fact for pure counts; list patterns already handled above.
   const wordCount = q.split(/\s+/).filter(Boolean).length;
   if (
     wordCount <= 28 &&
-    /\b(who|what|when|where|how much|how many|is |are |does |did |price|cost|calories?|population|founded|born)\b/i.test(
+    /\b(who|what|when|where|how much|how many|is |are |does |did |price|cost|calories?|population|founded|born|just the answer)\b/i.test(
       lower,
     )
   ) {

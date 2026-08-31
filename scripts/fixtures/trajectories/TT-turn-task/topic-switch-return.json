@@ -1,0 +1,48 @@
+{
+  "id": "TT-topic-switch-return",
+  "category": "turn-task",
+  "tags": ["topic-switch", "generic"],
+  "turns": [
+    {
+      "role": "user",
+      "content": "How many chapters does The Odyssey have?",
+      "expect": { "currentOperation": "count" }
+    },
+    {
+      "role": "assistant",
+      "content": "24 books (chapters).",
+      "emit": {
+        "intent": "count",
+        "entities": [{ "label": "The Odyssey", "type": "work" }],
+        "topic": { "label": "The Odyssey" }
+      }
+    },
+    {
+      "role": "user",
+      "content": "What about rainfall averages in Seattle?",
+      "expect": {
+        "currentOperation": "lookup",
+        "externalRetrievalRequired": true
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "Seattle averages about 37 inches of rain a year.",
+      "emit": {
+        "intent": "lookup",
+        "entities": [{ "label": "Seattle rainfall", "type": "place" }],
+        "topic": { "label": "Seattle rainfall" }
+      }
+    },
+    {
+      "role": "user",
+      "content": "List every chapter of that book we discussed earlier.",
+      "expect": {
+        "currentOperation": "list",
+        "presentation": "list",
+        "externalRetrievalRequired": true,
+        "answerContract": { "mustNotRepeatPreviousAnswer": true }
+      }
+    }
+  ]
+}

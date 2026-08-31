@@ -1,0 +1,36 @@
+{
+  "id": "TT-freshness-reretrieval",
+  "category": "turn-task",
+  "tags": ["freshness", "generic"],
+  "turns": [
+    {
+      "role": "user",
+      "content": "What is the current USD to EUR rate?",
+      "expect": {
+        "currentOperation": "lookup",
+        "externalRetrievalRequired": true
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "About 0.92.",
+      "emit": {
+        "intent": "lookup",
+        "entities": [{ "label": "USD EUR", "type": "topic" }],
+        "constraints": { "attribute": "exchange_rate" }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Check again with the latest number.",
+      "expect": {
+        "freshnessRequirement": true,
+        "externalRetrievalRequired": true,
+        "answerContract": {
+          "mustUseFreshEvidence": true,
+          "mustNotRepeatPreviousAnswer": true
+        }
+      }
+    }
+  ]
+}

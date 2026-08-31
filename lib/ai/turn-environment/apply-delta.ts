@@ -162,8 +162,36 @@ export function applyConversationDelta(
     resultSets,
     evidence,
     topics,
+    // Answer shape / operation / presentation re-resolved each turn when present.
+    // Sticky inheritance only when the delta did not re-specify (rare).
     desiredAnswerShape:
-      delta.answerShapeChange ?? prev.desiredAnswerShape,
+      delta.answerShapeChange !== undefined && delta.answerShapeChange !== null
+        ? delta.answerShapeChange
+        : delta.intentChange !== undefined
+          ? "normal"
+          : prev.desiredAnswerShape,
+    currentOperation:
+      delta.operationChange !== undefined
+        ? delta.operationChange
+        : prev.currentOperation,
+    requestedFields:
+      delta.requestedFields !== undefined
+        ? [...delta.requestedFields]
+        : delta.intentChange !== undefined
+          ? []
+          : [...prev.requestedFields],
+    requestedItemCount:
+      delta.requestedItemCount !== undefined
+        ? delta.requestedItemCount
+        : delta.intentChange !== undefined
+          ? null
+          : prev.requestedItemCount,
+    presentation:
+      delta.presentationChange !== undefined
+        ? delta.presentationChange
+        : delta.intentChange !== undefined
+          ? null
+          : prev.presentation,
     freshnessRequirement: Boolean(delta.freshness),
     dissatisfactionSignal: Boolean(delta.dissatisfaction),
     clarificationRequired,

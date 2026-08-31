@@ -1,0 +1,64 @@
+{
+  "id": "TT-count-to-list",
+  "category": "turn-task",
+  "tags": [
+    "count",
+    "list",
+    "generic"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "How many open roles does Acme have?",
+      "expect": {
+        "currentOperation": "count",
+        "presentation": "short_answer",
+        "answerContract": {
+          "mustAnswerDirectly": true
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "Acme currently has 12 open roles.",
+      "emit": {
+        "intent": "count",
+        "entities": [
+          {
+            "label": "Acme",
+            "type": "org"
+          }
+        ],
+        "constraints": {
+          "attribute": "open_roles"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "List every role and when they were posted.",
+      "expect": {
+        "activeEntityLabels": [
+          "Acme"
+        ],
+        "currentOperation": "list",
+        "presentation": "table",
+        "requestedFields": [
+          "date"
+        ],
+        "externalRetrievalRequired": true,
+        "route": {
+          "preRunIncludes": [
+            "web.search"
+          ],
+          "minOutputTokens": 800
+        },
+        "answerContract": {
+          "mustNotRepeatPreviousAnswer": true,
+          "mustUseFreshEvidence": true,
+          "mustAnswerDirectly": true
+        }
+      }
+    }
+  ]
+}

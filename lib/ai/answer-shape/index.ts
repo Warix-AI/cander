@@ -14,6 +14,8 @@ export type {
   ResponseContract,
   ResponseDepth,
   ResponseValidation,
+  AnswerPresentation,
+  InferResponseContractHints,
 } from "../../../supabase/functions/_shared/answer-shape/response-contract.ts";
 
 export { ANSWER_SHAPE_BUDGETS } from "../../../supabase/functions/_shared/answer-shape/types.ts";

@@ -1,0 +1,25 @@
+{
+  "id": "TT-result-filter",
+  "category": "turn-task",
+  "tags": ["filter", "generic"],
+  "seeded": true,
+  "seedState": {
+    "currentIntent": "list",
+    "currentOperation": "list",
+    "entities": [
+      { "id": "e1", "type": "org", "label": "Northwind", "contextClass": "ACTIVE" }
+    ]
+  },
+  "turns": [
+    {
+      "role": "user",
+      "content": "Only the ones under $20.",
+      "expect": {
+        "currentOperation": "filter",
+        "activeEntityLabels": ["Northwind"],
+        "externalRetrievalRequired": true,
+        "answerContract": { "mustNotRepeatPreviousAnswer": true }
+      }
+    }
+  ]
+}

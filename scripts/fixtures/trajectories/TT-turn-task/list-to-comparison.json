@@ -1,0 +1,38 @@
+{
+  "id": "TT-list-to-comparison",
+  "category": "turn-task",
+  "tags": ["compare", "generic"],
+  "turns": [
+    {
+      "role": "user",
+      "content": "List two popular note-taking apps.",
+      "expect": {
+        "currentOperation": "list",
+        "presentation": "list"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "1. Notion\n2. Obsidian",
+      "emit": {
+        "intent": "list",
+        "resultSet": {
+          "items": [
+            { "label": "Notion", "ordinal": 1 },
+            { "label": "Obsidian", "ordinal": 2 }
+          ]
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Compare them.",
+      "expect": {
+        "currentOperation": "compare",
+        "presentation": "comparison",
+        "externalRetrievalRequired": true,
+        "answerContract": { "mustNotRepeatPreviousAnswer": true }
+      }
+    }
+  ]
+}

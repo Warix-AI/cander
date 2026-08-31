@@ -1,0 +1,33 @@
+{
+  "id": "TT-answer-to-five-bullets",
+  "category": "turn-task",
+  "tags": ["bullets", "reformat", "generic"],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Why do libraries still matter?",
+      "expect": {
+        "currentOperation": "detail",
+        "presentation": "prose"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "Libraries still matter because they provide free access to knowledge and community space.",
+      "emit": {
+        "intent": "explain",
+        "entities": [{ "label": "libraries", "type": "topic" }]
+      }
+    },
+    {
+      "role": "user",
+      "content": "Give me five bullets.",
+      "expect": {
+        "currentOperation": "list",
+        "presentation": "bullet_list",
+        "answerContract": { "mustNotRepeatPreviousAnswer": true },
+        "route": { "minOutputTokens": 300 }
+      }
+    }
+  ]
+}

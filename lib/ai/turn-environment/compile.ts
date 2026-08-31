@@ -13,6 +13,10 @@ import {
 import { liveInfoHint } from "../orchestrator/v2-helpers.ts";
 import { inferResponseContract } from "../answer-shape/index.ts";
 import {
+  formatTurnTaskForPrompt,
+  resolveTurnTask,
+} from "./turn-task.ts";
+import {
   deeperResearchQueries,
   extractFactualComponents,
   isCorrectionRetry,
@@ -68,6 +72,14 @@ export type CompileTurnOptions = {
     readOnlyPreRun?: boolean;
     needsClarification?: boolean;
     clarificationReason?: string;
+  };
+  /**
+   * Health gate — only when HealthKit flag + user-data intent + local pref.
+   * Never unlocks on general health questions.
+   */
+  health?: {
+    requiresHealthCapabilities: boolean;
+    forceDomains?: string[];
   };
 };
 
@@ -208,12 +220,22 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     }
   }
 
+  const forceDomains: import("../tools/domains.ts").ToolDomain[] = [];
+  if (opts.build?.requiresBuildCapabilities && opts.build.forceDomains) {
+    for (const d of opts.build.forceDomains) {
+      forceDomains.push(d as import("../tools/domains.ts").ToolDomain);
+    }
+  }
+  if (opts.health?.requiresHealthCapabilities && opts.health.forceDomains) {
+    for (const d of opts.health.forceDomains) {
+      forceDomains.push(d as import("../tools/domains.ts").ToolDomain);
+    }
+  }
+
   const allowed = resolveAllowedToolsForTurn({
     content,
     taskState: opts.taskState,
-    forceDomains: opts.build?.requiresBuildCapabilities
-      ? (opts.build.forceDomains as import("../tools/domains.ts").ToolDomain[] | undefined)
-      : undefined,
+    forceDomains: forceDomains.length ? forceDomains : undefined,
   });
 
   // When pre-running live web, ensure web domain tools exist for residual opens,
@@ -274,7 +296,8 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     cards = cards.slice(0, 3);
   }
 
-  // Density from conversation answer shape when present
+  // Density: CURRENT turn ResponseContract / TurnTask wins over sticky conversation shape.
+  // Sticky desiredAnswerShape only fills gaps when the current turn has no explicit depth.
   const densityFromShape =
     conv?.desiredAnswerShape === "brief" ||
     conv?.desiredAnswerShape === "key_points"
@@ -291,12 +314,41 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     budgets.concurrency = Math.max(budgets.concurrency, 4);
   }
 
-  const responseContract = inferResponseContract(content);
+  const turnTask = resolveTurnTask({
+    content,
+    previous: conv ?? null,
+  });
+
+  const responseContract = inferResponseContract(content, {
+    presentation: turnTask.presentation,
+    operation: turnTask.operation,
+    requestedFields: turnTask.requestedFields,
+    requestedItemCount: turnTask.requestedItemCount,
+    depth: turnTask.depth,
+  });
   budgets.maxOutputTokens = Math.max(
     budgets.maxOutputTokens,
     responseContract.outputTokenBudget,
   );
-  if (responseContract.depth === "detailed" || responseContract.requestedItemCount) {
+  // Expand budget for complete lists / deep explanations (never inherit a 1-sentence budget)
+  if (
+    turnTask.operation === "list" ||
+    turnTask.operation === "deepen" ||
+    turnTask.operation === "add_fields" ||
+    responseContract.depth === "detailed" ||
+    responseContract.requestedItemCount
+  ) {
+    const listBoost =
+      turnTask.operation === "list" || turnTask.operation === "add_fields"
+        ? Math.max(900, (turnTask.requestedItemCount ?? 12) * 70)
+        : turnTask.operation === "deepen"
+          ? 1100
+          : 0;
+    budgets.maxOutputTokens = Math.max(
+      budgets.maxOutputTokens,
+      listBoost,
+      responseContract.outputTokenBudget,
+    );
     budgets.maxPromptChars = Math.max(
       budgets.maxPromptChars,
       Math.min(budgets.maxPromptChars + 4_000, budgets.contextTokens * 4),
@@ -307,12 +359,45 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     budgets.maxToolRounds = Math.max(budgets.maxToolRounds, 3);
   }
 
+  // Force retrieval when the turn task says so (e.g. count → full list)
+  if (
+    turnTask.retrievalNeeded &&
+    (turnTask.operation === "list" ||
+      turnTask.operation === "add_fields" ||
+      turnTask.operation === "deepen" ||
+      turnTask.freshness ||
+      turnTask.operation === "compare")
+  ) {
+    if (!preRunTasks.some((t) => t.name === "web.search")) {
+      if (!toolNames.includes("web.search")) {
+        toolNames = [...toolNames, "web.search"];
+      }
+      preRunTasks = [
+        {
+          name: "web.search",
+          arguments: {
+            query: [turnTask.subject, content, turnTask.requestedFields.join(" ")]
+              .filter(Boolean)
+              .join(" ")
+              .slice(0, 400),
+          },
+          reason: "turn_task_retrieval",
+        },
+        ...preRunTasks,
+      ];
+    }
+  }
+
   const densityFromContract =
     responseContract.depth === "detailed"
       ? ("detailed" as const)
       : responseContract.depth === "brief"
         ? ("brief" as const)
-        : null;
+        : turnTask.presentation === "short_answer"
+          ? ("brief" as const)
+          : turnTask.presentation === "prose" && turnTask.depth === "detailed"
+            ? ("detailed" as const)
+            : null;
 
   const recent = (opts.messages ?? []).slice(-12).map((m) => ({
     role: m.role,
@@ -320,17 +405,27 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
   }));
 
   const pendingBits = [opts.pendingStateText ?? ""];
+  pendingBits.push(formatTurnTaskForPrompt(turnTask));
   if (conv?.constraints && Object.keys(conv.constraints).length) {
     pendingBits.push(
       `Resolved constraints: ${JSON.stringify(conv.constraints)}`,
     );
   }
-  if (conv?.freshnessRequirement) {
+  if (conv?.freshnessRequirement || turnTask.freshness) {
     pendingBits.push("Freshness required — do not reuse stale prior answers.");
   }
   if (conv?.dissatisfactionSignal || deepRetry) {
     pendingBits.push(
       "Prior answer was wrong or incomplete. Do deeper retrieval and reconciliation before answering. Never tell the user to check the menu or website themselves when tools can investigate.",
+    );
+  }
+  if (
+    turnTask.operation === "list" ||
+    turnTask.operation === "add_fields" ||
+    turnTask.operation === "deepen"
+  ) {
+    pendingBits.push(
+      "Previous answers are context only. Satisfy the CURRENT operation and presentation; do not repeat a prior short answer.",
     );
   }
 
@@ -360,7 +455,10 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
   return {
     contextPacket,
     tools: cards,
-    toolMode,
+    toolMode:
+      preRunTasks.length && toolMode === "disallowed"
+        ? ("disallowed" as const) // synthesize after pre-run
+        : toolMode,
     preRunTasks,
     clarificationPolicy: {
       clarificationRequired: clarification.clarificationRequired,
@@ -369,7 +467,7 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
         ? ["select_one", "text_input", "confirm"]
         : [],
     },
-    density: densityFromShape ?? densityFromContract ?? inferDensity(content),
+    density: densityFromContract ?? densityFromShape ?? inferDensity(content),
     outputSchema: opts.outputSchema ?? "semantic_blocks_v1",
     budgets,
     domains: allowed.domains,

@@ -182,6 +182,8 @@ export async function resolveSemanticDelta(
 
 /**
  * Deterministic-first, semantic-second.
+ * Always merges per-turn task resolution so intent/operation/shape
+ * are re-derived even when subject context is inherited.
  */
 export async function resolveConversationDelta(
   input: DeltaResolverInput,
@@ -190,17 +192,76 @@ export async function resolveConversationDelta(
   const { resolveDeterministicDelta } = await import(
     "./deterministic-delta.ts"
   );
+  const { resolveTurnTask } = await import("./turn-task.ts");
+  const task = resolveTurnTask({
+    content: input.userMessage,
+    previous: input.previous,
+  });
+
+  const taskOverlay: Partial<ConversationDelta> = {
+    intentChange: task.intent,
+    operationChange: task.operation,
+    answerShapeChange: task.answerShape,
+    presentationChange: task.presentation,
+    requestedFields: task.requestedFields,
+    requestedItemCount: task.requestedItemCount,
+    freshness: task.freshness || undefined,
+    externalRetrievalRequired: task.retrievalNeeded || undefined,
+  };
+
+  const mergeTask = (base: ConversationDelta): ConversationDelta => {
+    // Short constraint / reference follow-ups must keep shopping (or other) intent.
+    // Overlaying task.intent would wipe e.g. find_laptop → lookup and break constraint stacks.
+    const constraintOnlyFollowUp =
+      base.resolutionConfidence === "high" &&
+      base.intentChange === undefined &&
+      !base.forgetAllActive &&
+      (Object.keys(base.constraintAdds).length > 0 ||
+        Object.keys(base.constraintReplacements).length > 0 ||
+        (base.exclusions?.length ?? 0) > 0 ||
+        Boolean(base.references?.priorResults?.length) ||
+        Boolean(base.references?.evidence?.length));
+
+    return {
+      ...base,
+      ...taskOverlay,
+      freshness: base.freshness || task.freshness || undefined,
+      dissatisfaction: base.dissatisfaction,
+      forgetAllActive: base.forgetAllActive,
+      externalRetrievalRequired: Boolean(
+        base.externalRetrievalRequired || task.retrievalNeeded,
+      ),
+      answerShapeChange: base.answerShapeChange ?? task.answerShape,
+      intentChange: constraintOnlyFollowUp
+        ? undefined
+        : base.intentChange !== undefined && base.intentChange !== null
+          ? base.intentChange
+          : task.intent,
+      operationChange: task.operation,
+      presentationChange: task.presentation,
+      requestedFields: task.requestedFields,
+      requestedItemCount: task.requestedItemCount,
+      entityChanges: base.entityChanges,
+      constraintAdds: {
+        ...base.constraintAdds,
+        ...(task.requestedFields.length
+          ? { requestedFields: task.requestedFields.join(",") }
+          : {}),
+      },
+      constraintReplacements: base.constraintReplacements,
+      exclusions: base.exclusions,
+    };
+  };
   const det = resolveDeterministicDelta(input);
   if (det && det.resolutionConfidence === "high") {
-    return det;
+    return mergeTask(det);
   }
-  // Deterministic returned low-confidence ambiguity — still usable
   if (det && det.unresolvedAmbiguity && det.resolutionConfidence === "low") {
-    return det;
+    return mergeTask(det);
   }
   const sem = await resolveSemanticDelta(input, generate);
   if (det) {
-    return {
+    return mergeTask({
       ...sem,
       ...det,
       entityChanges: [...(det.entityChanges || []), ...(sem.entityChanges || [])],
@@ -215,7 +276,7 @@ export async function resolveConversationDelta(
         det.resolutionConfidence === "high"
           ? "high"
           : sem.resolutionConfidence,
-    };
+    });
   }
-  return sem;
+  return mergeTask(sem);
 }

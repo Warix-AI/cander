@@ -25,12 +25,16 @@ export type TrajectoryExpect = {
   externalRetrievalRequired?: boolean;
   internalDataRequired?: boolean;
   desiredAnswerShape?: string;
+  currentOperation?: string;
+  presentation?: string;
+  requestedFields?: string[];
   resolutionMethod?: string;
   referencedItemLabel?: string;
   route?: {
     toolMode?: string;
     preRunIncludes?: string[];
     unnecessaryClarify?: boolean;
+    minOutputTokens?: number;
   };
   answerContract?: AnswerContract;
 };

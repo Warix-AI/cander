@@ -58,6 +58,11 @@ export type ConversationDelta = {
   constraintReplacements: Record<string, string>;
   exclusions: string[];
   answerShapeChange?: AnswerShapeKind | null;
+  /** Per-turn operation (count/list/compare/…) — always re-resolved. */
+  operationChange?: string | null;
+  requestedFields?: string[];
+  requestedItemCount?: number | null;
+  presentationChange?: string | null;
   dissatisfaction?: boolean;
   freshness?: boolean;
   references?: {
@@ -94,6 +99,11 @@ export type ConversationTurnState = {
   evidence: EvidenceRef[];
   topics: TopicRef[];
   desiredAnswerShape: AnswerShapeKind;
+  /** Last resolved operation for this thread turn. */
+  currentOperation: string | null;
+  requestedFields: string[];
+  requestedItemCount: number | null;
+  presentation: string | null;
   freshnessRequirement: boolean;
   dissatisfactionSignal: boolean;
   clarificationRequired: boolean;
@@ -130,6 +140,10 @@ export function emptyConversationTurnState(): ConversationTurnState {
     evidence: [],
     topics: [],
     desiredAnswerShape: "normal",
+    currentOperation: null,
+    requestedFields: [],
+    requestedItemCount: null,
+    presentation: null,
     freshnessRequirement: false,
     dissatisfactionSignal: false,
     clarificationRequired: false,

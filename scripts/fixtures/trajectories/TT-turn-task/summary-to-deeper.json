@@ -1,0 +1,50 @@
+{
+  "id": "TT-summary-to-deeper",
+  "category": "turn-task",
+  "tags": [
+    "deepen",
+    "prose",
+    "generic"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "What is photosynthesis in one sentence?",
+      "expect": {
+        "currentOperation": "lookup",
+        "presentation": "short_answer"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "Photosynthesis converts light into chemical energy in plants.",
+      "emit": {
+        "intent": "lookup",
+        "entities": [
+          {
+            "label": "photosynthesis",
+            "type": "topic"
+          }
+        ],
+        "topic": {
+          "label": "photosynthesis"
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Go deeper and explain it in paragraphs.",
+      "expect": {
+        "currentOperation": "deepen",
+        "presentation": "prose",
+        "desiredAnswerShape": "detailed",
+        "route": {
+          "minOutputTokens": 900
+        },
+        "answerContract": {
+          "mustNotRepeatPreviousAnswer": true
+        }
+      }
+    }
+  ]
+}

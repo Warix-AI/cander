@@ -1,0 +1,57 @@
+{
+  "id": "TT-short-to-table",
+  "category": "turn-task",
+  "tags": [
+    "table",
+    "generic"
+  ],
+  "turns": [
+    {
+      "role": "user",
+      "content": "List three programming languages for beginners.",
+      "expect": {
+        "currentOperation": "list"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "Python, JavaScript, and Ruby.",
+      "emit": {
+        "intent": "list",
+        "entities": [
+          {
+            "label": "beginner languages",
+            "type": "topic"
+          }
+        ],
+        "resultSet": {
+          "items": [
+            {
+              "label": "Python",
+              "ordinal": 1
+            },
+            {
+              "label": "JavaScript",
+              "ordinal": 2
+            },
+            {
+              "label": "Ruby",
+              "ordinal": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Put that in a table.",
+      "expect": {
+        "currentOperation": "reformat",
+        "presentation": "table",
+        "answerContract": {
+          "mustNotRepeatPreviousAnswer": true
+        }
+      }
+    }
+  ]
+}
