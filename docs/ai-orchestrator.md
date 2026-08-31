@@ -90,18 +90,18 @@ Set any to `0`/`false`/`off` to roll back that layer.
 
 ## Raw OpenAI benchmark mode
 
-Temporary A/B bypass for comparing **raw OpenAI** vs V6.
+Temporary A/B bypass for comparing **raw OpenAI** vs V6. **Default ON** (opt out with `=0`).
 
 | Var | Where | Purpose |
 |-----|--------|---------|
 | `OPENAI_API_KEY` | server only | OpenAI auth — never `NEXT_PUBLIC_` |
 | `OPENAI_MODEL` | server | Model id (default `gpt-5.6`) |
-| `RAW_OPENAI_MODE` | server | Allows `/api/ai/raw-openai` |
-| `NEXT_PUBLIC_RAW_OPENAI_MODE` | client | Routes `runAssistantTurn` → `runRawOpenAITurn` first |
+| `RAW_OPENAI_MODE` | server | Opt out with `0` (default allows `/api/ai/raw-openai`) |
+| `NEXT_PUBLIC_RAW_OPENAI_MODE` | client | Opt out with `0` (default routes to `runRawOpenAITurn` first) |
 
-When both mode flags are on, **no** V6 / Simple Turn / TaskGraph / Exa / KB / Apple FM runs. Full thread history is POSTed to the server and forwarded to the OpenAI Responses API.
+When enabled (default), **no** V6 / Simple Turn / TaskGraph / Exa / KB / Apple FM runs. Full thread history is POSTed to the server and forwarded to the OpenAI Responses API.
 
-UI shows a **RAW OPENAI** badge. Trace: `[RAW_OPENAI_TRACE]`.
+UI shows a **RAW OPENAI** badge. Trace: `[RAW_OPENAI_TRACE]`. Opt out: `NEXT_PUBLIC_RAW_OPENAI_MODE=0`, `RAW_OPENAI_MODE=0`, or `localStorage['cander:raw-openai-mode']='0'`.
 
 
 

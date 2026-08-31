@@ -16,41 +16,45 @@ import {
 } from "../lib/ai/raw-openai/run-turn.ts";
 
 describe("Raw OpenAI flags", () => {
-  it("defaults off", () => {
+  it("defaults on", () => {
     const prevN = process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     const prevR = process.env.RAW_OPENAI_MODE;
     delete process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     delete process.env.RAW_OPENAI_MODE;
-    assert.equal(isRawOpenAIModeEnabled(), false);
-    assert.equal(isRawOpenAIModeAllowedOnServer(), false);
+    assert.equal(isRawOpenAIModeEnabled(), true);
+    assert.equal(isRawOpenAIModeAllowedOnServer(), true);
     if (prevN !== undefined) process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = prevN;
     if (prevR !== undefined) process.env.RAW_OPENAI_MODE = prevR;
   });
 
-  it("enables via NEXT_PUBLIC_RAW_OPENAI_MODE", () => {
+  it("can opt out via NEXT_PUBLIC_RAW_OPENAI_MODE=0", () => {
     const prev = process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
-    process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = "1";
-    assert.equal(isRawOpenAIModeEnabled(), true);
-    assert.equal(isRawOpenAIModeAllowedOnServer(), true);
+    process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = "0";
+    assert.equal(isRawOpenAIModeEnabled(), false);
+    assert.equal(isRawOpenAIModeAllowedOnServer(), false);
     if (prev === undefined) delete process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     else process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = prev;
   });
 });
 
 describe("Raw OpenAI path bypasses V6", () => {
-  it("raw flag wins over V6", () => {
+  it("raw default wins over V6", () => {
     const prevRaw = process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
+    const prevRawServer = process.env.RAW_OPENAI_MODE;
     const prevV6 = process.env.NEXT_PUBLIC_AI_V6_RUNTIME;
-    process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = "1";
+    delete process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
+    delete process.env.RAW_OPENAI_MODE;
     process.env.NEXT_PUBLIC_AI_V6_RUNTIME = "1";
     assert.equal(resolveAssistantRuntimePath(), "raw_openai");
     if (prevRaw === undefined) delete process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     else process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = prevRaw;
+    if (prevRawServer === undefined) delete process.env.RAW_OPENAI_MODE;
+    else process.env.RAW_OPENAI_MODE = prevRawServer;
     if (prevV6 === undefined) delete process.env.NEXT_PUBLIC_AI_V6_RUNTIME;
     else process.env.NEXT_PUBLIC_AI_V6_RUNTIME = prevV6;
   });
 
-  it("flag off restores V6 when V6 default/on", () => {
+  it("flag off restores V6 when V6 on", () => {
     const prevRaw = process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     const prevV6 = process.env.NEXT_PUBLIC_AI_V6_RUNTIME;
     process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = "0";
