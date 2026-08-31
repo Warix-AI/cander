@@ -10,6 +10,7 @@ import {
 } from "../../browser-context/routing.ts";
 import { extractRequestedUrl } from "./web-retrieval.ts";
 import { liveInfoHint } from "./v2-helpers.ts";
+import { wantsAutonomousResearch } from "../web-research/index.ts";
 
 export type QueuedToolCall = {
   name: string;
@@ -17,7 +18,7 @@ export type QueuedToolCall = {
   reason: string;
 };
 
-/** Explicit deep-research / compare / verify phrasing. */
+/** Explicit deep-research / compare / verify phrasing (Search deep modes — not Agent). */
 export function wantsDeepResearch(content: string): boolean {
   const t = content.trim();
   if (!t) return false;
@@ -104,15 +105,29 @@ export function initialDeterministicToolCalls(content: string): QueuedToolCall[]
     ];
   }
 
+  if (wantsAutonomousResearch(content)) {
+    const query = content.trim();
+    return [
+      {
+        name: "create_work_task",
+        arguments: {
+          title: query.slice(0, 120) || "Research task",
+          goal: query.slice(0, 400),
+          kind: "research",
+          summary: "Autonomous multi-step research",
+        },
+        reason: "autonomous_research_intent",
+      },
+    ];
+  }
+
   if (wantsDeepResearch(content)) {
     const query = content.trim().slice(0, 400);
-    // Deep Search is Edge-gated (EXA_DEEP_SEARCH_ENABLED=false initially).
-    // Deterministic path uses web.search; model may still call web.research.
     return [
       {
         name: "web.search",
-        arguments: { query },
-        reason: "deep_research_intent_degraded_to_search",
+        arguments: { query, deeper: true },
+        reason: "deep_research_search_mode",
       },
     ];
   }

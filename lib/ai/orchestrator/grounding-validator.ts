@@ -28,9 +28,57 @@ export function hasUsableEvidenceSnippets(evidence: TurnEvidence[]): boolean {
       e.content.trim().length >= 20 &&
       (e.kind === "web_page" ||
         e.kind === "search_result" ||
+        e.kind === "exa_synthesis" ||
         e.kind === "browser" ||
         e.kind === "knowledge"),
   );
+}
+
+function findExaDirectEvidence(
+  evidence: TurnEvidence[],
+): TurnEvidence | undefined {
+  return evidence.find(
+    (e) => e.ok && e.kind === "exa_synthesis" && e.content.trim().length >= 8,
+  );
+}
+
+/** Detect FM substituting facts from a grounded Exa direct answer. */
+function answerContradictsDirectAnswer(answer: string, direct: string): boolean {
+  const a = answer.toLowerCase();
+  const d = direct.toLowerCase();
+
+  const entities = (text: string) =>
+    (text.match(/\b[a-z]+(?:\s+[a-z]+){0,2}\b/g) ?? []).filter(
+      (phrase) =>
+        phrase.length >= 5 &&
+        !/^(opens|against|first|football|season|game|september|october|november|december|january|february|march|april|may|june|july|august)$/.test(
+          phrase,
+        ),
+    );
+
+  const directEntities = [...new Set(entities(d))];
+  const answerEntities = [...new Set(entities(a))];
+
+  const directInAnswer = directEntities.filter((e) => a.includes(e));
+  const foreignInAnswer = answerEntities.filter((e) => !d.includes(e));
+
+  if (directEntities.length >= 1 && directInAnswer.length === 0 && foreignInAnswer.length >= 1) {
+    return true;
+  }
+
+  const monthDay =
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})\b/gi;
+  const directDates = [...direct.matchAll(monthDay)].map((m) => m[0].toLowerCase());
+  const answerDates = [...answer.matchAll(monthDay)].map((m) => m[0].toLowerCase());
+  if (
+    directDates.length > 0 &&
+    answerDates.length > 0 &&
+    !answerDates.some((ad) => directDates.includes(ad))
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export function validateLocalGrounding(opts: {
@@ -81,6 +129,16 @@ export function validateLocalGrounding(opts: {
 
   if (usable && HEDGE_NO_DATA.test(answer)) {
     issues.push("HEDGE_DESPITE_EVIDENCE");
+    return {
+      valid: false,
+      issues,
+      recommendedAction: "use_evidence_fallback",
+    };
+  }
+
+  const direct = findExaDirectEvidence(opts.evidence);
+  if (direct && answerContradictsDirectAnswer(answer, direct.content)) {
+    issues.push("ALTERED_DIRECT_ANSWER");
     return {
       valid: false,
       issues,

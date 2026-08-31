@@ -23,6 +23,12 @@ export type WebSource = {
   sourceType: WebSourceType;
 };
 
+export type ExaGroundingField = {
+  field?: string;
+  citations?: Array<{ url?: string; title?: string }>;
+  confidence?: string;
+};
+
 export type WebEvidence = {
   query?: string;
   sources: WebSource[];
@@ -34,6 +40,13 @@ export type WebEvidence = {
   requestId?: string;
   costDollars?: number;
   truncated?: boolean;
+  /** Exa synthesized output when outputSchema is used. */
+  directAnswer?: string;
+  structuredAnswer?: Record<string, unknown> | null;
+  grounding?: ExaGroundingField[];
+  groundingConfidence?: "low" | "medium" | "high" | "none";
+  retrievalMode?: string;
+  outputSchemaType?: "text" | "object" | "none";
 };
 
 export type WebSearchInput = {
@@ -44,6 +57,13 @@ export type WebSearchInput = {
   excludeDomains?: string[];
   /** ISO date lower bound for freshness-sensitive queries. */
   startPublishedDate?: string;
+  /** Override automatic Exa search mode (instant|fast|auto|deep-lite|…). */
+  retrievalMode?: string;
+  /** Escalate from a prior attempt (quality gate). */
+  escalate?: string;
+  deeper?: boolean;
+  /** TurnTask hints from compiler — drives mode, schema, freshness. */
+  retrievalHints?: Record<string, unknown>;
   signal?: AbortSignal;
   ownerId?: string;
   workspaceId?: string | null;

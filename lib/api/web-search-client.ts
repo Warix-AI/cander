@@ -2,6 +2,8 @@
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { normalizeMessageCitations } from "@/lib/ai/orchestrator/collect-citations";
+import type { ExaSearchBundle } from "@/lib/ai/web-research/evidence-bundle";
+import { parseExaSearchBundle } from "@/lib/ai/web-research/evidence-bundle";
 
 export type WebSearchHit = {
   title: string;
@@ -9,6 +11,16 @@ export type WebSearchHit = {
   description: string;
   publishedAt: string | null;
   source: string | null;
+};
+
+export type WebSearchResponse = {
+  ok: boolean;
+  detail: string;
+  results: WebSearchHit[];
+  citations?: ReturnType<typeof normalizeMessageCitations>;
+  requestId?: string;
+  synthesis?: ExaSearchBundle | null;
+  retrievalMode?: string | null;
 };
 
 function requestId() {
@@ -35,14 +47,16 @@ function normalizeResults(raw: unknown): WebSearchHit[] {
  */
 export async function searchWeb(
   query: string,
-  opts?: { mode?: "search" | "research"; level?: string; workspaceId?: string },
-): Promise<{
-  ok: boolean;
-  detail: string;
-  results: WebSearchHit[];
-  citations?: ReturnType<typeof normalizeMessageCitations>;
-  requestId?: string;
-}> {
+  opts?: {
+    mode?: "search" | "research";
+    level?: string;
+    workspaceId?: string;
+    retrievalMode?: string;
+    escalate?: string;
+    deeper?: boolean;
+    retrievalHints?: Record<string, unknown>;
+  },
+): Promise<WebSearchResponse> {
   const q = query.trim();
   if (!q) {
     return { ok: false, detail: "Empty search query.", results: [] };
@@ -83,6 +97,10 @@ export async function searchWeb(
         mode,
         ...(opts?.level ? { level: opts.level } : {}),
         ...(opts?.workspaceId ? { workspaceId: opts.workspaceId } : {}),
+        ...(opts?.retrievalMode ? { retrievalMode: opts.retrievalMode } : {}),
+        ...(opts?.escalate ? { escalate: opts.escalate } : {}),
+        ...(opts?.deeper ? { deeper: true } : {}),
+        ...(opts?.retrievalHints ? { retrievalHints: opts.retrievalHints } : {}),
       },
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -123,6 +141,7 @@ export async function searchWeb(
     }
 
     const results = normalizeResults(data?.results);
+    const synthesis = parseExaSearchBundle(data);
     const citations = normalizeMessageCitations(
       data?.citations ??
         results.map((r, i) => ({
@@ -138,17 +157,24 @@ export async function searchWeb(
       requestId: id,
       status: 200,
       resultCount: results.length,
+      directOutputPresent: Boolean(synthesis?.directAnswer),
+      groundingCount: synthesis?.grounding.length ?? 0,
+      retrievalMode: synthesis?.retrievalMode ?? data?.retrievalMode ?? null,
       durationMs: Date.now() - started,
       edgeRequestId: data?.requestId ?? null,
     });
     return {
       ok: true,
-      detail: results.length
-        ? `Found ${results.length} result(s).`
-        : "No web results.",
+      detail: synthesis?.directAnswer
+        ? "Retrieved a grounded answer."
+        : results.length
+          ? `Found ${results.length} result(s).`
+          : "No web results.",
       results,
       citations,
       requestId: id,
+      synthesis,
+      retrievalMode: synthesis?.retrievalMode ?? data?.retrievalMode ?? null,
     };
   } catch (err) {
     console.error("[WEB_SEARCH_ERROR]", {

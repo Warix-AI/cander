@@ -30,3 +30,23 @@ export {
   exaApiKey,
   braveApiKey,
 } from "./flags.ts";
+export {
+  parseExaSynthesizedResponse,
+  exaBundleQualityOk,
+  evaluateExaSynthesisQuality,
+} from "./exa-synthesized.ts";
+export type { ExaSynthesisQuality } from "./exa-synthesized.ts";
+export {
+  resolveExaRetrievalPolicy,
+  buildExaOutputSchema,
+  buildRetrievalQuery,
+  exaDirectAnswerText,
+  exaGroundingConfidence,
+  nextEscalationMode,
+  EXA_SEARCH_SYSTEM_PROMPT,
+} from "./retrieval-policy.ts";
+export type {
+  ExaRetrievalMode,
+  ExaRetrievalPolicy,
+  TurnRetrievalHints,
+} from "./retrieval-policy.ts";

@@ -153,13 +153,21 @@ describe("deterministic web routing", () => {
     assert.equal(calls[0]?.name, "web.read");
   });
 
-  it("queues web.search for deep research intent while Deep flag is off", () => {
+  it("queues web.search for deep research intent (Search deep modes)", () => {
     assert.equal(wantsDeepResearch("Please deep research solar vs wind"), true);
     const calls = initialDeterministicToolCalls(
       "Please deep research solar vs wind costs",
     );
     assert.equal(calls[0]?.name, "web.search");
-    assert.equal(calls[0]?.reason, "deep_research_intent_degraded_to_search");
+    assert.equal(calls[0]?.reason, "deep_research_search_mode");
+  });
+
+  it("queues create_work_task for autonomous research intent", () => {
+    const calls = initialDeterministicToolCalls(
+      "Research this for me comprehensively over the next few days — full report on quantum computing landscape",
+    );
+    assert.equal(calls[0]?.name, "create_work_task");
+    assert.equal(calls[0]?.reason, "autonomous_research_intent");
   });
 
   it("does not invent tools for casual rewrite", () => {

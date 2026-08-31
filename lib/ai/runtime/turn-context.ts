@@ -47,3 +47,14 @@ export function clearTurnContext() {
   turnProjectId = null;
   turnUserMessage = null;
 }
+
+export {
+  getRetrievalTrace,
+  resetRetrievalTrace,
+  logRetrievalTrace,
+  setFinalSource,
+} from "../orchestrator/retrieval-trace.ts";
+export type {
+  TurnRetrievalTrace,
+  FinalAnswerSource,
+} from "../orchestrator/retrieval-trace.ts";

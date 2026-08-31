@@ -15,6 +15,7 @@ export type EvidenceKind =
   | "web_page"
   | "browser"
   | "search_result"
+  | "exa_synthesis"
   | "file"
   | "memory"
   | "knowledge"
@@ -31,6 +32,7 @@ export type TurnEvidence = {
   ok: boolean;
   error?: string;
   sessionId?: string;
+  groundingConfidence?: "low" | "medium" | "high" | "none";
 };
 
 let evidenceSeq = 0;
@@ -69,6 +71,39 @@ export function prepareSynthesisEvidence(
 ): { instruction: string; compact: CompactEvidenceItem[]; shapeKind: string } {
   const contract = inferResponseContract(question);
   const shape = answerShapeFromContract(question, contract);
+
+  const direct = items.find(
+    (e) => e.ok && e.kind === "exa_synthesis" && e.content.trim().length >= 8,
+  );
+  if (direct) {
+    const instruction = [
+      "## CURRENT REQUEST",
+      question.trim(),
+      "",
+      "## GROUNDED RETRIEVAL ANSWER",
+      direct.content.trim(),
+      "",
+      "## RESPONSE CONTRACT",
+      "Answer concisely and naturally in the user's language.",
+      "Do not modify factual values from the grounded retrieval answer.",
+      "Do not substitute dates, opponents, locations, or other facts from lower-ranked snippets.",
+    ].join("\n");
+    return {
+      instruction,
+      compact: [
+        {
+          id: direct.id,
+          title: direct.title,
+          url: direct.url,
+          content: direct.content,
+          kind: direct.kind,
+          ok: true,
+        },
+      ],
+      shapeKind: shape.kind,
+    };
+  }
+
   const webby = items.filter(
     (e) =>
       e.ok &&

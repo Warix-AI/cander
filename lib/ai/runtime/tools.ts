@@ -352,22 +352,65 @@ export async function executeAuthorizedTool(
         };
       }
       case "web.search": {
-        const result = await actions.webSearch(String(args.query));
+        const searchOpts = {
+          retrievalHints:
+            args.retrievalHints && typeof args.retrievalHints === "object"
+              ? (args.retrievalHints as Record<string, unknown>)
+              : undefined,
+          escalate: typeof args.escalate === "string" ? args.escalate : undefined,
+          deeper: args.deeper === true,
+        };
+        const result = await actions.webSearch(String(args.query), searchOpts);
         const results = result.results ?? [];
+        const synthesis = result.synthesis ?? null;
         if (!result.ok) {
           return {
             name: tool.name,
             ok: false,
             output: result.detail || "Web search failed.",
-            data: { results, citations: result.citations },
+            data: {
+              results,
+              citations: result.citations,
+              synthesis,
+              retrievalMode: result.retrievalMode ?? null,
+            },
           };
         }
-        if (!results.length) {
+        if (!results.length && !synthesis?.directAnswer) {
           return {
             name: tool.name,
             ok: false,
             output: `No web results for “${args.query}”. Tell the user you couldn’t find current sources — do not invent headlines or claim you searched successfully.`,
-            data: { results, citations: result.citations },
+            data: {
+              results,
+              citations: result.citations,
+              synthesis,
+              retrievalMode: result.retrievalMode ?? null,
+            },
+          };
+        }
+        if (synthesis?.directAnswer) {
+          return {
+            name: tool.name,
+            ok: true,
+            output: [
+              `Grounded retrieval answer for “${args.query}”:`,
+              synthesis.directAnswer,
+              "",
+              "Use this grounded answer. Do not alter factual values or substitute other search snippets.",
+            ].join("\n"),
+            data: {
+              query: args.query,
+              results,
+              citations: result.citations,
+              synthesis,
+              directAnswer: synthesis.directAnswer,
+              structuredAnswer: synthesis.structuredAnswer ?? null,
+              grounding: synthesis.grounding,
+              groundingConfidence: synthesis.groundingConfidence,
+              retrievalMode: synthesis.retrievalMode ?? result.retrievalMode ?? null,
+              retrievalHints: searchOpts.retrievalHints ?? null,
+            },
           };
         }
         const lines = results.map((r, i) => {
@@ -384,7 +427,12 @@ export async function executeAuthorizedTool(
           name: tool.name,
           ok: true,
           output: `Web results for “${args.query}” (cite real URLs only; never invent sources):\n${lines.join("\n\n")}`,
-          data: { results, citations: result.citations },
+          data: {
+            results,
+            citations: result.citations,
+            synthesis,
+            retrievalMode: result.retrievalMode ?? null,
+          },
         };
       }
       case "web.open":

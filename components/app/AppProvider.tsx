@@ -3052,9 +3052,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           })),
         };
       },
-      webSearch: async (query) => {
+      webSearch: async (query, opts) => {
         const { searchWeb } = await import("@/lib/api/web-search-client");
-        const result = await searchWeb(query, { workspaceId });
+        const result = await searchWeb(query, { workspaceId, ...opts });
         return result;
       },
       webOpen: async (url) => {

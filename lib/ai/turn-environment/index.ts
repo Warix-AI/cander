@@ -46,6 +46,11 @@ export {
   resolveClarificationRequired,
   resolveToolMode,
 } from "./compile.ts";
+export {
+  enrichPreRunWebSearchTasks,
+  turnTaskToRetrievalHints,
+  webSearchArguments,
+} from "./retrieval-args.ts";
 export { autoRetrieveMemorySnippets } from "./memory-auto.ts";
 export {
   parseSemanticBlock,

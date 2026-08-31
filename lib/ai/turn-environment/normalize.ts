@@ -44,6 +44,15 @@ function clip(s: string, n: number): string {
 export function normalizeWebSearchResult(opts: {
   toolName: string;
   ok: boolean;
+  directAnswer?: string;
+  structuredAnswer?: Record<string, unknown> | null;
+  grounding?: Array<{
+    field?: string;
+    citations?: Array<{ url?: string; title?: string }>;
+    confidence?: string;
+  }>;
+  groundingConfidence?: "low" | "medium" | "high" | "none";
+  retrievalMode?: string | null;
   results?: Array<{
     title?: string;
     url?: string;
@@ -65,6 +74,30 @@ export function normalizeWebSearchResult(opts: {
     return { atoms, evidence, sufficient: false };
   }
 
+  const direct = String(opts.directAnswer ?? "").trim();
+  if (direct) {
+    const sourceId = "exa_direct";
+    atoms.push({
+      sourceId,
+      title: "Grounded retrieval answer",
+      url: null,
+      excerpt: clip(direct, 1200),
+      kind: "exa_synthesis",
+      sourceTool: opts.toolName,
+    });
+    evidence.push({
+      id: sourceId,
+      kind: "exa_synthesis",
+      title: "Grounded retrieval answer",
+      url: null,
+      content: direct,
+      retrievedAt: new Date().toISOString(),
+      sourceTool: opts.toolName,
+      ok: true,
+      groundingConfidence: opts.groundingConfidence,
+    });
+  }
+
   const citeByUrl = new Map<
     string,
     { id?: string; title?: string; url?: string; excerpt?: string; description?: string }
@@ -72,6 +105,14 @@ export function normalizeWebSearchResult(opts: {
   for (const c of opts.citations ?? []) {
     const u = String(c?.url ?? "").trim().toLowerCase();
     if (u) citeByUrl.set(u, c);
+  }
+
+  const groundedUrls = new Set<string>();
+  for (const g of opts.grounding ?? []) {
+    for (const cite of g.citations ?? []) {
+      const u = String(cite.url ?? "").trim().toLowerCase();
+      if (u) groundedUrls.add(u);
+    }
   }
 
   const rows: Array<{
@@ -89,10 +130,15 @@ export function normalizeWebSearchResult(opts: {
         id: c.id,
       }));
 
-  for (let i = 0; i < rows.length; i++) {
+  const maxSupporting = direct ? 3 : rows.length;
+  let added = 0;
+  for (let i = 0; i < rows.length && added < maxSupporting; i++) {
     const r = rows[i]!;
     const url = String(r.url ?? "").trim();
     if (!url) continue;
+    if (direct && groundedUrls.size > 0 && !groundedUrls.has(url.toLowerCase())) {
+      continue;
+    }
     const cite = citeByUrl.get(url.toLowerCase());
     const desc = String(
       r.description || r.snippet || cite?.excerpt || cite?.description || "",
@@ -102,7 +148,7 @@ export function normalizeWebSearchResult(opts: {
       80,
     );
     const title = String(r.title || cite?.title || url).slice(0, 200);
-    const excerpt = clip(desc, 400);
+    const excerpt = clip(desc, direct ? 200 : 400);
     atoms.push({
       sourceId,
       title,
@@ -112,19 +158,25 @@ export function normalizeWebSearchResult(opts: {
       kind: "search_result",
       sourceTool: opts.toolName,
     });
-    evidence.push({
-      id: sourceId,
-      kind: "search_result",
-      title,
-      url,
-      content: excerpt || title,
-      retrievedAt: new Date().toISOString(),
-      sourceTool: opts.toolName,
-      ok: Boolean(excerpt || title),
-    });
+    if (!direct) {
+      evidence.push({
+        id: sourceId,
+        kind: "search_result",
+        title,
+        url,
+        content: excerpt || title,
+        retrievedAt: new Date().toISOString(),
+        sourceTool: opts.toolName,
+        ok: Boolean(excerpt || title),
+      });
+    }
+    added += 1;
   }
 
-  const sufficient = atoms.some((a) => a.excerpt.length >= 20);
+  const sufficient = direct
+    ? direct.length >= 8 &&
+      opts.groundingConfidence !== "low"
+    : atoms.some((a) => a.excerpt.length >= 20);
   return { atoms, evidence, sufficient };
 }
 

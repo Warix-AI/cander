@@ -17,6 +17,10 @@ import {
   resolveTurnTask,
 } from "./turn-task.ts";
 import {
+  enrichPreRunWebSearchTasks,
+  webSearchArguments,
+} from "./retrieval-args.ts";
+import {
   deeperResearchQueries,
   extractFactualComponents,
   isCorrectionRetry,
@@ -33,6 +37,8 @@ import {
   type TurnStateInput,
 } from "./state-resolver.ts";
 import { autoRetrieveMemorySnippets } from "./memory-auto.ts";
+import { filterMemorySnippetsForTurn } from "../orchestrator/evidence-hygiene.ts";
+import { wantsAutonomousResearch } from "../web-research/index.ts";
 import type {
   BudgetProfileName,
   ContextPacket,
@@ -167,6 +173,12 @@ export function resolveClarificationRequired(opts: {
 
 export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
   const content = (opts.content || "").trim();
+  const conv = opts.conversationState;
+  const turnTask = resolveTurnTask({
+    content,
+    previous: conv ?? null,
+  });
+
   const resolved = resolveTurnState({
     content,
     taskState: opts.taskState as TurnStateInput["taskState"],
@@ -174,7 +186,7 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
   });
 
   let preRunTasks = buildPreRunTasks(content);
-  const conv = opts.conversationState;
+  const autonomousResearch = wantsAutonomousResearch(content);
   const deepRetry =
     Boolean(conv?.dissatisfactionSignal) ||
     Boolean(conv?.freshnessRequirement) ||
@@ -189,16 +201,21 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     !preRunTasks.some((t) => t.name === "web.search") &&
     !conv.internalDataRequired
   ) {
-    preRunTasks = [
-      {
-        name: "web.search",
-        arguments: { query: content.slice(0, 400) },
-        reason: conv.freshnessRequirement
-          ? "conversation_freshness"
-          : "conversation_external_required",
-      },
-      ...preRunTasks,
-    ];
+      preRunTasks = [
+        {
+          name: "web.search",
+          arguments: webSearchArguments({
+            content,
+            turnTask,
+            conv,
+            query: content.slice(0, 400),
+          }),
+          reason: conv.freshnessRequirement
+            ? "conversation_freshness"
+            : "conversation_external_required",
+        },
+        ...preRunTasks,
+      ];
   }
 
   // Deeper first-pass / retry: component searches + official queries.
@@ -214,7 +231,13 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
       if (preRunTasks.length >= 5) break;
       preRunTasks.push({
         name: "web.search",
-        arguments: { query },
+        arguments: webSearchArguments({
+          content,
+          turnTask,
+          conv,
+          query,
+          deeper: deepRetry,
+        }),
         reason: deepRetry ? "correction_deeper_research" : "multi_component_research",
       });
     }
@@ -314,11 +337,6 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     budgets.concurrency = Math.max(budgets.concurrency, 4);
   }
 
-  const turnTask = resolveTurnTask({
-    content,
-    previous: conv ?? null,
-  });
-
   const responseContract = inferResponseContract(content, {
     presentation: turnTask.presentation,
     operation: turnTask.operation,
@@ -375,12 +393,11 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
       preRunTasks = [
         {
           name: "web.search",
-          arguments: {
-            query: [turnTask.subject, content, turnTask.requestedFields.join(" ")]
-              .filter(Boolean)
-              .join(" ")
-              .slice(0, 400),
-          },
+          arguments: webSearchArguments({
+            content,
+            turnTask,
+            conv,
+          }),
           reason: "turn_task_retrieval",
         },
         ...preRunTasks,
@@ -434,12 +451,14 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     recentTurns: recent,
     pendingStateText: pendingBits.filter(Boolean).join("\n"),
     attachmentSummaries: opts.attachmentSummaries ?? [],
-    memorySnippets:
+    memorySnippets: filterMemorySnippetsForTurn(
       opts.memorySnippets ??
-      autoRetrieveMemorySnippets({
-        content,
-        messages: opts.messages,
-      }),
+        autoRetrieveMemorySnippets({
+          content,
+          messages: opts.messages,
+        }),
+      { turnTask, conversationState: conv },
+    ),
     evidence: opts.evidence ?? [],
     activeBrowserMeta: opts.activeBrowserMeta ?? "",
     ...(opts.build?.requiresBuildCapabilities && opts.build.buildSpecSlice
@@ -450,6 +469,16 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
   // Carry resolved correction into pending text for FM
   if (resolved.correctionNote && !contextPacket.pendingStateText) {
     contextPacket.pendingStateText = `User correction: ${resolved.correctionNote}`;
+  }
+
+  preRunTasks = enrichPreRunWebSearchTasks(preRunTasks, {
+    content,
+    turnTask,
+    conv,
+  });
+
+  if (autonomousResearch) {
+    preRunTasks = preRunTasks.filter((t) => t.name !== "web.search");
   }
 
   return {

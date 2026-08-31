@@ -110,6 +110,12 @@ export function applyConversationDelta(
       if (change.to) {
         entities = demoteActive(entities);
         entities.push({ ...change.to, contextClass: "ACTIVE" });
+        // Topic/domain shift — expire prior web evidence refs.
+        evidence = evidence.map((ev) =>
+          ev.contextClass === "ACTIVE"
+            ? { ...ev, contextClass: "EXPIRED" as const }
+            : ev,
+        );
       }
     }
   }

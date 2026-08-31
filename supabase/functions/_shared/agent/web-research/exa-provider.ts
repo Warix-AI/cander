@@ -20,6 +20,14 @@ import {
   makeWebSource,
 } from "../../web-research-contract/types.ts";
 import {
+  exaBundleQualityOk,
+  parseExaSynthesizedResponse,
+} from "../../web-research-contract/exa-synthesized.ts";
+import {
+  resolveExaRetrievalPolicy,
+  type ExaRetrievalMode,
+} from "../../web-research-contract/retrieval-policy.ts";
+import {
   exaApiKey,
   exaDeepSearchEnabled,
   webResearchEnabled,
@@ -52,6 +60,14 @@ type ExaResponse = {
   requestId?: string;
   results?: ExaResultRow[];
   costDollars?: number | { total?: number };
+  output?: {
+    content?: string | Record<string, unknown>;
+    grounding?: Array<{
+      field?: string;
+      citations?: Array<{ url?: string; title?: string }>;
+      confidence?: string;
+    }>;
+  };
 };
 
 function costFromExa(data: ExaResponse): number | undefined {
@@ -157,8 +173,19 @@ export function createExaWebResearchProvider(): WebResearchProvider {
         };
       }
 
+      const hints = input.retrievalHints as
+        | import("../../web-research-contract/retrieval-policy.ts").TurnRetrievalHints
+        | undefined;
+      const policyBase = resolveExaRetrievalPolicy(query, {
+        deeper: input.deeper,
+        escalate: (input.escalate as ExaRetrievalMode | null) ?? null,
+        hints,
+      });
+      const policy = input.retrievalMode
+        ? { ...policyBase, mode: input.retrievalMode as ExaRetrievalMode }
+        : policyBase;
       const count = Math.min(
-        input.count ?? 5,
+        input.count ?? policy.numResults,
         WEB_RESEARCH_LIMITS.maxResultsPerRequest,
       );
       const sb = createServiceSupabase();
@@ -170,8 +197,10 @@ export function createExaWebResearchProvider(): WebResearchProvider {
         query,
         extra: JSON.stringify({
           count,
+          retrievalMode: policy.mode,
+          schema: policy.outputSchema.type,
           include: input.includeDomains ?? [],
-          start: input.startPublishedDate ?? "",
+          start: input.startPublishedDate ?? policy.startPublishedDate ?? "",
         }),
       });
 
@@ -202,9 +231,13 @@ export function createExaWebResearchProvider(): WebResearchProvider {
 
       const body: Record<string, unknown> = {
         query,
-        type: "auto",
+        type: policy.mode,
         numResults: count,
-        contents: { highlights: true, text: { maxCharacters: 1200 } },
+        outputSchema: policy.outputSchema,
+        systemPrompt: policy.systemPrompt,
+        contents: policy.useHighlightsOnly
+          ? { highlights: { maxCharacters: 800 } }
+          : { highlights: true, text: { maxCharacters: 1200 } },
       };
       if (input.includeDomains?.length) {
         body.includeDomains = input.includeDomains.slice(0, 5);
@@ -212,12 +245,16 @@ export function createExaWebResearchProvider(): WebResearchProvider {
       if (input.excludeDomains?.length) {
         body.excludeDomains = input.excludeDomains.slice(0, 5);
       }
-      if (input.startPublishedDate) {
-        body.startPublishedDate = input.startPublishedDate;
-      } else if (freshness) {
-        const d = new Date();
-        d.setUTCDate(d.getUTCDate() - 14);
-        body.startPublishedDate = d.toISOString().slice(0, 10);
+      const startPublished =
+        input.startPublishedDate ?? policy.startPublishedDate;
+      if (startPublished) {
+        body.startPublishedDate = startPublished;
+      }
+      if (policy.maxAgeHours != null) {
+        body.maxAgeHours = policy.maxAgeHours;
+      }
+      if (freshness) {
+        body.livecrawl = "preferred";
       }
 
       try {
@@ -228,21 +265,53 @@ export function createExaWebResearchProvider(): WebResearchProvider {
           input.signal,
         );
         const retrievedAt = new Date().toISOString();
-        const sources = mapRows(data.results ?? [], "search", retrievedAt).slice(
-          0,
-          count,
+        const outputSchemaType =
+          policy.outputSchema.type === "object" ? "object" : "text";
+        const bundle = parseExaSynthesizedResponse({
+          query,
+          retrievalMode: policy.mode,
+          output: data.output ?? null,
+          results: data.results ?? [],
+          outputSchemaType,
+          requestId: data.requestId,
+          costDollars: costFromExa(data),
+          retrievedAt,
+        });
+
+        const groundedSources = bundle.supportingResults.filter((s) =>
+          bundle.grounding.some((g) =>
+            (g.citations ?? []).some(
+              (c) => String(c.url ?? "").trim() === s.url,
+            ),
+          ),
         );
+        const sources = dedupeSources([
+          ...groundedSources,
+          ...bundle.supportingResults,
+        ]).slice(0, count);
         const cost = costFromExa(data);
+        const evidenceText = bundle.directAnswer
+          ? bundle.directAnswer
+          : evidenceTextFromSources(sources);
         const evidence: WebEvidence = {
           query,
           sources,
-          evidenceText: evidenceTextFromSources(sources),
+          evidenceText,
           provider: "exa",
           mode: "search",
           retrievedAt,
           requestId: data.requestId,
           costDollars: cost,
           truncated: (data.results?.length ?? 0) > sources.length,
+          directAnswer: bundle.directAnswer || undefined,
+          structuredAnswer: bundle.structuredAnswer,
+          grounding: bundle.grounding,
+          groundingConfidence: bundle.groundingConfidence,
+          retrievalMode: policy.mode,
+          outputSchemaType,
+          warnings: exaBundleQualityOk(bundle)
+            ? undefined
+            : ["synthesized_output_weak"],
         };
 
         if (sb) {

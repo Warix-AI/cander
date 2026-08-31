@@ -38,7 +38,14 @@ export type AppActionHandlers = {
       excerpt: string;
     }>;
   };
-  webSearch: (query: string) => Promise<{
+  webSearch: (
+    query: string,
+    opts?: {
+      retrievalHints?: Record<string, unknown>;
+      escalate?: string;
+      deeper?: boolean;
+    },
+  ) => Promise<{
     ok: boolean;
     detail: string;
     results: Array<{
@@ -51,6 +58,8 @@ export type AppActionHandlers = {
       snippet?: string;
     }>;
     citations?: unknown[];
+    synthesis?: unknown;
+    retrievalMode?: string | null;
   }>;
   webOpen: (url: string) => Promise<{
     ok: boolean;

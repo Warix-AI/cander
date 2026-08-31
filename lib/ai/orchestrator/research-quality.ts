@@ -230,6 +230,23 @@ export function evaluateResearchQuality(opts: {
   deeper?: boolean;
 }): ResearchQualityGate {
   const { question, evidence } = opts;
+
+  const synthesized = evidence.filter(
+    (e) =>
+      e.kind === "exa_synthesis" &&
+      e.content.trim().length >= 8,
+  );
+  if (synthesized.length) {
+    return {
+      evidenceSufficient: true,
+      conflictingEvidence: false,
+      calculationVerified: questionNeedsArithmetic(question) ? false : null,
+      confidence: "high",
+      needsMoreInvestigation: false,
+      reason: "exa_synthesized_output",
+    };
+  }
+
   const pages = evidence.filter(
     (e) =>
       (e.kind === "web_page" || e.kind === "browser" || e.kind === "knowledge") &&

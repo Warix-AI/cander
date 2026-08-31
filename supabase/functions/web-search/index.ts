@@ -71,6 +71,15 @@ Deno.serve(async (req) => {
     const count = Math.min(Number(body?.count) || 5, 8);
     const workspaceId =
       typeof body?.workspaceId === "string" ? body.workspaceId : null;
+    const retrievalMode =
+      typeof body?.retrievalMode === "string" ? body.retrievalMode : undefined;
+    const escalate =
+      typeof body?.escalate === "string" ? body.escalate : undefined;
+    const deeper = body?.deeper === true;
+    const retrievalHints =
+      body?.retrievalHints && typeof body.retrievalHints === "object"
+        ? (body.retrievalHints as Record<string, unknown>)
+        : undefined;
 
     if (!query) {
       return json(400, { error: "query required", requestId: id });
@@ -134,6 +143,10 @@ Deno.serve(async (req) => {
       count,
       ownerId: user.id,
       workspaceId,
+      ...(retrievalMode ? { retrievalMode } : {}),
+      ...(escalate ? { escalate } : {}),
+      ...(deeper ? { deeper } : {}),
+      ...(retrievalHints ? { retrievalHints } : {}),
     });
     const results = evidence.sources.map((s) => ({
       title: s.title,
@@ -148,6 +161,9 @@ Deno.serve(async (req) => {
       mode: "search",
       status: 200,
       resultCount: results.length,
+      directOutputPresent: Boolean(evidence.directAnswer),
+      groundingCount: evidence.grounding?.length ?? 0,
+      retrievalMode: evidence.retrievalMode ?? null,
       durationMs: Date.now() - started,
       exaRequestId: evidence.requestId ?? null,
     });
@@ -160,6 +176,12 @@ Deno.serve(async (req) => {
       citations: evidence.sources,
       mode: "search",
       provider: evidence.provider,
+      directAnswer: evidence.directAnswer ?? null,
+      structuredAnswer: evidence.structuredAnswer ?? null,
+      grounding: evidence.grounding ?? [],
+      groundingConfidence: evidence.groundingConfidence ?? "none",
+      retrievalMode: evidence.retrievalMode ?? null,
+      outputSchemaType: evidence.outputSchemaType ?? "none",
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "web search error";

@@ -60,7 +60,9 @@ import {
   answerShapeFromContract,
   buildSynthesisInstruction,
   deterministicAnswerFromEvidence,
+  extractRequestedItemCount,
   inferAnswerShape,
+  inferResponseContract,
   looksLikeContextOverflow,
   shrinkEvidenceForRetry,
 } from "../answer-shape/index.ts";
@@ -76,6 +78,24 @@ import {
 } from "@/lib/ai/orchestrator/research-quality";
 import { shouldEscalateToBrowser } from "@/lib/computer/tool-routing";
 import {
+  evaluateExaSynthesisQuality,
+  type ExaRetrievalMode,
+} from "@/lib/ai/web-research/index.ts";
+import {
+  filterEvidenceForCurrentTurn,
+  filterTaskFactsForTurn,
+} from "@/lib/ai/orchestrator/evidence-hygiene.ts";
+import {
+  getRetrievalTrace,
+  logRetrievalTrace,
+  patchRetrievalTrace,
+  recordEscalation,
+  recordSearchTrace,
+  resetRetrievalTrace,
+  setFinalSource,
+  type FinalAnswerSource,
+} from "@/lib/ai/orchestrator/retrieval-trace.ts";
+import {
   citationsFromAtoms,
   compileTurnProfile,
   formatTurnProfileInstructions,
@@ -84,7 +104,9 @@ import {
   normalizeWebPageResult,
   normalizeWebSearchResult,
   parseSemanticResponse,
+  resolveTurnTask,
   runParallelTasks,
+  webSearchArguments,
   applyConversationDelta,
   resolveConversationDelta,
   semanticBlocksInstruction,
@@ -163,6 +185,11 @@ function narrowDeterministicFallback(opts: {
   question: string;
   evidence: TurnEvidence[];
 }): string | null {
+  const direct = opts.evidence.find(
+    (e) => e.ok && e.kind === "exa_synthesis" && e.content.trim(),
+  );
+  if (direct) return direct.content.trim();
+
   const breakdown = tryDeterministicComponentAnswer(opts.question, opts.evidence);
   if (breakdown) return breakdown;
   if (!hasUsableEvidenceSnippets(opts.evidence)) return null;
@@ -184,6 +211,30 @@ function narrowDeterministicFallback(opts: {
     shape,
     evidence: strong.length ? strong : synthesis.compact.slice(0, 3),
   });
+}
+
+function tryExaDirectAnswer(
+  question: string,
+  evidence: TurnEvidence[],
+): string | null {
+  const direct = evidence.find(
+    (e) =>
+      e.ok &&
+      e.kind === "exa_synthesis" &&
+      e.content.trim().length >= 8 &&
+      e.groundingConfidence !== "low",
+  );
+  if (!direct) return null;
+  const contract = inferResponseContract(question);
+  if (
+    contract.presentation === "list" ||
+    contract.presentation === "bullet_list" ||
+    extractRequestedItemCount(question) != null ||
+    /\b(list\s+(every|all|each)|show\s+(me\s+)?(all|every))\b/i.test(question)
+  ) {
+    return null;
+  }
+  return direct.content.trim();
 }
 
 function evidenceAsSnippets(items: TurnEvidence[]): EvidenceSnippet[] {
@@ -215,6 +266,174 @@ function tryDeterministicComponentAnswer(
     facts,
     total: sum.total,
   });
+}
+
+async function escalateExaSearchIfNeeded(opts: {
+  question: string;
+  conversationState: ReturnType<typeof applyConversationDelta>;
+  toolResults: AiToolCallResult[];
+  evidence: TurnEvidence[];
+  provenanceBatches: ProvenanceAtom[][];
+  report: (progress: AgentTurnProgress) => void;
+}): Promise<void> {
+  const MAX_ESCALATIONS = 4;
+
+  for (let attempt = 0; attempt < MAX_ESCALATIONS; attempt++) {
+    const searches = opts.toolResults.filter(
+      (r) => r.name === "web.search" && r.ok,
+    );
+    if (!searches.length) return;
+
+    const last = searches[searches.length - 1]!;
+    const data = (last.data ?? {}) as Record<string, unknown>;
+    const synthesis = data.synthesis as
+      | {
+          directAnswer?: string;
+          grounding?: Array<{ confidence?: string }>;
+          groundingConfidence?: string;
+          retrievalMode?: string | null;
+          query?: string;
+        }
+      | undefined;
+    const directAnswer = String(
+      data.directAnswer ?? synthesis?.directAnswer ?? "",
+    ).trim();
+
+    const turnTask = resolveTurnTask({
+      content: opts.question,
+      previous: opts.conversationState,
+    });
+    const hints =
+      (data.retrievalHints as Record<string, unknown> | undefined) ??
+      ({
+        subject: turnTask.subject,
+        operation: turnTask.operation,
+        requestedFields: turnTask.requestedFields,
+        requestedItemCount: turnTask.requestedItemCount,
+        freshness: turnTask.freshness,
+        depth: turnTask.depth,
+        presentation: turnTask.presentation,
+      } as import("@/lib/ai/web-research/index.ts").TurnRetrievalHints);
+    const retrievalMode = (data.retrievalMode ??
+      synthesis?.retrievalMode ??
+      "fast") as ExaRetrievalMode;
+
+    recordSearchTrace({
+      mode: retrievalMode,
+      outputSchemaType:
+        data.outputSchemaType === "object" ? "object" : directAnswer ? "text" : "none",
+      numResults: Array.isArray(data.results)
+        ? (data.results as unknown[]).length
+        : undefined,
+      directOutputPresent: Boolean(directAnswer),
+      groundingCount: Array.isArray(data.grounding)
+        ? (data.grounding as unknown[]).length
+        : (synthesis?.grounding?.length ?? 0),
+      escalatedFrom: getRetrievalTrace().escalatedFrom ?? null,
+    });
+
+    if (!directAnswer && !synthesis) return;
+
+    const quality = evaluateExaSynthesisQuality({
+      bundle: {
+        provider: "exa",
+        retrievalMode,
+        query: String(data.query ?? opts.question),
+        directAnswer,
+        grounding: Array.isArray(data.grounding)
+          ? (data.grounding as Array<{
+              field?: string;
+              citations?: Array<{ url?: string; title?: string }>;
+              confidence?: string;
+            }>)
+          : (synthesis?.grounding ?? []),
+        groundingConfidence:
+          (data.groundingConfidence as
+            | "low"
+            | "medium"
+            | "high"
+            | "none") ??
+          (synthesis?.groundingConfidence as
+            | "low"
+            | "medium"
+            | "high"
+            | "none") ??
+          "none",
+        supportingResults: [],
+        outputSchemaType: "text",
+      },
+      question: opts.question,
+      hints,
+    });
+
+    if (quality.sufficient || !quality.escalateTo) return;
+
+    const query = String(data.query ?? opts.question);
+    opts.report({
+      phase: "tool",
+      label: "Thinking",
+      detail: "Searching",
+      toolName: "web.search",
+    });
+    const result = await executeAuthorizedTool({
+      name: "web.search",
+      arguments: webSearchArguments({
+        content: opts.question,
+        turnTask,
+        conv: opts.conversationState,
+        query,
+        escalate: quality.escalateTo,
+      }),
+    });
+    opts.toolResults.push(result);
+    const mapped = evidenceFromToolResult(result);
+    appendEvidence(opts.evidence, mapped.evidence);
+    opts.provenanceBatches.push(mapped.atoms);
+
+    recordEscalation(retrievalMode, quality.escalateTo);
+    console.log("[EXA_ESCALATION]", {
+      from: retrievalMode,
+      to: quality.escalateTo,
+      issues: quality.issues,
+      ok: result.ok,
+      attempt: attempt + 1,
+    });
+  }
+}
+
+function fmFinalSource(evidence: TurnEvidence[]): FinalAnswerSource {
+  return evidence.some((e) => e.ok && e.kind === "exa_synthesis")
+    ? "fm_verbalized"
+    : "fm_synthesis";
+}
+
+function finalizeTurnResult<T extends AiGenerateResult>(
+  result: T,
+  source: FinalAnswerSource,
+): T {
+  setFinalSource(source);
+  logRetrievalTrace();
+  return result;
+}
+
+function applyEvidenceHygiene(opts: {
+  evidence: TurnEvidence[];
+  question: string;
+  conversationState: ReturnType<typeof applyConversationDelta>;
+}): void {
+  const turnTask = resolveTurnTask({
+    content: opts.question,
+    previous: opts.conversationState,
+  });
+  const { evidence, dropped } = filterEvidenceForCurrentTurn(opts.evidence, {
+    turnTask,
+    conversationState: opts.conversationState,
+    userMessage: opts.question,
+  });
+  if (dropped > 0) {
+    opts.evidence.splice(0, opts.evidence.length, ...evidence);
+    patchRetrievalTrace({ staleEvidenceDropped: dropped });
+  }
 }
 
 async function deepenRetrievalIfNeeded(opts: {
@@ -313,16 +532,17 @@ function evidenceFromToolResult(
   result: AiToolCallResult,
 ): { evidence: TurnEvidence[]; atoms: ProvenanceAtom[] } {
   if (result.name === "web.search" || result.name === "web.research") {
+    const data = (result.data ?? {}) as Record<string, unknown>;
     const rows =
-      (result.data?.results as Array<{
+      (data.results as Array<{
         title: string;
         url: string;
         description?: string;
         snippet?: string;
         id?: string;
       }>) ?? [];
-    const cites = Array.isArray(result.data?.citations)
-      ? (result.data?.citations as Array<{
+    const cites = Array.isArray(data.citations)
+      ? (data.citations as Array<{
           id?: string;
           title?: string;
           url?: string;
@@ -330,9 +550,42 @@ function evidenceFromToolResult(
           description?: string;
         }>)
       : [];
+    const synthesis = data.synthesis as
+      | {
+          directAnswer?: string;
+          structuredAnswer?: Record<string, unknown> | null;
+          grounding?: Array<{
+            field?: string;
+            citations?: Array<{ url?: string; title?: string }>;
+            confidence?: string;
+          }>;
+          groundingConfidence?: "low" | "medium" | "high" | "none";
+          retrievalMode?: string | null;
+        }
+      | undefined;
     const normalized = normalizeWebSearchResult({
       toolName: result.name,
       ok: result.ok,
+      directAnswer:
+        String(data.directAnswer ?? synthesis?.directAnswer ?? "").trim() ||
+        undefined,
+      structuredAnswer:
+        (data.structuredAnswer as Record<string, unknown> | null) ??
+        synthesis?.structuredAnswer ??
+        null,
+      grounding:
+        (Array.isArray(data.grounding)
+          ? data.grounding
+          : synthesis?.grounding) ?? [],
+      groundingConfidence:
+        (data.groundingConfidence as
+          | "low"
+          | "medium"
+          | "high"
+          | "none"
+          | undefined) ?? synthesis?.groundingConfidence,
+      retrievalMode:
+        (data.retrievalMode as string | null) ?? synthesis?.retrievalMode ?? null,
       results: rows,
       citations: cites,
     });
@@ -552,10 +805,24 @@ async function buildFmPrompt(
     refreshOnDeviceInventoryCache(request.workspaceId),
   ]);
   const taskState = getThreadTaskState(request.threadId);
+  const conv = getConversationTurnState(request.threadId);
+  const turnTask = resolveTurnTask({
+    content: request.content,
+    previous: conv,
+  });
+  const filteredTaskState = taskState
+    ? {
+        ...taskState,
+        facts: filterTaskFactsForTurn(taskState, {
+          turnTask,
+          conversationState: conv,
+        }),
+      }
+    : null;
   const taskActive =
-    Boolean(taskState) &&
-    taskState!.status !== "idle" &&
-    taskState!.status !== "completed";
+    Boolean(filteredTaskState) &&
+    filteredTaskState!.status !== "idle" &&
+    filteredTaskState!.status !== "completed";
   const priorTurns = hasPriorConversationTurns(request.messages, { taskActive });
   const snap = getOnDeviceWorkspaceSnapshot({
     workspaceId: request.workspaceId,
@@ -569,7 +836,7 @@ async function buildFmPrompt(
   const member =
     getMembersSnapshot().find((m) => m.id === actorId) ??
     getMembersSnapshot()[0];
-  const taskBlock = formatTaskStateForPrompt(taskState);
+  const taskBlock = formatTaskStateForPrompt(filteredTaskState);
   const toolBlock = formatTurnProfileInstructions(profile);
   const pkg = buildContextPackage({
     route: "on_device",
@@ -730,6 +997,7 @@ async function runLocalTurnOrchestratorInner(
     });
     const conversationState = applyConversationDelta(priorConv, convDelta);
     setConversationTurnState(request.threadId, conversationState);
+    resetRetrievalTrace();
 
     const { resolveBuildTurnContext, shouldRunBuildLocally } = await import(
       "@/lib/ai/build/turn-context"
@@ -984,6 +1252,46 @@ async function runLocalTurnOrchestratorInner(
         }
       }
 
+      await escalateExaSearchIfNeeded({
+        question: request.content,
+        conversationState,
+        toolResults,
+        evidence,
+        provenanceBatches,
+        report,
+      });
+
+      applyEvidenceHygiene({
+        evidence,
+        question: request.content,
+        conversationState,
+      });
+
+      const autonomousTask = toolResults.find(
+        (r) => r.name === "create_work_task" && r.ok,
+      );
+      if (autonomousTask) {
+        patchRetrievalTrace({ provider: "none", mode: "agent" });
+        return finalizeTurnResult(
+          {
+            content: safeContent(
+              autonomousTask.output,
+              "Started a research task.",
+            ),
+            runtime: "apple-local",
+            offline: false,
+            condensationOccurred: false,
+            aiChatId: request.aiChatId ?? null,
+            toolResults,
+            citations: finalizeCitations(
+              toolResults,
+              mergeProvenanceAtoms(provenanceBatches),
+            ),
+          },
+          "work_task",
+        );
+      }
+
       await deepenRetrievalIfNeeded({
         question: request.content,
         evidence,
@@ -1003,18 +1311,40 @@ async function runLocalTurnOrchestratorInner(
         evidence,
       );
       if (deterministicBreakdown) {
-        return {
-          content: deterministicBreakdown,
-          runtime: "apple-local",
-          offline: false,
-          condensationOccurred: false,
-          aiChatId: request.aiChatId ?? null,
-          toolResults: toolResults.length ? toolResults : undefined,
-          citations: finalizeCitations(
-            toolResults,
-            mergeProvenanceAtoms(provenanceBatches),
-          ),
-        };
+        return finalizeTurnResult(
+          {
+            content: deterministicBreakdown,
+            runtime: "apple-local",
+            offline: false,
+            condensationOccurred: false,
+            aiChatId: request.aiChatId ?? null,
+            toolResults: toolResults.length ? toolResults : undefined,
+            citations: finalizeCitations(
+              toolResults,
+              mergeProvenanceAtoms(provenanceBatches),
+            ),
+          },
+          "deterministic_render",
+        );
+      }
+
+      const exaDirect = tryExaDirectAnswer(request.content, evidence);
+      if (exaDirect) {
+        return finalizeTurnResult(
+          {
+            content: exaDirect,
+            runtime: "apple-local",
+            offline: false,
+            condensationOccurred: false,
+            aiChatId: request.aiChatId ?? null,
+            toolResults: toolResults.length ? toolResults : undefined,
+            citations: finalizeCitations(
+              toolResults,
+              mergeProvenanceAtoms(provenanceBatches),
+            ),
+          },
+          "exa_search_output",
+        );
       }
 
       // Recompile after pre-run: usually disallowed tools → synthesis-only.
@@ -1228,13 +1558,16 @@ async function runLocalTurnOrchestratorInner(
             return repair.text;
           },
         });
-        return {
-          ...lastGenerate,
-          content: completed.content,
-          toolResults: toolResults.length ? toolResults : undefined,
-          citations: finalizeCitations(toolResults, atoms()),
-          ...(parsed.blocks?.length ? { blocks: parsed.blocks } : {}),
-        };
+        return finalizeTurnResult(
+          {
+            ...lastGenerate,
+            content: completed.content,
+            toolResults: toolResults.length ? toolResults : undefined,
+            citations: finalizeCitations(toolResults, atoms()),
+            ...(parsed.blocks?.length ? { blocks: parsed.blocks } : {}),
+          },
+          fmFinalSource(evidence),
+        );
       }
 
       // Enforce profile allowlist + clarification gate
@@ -1442,5 +1775,9 @@ async function runLocalTurnOrchestratorInner(
     };
   } finally {
     setTurnToolExecutionListener(null);
+    if (!getRetrievalTrace().finalSource) {
+      setFinalSource(fmFinalSource(evidence));
+    }
+    logRetrievalTrace();
   }
 }
