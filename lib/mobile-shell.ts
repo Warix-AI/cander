@@ -254,6 +254,8 @@ export function syncNativeKeyboardStyle(theme?: "light" | "dark") {
 
 /** Dismiss the native keyboard (Capacitor). Safe no-op on web. */
 export function dismissNativeKeyboard() {
+  pluginHeight = 0;
+  writeKeyboardInset(0);
   if (typeof document !== "undefined") {
     const active = document.activeElement;
     if (

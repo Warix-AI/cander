@@ -27,11 +27,8 @@ import { BrowserSurfaceHost } from "@/components/browser/BrowserSurfaceHost";
 import { BrowserAddressField } from "@/components/browser/BrowserAddressField";
 import { BrowserChromeTooltip } from "@/components/browser/BrowserChromeTooltip";
 import { FaviconImage } from "@/components/browser/FaviconImage";
-import {
-  getBrowserSurfaceAdapter,
-  resumeNativeBrowserSurfaces,
-  suppressNativeBrowserSurfaces,
-} from "@/lib/browser-surface";
+import { NativeOverlayGate } from "@/components/browser/NativeOverlayGate";
+import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import {
   MobileBottomSheet,
   ProjectAddSheetHeader,
@@ -298,10 +295,29 @@ export function ProjectBrowserPanel() {
   const canBack = active.historyIndex > 0;
   const canForward = active.historyIndex < active.history.length - 1;
   const extraProjects = allProjects.filter((item) => item.id !== projectId);
+  const [panelRevealReady, setPanelRevealReady] = useState(
+    !mobile || mobileSurface === "panel",
+  );
+  useEffect(() => {
+    if (!mobile) {
+      setPanelRevealReady(true);
+      return;
+    }
+    if (mobileSurface !== "panel") {
+      setPanelRevealReady(false);
+      return;
+    }
+    setPanelRevealReady(false);
+    const t = window.setTimeout(
+      () => setPanelRevealReady(true),
+      MOBILE_PAGER_MS + 20,
+    );
+    return () => window.clearTimeout(t);
+  }, [mobile, mobileSurface]);
   // Native WKWebView / WebContentsView must hide when chat covers the panel.
   const surfaceActive =
     panelMode !== "collapsed" &&
-    (!mobile || mobileSurface === "panel");
+    (!mobile || (mobileSurface === "panel" && panelRevealReady));
   const address =
     active.kind === "agent-browser"
       ? (computerSession?.currentUrl ?? active.url)
@@ -947,7 +963,7 @@ function ProjectTabStrip({
   onAddProject: (project: SpaceProject) => void;
 }) {
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
       {tabs.map((tab) => (
         <ProjectTabButton
           key={tab.id}
@@ -992,7 +1008,7 @@ function ProjectMobileTabBar({
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-border bg-sidebar px-2 py-1.5 pb-[calc(env(safe-area-inset-bottom,0px)+0.375rem)]">
+    <div className="flex shrink-0 items-center gap-1.5 overflow-hidden border-t border-border bg-sidebar px-2 py-1.5 pb-[calc(env(safe-area-inset-bottom,0px)+0.375rem)]">
       {tabs.map((tab) => {
         const active = tab.id === activeId;
         const label = labelFor(tab);
@@ -1294,21 +1310,6 @@ function ProjectTabButton({
       )}
     </button>
   );
-}
-
-function NativeOverlayGate({ open }: { open: boolean }) {
-  useEffect(() => {
-    if (!open) return;
-    // Native WebContentsView sits above React portals — collapse it while menus are open.
-    suppressNativeBrowserSurfaces();
-    const adapter = getBrowserSurfaceAdapter();
-    void adapter.setChromeOverlay?.(true);
-    return () => {
-      resumeNativeBrowserSurfaces();
-      void adapter.setChromeOverlay?.(false);
-    };
-  }, [open]);
-  return null;
 }
 
 function AddTabMenu({

@@ -155,13 +155,15 @@ import type {
 } from "@/lib/types";
 import { isSpaceLibrarySpace } from "@/lib/space-library";
 import {
-  ensureContinuousChat,
+  adoptThreadAsSpaceDefault,
+  openSpaceDefaultChat,
   startContinuousChat,
   summarizeSession,
   threadHasTurns,
   upsertPersistentProjectThread,
 } from "@/lib/persistent-chat";
 import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
+import { dismissNativeKeyboard } from "@/lib/mobile-shell";
 import {
   requestMobileSurfaceEnter,
 } from "@/lib/mobile-nav-transition";
@@ -256,7 +258,7 @@ type AppContextValue = {
   setPanelMode: (mode: PanelMode) => void;
   setPanelIntent: (intent: PanelIntent) => void;
   mobileSurface: MobileSurface;
-  setMobileSurface: (surface: MobileSurface) => void;
+  setMobileSurface: React.Dispatch<React.SetStateAction<MobileSurface>>;
   mobileMenuScreen: MobileMenuScreen;
   setMobileMenuScreen: (screen: MobileMenuScreen) => void;
   sidebarOpen: boolean;
@@ -315,6 +317,10 @@ type AppContextValue = {
     id: SpaceId,
     opts?: { researchTool?: ResearchTool },
   ) => void;
+  /** Create a Build / Explore project from the active draft chat. */
+  startDraftProject: (space: SpaceId) => Promise<void>;
+  /** Promote the draft chat to the sidebar default for a space. */
+  setDraftAsDefaultChat: (space: SpaceId) => void;
   collapseDraft: () => void;
   /** Close space chat and restore the full workspace dashboard. */
   closeSpaceChat: () => void;
@@ -530,7 +536,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     panelRatio: number;
     panelMode: PanelMode;
   } | null>(null);
-  const [mobileSurface, setMobileSurface] = useState<MobileSurface>("chat");
+  const [mobileSurface, setMobileSurfaceState] = useState<MobileSurface>("chat");
+  const setMobileSurface = useCallback(
+    (value: MobileSurface | ((prev: MobileSurface) => MobileSurface)) => {
+      setMobileSurfaceState((prev) => {
+        const next = typeof value === "function" ? value(prev) : value;
+        if (next !== prev && next !== "chat") {
+          dismissNativeKeyboard();
+        }
+        return next;
+      });
+    },
+    [],
+  );
   const [mobileMenuScreen, setMobileMenuScreen] =
     useState<MobileMenuScreen>("main");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -748,11 +766,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           let tid = "";
           let hasMessages = false;
           setThreads((current) => {
-            const { threads: next, id: nextId } = ensureContinuousChat(
+            const { threads: next, id: nextId } = openSpaceDefaultChat(
               current,
               id,
               prevSpace,
-              threadId,
             );
             tid = nextId;
             hasMessages = threadHasTurns(
@@ -974,11 +991,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 projectId,
                 space,
               )
-            : ensureContinuousChat(
+            : openSpaceDefaultChat(
                 current,
                 workspaceId,
                 space,
-                threadId,
               );
         tid = result.id;
         hasMessages = threadHasTurns(
@@ -1183,11 +1199,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let tid = "";
       let hasMessages = false;
       setThreads((current) => {
-        const { threads: next, id: nextId } = ensureContinuousChat(
+        const { threads: next, id: nextId } = openSpaceDefaultChat(
           current,
           workspaceId,
           id,
-          threadId,
         );
         tid = nextId;
         hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
@@ -1219,31 +1234,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (id === "research")
         setResearchTool(opts?.researchTool ?? "browser");
       if (threadId && !projectId) {
-        let tid = threadId;
-        setThreads((current) => {
-          const existing = current.find((item) => item.id === threadId);
-          if (
-            existing?.persistent &&
-            !existing.projectId &&
-            existing.workspaceId === workspaceId
-          ) {
-            const upserted = ensureContinuousChat(
-              current,
-              workspaceId,
-              id,
-              threadId,
-            );
-            tid = upserted.id;
-            return upserted.threads;
-          }
-          return current.map((item) =>
+        setThreads((current) =>
+          current.map((item) =>
             item.id === threadId ? { ...item, spaceId: id } : item,
-          );
-        });
-        setThreadId(tid);
+          ),
+        );
       }
     },
-    [threadId, workspaceId, projectId],
+    [threadId, projectId],
+  );
+
+  const setDraftAsDefaultChat = useCallback(
+    (space: SpaceId) => {
+      if (!isChatSpace(space) || !threadId) return;
+      let tid = threadId;
+      setThreads((current) => {
+        const result = adoptThreadAsSpaceDefault(
+          current,
+          workspaceId,
+          space,
+          threadId,
+        );
+        tid = result.id;
+        return result.threads;
+      });
+      setThreadId(tid);
+      setDrafting(false);
+      setSpaceId(null);
+      setView("chat");
+      setPanelIntent("browse");
+      setPanelMode("split");
+    },
+    [threadId, workspaceId],
   );
 
   const collapseDraft = useCallback(() => {
@@ -1959,19 +1981,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           list = upserted.threads;
           activeId = upserted.id;
         } else if (useContinuousPersistent) {
-          const lens =
-            chatSpace ??
-            (thread?.spaceId && isChatSpace(thread.spaceId)
-              ? thread.spaceId
-              : "work");
-          const upserted = ensureContinuousChat(
-            list,
-            workspaceId,
-            lens,
-            threadId,
-          );
-          list = upserted.threads;
-          activeId = upserted.id;
+          const detachedDraft = view === "chat" && !spaceId && !opts?.space;
+          if (detachedDraft) {
+            activeId = threadId ?? nextId("t");
+          } else {
+            const lens =
+              chatSpace ??
+              (spaceId && isChatSpace(spaceId)
+                ? spaceId
+                : thread?.spaceId && isChatSpace(thread.spaceId)
+                  ? thread.spaceId
+                  : "work");
+            const upserted = openSpaceDefaultChat(list, workspaceId, lens);
+            list = upserted.threads;
+            activeId = upserted.id;
+          }
         }
         const existing = list.find((item) => item.id === activeId);
         if (existing) {
@@ -2946,11 +2970,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let tid = threadId;
       let hasMessages = Boolean(thread);
       setThreads((current) => {
-        const { threads: next, id: nextId } = ensureContinuousChat(
+        const { threads: next, id: nextId } = openSpaceDefaultChat(
           current,
           workspaceId,
           dest,
-          threadId,
         );
         tid = nextId;
         hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
@@ -2997,35 +3020,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setJobId(null);
       setSkillId(null);
       if (chatActive) {
-        const lens: SpaceId =
-          isChatSpace(dest)
-            ? dest
-            : chatSpaceId(spaceId) ??
-              (thread?.spaceId && isChatSpace(thread.spaceId)
-                ? thread.spaceId
-                : "work");
-        let tid = "";
-        let hasMessages = false;
-        setThreads((current) => {
-          const { threads: next, id: nextId } = ensureContinuousChat(
-            current,
-            workspaceId,
-            lens,
-            threadId,
-          );
-          tid = nextId;
-          hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
-          return next;
-        });
-        setThreadId(tid);
-        setDrafting(!hasMessages);
+        if (isChatSpace(dest)) {
+          openSpaceChat(dest);
+          return;
+        }
+        setView("space");
+        setSpaceId(dest);
+        setProjectId(null);
+        setConnectorId(null);
+        setJobId(null);
+        setSkillId(null);
+        setDrafting(Boolean(threadId) && drafting);
         setPanelIntent("execute");
         setPanelMode("split");
         setMobileSurface("panel");
         pushTarget({
           view: "space",
           spaceId: dest,
-          threadId: tid,
+          threadId,
           projectId: null,
           panelMode: "split",
           panelIntent: "execute",
@@ -3136,6 +3148,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (spaceAllowed("work", allowed, opts)) return;
     queueMicrotask(() => openSpace("work"));
   }, [spaceId, workspaceId, workspacePolicies, billingPlan, openSpace, actor.id]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    setThreads((current) =>
+      openSpaceDefaultChat(current, workspaceId, "work").threads,
+    );
+  }, [workspaceId]);
 
   const isPinned = useCallback(
     (kind: PinKind, id: string) =>
@@ -3297,6 +3316,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return tid;
   }, [workspaceId, actor.id, pushTarget]);
 
+  const startDraftProject = useCallback(
+    async (space: SpaceId) => {
+      if (!isChatSpace(space) || (space !== "build" && space !== "research")) {
+        return;
+      }
+      const sourceThreadId = threadIdRef.current;
+      if (!sourceThreadId) return;
+      const snap = threads.find((item) => item.id === sourceThreadId);
+      const title =
+        snap?.title && snap.title !== "Chat"
+          ? snap.title
+          : space === "build"
+            ? "New App"
+            : "Search";
+      const api = createApiBundle(getDataBackend());
+      const project = await api.entities.createProject(
+        { workspaceId, actorId: actor.id },
+        {
+          space,
+          title,
+          kind: space === "research" ? "research" : "app",
+          summary: snap?.snippet ?? "",
+        },
+      );
+      openProject(project.id, { migrateFromThreadId: sourceThreadId });
+      if (space === "build") setBuildTool("preview");
+      if (space === "research") setResearchTool("sources");
+    },
+    [workspaceId, actor.id, threads, openProject],
+  );
+
   /** Leave a project/entity and return to the space directory on the panel. */
   const backToSpaceHome = useCallback(() => {
     if (!spaceId) return;
@@ -3307,17 +3357,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let tid: string | null = threadId;
     let hasMessages = Boolean(thread);
     if (chatWasOpen) {
-      const lens: SpaceId =
-        chatSpace ??
-        (thread?.spaceId && isChatSpace(thread.spaceId)
-          ? thread.spaceId
-          : "work");
       setThreads((current) => {
-        const { threads: next, id: nextId } = ensureContinuousChat(
+        const { threads: next, id: nextId } = openSpaceDefaultChat(
           current,
           workspaceId,
-          lens,
-          threadId,
+          chatSpace ?? "work",
         );
         tid = nextId;
         hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
@@ -4203,6 +4247,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setChatSpace,
       armChatInterface,
       selectChatSpace,
+      startDraftProject,
+      setDraftAsDefaultChat,
       collapseDraft,
       closeSpaceChat,
       clearSessionSummary,
@@ -4350,6 +4396,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setChatSpace,
       armChatInterface,
       selectChatSpace,
+      startDraftProject,
+      setDraftAsDefaultChat,
       collapseDraft,
       closeSpaceChat,
       clearSessionSummary,

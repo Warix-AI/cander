@@ -68,6 +68,43 @@ export function upsertPersistentSpaceThread(
   return { threads: [created, ...threads], id: created.id };
 }
 
+/** Load (or create) the default sidebar chat for a space. */
+export function openSpaceDefaultChat(
+  threads: Thread[],
+  workspaceId: string,
+  spaceId: SpaceId,
+): { threads: Thread[]; id: string } {
+  return upsertPersistentSpaceThread(threads, workspaceId, spaceId);
+}
+
+/**
+ * Promote a draft / session thread to the persistent default for a space.
+ * The old default slot is replaced; the source row is removed when ids differ.
+ */
+export function adoptThreadAsSpaceDefault(
+  threads: Thread[],
+  workspaceId: string,
+  spaceId: SpaceId,
+  sourceThreadId: string,
+): { threads: Thread[]; id: string } {
+  const source = threads.find((item) => item.id === sourceThreadId);
+  if (!source || source.workspaceId !== workspaceId || source.projectId) {
+    return openSpaceDefaultChat(threads, workspaceId, spaceId);
+  }
+  const defaultId = spaceChatId(workspaceId, spaceId);
+  const promoted: Thread = {
+    ...source,
+    id: defaultId,
+    spaceId,
+    persistent: true,
+    projectId: undefined,
+  };
+  const rest = threads.filter(
+    (item) => item.id !== defaultId && item.id !== sourceThreadId,
+  );
+  return { threads: [promoted, ...rest], id: defaultId };
+}
+
 export function findPersistentProjectThread(
   threads: Thread[],
   workspaceId: string,

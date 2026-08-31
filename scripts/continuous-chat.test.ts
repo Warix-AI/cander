@@ -1,64 +1,65 @@
 /**
- * Continuous workspace chat — one left session across spaces; projects stay separate.
+ * Per-space default chats and draft promotion.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
-  continuousChatId,
-  ensureContinuousChat,
-  findContinuousChat,
+  adoptThreadAsSpaceDefault,
+  openSpaceDefaultChat,
   projectChatId,
+  spaceChatId,
   startContinuousChat,
   upsertPersistentProjectThread,
 } from "../lib/persistent-chat.ts";
 
-describe("continuous chat across spaces", () => {
-  it("keeps one session when switching spaces", () => {
-    const first = ensureContinuousChat([], "ws1", "work");
-    assert.equal(first.id, continuousChatId("ws1"));
-    const again = ensureContinuousChat(first.threads, "ws1", "build", first.id);
-    assert.equal(again.id, first.id);
-    const t = findContinuousChat(again.threads, "ws1");
-    assert.equal(t?.spaceId, "build");
-    assert.equal(again.threads.filter((x) => !x.projectId).length, 1);
+describe("space default chats", () => {
+  it("creates separate defaults per space", () => {
+    const work = openSpaceDefaultChat([], "ws1", "work");
+    const build = openSpaceDefaultChat(work.threads, "ws1", "build");
+    assert.equal(work.id, spaceChatId("ws1", "work"));
+    assert.equal(build.id, spaceChatId("ws1", "build"));
+    assert.notEqual(work.id, build.id);
+    assert.equal(build.threads.filter((t) => !t.projectId).length, 2);
   });
 
-  it("new chat mints a distinct session id", () => {
-    const a = startContinuousChat([], "ws1", "work");
-    const b = startContinuousChat(a.threads, "ws1", "research");
-    assert.notEqual(a.id, b.id);
-    assert.ok(b.id.startsWith("t-session-ws1-"));
+  it("new chat session stays detached until promoted", () => {
+    const draft = startContinuousChat([], "ws1", null);
+    const buildDefault = openSpaceDefaultChat(draft.threads, "ws1", "build");
+    assert.notEqual(draft.id, buildDefault.id);
+    assert.equal(
+      buildDefault.threads.find((t) => t.id === draft.id)?.spaceId,
+      "work",
+    );
+  });
+
+  it("promotes a draft thread into the space default slot", () => {
+    const draft = startContinuousChat([], "ws1", null);
+    const promoted = adoptThreadAsSpaceDefault(
+      draft.threads,
+      "ws1",
+      "build",
+      draft.id,
+    );
+    assert.equal(promoted.id, spaceChatId("ws1", "build"));
+    assert.equal(
+      promoted.threads.find((t) => t.id === spaceChatId("ws1", "build"))?.persistent,
+      true,
+    );
+    assert.equal(
+      promoted.threads.some((t) => t.id === draft.id),
+      false,
+    );
   });
 
   it("projects keep their own docks", () => {
-    const session = ensureContinuousChat([], "ws1", "build");
+    const build = openSpaceDefaultChat([], "ws1", "build");
     const project = upsertPersistentProjectThread(
-      session.threads,
+      build.threads,
       "ws1",
       "proj1",
       "build",
     );
     assert.equal(project.id, projectChatId("ws1", "proj1"));
-    assert.notEqual(project.id, session.id);
-    const back = ensureContinuousChat(project.threads, "ws1", "build", session.id);
-    assert.equal(back.id, session.id);
-  });
-
-  it("keeps a Recents non-project thread across spaces", () => {
-    const legacy = {
-      id: "t-space-ws1-work",
-      title: "Chat",
-      workspaceId: "ws1",
-      spaceId: "work" as const,
-      updatedAt: new Date().toISOString(),
-      snippet: "hi",
-      messages: [],
-      persistent: true,
-      sessionSummary: null,
-    };
-    const switched = ensureContinuousChat([legacy], "ws1", "research", legacy.id);
-    assert.equal(switched.id, legacy.id);
-    const t = findContinuousChat(switched.threads, "ws1", legacy.id);
-    assert.equal(t?.spaceId, "research");
+    assert.notEqual(project.id, build.id);
   });
 });

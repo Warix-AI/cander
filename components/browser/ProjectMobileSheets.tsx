@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { NativeOverlayGate } from "@/components/browser/NativeOverlayGate";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import { cn } from "@/lib/utils";
@@ -108,8 +109,6 @@ export function MobileBottomSheet({
     setDragY(0);
   };
 
-  if (!open || !mounted) return null;
-
   const heightClass =
     mode === "actions"
       ? "min-h-[min(58dvh,520px)] max-h-[92dvh]"
@@ -164,7 +163,12 @@ export function MobileBottomSheet({
     </div>
   );
 
-  return createPortal(sheet, document.body);
+  return (
+    <>
+      <NativeOverlayGate open={open && mounted} />
+      {open && mounted ? createPortal(sheet, document.body) : null}
+    </>
+  );
 }
 
 type ActionsPane = "main" | "publish" | "domains";

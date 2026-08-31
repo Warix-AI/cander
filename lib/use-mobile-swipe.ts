@@ -3,6 +3,7 @@
 import { useCallback, useRef, type TouchEvent } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { canUseRightPanel } from "@/lib/right-panel";
+import { dismissNativeKeyboard } from "@/lib/mobile-shell";
 import { isChatSpace } from "@/lib/spaces";
 import { useMobileShell } from "@/lib/use-media-query";
 
@@ -98,20 +99,25 @@ export function useMobileSwipeGestures() {
 
       const withPanel = panelAvailable;
 
+      const goSurface = (next: "menu" | "chat" | "panel") => {
+        if (next !== "chat") dismissNativeKeyboard();
+        setMobileSurface(next);
+      };
+
       // Swipe right → toward menu
       if (dx > 0) {
         if (mobileSurface === "panel") {
           if (projectId) {
-            setMobileSurface("chat");
+            goSurface("chat");
           } else if (view === "space" && spaceId && isChatSpace(spaceId)) {
             openSpaceChat(spaceId);
           } else {
-            setMobileSurface("chat");
+            goSurface("chat");
           }
           return;
         }
         if (mobileSurface === "chat") {
-          setMobileSurface("menu");
+          goSurface("menu");
         }
         return;
       }
@@ -119,12 +125,12 @@ export function useMobileSwipeGestures() {
       // Swipe left → toward panel / chat from menu
       if (dx < 0) {
         if (mobileSurface === "menu") {
-          setMobileSurface("chat");
+          goSurface("chat");
           return;
         }
         if (mobileSurface === "chat" && withPanel) {
           if (panelMode === "collapsed") setPanelMode("split");
-          setMobileSurface("panel");
+          goSurface("panel");
         }
       }
     },

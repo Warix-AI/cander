@@ -2,14 +2,9 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import {
-  getBrowserSurfaceAdapter,
-  resumeNativeBrowserSurfaces,
-  suppressNativeBrowserSurfaces,
-} from "@/lib/browser-surface";
 import { cn } from "@/lib/utils";
 
-/** Tooltip above native WebContentsView — collapses the surface while visible. */
+/** Tooltip for browser chrome controls — header sits above the native surface. */
 export function BrowserChromeTooltip({
   label,
   children,
@@ -37,16 +32,11 @@ export function BrowserChromeTooltip({
 
   useEffect(() => {
     if (!open) return;
-    suppressNativeBrowserSurfaces();
-    const adapter = getBrowserSurfaceAdapter();
-    void adapter.setChromeOverlay?.(true);
     place();
     const onMove = () => place();
     window.addEventListener("scroll", onMove, true);
     window.addEventListener("resize", onMove);
     return () => {
-      resumeNativeBrowserSurfaces();
-      void adapter.setChromeOverlay?.(false);
       window.removeEventListener("scroll", onMove, true);
       window.removeEventListener("resize", onMove);
     };
