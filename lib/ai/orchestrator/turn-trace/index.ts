@@ -11,6 +11,10 @@ export type {
 export { nodeTaskId, summarizeTrace } from "./types.ts";
 
 export {
+  isLocalTurnTracePersistEnabled,
+} from "./persist.ts";
+
+export {
   redactToolPayload,
   redactTraceString,
   redactTraceValue,
@@ -40,6 +44,7 @@ export {
   getTurnTraceRecorder,
   isTurnTraceEnabled,
   resetTurnTraceForTests,
+  shouldRecordTurnTrace,
   startTurnTrace,
   traceRouteForNode,
 } from "./recorder.ts";

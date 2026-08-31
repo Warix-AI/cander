@@ -6,6 +6,7 @@
  * Routes through AIRuntime agent turn (tools + clarification) then providers.
  */
 
+import "@/lib/api/turn-trace-api";
 import {
   runAssistantTurn,
   type AgentTurnProgress,

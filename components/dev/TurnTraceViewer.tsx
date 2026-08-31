@@ -10,7 +10,7 @@ import {
   type TurnTrace,
   type TurnTraceSummary,
 } from "@/lib/ai/orchestrator/turn-trace/index";
-import { fetchCloudTurnTraces } from "@/lib/api/turn-trace-api";
+import { fetchAllPersistedTurnTraces } from "@/lib/api/turn-trace-api";
 
 const STAGES: TraceStage[] = [
   "user_input",
@@ -214,8 +214,7 @@ export function TurnTraceViewer() {
 
   const loadCloud = useCallback(async () => {
     try {
-      await fetchCloudTurnTraces(50);
-      setSummaries((prev) => prev);
+      await fetchAllPersistedTurnTraces(50);
     } catch {
       /* auth or migration not applied yet */
     }

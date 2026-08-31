@@ -7,6 +7,7 @@ import type { TaskNode } from "../task-graph.ts";
 import type { TemporalGrounding } from "../temporal-grounding.ts";
 import type { CoverageResult } from "../coverage-ledger.ts";
 import type { TurnEvidence } from "../evidence.ts";
+import { isLocalTurnTracePersistEnabled } from "./persist.ts";
 import { redactToolPayload, redactTraceValue } from "./redact.ts";
 import { storeTurnTrace } from "./store.ts";
 import type {
@@ -50,6 +51,10 @@ export function isTurnTraceEnabled(): boolean {
     }
   }
   return true;
+}
+
+export function shouldRecordTurnTrace(): boolean {
+  return isTurnTraceEnabled() || isLocalTurnTracePersistEnabled();
 }
 
 export class TurnTraceRecorder {
@@ -457,7 +462,7 @@ export function startTurnTrace(opts: {
   aiChatId?: string;
   userInput: string;
 }): TurnTraceRecorder | null {
-  if (!isTurnTraceEnabled()) return null;
+  if (!shouldRecordTurnTrace()) return null;
   activeRecorder = new TurnTraceRecorder(opts);
   return activeRecorder;
 }

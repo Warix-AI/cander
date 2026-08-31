@@ -198,6 +198,18 @@ Divergence hints flag when model output has weak overlap with accepted evidence 
 
 **Console:** `[TURN_TRACE]` JSON on turn finalize (dev default on; set `NEXT_PUBLIC_TURN_TRACE=0` to disable).
 
+**Local FM remote persist (debug):** After each local FM turn, the client uploads the full structured trace plus `TurnAudit` / retrieval trace to `ai_audit_events` (`action = local_turn_trace`, `provider = apple_fm`). Default **on**; opt out with `NEXT_PUBLIC_LOCAL_TURN_TRACE_PERSIST=0` or `localStorage['cander:local-turn-trace-persist'] = '0'`. Console: `[TURN_TRACE_PERSIST]` with `traceId`. Query:
+
+```sql
+select id, created_at, status, detail->'structuredTrace'->>'userInput' as question
+from ai_audit_events
+where action = 'local_turn_trace'
+order by created_at desc
+limit 20;
+```
+
+**Dev viewer:** `/dev/turn-trace` loads in-memory traces plus cloud (`ai_chat_turns.structured_trace`) and persisted local traces from `ai_audit_events`.
+
 ### Cloud Edge V2 tracing
 
 Edge orchestrator (`supabase/functions/_shared/agent/v2/orchestrator.ts`) emits the same JSON schema with `runtime: "cloud"`:
@@ -210,8 +222,6 @@ Edge orchestrator (`supabase/functions/_shared/agent/v2/orchestrator.ts`) emits 
 **Stages:** controller decisions, raw web search/read responses before evidence mapping, evidence briefing, answer model prompt packet, model output, validation retries, final response.
 
 **Enable/disable (Edge):** `TURN_TRACE=1` (default on). Set `TURN_TRACE=0` in Supabase secrets to disable.
-
-**Dev viewer:** `/dev/turn-trace` loads local in-memory traces + cloud traces from `ai_chat_turns.structured_trace` (refresh pulls latest 50).
 
 Next phases (still deferred): `@Generable TaskGraph`, write idempotency.
 

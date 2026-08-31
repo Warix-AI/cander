@@ -10,6 +10,7 @@ const MAX_TRACES = 120;
 const listeners = new Set<(summaries: TurnTraceSummary[]) => void>();
 const buffer: TurnTrace[] = [];
 const byId = new Map<string, TurnTrace>();
+let persistSink: ((trace: TurnTrace) => void) | null = null;
 
 function emit(): void {
   const summaries = listTurnTraceSummaries();
@@ -38,6 +39,13 @@ export function storeTurnTrace(trace: TurnTrace): void {
     if (removed) byId.delete(removed.traceId);
   }
   emit();
+  if (persistSink && (trace.runtime ?? "local") === "local") {
+    try {
+      persistSink(trace);
+    } catch {
+      /* persistence must not break the turn */
+    }
+  }
 }
 
 export function getTurnTrace(traceId: string): TurnTrace | null {
@@ -83,7 +91,6 @@ export function subscribeTurnTraces(
   };
 }
 
-/** @deprecated use subscribeTurnTraces */
-export function setTurnTraceSink(_fn: ((trace: TurnTrace) => void) | null): void {
-  void _fn;
+export function setTurnTraceSink(fn: ((trace: TurnTrace) => void) | null): void {
+  persistSink = fn;
 }
