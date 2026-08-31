@@ -2,7 +2,7 @@
  * Progressive content emission during local turns (v4 §7 Phase 3).
  */
 
-import type { AgentTurnProgress } from "../agent-turn.ts";
+import type { AgentTurnProgress } from "../runtime/agent-turn.ts";
 
 export function emitContentDelta(
   report: (progress: AgentTurnProgress) => void,

@@ -3,8 +3,8 @@
  * Holds durable session ids per thread + profile until topic switch or instruction change.
  */
 
-import type { TurnRelation } from "../turn-environment/turn-relation.ts";
-import type { DynamicProfilePayload } from "../turn-environment/dynamic-profile.ts";
+import type { TurnRelation } from "../../turn-environment/turn-relation.ts";
+import type { DynamicProfilePayload } from "../../turn-environment/dynamic-profile.ts";
 import {
   getFoundationModelsAvailability,
   prewarmFoundationModelsSession,

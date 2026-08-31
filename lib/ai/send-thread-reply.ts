@@ -65,6 +65,7 @@ export async function fetchPrivateAiReply(opts: {
   condensationOccurred: boolean;
   runtime?: string;
   pausedForUser?: boolean;
+  presentationStreamed?: boolean;
   toolResults?: AiToolCallResult[];
   citations?: AiGenerateResult["citations"];
   blocks?: AiGenerateResult["blocks"];
@@ -91,6 +92,7 @@ export async function fetchPrivateAiReply(opts: {
       condensationOccurred: result.condensationOccurred,
       runtime: result.runtime,
       pausedForUser: result.pausedForUser,
+      presentationStreamed: result.presentationStreamed,
       toolResults: result.toolResults,
       citations: result.citations,
       blocks: result.blocks,
