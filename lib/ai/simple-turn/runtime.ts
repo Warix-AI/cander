@@ -31,12 +31,14 @@ import type { SimpleEvidence } from "./types.ts";
 
 function citationsFromEvidence(items: SimpleEvidence[]) {
   return items
-    .filter((e) => e.accepted && e.url)
+    .filter((e): e is SimpleEvidence & { url: string } =>
+      Boolean(e.accepted && e.url),
+    )
     .slice(0, 3)
     .map((e, i) => ({
       id: e.id || `c${i}`,
       title: e.title,
-      url: e.url ?? undefined,
+      url: e.url,
     }));
 }
 
@@ -186,12 +188,14 @@ export async function runSimpleTurnRuntime(
             trace?.recordToolResponseRaw({
               tool: ev.sourceTool,
               ok: true,
+              durationMs: 0,
               rawOutput: ev.content.slice(0, 500),
             });
           } else {
             trace?.recordToolResponseRaw({
               tool: ev.sourceTool,
               ok: false,
+              durationMs: 0,
               rawOutput: ev.rejectReason ?? "failed",
             });
           }

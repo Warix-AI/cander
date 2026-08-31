@@ -4,7 +4,6 @@
 
 import { executeAuthorizedTool } from "../runtime/tools.ts";
 import type { AiToolCallResult } from "../runtime/tools.ts";
-import { createWriteOperation, isWriteTool } from "../orchestrator/write-safety.ts";
 import type { Lookup, SimpleEvidence } from "./types.ts";
 import { cacheKey } from "./state-store.ts";
 
@@ -63,24 +62,6 @@ export async function executeLookup(opts: {
     const args = isUrl
       ? { url: normalizeUrl(opts.lookup.q) }
       : { query: opts.lookup.q, numResults: 5 };
-
-    if (isWriteTool(name)) {
-      const op = createWriteOperation({ toolName: name, args });
-      if (op.status === "blocked") {
-        return {
-          id: newId("ev"),
-          cap: "WEB",
-          query: opts.lookup.q,
-          title: "Blocked write",
-          content: op.reason ?? "Requires confirmation",
-          ok: false,
-          accepted: false,
-          rejectReason: "write_blocked",
-          retrievedAt: new Date().toISOString(),
-          sourceTool: name,
-        };
-      }
-    }
 
     const result = await exec({ name, arguments: args });
     const content =
