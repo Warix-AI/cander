@@ -1,0 +1,146 @@
+[
+  {
+    "id": "mixed-model-web",
+    "category": 1,
+    "prompt": "Explain photosynthesis, and who is Apple's CEO now?",
+    "assert": ["model+web", "policy_trusted+verified", "coverage_complete"]
+  },
+  {
+    "id": "mixed-kb-web",
+    "category": 1,
+    "prompt": "What does our handbook say about PTO, and who is Amazon's CEO now?",
+    "assert": ["knowledge_base+web", "kb_gate"]
+  },
+  {
+    "id": "mixed-three-sources",
+    "category": 1,
+    "prompt": "Explain photosynthesis, who is Apple's CEO now, and what does our handbook say about PTO?",
+    "assert": ["model+web+kb", "spans>=3"]
+  },
+  {
+    "id": "dep-ceo-age",
+    "category": 2,
+    "prompt": "Who is Apple's CEO and how old is he?",
+    "assert": ["scalar_dependency", "waves>=2"]
+  },
+  {
+    "id": "dep-share-calc",
+    "category": 2,
+    "prompt": "What is Tesla's current share price and what would 20 shares cost?",
+    "assert": ["web+deterministic", "multiply"]
+  },
+  {
+    "id": "map-board-ages",
+    "category": 3,
+    "prompt": "Who is on Apple's board and how old is each member?",
+    "assert": ["map_dependency", "expansion"]
+  },
+  {
+    "id": "followup-pronoun",
+    "category": 4,
+    "prompt": ["Who is Apple's CEO now?", "How old is he?"],
+    "assert": ["active_entity", "person.age"]
+  },
+  {
+    "id": "followup-calories",
+    "category": 4,
+    "prompt": ["How many calories are in 3 Taco Bell tacos?", "What about 5?"],
+    "assert": ["no_unnecessary_web", "deterministic_recalc"]
+  },
+  {
+    "id": "cross-chat-gate",
+    "category": 5,
+    "prompt": "What was that company we talked about yesterday?",
+    "assert": ["searchPriorChats=true", "tenant_scoped"]
+  },
+  {
+    "id": "cross-chat-ceo",
+    "category": 5,
+    "prompt": "That company we discussed yesterday — who is the CEO now?",
+    "assert": ["resolved_entity", "web_ceo"]
+  },
+  {
+    "id": "kb-web-refund",
+    "category": 6,
+    "prompt": "Compare our refund policy with Amazon's current refund policy.",
+    "assert": ["kb_internal", "web_external", "compare"]
+  },
+  {
+    "id": "coverage-omission",
+    "category": 7,
+    "prompt": "How many calories are in 3 Taco Bell tacos and a medium McDonald's Sprite?",
+    "assert": ["repair_pass", "no_silent_drop"]
+  },
+  {
+    "id": "partial-three",
+    "category": 8,
+    "prompt": "Explain photosynthesis, who is Apple's CEO now, and what does our handbook say about PTO?",
+    "inject": "forceUnresolvedIds:r2",
+    "assert": ["coverage_incomplete", "mentions_gap"]
+  },
+  {
+    "id": "blocked-upstream",
+    "category": 8,
+    "prompt": "What is Tesla's current share price and what would 20 shares cost?",
+    "inject": "forceUnresolvedIds:r1",
+    "assert": ["blocked_upstream"]
+  },
+  {
+    "id": "ambiguity",
+    "category": 9,
+    "prompt": "What did that company charge?",
+    "assert": ["clarification_required", "no_web"]
+  },
+  {
+    "id": "conflict-authority",
+    "category": 10,
+    "assert": ["prefer_authority_100", "or_surface_disagreement"]
+  },
+  {
+    "id": "route-everest",
+    "category": 11,
+    "prompt": "How tall is Mount Everest?",
+    "assert": ["model", "webPlannedCount=0"]
+  },
+  {
+    "id": "route-photosynthesis",
+    "category": 11,
+    "prompt": "Explain photosynthesis",
+    "assert": ["policy_trusted"]
+  },
+  {
+    "id": "route-live-facts",
+    "category": 11,
+    "prompts": [
+      "Who is Apple's current CEO?",
+      "What is the weather in Austin today?",
+      "When do BYU and Utah play?",
+      "What is Tesla's current share price?"
+    ],
+    "assert": ["web", "modelAllowed=false"]
+  },
+  {
+    "id": "route-arithmetic",
+    "category": 11,
+    "prompt": "What is 17*3?",
+    "assert": ["fastPath=arithmetic"]
+  },
+  {
+    "id": "route-url",
+    "category": 11,
+    "prompt": "https://example.com/page",
+    "assert": ["fastPath=url", "web.read"]
+  },
+  {
+    "id": "route-file",
+    "category": 11,
+    "prompt": "Summarize the uploaded handbook file section on PTO",
+    "assert": ["kb_gate"]
+  },
+  {
+    "id": "normalize-ceo",
+    "category": 12,
+    "variants": ["CEO", "current CEO", "who runs Apple", "chief executive"],
+    "assert": ["company.current_ceo"]
+  }
+]

@@ -9,6 +9,7 @@
 export {
   isAgentOrchestratorEnabled,
   isSimpleTurnRuntimeEnabled,
+  isV6RuntimeEnabled,
 } from "./flags";
 export {
   runOrchestratedTurn,

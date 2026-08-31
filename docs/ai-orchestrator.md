@@ -81,11 +81,36 @@ New turn → deterministic delta (high confidence?)
 
 | Flag | Default | Meaning |
 |------|---------|---------|
+| `NEXT_PUBLIC_AI_V6_RUNTIME` / `cander:v6-runtime` | **off** | V6 `runTurn()` sole path when on (see below) |
 | `NEXT_PUBLIC_AI_AGENT_ORCHESTRATOR` | on | Use Edge agent vs legacy client agent-turn |
 | `AI_ORCHESTRATOR_V2` (Edge) | on | V2 loop vs V1 retrieve-once pipeline |
 | `NEXT_PUBLIC_AI_ORCHESTRATOR_V2` | on | Client requests `orchestratorVersion: v2` |
 
 Set any to `0`/`false`/`off` to roll back that layer.
+
+## V6 runtime (flagged parallel)
+
+**Status:** opt-in replacement architecture. Simple Turn and TaskGraph remain the default until V6 eval passes and the flag flips.
+
+Enable: `NEXT_PUBLIC_AI_V6_RUNTIME=1` or `localStorage['cander:v6-runtime']='1'`.
+
+When enabled, `runAssistantTurn` calls **only** `runTurn()` from `lib/ai/v6/`. Edge V2 is **not** a second orchestrator — it is used inside V6 as a **provider** for vision / deep research / complex synthesis.
+
+```text
+USER → SURFACE PREPASS → CONTEXT GATE → CONTEXT RESOLUTION → APPLE PARSE
+    → PARSE RECONCILIATION → SEMANTIC NORMALIZATION → POLICY ROUTING
+    → REQUEST GRAPH → EXECUTION → EVIDENCE VERIFY → CONFLICT → DERIVE
+    → USER COVERAGE CHECK → RENDER → MEMORY COMMIT
+```
+
+Core rule: the model is never the sole source of completeness. The runtime checks:
+
+1. **Parse coverage** — every probable surface span maps to a request, clarification, or non-request
+2. **User coverage** — every substantive span receives an outcome in the answer
+
+Schema: `TurnSpec` / `Request` (`fact|explain|compare|summarize|calculate|research`) with `surfaceSpanIds`, scalar/map dependencies. No BUILD/CALENDAR/EMAIL/CRM/mutation caps in V6 prompts.
+
+Tests: `scripts/v6-runtime.test.ts`, `scripts/v6-eval.test.ts`. Prompt fixtures: `scripts/fixtures/v6-prompts.json`. Validation report: `docs/v6-validation-report.md`.
 
 ## Local FM orchestrator (Apple-first)
 

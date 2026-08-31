@@ -28,6 +28,7 @@ import { AiRuntimeError } from "@/lib/ai/runtime/types";
 import {
   isAgentOrchestratorEnabled,
   isSimpleTurnRuntimeEnabled,
+  isV6RuntimeEnabled,
 } from "@/lib/ai/orchestrator/flags";
 import { getAiRuntimeMode } from "@/lib/ai/runtime/mode-store";
 import { shouldUseLocalTurnOrchestrator } from "@/lib/ai/runtime/on-device-routing";
@@ -158,6 +159,12 @@ async function runAssistantTurnInner(
   request: AiGenerateRequest,
   opts?: AgentTurnOptions,
 ): Promise<AgentTurnResult> {
+  // V6 flagged parallel — sole path when enabled (Edge only as in-pipeline provider).
+  if (isV6RuntimeEnabled()) {
+    const { runTurn } = await import("@/lib/ai/v6");
+    return runTurn(request, opts);
+  }
+
   // Unified orchestrator: local FM loop on Apple devices; cloud for vision/complex work.
   const hasImages = Boolean(request.images?.length);
   if (isAgentOrchestratorEnabled()) {

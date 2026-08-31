@@ -44,6 +44,30 @@ export function isBuildLocalOrchestratorEnabled(): boolean {
 }
 
 /**
+ * V6 runtime — single runTurn() pipeline (surface → coverage → render).
+ * Default OFF — flagged parallel beside Simple Turn / TaskGraph / Edge.
+ * Set NEXT_PUBLIC_AI_V6_RUNTIME=1 to enable.
+ * Desktop override: localStorage['cander:v6-runtime'] = '1'
+ */
+export function isV6RuntimeEnabled(): boolean {
+  if (typeof process !== "undefined") {
+    const v = process.env.NEXT_PUBLIC_AI_V6_RUNTIME;
+    if (v === "1" || v === "true" || v === "on") return true;
+    if (v === "0" || v === "false" || v === "off") return false;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const ls = window.localStorage?.getItem("cander:v6-runtime");
+      if (ls === "1" || ls === "true" || ls === "on") return true;
+      if (ls === "0" || ls === "false" || ls === "off") return false;
+    } catch {
+      /* ignore */
+    }
+  }
+  return false;
+}
+
+/**
  * Simple small-model turn runtime (HYDRATE→PLAN→RUN→CHECK→ANSWER→COMMIT).
  * Default OFF — opt in for parity testing beside the TaskGraph local orchestrator.
  * Set NEXT_PUBLIC_AI_SIMPLE_TURN_RUNTIME=1 to enable.
