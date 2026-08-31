@@ -57,12 +57,12 @@ function getCapCamera(): CapCameraPlugin | null {
   if (!cap) return null;
 
   const existing = cap.Plugins?.Camera;
-  if (existing?.getPhoto) return existing;
+  if (existing && typeof existing.getPhoto === "function") return existing;
 
   if (typeof cap.registerPlugin === "function") {
     try {
       const registered = cap.registerPlugin<CapCameraPlugin>("Camera");
-      if (registered?.getPhoto) return registered;
+      if (registered && typeof registered.getPhoto === "function") return registered;
     } catch {
       /* fall through */
     }

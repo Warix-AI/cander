@@ -102,12 +102,12 @@ function getCapSpeech(): CapSpeechPlugin | null {
   if (!cap) return null;
 
   const existing = cap.Plugins?.SpeechRecognition;
-  if (existing?.start) return existing;
+  if (existing && typeof existing.start === "function") return existing;
 
   if (typeof cap.registerPlugin === "function") {
     try {
       const registered = cap.registerPlugin<CapSpeechPlugin>("SpeechRecognition");
-      if (registered?.start) return registered;
+      if (registered && typeof registered.start === "function") return registered;
     } catch {
       /* fall through */
     }
