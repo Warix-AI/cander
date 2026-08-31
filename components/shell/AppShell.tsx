@@ -34,7 +34,6 @@ import {
 } from "@/lib/session";
 import { useSyncExternalStore } from "react";
 import { BrowserLayout } from "@/components/browser/BrowserLayout";
-import { FloatingVoiceDock } from "@/components/shell/VoiceControl";
 import { AppearanceProvider } from "@/components/theme/AppearanceProvider";
 import { MobilePanelActionsProvider } from "@/components/shell/mobile/MobilePanelActions";
 import { isDesktopShell } from "@/lib/desktop-shell";
@@ -281,7 +280,6 @@ function AuthenticatedShell() {
           <WorkspaceModal />
           <InviteWall />
           <PublishSheet />
-          <FloatingVoiceDock />
         </div>
       </MobilePanelActionsProvider>
     </AppearanceProvider>

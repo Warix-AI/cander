@@ -26,7 +26,6 @@ import { useHourlyUsagePercent } from "@/lib/use-hourly-usage";
 import {
   ComposerRecordingView,
   ComposerTrailingActions,
-  ComposerVoiceOrb,
 } from "@/components/shell/ComposerVoice";
 import { connectors } from "@/lib/data";
 import { APP_MESSAGE_PLACEHOLDER } from "@/lib/app-brand";
@@ -72,7 +71,7 @@ import {
   type VoiceDictationSession,
 } from "@/lib/voice/openai-dictation";
 import type { AudioMeter } from "@/lib/voice/audio-meter";
-import { stopTextToSpeech } from "@/lib/voice/text-to-speech";
+import { logDictationTiming } from "@/lib/voice/audio-meter";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -129,8 +128,6 @@ export function Composer({
     clearPageReference,
     clearEntityReference,
     entitlements,
-    voiceActive,
-    toggleVoice,
     pinTier,
     setPin,
     clearPin,
@@ -158,6 +155,8 @@ export function Composer({
   const textRef = useRef<HTMLTextAreaElement>(null);
   const speechRef = useRef<SpeechSession | null>(null);
   const dictationRef = useRef<VoiceDictationSession | null>(null);
+  /** After stop: insert into composer; after send-while-recording: send immediately. */
+  const afterTranscriptionRef = useRef<"insert" | "send">("insert");
   const valueBaseRef = useRef("");
   /** Keep the + menu visible while the native file sheet is open (iOS). */
   const awaitingFilePickRef = useRef(false);
@@ -358,39 +357,93 @@ export function Composer({
     dictationRef.current = null;
     speechRef.current?.stop();
     speechRef.current = null;
+    afterTranscriptionRef.current = "insert";
     setDictationMeter(null);
     setDictating(false);
     setTranscribing(false);
     setDictateError(null);
+    // Restore draft text that existed before dictation began
+    if (valueBaseRef.current) {
+      setValue(valueBaseRef.current.trimEnd());
+    }
   };
 
-  const stopDictationAndTranscribe = () => {
+  const finishTranscription = (text: string) => {
+    const intent = afterTranscriptionRef.current;
+    afterTranscriptionRef.current = "insert";
+    const next = `${valueBaseRef.current}${text} `.replace(/\s+/g, " ").trim();
+    valueBaseRef.current = next ? `${next} ` : "";
+
+    if (intent === "send") {
+      // Transcribe → send immediately (no second tap)
+      const refPrefix = pageReference
+        ? `[ref: ${pageReference.title} — ${pageReference.url}] `
+        : entityReference
+          ? `[ref: ${entityReference.label ?? entityReference.type} — ${entityReference.snapshot ?? entityReference.id}] `
+          : "";
+      const body = `${refPrefix}${next}`.trim();
+      const usableImages = images.filter((img) =>
+        img.url?.startsWith("data:image/"),
+      );
+      const sendAttachments = toSendAttachments(usableImages, files);
+      if (!body && !usableImages.length && !files.length) {
+        setValue(next);
+        setDictateError("No speech detected.");
+        return;
+      }
+      suppressAutoFocusRef.current = true;
+      try {
+        getNativeCapabilities().keyboard.dismiss();
+        getNativeCapabilities().haptics.impact("send");
+      } catch {
+        /* never block send */
+      }
+      onSend(body || "", {
+        ...(usableImages.length ? { attachments: usableImages } : {}),
+        ...(files.length ? { files } : {}),
+        ...(sendAttachments.length ? { sendAttachments } : {}),
+      });
+      setValue("");
+      setFiles([]);
+      setImages([]);
+      setMenu(null);
+      setDictateError(null);
+      setAttachError(null);
+      clearPageReference();
+      clearEntityReference();
+      return;
+    }
+
+    setTranscriptReveal(true);
+    setValue(next ? `${next} ` : "");
+    window.setTimeout(() => {
+      setTranscriptReveal(false);
+      const el = textRef.current;
+      if (el) {
+        el.focus();
+        const end = el.value.length;
+        el.setSelectionRange(end, end);
+      }
+    }, 180);
+  };
+
+  const stopDictationAndTranscribe = (intent: "insert" | "send" = "insert") => {
     const session = dictationRef.current;
     if (!session) {
       cancelDictation();
       return;
     }
+    afterTranscriptionRef.current = intent;
     setDictating(false);
     setTranscribing(true);
     setDictationMeter(null);
     void session
       .stopAndTranscribe()
       .then((text) => {
-        const next = `${valueBaseRef.current}${text} `.replace(/\s+/g, " ");
-        valueBaseRef.current = next;
-        setTranscriptReveal(true);
-        setValue(next);
-        window.setTimeout(() => {
-          setTranscriptReveal(false);
-          const el = textRef.current;
-          if (el) {
-            el.focus();
-            const end = el.value.length;
-            el.setSelectionRange(end, end);
-          }
-        }, 220);
+        finishTranscription(text);
       })
       .catch((e) => {
+        afterTranscriptionRef.current = "insert";
         setDictateError(
           e instanceof Error ? e.message : "Transcription failed.",
         );
@@ -403,17 +456,11 @@ export function Composer({
       });
   };
 
-  const stopVoice = () => {
-    speechRef.current?.stop();
-    speechRef.current = null;
-    stopTextToSpeech();
-    if (voiceActive) toggleVoice();
-  };
-
   const submit = () => {
     if (transcribing) return;
     if (dictating) {
-      stopDictationAndTranscribe();
+      // Send while recording → stop + transcribe + send
+      stopDictationAndTranscribe("send");
       return;
     }
     const refPrefix = pageReference
@@ -467,17 +514,11 @@ export function Composer({
     clearEntityReference();
   };
 
-  const startVoice = () => {
-    if (!entitlements.hasVoice) return;
-    stopTextToSpeech();
-    if (!voiceActive) toggleVoice();
-  };
-
   const startDictation = () => {
     if (!entitlements.hasVoice) return;
-    if (voiceActive) toggleVoice();
     setDictateError(null);
     setTranscribing(false);
+    afterTranscriptionRef.current = "insert";
 
     const useOpenAI = isRawOpenAIModeEnabled();
     if (useOpenAI) {
@@ -485,10 +526,16 @@ export function Composer({
         setDictateError("Microphone recording isn’t available here.");
         return;
       }
+      const t0 = performance.now();
+      logDictationTiming("mic_button_clicked", t0);
       valueBaseRef.current = value.trim() ? `${value.trim()} ` : "";
+      // Show recording UI immediately — do not wait for getUserMedia
       setDictating(true);
+      setDictationMeter(null);
+      logDictationTiming("recording_ui_visible", t0);
       dictationRef.current?.cancel();
       void startVoiceDictation({
+        t0,
         onError: (message) => {
           setDictateError(message);
           setDictating(false);
@@ -540,45 +587,6 @@ export function Composer({
       { continuous: true },
     );
   };
-
-  // Voice conversation mode: listen → send → (TTS handled in AppProvider).
-  // In raw OpenAI mode, skip Apple/Web continuous voice loop (dictation-only).
-  useEffect(() => {
-    if (isRawOpenAIModeEnabled()) return;
-    if (!voiceActive || dictating || !entitlements.hasVoice) return;
-    if (!isSpeechToTextSupported()) return;
-
-    let cancelled = false;
-    const listen = () => {
-      if (cancelled) return;
-      speechRef.current?.stop();
-      speechRef.current = startSpeechToText(
-        {
-          onFinal: (text) => {
-            if (cancelled || !text.trim()) return;
-            speechRef.current?.stop();
-            speechRef.current = null;
-            onSend(text.trim());
-          },
-          onError: () => {
-            /* stay in voice mode; user can retry */
-          },
-          onEnd: () => {
-            if (!cancelled && voiceActive) {
-              window.setTimeout(listen, 350);
-            }
-          },
-        },
-        { continuous: false },
-      );
-    };
-    listen();
-    return () => {
-      cancelled = true;
-      speechRef.current?.stop();
-      speechRef.current = null;
-    };
-  }, [voiceActive, dictating, entitlements.hasVoice, onSend]);
 
   // Cleanup dictation session on unmount
   useEffect(() => {
@@ -816,10 +824,6 @@ export function Composer({
           </p>
         ) : null}
 
-        {voiceActive && !dictatingActive ? (
-          <ComposerVoiceOrb compact={compact} />
-        ) : null}
-
         {compact ? (
           <div className="composer-shell py-1.5 pr-1.5 pl-3">
             {dictatingActive ? (
@@ -828,7 +832,8 @@ export function Composer({
                 status={transcribing ? "transcribing" : "recording"}
                 meter={dictationMeter}
                 onCancel={cancelDictation}
-                onStop={stopDictationAndTranscribe}
+                onStop={() => stopDictationAndTranscribe("insert")}
+                onSend={() => stopDictationAndTranscribe("send")}
               />
             ) : (
               <div className="flex h-9 items-center gap-0.5">
@@ -857,9 +862,6 @@ export function Composer({
                   compact
                   canSend={hasPayload}
                   hasVoice={entitlements.hasVoice}
-                  voiceActive={voiceActive}
-                  onStartVoice={startVoice}
-                  onStopVoice={stopVoice}
                   onStartDictation={startDictation}
                   onSend={submit}
                 />
@@ -1001,7 +1003,8 @@ export function Composer({
                 status={transcribing ? "transcribing" : "recording"}
                 meter={dictationMeter}
                 onCancel={cancelDictation}
-                onStop={stopDictationAndTranscribe}
+                onStop={() => stopDictationAndTranscribe("insert")}
+                onSend={() => stopDictationAndTranscribe("send")}
               />
             ) : (
             <div
@@ -1075,9 +1078,6 @@ export function Composer({
                 <ComposerTrailingActions
                   canSend={hasPayload}
                   hasVoice={entitlements.hasVoice}
-                  voiceActive={voiceActive}
-                  onStartVoice={startVoice}
-                  onStopVoice={stopVoice}
                   onStartDictation={startDictation}
                   onSend={submit}
                 />

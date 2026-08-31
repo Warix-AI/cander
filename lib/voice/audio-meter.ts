@@ -2,23 +2,40 @@
  * Local microphone amplitude metering via Web Audio AnalyserNode.
  * Does not send data to OpenAI — UI only.
  *
- * Amplitude is sampled every animation frame; visual history advances
- * only every VOICE_WAVEFORM_STEP_MS (~3x slower scroll than per-frame).
+ * Mic analysis runs every animation frame; the waveform canvas owns a
+ * fixed-length ring buffer and advances it every VOICE_WAVEFORM_STEP_MS.
  */
 
-export const VOICE_WAVEFORM_STEP_MS = 100;
+export const VOICE_WAVEFORM_STEP_MS = 65;
+
+/** Visual bar geometry (CSS px) — ChatGPT-like thin pills. */
+export const WAVEFORM_BAR_WIDTH = 2.5;
+export const WAVEFORM_GAP = 5;
+export const WAVEFORM_MIN_SAMPLES = 35;
+export const WAVEFORM_MAX_SAMPLES = 120;
+export const WAVEFORM_MIN_HEIGHT = 3;
+export const WAVEFORM_MAX_HEIGHT = 36;
+
+const NOISE_FLOOR = 0.018;
+const GAIN = 3.2;
+const SMOOTH_PREV = 0.55;
+const SMOOTH_NEXT = 0.45;
 
 export type AudioMeter = {
-  /** Latest smoothed RMS 0..1 (updates every frame) */
+  /** Latest smoothed amplitude 0..1 (updates every frame) */
   getLevel: () => number;
-  /** Rolling history (oldest → newest), values 0..1 — advances every STEP_MS */
-  getHistory: () => Float32Array;
   /** Stop AudioContext + disconnect nodes */
   stop: () => void;
 };
 
-const HISTORY_LEN = 72;
-const SMOOTH = 0.7;
+export function sampleCountForWidth(widthPx: number): number {
+  const pitch = WAVEFORM_BAR_WIDTH + WAVEFORM_GAP;
+  const n = Math.floor(Math.max(0, widthPx) / pitch);
+  return Math.min(
+    WAVEFORM_MAX_SAMPLES,
+    Math.max(WAVEFORM_MIN_SAMPLES, n || WAVEFORM_MIN_SAMPLES),
+  );
+}
 
 function rmsFromTimeDomain(data: Uint8Array): number {
   let sum = 0;
@@ -29,25 +46,27 @@ function rmsFromTimeDomain(data: Uint8Array): number {
   return Math.sqrt(sum / Math.max(data.length, 1));
 }
 
+function processAmplitude(rawRms: number): number {
+  const gated = Math.max(0, rawRms - NOISE_FLOOR);
+  if (gated <= 0) return 0;
+  const normalized = Math.min(1, gated * GAIN);
+  // Nonlinear compression so normal speech shows variation without shouting
+  return Math.pow(normalized, 0.6);
+}
+
 /**
  * Attach AnalyserNode to an existing MediaStream.
+ * Returns live level only — waveform history lives in the canvas component.
  */
 export function createAudioMeter(
   stream: MediaStream,
   opts?: {
-    historyLen?: number;
-    stepMs?: number;
     onFrame?: (level: number) => void;
   },
 ): AudioMeter {
-  const historyLen = opts?.historyLen ?? HISTORY_LEN;
-  const stepMs = opts?.stepMs ?? VOICE_WAVEFORM_STEP_MS;
-  const history = new Float32Array(historyLen);
-  let write = 0;
-  let filled = 0;
   let smoothed = 0;
   let stopped = false;
-  let lastCommit = 0;
+  let firstAmplitudeLogged = false;
 
   const AudioCtx =
     window.AudioContext ||
@@ -56,7 +75,6 @@ export function createAudioMeter(
   if (!AudioCtx) {
     return {
       getLevel: () => 0,
-      getHistory: () => history,
       stop: () => {},
     };
   }
@@ -65,33 +83,21 @@ export function createAudioMeter(
   const source = ctx.createMediaStreamSource(stream);
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 256;
-  analyser.smoothingTimeConstant = 0.4;
+  analyser.smoothingTimeConstant = 0.35;
   source.connect(analyser);
 
   const buf = new Uint8Array(analyser.fftSize);
   let raf = 0;
 
-  const tick = (now: number) => {
+  const tick = () => {
     if (stopped) return;
     analyser.getByteTimeDomainData(buf);
-    const raw = rmsFromTimeDomain(buf);
-    // Soft-gate noise floor, then clamp
-    const gated = Math.max(0, (raw - 0.02) / 0.35);
-    const clamped = Math.min(1, gated);
-    smoothed = smoothed * SMOOTH + clamped * (1 - SMOOTH);
+    const visual = processAmplitude(rmsFromTimeDomain(buf));
+    smoothed = smoothed * SMOOTH_PREV + visual * SMOOTH_NEXT;
 
-    // Always refresh the rightmost committed sample so loudness reacts immediately
-    // without advancing the scroll every frame.
-    if (filled > 0) {
-      const lastIdx = (write - 1 + historyLen) % historyLen;
-      history[lastIdx] = smoothed;
-    }
-
-    if (!lastCommit || now - lastCommit >= stepMs) {
-      history[write] = smoothed;
-      write = (write + 1) % historyLen;
-      if (filled < historyLen) filled += 1;
-      lastCommit = now;
+    if (!firstAmplitudeLogged && smoothed > 0.02) {
+      firstAmplitudeLogged = true;
+      logDictationTiming("first_audio_amplitude");
     }
 
     opts?.onFrame?.(smoothed);
@@ -103,17 +109,6 @@ export function createAudioMeter(
 
   return {
     getLevel: () => smoothed,
-    getHistory: () => {
-      const out = new Float32Array(filled || historyLen);
-      if (filled < historyLen) {
-        for (let i = 0; i < filled; i++) out[i] = history[i] ?? 0;
-        return out;
-      }
-      for (let i = 0; i < historyLen; i++) {
-        out[i] = history[(write + i) % historyLen] ?? 0;
-      }
-      return out;
-    },
     stop: () => {
       if (stopped) return;
       stopped = true;
@@ -136,4 +131,18 @@ export function createAudioMeter(
 export function prefersReducedMotion(): boolean {
   if (typeof window === "undefined") return false;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** Dev-only timing breadcrumbs for mic-start latency. */
+export function logDictationTiming(event: string, t0?: number): void {
+  if (typeof process !== "undefined" && process.env.NODE_ENV === "production") {
+    return;
+  }
+  const now =
+    typeof performance !== "undefined" ? performance.now() : Date.now();
+  const delta = typeof t0 === "number" ? Math.round(now - t0) : undefined;
+  console.log(
+    "[DICTATION_TIMING]",
+    delta !== undefined ? { event, ms: delta } : { event, t: Math.round(now) },
+  );
 }

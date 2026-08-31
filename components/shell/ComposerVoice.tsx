@@ -2,80 +2,64 @@
 
 import type { ReactNode } from "react";
 import { ArrowUp, Mic, Square, X } from "lucide-react";
-import { VoiceOrb } from "@/components/shell/VoiceOrb";
-import { VoiceWaveButton } from "@/components/shell/VoiceWaveButton";
 import { VoiceDictationWaveform } from "@/components/shell/VoiceDictationWaveform";
 import type { AudioMeter } from "@/lib/voice/audio-meter";
 import { cn } from "@/lib/utils";
 
-/** Listening orb — sits above the composer while voice mode is on. */
-export function ComposerVoiceOrb({ compact = false }: { compact?: boolean }) {
-  return (
-    <div
-      className={cn("flex justify-center", compact ? "mb-2" : "mb-3")}
-      aria-hidden
-    >
-      <VoiceOrb
-        active
-        as="div"
-        size={compact ? 64 : 88}
-        label="Listening"
-        className="voice-orb-live shadow-[0_8px_32px_oklch(0.55_0.14_260/0.22)]"
-      />
-    </div>
-  );
-}
+/** Visual diameter for cancel/stop while recording (~ChatGPT scale). */
+const REC_BTN = 34;
+const REC_HIT = 44;
 
+/**
+ * Recording composer row:
+ * [ X ]  [ rolling waveform ........ ]  [ ■ ] [ ↑ ]
+ * Recording state is obvious from controls + waveform (no status label).
+ */
 export function ComposerRecordingView({
   onCancel,
   onStop,
+  onSend,
   compact = false,
   status = "recording",
   meter = null,
 }: {
   onCancel: () => void;
   onStop: () => void;
+  /** Send while recording → stop + transcribe + send */
+  onSend: () => void;
   compact?: boolean;
   status?: "recording" | "transcribing";
   meter?: AudioMeter | null;
 }) {
-  const btn = compact ? 26 : 28;
-  const waveH = compact ? 24 : 28;
+  const waveH = compact ? 32 : 36;
   const isTranscribing = status === "transcribing";
 
   return (
     <div
       className={cn(
-        "flex flex-col",
-        compact ? "gap-2 py-0.5" : "gap-2.5 py-1",
+        "flex items-center gap-1.5",
+        compact ? "min-h-9 py-0.5" : "min-h-10 py-0.5",
       )}
       role="status"
       aria-live="polite"
+      aria-label={isTranscribing ? "Transcribing" : "Recording"}
     >
-      <p
-        className={cn(
-          "select-none text-muted-foreground transition-opacity duration-200",
-          compact ? "px-0.5 text-[13px]" : "px-1 text-[14px]",
-          isTranscribing ? "opacity-100" : "opacity-80",
-        )}
+      <CircleIconBtn
+        label="Cancel recording"
+        onClick={onCancel}
+        size={REC_BTN}
+        hitSize={REC_HIT}
+        className="bg-muted text-foreground hover:bg-muted/80"
+        disabled={isTranscribing}
       >
-        {isTranscribing ? "Transcribing…" : "Listening…"}
-      </p>
-      <div className="flex items-center gap-2">
-        <CircleIconBtn
-          label="Cancel recording"
-          onClick={onCancel}
-          size={btn}
-          hitSize={compact ? 36 : 40}
-          className="bg-muted text-foreground hover:bg-muted/80"
-          disabled={isTranscribing}
-        >
-          <X className="h-3.5 w-3.5" strokeWidth={2} />
-        </CircleIconBtn>
+        <X className="h-3.5 w-3.5" strokeWidth={2} />
+      </CircleIconBtn>
+
+      <div className="relative min-w-0 flex-1">
         <div
           className={cn(
-            "min-w-0 flex-1 transition-opacity duration-200",
-            isTranscribing && "opacity-40",
+            "transition-opacity duration-150",
+            isTranscribing ? "opacity-0" : "opacity-100",
           )}
         >
           <VoiceDictationWaveform
@@ -84,17 +68,35 @@ export function ComposerRecordingView({
             height={waveH}
           />
         </div>
-        <CircleIconBtn
-          label={isTranscribing ? "Transcribing" : "Stop and transcribe"}
-          onClick={onStop}
-          size={btn}
-          hitSize={compact ? 36 : 40}
-          className="bg-foreground text-background hover:bg-foreground/90"
-          disabled={isTranscribing}
-        >
-          <Square className="h-2.5 w-2.5 fill-current" strokeWidth={0} />
-        </CircleIconBtn>
+        {isTranscribing ? (
+          <p
+            className={cn(
+              "absolute inset-0 flex items-center justify-center select-none text-muted-foreground",
+              compact ? "text-[12px]" : "text-[13px]",
+            )}
+          >
+            Transcribing…
+          </p>
+        ) : null}
       </div>
+
+      <CircleIconBtn
+        label={isTranscribing ? "Transcribing" : "Stop and insert transcript"}
+        onClick={onStop}
+        size={REC_BTN}
+        hitSize={REC_HIT}
+        className="bg-muted text-foreground hover:bg-muted/80"
+        disabled={isTranscribing}
+      >
+        <Square className="h-2.5 w-2.5 fill-current" strokeWidth={0} />
+      </CircleIconBtn>
+
+      <ComposerSendButton
+        compact={compact}
+        onClick={onSend}
+        disabled={isTranscribing}
+        className={isTranscribing ? "opacity-50" : undefined}
+      />
     </div>
   );
 }
@@ -103,23 +105,26 @@ export function ComposerSendButton({
   compact = false,
   className,
   onClick,
+  disabled,
 }: {
   compact?: boolean;
   className?: string;
   /** Prefer explicit click on iOS — form submit alone is unreliable with keyboard lift. */
   onClick?: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="submit"
       aria-label="Send"
+      disabled={disabled}
       onClick={(event) => {
         if (!onClick) return;
         event.preventDefault();
         onClick();
       }}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors duration-200 hover:bg-foreground",
+        "inline-flex shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors duration-200 hover:bg-foreground disabled:pointer-events-none disabled:opacity-40",
         compact ? "h-7 w-7" : "h-8 w-8",
         className,
       )}
@@ -157,45 +162,21 @@ export function ComposerDictationButton({
   );
 }
 
-function ComposerStopVoiceButton({
-  onClick,
-  compact = false,
-}: {
-  onClick: () => void;
-  compact?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label="Stop voice"
-      onClick={onClick}
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground",
-        compact ? "h-7 w-7" : "h-8 w-8",
-      )}
-    >
-      <X className={compact ? "h-4 w-4" : "h-[18px] w-[18px]"} strokeWidth={1.75} />
-    </button>
-  );
-}
-
+/**
+ * Trailing actions for the normal (non-recording) composer.
+ * Dictation only — no live / realtime voice control.
+ */
 export function ComposerTrailingActions({
   canSend,
   hasVoice,
-  voiceActive = false,
   compact = false,
-  onStartVoice,
-  onStopVoice,
   onStartDictation,
   onSend,
 }: {
   /** True when there is text, images, or files to send. */
   canSend: boolean;
   hasVoice: boolean;
-  voiceActive?: boolean;
   compact?: boolean;
-  onStartVoice: () => void;
-  onStopVoice: () => void;
   onStartDictation: () => void;
   onSend?: () => void;
 }) {
@@ -205,32 +186,15 @@ export function ComposerTrailingActions({
     ) : null;
   }
 
-  if (canSend) {
-    return (
-      <>
-        {voiceActive ? (
-          <ComposerStopVoiceButton onClick={onStopVoice} compact={compact} />
-        ) : (
-          <ComposerDictationButton onClick={onStartDictation} compact={compact} />
-        )}
-        <ComposerSendButton compact={compact} onClick={onSend} />
-      </>
-    );
-  }
-
-  if (voiceActive) {
-    return (
-      <>
-        <ComposerDictationButton onClick={onStartDictation} compact={compact} />
-        <ComposerStopVoiceButton onClick={onStopVoice} compact={compact} />
-      </>
-    );
-  }
-
   return (
     <>
       <ComposerDictationButton onClick={onStartDictation} compact={compact} />
-      <VoiceWaveButton onClick={onStartVoice} compact={compact} ariaLabel="Start voice" />
+      <ComposerSendButton
+        compact={compact}
+        onClick={onSend}
+        disabled={!canSend}
+        className={!canSend ? "opacity-40" : undefined}
+      />
     </>
   );
 }

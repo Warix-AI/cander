@@ -3,7 +3,11 @@
  * Cancel discards audio (no API). Stop uploads to Cander → OpenAI transcription.
  */
 
-import { createAudioMeter, type AudioMeter } from "./audio-meter.ts";
+import {
+  createAudioMeter,
+  logDictationTiming,
+  type AudioMeter,
+} from "./audio-meter.ts";
 import { transcribeRawOpenAIAudio } from "../ai/raw-openai/upload-client.ts";
 
 export type DictationMime = {
@@ -51,6 +55,8 @@ export type VoiceDictationSession = {
 export type StartVoiceDictationHandlers = {
   onReady?: (mime: DictationMime) => void;
   onError?: (message: string) => void;
+  /** performance.now() from mic button press for timing logs */
+  t0?: number;
 };
 
 export async function startVoiceDictation(
@@ -62,7 +68,9 @@ export async function startVoiceDictation(
   let chunks: BlobPart[] = [];
   let closed = false;
   const mime = pickDictationMime();
+  const t0 = handlers?.t0 ?? performance.now();
 
+  logDictationTiming("getUserMedia_started", t0);
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -74,6 +82,7 @@ export async function startVoiceDictation(
   } catch {
     throw new Error("Microphone permission is required for voice dictation.");
   }
+  logDictationTiming("getUserMedia_resolved", t0);
 
   meter = createAudioMeter(stream);
 
@@ -94,7 +103,9 @@ export async function startVoiceDictation(
   recorder.onerror = () => {
     handlers?.onError?.("Microphone recording failed.");
   };
-  recorder.start(200);
+  // Smaller timeslice → first chunk sooner; UI already visible before this.
+  recorder.start(100);
+  logDictationTiming("MediaRecorder_started", t0);
   handlers?.onReady?.(mime);
 
   const releaseHardware = () => {

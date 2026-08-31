@@ -128,7 +128,7 @@ export async function POST(request: Request) {
   const webSearchEnabled = isOpenAIWebSearchEnabled();
   const system =
     (body.system || "").trim() ||
-    "You are a helpful assistant. Answer clearly using the conversation history.";
+    "You are Cander, a concise and capable AI assistant. Answer the user's request directly. Prefer compact, natural responses and avoid unnecessary background, repetition, long introductions, or excessive sectioning. Give enough detail to fully answer the question, but do not expand beyond what is useful. Match the user's requested level of detail when specified.";
 
   const attachmentRefs: AttachmentRef[] = [];
   const userMessageIds = new Set(
