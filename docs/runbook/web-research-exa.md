@@ -9,17 +9,12 @@ npx supabase secrets set EXA_API_KEY=…
 npx supabase secrets set WEB_RESEARCH_ENABLED=true
 npx supabase secrets set WEB_RESEARCH_PROVIDER=exa
 npx supabase secrets set EXA_DEEP_SEARCH_ENABLED=false
-npx supabase secrets set WEB_RETRIEVAL_MODE=deep_default
 npx supabase secrets set WEB_OPEN_DIRECT_FETCH_ENABLED=false
 ```
 
-`WEB_RETRIEVAL_MODE` (Edge) / `NEXT_PUBLIC_WEB_RETRIEVAL_MODE` (client):
+**Normal chat web search:** Exa Search `type: "deep"` only. The mode ladder (`instant` / `fast` / `auto` / `deep-lite` / `deep-reasoning` / Agent) is disabled until deliberately re-enabled. `WEB_RETRIEVAL_MODE` / `NEXT_PUBLIC_WEB_RETRIEVAL_MODE` are ignored for routing.
 
-| Value | Behavior |
-|-------|----------|
-| `deep_default` (default) | Open-web factual/current → Exa `deep` search type. URL inspect stays direct `web.read`. |
-| `fast` | Prior lightweight one-shot policy (benchmark once INTERPRET is stronger). |
-| `auto` | Floor at Exa `auto`. |
+Flow: INTERPRET → Exa Deep per WEB intent (canonical query) → validate → return Exa text as-is → citations top 1–3.
 
 Never set `NEXT_PUBLIC_EXA_*`. Never commit real keys.
 

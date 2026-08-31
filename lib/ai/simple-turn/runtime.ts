@@ -418,7 +418,7 @@ export async function runSimpleTurnRuntime(
         title: c.title,
       })),
       finalSource:
-        packet.path === "deterministic"
+        packet.path === "deterministic" || packet.path === "exa_deep"
           ? "deterministic_render"
           : packet.path === "fm_synthesis"
             ? "fm_synthesis"

@@ -9,9 +9,10 @@ import {
   urlHostMatchesRequestedDomain,
 } from "../orchestrator/url-open-path.ts";
 import {
-  getWebRetrievalMode,
-  isWebRetrievalDeepDefault,
-} from "../orchestrator/flags.ts";
+  EXA_SEARCH_TYPE,
+  lightFormatExaText,
+  logExaDeep,
+} from "./exa-deep.ts";
 import type { Lookup, SimpleEvidence } from "./types.ts";
 import { cacheKey } from "./state-store.ts";
 
@@ -19,27 +20,58 @@ function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-/** Open-web search args: deep by default; never send raw multi-ask user prose. */
+/** Open-web search args — Exa type=deep only; canonical query, never raw user prose. */
 export function webSearchArgsForLookup(lookup: Lookup): Record<string, unknown> {
-  const mode = getWebRetrievalMode();
-  const deepDefault = mode === "deep_default";
-  const args: Record<string, unknown> = {
+  return {
     query: lookup.q,
-    numResults: deepDefault || lookup.deeper || lookup.escalate ? 8 : 5,
+    numResults: 8,
+    retrievalMode: EXA_SEARCH_TYPE,
   };
-  if (lookup.retrievalMode) {
-    args.retrievalMode = lookup.retrievalMode;
-  } else if (lookup.escalate) {
-    args.escalate = lookup.escalate;
-  } else if (deepDefault) {
-    args.retrievalMode = "deep";
-    args.deeper = true;
-  } else if (mode === "auto") {
-    args.retrievalMode = "auto";
-  } else if (lookup.deeper) {
-    args.deeper = true;
+}
+
+function citationsFromToolData(data: unknown): Array<{ title?: string; url?: string | null }> {
+  if (!data || typeof data !== "object") return [];
+  const row = data as Record<string, unknown>;
+  const citations = row.citations;
+  if (Array.isArray(citations)) {
+    return citations
+      .slice(0, 8)
+      .map((c) => {
+        if (!c || typeof c !== "object") return {};
+        const r = c as Record<string, unknown>;
+        return {
+          title: typeof r.title === "string" ? r.title : undefined,
+          url: typeof r.url === "string" ? r.url : null,
+        };
+      });
   }
-  return args;
+  const results = row.results;
+  if (Array.isArray(results)) {
+    return results.slice(0, 8).map((c) => {
+      if (!c || typeof c !== "object") return {};
+      const r = c as Record<string, unknown>;
+      return {
+        title: typeof r.title === "string" ? r.title : undefined,
+        url: typeof r.url === "string" ? r.url : null,
+      };
+    });
+  }
+  return [];
+}
+
+function extractExaContent(result: AiToolCallResult): string {
+  const data = result.data as Record<string, unknown> | undefined;
+  const synthesis = data?.synthesis as { directAnswer?: string } | undefined;
+  const direct =
+    (typeof data?.directAnswer === "string" && data.directAnswer.trim()) ||
+    (typeof synthesis?.directAnswer === "string" &&
+      synthesis.directAnswer.trim()) ||
+    "";
+  if (direct) return lightFormatExaText(direct);
+  const output = typeof result.output === "string" ? result.output : "";
+  if (output) return lightFormatExaText(output);
+  if (data) return lightFormatExaText(JSON.stringify(data).slice(0, 4000));
+  return "";
 }
 
 export async function executeLookup(opts: {
@@ -111,7 +143,7 @@ export async function executeLookup(opts: {
       const ok = result.ok && content.trim().length >= 8 && domainOk;
 
       if (!ok) {
-        // Fall back once to site:domain search — not agent/deep mode.
+        // Fall back once to site:domain search — still Exa type=deep (only search mode).
         const siteQ = siteSearchQueryForUrl(normalized.url);
         console.log("[SIMPLE_TURN_URL_SITE_FALLBACK]", {
           from: normalized.url,
@@ -121,11 +153,13 @@ export async function executeLookup(opts: {
         });
         const search = await exec({
           name: "web.search",
-          arguments: { query: siteQ, numResults: 5, retrievalMode: "fast" },
+          arguments: {
+            query: siteQ,
+            numResults: 8,
+            retrievalMode: EXA_SEARCH_TYPE,
+          },
         });
-        const searchContent =
-          (typeof search.output === "string" && search.output) ||
-          (search.data ? JSON.stringify(search.data).slice(0, 4000) : "");
+        const searchContent = extractExaContent(search);
         const evidence: SimpleEvidence = {
           id: newId("ev"),
           cap: "WEB",
@@ -168,25 +202,41 @@ export async function executeLookup(opts: {
       return evidence;
     }
 
-    // Open-web factual/current → Exa deep by default (canonical intent query only).
+    // Open-web → Exa Search type=deep only (canonical intent query).
     const name = "web.search";
     const args = webSearchArgsForLookup(opts.lookup);
-    console.log("[SIMPLE_TURN_WEB_SEARCH]", {
-      query: String(args.query).slice(0, 160),
-      retrievalMode: args.retrievalMode ?? null,
-      deeper: Boolean(args.deeper),
-      escalate: args.escalate ?? null,
-      webRetrievalMode: getWebRetrievalMode(),
-      deepDefault: isWebRetrievalDeepDefault(),
+    const normalizedQuery = String(args.query);
+    logExaDeep({
+      stage: opts.lookup.escalate || /official|refine/i.test(opts.lookup.q)
+        ? "retry"
+        : "request",
+      normalizedQuery,
+      exaType: EXA_SEARCH_TYPE,
+      intentId: opts.lookup.intentId,
+      retryQuery: opts.lookup.escalate ? normalizedQuery : undefined,
     });
     const result = await exec({ name, arguments: args });
-    const content =
-      (typeof result.output === "string" && result.output) ||
-      (result.data ? JSON.stringify(result.data).slice(0, 4000) : "");
+    const content = extractExaContent(result);
+    const citations = citationsFromToolData(result.data);
     const title =
       (result.data as { title?: string } | undefined)?.title ||
+      citations[0]?.title ||
       opts.lookup.q.slice(0, 80);
-    const url = (result.data as { url?: string } | undefined)?.url ?? null;
+    const url =
+      (result.data as { url?: string } | undefined)?.url ??
+      citations[0]?.url ??
+      null;
+    const ok = result.ok && content.trim().length >= 8;
+
+    logExaDeep({
+      stage: "response",
+      normalizedQuery,
+      exaType: EXA_SEARCH_TYPE,
+      rawExaResponse: content,
+      citations: citations.slice(0, 3),
+      intentId: opts.lookup.intentId,
+      ok,
+    });
 
     const evidence: SimpleEvidence = {
       id: newId("ev"),
@@ -195,7 +245,7 @@ export async function executeLookup(opts: {
       title,
       url,
       content: content.slice(0, 6000),
-      ok: result.ok && content.trim().length >= 8,
+      ok,
       accepted: false,
       retrievedAt: new Date().toISOString(),
       sourceTool: name,

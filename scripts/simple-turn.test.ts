@@ -506,24 +506,17 @@ describe("simple turn IntentPlan runtime", () => {
     assert.ok(v.plan.intents.length >= 3);
   });
 
-  it("open-web WEB intents request Exa deep by default; URL stays direct", async () => {
-    process.env.NEXT_PUBLIC_WEB_RETRIEVAL_MODE = "deep_default";
+  it("open-web WEB intents always use Exa type=deep; URL stays direct; Exa text passthrough", async () => {
     const deepArgs = webSearchArgsForLookup({
       cap: "WEB",
       q: "Taco Bell regular taco calories",
     });
     assert.equal(deepArgs.retrievalMode, "deep");
-    assert.equal(deepArgs.deeper, true);
+    assert.ok(!deepArgs.deeper);
+    assert.ok(!deepArgs.escalate);
     assert.ok(!/if i eat/i.test(String(deepArgs.query)));
 
-    process.env.NEXT_PUBLIC_WEB_RETRIEVAL_MODE = "fast";
-    const fastArgs = webSearchArgsForLookup({
-      cap: "WEB",
-      q: "BYU next football game 2026",
-    });
-    assert.equal(fastArgs.retrievalMode, undefined);
-
-    // URL path must not invoke deep search first
+    // URL path must not invoke search first
     const calls: string[] = [];
     await executeLookup({
       lookup: { cap: "WEB", q: "https://vercel.com" },
@@ -546,10 +539,9 @@ describe("simple turn IntentPlan runtime", () => {
       },
     });
     assert.ok(calls[0]?.startsWith("web.read:"));
-    assert.ok(!calls.some((c) => /web\.search:deep/.test(c)));
+    assert.ok(!calls.some((c) => c.startsWith("web.search:")));
 
     // Open-web concurrent intents pass deep + canonical queries
-    process.env.NEXT_PUBLIC_WEB_RETRIEVAL_MODE = "deep_default";
     const state = loadSimpleState({ text: CALORIE_PROMPT });
     const hydrate = hydrateTurn(state);
     const ip = intentPlanFromHydrateHeuristic(hydrate);
@@ -564,11 +556,12 @@ describe("simple turn IntentPlan runtime", () => {
         return {
           name,
           ok: true,
-          output: "170 calories per serving according to nutrition data",
+          output: "Grounded retrieval answer for “q”:\n170 calories per serving.\n\nUse this grounded answer.",
           data: {
             title: "Nutrition",
             url: "https://example.com",
-            text: "170 calories per serving according to nutrition data",
+            directAnswer: "170 calories per serving.",
+            text: "170 calories per serving.",
           },
         };
       },
@@ -578,7 +571,32 @@ describe("simple turn IntentPlan runtime", () => {
       assert.equal(c.retrievalMode, "deep");
       assert.ok(!/if i eat|how many calories is that/i.test(String(c.query)));
     }
-    delete process.env.NEXT_PUBLIC_WEB_RETRIEVAL_MODE;
+
+    // Validated Exa answer returned as-is (no FM rewrite)
+    const packet = await answerTurn({
+      plan: intentPlanToPlan(ip),
+      hydrate,
+      accepted: [
+        {
+          id: "e1",
+          cap: "WEB",
+          query: "Taco Bell regular taco calories",
+          title: "Nutrition",
+          url: "https://example.com",
+          content: "A Taco Bell regular taco has about 170 calories.",
+          ok: true,
+          accepted: true,
+          retrievedAt: new Date().toISOString(),
+          sourceTool: "web.search",
+        },
+      ],
+      useHeuristicOnly: false,
+      generate: async () => {
+        throw new Error("FM must not rewrite Exa web answers");
+      },
+    });
+    assert.equal(packet.path, "exa_deep");
+    assert.match(packet.answer, /170 calories/i);
   });
 
   it("classifies deliberation depth adaptively", () => {

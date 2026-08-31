@@ -134,7 +134,7 @@ function buildArgsForNode(
   // site: fallback queries must stay exact — do not expand via webRetrievalPlan.
   if (/^site:[a-z0-9.-]+/i.test(query.trim())) {
     return applyPreConstraints(
-      { query: query.trim(), numResults: 5 },
+      { query: query.trim(), numResults: 8, retrievalMode: "deep" },
       ctx.constraints,
     );
   }

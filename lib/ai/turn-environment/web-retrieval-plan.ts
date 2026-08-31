@@ -15,7 +15,6 @@ import { extractRequestedUrl } from "../orchestrator/web-retrieval.ts";
 import {
   isExplicitWebsiteInspectRequest,
 } from "../orchestrator/url-open-path.ts";
-import { getWebRetrievalMode } from "../orchestrator/flags.ts";
 import type { TemporalGrounding } from "../orchestrator/temporal-grounding.ts";
 import { maybeAnchorRetrievalQuery } from "../orchestrator/temporal-grounding.ts";
 import type { ConversationTurnState } from "./conversation-types.ts";
@@ -51,35 +50,15 @@ export type WebRetrievalPlan = {
   systemPrompt: string;
 };
 
-const PLAN_ESCALATION: WebRetrievalPlanMode[] = [
-  "fast",
-  "auto",
-  "deep-lite",
-  "deep",
-  "agent",
-];
+const PLAN_ESCALATION: WebRetrievalPlanMode[] = ["deep"];
 
-function mapExaModeToPlan(mode: ExaRetrievalMode): WebRetrievalPlanMode {
-  if (mode === "instant") return "fast";
-  if (mode === "deep-reasoning") return "deep";
-  return mode as WebRetrievalPlanMode;
+function mapExaModeToPlan(_mode: ExaRetrievalMode): WebRetrievalPlanMode {
+  return "deep";
 }
 
 function planModeToExa(mode: WebRetrievalPlanMode): ExaRetrievalMode | null {
-  switch (mode) {
-    case "fast":
-      return "fast";
-    case "auto":
-      return "auto";
-    case "deep-lite":
-      return "deep-lite";
-    case "deep":
-      return "deep";
-    case "agent":
-      return null;
-    default:
-      return null;
-  }
+  if (mode === "none" || mode === "agent") return null;
+  return "deep";
 }
 
 function extractDomains(content: string): string[] {
@@ -143,12 +122,18 @@ export function compileWebRetrievalPlan(opts: {
     Boolean(opts.temporalGrounding?.timeSensitive);
 
   if (wantsAutonomousResearch(content)) {
+    // Autonomous-sounding prompts still use Exa type=deep in normal chat —
+    // no separate Agent mode until deliberately re-enabled.
+    const policy = resolveExaRetrievalPolicy(content, {
+      hints,
+      webRetrievalMode: "deep_only",
+    });
     return {
-      mode: "agent",
+      mode: "deep",
       output: "text",
       requestedFields: opts.turnTask.requestedFields,
       freshness: hints.freshness ?? false,
-      resultCount: 0,
+      resultCount: policy.numResults,
       domains: extractDomains(content),
       category: null,
       location: extractLocation(content, opts.conv),
@@ -164,9 +149,9 @@ export function compileWebRetrievalPlan(opts: {
         opts.temporalGrounding,
       ),
       carrySubject,
-      escalationChain: ["agent"],
-      exaMode: null,
-      systemPrompt: "",
+      escalationChain: ["deep"],
+      exaMode: "deep",
+      systemPrompt: policy.systemPrompt,
     };
   }
 
@@ -211,19 +196,15 @@ export function compileWebRetrievalPlan(opts: {
     deeper: opts.deeper,
     escalate: opts.escalate ?? undefined,
     hints,
-    webRetrievalMode: getWebRetrievalMode(),
+    webRetrievalMode: "deep_only",
   });
   const schema = buildExaOutputSchema(content, hints);
-  const planMode = mapExaModeToPlan(policy.mode);
-  const startIdx = PLAN_ESCALATION.indexOf(planMode);
-  const escalationChain: WebRetrievalPlanMode[] =
-    startIdx >= 0
-      ? PLAN_ESCALATION.slice(startIdx)
-      : (["fast", "auto", "deep-lite", "deep"] as WebRetrievalPlanMode[]);
+  // Normal chat: Exa type=deep only — no mode ladder / agent fallback
+  const planMode: WebRetrievalPlanMode = "deep";
+  const escalationChain: WebRetrievalPlanMode[] = ["deep"];
 
-  let contentNeeded: WebRetrievalContentNeed = "highlights";
-  if (planMode === "deep" || planMode === "agent") contentNeeded = "subpages";
-  else if (hints.operation === "detail" || hints.depth === "detailed") {
+  let contentNeeded: WebRetrievalContentNeed = "subpages";
+  if (hints.operation === "detail" || hints.depth === "detailed") {
     contentNeeded = "full_text";
   }
 
@@ -249,7 +230,7 @@ export function compileWebRetrievalPlan(opts: {
     ),
     carrySubject,
     escalationChain,
-    exaMode: planModeToExa(planMode),
+    exaMode: "deep",
     systemPrompt: policy.systemPrompt,
   };
 }

@@ -31,11 +31,11 @@ export type Lookup = {
   parallelGroup?: string;
   /** Owning intent id when run from IntentPlan */
   intentId?: string;
-  /** Prefer Exa deeper retrieval for this lookup */
+  /** Prefer Exa deeper retrieval for this lookup — ignored; always type=deep */
   deeper?: boolean;
-  /** Explicit Exa retrievalMode override (instant|fast|auto|deep-lite|deep|deep-reasoning) */
+  /** Always forced to "deep" for open-web; kept for debug/override logging */
   retrievalMode?: string;
-  /** Escalation target for bounded retry */
+  /** @deprecated Mode escalation disabled — retry uses refined query + type=deep */
   escalate?: string;
 };
 
@@ -216,7 +216,7 @@ export type AnswerPacket = {
   topic?: string;
   entities?: string[];
   facts?: string[];
-  path: "deterministic" | "fm_synthesis" | "unresolved";
+  path: "deterministic" | "exa_deep" | "fm_synthesis" | "unresolved";
 };
 
 export type SimpleTurnTerminal =

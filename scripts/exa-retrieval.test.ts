@@ -30,37 +30,33 @@ import {
 import { tryExaDirectAnswer } from "./exa-retrieval-helpers.ts";
 
 describe("Exa retrieval policy", () => {
-  it("deep_default routes simple factual questions to Exa deep", () => {
+  it("normal chat always resolves to Exa type=deep", () => {
     const q = "What is BYU's first football game of the season this year?";
-    const policy = resolveExaRetrievalPolicy(q, {
-      webRetrievalMode: "deep_default",
-    });
-    assert.equal(policy.mode, "deep");
-    assert.ok(policy.numResults >= 6);
-  });
-
-  it("fast mode keeps simple factual questions on fast + text outputSchema", () => {
-    const q = "What is BYU's first football game of the season this year?";
-    const policy = resolveExaRetrievalPolicy(q, { webRetrievalMode: "fast" });
-    assert.equal(policy.mode, "fast");
-    assert.equal(policy.outputSchema.type, "text");
-    assert.ok(policy.numResults <= 5);
-  });
-
-  it("escalates list-all questions toward deep under deep_default", () => {
-    const policy = resolveExaRetrievalPolicy(
-      "List every BYU football game this season with times",
-      { webRetrievalMode: "deep_default" },
+    assert.equal(resolveExaRetrievalPolicy(q).mode, "deep");
+    assert.equal(
+      resolveExaRetrievalPolicy(q, { webRetrievalMode: "fast" }).mode,
+      "deep",
     );
-    assert.equal(policy.mode, "deep");
+    assert.equal(
+      resolveExaRetrievalPolicy(q, { escalate: "instant" }).mode,
+      "deep",
+    );
+    assert.ok(resolveExaRetrievalPolicy(q).numResults >= 6);
   });
 
-  it("escalates list-all questions toward deep-lite under fast mode", () => {
-    const policy = resolveExaRetrievalPolicy(
-      "List every BYU football game this season with times",
-      { webRetrievalMode: "fast" },
+  it("list-all and compare prompts still use deep (no mode ladder)", () => {
+    assert.equal(
+      resolveExaRetrievalPolicy(
+        "List every BYU football game this season with times",
+      ).mode,
+      "deep",
     );
-    assert.equal(policy.mode, "deep-lite");
+    assert.equal(
+      resolveExaRetrievalPolicy("Compare BYU vs Utah schedules", {
+        hints: { operation: "compare", depth: "detailed" },
+      }).mode,
+      "deep",
+    );
   });
 
   it("builds object schema when multiple schedule fields are requested", () => {
@@ -300,11 +296,11 @@ describe("Exa retrieval policy — P1", () => {
     assert.ok(quality.issues.includes("missing_direct_output"));
   });
 
-  it("list operation selects deep-lite mode and object schema", () => {
+  it("list operation selects deep mode and object schema", () => {
     const policy = resolveExaRetrievalPolicy("List every BYU game", {
       hints: { operation: "list", subject: "BYU football" },
     });
-    assert.equal(policy.mode, "deep-lite");
+    assert.equal(policy.mode, "deep");
     assert.equal(policy.outputSchema.type, "object");
   });
 
@@ -363,7 +359,7 @@ describe("Exa retrieval — P2", () => {
         },
       },
     );
-    assert.equal(policy.mode, "deep-reasoning");
+    assert.equal(policy.mode, "deep");
     assert.equal(
       wantsDeepReasoningSearch("Why did revenue drop?", {
         depth: "detailed",

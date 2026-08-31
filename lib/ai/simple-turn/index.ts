@@ -75,6 +75,12 @@ export {
   heuristicCalorieIntents,
 } from "./query-normalize.ts";
 export { webSearchArgsForLookup, executeLookup } from "./cap-router.ts";
+export {
+  EXA_SEARCH_TYPE,
+  logExaDeep,
+  lightFormatExaText,
+  formatExaPassthroughAnswer,
+} from "./exa-deep.ts";
 export { answerTurn, mergeCommitNotes } from "./answer.ts";
 export { commitTurnNotes } from "./commit.ts";
 export {

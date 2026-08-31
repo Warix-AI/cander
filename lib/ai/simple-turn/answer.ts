@@ -1,7 +1,13 @@
 /**
- * ANSWER — deterministic scalar first; FM synthesis only when needed.
+ * ANSWER — Exa Deep text as-is for WEB; no FM rewrite of validated web facts.
+ * FM only for non-web / no-retrieval turns.
  */
 
+import {
+  formatExaPassthroughAnswer,
+  lightFormatExaText,
+  logExaDeep,
+} from "./exa-deep.ts";
 import type {
   AnswerPacket,
   CommitNotes,
@@ -47,48 +53,6 @@ function parseAnswerJson(raw: string): {
   }
 }
 
-function isSimpleScalarEvidence(items: SimpleEvidence[]): string | null {
-  if (items.length !== 1) return null;
-  const e = items[0]!;
-  const text = e.content.trim();
-  // Short Exa-style direct answers / dates / distances
-  if (text.length > 0 && text.length <= 280) {
-    if (
-      /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}/i.test(
-        text,
-      ) ||
-      /^\s*[\d.,]+\s*(miles|km|kilometers|calories|cal|minutes?|hours?)\b/i.test(
-        text,
-      ) ||
-      /^[^.\n]{8,120}\.\s*$/.test(text)
-    ) {
-      return text;
-    }
-  }
-  // Prefer title+first sentence for single web.read of a known site when short enough
-  if (e.sourceTool === "web.read" && text.length <= 400) {
-    const first = text.split(/\n+/).map((l) => l.trim()).find((l) => l.length > 40);
-    if (first && first.length <= 280) return first;
-  }
-  return null;
-}
-
-function needsSynthesis(plan: Plan, evidence: SimpleEvidence[]): boolean {
-  if (plan.asks.length > 1) return true;
-  if (
-    plan.answerShape === "comparison" ||
-    plan.answerShape === "breakdown" ||
-    plan.answerShape === "steps" ||
-    plan.answerShape === "mixed"
-  ) {
-    return true;
-  }
-  if (/summar|compar|explain|draft|nuance|caveat/i.test(plan.intent)) return true;
-  if (evidence.length > 1) return true;
-  if (evidence.some((e) => e.content.length > 400)) return true;
-  return false;
-}
-
 const SYNTHESIS_INSTRUCTIONS = [
   "Write the final user-facing answer from accepted evidence only.",
   "Return JSON: { \"answer\": string, \"topic\"?: string, \"entities\"?: string[], \"facts\"?: string[] }",
@@ -115,12 +79,19 @@ export async function answerTurn(opts: {
     const freshFail =
       /fresh|no fresh|won'?t guess|live information|unresolved/i.test(reason) ||
       reason.includes("WEB selected");
+    const answer = freshFail
+      ? "I couldn't retrieve live information for that question, so I won't guess. Please try again in a moment."
+      : `I couldn't verify that reliably${
+          reason ? ` (${reason})` : ""
+        }. Please try again.`;
+    logExaDeep({
+      stage: "final",
+      validationResult: `unresolved:${reason || "unknown"}`,
+      finalText: answer,
+      ok: false,
+    });
     return {
-      answer: freshFail
-        ? "I couldn't retrieve live information for that question, so I won't guess. Please try again in a moment."
-        : `I couldn't verify that reliably${
-            reason ? ` (${reason})` : ""
-          }. Please try again.`,
+      answer,
       path: "unresolved",
       topic: opts.hydrate.topicHint,
       entities: opts.hydrate.entityHints.slice(0, 5),
@@ -143,24 +114,79 @@ export async function answerTurn(opts: {
     };
   }
 
-  const scalar = isSimpleScalarEvidence(opts.accepted);
-  if (scalar && !needsSynthesis(opts.plan, opts.accepted)) {
+  const webEvidence = opts.accepted.filter(
+    (e) => e.cap === "WEB" && e.content.trim().length >= 8,
+  );
+  const needsCalc = opts.intentResults?.some(
+    (r) => r.intent.action === "CALC" && r.status === "succeeded",
+  );
+  const urlOnly =
+    webEvidence.length > 0 &&
+    webEvidence.every((e) => e.sourceTool === "web.read");
+
+  // Validated Exa Deep (or direct URL fetch) → return essentially as-is. No FM rewrite.
+  if (webEvidence.length && !needsCalc) {
+    const answer = formatExaPassthroughAnswer(webEvidence);
+    if (answer) {
+      logExaDeep({
+        stage: "final",
+        validationResult: "accepted_passthrough",
+        finalText: answer,
+        citations: webEvidence.slice(0, 3).map((e) => ({
+          title: e.title,
+          url: e.url,
+        })),
+        ok: true,
+      });
+      return {
+        answer,
+        path: urlOnly ? "deterministic" : "exa_deep",
+        topic: opts.hydrate.topicHint ?? opts.hydrate.urls[0]?.domain,
+        entities: [
+          ...opts.hydrate.entityHints,
+          ...opts.hydrate.urls.map((u) => u.domain),
+        ].slice(0, 5),
+        facts: webEvidence.slice(0, 3).map((e) =>
+          lightFormatExaText(e.content).slice(0, 160),
+        ),
+      };
+    }
+  }
+
+  // WEB + CALC: pass Exa facts through; light combine without inventing numbers
+  if (webEvidence.length && needsCalc) {
+    const facts = formatExaPassthroughAnswer(webEvidence);
+    const qtyLines =
+      opts.intentResults
+        ?.filter((r) => r.intent.action === "WEB" && r.intent.quantity != null)
+        .map(
+          (r) =>
+            `${r.intent.quantity}× ${r.intent.entity ?? ""} ${r.intent.subject ?? r.intent.goal}`.trim(),
+        ) ?? [];
+    const answer = [facts, qtyLines.length ? `Quantities: ${qtyLines.join("; ")}` : ""]
+      .filter(Boolean)
+      .join("\n\n")
+      .slice(0, 4000);
+    logExaDeep({
+      stage: "final",
+      validationResult: "accepted_passthrough_with_calc",
+      finalText: answer,
+      ok: true,
+    });
     return {
-      answer: scalar,
-      path: "deterministic",
-      topic: opts.hydrate.topicHint ?? opts.hydrate.urls[0]?.domain,
-      entities: [
-        ...opts.hydrate.entityHints,
-        ...(opts.hydrate.urls.map((u) => u.domain) ?? []),
-      ].slice(0, 5),
-      facts: [scalar.slice(0, 160)],
+      answer,
+      path: "exa_deep",
+      topic: opts.hydrate.topicHint,
+      entities: opts.hydrate.entityHints.slice(0, 5),
+      facts: webEvidence.slice(0, 3).map((e) =>
+        lightFormatExaText(e.content).slice(0, 160),
+      ),
     };
   }
 
   if (opts.useHeuristicOnly || !opts.generate) {
-    // Deterministic summary from evidence without FM
     const bits = opts.accepted
-      .map((e) => e.content.trim().slice(0, 400))
+      .map((e) => lightFormatExaText(e.content).slice(0, 400))
       .filter(Boolean);
     const answer = bits.length
       ? bits.join("\n\n").slice(0, 1500)
@@ -175,6 +201,7 @@ export async function answerTurn(opts: {
     };
   }
 
+  // Non-web turns only — never rewrite a validated Exa web answer via FM
   const generate =
     opts.generate ??
     (async (prompt: string, instructions: string) => {
@@ -224,8 +251,7 @@ export async function answerTurn(opts: {
     "",
     opts.hydrate.temporalLine,
     "",
-    "Combine quantities from intents with per-unit facts from evidence when calculating totals.",
-    "Do not ask the user to split the question into separate prompts.",
+    "Do not invent live web facts. Do not ask the user to split the question.",
   ].join("\n");
 
   const raw = await generate(prompt, SYNTHESIS_INSTRUCTIONS);

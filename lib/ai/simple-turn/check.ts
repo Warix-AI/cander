@@ -16,6 +16,7 @@ import type {
 } from "./types.ts";
 import { syncPlanAliases } from "./types.ts";
 import { buildCanonicalLookupQuery } from "./query-normalize.ts";
+import { logExaDeep } from "./exa-deep.ts";
 
 const CURRENT_YEAR_RE = /\b(20\d{2})\b/g;
 
@@ -347,9 +348,8 @@ export function buildRefineLookups(opts: {
       }),
       parallelGroup: "refine",
       intentId: intent.id,
-      // Bounded retry: escalate one step past deep_default
-      escalate: "deep-reasoning",
-      deeper: true,
+      // Retry once with cleaner query — still Exa type=deep (no mode ladder)
+      retrievalMode: "deep",
     }));
   }
 
@@ -378,8 +378,7 @@ export function buildRefineLookups(opts: {
         cap: "WEB",
         q: `${ask} ${entity} ${year} official`.trim().slice(0, 400),
         parallelGroup: "refine",
-        escalate: "deep-reasoning",
-        deeper: true,
+        retrievalMode: "deep",
       },
     ];
   }
@@ -389,8 +388,7 @@ export function buildRefineLookups(opts: {
         cap: "WEB",
         q: `${entity} ${ask}`.trim().slice(0, 400),
         parallelGroup: "refine",
-        escalate: "deep",
-        deeper: true,
+        retrievalMode: "deep",
       },
     ];
   }
@@ -402,8 +400,7 @@ export function buildRefineLookups(opts: {
           .trim()
           .slice(0, 400),
         parallelGroup: "refine",
-        escalate: "deep-reasoning",
-        deeper: true,
+        retrievalMode: "deep",
       },
     ];
   }
@@ -555,18 +552,43 @@ export function checkEvidence(opts: {
       (r) => r.intent.action !== "ANSWER" && r.intent.action !== "CALC",
     );
 
+    for (const r of intentResults) {
+      if (r.intent.action !== "WEB") continue;
+      logExaDeep({
+        stage: "validation",
+        normalizedQuery: r.intent.lookup?.q,
+        intentId: r.intent.id,
+        validationResult: `${r.status}${r.rejectReason ? `:${r.rejectReason}` : ""}`,
+        citations: r.accepted.slice(0, 3).map((e) => ({
+          title: e.title,
+          url: e.url,
+        })),
+        ok: r.status === "succeeded",
+      });
+    }
+
     if (failedToolIntents.length && opts.round < 2) {
+      const refineLookups = buildRefineLookups({
+        plan,
+        hydrate: opts.hydrate,
+        rejected,
+        round: opts.round,
+        failedIntents: failedToolIntents.map((f) => f.intent),
+      });
+      for (const look of refineLookups) {
+        logExaDeep({
+          stage: "retry",
+          normalizedQuery: look.q,
+          retryQuery: look.q,
+          intentId: look.intentId,
+          validationResult: "refine_query_same_deep",
+        });
+      }
       return {
         accepted,
         rejected,
         needsRefine: true,
-        refineLookups: buildRefineLookups({
-          plan,
-          hydrate: opts.hydrate,
-          rejected,
-          round: opts.round,
-          failedIntents: failedToolIntents.map((f) => f.intent),
-        }),
+        refineLookups,
         needsCorroboration: false,
         needsDeeperSearch: false,
         unresolved: false,

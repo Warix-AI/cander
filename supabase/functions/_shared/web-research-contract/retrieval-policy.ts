@@ -6,7 +6,6 @@
 import {
   extractRequestedItemCount,
   inferResponseContract,
-  inferResponseDepth,
 } from "../answer-shape/response-contract.ts";
 import { isFreshnessQuery } from "./types.ts";
 
@@ -259,67 +258,24 @@ export function resolveExaRetrievalPolicy(
     escalate?: ExaRetrievalMode | null;
     hints?: TurnRetrievalHints;
     /**
-     * Temporary product policy. `deep_default` starts open-web factual asks
-     * at Exa deep (not fast/instant). Explicit escalate still wins.
+     * @deprecated Mode ladder disabled — normal chat always uses Exa type=deep.
+     * Kept for API compatibility; ignored except escalate is also forced to deep.
      */
-    webRetrievalMode?: "deep_default" | "fast" | "auto";
+    webRetrievalMode?: "deep_default" | "fast" | "auto" | "deep_only";
   },
 ): ExaRetrievalPolicy {
   const q = question.trim();
   const hints = opts?.hints;
-  const depth = hints?.depth ?? inferResponseDepth(q);
   const fresh =
     Boolean(hints?.freshness) || isFreshnessQuery(q) || VOLATILE_FRESH_RE.test(q);
-  const components = (q.match(/\band\b/gi) ?? []).length + 1;
   const itemCount =
     hints?.requestedItemCount ?? extractRequestedItemCount(q);
-  const webMode = opts?.webRetrievalMode ?? "fast";
 
-  let mode: ExaRetrievalMode = "fast";
+  // Normal chat: Exa Search type="deep" only. No instant/fast/auto/deep-lite/
+  // deep-reasoning/agent selection — FM decides WHETHER to retrieve, not how deep.
+  const mode: ExaRetrievalMode = "deep";
 
-  if (opts?.escalate) {
-    mode = opts.escalate;
-  } else if (wantsDeepReasoningSearch(q, hints)) {
-    mode = "deep-reasoning";
-  } else if (opts?.deeper || hints?.dissatisfaction) {
-    mode = RESEARCH_RE.test(q) ? "deep" : webMode === "deep_default" ? "deep" : "auto";
-  } else if (
-    hints?.operation === "deepen" ||
-    RESEARCH_RE.test(q) ||
-    depth === "detailed"
-  ) {
-    mode = webMode === "deep_default" ? "deep" : "deep-lite";
-  } else if (
-    hints?.operation === "compare" ||
-    COMPARISON_RE.test(q) ||
-    components >= 3
-  ) {
-    mode = webMode === "deep_default" ? "deep" : "auto";
-  } else if (
-    hints?.operation === "list" ||
-    LIST_ALL_RE.test(q) ||
-    itemCount != null
-  ) {
-    mode = webMode === "deep_default" ? "deep" : "deep-lite";
-  } else if (/\b(quick|right now|asap)\b/i.test(q)) {
-    mode = "instant";
-  } else if (webMode === "deep_default") {
-    // Correctness-first: open-web factual/current → Exa deep by default
-    mode = "deep";
-  } else if (webMode === "auto") {
-    mode = "auto";
-  } else if (hints?.operation === "lookup" || hints?.operation === "answer") {
-    mode = "fast";
-  } else {
-    mode = "fast";
-  }
-
-  let numResults = 5;
-  if (mode === "instant") numResults = 3;
-  if (mode === "fast") numResults = 4;
-  if (mode === "auto") numResults = 6;
-  if (mode === "deep-lite") numResults = 6;
-  if (mode === "deep" || mode === "deep-reasoning") numResults = 8;
+  let numResults = 8;
   if (itemCount != null) {
     numResults = Math.min(8, Math.max(numResults, itemCount + 2));
   }
