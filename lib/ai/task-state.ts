@@ -17,7 +17,8 @@ export type ToolDomain =
   | "comms"
   | "cloud_work"
   | "review"
-  | "build";
+  | "build"
+  | "health";
 
 export type TaskStatus =
   | "idle"
