@@ -6,7 +6,10 @@
  * Cap / web / desktop share runOrchestratedTurn → ai-agent run_turn.
  */
 
-export { isAgentOrchestratorEnabled } from "./flags";
+export {
+  isAgentOrchestratorEnabled,
+  isSimpleTurnRuntimeEnabled,
+} from "./flags";
 export {
   runOrchestratedTurn,
   cancelActiveOrchestratorTurn,

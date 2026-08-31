@@ -169,6 +169,21 @@ export class TurnTraceRecorder {
     });
   }
 
+  /** Generic stage logger for simple-turn runtime. */
+  recordStage(
+    stage: TraceStage,
+    opts?: {
+      taskId?: string;
+      decision?: string;
+      failureType?: TraceFailureType;
+      input?: unknown;
+      output?: unknown;
+      durationMs?: number;
+    },
+  ): void {
+    this.record(stage, opts ?? {});
+  }
+
   recordRequestLedger(ledger: RequestLedger): void {
     this.trace.requestLedger = ledger;
     this.record("request_ledger", {

@@ -42,3 +42,27 @@ export function isBuildLocalOrchestratorEnabled(): boolean {
   if (v === "0" || v === "false" || v === "off") return false;
   return true;
 }
+
+/**
+ * Simple small-model turn runtime (HYDRATE→PLAN→RUN→CHECK→ANSWER→COMMIT).
+ * Default OFF — opt in for parity testing beside the TaskGraph local orchestrator.
+ * Set NEXT_PUBLIC_AI_SIMPLE_TURN_RUNTIME=1 to enable.
+ * Desktop override: localStorage['cander:simple-turn-runtime'] = '1'
+ */
+export function isSimpleTurnRuntimeEnabled(): boolean {
+  if (typeof process !== "undefined") {
+    const v = process.env.NEXT_PUBLIC_AI_SIMPLE_TURN_RUNTIME;
+    if (v === "1" || v === "true" || v === "on") return true;
+    if (v === "0" || v === "false" || v === "off") return false;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const ls = window.localStorage?.getItem("cander:simple-turn-runtime");
+      if (ls === "1" || ls === "true" || ls === "on") return true;
+      if (ls === "0" || ls === "false" || ls === "off") return false;
+    } catch {
+      /* ignore */
+    }
+  }
+  return false;
+}

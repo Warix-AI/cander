@@ -198,6 +198,17 @@ Divergence hints flag when model output has weak overlap with accepted evidence 
 
 **URL entity/action binding:** `bindEntitiesToActions` (after `scanRequest`) binds domains/URLs to compound workflows: `FETCH_URL(domain)` → `SUMMARIZE_SITE` (via `web.read`, then FM synthesis). Filler phrases (`tell me about it`, `write me a summary`) are not decomposed into separate search tasks. `ensureUrlFetchNodes` repairs missing fetch nodes when a domain is present. Tests: `scripts/url-workflow.test.ts`.
 
+### Simple turn runtime (flagged)
+
+Opt-in replacement for the TaskGraph local orchestrator:
+
+`STATE → HYDRATE → PLAN → RUN → CHECK → ANSWER → COMMIT`
+
+- Flag: `NEXT_PUBLIC_AI_SIMPLE_TURN_RUNTIME=1` (default **off**). Desktop: `localStorage['cander:simple-turn-runtime']='1'`.
+- Module: `lib/ai/simple-turn/` — at most two Apple FM calls (PLAN + optional synthesis). Code owns routing, evidence gates, retries (max 2), and notes.
+- Branch: `agent-turn.ts` → `runSimpleTurnRuntime` when local FM + flag on; legacy `runLocalTurnOrchestrator` otherwise.
+- Tests: `scripts/simple-turn.test.ts`.
+
 **Dev viewer:** `/dev/turn-trace` — filter by traceId, taskId, stage, failure type.
 
 **Console:** `[TURN_TRACE]` JSON on turn finalize (dev default on; set `NEXT_PUBLIC_TURN_TRACE=0` to disable).

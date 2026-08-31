@@ -14,6 +14,9 @@ import { fetchAllPersistedTurnTraces } from "@/lib/api/turn-trace-api";
 
 const STAGES: TraceStage[] = [
   "user_input",
+  "hydrate",
+  "plan",
+  "plan_validate",
   "temporal_grounding",
   "request_ledger",
   "task_graph",
@@ -29,6 +32,8 @@ const STAGES: TraceStage[] = [
   "validation_failure",
   "fallback",
   "coverage",
+  "answer_path",
+  "commit",
   "final_response",
 ];
 

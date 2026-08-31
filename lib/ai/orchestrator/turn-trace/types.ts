@@ -9,6 +9,9 @@ import type { CoverageResult } from "../coverage-ledger.ts";
 
 export type TraceStage =
   | "user_input"
+  | "hydrate"
+  | "plan"
+  | "plan_validate"
   | "temporal_grounding"
   | "request_ledger"
   | "task_graph"
@@ -24,6 +27,8 @@ export type TraceStage =
   | "validation_failure"
   | "fallback"
   | "coverage"
+  | "answer_path"
+  | "commit"
   | "final_response";
 
 export type TraceFailureType =

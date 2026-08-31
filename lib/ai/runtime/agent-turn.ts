@@ -25,7 +25,10 @@ import type {
   AiGenerateResult,
 } from "@/lib/ai/runtime/types";
 import { AiRuntimeError } from "@/lib/ai/runtime/types";
-import { isAgentOrchestratorEnabled } from "@/lib/ai/orchestrator/flags";
+import {
+  isAgentOrchestratorEnabled,
+  isSimpleTurnRuntimeEnabled,
+} from "@/lib/ai/orchestrator/flags";
 import { getAiRuntimeMode } from "@/lib/ai/runtime/mode-store";
 import { shouldUseLocalTurnOrchestrator } from "@/lib/ai/runtime/on-device-routing";
 
@@ -160,6 +163,12 @@ async function runAssistantTurnInner(
   if (isAgentOrchestratorEnabled()) {
     const useLocal = await shouldUseLocalTurnOrchestrator(request);
     if (useLocal) {
+      if (isSimpleTurnRuntimeEnabled()) {
+        const { runSimpleTurnRuntime } = await import(
+          "@/lib/ai/simple-turn/runtime"
+        );
+        return runSimpleTurnRuntime(request, opts);
+      }
       const { runLocalTurnOrchestrator } = await import(
         "@/lib/ai/orchestrator/local-turn-orchestrator"
       );
