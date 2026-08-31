@@ -70,6 +70,16 @@ export function applyConversationDelta(
     topics = topics.map((t) =>
       expire.has(t.id) ? { ...t, contextClass: "EXPIRED" as const } : t,
     );
+    evidence = evidence.map((ev) =>
+      ev.contextClass === "ACTIVE"
+        ? { ...ev, contextClass: "EXPIRED" as const }
+        : ev,
+    );
+    resultSets = resultSets.map((rs) =>
+      rs.contextClass === "ACTIVE"
+        ? { ...rs, contextClass: "EXPIRED" as const }
+        : rs,
+    );
   }
   if (delta.topicSwitch?.activateTopicId) {
     const id = delta.topicSwitch.activateTopicId;
@@ -98,6 +108,16 @@ export function applyConversationDelta(
         e.id === change.from!.id || e.label === change.from!.label
           ? { ...e, contextClass: "EXPIRED" as const }
           : e,
+      );
+      evidence = evidence.map((ev) =>
+        ev.contextClass === "ACTIVE"
+          ? { ...ev, contextClass: "EXPIRED" as const }
+          : ev,
+      );
+      resultSets = resultSets.map((rs) =>
+        rs.contextClass === "ACTIVE"
+          ? { ...rs, contextClass: "EXPIRED" as const }
+          : rs,
       );
     } else if (change.op === "replace") {
       if (change.from) {

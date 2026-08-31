@@ -74,7 +74,15 @@ function extractUrl(text: string): string | null {
   return m ? m[0] : null;
 }
 
-function domainOf(text: string): string | null {
+function domainOf(text: string, entities?: EntityRef[]): string | null {
+  if (entities?.length) {
+    const activeTypes = new Set(
+      entities.filter((e) => e.contextClass === "ACTIVE").map((e) => e.type),
+    );
+    if (activeTypes.has("food")) return "food";
+    if (activeTypes.has("sports")) return "sports";
+    if (activeTypes.has("website")) return "web";
+  }
   for (const [name, re] of Object.entries(DOMAIN_KEYWORDS)) {
     if (re.test(text)) return name;
   }
@@ -113,6 +121,26 @@ export function classifyTurnRelation(opts: {
   const msgTokens = tokenize(content);
   const activeTokens = tokenize(actives.join(" "));
   const overlap = overlapRatio(msgTokens, activeTokens);
+
+  // Early domain pivot: food context + sports question (before pronoun heuristics)
+  if (actives.length) {
+    const priorDomain = domainOf(actives.join(" "), prev?.entities);
+    const sportsPivot =
+      /\b(football|game|byu|utes|team|schedule|face off|opponent|nba|nfl)\b/i.test(
+        content,
+      );
+    if (
+      (priorDomain === "food" && sportsPivot) ||
+      (priorDomain === "food" && domainOf(content) === "sports")
+    ) {
+      return {
+        relation: "topic_switch",
+        carrySubject: false,
+        maxTranscriptTurns: 0,
+        newEntity: { label: content.slice(0, 80), type: "sports" },
+      };
+    }
+  }
 
   const backMatch =
     content.match(BACK_TO) ?? content.match(RETURN_TO);
@@ -192,9 +220,22 @@ export function classifyTurnRelation(opts: {
     }
   }
 
-  if (actives.length && overlap < 0.15 && content.length > 20) {
-    const priorDomain = domainOf(actives.join(" "));
+  if (actives.length && overlap < 0.15) {
+    const priorDomain = domainOf(actives.join(" "), prev?.entities);
     const msgDomain = domainOf(content);
+    if (
+      priorDomain === "food" &&
+      /\b(football|game|byu|utes|team|schedule|face off|opponent)\b/i.test(
+        content,
+      )
+    ) {
+      return {
+        relation: "topic_switch",
+        carrySubject: false,
+        maxTranscriptTurns: 0,
+        newEntity: { label: content.slice(0, 80), type: "sports" },
+      };
+    }
     if (priorDomain && msgDomain && priorDomain !== msgDomain) {
       return {
         relation: "topic_switch",
@@ -203,7 +244,20 @@ export function classifyTurnRelation(opts: {
         newEntity: { label: content.slice(0, 80), type: msgDomain },
       };
     }
-    if (!msgDomain && overlap < 0.08) {
+    if (
+      priorDomain &&
+      !msgDomain &&
+      overlap < 0.08 &&
+      /\b(when|who|what|where|game|football|team|score|schedule)\b/i.test(content)
+    ) {
+      return {
+        relation: "topic_switch",
+        carrySubject: false,
+        maxTranscriptTurns: 0,
+        newEntity: { label: content.slice(0, 80), type: "sports" },
+      };
+    }
+    if (!msgDomain && overlap < 0.08 && content.length > 12) {
       return {
         relation: "topic_switch",
         carrySubject: false,

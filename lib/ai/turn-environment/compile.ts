@@ -40,6 +40,10 @@ import { autoRetrieveMemorySnippets } from "./memory-auto.ts";
 import { filterMemorySnippetsForTurn } from "../orchestrator/evidence-hygiene.ts";
 import { wantsAutonomousResearch } from "../web-research/index.ts";
 import { compileWebRetrievalPlan } from "./web-retrieval-plan.ts";
+import {
+  compileResearchTurnPlan,
+  subtaskPreRunTasks,
+} from "./research-turn-plan.ts";
 import type {
   BudgetProfileName,
   ContextPacket,
@@ -195,6 +199,8 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     deeper: Boolean(conv?.dissatisfactionSignal),
   });
 
+  const researchPlan = compileResearchTurnPlan({ content, turnTask });
+
   const resolved = resolveTurnState({
     content,
     taskState: opts.taskState as TurnStateInput["taskState"],
@@ -236,6 +242,7 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
 
   // Deeper first-pass / retry: component searches + official queries.
   if (
+    !researchPlan &&
     (deepRetry || extractFactualComponents(content).length >= 2) &&
     !conv?.internalDataRequired
   ) {
@@ -257,6 +264,25 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
         reason: deepRetry ? "correction_deeper_research" : "multi_component_research",
       });
     }
+  }
+
+  if (researchPlan && researchPlan.subtasks.length >= 1 && !conv?.internalDataRequired) {
+    preRunTasks = preRunTasks.filter((t) => t.name !== "web.search");
+    const subTasks = subtaskPreRunTasks(researchPlan, (st) =>
+      webSearchArguments({
+        content,
+        turnTask,
+        conv,
+        webRetrievalPlan,
+        query: st.query,
+      }),
+    ).map((t) => ({
+      name: t.name,
+      arguments: t.arguments,
+      reason: t.reason,
+      subtaskId: t.subtaskId,
+    }));
+    preRunTasks = [...subTasks, ...preRunTasks];
   }
 
   const forceDomains: import("../tools/domains.ts").ToolDomain[] = [];
@@ -437,9 +463,16 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     content: String(m.content ?? "").slice(0, 800),
   }));
 
-  const pendingBits = [opts.pendingStateText ?? ""];
+  const pendingBits: string[] = [];
+  if (opts.pendingStateText?.trim()) {
+    pendingBits.push(opts.pendingStateText);
+  }
   pendingBits.push(formatTurnTaskForPrompt(turnTask));
-  if (conv?.constraints && Object.keys(conv.constraints).length) {
+  if (
+    turnRelation !== "topic_switch" &&
+    conv?.constraints &&
+    Object.keys(conv.constraints).length
+  ) {
     pendingBits.push(
       `Resolved constraints: ${JSON.stringify(conv.constraints)}`,
     );
@@ -475,7 +508,7 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
               content,
               messages: opts.messages,
             })),
-      { turnTask, conversationState: conv },
+      { turnTask, conversationState: conv, turnRelation },
     ),
     evidence: opts.evidence ?? [],
     activeBrowserMeta: opts.activeBrowserMeta ?? "",
@@ -520,6 +553,7 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     budgets,
     domains: allowed.domains,
     webRetrievalPlan,
+    ...(researchPlan ? { researchPlan } : {}),
     turnRelation,
   };
 }

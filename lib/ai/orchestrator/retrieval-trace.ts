@@ -12,7 +12,8 @@ export type FinalAnswerSource =
   | "fm_verbalized"
   | "fm_synthesis"
   | "exa_agent"
-  | "work_task";
+  | "work_task"
+  | "research_incomplete";
 
 export type TurnRetrievalTrace = {
   turnIntent?: string;

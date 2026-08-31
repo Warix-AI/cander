@@ -262,22 +262,33 @@ export async function resolveConversationDelta(
     };
   };
   const relationHints = deltaHintsFromTurnRelation(relationResult, input.previous);
+  const forceTopicSwitch = relationResult.relation === "topic_switch";
   const mergeRelation = (base: ConversationDelta): ConversationDelta => {
     if (
       !relationHints.entityChanges?.length &&
-      !relationHints.topicSwitch
+      !relationHints.topicSwitch &&
+      !forceTopicSwitch
     ) {
       return base;
     }
-    if (base.entityChanges?.length || base.topicSwitch) return base;
-    return {
+    if (!forceTopicSwitch && (base.entityChanges?.length || base.topicSwitch)) {
+      return base;
+    }
+    const merged: ConversationDelta = {
       ...base,
-      entityChanges: [
-        ...(base.entityChanges ?? []),
-        ...(relationHints.entityChanges ?? []),
-      ],
+      entityChanges: forceTopicSwitch
+        ? (relationHints.entityChanges ?? base.entityChanges ?? [])
+        : [
+            ...(base.entityChanges ?? []),
+            ...(relationHints.entityChanges ?? []),
+          ],
       topicSwitch: base.topicSwitch ?? relationHints.topicSwitch,
     };
+    if (forceTopicSwitch) {
+      merged.constraintReplacements = {};
+      merged.constraintAdds = {};
+    }
+    return merged;
   };
 
   const det = resolveDeterministicDelta(input);

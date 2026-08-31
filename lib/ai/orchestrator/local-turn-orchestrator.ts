@@ -123,7 +123,10 @@ import {
   semanticBlocksToMarkdown,
   setConversationTurnState,
   toDynamicProfilePayload,
+  validateResearchCompletion,
   type ProvenanceAtom,
+  type ResearchCompletionResult,
+  type ResearchTurnPlan,
   type TurnProfile,
 } from "@/lib/ai/turn-environment";
 import type { ChatBlock } from "@/lib/types";
@@ -283,9 +286,88 @@ function tryDeterministicComponentAnswer(
   });
 }
 
+async function runResearchCompletionLoop(opts: {
+  plan: ResearchTurnPlan;
+  evidence: TurnEvidence[];
+  toolResults: AiToolCallResult[];
+  provenanceBatches: ProvenanceAtom[][];
+  profile: TurnProfile;
+  question: string;
+  conversationState: ReturnType<typeof applyConversationDelta>;
+  turnRelation: import("@/lib/ai/turn-environment/turn-relation.ts").TurnRelation;
+  report: (progress: AgentTurnProgress) => void;
+}): Promise<ResearchCompletionResult> {
+  let plan = { ...opts.plan, unresolved: [...opts.plan.unresolved] };
+  let completion = validateResearchCompletion(plan, opts.evidence);
+
+  while (
+    plan.retrievalRound < plan.maxRetrievalRounds &&
+    !completion.complete &&
+    completion.unresolved.length > 0
+  ) {
+    plan.retrievalRound += 1;
+    const followUps = plan.subtasks.filter((st) =>
+      completion.unresolved.includes(st.id),
+    );
+    if (!followUps.length) break;
+
+    const turnTask = resolveTurnTask({
+      content: opts.question,
+      previous: opts.conversationState,
+      turnRelation: opts.turnRelation,
+    });
+
+    const retry = await runParallelTasks({
+      tasks: followUps.map((st) => ({
+        id: `subtask:${st.id}`,
+        run: async (signal) => {
+          if (signal.aborted) throw new Error("cancelled");
+          opts.report({
+            phase: "tool",
+            label: "Thinking",
+            detail: "Searching",
+            toolName: "web.search",
+          });
+          return executeAuthorizedTool({
+            name: "web.search",
+            arguments: webSearchArguments({
+              content: opts.question,
+              turnTask,
+              conv: opts.conversationState,
+              webRetrievalPlan: opts.profile.webRetrievalPlan,
+              query: `${st.query} official nutrition`,
+              deeper: true,
+            }),
+          });
+        },
+      })),
+      concurrency: opts.profile.budgets.concurrency,
+      timeoutMs: opts.profile.budgets.toolTimeoutMs,
+    });
+
+    for (const item of retry) {
+      if (!item.ok || !item.value) continue;
+      const subtaskId = item.id.startsWith("subtask:")
+        ? item.id.slice("subtask:".length)
+        : undefined;
+      opts.toolResults.push(item.value);
+      const mapped = evidenceFromToolResult(item.value, subtaskId);
+      appendEvidence(opts.evidence, mapped.evidence);
+      opts.provenanceBatches.push(mapped.atoms);
+    }
+
+    completion = validateResearchCompletion(plan, opts.evidence);
+    plan.unresolved = completion.unresolved;
+    recordValidationIssues(completion.unresolved);
+  }
+
+  return completion;
+}
+
 async function escalateExaSearchIfNeeded(opts: {
   question: string;
   conversationState: ReturnType<typeof applyConversationDelta>;
+  turnRelation?: import("@/lib/ai/turn-environment/turn-relation.ts").TurnRelation;
   toolResults: AiToolCallResult[];
   evidence: TurnEvidence[];
   provenanceBatches: ProvenanceAtom[][];
@@ -317,6 +399,7 @@ async function escalateExaSearchIfNeeded(opts: {
     const turnTask = resolveTurnTask({
       content: opts.question,
       previous: opts.conversationState,
+      turnRelation: opts.turnRelation,
     });
     const hints =
       (data.retrievalHints as Record<string, unknown> | undefined) ??
@@ -548,7 +631,14 @@ async function deepenRetrievalIfNeeded(opts: {
 
 function evidenceFromToolResult(
   result: AiToolCallResult,
+  subtaskId?: string,
 ): { evidence: TurnEvidence[]; atoms: ProvenanceAtom[] } {
+  const tag = (items: TurnEvidence[]): TurnEvidence[] =>
+    items.map((e) => ({
+      ...e,
+      id: subtaskId ? `st_${subtaskId}_${e.id}` : e.id,
+      subtaskId,
+    }));
   if (result.name === "web.search" || result.name === "web.research") {
     const data = (result.data ?? {}) as Record<string, unknown>;
     const rows =
@@ -607,7 +697,10 @@ function evidenceFromToolResult(
       results: rows,
       citations: cites,
     });
-    return { evidence: normalized.evidence, atoms: normalized.atoms };
+    return {
+      evidence: tag(normalized.evidence),
+      atoms: normalized.atoms,
+    };
   }
   if (result.name === "web.open" || result.name === "web.read") {
     const data = result.data as
@@ -817,6 +910,7 @@ async function buildFmPrompt(
   evidence: TurnEvidence[],
   profile: TurnProfile,
   extraInstruction?: string,
+  researchCompletion?: ResearchCompletionResult | null,
 ): Promise<{ prompt: string; instructions: string; profile: TurnProfile }> {
   const [identity] = await Promise.all([
     ensureOnDeviceIdentity(),
@@ -872,6 +966,10 @@ async function buildFmPrompt(
     request.content,
     evidence,
     "onDevice",
+    {
+      researchPlan: profile.researchPlan,
+      researchCompletion,
+    },
   );
   const evidenceBlock = synthesis.instruction;
   let activeBrowserMeta = profile.contextPacket.activeBrowserMeta;
@@ -1107,7 +1205,25 @@ async function runLocalTurnOrchestratorInner(
       content: request.content,
       taskState,
       messages: request.messages,
-      pendingStateText: formatTaskStateForPrompt(taskState),
+      pendingStateText:
+        relationResult.relation === "topic_switch"
+          ? ""
+          : formatTaskStateForPrompt(
+              taskState
+                ? {
+                    ...taskState,
+                    facts: filterTaskFactsForTurn(taskState, {
+                      turnTask: resolveTurnTask({
+                        content: request.content,
+                        previous: conversationState,
+                        turnRelation: relationResult.relation,
+                      }),
+                      conversationState,
+                      turnRelation: relationResult.relation,
+                    }),
+                  }
+                : null,
+            ),
       conversationState,
       turnRelation: relationResult.relation,
       reactivateEntityLabel: relationResult.reactivateEntityLabel,
@@ -1152,13 +1268,14 @@ async function runLocalTurnOrchestratorInner(
     toolResults = [];
     provenanceBatches = [];
     retrievalAttempted = false;
+    let researchCompletion: ResearchCompletionResult | null = null;
 
     // —— Pre-run: bypass FM for obvious retrieval ——
     if (profile.preRunTasks.length) {
       emitToolExecution({ type: "model_generate_start", round: -1 });
       const parallel = await runParallelTasks({
         tasks: profile.preRunTasks.map((task, i) => ({
-          id: `${task.name}_${i}`,
+          id: task.subtaskId ? `subtask:${task.subtaskId}` : `${task.name}_${i}`,
           run: async (signal) => {
             if (signal.aborted) throw new Error("cancelled");
             emitToolExecution({
@@ -1215,6 +1332,9 @@ async function runLocalTurnOrchestratorInner(
           // Never early-exit on a lone search for multi-component / live facts —
           // wait for the batch so deepenRetrieval can open pages.
           if (extractFactualComponents(request.content).length >= 2) return false;
+          if (profile.researchPlan && profile.researchPlan.subtasks.length >= 2) {
+            return false;
+          }
           if (conversationState.dissatisfactionSignal) return false;
           return oks.some((c) => {
             const r = c.value as AiToolCallResult;
@@ -1231,6 +1351,9 @@ async function runLocalTurnOrchestratorInner(
       for (const item of parallel) {
         if (!item.ok || !item.value) continue;
         const result = item.value;
+        const subtaskId = item.id.startsWith("subtask:")
+          ? item.id.slice("subtask:".length)
+          : undefined;
         toolResults.push(result);
         retrievalAttempted =
           retrievalAttempted ||
@@ -1239,7 +1362,7 @@ async function runLocalTurnOrchestratorInner(
           result.name === "web.read" ||
           result.name === "web.research" ||
           result.name.startsWith("browser.current.");
-        const mapped = evidenceFromToolResult(result);
+        const mapped = evidenceFromToolResult(result, subtaskId);
         appendEvidence(evidence, mapped.evidence);
         provenanceBatches.push(mapped.atoms);
 
@@ -1313,6 +1436,7 @@ async function runLocalTurnOrchestratorInner(
       await escalateExaSearchIfNeeded({
         question: request.content,
         conversationState,
+        turnRelation: relationResult.relation,
         toolResults,
         evidence,
         provenanceBatches,
@@ -1351,18 +1475,74 @@ async function runLocalTurnOrchestratorInner(
         );
       }
 
-      await deepenRetrievalIfNeeded({
-        question: request.content,
+      if (!profile.researchPlan) {
+        await deepenRetrievalIfNeeded({
+          question: request.content,
+          evidence,
+          toolResults,
+          provenanceBatches,
+          conversationState,
+          report,
+          deeper: Boolean(
+            conversationState.dissatisfactionSignal ||
+              conversationState.freshnessRequirement,
+          ),
+        });
+      }
+
+      if (profile.researchPlan) {
+        researchCompletion = await runResearchCompletionLoop({
+          plan: profile.researchPlan,
+          evidence,
+          toolResults,
+          provenanceBatches,
+          profile,
+          question: request.content,
+          conversationState,
+          turnRelation: relationResult.relation,
+          report,
+        });
+      }
+
+      applyEvidenceHygiene({
         evidence,
-        toolResults,
-        provenanceBatches,
+        question: request.content,
         conversationState,
-        report,
-        deeper: Boolean(
-          conversationState.dissatisfactionSignal ||
-            conversationState.freshnessRequirement,
-        ),
+        turnRelation: relationResult.relation,
       });
+
+      if (
+        profile.researchPlan &&
+        profile.researchPlan.subtasks.length >= 2 &&
+        researchCompletion != null &&
+        !researchCompletion.complete
+      ) {
+        const completion = researchCompletion;
+        const missing = profile.researchPlan.subtasks
+          .filter((s) => completion.unresolved.includes(s.id))
+          .map((s) => s.label)
+          .join("; ");
+        return finalizeTurnResult(
+          {
+            content: safeContent(
+              "",
+              missing.length
+                ? `I found partial information but couldn't verify everything needed for a reliable answer (still missing: ${missing}). Try asking about one item at a time.`
+                : "I found partial information but couldn't verify everything needed for a reliable answer. Try asking about one item at a time.",
+            ),
+            runtime: "apple-local",
+            offline: false,
+            condensationOccurred: false,
+            aiChatId: request.aiChatId ?? null,
+            toolResults: toolResults.length ? toolResults : undefined,
+            citations: finalizeCitations(
+              toolResults,
+              mergeProvenanceAtoms(provenanceBatches),
+            ),
+          },
+          "research_incomplete",
+        );
+      }
 
       // Prefer verified multi-component arithmetic over FM guesswork.
       const deterministicBreakdown = tryDeterministicComponentAnswer(
@@ -1411,7 +1591,25 @@ async function runLocalTurnOrchestratorInner(
         content: request.content,
         taskState,
         messages: request.messages,
-        pendingStateText: formatTaskStateForPrompt(taskState),
+        pendingStateText:
+          relationResult.relation === "topic_switch"
+            ? ""
+            : formatTaskStateForPrompt(
+                taskState
+                  ? {
+                      ...taskState,
+                      facts: filterTaskFactsForTurn(taskState, {
+                        turnTask: resolveTurnTask({
+                          content: request.content,
+                          previous: conversationState,
+                          turnRelation: relationResult.relation,
+                        }),
+                        conversationState,
+                        turnRelation: relationResult.relation,
+                      }),
+                    }
+                  : null,
+              ),
         evidence,
         conversationState,
         turnRelation: relationResult.relation,
@@ -1458,6 +1656,8 @@ async function runLocalTurnOrchestratorInner(
         request,
         evidence,
         profile,
+        undefined,
+        researchCompletion,
       );
       emitToolExecution({ type: "model_generate_start", round });
       report({ phase: "generating", label: "Thinking", detail: "Generating" });

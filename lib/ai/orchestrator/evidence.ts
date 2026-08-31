@@ -3,6 +3,9 @@
  * Mirror server TurnState.evidence where practical.
  */
 
+import type { ResearchCompletionResult } from "../turn-environment/research-turn-plan.ts";
+import type { ResearchTurnPlan } from "../turn-environment/research-turn-plan.ts";
+import { buildResolvedFactsInstruction } from "../turn-environment/research-turn-plan.ts";
 import {
   answerShapeFromContract,
   buildSynthesisInstruction,
@@ -33,6 +36,7 @@ export type TurnEvidence = {
   error?: string;
   sessionId?: string;
   groundingConfidence?: "low" | "medium" | "high" | "none";
+  subtaskId?: string;
 };
 
 let evidenceSeq = 0;
@@ -68,9 +72,36 @@ export function prepareSynthesisEvidence(
   question: string,
   items: TurnEvidence[],
   profile: "onDevice" | "cloud" = "onDevice",
+  opts?: {
+    researchPlan?: ResearchTurnPlan | null;
+    researchCompletion?: ResearchCompletionResult | null;
+  },
 ): { instruction: string; compact: CompactEvidenceItem[]; shapeKind: string } {
   const contract = inferResponseContract(question);
   const shape = answerShapeFromContract(question, contract);
+
+  if (
+    opts?.researchPlan &&
+    opts.researchCompletion?.complete &&
+    opts.researchPlan.subtasks.length >= 2
+  ) {
+    const instruction = buildResolvedFactsInstruction({
+      question,
+      plan: opts.researchPlan,
+      completion: opts.researchCompletion,
+    });
+    return {
+      instruction,
+      compact: opts.researchCompletion.facts.map((f, i) => ({
+        id: `fact_${i}`,
+        title: f.label,
+        excerpt: `${f.value ?? "?"} ${f.unit}`,
+        authority: 10,
+        kind: "exa_synthesis" as const,
+      })),
+      shapeKind: shape.kind,
+    };
+  }
 
   const direct = items.find(
     (e) => e.ok && e.kind === "exa_synthesis" && e.content.trim().length >= 8,

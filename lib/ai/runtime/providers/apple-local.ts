@@ -1,10 +1,11 @@
 "use client";
 
 import {
-  buildDialoguePrompt,
+  buildSelectiveDialoguePrompt,
   hasPriorConversationTurns,
   isIdentityQuestion,
 } from "@/lib/ai/assistant-behavior";
+import { classifyTurnRelation } from "@/lib/ai/turn-environment/turn-relation";
 import { buildPlanCapabilityLine } from "@/lib/ai/plan-capability";
 import { buildCanderOnDeviceInstructions } from "@/lib/ai/runtime/cander-on-device-instructions";
 import {
@@ -152,11 +153,16 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
         ]
           .filter(Boolean)
           .join("\n\n");
-        const prompt = buildDialoguePrompt(
+        const relation = classifyTurnRelation({
+          userMessage: request.content,
+          previous: null,
+        });
+        const prompt = buildSelectiveDialoguePrompt(
           (pkg.messages.length ? pkg.messages : request.messages) as
             | Array<{ role: "user" | "assistant" | "system"; content: string }>
             | undefined,
           request.content,
+          { relation: relation.relation },
         );
         const content = await generateWithFoundationModels(
           prompt,

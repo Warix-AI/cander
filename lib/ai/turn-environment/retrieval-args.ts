@@ -14,9 +14,10 @@ import {
 export function turnTaskToRetrievalHints(
   turnTask: TurnTaskResolution,
   conv?: ConversationTurnState | null,
+  carrySubject = true,
 ): TurnRetrievalHints {
   return {
-    subject: turnTask.subject,
+    subject: carrySubject ? turnTask.subject : null,
     operation: turnTask.operation,
     requestedFields: turnTask.requestedFields,
     requestedItemCount: turnTask.requestedItemCount,
@@ -36,9 +37,9 @@ export function webSearchArguments(opts: {
   escalate?: string;
   deeper?: boolean;
 }): Record<string, unknown> {
-  const hints = turnTaskToRetrievalHints(opts.turnTask, opts.conv);
   const plan = opts.webRetrievalPlan;
   const carrySubject = plan?.carrySubject ?? opts.turnTask.subject != null;
+  const hints = turnTaskToRetrievalHints(opts.turnTask, opts.conv, carrySubject);
   const query =
     opts.query ??
     plan?.query ??

@@ -6,6 +6,7 @@
 import type { TurnEvidence } from "../orchestrator/evidence.ts";
 import type { TurnRelation } from "./turn-relation.ts";
 import type { WebRetrievalPlan } from "./web-retrieval-plan.ts";
+import type { ResearchTurnPlan } from "./research-turn-plan.ts";
 
 export type ToolMode = "disallowed" | "allowed" | "required";
 
@@ -39,6 +40,7 @@ export type PreRunTask = {
   name: string;
   arguments: Record<string, unknown>;
   reason: string;
+  subtaskId?: string;
 };
 
 export type ClarificationPolicy = {
@@ -121,6 +123,8 @@ export type TurnProfile = {
   domains: string[];
   /** Compiled per-turn web retrieval plan (Exa depth, output shape, escalation). */
   webRetrievalPlan?: WebRetrievalPlan;
+  /** Multi-part research decomposition with subtasks + completion criteria. */
+  researchPlan?: ResearchTurnPlan;
   /** How this turn relates to prior context. */
   turnRelation?: TurnRelation;
 };

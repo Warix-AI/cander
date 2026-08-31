@@ -103,8 +103,10 @@ export function filterMemorySnippetsForTurn(
   opts: {
     turnTask: TurnTaskResolution;
     conversationState?: ConversationTurnState | null;
+    turnRelation?: "continuation" | "related" | "reference" | "topic_switch";
   },
 ): string[] {
+  if (opts.turnRelation === "topic_switch") return [];
   const active = activeLabels(opts.turnTask, opts.conversationState);
   const expired = expiredLabels(opts.conversationState);
   if (!active.length && !expired.length) return snippets;

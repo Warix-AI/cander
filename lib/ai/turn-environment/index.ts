@@ -127,3 +127,17 @@ export type {
   WebRetrievalOutput,
   WebRetrievalContentNeed,
 } from "./web-retrieval-plan.ts";
+export {
+  compileResearchTurnPlan,
+  decomposeCalorieSubtasks,
+  decomposeCompareSubtasks,
+  subtaskPreRunTasks,
+  validateResearchCompletion,
+  buildResolvedFactsInstruction,
+} from "./research-turn-plan.ts";
+export type {
+  ResearchSubtask,
+  ResearchTurnPlan,
+  ResearchCalculation,
+  ResearchCompletionResult,
+} from "./research-turn-plan.ts";
