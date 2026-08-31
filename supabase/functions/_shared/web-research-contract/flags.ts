@@ -21,6 +21,8 @@ export function exaDeepSearchEnabled(): boolean {
 }
 
 export function webOpenDirectFetchEnabled(): boolean {
+  // When true: direct HTTP fetch only (no Exa Contents fallback inside web-open).
+  // Direct fetch is always attempted first for explicit URL opens.
   const v = (
     Deno.env.get("WEB_OPEN_DIRECT_FETCH_ENABLED") ?? "false"
   ).toLowerCase();

@@ -38,11 +38,45 @@ import {
   nodeTaskId,
   traceRouteForNode,
 } from "./turn-trace/index.ts";
+import {
+  normalizeExplicitUrl,
+  siteSearchQueryForUrl,
+} from "./url-open-path.ts";
 
 function appendEvidence(target: TurnEvidence[], items: TurnEvidence[]): void {
   for (const item of items) {
     if (!target.some((e) => e.id === item.id)) target.push(item);
   }
+}
+
+function capabilityForNode(node: TaskNode): string {
+  if (node.capability === "web.search" || node.capability === "web.read" || node.capability === "web.open") {
+    return node.capability;
+  }
+  if (node.kind === "FETCH_URL") return "web.read";
+  return node.capability ?? "web.search";
+}
+
+function scheduleSiteSearchFallback(
+  graph: TaskGraph,
+  node: TaskNode,
+): TaskGraph {
+  const siteQuery = siteSearchQueryForUrl(node.query ?? node.label);
+  return {
+    ...graph,
+    nodes: graph.nodes.map((n) =>
+      n.id === node.id || n.subtaskId === node.id
+        ? {
+            ...n,
+            status: "PENDING" as const,
+            retryCount: (n.retryCount ?? 0) + 1,
+            capability: "web.search" as const,
+            query: siteQuery,
+            terminalReason: undefined,
+          }
+        : n,
+    ),
+  };
 }
 
 export type TaskExecutorContext = {
@@ -80,12 +114,27 @@ function buildArgsForNode(
   node: TaskNode,
   ctx: TaskExecutorContext,
 ): Record<string, unknown> {
-  const capability =
-    node.kind === "FETCH_URL" ? "web.read" : (node.capability ?? "web.search");
+  const capability = capabilityForNode(node);
   if (capability === "web.read" || capability === "web.open") {
-    const url = node.query?.startsWith("http") ? node.query : undefined;
+    const rawQuery = (node.query ?? node.label).trim();
+    // Prefer a clean URL even if validation appended junk previously.
+    const urlMatch = rawQuery.match(/https?:\/\/[^\s]+/i)?.[0];
+    const normalized =
+      normalizeExplicitUrl(urlMatch ?? rawQuery) ??
+      normalizeExplicitUrl(node.label);
+    const url = normalized?.url;
     return applyPreConstraints(
-      url ? { url } : { query: node.query ?? node.label },
+      url
+        ? { url }
+        : { url: `https://${rawQuery.replace(/^https?:\/\//i, "").split(/\s+/)[0]}` },
+      ctx.constraints,
+    );
+  }
+  const query = node.query ?? node.label;
+  // site: fallback queries must stay exact — do not expand via webRetrievalPlan.
+  if (/^site:[a-z0-9.-]+/i.test(query.trim())) {
+    return applyPreConstraints(
+      { query: query.trim(), numResults: 5 },
       ctx.constraints,
     );
   }
@@ -94,7 +143,7 @@ function buildArgsForNode(
     turnTask: ctx.turnTask,
     conv: ctx.conversationState,
     webRetrievalPlan: ctx.webRetrievalPlan,
-    query: node.query ?? node.label,
+    query,
     deeper: Boolean(ctx.conversationState.dissatisfactionSignal),
     temporalGrounding: ctx.temporalGrounding,
   });
@@ -122,10 +171,7 @@ async function executeReadyBatch(
       id: node.subtaskId ?? node.id,
       run: async (signal) => {
         if (signal.aborted) throw new Error("cancelled");
-        const capability =
-          node.kind === "FETCH_URL"
-            ? "web.read"
-            : (node.capability ?? "web.search");
+        const capability = capabilityForNode(node);
         const toolName =
           capability === "web.read"
             ? "web.read"
@@ -139,6 +185,15 @@ async function executeReadyBatch(
         );
         const toolArgs = buildArgsForNode(node, ctx);
         const trace = getTurnTraceRecorder();
+        if (node.kind === "FETCH_URL" || toolName === "web.read" || toolName === "web.open") {
+          console.log("[URL_OPEN_EXEC]", {
+            taskId,
+            kind: node.kind,
+            tool: toolName,
+            args: toolArgs,
+            retryCount: node.retryCount ?? 0,
+          });
+        }
         trace?.recordToolRequest({
           taskId,
           tool: toolName,
@@ -158,7 +213,18 @@ async function executeReadyBatch(
           arguments: toolArgs,
         });
         const durationMs = Date.now() - started;
-        trace?.recordToolResponseRaw({
+        if (node.kind === "FETCH_URL" || toolName === "web.read" || toolName === "web.open") {
+          console.log("[URL_OPEN_EXEC_RESULT]", {
+            taskId,
+            tool: toolName,
+            ok: result.ok,
+            durationMs,
+            outputPreview:
+              typeof result.output === "string"
+                ? result.output.slice(0, 160)
+                : null,
+          });
+        }        trace?.recordToolResponseRaw({
           taskId,
           tool: toolName,
           ok: result.ok,
@@ -177,6 +243,22 @@ async function executeReadyBatch(
 
   for (const item of parallel) {
     if (!item.ok || !item.value) {
+      const failedNode =
+        ready.find((n) => (n.subtaskId ?? n.id) === item.id) ??
+        ready.find((n) => n.id === item.id);
+      if (
+        failedNode?.kind === "FETCH_URL" &&
+        (failedNode.capability ?? "web.read") !== "web.search" &&
+        (failedNode.retryCount ?? 0) < 1
+      ) {
+        console.log("[URL_OPEN_SITE_FALLBACK]", {
+          nodeId: failedNode.id,
+          from: failedNode.query,
+          to: siteSearchQueryForUrl(failedNode.query ?? failedNode.label),
+        });
+        nextGraph = scheduleSiteSearchFallback(nextGraph, failedNode);
+        continue;
+      }
       const nodeId = item.id;
       nextGraph = setSubtaskStatus(nextGraph, nodeId, "FAILED", "tool_error");
       nextGraph = blockDownstreamTasks(nextGraph, nodeId);
@@ -186,6 +268,20 @@ async function executeReadyBatch(
     const nodeId = node.subtaskId ?? node.id;
     toolResults.push(result);
     if (!result.ok) {
+      // FETCH_URL direct read failed → one site:domain search before blocking summarize.
+      if (
+        node.kind === "FETCH_URL" &&
+        capabilityForNode(node) === "web.read" &&
+        (node.retryCount ?? 0) < 1
+      ) {
+        console.log("[URL_OPEN_SITE_FALLBACK]", {
+          nodeId: node.id,
+          from: node.query,
+          to: siteSearchQueryForUrl(node.query ?? node.label),
+        });
+        nextGraph = scheduleSiteSearchFallback(nextGraph, node);
+        continue;
+      }
       nextGraph = setSubtaskStatus(nextGraph, nodeId, "FAILED", "tool_error");
       nextGraph = blockDownstreamTasks(nextGraph, nodeId);
       continue;

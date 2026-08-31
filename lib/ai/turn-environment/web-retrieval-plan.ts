@@ -11,8 +11,12 @@ import {
   type TurnRetrievalHints,
 } from "../web-research/index.ts";
 import { requiresExternalEvidence } from "../orchestrator/deterministic-triggers.ts";
+import { extractRequestedUrl } from "../orchestrator/web-retrieval.ts";
+import {
+  isExplicitWebsiteInspectRequest,
+} from "../orchestrator/url-open-path.ts";
 import type { TemporalGrounding } from "../orchestrator/temporal-grounding.ts";
-import { anchorRetrievalQuery, maybeAnchorRetrievalQuery } from "../orchestrator/temporal-grounding.ts";
+import { maybeAnchorRetrievalQuery } from "../orchestrator/temporal-grounding.ts";
 import type { ConversationTurnState } from "./conversation-types.ts";
 import type { TurnRelation } from "./turn-relation.ts";
 import type { TurnTaskResolution } from "./turn-task.ts";
@@ -160,6 +164,27 @@ export function compileWebRetrievalPlan(opts: {
       ),
       carrySubject,
       escalationChain: ["agent"],
+      exaMode: null,
+      systemPrompt: "",
+    };
+  }
+
+  // Explicit website inspect/summarize — owned by web.read / FETCH_URL, not Exa agent.
+  const exactUrl = extractRequestedUrl(content);
+  if (exactUrl && isExplicitWebsiteInspectRequest(content)) {
+    return {
+      mode: "none",
+      output: "text",
+      requestedFields: opts.turnTask.requestedFields,
+      freshness: false,
+      resultCount: 0,
+      domains: [exactUrl.domain],
+      category: null,
+      location: extractLocation(content, opts.conv),
+      contentNeeded: "full_text",
+      query: exactUrl.url,
+      carrySubject,
+      escalationChain: [],
       exaMode: null,
       systemPrompt: "",
     };

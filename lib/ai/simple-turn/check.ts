@@ -64,11 +64,15 @@ export function checkEvidence(opts: {
           e.content.toLowerCase().includes(u.domain)),
     );
     if (!fetched) {
+      const refineQ =
+        opts.round >= 1
+          ? `site:${u.domain}`
+          : u.url;
       return {
         accepted: [],
         rejected: opts.evidence,
         needsRefine: opts.round < 2,
-        refineLookups: [{ cap: "WEB", q: u.url }],
+        refineLookups: [{ cap: "WEB", q: refineQ }],
         unresolved: opts.round >= 2,
         unresolvedReason: `explicit URL ${u.domain} never fetched`,
       };

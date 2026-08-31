@@ -64,6 +64,23 @@ export function validateTaskEvidence(opts: {
 
   const items = evidenceForNode(node, opts.evidence);
 
+  // Explicit URL fetch: any usable page/search hit for this node is enough.
+  // Do not rewrite the URL query into a search phrase (breaks web.read).
+  if (node.kind === "FETCH_URL") {
+    const usable = items.some(
+      (e) => e.ok && e.content.trim().length >= 24,
+    );
+    if (usable) return { nodeId, satisfied: true };
+    return {
+      nodeId,
+      satisfied: false,
+      reason: "url_fetch_empty",
+      // Keep the original URL for retry/site fallback — never append search filler.
+      refinedQuery: node.query,
+      alternateCapability: "web.search",
+    };
+  }
+
   if (opts.temporalGrounding) {
     const verification = verifyEvidenceForTask({
       node,

@@ -48,8 +48,12 @@ import type {
 } from "./types.ts";
 import { validateAnswerDeterministic } from "./validator.ts";
 import { fetchReadablePage } from "./web-open.ts";
+import {
+  normalizeExplicitUrl,
+  retryNormalizedUrl,
+  urlHostMatchesRequestedDomain,
+} from "./url-open-path.ts";
 import { getWebResearchProvider } from "../web-research/index.ts";
-import { webOpenDirectFetchEnabled } from "../../web-research-contract/flags.ts";
 import {
   checkWebEvidenceSufficiency,
   dedupeQueries,
@@ -469,6 +473,38 @@ export async function runTurnOrchestratorV2(
       await openWebPages(deps, state, userMsgId!, [
         { url: state.retrieval.requestedExactUrl, fromId: "exact_url" },
       ]);
+
+      // If direct open failed: one site:domain search (not agent/deep research).
+      const pageOk = state.evidence.some(
+        (e) =>
+          e.kind === "web_page" &&
+          normalizeUrlKey(e.url ?? "") ===
+            normalizeUrlKey(state.retrieval.requestedExactUrl!),
+      );
+      if (!pageOk && state.retrieval.exactUrlDomain && capabilities.webSearch) {
+        const siteQuery = `site:${state.retrieval.exactUrlDomain}`;
+        console.log("[URL_OPEN_SITE_FALLBACK]", {
+          turnId: state.turnId,
+          from: state.retrieval.requestedExactUrl,
+          to: siteQuery,
+        });
+        emitStatus(state, {
+          phase: "searching",
+          label: "Thinking",
+          detail: "Searching the requested site…",
+        }, deps.onEvent);
+        await runWebSearch(deps, state, userMsgId!, siteQuery, userContent);
+        // Clear exactUrlFailed if site search produced domain-matching hits.
+        if (
+          state.evidence.some(
+            (e) =>
+              e.url &&
+              normalizeUrlKey(e.url).includes(state.retrieval.exactUrlDomain!),
+          )
+        ) {
+          state.retrieval.exactUrlFailed = false;
+        }
+      }
     }
 
     const workspaceId = (chat.workspace_id as string | null) ?? null;
@@ -1614,59 +1650,121 @@ async function openWebPages(
       reason: target.fromId ? `from:${target.fromId}` : "web_open",
     });
     const openStarted = Date.now();
+    const normalized = normalizeExplicitUrl(target.url);
+    const openUrl = normalized?.url ?? target.url;
+    const requestedDomain = normalized?.domain;
+
+    console.log("[WEB_OPEN_REQUEST]", {
+      turnId: state.turnId,
+      taskId,
+      payload: { url: openUrl },
+      rawUrl: target.url,
+    });
 
     let ok = false;
-    let finalUrl = target.url;
+    let finalUrl = openUrl;
     let title = "";
     let text = "";
     let error: string | undefined;
+    let provider = "direct-fetch";
 
-    try {
-      const evidence = await getWebResearchProvider().read({
-        urls: [target.url],
-        ownerId: deps.ownerId,
-        workspaceId: state.workspaceId ?? null,
-      });
+    // 1) Direct fetch first
+    let page = await fetchReadablePage(openUrl);
+    console.log("[WEB_OPEN_UPSTREAM_FETCH]", {
+      turnId: state.turnId,
+      attempt: 1,
+      url: openUrl,
+      ok: page.ok,
+      error: page.error ?? null,
+      bytes: page.text?.length ?? 0,
+    });
+
+    // 2) Retry once with www / path normalization
+    if (!page.ok) {
+      const retryUrl = retryNormalizedUrl(openUrl);
+      if (retryUrl) {
+        page = await fetchReadablePage(retryUrl);
+        console.log("[WEB_OPEN_UPSTREAM_FETCH]", {
+          turnId: state.turnId,
+          attempt: 2,
+          url: retryUrl,
+          ok: page.ok,
+          error: page.error ?? null,
+          bytes: page.text?.length ?? 0,
+        });
+      }
+    }
+
+    if (
+      page.ok &&
+      page.text.trim() &&
+      (!requestedDomain ||
+        urlHostMatchesRequestedDomain(page.finalUrl, requestedDomain))
+    ) {
+      ok = true;
+      finalUrl = page.finalUrl;
+      title = page.title;
+      text = page.text;
+      provider = "direct-fetch";
       deps.trace?.recordToolResponseRaw({
         taskId,
         tool: "web.read",
         ok: true,
         durationMs: Date.now() - openStarted,
         raw: {
-          sources: evidence.sources?.slice(0, 3),
-          evidenceTextPreview: evidence.evidenceText?.slice(0, 800),
+          finalUrl,
+          title,
+          evidenceTextPreview: text.slice(0, 800),
+          provider,
         },
       });
-      const primary = evidence.sources[0];
-      text = evidence.evidenceText || primary?.excerpt || "";
-      if (primary && text.trim()) {
-        ok = true;
-        finalUrl = primary.url || target.url;
-        title = primary.title || "";
-      } else {
-        error = "empty_contents";
-      }
-    } catch (exaErr) {
-      error = exaErr instanceof Error ? exaErr.message : "exa_contents_failed";
-      deps.trace?.recordToolResponseRaw({
-        taskId,
-        tool: "web.read",
-        ok: false,
-        durationMs: Date.now() - openStarted,
-        error,
-      });
-      // No silent Brave/direct fallback — emergency flag only.
-      if (webOpenDirectFetchEnabled()) {
-        const page = await fetchReadablePage(target.url);
-        if (page.ok && page.text.trim()) {
+    } else {
+      // 3) Exa Contents last-resort page read (not search/agent)
+      try {
+        const evidence = await getWebResearchProvider().read({
+          urls: [openUrl],
+          ownerId: deps.ownerId,
+          workspaceId: state.workspaceId ?? null,
+        });
+        const primary = evidence.sources[0];
+        text = evidence.evidenceText || primary?.excerpt || "";
+        finalUrl = primary?.url || openUrl;
+        title = primary?.title || "";
+        if (
+          text.trim() &&
+          (!requestedDomain ||
+            urlHostMatchesRequestedDomain(finalUrl, requestedDomain))
+        ) {
           ok = true;
-          finalUrl = page.finalUrl;
-          title = page.title;
-          text = page.text;
-          error = undefined;
+          provider = evidence.provider || "exa";
         } else {
-          error = page.error || error;
+          error = text.trim()
+            ? "final_url_domain_mismatch"
+            : "empty_contents";
         }
+        deps.trace?.recordToolResponseRaw({
+          taskId,
+          tool: "web.read",
+          ok,
+          durationMs: Date.now() - openStarted,
+          raw: {
+            sources: evidence.sources?.slice(0, 3),
+            evidenceTextPreview: text.slice(0, 800),
+            provider,
+          },
+          error,
+        });
+      } catch (exaErr) {
+        error =
+          page.error ||
+          (exaErr instanceof Error ? exaErr.message : "exa_contents_failed");
+        deps.trace?.recordToolResponseRaw({
+          taskId,
+          tool: "web.read",
+          ok: false,
+          durationMs: Date.now() - openStarted,
+          error,
+        });
       }
     }
 
@@ -1674,7 +1772,7 @@ async function openWebPages(
       state.evidence.push(
         pageToEvidence({
           id: `page_${state.budgets.webOpens}`,
-          url: target.url,
+          url: openUrl,
           finalUrl,
           title,
           text,
@@ -1700,23 +1798,25 @@ async function openWebPages(
         message_id: userMsgId,
         kind: "web_open",
         payload: {
-          url: target.url,
+          url: openUrl,
           finalUrl,
           ok: true,
           bytes: text.length,
           version: "v2",
-          provider: "exa",
+          provider,
         },
       });
       console.info("[WEB_RETRIEVAL]", {
         turnId: state.turnId,
         opened: finalUrl,
         bytes: text.length,
+        provider,
       });
     } else {
       if (
         state.retrieval.requestedExactUrl &&
-        normalizeUrlKey(target.url) === normalizeUrlKey(state.retrieval.requestedExactUrl)
+        normalizeUrlKey(openUrl) ===
+          normalizeUrlKey(state.retrieval.requestedExactUrl)
       ) {
         state.retrieval.exactUrlFailed = true;
       }
@@ -1727,7 +1827,7 @@ async function openWebPages(
         message_id: userMsgId,
         kind: "web_open",
         payload: {
-          url: target.url,
+          url: openUrl,
           ok: false,
           error: error ?? "fetch_failed",
           version: "v2",
@@ -1735,7 +1835,7 @@ async function openWebPages(
       });
       console.info("[WEB_RETRIEVAL]", {
         turnId: state.turnId,
-        openFailed: target.url,
+        openFailed: openUrl,
         error,
       });
     }
