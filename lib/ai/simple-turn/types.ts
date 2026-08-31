@@ -41,6 +41,21 @@ export type AnswerShape =
   | "steps"
   | "mixed";
 
+export type IntentConditionOperator = "exists" | "equals" | "not_equals";
+
+/** Gate a dependent intent on an upstream result (evaluated in code). */
+export type IntentCondition = {
+  intentId: string;
+  operator: IntentConditionOperator;
+  value?: string;
+};
+
+/** Fields a dependent intent needs extracted from an upstream intent's evidence. */
+export type IntentNeedsFrom = {
+  intentId: string;
+  fields: string[];
+};
+
 /** Atomic normalized ask — one executable unit. */
 export type Intent = {
   id: string;
@@ -54,6 +69,8 @@ export type Intent = {
   unresolvedRefs: string[];
   freshnessRequired: boolean;
   dependsOn: string[];
+  condition?: IntentCondition;
+  needsFrom?: IntentNeedsFrom;
   lookup?: { q: string };
 };
 
@@ -155,12 +172,24 @@ export type PlanValidation = {
   repaired?: IntentPlan;
 };
 
+export type IntentResultStatus =
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "skipped"
+  | "unresolved"
+  | "BLOCKED_UPSTREAM_FAILED"
+  | "SKIPPED_BY_CONDITION";
+
 export type IntentResult = {
   intent: Intent;
-  status: "pending" | "running" | "succeeded" | "failed" | "skipped" | "unresolved";
+  status: IntentResultStatus;
   evidence: SimpleEvidence[];
   accepted: SimpleEvidence[];
   rejectReason?: string;
+  /** Fields pulled from upstream for needsFrom (deterministic, not free-form CoT). */
+  needsPayload?: Record<string, string>;
 };
 
 export type CheckResult = {
@@ -287,20 +316,68 @@ export function intentPlanToPlan(ip: IntentPlan): Plan {
   });
 }
 
+const CONDITION_OPS: IntentConditionOperator[] = [
+  "exists",
+  "equals",
+  "not_equals",
+];
+
+export function normalizeCondition(
+  raw: IntentCondition | undefined,
+): IntentCondition | undefined {
+  if (!raw?.intentId?.trim()) return undefined;
+  const operator = CONDITION_OPS.includes(raw.operator)
+    ? raw.operator
+    : "exists";
+  return {
+    intentId: String(raw.intentId).trim(),
+    operator,
+    value:
+      typeof raw.value === "string" && raw.value.trim()
+        ? raw.value.trim().slice(0, 200)
+        : undefined,
+  };
+}
+
+export function normalizeNeedsFrom(
+  raw: IntentNeedsFrom | undefined,
+): IntentNeedsFrom | undefined {
+  if (!raw?.intentId?.trim()) return undefined;
+  const fields = (raw.fields ?? [])
+    .filter((f): f is string => typeof f === "string" && f.trim().length > 0)
+    .map((f) => f.trim().slice(0, 80))
+    .slice(0, 12);
+  if (!fields.length) return undefined;
+  return { intentId: String(raw.intentId).trim(), fields };
+}
+
 export function normalizeIntentPlan(ip: IntentPlan): IntentPlan {
-  const intents = ip.intents.map((intent, i) => ({
-    ...intent,
-    id: intent.id?.trim() || String(i + 1),
-    goal: intent.goal.trim().slice(0, 300),
-    constraints: intent.constraints ?? [],
-    resolvedRefs: intent.resolvedRefs ?? [],
-    unresolvedRefs: intent.unresolvedRefs ?? [],
-    dependsOn: (intent.dependsOn ?? []).map(String),
-    freshnessRequired: Boolean(intent.freshnessRequired),
-    lookup: intent.lookup?.q
-      ? { q: intent.lookup.q.trim().slice(0, 400) }
-      : undefined,
-  }));
+  const intents = ip.intents.map((intent, i) => {
+    const condition = normalizeCondition(intent.condition);
+    const needsFrom = normalizeNeedsFrom(intent.needsFrom);
+    // Implicit deps from condition / needsFrom for ordering
+    const dependsOn = [
+      ...(intent.dependsOn ?? []).map(String),
+      ...(condition ? [condition.intentId] : []),
+      ...(needsFrom ? [needsFrom.intentId] : []),
+    ].filter((v, idx, arr) => arr.indexOf(v) === idx);
+
+    return {
+      ...intent,
+      id: intent.id?.trim() || String(i + 1),
+      goal: intent.goal.trim().slice(0, 300),
+      constraints: intent.constraints ?? [],
+      resolvedRefs: intent.resolvedRefs ?? [],
+      unresolvedRefs: intent.unresolvedRefs ?? [],
+      dependsOn,
+      condition,
+      needsFrom,
+      freshnessRequired: Boolean(intent.freshnessRequired),
+      lookup: intent.lookup?.q
+        ? { q: intent.lookup.q.trim().slice(0, 400) }
+        : undefined,
+    };
+  });
   return {
     overallIntent: ip.overallIntent.trim().slice(0, 400),
     intents,

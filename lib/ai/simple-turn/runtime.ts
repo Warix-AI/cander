@@ -103,26 +103,35 @@ export async function runSimpleTurnRuntime(
       generate: canFm ? generate : undefined,
       useHeuristicOnly: !canFm,
     });
+    // Log structured plan + PlanHealth only — never free-form deliberation
     trace?.recordStage("interpret", {
       decision: planned.usedHeuristic ? "heuristic" : "fm",
       output: {
         overallIntent: planned.plan.overallIntent,
         intents: planned.plan.intents,
+        planHealth: planned.planHealth,
         selfCheckIssues: planned.selfCheckIssues,
       },
-      input: planned.raw ? { rawChars: planned.raw.length } : undefined,
+      input: {
+        deliberationDepth: planned.deliberationDepth,
+        rawChars: planned.raw?.length ?? 0,
+      },
     });
     trace?.recordStage("plan", {
       decision: planned.usedHeuristic ? "heuristic" : "fm",
-      output: planned.flatPlan,
+      output: {
+        flatPlan: planned.flatPlan,
+        planHealth: planned.planHealth,
+      },
     });
     if (!planned.usedHeuristic) {
       trace?.recordModelPrompt({
         round: 0,
         prompt: hydrate.planPrompt.slice(0, 2000),
-        instructions: "INTERPRET IntentPlan schema",
+        instructions: `INTERPRET IntentPlan (${planned.deliberationDepth})`,
       });
       if (planned.raw) {
+        // Structured IntentPlan JSON only — truncate; no CoT storage
         trace?.recordModelOutput({
           round: 0,
           text: planned.raw.slice(0, 2000),

@@ -205,8 +205,9 @@ Opt-in replacement for the TaskGraph local orchestrator:
 `STATE → HYDRATE → INTERPRET/NORMALIZE → RUN → VERIFY → ANSWER → COMMIT`
 
 - Flag: `NEXT_PUBLIC_AI_SIMPLE_TURN_RUNTIME=1` (default **off**). Desktop: `localStorage['cander:simple-turn-runtime']='1'`.
-- Module: `lib/ai/simple-turn/` — INTERPRET emits an **IntentPlan** of atomic intents (entity/subject/quantity/dependsOn/canonical lookup.q). Extra latency goes to understanding, not autonomy.
-- Independent intents run in parallel; dependent intents (e.g. CALC) wait on `dependsOn`.
+- Module: `lib/ai/simple-turn/` — INTERPRET emits an **IntentPlan** of atomic intents (entity/subject/quantity/dependsOn/condition/needsFrom/canonical lookup.q).
+- **Adaptive deliberation** (internal only): SIMPLE / NORMAL / COMPLEX depth chooses how carefully the FM plans before emitting IntentPlan JSON. Free-form reasoning is never shown in UI or stored in logs — only the structured plan + `PlanHealth` metadata.
+- Independent intents run in parallel; dependents wait on `dependsOn`. Code evaluates `condition` (`SKIPPED_BY_CONDITION`) and upstream failure (`BLOCKED_UPSTREAM_FAILED`); `needsFrom` fields are passed into write intents. One bounded plan repair if semantic validation fails.
 - VERIFY scores each result against its exact intent; retry failed intents once; never ask the user to split multi-part prompts.
 - Branch: `agent-turn.ts` → `runSimpleTurnRuntime` when local FM + flag on; legacy `runLocalTurnOrchestrator` otherwise.
 - Tests: `scripts/simple-turn.test.ts`.

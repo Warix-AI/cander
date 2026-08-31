@@ -9,8 +9,11 @@ export type {
   HydrateResult,
   Intent,
   IntentAction,
+  IntentCondition,
+  IntentNeedsFrom,
   IntentPlan,
   IntentResult,
+  IntentResultStatus,
   Lookup,
   Plan,
   PlanValidation,
@@ -23,7 +26,9 @@ export {
   actionToCap,
   intentPlanToPlan,
   isIntentAction,
+  normalizeCondition,
   normalizeIntentPlan,
+  normalizeNeedsFrom,
   syncPlanAliases,
 } from "./types.ts";
 
@@ -34,8 +39,13 @@ export {
   parseIntentPlanJson,
   planFromHydrateHeuristic,
   intentPlanFromHydrateHeuristic,
+  heuristicConditionalCalendarPlan,
   interpretSelfCheck,
+  classifyDeliberationDepth,
+  buildInterpretInstructions,
 } from "./plan.ts";
+export type { DeliberationDepth, PlanHealth } from "./deliberation.ts";
+export { buildPlanHealth } from "./deliberation.ts";
 export {
   validatePlan,
   validateIntentPlan,
@@ -43,7 +53,13 @@ export {
   repairIntentPlanCode,
   validateAndRepairPlan,
 } from "./validate-plan.ts";
-export { runLookups, intentExecutionWaves } from "./run.ts";
+export {
+  runLookups,
+  intentExecutionWaves,
+  evaluateIntentCondition,
+  extractNeedsPayload,
+  effectiveDependsOn,
+} from "./run.ts";
 export {
   checkEvidence,
   verifyEvidence,

@@ -38,9 +38,22 @@ export function validateIntentPlan(opts: {
     if (
       intent.action !== "ANSWER" &&
       intent.action !== "CALC" &&
+      intent.action !== "CALENDAR" &&
       !intent.lookup?.q
     ) {
       issues.push(`missing_lookup:${intent.id}`);
+    }
+    if (
+      intent.condition &&
+      !plan.intents.some((i) => i.id === intent.condition!.intentId)
+    ) {
+      issues.push(`condition_unknown_intent:${intent.id}`);
+    }
+    if (
+      intent.needsFrom &&
+      !plan.intents.some((i) => i.id === intent.needsFrom!.intentId)
+    ) {
+      issues.push(`needsFrom_unknown_intent:${intent.id}`);
     }
   }
 

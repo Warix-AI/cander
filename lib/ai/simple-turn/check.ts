@@ -518,7 +518,13 @@ export function checkEvidence(opts: {
   if (intentPlan?.intents.length) {
     const intentResults: IntentResult[] = intentPlan.intents.map((intent) => {
       const prior = opts.intentResults?.find((r) => r.intent.id === intent.id);
-      if (prior?.status === "skipped") return prior;
+      if (
+        prior?.status === "skipped" ||
+        prior?.status === "SKIPPED_BY_CONDITION" ||
+        prior?.status === "BLOCKED_UPSTREAM_FAILED"
+      ) {
+        return prior;
+      }
       return verifyIntentEvidence({
         intent,
         evidence: opts.evidence,

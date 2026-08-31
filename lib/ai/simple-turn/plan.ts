@@ -3,17 +3,34 @@
  * Highest-priority stage: spend latency here before any tool call.
  */
 
-import type { HydrateResult, Intent, IntentAction, IntentPlan, Plan } from "./types.ts";
+import type {
+  HydrateResult,
+  Intent,
+  IntentAction,
+  IntentCondition,
+  IntentNeedsFrom,
+  IntentPlan,
+  Plan,
+} from "./types.ts";
 import {
   intentPlanToPlan,
   isIntentAction,
+  normalizeCondition,
   normalizeIntentPlan,
+  normalizeNeedsFrom,
 } from "./types.ts";
 import {
   buildCanonicalLookupQuery,
   heuristicCalorieIntents,
   looksLikeNarrativeQuery,
 } from "./query-normalize.ts";
+import {
+  buildInterpretInstructions,
+  buildPlanHealth,
+  classifyDeliberationDepth,
+  type DeliberationDepth,
+  type PlanHealth,
+} from "./deliberation.ts";
 
 function stringList(v: unknown, max = 12, slice = 300): string[] {
   if (!Array.isArray(v)) return [];
@@ -21,6 +38,30 @@ function stringList(v: unknown, max = 12, slice = 300): string[] {
     .filter((a): a is string => typeof a === "string" && a.trim().length > 0)
     .map((a) => a.trim().slice(0, slice))
     .slice(0, max);
+}
+
+function parseCondition(raw: unknown): IntentCondition | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const row = raw as Record<string, unknown>;
+  return normalizeCondition({
+    intentId: String(row.intentId ?? ""),
+    operator: (typeof row.operator === "string"
+      ? row.operator
+      : "exists") as IntentCondition["operator"],
+    value: typeof row.value === "string" ? row.value : undefined,
+  });
+}
+
+function parseNeedsFrom(raw: unknown): IntentNeedsFrom | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const row = raw as Record<string, unknown>;
+  const fields = Array.isArray(row.fields)
+    ? row.fields.filter((f): f is string => typeof f === "string")
+    : [];
+  return normalizeNeedsFrom({
+    intentId: String(row.intentId ?? ""),
+    fields,
+  });
 }
 
 function parseIntent(raw: unknown, index: number): Intent | null {
@@ -58,7 +99,7 @@ function parseIntent(raw: unknown, index: number): Intent | null {
     lookup = { q: row.q.trim().slice(0, 400) };
   }
 
-  if (action !== "ANSWER" && action !== "CALC") {
+  if (action !== "ANSWER" && action !== "CALC" && action !== "CALENDAR") {
     lookup = {
       q: buildCanonicalLookupQuery({
         entity,
@@ -69,7 +110,7 @@ function parseIntent(raw: unknown, index: number): Intent | null {
         rawQ: lookup?.q,
       }),
     };
-  } else if (action === "CALC" && lookup) {
+  } else if ((action === "CALC" || action === "CALENDAR") && lookup) {
     lookup = {
       q: buildCanonicalLookupQuery({
         entity,
@@ -96,6 +137,8 @@ function parseIntent(raw: unknown, index: number): Intent | null {
     unresolvedRefs: stringList(row.unresolvedRefs, 8, 200),
     freshnessRequired: Boolean(row.freshnessRequired),
     dependsOn,
+    condition: parseCondition(row.condition),
+    needsFrom: parseNeedsFrom(row.needsFrom),
     lookup,
   };
 }
@@ -239,6 +282,9 @@ export function intentPlanFromHydrateHeuristic(
     });
   }
 
+  const conditionalCal = heuristicConditionalCalendarPlan(hydrate);
+  if (conditionalCal) return conditionalCal;
+
   if (hydrate.urls.length === 1) {
     const u = hydrate.urls[0]!;
     return normalizeIntentPlan({
@@ -338,6 +384,104 @@ export function intentPlanFromHydrateHeuristic(
   });
 }
 
+/**
+ * Heuristic: multi-ask sports schedule + conditional calendar write.
+ * Example: BYU next game + vs Utah + if they do add to calendar.
+ */
+export function heuristicConditionalCalendarPlan(
+  hydrate: HydrateResult,
+): IntentPlan | null {
+  const text = hydrate.userText;
+  if (!/\bcalendar\b/i.test(text)) return null;
+  if (!/\bif (they|it|that)\b/i.test(text)) return null;
+
+  const teamMatch = text.match(
+    /\b(BYU|Utah|USC|UCLA|Stanford|Oregon|Alabama|Ohio State)\b/i,
+  );
+  const vsMatch = text.match(
+    /\b(?:play|vs\.?|versus)\s+(BYU|Utah|USC|UCLA|Stanford|Oregon|[A-Z][a-z]+)\b/i,
+  );
+  if (!teamMatch) return null;
+
+  const team = teamMatch[1]!;
+  const opponent =
+    vsMatch?.[1] && vsMatch[1].toLowerCase() !== team.toLowerCase()
+      ? vsMatch[1]
+      : text.match(/\bUtah\b/i) && !/^utah$/i.test(team)
+        ? "Utah"
+        : null;
+  if (!opponent) return null;
+
+  const year = String(hydrate.year);
+  const refs = [
+    ...hydrate.resolved,
+    `they = ${team}`,
+    `it = ${team} vs ${opponent} game`,
+  ];
+
+  return normalizeIntentPlan({
+    overallIntent: `${team} football schedule and conditional calendar add for ${opponent}`,
+    intents: [
+      {
+        id: "1",
+        goal: `find ${team}'s next football game`,
+        action: "WEB",
+        entity: team,
+        subject: "next football game",
+        constraints: [`season ${year}`],
+        resolvedRefs: refs,
+        unresolvedRefs: hydrate.unresolved,
+        freshnessRequired: true,
+        dependsOn: [],
+        lookup: {
+          q: buildCanonicalLookupQuery({
+            entity: team,
+            subject: `next football game ${year}`,
+          }),
+        },
+      },
+      {
+        id: "2",
+        goal: `determine whether ${team} plays ${opponent} this season`,
+        action: "WEB",
+        entity: team,
+        subject: `vs ${opponent} ${year}`,
+        constraints: [`season ${year}`],
+        resolvedRefs: refs,
+        unresolvedRefs: [],
+        freshnessRequired: true,
+        dependsOn: [],
+        lookup: {
+          q: buildCanonicalLookupQuery({
+            entity: team,
+            subject: `vs ${opponent} football schedule ${year}`,
+          }),
+        },
+      },
+      {
+        id: "3",
+        goal: `add ${team} vs ${opponent} game to calendar if scheduled`,
+        action: "CALENDAR",
+        entity: `${team} vs ${opponent}`,
+        subject: "calendar event",
+        constraints: ["require confirmation before write"],
+        resolvedRefs: [`it = ${team} vs ${opponent} game`],
+        unresolvedRefs: [],
+        freshnessRequired: false,
+        dependsOn: ["2"],
+        condition: { intentId: "2", operator: "exists" },
+        needsFrom: {
+          intentId: "2",
+          fields: ["title", "date", "kickoff time", "location"],
+        },
+        lookup: {
+          q: `${team} vs ${opponent} calendar event`,
+        },
+      },
+    ],
+  });
+}
+
 /** @deprecated */
 export function planFromHydrateHeuristic(hydrate: HydrateResult): Plan {
   return intentPlanToPlan(intentPlanFromHydrateHeuristic(hydrate));
@@ -418,8 +562,32 @@ export function interpretSelfCheck(opts: {
     }
   }
 
+  // Conditional writes should carry condition + needsFrom
+  if (
+    /\bif (they|it|that)\b/i.test(text) &&
+    /\bcalendar\b/i.test(text) &&
+    !plan.intents.some((i) => i.condition)
+  ) {
+    issues.push("missing_condition");
+  }
+  for (const intent of plan.intents) {
+    if (
+      intent.action === "CALENDAR" &&
+      intent.condition &&
+      !intent.needsFrom
+    ) {
+      issues.push(`calendar_missing_needsFrom:${intent.id}`);
+    }
+    if (
+      intent.condition &&
+      !plan.intents.some((i) => i.id === intent.condition!.intentId)
+    ) {
+      issues.push(`condition_unknown_intent:${intent.id}`);
+    }
+  }
+
   // —— one bounded repair ——
-  const repaired = plan.intents.map((intent) => {
+  let repaired = plan.intents.map((intent) => {
     let next = { ...intent };
     if (
       intent.lookup &&
@@ -446,6 +614,19 @@ export function interpretSelfCheck(opts: {
     ) {
       next = { ...next, dependsOn: [...webIds] };
     }
+    if (
+      intent.action === "CALENDAR" &&
+      intent.condition &&
+      !intent.needsFrom
+    ) {
+      next = {
+        ...next,
+        needsFrom: {
+          intentId: intent.condition.intentId,
+          fields: ["title", "date", "kickoff time", "location"],
+        },
+      };
+    }
     return next;
   });
 
@@ -458,6 +639,13 @@ export function interpretSelfCheck(opts: {
         issues,
         plan: intentPlanFromHydrateHeuristic(opts.hydrate),
       };
+    }
+  }
+
+  if (issues.includes("missing_condition")) {
+    const conditional = heuristicConditionalCalendarPlan(opts.hydrate);
+    if (conditional) {
+      return { ok: false, issues, plan: conditional };
     }
   }
 
@@ -537,58 +725,7 @@ export function interpretSelfCheck(opts: {
   };
 }
 
-const INTERPRET_INSTRUCTIONS = [
-  "You INTERPRET/NORMALIZE the user message into atomic intents BEFORE any tools run.",
-  "Return ONLY JSON:",
-  "{",
-  '  "overallIntent": string,',
-  '  "intents": [{',
-  '    "id": string,',
-  '    "goal": string,',
-  '    "action": "ANSWER"|"WEB"|"MEMORY"|"FILES"|"CALENDAR"|"EMAIL"|"CRM"|"CALC"|"BUILD",',
-  '    "entity"?: string,',
-  '    "subject"?: string,',
-  '    "quantity"?: number,',
-  '    "constraints": string[],',
-  '    "resolvedRefs": string[],',
-  '    "unresolvedRefs": string[],',
-  '    "freshnessRequired": boolean,',
-  '    "dependsOn": string[],',
-  '    "lookup"?: { "q": string }',
-  "  }],",
-  '  "answer"?: string',
-  "}",
-  "",
-  "Process:",
-  "1) Understand the ENTIRE message before splitting.",
-  "2) Identify every distinct ask.",
-  "3) Preserve relationships between entities, quantities, pronouns, dates, URLs, constraints, and actions.",
-  "4) Separate independent intents from dependent ones (dependsOn).",
-  "5) Resolve conversational references from notes; mark ambiguity in unresolvedRefs — never guess.",
-  "6) Generate CANONICAL lookup queries from normalized meaning — never copy raw sentence fragments.",
-  "",
-  "Query rules (critical):",
-  '- Bad: "Taco Bell If I eat three regular tacos"',
-  '- Good: "Taco Bell regular taco calories"',
-  '- Bad: "McDonald\'s I have a medium Sprite"',
-  '- Good: "McDonald\'s medium Sprite calories"',
-  "- lookup.q describes the FACT needed, not the user's wording.",
-  "",
-  "Example — calories from two brands → two WEB intents (parallel) + one CALC (dependsOn both).",
-  "URL inspect → one WEB intent with lookup.q = https://domain...",
-  "Independent intents: dependsOn=[]. Dependent: list prior intent ids.",
-  "Only set answer when action is ANSWER and no retrieval is needed.",
-  "Do not execute tools. Do not invent live facts.",
-  "",
-  "SELF-CHECK before returning:",
-  "- Did every meaningful ask become an intent?",
-  "- Are entities/actions bound?",
-  "- Are quantities preserved?",
-  "- Are pronouns resolved or marked unresolved?",
-  "- Are date refs normalized into constraints/resolvedRefs?",
-  "- Are lookup queries clean standalone queries?",
-  "- Are dependencies correct?",
-].join("\n");
+const INTERPRET_INSTRUCTIONS = buildInterpretInstructions("NORMAL");
 
 export async function planTurn(opts: {
   hydrate: HydrateResult;
@@ -600,14 +737,30 @@ export async function planTurn(opts: {
   raw?: string;
   usedHeuristic: boolean;
   selfCheckIssues: string[];
+  deliberationDepth: DeliberationDepth;
+  planHealth: PlanHealth;
 }> {
+  const depth = classifyDeliberationDepth({
+    userText: opts.hydrate.userText,
+    hydrate: opts.hydrate,
+  });
+  const instructions = buildInterpretInstructions(depth);
+
   const finish = (
     ip: IntentPlan,
-    meta: { raw?: string; usedHeuristic: boolean },
+    meta: { raw?: string; usedHeuristic: boolean; repaired?: boolean },
   ) => {
     const checked = interpretSelfCheck({
       plan: ip,
       hydrate: opts.hydrate,
+    });
+    const planHealth = buildPlanHealth({
+      depth,
+      intentCount: checked.plan.intents.length,
+      intents: checked.plan.intents,
+      selfCheckIssues: checked.issues,
+      repaired: Boolean(meta.repaired || checked.issues.length),
+      usedHeuristic: meta.usedHeuristic,
     });
     return {
       plan: checked.plan,
@@ -615,6 +768,8 @@ export async function planTurn(opts: {
       raw: meta.raw,
       usedHeuristic: meta.usedHeuristic,
       selfCheckIssues: checked.issues,
+      deliberationDepth: depth,
+      planHealth,
     };
   };
 
@@ -624,12 +779,12 @@ export async function planTurn(opts: {
     });
   }
 
-  let raw = await opts.generate(opts.hydrate.planPrompt, INTERPRET_INSTRUCTIONS);
+  let raw = await opts.generate(opts.hydrate.planPrompt, instructions);
   let parsed = parseIntentPlanJson(raw);
   if (!parsed) {
     raw = await opts.generate(
-      `${opts.hydrate.planPrompt}\n\nPrevious output was invalid. Return only IntentPlan JSON. Re-check coverage, bindings, quantities, clean queries, and dependsOn.`,
-      INTERPRET_INSTRUCTIONS,
+      `${opts.hydrate.planPrompt}\n\nPrevious output was invalid JSON. Return only IntentPlan JSON. Defect: unparseable_output.`,
+      instructions,
     );
     parsed = parseIntentPlanJson(raw);
   }
@@ -639,7 +794,40 @@ export async function planTurn(opts: {
       usedHeuristic: true,
     });
   }
+
+  const firstCheck = interpretSelfCheck({
+    plan: parsed,
+    hydrate: opts.hydrate,
+  });
+  // One bounded repair: name exact defects; no open-ended self-chat loop
+  if (!firstCheck.ok && firstCheck.issues.length) {
+    const defectList = firstCheck.issues.slice(0, 8).join("; ");
+    raw = await opts.generate(
+      `${opts.hydrate.planPrompt}\n\nPrevious IntentPlan failed semantic validation.\nExact defects: ${defectList}\nReturn only repaired IntentPlan JSON. Do not include deliberation text.`,
+      instructions,
+    );
+    const repaired = parseIntentPlanJson(raw);
+    if (repaired) {
+      return finish(repaired, {
+        raw,
+        usedHeuristic: false,
+        repaired: true,
+      });
+    }
+    return finish(firstCheck.plan, {
+      raw,
+      usedHeuristic: false,
+      repaired: true,
+    });
+  }
+
   return finish(parsed, { raw, usedHeuristic: false });
 }
 
 export { INTERPRET_INSTRUCTIONS as PLAN_INSTRUCTIONS };
+export {
+  classifyDeliberationDepth,
+  buildInterpretInstructions,
+  type DeliberationDepth,
+  type PlanHealth,
+} from "./deliberation.ts";

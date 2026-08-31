@@ -11,6 +11,8 @@ import {
   parseIntentPlanJson,
   planFromHydrateHeuristic,
   parsePlanJson,
+  classifyDeliberationDepth,
+  buildInterpretInstructions,
 } from "../lib/ai/simple-turn/plan.ts";
 import {
   validateAndRepairPlan,
@@ -38,7 +40,11 @@ import {
 } from "../lib/ai/simple-turn/state-store.ts";
 import { isSimpleTurnRuntimeEnabled } from "../lib/ai/orchestrator/flags.ts";
 import type { IntentPlan, Plan, SimpleEvidence } from "../lib/ai/simple-turn/types.ts";
-import { intentPlanToPlan, syncPlanAliases } from "../lib/ai/simple-turn/types.ts";
+import {
+  intentPlanToPlan,
+  normalizeIntentPlan,
+  syncPlanAliases,
+} from "../lib/ai/simple-turn/types.ts";
 
 const FILLER = [
   "tell me about it",
@@ -50,6 +56,9 @@ const FILLER = [
 
 const CALORIE_PROMPT =
   "If I eat three regular tacos from Taco Bell and a medium Sprite from McDonald's, how many calories is that?";
+
+const BYU_CONDITIONAL =
+  "When is BYU's next football game? Do they play Utah this year? If they do, add it to my calendar.";
 
 describe("simple turn IntentPlan runtime", () => {
   it("flag defaults off", () => {
@@ -491,5 +500,282 @@ describe("simple turn IntentPlan runtime", () => {
     });
     assert.equal(v.failed, false);
     assert.ok(v.plan.intents.length >= 3);
+  });
+
+  it("classifies deliberation depth adaptively", () => {
+    const simple = hydrateTurn(
+      loadSimpleState({ text: "What is the capital of Utah?" }),
+    );
+    assert.equal(
+      classifyDeliberationDepth({
+        userText: simple.userText,
+        hydrate: simple,
+      }),
+      "SIMPLE",
+    );
+
+    const normal = hydrateTurn(
+      loadSimpleState({
+        text: "When is BYU's next game? Do they play Utah this year?",
+      }),
+    );
+    assert.equal(
+      classifyDeliberationDepth({
+        userText: normal.userText,
+        hydrate: normal,
+      }),
+      "NORMAL",
+    );
+
+    const complex = hydrateTurn(
+      loadSimpleState({ text: BYU_CONDITIONAL }),
+    );
+    assert.equal(
+      classifyDeliberationDepth({
+        userText: complex.userText,
+        hydrate: complex,
+      }),
+      "COMPLEX",
+    );
+
+    const instructions = buildInterpretInstructions("COMPLEX");
+    assert.ok(/Deliberation depth: COMPLEX/i.test(instructions));
+    assert.ok(/condition/i.test(instructions));
+    assert.ok(/needsFrom/i.test(instructions));
+    assert.ok(/Do NOT expose deliberation/i.test(instructions));
+  });
+
+  it("BYU conditional calendar → parallel WEB + conditioned CALENDAR", () => {
+    const state = loadSimpleState({ text: BYU_CONDITIONAL });
+    const hydrate = hydrateTurn(state);
+    assert.equal(
+      classifyDeliberationDepth({
+        userText: BYU_CONDITIONAL,
+        hydrate,
+      }),
+      "COMPLEX",
+    );
+
+    const ip = intentPlanFromHydrateHeuristic(hydrate);
+    const web = ip.intents.filter((i) => i.action === "WEB");
+    const cal = ip.intents.find((i) => i.action === "CALENDAR");
+    assert.ok(web.length >= 2);
+    assert.ok(cal);
+    assert.ok(cal!.dependsOn.includes("2") || cal!.condition?.intentId === "2");
+    assert.equal(cal!.condition?.operator, "exists");
+    assert.ok(cal!.needsFrom?.fields.includes("date"));
+    assert.ok(cal!.needsFrom?.fields.some((f) => /time|kickoff/i.test(f)));
+    assert.ok(
+      ip.intents.some((i) =>
+        i.resolvedRefs.some((r) => /they\s*=\s*BYU/i.test(r)),
+      ),
+    );
+
+    const waves = intentExecutionWaves(ip.intents);
+    assert.ok(waves[0]!.every((i) => i.action === "WEB"));
+    assert.ok(waves.at(-1)!.some((i) => i.action === "CALENDAR"));
+
+    for (const w of web) {
+      assert.ok(w.lookup?.q);
+      assert.ok(!looksLikeNarrativeQuery(w.lookup!.q));
+      assert.ok(!/if they do/i.test(w.lookup!.q));
+    }
+  });
+
+  it("runLookups skips calendar when condition fails; runs when it passes", async () => {
+    const state = loadSimpleState({ text: BYU_CONDITIONAL });
+    const hydrate = hydrateTurn(state);
+    const base = intentPlanFromHydrateHeuristic(hydrate);
+    // Use equals so a successful "they don't play" answer yields SKIPPED_BY_CONDITION
+    const ip = normalizeIntentPlan({
+      ...base,
+      intents: base.intents.map((intent) =>
+        intent.action === "CALENDAR"
+          ? {
+              ...intent,
+              condition: {
+                intentId: "2",
+                operator: "equals" as const,
+                value: "play utah",
+              },
+            }
+          : intent,
+      ),
+    });
+
+    const skipped = await runLookups({
+      plan: ip,
+      browser: "auto",
+      userText: BYU_CONDITIONAL,
+      cache: new Map(),
+      executeTool: async ({ arguments: args }) => {
+        const q = String(args.query ?? "");
+        if (/utah/i.test(q)) {
+          return {
+            name: "web.search",
+            ok: true,
+            output:
+              "BYU does not face Utah on the 2026 football schedule this year.",
+            data: {
+              title: "Schedule",
+              url: "https://byucougars.com",
+              text: "BYU does not face Utah on the 2026 football schedule this year.",
+            },
+          };
+        }
+        return {
+          name: "web.search",
+          ok: true,
+          output: "BYU plays next Saturday at LaVell Edwards Stadium, 7:00 PM",
+          data: {
+            title: "BYU schedule",
+            url: "https://byucougars.com",
+            text: "BYU plays next Saturday at LaVell Edwards Stadium, 7:00 PM",
+          },
+        };
+      },
+    });
+    const calSkipped = skipped.intentResults.find(
+      (r) => r.intent.action === "CALENDAR",
+    );
+    assert.ok(calSkipped);
+    assert.equal(calSkipped!.status, "SKIPPED_BY_CONDITION");
+
+    // Upstream success matching condition → calendar runs with needsFrom
+    const okRun = await runLookups({
+      plan: ip,
+      browser: "auto",
+      userText: BYU_CONDITIONAL,
+      cache: new Map(),
+      executeTool: async ({ arguments: args }) => {
+        const q = String(args.query ?? "");
+        if (/utah/i.test(q)) {
+          return {
+            name: "web.search",
+            ok: true,
+            output:
+              "BYU will play Utah — October 18, 2026, kickoff 8:00 PM at Rice-Eccles Stadium",
+            data: {
+              title: "BYU vs Utah",
+              url: "https://byucougars.com",
+              text: "BYU will play Utah — October 18, 2026, kickoff 8:00 PM at Rice-Eccles Stadium",
+            },
+          };
+        }
+        return {
+          name: "web.search",
+          ok: true,
+          output: "Next BYU game is Saturday",
+          data: {
+            title: "Next game",
+            url: "https://byucougars.com",
+            text: "Next BYU game is Saturday",
+          },
+        };
+      },
+    });
+    const calOk = okRun.intentResults.find((r) => r.intent.action === "CALENDAR");
+    assert.ok(calOk);
+    assert.equal(calOk!.status, "succeeded");
+    assert.ok(calOk!.needsPayload);
+  });
+
+  it("BLOCKED_UPSTREAM_FAILED when dependency fails before conditioned write", async () => {
+    const ip: IntentPlan = {
+      overallIntent: "add game if found",
+      intents: [
+        {
+          id: "1",
+          goal: "find game",
+          action: "WEB",
+          constraints: [],
+          resolvedRefs: [],
+          unresolvedRefs: [],
+          freshnessRequired: true,
+          dependsOn: [],
+          lookup: { q: "BYU vs Utah 2026" },
+        },
+        {
+          id: "2",
+          goal: "add to calendar",
+          action: "CALENDAR",
+          constraints: [],
+          resolvedRefs: [],
+          unresolvedRefs: [],
+          freshnessRequired: false,
+          dependsOn: ["1"],
+          condition: { intentId: "1", operator: "exists" },
+          needsFrom: {
+            intentId: "1",
+            fields: ["title", "date"],
+          },
+          lookup: { q: "calendar event" },
+        },
+      ],
+    };
+    const run = await runLookups({
+      plan: normalizeIntentPlan(ip),
+      browser: "auto",
+      userText: "If they play Utah add it",
+      cache: new Map(),
+      executeTool: async () => ({
+        name: "web.search",
+        ok: false,
+        output: "",
+      }),
+    });
+    const cal = run.intentResults.find((r) => r.intent.id === "2");
+    assert.equal(cal?.status, "BLOCKED_UPSTREAM_FAILED");
+  });
+
+  it("parseIntentPlanJson accepts condition and needsFrom", () => {
+    const ip = parseIntentPlanJson(
+      JSON.stringify({
+        overallIntent: "BYU schedule + calendar",
+        intents: [
+          {
+            id: "1",
+            goal: "next BYU game",
+            action: "WEB",
+            constraints: [],
+            resolvedRefs: [],
+            freshnessRequired: true,
+            dependsOn: [],
+            lookup: { q: "BYU next football game 2026" },
+          },
+          {
+            id: "2",
+            goal: "BYU vs Utah",
+            action: "WEB",
+            constraints: [],
+            resolvedRefs: ["they = BYU"],
+            freshnessRequired: true,
+            dependsOn: [],
+            lookup: { q: "BYU vs Utah football schedule 2026" },
+          },
+          {
+            id: "3",
+            goal: "add to calendar",
+            action: "CALENDAR",
+            constraints: [],
+            resolvedRefs: [],
+            freshnessRequired: false,
+            dependsOn: ["2"],
+            condition: { intentId: "2", operator: "exists" },
+            needsFrom: {
+              intentId: "2",
+              fields: ["title", "date", "kickoff time", "location"],
+            },
+          },
+        ],
+      }),
+    );
+    assert.ok(ip);
+    assert.equal(ip!.intents[2]!.condition?.intentId, "2");
+    assert.ok(ip!.intents[2]!.dependsOn.includes("2"));
+    assert.deepEqual(ip!.intents[2]!.needsFrom?.fields.slice(0, 2), [
+      "title",
+      "date",
+    ]);
   });
 });
