@@ -111,3 +111,19 @@ export type {
   TurnOperation,
   TurnTaskResolution,
 } from "./turn-task.ts";
+export {
+  classifyTurnRelation,
+  deltaHintsFromTurnRelation,
+  transcriptTurnCap,
+} from "./turn-relation.ts";
+export type { TurnRelation, TurnRelationResult } from "./turn-relation.ts";
+export {
+  compileWebRetrievalPlan,
+  nextPlanEscalation,
+} from "./web-retrieval-plan.ts";
+export type {
+  WebRetrievalPlan,
+  WebRetrievalPlanMode,
+  WebRetrievalOutput,
+  WebRetrievalContentNeed,
+} from "./web-retrieval-plan.ts";

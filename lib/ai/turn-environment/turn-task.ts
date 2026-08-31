@@ -137,6 +137,23 @@ function subjectFromState(prev: ConversationTurnState | null | undefined): strin
   return null;
 }
 
+function subjectForRelation(opts: {
+  content: string;
+  previous?: ConversationTurnState | null;
+  turnRelation?: import("./turn-relation.ts").TurnRelation;
+  reactivateLabel?: string;
+}): string | null {
+  const rel = opts.turnRelation;
+  if (rel === "topic_switch") return null;
+  if (rel === "reference" && opts.reactivateLabel?.trim()) {
+    return opts.reactivateLabel.trim();
+  }
+  if (rel === "continuation" || rel === "related" || !rel) {
+    return subjectFromState(opts.previous);
+  }
+  return subjectFromState(opts.previous);
+}
+
 function presentationToConvShape(
   presentation: AnswerPresentation,
   depth: ResponseDepth,
@@ -174,10 +191,17 @@ function completionCriteriaFor(task: Omit<TurnTaskResolution, "completionCriteri
 export function resolveTurnTask(opts: {
   content: string;
   previous?: ConversationTurnState | null;
+  turnRelation?: import("./turn-relation.ts").TurnRelation;
+  reactivateEntityLabel?: string;
 }): TurnTaskResolution {
   const content = (opts.content || "").trim();
   const prev = opts.previous ?? null;
-  const subject = subjectFromState(prev);
+  const subject = subjectForRelation({
+    content,
+    previous: prev,
+    turnRelation: opts.turnRelation,
+    reactivateLabel: opts.reactivateEntityLabel,
+  });
   let itemCount = extractRequestedItemCount(content);
   if (itemCount == null) {
     const wm = content.match(

@@ -60,8 +60,18 @@ export function filterEvidenceForCurrentTurn(
     turnTask: TurnTaskResolution;
     conversationState?: ConversationTurnState | null;
     userMessage: string;
+    turnRelation?: "continuation" | "related" | "reference" | "topic_switch";
   },
 ): { evidence: TurnEvidence[]; dropped: number } {
+  if (opts.turnRelation === "topic_switch") {
+    const filtered = evidence.filter((e) => {
+      const blob = `${e.title} ${e.content}`.trim();
+      if (!blob) return false;
+      return textMatchesAnyLabel(blob, [opts.userMessage]);
+    });
+    return { evidence: filtered, dropped: evidence.length - filtered.length };
+  }
+
   const active = activeLabels(opts.turnTask, opts.conversationState);
   const expired = expiredLabels(opts.conversationState);
   if (!expired.length && !active.length) {
@@ -116,9 +126,11 @@ export function filterTaskFactsForTurn(
   opts: {
     turnTask: TurnTaskResolution;
     conversationState?: ConversationTurnState | null;
+    turnRelation?: "continuation" | "related" | "reference" | "topic_switch";
   },
 ): Record<string, unknown> {
   if (!taskState?.facts) return {};
+  if (opts.turnRelation === "topic_switch") return {};
   const active = activeLabels(opts.turnTask, opts.conversationState);
   const expired = expiredLabels(opts.conversationState);
   const out: Record<string, unknown> = {};

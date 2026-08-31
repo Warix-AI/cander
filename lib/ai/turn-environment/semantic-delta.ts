@@ -192,10 +192,19 @@ export async function resolveConversationDelta(
   const { resolveDeterministicDelta } = await import(
     "./deterministic-delta.ts"
   );
+  const { classifyTurnRelation, deltaHintsFromTurnRelation } = await import(
+    "./turn-relation.ts"
+  );
+  const relationResult = classifyTurnRelation({
+    userMessage: input.userMessage,
+    previous: input.previous,
+  });
   const { resolveTurnTask } = await import("./turn-task.ts");
   const task = resolveTurnTask({
     content: input.userMessage,
     previous: input.previous,
+    turnRelation: relationResult.relation,
+    reactivateEntityLabel: relationResult.reactivateEntityLabel,
   });
 
   const taskOverlay: Partial<ConversationDelta> = {
@@ -252,31 +261,52 @@ export async function resolveConversationDelta(
       exclusions: base.exclusions,
     };
   };
+  const relationHints = deltaHintsFromTurnRelation(relationResult, input.previous);
+  const mergeRelation = (base: ConversationDelta): ConversationDelta => {
+    if (
+      !relationHints.entityChanges?.length &&
+      !relationHints.topicSwitch
+    ) {
+      return base;
+    }
+    if (base.entityChanges?.length || base.topicSwitch) return base;
+    return {
+      ...base,
+      entityChanges: [
+        ...(base.entityChanges ?? []),
+        ...(relationHints.entityChanges ?? []),
+      ],
+      topicSwitch: base.topicSwitch ?? relationHints.topicSwitch,
+    };
+  };
+
   const det = resolveDeterministicDelta(input);
   if (det && det.resolutionConfidence === "high") {
-    return mergeTask(det);
+    return mergeRelation(mergeTask(det));
   }
   if (det && det.unresolvedAmbiguity && det.resolutionConfidence === "low") {
-    return mergeTask(det);
+    return mergeRelation(mergeTask(det));
   }
   const sem = await resolveSemanticDelta(input, generate);
   if (det) {
-    return mergeTask({
-      ...sem,
-      ...det,
-      entityChanges: [...(det.entityChanges || []), ...(sem.entityChanges || [])],
-      constraintAdds: { ...sem.constraintAdds, ...det.constraintAdds },
-      constraintReplacements: {
-        ...sem.constraintReplacements,
-        ...det.constraintReplacements,
-      },
-      exclusions: [...new Set([...(det.exclusions || []), ...(sem.exclusions || [])])],
-      resolutionMethod: "mixed",
-      resolutionConfidence:
-        det.resolutionConfidence === "high"
-          ? "high"
-          : sem.resolutionConfidence,
-    });
+    return mergeRelation(
+      mergeTask({
+        ...sem,
+        ...det,
+        entityChanges: [...(det.entityChanges || []), ...(sem.entityChanges || [])],
+        constraintAdds: { ...sem.constraintAdds, ...det.constraintAdds },
+        constraintReplacements: {
+          ...sem.constraintReplacements,
+          ...det.constraintReplacements,
+        },
+        exclusions: [...new Set([...(det.exclusions || []), ...(sem.exclusions || [])])],
+        resolutionMethod: "mixed",
+        resolutionConfidence:
+          det.resolutionConfidence === "high"
+            ? "high"
+            : sem.resolutionConfidence,
+      }),
+    );
   }
-  return mergeTask(sem);
+  return mergeRelation(mergeTask(sem));
 }

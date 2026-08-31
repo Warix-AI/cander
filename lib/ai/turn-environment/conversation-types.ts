@@ -110,6 +110,12 @@ export type ConversationTurnState = {
   internalDataRequired: boolean;
   externalRetrievalRequired: boolean;
   lastDelta?: ConversationDelta;
+  /** Last classified relation to prior context (selective activation). */
+  lastTurnRelation?:
+    | "continuation"
+    | "related"
+    | "reference"
+    | "topic_switch";
 };
 
 /** Structured observations emitted by assistant turns in trajectory fixtures. */

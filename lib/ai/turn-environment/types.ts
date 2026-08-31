@@ -4,6 +4,8 @@
  */
 
 import type { TurnEvidence } from "../orchestrator/evidence.ts";
+import type { TurnRelation } from "./turn-relation.ts";
+import type { WebRetrievalPlan } from "./web-retrieval-plan.ts";
 
 export type ToolMode = "disallowed" | "allowed" | "required";
 
@@ -117,6 +119,10 @@ export type TurnProfile = {
   budgets: TurnBudgets;
   /** Domains unlocked this turn (for logging/tests). */
   domains: string[];
+  /** Compiled per-turn web retrieval plan (Exa depth, output shape, escalation). */
+  webRetrievalPlan?: WebRetrievalPlan;
+  /** How this turn relates to prior context. */
+  turnRelation?: TurnRelation;
 };
 
 export const MAX_TOOLS_PER_TURN = 5;

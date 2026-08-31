@@ -6,7 +6,7 @@
  */
 
 import {
-  buildDialoguePrompt,
+  buildSelectiveDialoguePrompt,
   hasPriorConversationTurns,
   isIdentityQuestion,
 } from "@/lib/ai/assistant-behavior";
@@ -57,6 +57,10 @@ import {
 } from "@/lib/ai/orchestrator/tool-execution-bus";
 import { collectCitationsFromToolResults } from "@/lib/ai/orchestrator/collect-citations";
 import {
+  normalizeAssistantProse,
+  stripInlineCitationMarkers,
+} from "@/lib/ai/orchestrator/citations.ts";
+import {
   answerShapeFromContract,
   buildSynthesisInstruction,
   deterministicAnswerFromEvidence,
@@ -90,7 +94,10 @@ import {
   logRetrievalTrace,
   patchRetrievalTrace,
   recordEscalation,
+  recordFmInput,
   recordSearchTrace,
+  recordTurnIntent,
+  recordValidationIssues,
   resetRetrievalTrace,
   setFinalSource,
   type FinalAnswerSource,
@@ -108,6 +115,8 @@ import {
   runParallelTasks,
   webSearchArguments,
   applyConversationDelta,
+  activeEntities,
+  classifyTurnRelation,
   resolveConversationDelta,
   semanticBlocksInstruction,
   semanticBlocksToChatBlocks,
@@ -175,8 +184,14 @@ function detailForTool(name: string): string {
   }
 }
 
-function safeContent(text: string, fallback: string): string {
-  const cleaned = sanitizeAssistantVisibleText(text || "").trim();
+function safeContent(
+  text: string,
+  fallback: string,
+  citationSources?: Array<{ id: string; title: string; url?: string | null }>,
+): string {
+  const cleaned = citationSources?.length
+    ? normalizeAssistantProse(text || "", citationSources).trim()
+    : sanitizeAssistantVisibleText(text || "").trim();
   return cleaned || fallback;
 }
 
@@ -234,7 +249,7 @@ function tryExaDirectAnswer(
   ) {
     return null;
   }
-  return direct.content.trim();
+  return stripInlineCitationMarkers(direct.content.trim());
 }
 
 function evidenceAsSnippets(items: TurnEvidence[]): EvidenceSnippet[] {
@@ -420,15 +435,18 @@ function applyEvidenceHygiene(opts: {
   evidence: TurnEvidence[];
   question: string;
   conversationState: ReturnType<typeof applyConversationDelta>;
+  turnRelation?: import("@/lib/ai/turn-environment/turn-relation.ts").TurnRelation;
 }): void {
   const turnTask = resolveTurnTask({
     content: opts.question,
     previous: opts.conversationState,
+    turnRelation: opts.turnRelation,
   });
   const { evidence, dropped } = filterEvidenceForCurrentTurn(opts.evidence, {
     turnTask,
     conversationState: opts.conversationState,
     userMessage: opts.question,
+    turnRelation: opts.turnRelation,
   });
   if (dropped > 0) {
     opts.evidence.splice(0, opts.evidence.length, ...evidence);
@@ -806,9 +824,11 @@ async function buildFmPrompt(
   ]);
   const taskState = getThreadTaskState(request.threadId);
   const conv = getConversationTurnState(request.threadId);
+  const turnRelation = profile.turnRelation ?? conv?.lastTurnRelation;
   const turnTask = resolveTurnTask({
     content: request.content,
     previous: conv,
+    turnRelation,
   });
   const filteredTaskState = taskState
     ? {
@@ -816,6 +836,7 @@ async function buildFmPrompt(
         facts: filterTaskFactsForTurn(taskState, {
           turnTask,
           conversationState: conv,
+          turnRelation,
         }),
       }
     : null;
@@ -903,11 +924,13 @@ async function buildFmPrompt(
       ? semanticBlocksInstruction()
       : "",
     extraInstruction,
-    requiresExternalEvidence(request.content) && evidence.length
-      ? "Evidence was retrieved for this turn. Answer from compact evidence only. Never invent facts. Do not tell the user to check a website or nutrition calculator when evidence is present."
-      : requiresExternalEvidence(request.content)
-        ? "This turn needs live facts. Prefer tools only if still listed above."
-        : "",
+    requiresExternalEvidence(request.content) && evidence.some((e) => e.kind === "exa_synthesis")
+      ? "Exa already resolved the factual answer in GROUNDED RETRIEVAL ANSWER. Your job is intent, phrasing, and presentation only — do not change dates, names, numbers, or other facts. Do not cite sources inline; Sources appear separately."
+      : requiresExternalEvidence(request.content) && evidence.length
+        ? "Evidence was retrieved for this turn. Answer from compact evidence only. Never invent facts. Do not tell the user to check a website or nutrition calculator when evidence is present."
+        : requiresExternalEvidence(request.content)
+          ? "This turn needs live facts. Prefer tools only if still listed above."
+          : "",
   ]
     .filter(Boolean)
     .join("\n\n")
@@ -916,12 +939,20 @@ async function buildFmPrompt(
   // Expose DynamicProfile payload for native bridges (no-op today).
   void toDynamicProfilePayload(profile, evidenceBlock);
 
-  const prompt = buildDialoguePrompt(
+  const activeLabels = conv
+    ? activeEntities(conv).map((e) => e.label)
+    : [];
+  const prompt = buildSelectiveDialoguePrompt(
     (pkg.messages.length ? pkg.messages : request.messages) as
       | Array<{ role: "user" | "assistant" | "system"; content: string }>
       | undefined,
     request.content,
+    {
+      relation: turnRelation ?? "continuation",
+      activeLabels,
+    },
   );
+  recordFmInput(prompt.length + instructions.length);
   return { prompt, instructions, profile };
 }
 
@@ -1000,7 +1031,15 @@ async function runLocalTurnOrchestratorInner(
       previous: priorConv,
       userMessage: request.content,
     });
-    const conversationState = applyConversationDelta(priorConv, convDelta);
+    const relationResult = classifyTurnRelation({
+      userMessage: request.content,
+      previous: priorConv,
+    });
+    let conversationState = applyConversationDelta(priorConv, convDelta);
+    conversationState = {
+      ...conversationState,
+      lastTurnRelation: relationResult.relation,
+    };
     setConversationTurnState(request.threadId, conversationState);
     resetRetrievalTrace();
 
@@ -1070,6 +1109,8 @@ async function runLocalTurnOrchestratorInner(
       messages: request.messages,
       pendingStateText: formatTaskStateForPrompt(taskState),
       conversationState,
+      turnRelation: relationResult.relation,
+      reactivateEntityLabel: relationResult.reactivateEntityLabel,
       isDesktop:
         typeof navigator !== "undefined" &&
         /Mac|Win|Linux/i.test(navigator.platform || ""),
@@ -1094,6 +1135,18 @@ async function runLocalTurnOrchestratorInner(
           }
         : {}),
     });
+
+    if (profile.webRetrievalPlan) {
+      recordTurnIntent({
+        intent: resolveTurnTask({
+          content: request.content,
+          previous: conversationState,
+          turnRelation: relationResult.relation,
+        }).intent,
+        relation: relationResult.relation,
+        plan: profile.webRetrievalPlan,
+      });
+    }
 
     evidence = [];
     toolResults = [];
@@ -1270,6 +1323,7 @@ async function runLocalTurnOrchestratorInner(
         evidence,
         question: request.content,
         conversationState,
+        turnRelation: relationResult.relation,
       });
 
       const autonomousTask = toolResults.find(
@@ -1360,6 +1414,8 @@ async function runLocalTurnOrchestratorInner(
         pendingStateText: formatTaskStateForPrompt(taskState),
         evidence,
         conversationState,
+        turnRelation: relationResult.relation,
+        reactivateEntityLabel: relationResult.reactivateEntityLabel,
         isDesktop:
           typeof navigator !== "undefined" &&
           /Mac|Win|Linux/i.test(navigator.platform || ""),
@@ -1737,6 +1793,7 @@ async function runLocalTurnOrchestratorInner(
         messages: request.messages,
         evidence,
         conversationState,
+        turnRelation: relationResult.relation,
       });
     }
 

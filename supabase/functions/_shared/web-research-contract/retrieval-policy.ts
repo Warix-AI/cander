@@ -122,10 +122,16 @@ export function buildRetrievalQuery(opts: {
   subject?: string | null;
   requestedFields?: string[];
   operation?: string;
+  /** When false, omit carried subject — current message only. */
+  carrySubject?: boolean;
 }): string {
   const parts: string[] = [];
-  if (opts.subject?.trim()) parts.push(opts.subject.trim());
-  parts.push(opts.content.trim());
+  const subject = opts.subject?.trim() ?? "";
+  const content = opts.content.trim();
+  if (opts.carrySubject !== false && subject) {
+    parts.push(subject);
+  }
+  parts.push(content);
   if (
     opts.operation === "add_fields" &&
     opts.requestedFields?.length

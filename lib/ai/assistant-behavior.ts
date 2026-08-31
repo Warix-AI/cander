@@ -126,3 +126,84 @@ export function buildDialoguePrompt(
   ];
   return lines.join("\n");
 }
+
+export type SelectiveDialogueOpts = {
+  relation?: "continuation" | "related" | "reference" | "topic_switch";
+  maxTurns?: number;
+  activeLabels?: string[];
+  reactivateLabel?: string;
+};
+
+/**
+ * Build dialogue prompt with selective prior-turn inclusion.
+ * remember broadly → activate selectively → prompt minimally
+ */
+export function buildSelectiveDialoguePrompt(
+  history: AiHistoryMessage[] | undefined,
+  latestUserContent: string,
+  opts?: SelectiveDialogueOpts,
+): string {
+  const relation = opts?.relation ?? "continuation";
+  const maxTurns =
+    opts?.maxTurns ??
+    (relation === "topic_switch"
+      ? 0
+      : relation === "continuation"
+        ? 4
+        : 6);
+
+  if (maxTurns <= 0) return latestUserContent.trim();
+
+  const prior = (history ?? []).filter(
+    (m) =>
+      (m.role === "user" || m.role === "assistant") &&
+      m.content.trim() &&
+      m.content !== "Thinking…" &&
+      m.content !== "Thinking...",
+  );
+
+  let trimmed = [...prior];
+  const last = trimmed[trimmed.length - 1];
+  if (
+    last?.role === "user" &&
+    last.content.trim() === latestUserContent.trim()
+  ) {
+    trimmed.pop();
+  }
+
+  const reactivate = opts?.reactivateLabel?.trim().toLowerCase();
+  const labels = (opts?.activeLabels ?? []).map((l) => l.toLowerCase());
+  const msgTokens = latestUserContent
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 3);
+
+  if (relation === "reference" && reactivate) {
+    const matching = trimmed.filter((m) =>
+      m.content.toLowerCase().includes(reactivate),
+    );
+    const recent = trimmed.slice(-2);
+    const merged = [...matching, ...recent];
+    const seen = new Set<string>();
+    trimmed = merged.filter((m) => {
+      const key = `${m.role}:${m.content.slice(0, 60)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  } else if (relation === "related" && labels.length) {
+    trimmed = trimmed.filter((m) => {
+      const lower = m.content.toLowerCase();
+      return (
+        labels.some((l) => lower.includes(l)) ||
+        msgTokens.some((t) => lower.includes(t))
+      );
+    });
+  }
+
+  trimmed = trimmed.slice(-maxTurns);
+  if (!trimmed.length) return latestUserContent.trim();
+
+  return buildDialoguePrompt(trimmed, latestUserContent);
+}

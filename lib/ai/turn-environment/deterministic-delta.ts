@@ -54,7 +54,9 @@ const WHERE_ELLIPSIS = /^\s*where\??\s*$/i;
 const EARLIER_PRICING =
   /\bwhat (did you|you) say earlier about pricing\b/i;
 const GO_BACK =
-  /\b(go back to|return to|about that)\b[\s\S]{0,40}\b(we discussed|earlier|before)\b/i;
+  /\b(go back to|return to|back to(?:\s+the)?)\b[\s\S]{0,60}\b(we discussed|earlier|before)\b/i;
+const GO_BACK_ENTITY =
+  /\b(?:go\s+)?back\s+to(?:\s+the)?\s+(.+?)[?.!]?\s*$/i;
 
 function ordinalFromText(t: string): number | null {
   if (/\bone before (it|that)|previous one\b/i.test(t)) return -1; // relative
@@ -411,7 +413,30 @@ export function resolveDeterministicDelta(
     };
   }
 
-  // Explicit reopen of AVAILABLE topic
+  // Explicit reopen of AVAILABLE topic / entity ("back to the burger")
+  const backEntity = content.match(GO_BACK_ENTITY);
+  if (backEntity?.[1] && !GO_BACK.test(content)) {
+    const phrase = backEntity[1].trim();
+    const availEnt = prev.entities.find(
+      (e) =>
+        e.contextClass === "AVAILABLE" &&
+        (e.label.toLowerCase().includes(phrase.toLowerCase()) ||
+          phrase.toLowerCase().includes(e.label.toLowerCase())),
+    );
+    const avail = prev.topics.find((t) => t.contextClass === "AVAILABLE");
+    if (availEnt || avail) {
+      return high({
+        resolutionMethod: "deterministic",
+        topicSwitch: avail
+          ? { activateTopicId: avail.id, activateLabel: avail.label }
+          : undefined,
+        entityChanges: availEnt
+          ? [{ op: "set", entity: { ...availEnt, contextClass: "ACTIVE" } }]
+          : [],
+      });
+    }
+  }
+
   if (GO_BACK.test(content)) {
     const avail = prev.topics.find((t) => t.contextClass === "AVAILABLE");
     const availEnt = prev.entities.find((e) => e.contextClass === "AVAILABLE");

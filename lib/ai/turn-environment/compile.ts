@@ -39,6 +39,7 @@ import {
 import { autoRetrieveMemorySnippets } from "./memory-auto.ts";
 import { filterMemorySnippetsForTurn } from "../orchestrator/evidence-hygiene.ts";
 import { wantsAutonomousResearch } from "../web-research/index.ts";
+import { compileWebRetrievalPlan } from "./web-retrieval-plan.ts";
 import type {
   BudgetProfileName,
   ContextPacket,
@@ -66,6 +67,9 @@ export type CompileTurnOptions = {
   outputSchema?: TurnProfile["outputSchema"];
   /** Resolved conversation state from delta pipeline. */
   conversationState?: ConversationTurnState | null;
+  /** Classified relation to prior context. */
+  turnRelation?: import("./turn-relation.ts").TurnRelation;
+  reactivateEntityLabel?: string;
   /**
    * Build gate — only set when Build orchestrator is enabled AND
    * requiresBuildCapabilities. Never set on normal chat/research.
@@ -174,9 +178,21 @@ export function resolveClarificationRequired(opts: {
 export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
   const content = (opts.content || "").trim();
   const conv = opts.conversationState;
+  const turnRelation = opts.turnRelation ?? conv?.lastTurnRelation;
   const turnTask = resolveTurnTask({
     content,
     previous: conv ?? null,
+    turnRelation,
+    reactivateEntityLabel: opts.reactivateEntityLabel,
+  });
+
+  const webRetrievalPlan = compileWebRetrievalPlan({
+    content,
+    turnTask,
+    conv,
+    turnRelation,
+    carrySubject: turnRelation !== "topic_switch" && turnTask.subject != null,
+    deeper: Boolean(conv?.dissatisfactionSignal),
   });
 
   const resolved = resolveTurnState({
@@ -452,11 +468,13 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     pendingStateText: pendingBits.filter(Boolean).join("\n"),
     attachmentSummaries: opts.attachmentSummaries ?? [],
     memorySnippets: filterMemorySnippetsForTurn(
-      opts.memorySnippets ??
-        autoRetrieveMemorySnippets({
-          content,
-          messages: opts.messages,
-        }),
+      turnRelation === "topic_switch" && !/\b(back to|earlier|you said)\b/i.test(content)
+        ? []
+        : (opts.memorySnippets ??
+            autoRetrieveMemorySnippets({
+              content,
+              messages: opts.messages,
+            })),
       { turnTask, conversationState: conv },
     ),
     evidence: opts.evidence ?? [],
@@ -475,6 +493,7 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     content,
     turnTask,
     conv,
+    webRetrievalPlan,
   });
 
   if (autonomousResearch) {
@@ -500,6 +519,8 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     outputSchema: opts.outputSchema ?? "semantic_blocks_v1",
     budgets,
     domains: allowed.domains,
+    webRetrievalPlan,
+    turnRelation,
   };
 }
 

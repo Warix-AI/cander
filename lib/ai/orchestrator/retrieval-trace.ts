@@ -3,6 +3,8 @@
  */
 
 import type { ExaRetrievalMode } from "@/lib/ai/web-research/index.ts";
+import type { TurnRelation } from "@/lib/ai/turn-environment/turn-relation.ts";
+import type { WebRetrievalPlan } from "@/lib/ai/turn-environment/web-retrieval-plan.ts";
 
 export type FinalAnswerSource =
   | "exa_search_output"
@@ -13,6 +15,12 @@ export type FinalAnswerSource =
   | "work_task";
 
 export type TurnRetrievalTrace = {
+  turnIntent?: string;
+  turnRelation?: TurnRelation;
+  webPlan?: Pick<
+    WebRetrievalPlan,
+    "mode" | "output" | "query" | "resultCount" | "freshness" | "contentNeeded"
+  >;
   provider: "exa" | "none";
   mode: ExaRetrievalMode | "agent" | "none";
   outputSchema: "text" | "object" | "none";
@@ -24,6 +32,8 @@ export type TurnRetrievalTrace = {
   escalatedFrom?: ExaRetrievalMode | null;
   escalations?: number;
   staleEvidenceDropped?: number;
+  fmInputChars?: number;
+  validationIssues?: string[];
   finalSource?: FinalAnswerSource;
 };
 
@@ -56,6 +66,28 @@ export function patchRetrievalTrace(
   return activeTrace;
 }
 
+export function recordTurnIntent(opts: {
+  intent: string;
+  relation: TurnRelation;
+  plan: WebRetrievalPlan;
+}): void {
+  patchRetrievalTrace({
+    turnIntent: opts.intent,
+    turnRelation: opts.relation,
+    webPlan: {
+      mode: opts.plan.mode,
+      output: opts.plan.output,
+      query: opts.plan.query,
+      resultCount: opts.plan.resultCount,
+      freshness: opts.plan.freshness,
+      contentNeeded: opts.plan.contentNeeded,
+    },
+    mode: opts.plan.mode === "agent" ? "agent" : (opts.plan.exaMode ?? "none"),
+    outputSchema: opts.plan.output,
+    numResults: opts.plan.resultCount,
+  });
+}
+
 export function recordSearchTrace(opts: {
   mode: ExaRetrievalMode | string;
   outputSchemaType?: "text" | "object" | "none";
@@ -84,6 +116,15 @@ export function recordEscalation(from: ExaRetrievalMode, to: ExaRetrievalMode): 
     mode: to,
     escalations: (activeTrace.escalations ?? 0) + 1,
   });
+}
+
+export function recordFmInput(chars: number): void {
+  patchRetrievalTrace({ fmInputChars: chars });
+}
+
+export function recordValidationIssues(issues: string[]): void {
+  if (!issues.length) return;
+  patchRetrievalTrace({ validationIssues: issues });
 }
 
 export function setFinalSource(source: FinalAnswerSource): void {
