@@ -95,13 +95,14 @@ Temporary A/B bypass for comparing **raw OpenAI** vs V6. **Default ON** (opt out
 | Var | Where | Purpose |
 |-----|--------|---------|
 | `OPENAI_API_KEY` | server only | OpenAI auth — never `NEXT_PUBLIC_` |
-| `OPENAI_MODEL` | server | Model id (default `gpt-5.6`) |
+| `OPENAI_MODEL` | server | Model id (default `gpt-5.6-luna`) |
+| `OPENAI_WEB_SEARCH` | server | `1` adds Responses API `tools: [{ type: "web_search" }]` (model decides when to search); `0`/unset = no tool |
 | `RAW_OPENAI_MODE` | server | Opt out with `0` (default allows `/api/ai/raw-openai`) |
 | `NEXT_PUBLIC_RAW_OPENAI_MODE` | client | Opt out with `0` (default routes to `runRawOpenAITurn` first) |
 
-When enabled (default), **no** V6 / Simple Turn / TaskGraph / Exa / KB / Apple FM runs. Full thread history is POSTed to the server and forwarded to the OpenAI Responses API.
+When enabled (default), **no** V6 / Simple Turn / TaskGraph / Exa / KB / Apple FM runs. Full thread history is POSTed to the server and forwarded to the OpenAI Responses API. Native OpenAI web search is optional via `OPENAI_WEB_SEARCH` and never uses Exa/Cander search.
 
-UI shows a **RAW OPENAI** badge. Trace: `[RAW_OPENAI_TRACE]`. Opt out: `NEXT_PUBLIC_RAW_OPENAI_MODE=0`, `RAW_OPENAI_MODE=0`, or `localStorage['cander:raw-openai-mode']='0'`.
+UI shows a **RAW OPENAI** badge. Trace: `[RAW_OPENAI_TRACE]` (model, `webSearchEnabled`, `webSearchUsed`, latency, tokens). Opt out: `NEXT_PUBLIC_RAW_OPENAI_MODE=0`, `RAW_OPENAI_MODE=0`, or `localStorage['cander:raw-openai-mode']='0'`.
 
 
 

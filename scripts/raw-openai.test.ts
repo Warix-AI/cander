@@ -14,6 +14,11 @@ import {
   buildRawOpenAIHistory,
   runRawOpenAITurn,
 } from "../lib/ai/raw-openai/run-turn.ts";
+import {
+  didOpenAIUseWebSearch,
+  isOpenAIWebSearchEnabled,
+  resolveOpenAIModel,
+} from "../lib/ai/raw-openai/web-search.ts";
 
 describe("Raw OpenAI flags", () => {
   it("defaults on", () => {
@@ -34,6 +39,42 @@ describe("Raw OpenAI flags", () => {
     assert.equal(isRawOpenAIModeAllowedOnServer(), false);
     if (prev === undefined) delete process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     else process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = prev;
+  });
+});
+
+describe("OpenAI web search flag", () => {
+  it("defaults off when unset", () => {
+    const prev = process.env.OPENAI_WEB_SEARCH;
+    delete process.env.OPENAI_WEB_SEARCH;
+    assert.equal(isOpenAIWebSearchEnabled(), false);
+    if (prev !== undefined) process.env.OPENAI_WEB_SEARCH = prev;
+  });
+
+  it("enables with OPENAI_WEB_SEARCH=1", () => {
+    const prev = process.env.OPENAI_WEB_SEARCH;
+    process.env.OPENAI_WEB_SEARCH = "1";
+    assert.equal(isOpenAIWebSearchEnabled(), true);
+    if (prev === undefined) delete process.env.OPENAI_WEB_SEARCH;
+    else process.env.OPENAI_WEB_SEARCH = prev;
+  });
+
+  it("detects web_search_call in output", () => {
+    assert.equal(didOpenAIUseWebSearch([{ type: "message" }]), false);
+    assert.equal(
+      didOpenAIUseWebSearch([
+        { type: "web_search_call" },
+        { type: "message" },
+      ]),
+      true,
+    );
+  });
+
+  it("resolves model from OPENAI_MODEL", () => {
+    const prev = process.env.OPENAI_MODEL;
+    process.env.OPENAI_MODEL = "gpt-5.6-luna";
+    assert.equal(resolveOpenAIModel(), "gpt-5.6-luna");
+    if (prev === undefined) delete process.env.OPENAI_MODEL;
+    else process.env.OPENAI_MODEL = prev;
   });
 });
 
@@ -96,7 +137,9 @@ describe("Raw OpenAI client turn", () => {
       return new Response(
         JSON.stringify({
           content: "raw openai answer",
-          model: "gpt-5.6",
+          model: "gpt-5.6-luna",
+          webSearchEnabled: true,
+          webSearchUsed: false,
           inputTokens: 12,
           outputTokens: 4,
           latencyMs: 10,
@@ -133,23 +176,29 @@ describe("Raw OpenAI client turn", () => {
   });
 });
 
-describe("No client OpenAI secret", () => {
+describe("No client OpenAI secret / no Exa on raw path", () => {
   it("client modules never reference OPENAI_API_KEY", () => {
     for (const rel of [
       "lib/ai/raw-openai/run-turn.ts",
       "lib/ai/raw-openai/flags.ts",
       "lib/ai/raw-openai/path.ts",
+      "lib/ai/raw-openai/web-search.ts",
       "components/chat/RawOpenAIModeBadge.tsx",
     ]) {
       const src = fs.readFileSync(rel, "utf8");
       assert.equal(src.includes("OPENAI_API_KEY"), false, rel);
       assert.equal(src.includes("NEXT_PUBLIC_OPENAI"), false, rel);
+      assert.equal(/\bexa\b/i.test(src), false, rel);
     }
   });
 
-  it("server route reads OPENAI_API_KEY only server-side", () => {
+  it("server route reads OPENAI_API_KEY only server-side and uses native web_search", () => {
     const src = fs.readFileSync("app/api/ai/raw-openai/route.ts", "utf8");
     assert.ok(src.includes("process.env.OPENAI_API_KEY"));
     assert.equal(src.includes("NEXT_PUBLIC_OPENAI_API_KEY"), false);
+    assert.ok(src.includes('type: "web_search"'));
+    assert.ok(src.includes("isOpenAIWebSearchEnabled"));
+    assert.equal(/\bexa\b/i.test(src), false);
+    assert.equal(/\btool_choice\b/.test(src), false);
   });
 });

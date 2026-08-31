@@ -12,12 +12,14 @@ import { AiRuntimeError } from "../runtime/types.ts";
 
 const SYSTEM_INSTRUCTIONS = `You are a helpful assistant in the Cander chat product.
 Answer clearly and completely. Handle follow-ups, pronouns, multi-part questions, and topic changes using the conversation history provided.
-Do not invent tool calls or claim you searched the web unless you actually have that capability in this session.`;
+When web search is available, use it only when current or external facts would improve the answer; otherwise answer from knowledge.`;
 
 export type RawOpenAITrace = {
   provider: "openai";
   mode: "raw";
   model: string;
+  webSearchEnabled?: boolean;
+  webSearchUsed?: boolean;
   threadMessageCount: number;
   inputTokens?: number;
   outputTokens?: number;
@@ -85,6 +87,8 @@ export async function runRawOpenAITurn(
   const data = (await res.json().catch(() => ({}))) as {
     content?: string;
     model?: string;
+    webSearchEnabled?: boolean;
+    webSearchUsed?: boolean;
     inputTokens?: number;
     outputTokens?: number;
     error?: string;
@@ -93,12 +97,16 @@ export async function runRawOpenAITurn(
 
   const latencyMs = data.latencyMs ?? Date.now() - started;
   const model = data.model || "unknown";
+  const webSearchEnabled = Boolean(data.webSearchEnabled);
+  const webSearchUsed = Boolean(data.webSearchUsed);
 
   if (!res.ok || data.error) {
     logTrace({
       provider: "openai",
       mode: "raw",
       model,
+      webSearchEnabled,
+      webSearchUsed,
       threadMessageCount: history.length,
       inputTokens: data.inputTokens,
       outputTokens: data.outputTokens,
@@ -117,6 +125,8 @@ export async function runRawOpenAITurn(
     provider: "openai",
     mode: "raw",
     model,
+    webSearchEnabled,
+    webSearchUsed,
     threadMessageCount: history.length,
     inputTokens: data.inputTokens,
     outputTokens: data.outputTokens,
@@ -127,7 +137,11 @@ export async function runRawOpenAITurn(
   report({
     phase: "generating",
     label: "RAW OPENAI",
-    detail: model,
+    detail: webSearchUsed
+      ? `${model} · web search`
+      : webSearchEnabled
+        ? `${model} · web search available`
+        : model,
     contentDelta: content,
     contentStreaming: false,
   });
