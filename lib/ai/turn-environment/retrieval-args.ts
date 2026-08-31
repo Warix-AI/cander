@@ -88,6 +88,7 @@ export function webSearchArguments(opts: {
             },
           }
         : {}),
+    ...(plan?.exaMode ? { retrievalMode: plan.exaMode } : {}),
     ...(opts.escalate ? { escalate: opts.escalate } : {}),
     ...(opts.deeper ? { deeper: true } : {}),
   });

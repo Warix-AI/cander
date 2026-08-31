@@ -30,17 +30,35 @@ import {
 import { tryExaDirectAnswer } from "./exa-retrieval-helpers.ts";
 
 describe("Exa retrieval policy", () => {
-  it("defaults simple factual questions to fast + text outputSchema", () => {
+  it("deep_default routes simple factual questions to Exa deep", () => {
     const q = "What is BYU's first football game of the season this year?";
-    const policy = resolveExaRetrievalPolicy(q);
+    const policy = resolveExaRetrievalPolicy(q, {
+      webRetrievalMode: "deep_default",
+    });
+    assert.equal(policy.mode, "deep");
+    assert.ok(policy.numResults >= 6);
+  });
+
+  it("fast mode keeps simple factual questions on fast + text outputSchema", () => {
+    const q = "What is BYU's first football game of the season this year?";
+    const policy = resolveExaRetrievalPolicy(q, { webRetrievalMode: "fast" });
     assert.equal(policy.mode, "fast");
     assert.equal(policy.outputSchema.type, "text");
     assert.ok(policy.numResults <= 5);
   });
 
-  it("escalates list-all questions toward deep-lite", () => {
+  it("escalates list-all questions toward deep under deep_default", () => {
     const policy = resolveExaRetrievalPolicy(
       "List every BYU football game this season with times",
+      { webRetrievalMode: "deep_default" },
+    );
+    assert.equal(policy.mode, "deep");
+  });
+
+  it("escalates list-all questions toward deep-lite under fast mode", () => {
+    const policy = resolveExaRetrievalPolicy(
+      "List every BYU football game this season with times",
+      { webRetrievalMode: "fast" },
     );
     assert.equal(policy.mode, "deep-lite");
   });

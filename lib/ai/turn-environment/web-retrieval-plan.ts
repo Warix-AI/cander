@@ -15,6 +15,7 @@ import { extractRequestedUrl } from "../orchestrator/web-retrieval.ts";
 import {
   isExplicitWebsiteInspectRequest,
 } from "../orchestrator/url-open-path.ts";
+import { getWebRetrievalMode } from "../orchestrator/flags.ts";
 import type { TemporalGrounding } from "../orchestrator/temporal-grounding.ts";
 import { maybeAnchorRetrievalQuery } from "../orchestrator/temporal-grounding.ts";
 import type { ConversationTurnState } from "./conversation-types.ts";
@@ -210,6 +211,7 @@ export function compileWebRetrievalPlan(opts: {
     deeper: opts.deeper,
     escalate: opts.escalate ?? undefined,
     hints,
+    webRetrievalMode: getWebRetrievalMode(),
   });
   const schema = buildExaOutputSchema(content, hints);
   const planMode = mapExaModeToPlan(policy.mode);

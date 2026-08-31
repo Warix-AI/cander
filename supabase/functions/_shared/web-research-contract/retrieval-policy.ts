@@ -258,6 +258,11 @@ export function resolveExaRetrievalPolicy(
     deeper?: boolean;
     escalate?: ExaRetrievalMode | null;
     hints?: TurnRetrievalHints;
+    /**
+     * Temporary product policy. `deep_default` starts open-web factual asks
+     * at Exa deep (not fast/instant). Explicit escalate still wins.
+     */
+    webRetrievalMode?: "deep_default" | "fast" | "auto";
   },
 ): ExaRetrievalPolicy {
   const q = question.trim();
@@ -268,6 +273,7 @@ export function resolveExaRetrievalPolicy(
   const components = (q.match(/\band\b/gi) ?? []).length + 1;
   const itemCount =
     hints?.requestedItemCount ?? extractRequestedItemCount(q);
+  const webMode = opts?.webRetrievalMode ?? "fast";
 
   let mode: ExaRetrievalMode = "fast";
 
@@ -276,27 +282,32 @@ export function resolveExaRetrievalPolicy(
   } else if (wantsDeepReasoningSearch(q, hints)) {
     mode = "deep-reasoning";
   } else if (opts?.deeper || hints?.dissatisfaction) {
-    mode = RESEARCH_RE.test(q) ? "deep" : "auto";
+    mode = RESEARCH_RE.test(q) ? "deep" : webMode === "deep_default" ? "deep" : "auto";
   } else if (
     hints?.operation === "deepen" ||
     RESEARCH_RE.test(q) ||
     depth === "detailed"
   ) {
-    mode = "deep-lite";
+    mode = webMode === "deep_default" ? "deep" : "deep-lite";
   } else if (
     hints?.operation === "compare" ||
     COMPARISON_RE.test(q) ||
     components >= 3
   ) {
-    mode = "auto";
+    mode = webMode === "deep_default" ? "deep" : "auto";
   } else if (
     hints?.operation === "list" ||
     LIST_ALL_RE.test(q) ||
     itemCount != null
   ) {
-    mode = "deep-lite";
+    mode = webMode === "deep_default" ? "deep" : "deep-lite";
   } else if (/\b(quick|right now|asap)\b/i.test(q)) {
     mode = "instant";
+  } else if (webMode === "deep_default") {
+    // Correctness-first: open-web factual/current → Exa deep by default
+    mode = "deep";
+  } else if (webMode === "auto") {
+    mode = "auto";
   } else if (hints?.operation === "lookup" || hints?.operation === "answer") {
     mode = "fast";
   } else {

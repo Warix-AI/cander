@@ -364,6 +364,10 @@ export async function executeAuthorizedTool(
               : undefined,
           escalate: typeof args.escalate === "string" ? args.escalate : undefined,
           deeper: args.deeper === true,
+          retrievalMode:
+            typeof args.retrievalMode === "string"
+              ? args.retrievalMode
+              : undefined,
         };
         const result = await actions.webSearch(String(args.query), searchOpts);
         const results = result.results ?? [];

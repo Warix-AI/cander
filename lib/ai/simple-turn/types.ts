@@ -31,6 +31,12 @@ export type Lookup = {
   parallelGroup?: string;
   /** Owning intent id when run from IntentPlan */
   intentId?: string;
+  /** Prefer Exa deeper retrieval for this lookup */
+  deeper?: boolean;
+  /** Explicit Exa retrievalMode override (instant|fast|auto|deep-lite|deep|deep-reasoning) */
+  retrievalMode?: string;
+  /** Escalation target for bounded retry */
+  escalate?: string;
 };
 
 export type AnswerShape =

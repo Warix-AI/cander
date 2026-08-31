@@ -66,3 +66,45 @@ export function isSimpleTurnRuntimeEnabled(): boolean {
   }
   return false;
 }
+
+/**
+ * Open-web Exa retrieval depth.
+ * Default `deep_default` — prefer Exa deep/agent-style retrieval for factual/current
+ * questions instead of fast/instant one-shot search. Explicit URL opens stay direct-fetch.
+ * Benchmark later with NEXT_PUBLIC_WEB_RETRIEVAL_MODE=fast|auto.
+ * Edge secret mirror: WEB_RETRIEVAL_MODE (no NEXT_PUBLIC_ on Edge).
+ */
+export type WebRetrievalModeFlag = "deep_default" | "fast" | "auto";
+
+export function getWebRetrievalMode(): WebRetrievalModeFlag {
+  const read = (v: string | undefined | null): WebRetrievalModeFlag | null => {
+    if (!v) return null;
+    const n = v.toLowerCase();
+    if (n === "fast" || n === "instant") return "fast";
+    if (n === "auto") return "auto";
+    if (n === "deep_default" || n === "deep" || n === "deep-default") {
+      return "deep_default";
+    }
+    return null;
+  };
+
+  if (typeof process !== "undefined") {
+    const fromPublic = read(process.env.NEXT_PUBLIC_WEB_RETRIEVAL_MODE);
+    if (fromPublic) return fromPublic;
+    const fromServer = read(process.env.WEB_RETRIEVAL_MODE);
+    if (fromServer) return fromServer;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const ls = read(window.localStorage?.getItem("cander:web-retrieval-mode"));
+      if (ls) return ls;
+    } catch {
+      /* ignore */
+    }
+  }
+  return "deep_default";
+}
+
+export function isWebRetrievalDeepDefault(): boolean {
+  return getWebRetrievalMode() === "deep_default";
+}

@@ -25,11 +25,13 @@ export {
 export {
   webResearchEnabled,
   webResearchProvider,
+  webRetrievalMode,
   exaDeepSearchEnabled,
   webOpenDirectFetchEnabled,
   exaApiKey,
   braveApiKey,
 } from "./flags.ts";
+export type { WebRetrievalModeFlag } from "./flags.ts";
 export {
   parseExaSynthesizedResponse,
   exaBundleQualityOk,

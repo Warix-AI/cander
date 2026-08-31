@@ -44,6 +44,7 @@ export type AppActionHandlers = {
       retrievalHints?: Record<string, unknown>;
       escalate?: string;
       deeper?: boolean;
+      retrievalMode?: string;
     },
   ) => Promise<{
     ok: boolean;

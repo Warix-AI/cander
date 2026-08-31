@@ -347,6 +347,9 @@ export function buildRefineLookups(opts: {
       }),
       parallelGroup: "refine",
       intentId: intent.id,
+      // Bounded retry: escalate one step past deep_default
+      escalate: "deep-reasoning",
+      deeper: true,
     }));
   }
 
@@ -375,6 +378,8 @@ export function buildRefineLookups(opts: {
         cap: "WEB",
         q: `${ask} ${entity} ${year} official`.trim().slice(0, 400),
         parallelGroup: "refine",
+        escalate: "deep-reasoning",
+        deeper: true,
       },
     ];
   }
@@ -384,6 +389,8 @@ export function buildRefineLookups(opts: {
         cap: "WEB",
         q: `${entity} ${ask}`.trim().slice(0, 400),
         parallelGroup: "refine",
+        escalate: "deep",
+        deeper: true,
       },
     ];
   }
@@ -395,6 +402,8 @@ export function buildRefineLookups(opts: {
           .trim()
           .slice(0, 400),
         parallelGroup: "refine",
+        escalate: "deep-reasoning",
+        deeper: true,
       },
     ];
   }

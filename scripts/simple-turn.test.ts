@@ -29,6 +29,10 @@ import {
   runLookups,
 } from "../lib/ai/simple-turn/run.ts";
 import {
+  webSearchArgsForLookup,
+  executeLookup,
+} from "../lib/ai/simple-turn/cap-router.ts";
+import {
   buildCanonicalLookupQuery,
   looksLikeNarrativeQuery,
   heuristicCalorieIntents,
@@ -500,6 +504,81 @@ describe("simple turn IntentPlan runtime", () => {
     });
     assert.equal(v.failed, false);
     assert.ok(v.plan.intents.length >= 3);
+  });
+
+  it("open-web WEB intents request Exa deep by default; URL stays direct", async () => {
+    process.env.NEXT_PUBLIC_WEB_RETRIEVAL_MODE = "deep_default";
+    const deepArgs = webSearchArgsForLookup({
+      cap: "WEB",
+      q: "Taco Bell regular taco calories",
+    });
+    assert.equal(deepArgs.retrievalMode, "deep");
+    assert.equal(deepArgs.deeper, true);
+    assert.ok(!/if i eat/i.test(String(deepArgs.query)));
+
+    process.env.NEXT_PUBLIC_WEB_RETRIEVAL_MODE = "fast";
+    const fastArgs = webSearchArgsForLookup({
+      cap: "WEB",
+      q: "BYU next football game 2026",
+    });
+    assert.equal(fastArgs.retrievalMode, undefined);
+
+    // URL path must not invoke deep search first
+    const calls: string[] = [];
+    await executeLookup({
+      lookup: { cap: "WEB", q: "https://vercel.com" },
+      cache: new Map(),
+      executeTool: async ({ name, arguments: args }) => {
+        calls.push(
+          `${name}:${String(args.retrievalMode ?? args.url ?? args.query ?? "")}`,
+        );
+        return {
+          name,
+          ok: true,
+          output: "Vercel is a deployment platform for frontend apps.",
+          data: {
+            title: "Vercel",
+            url: "https://vercel.com",
+            finalUrl: "https://vercel.com",
+            text: "Vercel is a deployment platform for frontend apps.",
+          },
+        };
+      },
+    });
+    assert.ok(calls[0]?.startsWith("web.read:"));
+    assert.ok(!calls.some((c) => /web\.search:deep/.test(c)));
+
+    // Open-web concurrent intents pass deep + canonical queries
+    process.env.NEXT_PUBLIC_WEB_RETRIEVAL_MODE = "deep_default";
+    const state = loadSimpleState({ text: CALORIE_PROMPT });
+    const hydrate = hydrateTurn(state);
+    const ip = intentPlanFromHydrateHeuristic(hydrate);
+    const searchCalls: Array<Record<string, unknown>> = [];
+    await runLookups({
+      plan: ip,
+      browser: "auto",
+      userText: CALORIE_PROMPT,
+      cache: new Map(),
+      executeTool: async ({ name, arguments: args }) => {
+        if (name === "web.search") searchCalls.push({ ...args });
+        return {
+          name,
+          ok: true,
+          output: "170 calories per serving according to nutrition data",
+          data: {
+            title: "Nutrition",
+            url: "https://example.com",
+            text: "170 calories per serving according to nutrition data",
+          },
+        };
+      },
+    });
+    assert.ok(searchCalls.length >= 2);
+    for (const c of searchCalls) {
+      assert.equal(c.retrievalMode, "deep");
+      assert.ok(!/if i eat|how many calories is that/i.test(String(c.query)));
+    }
+    delete process.env.NEXT_PUBLIC_WEB_RETRIEVAL_MODE;
   });
 
   it("classifies deliberation depth adaptively", () => {

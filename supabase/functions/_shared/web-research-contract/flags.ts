@@ -5,6 +5,9 @@
 
 export type WebResearchProviderFlag = "exa" | "brave";
 
+/** Temporary: prefer Exa deep retrieval for open-web factual asks. */
+export type WebRetrievalModeFlag = "deep_default" | "fast" | "auto";
+
 export function webResearchEnabled(): boolean {
   const v = (Deno.env.get("WEB_RESEARCH_ENABLED") ?? "true").toLowerCase();
   return v !== "0" && v !== "false" && v !== "off";
@@ -13,6 +16,18 @@ export function webResearchEnabled(): boolean {
 export function webResearchProvider(): WebResearchProviderFlag {
   const v = (Deno.env.get("WEB_RESEARCH_PROVIDER") ?? "exa").toLowerCase();
   return v === "brave" ? "brave" : "exa";
+}
+
+/**
+ * Open-web retrieval depth policy.
+ * Default `deep_default` — correctness over latency while INTERPRET matures.
+ * Set WEB_RETRIEVAL_MODE=fast|auto to benchmark lighter Exa modes later.
+ */
+export function webRetrievalMode(): WebRetrievalModeFlag {
+  const v = (Deno.env.get("WEB_RETRIEVAL_MODE") ?? "deep_default").toLowerCase();
+  if (v === "fast" || v === "instant") return "fast";
+  if (v === "auto") return "auto";
+  return "deep_default";
 }
 
 export function exaDeepSearchEnabled(): boolean {

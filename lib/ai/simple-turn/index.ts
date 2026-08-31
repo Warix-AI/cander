@@ -74,6 +74,7 @@ export {
   looksLikeNarrativeQuery,
   heuristicCalorieIntents,
 } from "./query-normalize.ts";
+export { webSearchArgsForLookup, executeLookup } from "./cap-router.ts";
 export { answerTurn, mergeCommitNotes } from "./answer.ts";
 export { commitTurnNotes } from "./commit.ts";
 export {

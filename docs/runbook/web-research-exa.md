@@ -9,8 +9,17 @@ npx supabase secrets set EXA_API_KEY=…
 npx supabase secrets set WEB_RESEARCH_ENABLED=true
 npx supabase secrets set WEB_RESEARCH_PROVIDER=exa
 npx supabase secrets set EXA_DEEP_SEARCH_ENABLED=false
+npx supabase secrets set WEB_RETRIEVAL_MODE=deep_default
 npx supabase secrets set WEB_OPEN_DIRECT_FETCH_ENABLED=false
 ```
+
+`WEB_RETRIEVAL_MODE` (Edge) / `NEXT_PUBLIC_WEB_RETRIEVAL_MODE` (client):
+
+| Value | Behavior |
+|-------|----------|
+| `deep_default` (default) | Open-web factual/current → Exa `deep` search type. URL inspect stays direct `web.read`. |
+| `fast` | Prior lightweight one-shot policy (benchmark once INTERPRET is stronger). |
+| `auto` | Floor at Exa `auto`. |
 
 Never set `NEXT_PUBLIC_EXA_*`. Never commit real keys.
 

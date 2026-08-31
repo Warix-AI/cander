@@ -8,11 +8,38 @@ import {
   siteSearchQueryForUrl,
   urlHostMatchesRequestedDomain,
 } from "../orchestrator/url-open-path.ts";
+import {
+  getWebRetrievalMode,
+  isWebRetrievalDeepDefault,
+} from "../orchestrator/flags.ts";
 import type { Lookup, SimpleEvidence } from "./types.ts";
 import { cacheKey } from "./state-store.ts";
 
 function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/** Open-web search args: deep by default; never send raw multi-ask user prose. */
+export function webSearchArgsForLookup(lookup: Lookup): Record<string, unknown> {
+  const mode = getWebRetrievalMode();
+  const deepDefault = mode === "deep_default";
+  const args: Record<string, unknown> = {
+    query: lookup.q,
+    numResults: deepDefault || lookup.deeper || lookup.escalate ? 8 : 5,
+  };
+  if (lookup.retrievalMode) {
+    args.retrievalMode = lookup.retrievalMode;
+  } else if (lookup.escalate) {
+    args.escalate = lookup.escalate;
+  } else if (deepDefault) {
+    args.retrievalMode = "deep";
+    args.deeper = true;
+  } else if (mode === "auto") {
+    args.retrievalMode = "auto";
+  } else if (lookup.deeper) {
+    args.deeper = true;
+  }
+  return args;
 }
 
 export async function executeLookup(opts: {
@@ -23,7 +50,10 @@ export async function executeLookup(opts: {
     arguments: Record<string, unknown>;
   }) => Promise<AiToolCallResult>;
 }): Promise<SimpleEvidence> {
-  const key = cacheKey(opts.lookup.cap, opts.lookup.q);
+  const key = cacheKey(
+    opts.lookup.cap,
+    `${opts.lookup.q}|${opts.lookup.retrievalMode ?? opts.lookup.escalate ?? ""}|${opts.lookup.deeper ? "d" : ""}`,
+  );
   const hit = opts.cache.get(key);
   if (hit?.ok && hit.accepted) {
     return { ...hit, cacheHit: true };
@@ -57,7 +87,7 @@ export async function executeLookup(opts: {
     const isSiteFallback = /^site:/i.test(opts.lookup.q.trim());
     const isUrl = Boolean(normalized) && !isSiteFallback;
 
-    // Explicit URL/domain → web.read first (never agent / generic search).
+    // Explicit URL/domain → web.read first (never agent / deep research).
     if (isUrl && normalized) {
       console.log("[SIMPLE_TURN_URL_OPEN]", {
         raw: opts.lookup.q.slice(0, 200),
@@ -81,7 +111,7 @@ export async function executeLookup(opts: {
       const ok = result.ok && content.trim().length >= 8 && domainOk;
 
       if (!ok) {
-        // Fall back once to site:domain search — not agent mode.
+        // Fall back once to site:domain search — not agent/deep mode.
         const siteQ = siteSearchQueryForUrl(normalized.url);
         console.log("[SIMPLE_TURN_URL_SITE_FALLBACK]", {
           from: normalized.url,
@@ -91,7 +121,7 @@ export async function executeLookup(opts: {
         });
         const search = await exec({
           name: "web.search",
-          arguments: { query: siteQ, numResults: 5 },
+          arguments: { query: siteQ, numResults: 5, retrievalMode: "fast" },
         });
         const searchContent =
           (typeof search.output === "string" && search.output) ||
@@ -138,11 +168,17 @@ export async function executeLookup(opts: {
       return evidence;
     }
 
+    // Open-web factual/current → Exa deep by default (canonical intent query only).
     const name = "web.search";
-    const args = {
-      query: opts.lookup.q,
-      numResults: 5,
-    };
+    const args = webSearchArgsForLookup(opts.lookup);
+    console.log("[SIMPLE_TURN_WEB_SEARCH]", {
+      query: String(args.query).slice(0, 160),
+      retrievalMode: args.retrievalMode ?? null,
+      deeper: Boolean(args.deeper),
+      escalate: args.escalate ?? null,
+      webRetrievalMode: getWebRetrievalMode(),
+      deepDefault: isWebRetrievalDeepDefault(),
+    });
     const result = await exec({ name, arguments: args });
     const content =
       (typeof result.output === "string" && result.output) ||
@@ -207,7 +243,6 @@ export async function executeLookup(opts: {
   }
 
   if (opts.lookup.cap === "CALC") {
-    // CALC evidence is a structured hint for deterministic answer; no external call.
     return {
       id: newId("ev"),
       cap: "CALC",

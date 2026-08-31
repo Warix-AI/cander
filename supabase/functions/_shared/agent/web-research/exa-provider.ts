@@ -31,6 +31,7 @@ import {
   exaApiKey,
   exaDeepSearchEnabled,
   webResearchEnabled,
+  webRetrievalMode,
 } from "../../web-research-contract/flags.ts";
 import {
   assertWithinQuota,
@@ -180,6 +181,7 @@ export function createExaWebResearchProvider(): WebResearchProvider {
         deeper: input.deeper,
         escalate: (input.escalate as ExaRetrievalMode | null) ?? null,
         hints,
+        webRetrievalMode: webRetrievalMode(),
       });
       const policy = input.retrievalMode
         ? { ...policyBase, mode: input.retrievalMode as ExaRetrievalMode }
