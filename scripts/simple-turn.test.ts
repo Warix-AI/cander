@@ -50,6 +50,7 @@ import {
   commitSimpleNotes,
 } from "../lib/ai/simple-turn/state-store.ts";
 import { isSimpleTurnRuntimeEnabled } from "../lib/ai/orchestrator/flags.ts";
+import { resolveBrowserMode } from "../lib/ai/simple-turn/browser-policy.ts";
 import type { IntentPlan, Plan, SimpleEvidence } from "../lib/ai/simple-turn/types.ts";
 import {
   intentPlanToPlan,
@@ -78,6 +79,11 @@ describe("simple turn IntentPlan runtime", () => {
   it("flag defaults off", () => {
     delete process.env.NEXT_PUBLIC_AI_SIMPLE_TURN_RUNTIME;
     assert.equal(isSimpleTurnRuntimeEnabled(), false);
+  });
+
+  it("web mode defaults off", () => {
+    delete process.env.NEXT_PUBLIC_CANDER_WEB_MODE;
+    assert.equal(resolveBrowserMode(), "off");
   });
 
   it("canonical queries strip narrative wording", () => {

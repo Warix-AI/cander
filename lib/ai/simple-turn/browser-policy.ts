@@ -24,7 +24,7 @@ export function resolveBrowserMode(opts?: {
       /* ignore */
     }
   }
-  return "auto";
+  return "off";
 }
 
 export function allowWebLookup(opts: {
