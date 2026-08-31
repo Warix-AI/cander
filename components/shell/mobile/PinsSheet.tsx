@@ -73,8 +73,7 @@ export function PinsSheet({
           Pinned
         </p>
       )}
-      {pinnedItems.length ? (
-        pinnedItems.map((item) => (
+      {pinnedItems.map((item) => (
           <button
             key={`${item.kind}-${item.id}`}
             type="button"
@@ -87,12 +86,7 @@ export function PinsSheet({
             <PinLeading item={item} />
             <span className="truncate">{item.title}</span>
           </button>
-        ))
-      ) : (
-        <p className="px-4 py-4 text-[13.5px] text-muted-foreground/70">
-          No pinned items
-        </p>
-      )}
+        ))}
     </div>
   );
 }

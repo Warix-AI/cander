@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
+import { getChatStoreSnapshot } from "@/lib/api/chat-store";
 import { CONNECTOR_CATALOG } from "@/lib/api/connector-catalog";
 import {
   getSpaceEntityStoreSnapshot,
   localSpaceEntityStore,
 } from "@/lib/api/space-entity-store";
+import { removeStoredPin } from "@/lib/session";
 import type { PinKind, SpaceId } from "@/lib/types";
 
 export type PinnedItem = {
@@ -52,12 +54,6 @@ export function usePinnedItems() {
             title: thread.title,
             spaceId: thread.spaceId,
           });
-        } else {
-          resolved.push({
-            kind: "thread",
-            id: pin.id,
-            title: "Pinned chat",
-          });
         }
         continue;
       }
@@ -82,6 +78,17 @@ export function usePinnedItems() {
     }
     return resolved;
   }, [pins, threads, workspaceId, projects, projectRevision]);
+
+  useEffect(() => {
+    if (!getChatStoreSnapshot().hydrated) return;
+    for (const pin of pins) {
+      if (pin.kind !== "thread") continue;
+      const thread = threads.find(
+        (item) => item.id === pin.id && item.workspaceId === workspaceId,
+      );
+      if (!thread) removeStoredPin("thread", pin.id);
+    }
+  }, [pins, threads, workspaceId]);
 
   return { pinnedItems: items };
 }

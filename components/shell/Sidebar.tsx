@@ -429,13 +429,7 @@ export function Sidebar() {
                 <p className="px-3 pb-1 text-[12px] text-muted-foreground">
                   Pinned
                 </p>
-                {pinnedItems.length ? (
-                  pinnedItems.map(renderPinnedRow)
-                ) : (
-                  <p className="px-3 py-1.5 text-[12px] text-muted-foreground/70">
-                    No pinned items
-                  </p>
-                )}
+                {pinnedItems.map(renderPinnedRow)}
               </div>
             </div>
           </nav>
