@@ -8,11 +8,13 @@
   "scripts": {
     "prepare-dev-app": "node scripts/prepare-dev-app.js",
     "build:fm-helper": "node scripts/build-fm-helper.js",
-    "dev": "node scripts/prepare-dev-app.js && env -u ELECTRON_RUN_AS_NODE CANDER_URL=http://localhost:3000 .dev/Cander.app/Contents/MacOS/Electron .",
-    "start": "node scripts/prepare-dev-app.js && env -u ELECTRON_RUN_AS_NODE .dev/Cander.app/Contents/MacOS/Electron .",
-    "pack": "npm run build:fm-helper && env -u ELECTRON_RUN_AS_NODE electron-builder --dir",
-    "dist": "npm run build:fm-helper && env -u ELECTRON_RUN_AS_NODE electron-builder --mac dmg",
-    "dist:unsigned": "npm run build:fm-helper && env -u ELECTRON_RUN_AS_NODE CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg",
+    "build:speech-helper": "node scripts/build-speech-helper.js",
+    "build:helpers": "npm run build:fm-helper && npm run build:speech-helper",
+    "dev": "node scripts/prepare-dev-app.js && npm run build:speech-helper && env -u ELECTRON_RUN_AS_NODE CANDER_URL=http://localhost:3000 .dev/Cander.app/Contents/MacOS/Electron .",
+    "start": "node scripts/prepare-dev-app.js && npm run build:speech-helper && env -u ELECTRON_RUN_AS_NODE .dev/Cander.app/Contents/MacOS/Electron .",
+    "pack": "npm run build:helpers && env -u ELECTRON_RUN_AS_NODE electron-builder --dir",
+    "dist": "npm run build:helpers && env -u ELECTRON_RUN_AS_NODE electron-builder --mac dmg",
+    "dist:unsigned": "npm run build:helpers && env -u ELECTRON_RUN_AS_NODE CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg",
     "postinstall": "node scripts/ensure-electron.js"
   },
   "build": {
@@ -31,6 +33,10 @@
       {
         "from": "native/FoundationModelsHelper/FoundationModelsHelper",
         "to": "FoundationModelsHelper/FoundationModelsHelper"
+      },
+      {
+        "from": "native/SpeechHelper/SpeechHelper",
+        "to": "SpeechHelper/SpeechHelper"
       }
     ],
     "mac": {
@@ -40,7 +46,11 @@
         "dmg"
       ],
       "hardenedRuntime": true,
-      "gatekeeperAssess": false
+      "gatekeeperAssess": false,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Cander uses the microphone for dictation and voice chat.",
+        "NSSpeechRecognitionUsageDescription": "Cander turns your speech into text for dictation and voice chat."
+      }
     },
     "dmg": {
       "title": "Cander"

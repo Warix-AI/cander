@@ -1,8 +1,13 @@
 /**
  * Speech-to-text for composer dictation and voice mode.
- * Cap native prefers SpeechRecognition plugin; web/desktop uses Web Speech API.
+ *
+ * Routing (checked in order):
+ * 1. Electron desktop shell → native macOS Speech bridge (never Web Speech)
+ * 2. Capacitor native → SpeechRecognition plugin (Apple Speech on iOS)
+ * 3. Web browser → Web Speech API (no native dictation)
  */
 
+import { isDesktopShell } from "@/lib/desktop-shell";
 import { isMobileShell } from "@/lib/mobile-shell";
 
 export type SpeechToTextHandlers = {
@@ -50,8 +55,35 @@ type CapSpeechPlugin = {
   ) => Promise<{ remove: () => void }> | { remove: () => void };
 };
 
+type DesktopSpeechBridge = {
+  available?: () => Promise<{
+    available?: boolean;
+    supportsOnDeviceRecognition?: boolean;
+    message?: string;
+  }>;
+  start?: (opts?: { lang?: string; continuous?: boolean }) => Promise<{
+    ok?: boolean;
+    message?: string;
+  }>;
+  stop?: () => Promise<void>;
+  onEvent?: (
+    handler: (event: {
+      type?: string;
+      text?: string;
+      message?: string;
+    }) => void,
+  ) => () => void;
+};
+
+type CapBridge = {
+  isNativePlatform?: () => boolean;
+  registerPlugin?: <T>(name: string) => T;
+  Plugins?: { SpeechRecognition?: CapSpeechPlugin };
+};
+
 function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
-  if (typeof window === "undefined") return null;
+  // Electron must never use browser/cloud speech — even if Chromium exposes it.
+  if (typeof window === "undefined" || isDesktopShell()) return null;
   const w = window as Window & {
     SpeechRecognition?: SpeechRecognitionCtor;
     webkitSpeechRecognition?: SpeechRecognitionCtor;
@@ -59,19 +91,57 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-function getCapSpeech(): CapSpeechPlugin | null {
-  if (typeof window === "undefined" || !isMobileShell()) return null;
-  const cap = (
-    window as Window & {
-      Capacitor?: { Plugins?: { SpeechRecognition?: CapSpeechPlugin } };
-    }
-  ).Capacitor;
-  const plugin = cap?.Plugins?.SpeechRecognition;
-  return plugin?.start ? plugin : null;
+function getCapacitor(): CapBridge | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as Window & { Capacitor?: CapBridge }).Capacitor;
 }
 
+function getCapSpeech(): CapSpeechPlugin | null {
+  if (!isMobileShell()) return null;
+  const cap = getCapacitor();
+  if (!cap) return null;
+
+  const existing = cap.Plugins?.SpeechRecognition;
+  if (existing?.start) return existing;
+
+  if (typeof cap.registerPlugin === "function") {
+    try {
+      const registered = cap.registerPlugin<CapSpeechPlugin>("SpeechRecognition");
+      if (registered?.start) return registered;
+    } catch {
+      /* fall through */
+    }
+  }
+  return null;
+}
+
+function getDesktopSpeech(): DesktopSpeechBridge | null {
+  if (typeof window === "undefined" || !isDesktopShell()) return null;
+  const bridge = (
+    window as Window & {
+      canderDesktop?: { speech?: DesktopSpeechBridge };
+    }
+  ).canderDesktop;
+  const speech = bridge?.speech;
+  if (!speech?.start || !speech?.stop) return null;
+  return speech;
+}
+
+/** True when the current host can start dictation on the preferred path. */
 export function isSpeechToTextSupported(): boolean {
-  return Boolean(getCapSpeech() || getSpeechRecognitionCtor());
+  if (isDesktopShell()) return Boolean(getDesktopSpeech());
+  if (isMobileShell()) return Boolean(getCapSpeech());
+  return Boolean(getSpeechRecognitionCtor());
+}
+
+export function resolveSpeechToTextRoute():
+  | "electron"
+  | "capacitor"
+  | "web"
+  | "none" {
+  if (isDesktopShell()) return getDesktopSpeech() ? "electron" : "none";
+  if (isMobileShell()) return getCapSpeech() ? "capacitor" : "none";
+  return getSpeechRecognitionCtor() ? "web" : "none";
 }
 
 function mapWebSpeechError(code: string): string {
@@ -108,6 +178,86 @@ async function ensureMicPermission(): Promise<string | null> {
     }
     return null;
   }
+}
+
+async function startDesktopSpeech(
+  handlers: SpeechToTextHandlers,
+  opts?: { continuous?: boolean; lang?: string },
+): Promise<SpeechSession | null> {
+  const speech = getDesktopSpeech();
+  if (!speech?.start || !speech.stop) {
+    handlers.onError?.(
+      "Native macOS speech isn’t available in this desktop build.",
+    );
+    return null;
+  }
+
+  if (speech.available) {
+    try {
+      const avail = await speech.available();
+      if (!avail.available) {
+        handlers.onError?.(
+          avail.message || "Speech recognition isn’t available on this Mac.",
+        );
+        return null;
+      }
+    } catch {
+      /* continue — start may still work */
+    }
+  }
+
+  let stopped = false;
+  const unsubscribe = speech.onEvent?.((event) => {
+    if (stopped) return;
+    const type = event.type || "";
+    if (type === "partial" && event.text?.trim()) {
+      handlers.onPartial?.(event.text.trim());
+      return;
+    }
+    if (type === "final" && event.text?.trim()) {
+      handlers.onFinal?.(event.text.trim());
+      return;
+    }
+    if (type === "error") {
+      handlers.onError?.(event.message || "Speech recognition failed.");
+      return;
+    }
+    if (type === "end") {
+      handlers.onEnd?.();
+    }
+  });
+
+  try {
+    const res = await speech.start({
+      lang: opts?.lang ?? "en-US",
+      continuous: opts?.continuous ?? true,
+    });
+    if (res && res.ok === false) {
+      unsubscribe?.();
+      handlers.onError?.(res.message || "Could not start native speech.");
+      return null;
+    }
+  } catch (err) {
+    unsubscribe?.();
+    handlers.onError?.(
+      err instanceof Error ? err.message : "Could not start native speech.",
+    );
+    return null;
+  }
+
+  return {
+    stop: () => {
+      if (stopped) return;
+      stopped = true;
+      void speech
+        .stop?.()
+        .catch(() => undefined)
+        .finally(() => {
+          unsubscribe?.();
+          handlers.onEnd?.();
+        });
+    },
+  };
 }
 
 async function startCapSpeech(
@@ -187,7 +337,6 @@ async function startCapSpeech(
     return null;
   }
 
-  // Cap plugin often delivers finals via partialResults stream; on stop, end.
   return {
     stop: () => {
       if (stopped) return;
@@ -206,6 +355,13 @@ function startWebSpeech(
   handlers: SpeechToTextHandlers,
   opts?: { continuous?: boolean; lang?: string },
 ): SpeechSession | null {
+  if (isDesktopShell()) {
+    handlers.onError?.(
+      "Electron must use native macOS speech — browser speech is disabled.",
+    );
+    return null;
+  }
+
   const Ctor = getSpeechRecognitionCtor();
   if (!Ctor) {
     handlers.onError?.("Speech recognition is not supported in this browser.");
@@ -268,18 +424,53 @@ function startWebSpeech(
 }
 
 /**
- * Start recognition. Prefers Cap SpeechRecognition on native; else Web Speech.
- * Requests mic access first so permission prompts are clearer.
+ * Start recognition on the host-preferred path.
+ * Electron never falls through to SpeechRecognition / webkitSpeechRecognition.
  */
 export function startSpeechToText(
   handlers: SpeechToTextHandlers,
   opts?: { continuous?: boolean; lang?: string },
 ): SpeechSession | null {
-  // Async preflight — return a session that cancels if permission fails mid-start.
   let inner: SpeechSession | null = null;
   let cancelled = false;
 
   void (async () => {
+    // Desktop shell wins before any browser feature detection.
+    if (isDesktopShell()) {
+      if (cancelled) return;
+      inner = await startDesktopSpeech(handlers, opts);
+      if (cancelled) {
+        inner?.stop();
+        return;
+      }
+      if (!inner) handlers.onEnd?.();
+      return;
+    }
+
+    if (isMobileShell()) {
+      const micError = await ensureMicPermission();
+      if (cancelled) return;
+      if (micError) {
+        handlers.onError?.(micError);
+        handlers.onEnd?.();
+        return;
+      }
+      if (getCapSpeech()) {
+        inner = await startCapSpeech(handlers, opts);
+        if (cancelled) {
+          inner?.stop();
+          return;
+        }
+        if (inner) return;
+      }
+      handlers.onError?.(
+        "Native speech isn’t available in this build. Sync the mobile app and rebuild.",
+      );
+      handlers.onEnd?.();
+      return;
+    }
+
+    // Web only
     const micError = await ensureMicPermission();
     if (cancelled) return;
     if (micError) {
@@ -287,21 +478,8 @@ export function startSpeechToText(
       handlers.onEnd?.();
       return;
     }
-
-    if (isMobileShell() && getCapSpeech()) {
-      inner = await startCapSpeech(handlers, opts);
-      if (cancelled) {
-        inner?.stop();
-        return;
-      }
-      if (inner) return;
-    }
-
-    if (cancelled) return;
     inner = startWebSpeech(handlers, opts);
-    if (!inner && !cancelled) {
-      handlers.onEnd?.();
-    }
+    if (!inner && !cancelled) handlers.onEnd?.();
   })();
 
   return {

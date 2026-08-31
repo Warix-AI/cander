@@ -41,15 +41,33 @@ type CapCameraPlugin = {
   }) => Promise<{ camera?: string; photos?: string }>;
 };
 
+type CapBridge = {
+  isNativePlatform?: () => boolean;
+  registerPlugin?: <T>(name: string) => T;
+  Plugins?: { Camera?: CapCameraPlugin };
+};
+
+function getCapacitor(): CapBridge | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as Window & { Capacitor?: CapBridge }).Capacitor;
+}
+
 function getCapCamera(): CapCameraPlugin | null {
-  if (typeof window === "undefined") return null;
-  const cap = (
-    window as Window & {
-      Capacitor?: { Plugins?: { Camera?: CapCameraPlugin } };
+  const cap = getCapacitor();
+  if (!cap) return null;
+
+  const existing = cap.Plugins?.Camera;
+  if (existing?.getPhoto) return existing;
+
+  if (typeof cap.registerPlugin === "function") {
+    try {
+      const registered = cap.registerPlugin<CapCameraPlugin>("Camera");
+      if (registered?.getPhoto) return registered;
+    } catch {
+      /* fall through */
     }
-  ).Capacitor;
-  const Camera = cap?.Plugins?.Camera;
-  return Camera?.getPhoto ? Camera : null;
+  }
+  return null;
 }
 
 function approxByteLengthFromDataUrl(dataUrl: string): number {

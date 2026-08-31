@@ -434,11 +434,12 @@ html.cander-narrow .landing-suggestions {
 
 /*
  * Composer tracks the keyboard via --keyboard-inset (no CSS transition — must stay in sync).
+ * Use margin (layout) — not transform — so iOS WKWebView hit-testing matches the
+ * visible Send/mic controls when the keyboard is open.
  */
 html.cander-mobile .composer-keyboard-pad,
 html.cander-narrow .composer-keyboard-pad {
-  transform: translateY(calc(-1 * var(--keyboard-inset, 0px)));
-  will-change: transform;
+  margin-bottom: var(--keyboard-inset, 0px);
 }
 
 html.cander-mobile[data-keyboard="1"] .composer-keyboard-pad,

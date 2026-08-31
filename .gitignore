@@ -44,6 +44,7 @@ next-env.d.ts
 /desktop/release
 /desktop/build
 /desktop/native/FoundationModelsHelper/FoundationModelsHelper
+/desktop/native/SpeechHelper/SpeechHelper
 
 # supabase CLI cache
 supabase/.temp

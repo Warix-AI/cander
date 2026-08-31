@@ -52,6 +52,12 @@ import {
   isCapacitorNative,
   toSendAttachments,
 } from "@/lib/composer-attach";
+import {
+  applyComposerTextareaSize,
+  nextComposerTextareaSize,
+  readTextareaVerticalMetrics,
+  resolveComposerAutosizeMetrics,
+} from "@/lib/composer-autosize";
 import { getNativeCapabilities } from "@/lib/native";
 import {
   isSpeechToTextSupported,
@@ -222,27 +228,29 @@ export function Composer({
     return () => window.cancelAnimationFrame(id);
   }, [autoFocus, nativeShell, overlay, view, thread?.id]);
 
-  const LINE_HEIGHT = 20;
-  const MAX_LINES = 10;
-  const MIN_HEIGHT = 32;
-
   useEffect(() => {
     const el = textRef.current;
     if (!el || compact) return;
 
     const resize = () => {
+      const vertical = readTextareaVerticalMetrics(el);
+      const metrics = resolveComposerAutosizeMetrics({
+        mobile,
+        lineHeight: vertical.lineHeight,
+        paddingY: vertical.paddingY,
+      });
       // Empty: always one line. Avoids the space-slide animation measuring
       // the placeholder at ~0 width and locking the box at max height.
       if (!value) {
-        el.style.height = `${MIN_HEIGHT}px`;
-        el.style.overflowY = "hidden";
+        applyComposerTextareaSize(
+          el,
+          nextComposerTextareaSize(0, metrics, { empty: true }),
+        );
         return;
       }
-      const max = LINE_HEIGHT * MAX_LINES + 12;
       el.style.height = "auto";
       const scroll = el.scrollHeight;
-      el.style.height = `${Math.min(Math.max(scroll, MIN_HEIGHT), max)}px`;
-      el.style.overflowY = scroll > max ? "auto" : "hidden";
+      applyComposerTextareaSize(el, nextComposerTextareaSize(scroll, metrics));
     };
 
     resize();
@@ -250,7 +258,7 @@ export function Composer({
     ro.observe(el);
     if (wrapRef.current) ro.observe(wrapRef.current);
     return () => ro.disconnect();
-  }, [value, compact]);
+  }, [value, compact, mobile]);
 
   useEffect(() => {
     if (!menu) return;
@@ -340,7 +348,7 @@ export function Composer({
   };
 
   const submit = () => {
-    if (dictatingActive && !hasText && !images.length) {
+    if (dictatingActive && !hasText && !images.length && !files.length) {
       endDictation();
       return;
     }
@@ -354,13 +362,30 @@ export function Composer({
     if (!body && !images.length && !files.length) return;
     speechRef.current?.stop();
     speechRef.current = null;
-    const sendAttachments = toSendAttachments(images, files);
+    const usableImages = images.filter((img) =>
+      img.url?.startsWith("data:image/"),
+    );
+    const sendAttachments = toSendAttachments(usableImages, files);
+    if (
+      !body &&
+      !usableImages.length &&
+      !files.length
+    ) {
+      setAttachError(
+        "That attachment couldn’t be prepared for send. Try a JPEG/PNG or another file.",
+      );
+      return;
+    }
     // Give the reply the screen: dismiss keyboard immediately on Capacitor.
     suppressAutoFocusRef.current = true;
-    getNativeCapabilities().keyboard.dismiss();
-    getNativeCapabilities().haptics.impact("send");
+    try {
+      getNativeCapabilities().keyboard.dismiss();
+      getNativeCapabilities().haptics.impact("send");
+    } catch {
+      /* never block send */
+    }
     onSend(body || "", {
-      ...(images.length ? { attachments: images } : {}),
+      ...(usableImages.length ? { attachments: usableImages } : {}),
       ...(files.length ? { files } : {}),
       ...(sendAttachments.length ? { sendAttachments } : {}),
     });
@@ -370,6 +395,7 @@ export function Composer({
     setMenu(null);
     setDictating(false);
     setDictateError(null);
+    setAttachError(null);
     clearPageReference();
     clearEntityReference();
   };
@@ -386,7 +412,6 @@ export function Composer({
     setDictateError(null);
     if (!isSpeechToTextSupported()) {
       setDictateError("Speech recognition isn’t available here.");
-      setDictating(true);
       return;
     }
     valueBaseRef.current = value.trim() ? `${value.trim()} ` : "";
@@ -602,45 +627,9 @@ export function Composer({
                   label="Files"
                   onClick={() => {
                     setAttachError(null);
+                    // Keep user-gesture sync on iOS — open the input before React paint.
+                    openFilePicker(fileRef);
                     setMenu(null);
-                    void (async () => {
-                      const attached =
-                        await getNativeCapabilities().files.pickDocuments({
-                          multiple: true,
-                          accept: DOCUMENT_ACCEPT,
-                        });
-                      if (!attached.length) return;
-                      getNativeCapabilities().haptics.impact("select");
-                      const nextImages = attached.filter(
-                        (a) => a.type === "image",
-                      );
-                      const nextFiles = attached.filter(
-                        (a) => a.type === "file",
-                      );
-                      if (nextImages.length) {
-                        setImages((current) =>
-                          [
-                            ...current,
-                            ...nextImages.map((a) => ({
-                              name: a.filename,
-                              url: a.dataUrl!,
-                              mime: a.mimeType,
-                            })),
-                          ].slice(0, 4),
-                        );
-                      }
-                      if (nextFiles.length) {
-                        setFiles((current) =>
-                          [
-                            ...current,
-                            ...nextFiles.map((a) => ({
-                              name: a.filename,
-                              text: a.text,
-                            })),
-                          ].slice(0, 4),
-                        );
-                      }
-                    })();
                   }}
                 />
               </>
@@ -713,6 +702,7 @@ export function Composer({
                   onStartVoice={startVoice}
                   onStopVoice={stopVoice}
                   onStartDictation={startDictation}
+                  onSend={submit}
                 />
               </div>
             )}
@@ -853,7 +843,7 @@ export function Composer({
             <div
               className={cn(
                 "flex min-h-8 gap-1",
-                !hasText ? "items-center" : "items-end md:items-start",
+                mobile ? "items-end" : !hasText ? "items-center" : "items-start",
               )}
             >
               <ToolBtn
@@ -906,19 +896,26 @@ export function Composer({
                   }
                 }}
                 className={cn(
-                  "max-h-[212px] min-h-8 min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent text-[16px] outline-none placeholder:text-muted-foreground sm:text-[14px]",
+                  "min-h-8 min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent text-[16px] outline-none placeholder:text-muted-foreground sm:text-[14px]",
+                  mobile ? "max-h-[none]" : "max-h-[212px]",
                   hasText ? "h-auto py-1.5 leading-5" : "h-8 py-0 leading-8",
                 )}
               />
-              <div className="flex shrink-0 items-center gap-0.5 self-end md:self-start">
+              <div
+                className={cn(
+                  "flex shrink-0 items-center gap-0.5",
+                  mobile ? "self-end" : "self-end md:self-start",
+                )}
+              >
                 <ComposerTrailingActions
                   canSend={hasPayload}
-                hasVoice={entitlements.hasVoice}
-                voiceActive={voiceActive}
-                onStartVoice={startVoice}
-                onStopVoice={stopVoice}
-                onStartDictation={startDictation}
-              />
+                  hasVoice={entitlements.hasVoice}
+                  voiceActive={voiceActive}
+                  onStartVoice={startVoice}
+                  onStopVoice={stopVoice}
+                  onStartDictation={startDictation}
+                  onSend={submit}
+                />
               </div>
             </div>
             )}

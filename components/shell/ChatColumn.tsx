@@ -16,7 +16,13 @@ import { Composer } from "@/components/shell/Composer";
 import { APP_TAGLINE } from "@/lib/app-brand";
 import { chatSpaceCopy, spaceIconTint } from "@/lib/space-icons";
 import { homeSuggestions } from "@/lib/suggestions";
-import type { ChatFileAttachment, ChatImageAttachment, Message, SpaceId } from "@/lib/types";
+import type {
+  ChatFileAttachment,
+  ChatImageAttachment,
+  ChatSendAttachment,
+  Message,
+  SpaceId,
+} from "@/lib/types";
 import { chatSpaceId } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import { useChatCanvasCentered } from "@/lib/chat-layout";
@@ -40,6 +46,7 @@ function ComposerDock({
     opts?: {
       attachments?: ChatImageAttachment[];
       files?: ChatFileAttachment[];
+      sendAttachments?: ChatSendAttachment[];
     },
   ) => void;
   hideSpaceTools?: boolean;
@@ -148,14 +155,15 @@ export function ChatColumn() {
     opts?: {
       attachments?: ChatImageAttachment[];
       files?: ChatFileAttachment[];
+      sendAttachments?: ChatSendAttachment[];
     },
   ) => {
     const trimmed = text.trim();
-    if (
-      !trimmed &&
-      !opts?.attachments?.length &&
-      !opts?.files?.length
-    ) {
+    const hasAttachments =
+      Boolean(opts?.attachments?.length) ||
+      Boolean(opts?.files?.length) ||
+      Boolean(opts?.sendAttachments?.length);
+    if (!trimmed && !hasAttachments) {
       return;
     }
     const go = () => sendMessage(trimmed, opts);
@@ -304,7 +312,14 @@ function EmptyChat({
 }: {
   spaceId: SpaceId | null;
   drafting: boolean;
-  onPrompt: (text: string) => void;
+  onPrompt: (
+    text: string,
+    opts?: {
+      attachments?: ChatImageAttachment[];
+      files?: ChatFileAttachment[];
+      sendAttachments?: ChatSendAttachment[];
+    },
+  ) => void;
   autoFocusComposer?: boolean;
 }) {
   const copy = drafting ? emptyCopy(spaceId) : null;

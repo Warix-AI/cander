@@ -51,12 +51,42 @@ function needsRebuild() {
   }
 }
 
+function ensurePlistString(key, value) {
+  if (!fs.existsSync(plistPath)) return;
+  const check = spawnSync("/usr/libexec/PlistBuddy", [
+    "-c",
+    `Print :${key}`,
+    plistPath,
+  ]);
+  if (check.status === 0) {
+    run("/usr/libexec/PlistBuddy", ["-c", `Set :${key} ${value}`, plistPath]);
+  } else {
+    run("/usr/libexec/PlistBuddy", [
+      "-c",
+      `Add :${key} string ${value}`,
+      plistPath,
+    ]);
+  }
+}
+
+function ensurePrivacyPlist() {
+  ensurePlistString(
+    "NSMicrophoneUsageDescription",
+    "Cander uses the microphone for dictation and voice chat.",
+  );
+  ensurePlistString(
+    "NSSpeechRecognitionUsageDescription",
+    "Cander turns your speech into text for dictation and voice chat.",
+  );
+}
+
 if (!fs.existsSync(electronApp)) {
   console.error("Electron.app missing. Run: npm install");
   process.exit(1);
 }
 
 if (!needsRebuild()) {
+  ensurePrivacyPlist();
   process.exit(0);
 }
 
@@ -76,6 +106,7 @@ setPlist("CFBundleName", APP_NAME);
 setPlist("CFBundleDisplayName", APP_NAME);
 setPlist("CFBundleIdentifier", BUNDLE_ID);
 setPlist("LSApplicationCategoryType", "public.app-category.productivity");
+ensurePrivacyPlist();
 
 if (fs.existsSync(iconSrc)) {
   fs.copyFileSync(iconSrc, iconDest);

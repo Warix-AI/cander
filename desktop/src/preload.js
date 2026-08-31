@@ -2,8 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("canderDesktop", {
   platform: process.platform,
-  shellBuild: "2026-08-30-native-capabilities",
-  shellVersion: "0.1.4",
+  shellBuild: "2026-08-30-speech-composer",
+  shellVersion: "0.1.5",
   window: {
     minimize: () => ipcRenderer.send("cander:window-minimize"),
     maximize: () => ipcRenderer.send("cander:window-toggle-maximize"),
@@ -14,6 +14,16 @@ contextBridge.exposeInMainWorld("canderDesktop", {
     generate: (opts) => ipcRenderer.invoke("cander:fm-generate", opts),
     generateStructured: (opts) =>
       ipcRenderer.invoke("cander:fm-generate-structured", opts),
+  },
+  speech: {
+    available: () => ipcRenderer.invoke("cander:speech-availability"),
+    start: (opts) => ipcRenderer.invoke("cander:speech-start", opts || {}),
+    stop: () => ipcRenderer.invoke("cander:speech-stop"),
+    onEvent: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on("cander:speech-event", listener);
+      return () => ipcRenderer.removeListener("cander:speech-event", listener);
+    },
   },
   files: {
     showOpenDialog: (opts) =>

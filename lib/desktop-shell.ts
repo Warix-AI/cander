@@ -34,6 +34,25 @@ export type CanderDesktopBridge = {
       structured?: boolean;
     }>;
   };
+  speech?: {
+    available: () => Promise<{
+      available?: boolean;
+      supportsOnDeviceRecognition?: boolean;
+      message?: string;
+    }>;
+    start: (opts?: {
+      lang?: string;
+      continuous?: boolean;
+    }) => Promise<{ ok?: boolean; message?: string }>;
+    stop: () => Promise<void>;
+    onEvent?: (
+      handler: (event: {
+        type?: string;
+        text?: string;
+        message?: string;
+      }) => void,
+    ) => () => void;
+  };
   browser?: {
     createTab: (
       tabId: string,

@@ -88,14 +88,22 @@ export function ComposerRecordingView({
 export function ComposerSendButton({
   compact = false,
   className,
+  onClick,
 }: {
   compact?: boolean;
   className?: string;
+  /** Prefer explicit click on iOS — form submit alone is unreliable with keyboard lift. */
+  onClick?: () => void;
 }) {
   return (
     <button
       type="submit"
       aria-label="Send"
+      onClick={(event) => {
+        if (!onClick) return;
+        event.preventDefault();
+        onClick();
+      }}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors duration-200 hover:bg-foreground",
         compact ? "h-7 w-7" : "h-8 w-8",
@@ -165,6 +173,7 @@ export function ComposerTrailingActions({
   onStartVoice,
   onStopVoice,
   onStartDictation,
+  onSend,
 }: {
   /** True when there is text, images, or files to send. */
   canSend: boolean;
@@ -174,9 +183,12 @@ export function ComposerTrailingActions({
   onStartVoice: () => void;
   onStopVoice: () => void;
   onStartDictation: () => void;
+  onSend?: () => void;
 }) {
   if (!hasVoice) {
-    return canSend ? <ComposerSendButton compact={compact} /> : null;
+    return canSend ? (
+      <ComposerSendButton compact={compact} onClick={onSend} />
+    ) : null;
   }
 
   if (canSend) {
@@ -187,7 +199,7 @@ export function ComposerTrailingActions({
         ) : (
           <ComposerDictationButton onClick={onStartDictation} compact={compact} />
         )}
-        <ComposerSendButton compact={compact} />
+        <ComposerSendButton compact={compact} onClick={onSend} />
       </>
     );
   }

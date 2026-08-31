@@ -4,13 +4,14 @@ const foundationModels = require("./foundation-models-bridge");
 const browserSurface = require("./browser-surface");
 const filesBridge = require("./files-bridge");
 const desktopShell = require("./desktop-shell");
+const speechBridge = require("./speech-bridge");
 
 const APP_NAME = "Cander";
 const DEFAULT_URL = "https://cander.app";
 const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Bumped when the native shell changes — visible on <html data-cander-shell>. */
-const SHELL_BUILD = "2026-08-30-native-capabilities";
+const SHELL_BUILD = "2026-08-30-speech-composer";
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
 /** Classic Mac titlebar / chrome row height (traffic-light axis). */
 const TITLEBAR_PX = 52;
@@ -425,6 +426,8 @@ app.whenReady().then(() => {
   ipcMain.handle("cander:shell-show-main", async () => {
     return desktopShell.showMainWindow();
   });
+
+  speechBridge.bindIpc(ipcMain, () => mainWindow);
 
   buildMenu();
   void createWindow().then(() => {
