@@ -58,7 +58,7 @@ export function renderDeterministic(bundle: AnswerBundle): string {
       }
       if (r.status === "conflicting") {
         lines.push(
-          `Sources disagree for “${ask || id}”: ${r.reason || "conflict"}. I am not picking a side without a clear primary source.`,
+          `Sources disagree for “${spanMeta?.text || id}”: ${r.reason || "conflict"}. I am not picking a side without a clear primary source.`,
         );
         continue;
       }
