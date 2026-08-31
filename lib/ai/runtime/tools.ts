@@ -21,6 +21,7 @@ import {
 } from "@/lib/ai/runtime/turn-context";
 import { getThreadTaskState, upsertThreadTaskState } from "@/lib/ai/task-state";
 import { shouldOpenVisibleResearchTab } from "@/lib/computer/tool-routing";
+import type { ExaSearchBundle } from "@/lib/ai/web-research/evidence-bundle";
 
 export type AiToolCallRequest = {
   name: string;
@@ -362,7 +363,7 @@ export async function executeAuthorizedTool(
         };
         const result = await actions.webSearch(String(args.query), searchOpts);
         const results = result.results ?? [];
-        const synthesis = result.synthesis ?? null;
+        const synthesis: ExaSearchBundle | null = result.synthesis ?? null;
         if (!result.ok) {
           return {
             name: tool.name,

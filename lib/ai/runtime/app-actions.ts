@@ -58,7 +58,7 @@ export type AppActionHandlers = {
       snippet?: string;
     }>;
     citations?: unknown[];
-    synthesis?: unknown;
+    synthesis?: import("@/lib/ai/web-research/evidence-bundle").ExaSearchBundle | null;
     retrievalMode?: string | null;
   }>;
   webOpen: (url: string) => Promise<{

@@ -966,6 +966,11 @@ async function runLocalTurnOrchestratorInner(
     }
   });
 
+  let evidence: TurnEvidence[] = [];
+  let toolResults: AiToolCallResult[] = [];
+  let provenanceBatches: ProvenanceAtom[][] = [];
+  let retrievalAttempted = false;
+
   try {
     report({ phase: "thinking", label: "Thinking" });
 
@@ -1090,10 +1095,10 @@ async function runLocalTurnOrchestratorInner(
         : {}),
     });
 
-    const evidence: TurnEvidence[] = [];
-    const toolResults: AiToolCallResult[] = [];
-    const provenanceBatches: ProvenanceAtom[][] = [];
-    let retrievalAttempted = false;
+    evidence = [];
+    toolResults = [];
+    provenanceBatches = [];
+    retrievalAttempted = false;
 
     // —— Pre-run: bypass FM for obvious retrieval ——
     if (profile.preRunTasks.length) {
