@@ -22,11 +22,12 @@ import {
   X,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { GoogleHome } from "@/components/browser/GoogleHome";
+import { NewTabPage } from "@/components/browser/NewTabPage";
 import { ChatColumn } from "@/components/shell/ChatColumn";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { SplitHandle } from "@/components/shell/SplitHandle";
 import { Dropdown } from "@/components/ui/Controls";
+import { normalizeBrowserUrl } from "@/lib/preview-url";
 import {
   getSidebarPeeking,
   getSidebarPeekingServerSnapshot,
@@ -41,7 +42,7 @@ type BrowserTab = {
 };
 
 const seedTabs: BrowserTab[] = [
-  { id: "t1", title: "Google", url: "https://www.google.com" },
+  { id: "t1", title: "New tab", url: "about:blank" },
   { id: "t2", title: "Cander :4100", url: "http://localhost:4100" },
 ];
 
@@ -85,16 +86,20 @@ export function BrowserLayout() {
 
   const addTab = () => {
     const id = `t-${Math.random().toString(36).slice(2, 6)}`;
-    const tab = { id, title: "New tab", url: "https://" };
+    const tab = { id, title: "New tab", url: "about:blank" };
     setTabs((current) => [...current, tab]);
     setActiveId(id);
     setUrl(tab.url);
   };
 
   const commitUrl = () => {
+    const nextUrl = normalizeBrowserUrl(url);
+    setUrl(nextUrl);
     setTabs((current) =>
       current.map((item) =>
-        item.id === activeId ? { ...item, url, title: tabTitle(url) } : item,
+        item.id === activeId
+          ? { ...item, url: nextUrl, title: tabTitle(nextUrl) }
+          : item,
       ),
     );
   };
@@ -173,9 +178,9 @@ export function BrowserLayout() {
           onUrlChange={setUrl}
           onCommit={commitUrl}
         />
-        {isGoogle(active.url) ? (
-          <div className="min-h-0 flex-1 overflow-y-auto bg-white">
-            <GoogleHome />
+        {active.url === "about:blank" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <NewTabPage />
           </div>
         ) : (
           <BrowserPage active={active} />

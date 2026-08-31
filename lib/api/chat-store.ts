@@ -1,6 +1,12 @@
 import type { Message, Thread } from "@/lib/types";
+import {
+  estimateThreadsJsonBytes,
+  stripThreadsForLocalStorage,
+} from "@/lib/chat-store-persist";
+import { safeLocalStorageSetItem } from "@/lib/safe-local-storage";
 
 const STORAGE_KEY = "courier-threads-v1";
+const MAX_PERSISTED_THREADS = 40;
 
 let ownerId: string | null = null;
 
@@ -40,7 +46,38 @@ function parse(raw: string | null): Thread[] | null {
 
 function persistLocal() {
   if (typeof window === "undefined" || !ownerId) return;
-  window.localStorage.setItem(storageKey(), JSON.stringify(state.threads));
+  const key = storageKey();
+  const sanitized = stripThreadsForLocalStorage(state.threads);
+  const payload = JSON.stringify(sanitized);
+
+  try {
+    if (safeLocalStorageSetItem(key, payload)) {
+      return;
+    }
+    throw new DOMException("QuotaExceededError");
+  } catch {
+    // Quota full — never throw; keep in-memory state usable for typing/sending.
+    try {
+      const trimmed = stripThreadsForLocalStorage(
+        state.threads.slice(0, MAX_PERSISTED_THREADS),
+      );
+      if (safeLocalStorageSetItem(key, JSON.stringify(trimmed))) {
+        return;
+      }
+    } catch {
+      /* continue */
+    }
+
+    try {
+      window.localStorage.removeItem(key);
+      safeLocalStorageSetItem(
+        key,
+        JSON.stringify(stripThreadsForLocalStorage(state.threads.slice(0, 12))),
+      );
+    } catch {
+      /* memory only */
+    }
+  }
 }
 
 /** useSyncExternalStore compares snapshots with Object.is — replace state object on writes. */
@@ -60,13 +97,19 @@ function hydrate() {
     state = { ...state, hydrated: true };
     return;
   }
-  const stored = parse(window.localStorage.getItem(storageKey()));
+  const raw = window.localStorage.getItem(storageKey());
+  const stored = parse(raw);
   if (stored?.length) {
+    const sanitized = stripThreadsForLocalStorage(stored);
     state = {
-      threads: stored,
+      threads: sanitized,
       revision: state.revision + 1,
       hydrated: true,
     };
+    // Rewrite stripped threads so a prior photo attach cannot keep quota full.
+    if (raw && estimateThreadsJsonBytes(sanitized) < raw.length) {
+      safeLocalStorageSetItem(storageKey(), JSON.stringify(sanitized));
+    }
     return;
   }
   state = { ...state, hydrated: true };

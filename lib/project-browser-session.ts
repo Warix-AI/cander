@@ -4,6 +4,7 @@ import {
   titleFromUrl,
 } from "@/lib/preview-url";
 import type { SpaceId } from "@/lib/types";
+import { safeLocalStorageSetItem } from "@/lib/safe-local-storage";
 
 /**
  * Intent-based tab kinds. Do not conflate ordinary browsing with sandboxes.
@@ -137,18 +138,23 @@ export function makePinnedProjectTab(input: {
   return makePinnedBuildPreviewTab(input);
 }
 
-export function makeWebTab(url = "https://www.google.com"): ProjectBrowserTab {
+export function makeWebTab(url = "about:blank"): ProjectBrowserTab {
   return {
     id: newBrowserTabId(),
     kind: "web",
-    title: isGoogleUrl(url) ? "Google" : titleFromUrl(url),
+    title:
+      url === "about:blank"
+        ? "New tab"
+        : isGoogleUrl(url)
+          ? "Google"
+          : titleFromUrl(url),
     url,
     ...withHistory(url),
   };
 }
 
 /** @deprecated Use makeWebTab */
-export function makeUrlTab(url = "https://www.google.com"): ProjectBrowserTab {
+export function makeUrlTab(url = "about:blank"): ProjectBrowserTab {
   return makeWebTab(url);
 }
 
@@ -324,7 +330,7 @@ function persistKey(key: string, session: ProjectBrowserSession) {
   cache.set(key, session);
   lastChangedKey = key;
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(
+    safeLocalStorageSetItem(
       `${STORAGE_PREFIX}:${key}`,
       JSON.stringify(durable),
     );
@@ -468,7 +474,7 @@ export function replaceProjectBrowserWorkspaceState(
     hydratedKeys.add(storageKey);
     cache.set(storageKey, item.session);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(
+      safeLocalStorageSetItem(
         `${STORAGE_PREFIX}:${storageKey}`,
         JSON.stringify(item.session),
       );

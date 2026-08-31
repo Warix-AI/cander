@@ -45,7 +45,7 @@ export function isGoogleUrl(url: string) {
 export function normalizeBrowserUrl(raw: string) {
   const trimmed = raw.trim();
   if (!trimmed || trimmed === "https://" || trimmed === "http://") {
-    return "https://www.google.com";
+    return "about:blank";
   }
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   if (trimmed.includes(" ") || !trimmed.includes(".")) {

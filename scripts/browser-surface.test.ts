@@ -1,10 +1,18 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   canEmbedInPwa,
   isAllowedLocalBrowserUrl,
   localBrowserPartition,
 } from "../lib/browser-surface/local-browsing.ts";
+
+const root = join(import.meta.dirname, "..");
+
+function readRepo(rel: string) {
+  return readFileSync(join(root, rel), "utf8");
+}
 
 describe("local-browsing security", () => {
   it("partitions web tabs per user and previews per project", () => {
@@ -51,6 +59,24 @@ describe("local-browsing security", () => {
     assert.equal(canEmbedInPwa("https://stripe.com"), false);
     assert.equal(canEmbedInPwa("https://stripe.com", true), false);
     assert.equal(canEmbedInPwa("https://www.google.com"), false);
+  });
+});
+
+describe("browser URL normalization", () => {
+  it("defaults new tabs and empty input to about:blank", () => {
+    const preview = readRepo("lib/preview-url.ts");
+    const session = readRepo("lib/project-browser-session.ts");
+    const host = readRepo("components/browser/BrowserSurfaceHost.tsx");
+    assert.match(preview, /return "about:blank"/);
+    assert.match(session, /makeWebTab\(url = "about:blank"\)/);
+    assert.match(host, /url === "about:blank"/);
+    assert.match(host, /NewTabPage/);
+  });
+
+  it("does not render fake GoogleHome on native browser surfaces", () => {
+    const host = readRepo("components/browser/BrowserSurfaceHost.tsx");
+    assert.doesNotMatch(host, /<GoogleHome/);
+    assert.match(host, /adapterId === "web-pwa" && isGoogleUrl\(url\)/);
   });
 });
 

@@ -30,6 +30,7 @@ import {
   subscribeWorkApps,
   workAppIds,
 } from "@/lib/work-apps";
+import { safeLocalStorageSetItem } from "@/lib/safe-local-storage";
 
 const STORAGE_KEY = "courier-space-entities-v1";
 
@@ -141,7 +142,11 @@ function persist() {
   if (typeof window === "undefined") return;
   state = { ...state, revision: state.revision + 1 };
   if (ownerId) {
-    window.localStorage.setItem(storageKey(), JSON.stringify(state));
+    try {
+      safeLocalStorageSetItem(storageKey(), JSON.stringify(state));
+    } catch {
+      // Quota full — keep in-memory state usable.
+    }
   }
   emit();
 }

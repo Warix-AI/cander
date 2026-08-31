@@ -115,6 +115,12 @@ describe("composer mobile alignment + send", () => {
       /composer-keyboard-pad[^{]*\{[^}]*transform:\s*translateY/,
     );
   });
+
+  it("disables pointer events on inactive mobile pager panes", () => {
+    const pager = readRepo("components/shell/MobilePager.tsx");
+    assert.match(pager, /pointer-events-none/);
+    assert.match(pager, /panes\[i\] !== safeActive/);
+  });
 });
 
 describe("speech dictation routing", () => {

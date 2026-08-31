@@ -101,7 +101,10 @@ export function MobilePager({
         {children.map((child, i) => (
           <div
             key={panes[i] ?? i}
-            className="flex h-full min-w-0 flex-col overflow-hidden"
+            className={cn(
+              "flex h-full min-w-0 flex-col overflow-hidden",
+              panes[i] !== safeActive && "pointer-events-none",
+            )}
             style={{
               width: width > 0 ? width : `${100 / n}%`,
               flex: width > 0 ? `0 0 ${width}px` : undefined,

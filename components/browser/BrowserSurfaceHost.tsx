@@ -13,7 +13,7 @@ import {
   isDesktopShell,
 } from "@/lib/desktop-shell";
 import { isGoogleUrl } from "@/lib/preview-url";
-import { GoogleHome } from "@/components/browser/GoogleHome";
+import { NewTabPage } from "@/components/browser/NewTabPage";
 import { ExternalLink } from "lucide-react";
 
 type BrowserSurfaceHostProps = {
@@ -181,10 +181,34 @@ export function BrowserSurfaceHost({
     suppressed,
   ]);
 
-  if (isGoogleUrl(url)) {
+  if (url === "about:blank") {
     return (
-      <div className="h-full min-h-0 overflow-y-auto bg-white">
-        <GoogleHome />
+      <div ref={hostRef} className="h-full w-full">
+        <NewTabPage />
+      </div>
+    );
+  }
+
+  if (adapterId === "web-pwa" && isGoogleUrl(url)) {
+    return (
+      <div
+        ref={hostRef}
+        className="flex h-full flex-col items-center justify-center gap-3 bg-muted/20 px-6 text-center"
+      >
+        <p className="max-w-sm text-sm text-muted-foreground">
+          Google can&apos;t be embedded in the web app. Type a URL or search
+          term in the address bar above, or use the macOS / iOS app for full
+          in-panel browsing.
+        </p>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-medium text-background"
+        >
+          <ExternalLink className="size-3.5" />
+          Open Google
+        </a>
       </div>
     );
   }

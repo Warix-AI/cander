@@ -22,23 +22,33 @@ export function UserMessage({
     <div className="max-w-[min(78%,36rem)] space-y-2">
       {images.length || files.length ? (
         <div className="flex flex-wrap justify-end gap-1.5">
-          {images.map((image, index) => (
-            <a
-              key={`${image.name}-${index}`}
-              href={image.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block h-10 w-10 overflow-hidden rounded-[10px] border border-border bg-muted"
-              title={image.name}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={image.url}
-                alt={image.name}
-                className="h-full w-full object-cover"
-              />
-            </a>
-          ))}
+          {images.map((image, index) =>
+            image.url ? (
+              <a
+                key={`${image.name}-${index}`}
+                href={image.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block h-10 w-10 overflow-hidden rounded-[10px] border border-border bg-muted"
+                title={image.name}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={image.url}
+                  alt={image.name}
+                  className="h-full w-full object-cover"
+                />
+              </a>
+            ) : (
+              <div
+                key={`${image.name}-${index}`}
+                title={image.name}
+                className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-border bg-muted text-[9px] text-muted-foreground"
+              >
+                IMG
+              </div>
+            ),
+          )}
           {files.map((file, index) => (
             <div
               key={`${file.name}-${index}`}
