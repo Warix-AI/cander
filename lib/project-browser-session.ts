@@ -24,6 +24,7 @@ export type ProjectBrowserTab = {
   kind: ProjectBrowserTabKind;
   title: string;
   url: string;
+  faviconUrl?: string | null;
   pinned?: boolean;
   projectId?: string;
   /** Durable computer_sessions id for agent-browser or build sandbox metadata. */

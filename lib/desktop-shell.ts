@@ -109,7 +109,7 @@ export function hasDesktopBrowserBridge() {
   return Boolean(bridge?.browser?.createTab);
 }
 
-/** Electron on macOS with custom frameless traffic lights. */
+/** Electron on macOS (native traffic lights via titleBarStyle: hidden). */
 export function isMacDesktopShell() {
   if (typeof navigator === "undefined") return false;
   const platform = getCanderDesktopBridge()?.platform;

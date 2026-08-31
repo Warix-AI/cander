@@ -3,12 +3,10 @@
 import type { ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Search } from "lucide-react";
 import { NavToggle } from "@/components/shell/NavToggle";
-import { DesktopTrafficLights } from "@/components/shell/DesktopTrafficLights";
 import { useApp } from "@/components/app/AppProvider";
 import {
   DESKTOP_DRAG,
   DESKTOP_NO_DRAG,
-  isMacDesktopShell,
   useDesktopShell,
 } from "@/lib/desktop-shell";
 import { cn } from "@/lib/utils";
@@ -25,7 +23,6 @@ export function WindowChrome({
   className?: string;
 }) {
   const desktop = useDesktopShell();
-  const macDesktop = isMacDesktopShell();
   const dragSpacer = desktop ? (
     <div
       className="min-w-2 flex-1 self-stretch"
@@ -47,9 +44,6 @@ export function WindowChrome({
         className,
       )}
     >
-      {clearTrafficLights && macDesktop ? (
-        <DesktopTrafficLights className="absolute top-1/2 left-4 -translate-y-1/2" />
-      ) : null}
       <NavToggle />
       {!hideHistory ? <HistoryButtons dragSpacer={dragSpacer} /> : dragSpacer}
     </div>

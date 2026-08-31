@@ -41,6 +41,18 @@ function hardenSession(ses) {
   });
 }
 
+/** Sites flag Electron's default UA as automation — present as desktop Chrome. */
+function applyBrowserUserAgent(wc) {
+  const raw = wc.getUserAgent();
+  const cleaned = raw
+    .replace(/\sElectron\/[^\s]+/g, "")
+    .replace(/\sCander\/[^\s]+/g, "")
+    .trim();
+  if (cleaned && cleaned !== raw) {
+    wc.setUserAgent(cleaned);
+  }
+}
+
 function attachViewListeners(tabId, view) {
   const wc = view.webContents;
 
@@ -151,6 +163,7 @@ function createView(tabId, initialUrl, options) {
     },
   });
   attachViewListeners(tabId, view);
+  applyBrowserUserAgent(view.webContents);
   view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
   if (hostWindow && !hostWindow.isDestroyed()) {
     hostWindow.contentView.addChildView(view);
@@ -234,10 +247,10 @@ function showTab(tabId, bounds) {
   const entry = tabs.get(tabId);
   if (!entry || !hostWindow || hostWindow.isDestroyed()) return;
   const nextBounds = {
-    x: Math.max(0, Math.round(bounds.x || 0)),
-    y: Math.max(0, Math.round(bounds.y || 0)),
-    width: Math.max(1, Math.round(bounds.width || 1)),
-    height: Math.max(1, Math.round(bounds.height || 1)),
+    x: Math.max(0, Math.floor(bounds.x || 0)),
+    y: Math.max(0, Math.floor(bounds.y || 0)),
+    width: Math.max(1, Math.ceil(bounds.width || 1)),
+    height: Math.max(1, Math.ceil(bounds.height || 1)),
   };
   entry.lastBounds = nextBounds;
   entry.visible = true;

@@ -24,6 +24,9 @@ import {
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { BrowserSurfaceHost } from "@/components/browser/BrowserSurfaceHost";
+import { BrowserAddressField } from "@/components/browser/BrowserAddressField";
+import { BrowserChromeTooltip } from "@/components/browser/BrowserChromeTooltip";
+import { FaviconImage } from "@/components/browser/FaviconImage";
 import {
   getBrowserSurfaceAdapter,
   resumeNativeBrowserSurfaces,
@@ -540,30 +543,34 @@ export function ProjectBrowserPanel() {
           ) : null}
           <span className="ml-auto flex shrink-0 items-center gap-0.5">
             {chatArmed ? (
-              <button
-                type="button"
-                aria-label={expandedLayout ? "Restore layout" : "Expand"}
-                title={expandedLayout ? "Restore layout" : "Expand"}
-                onClick={() => toggleExpandedLayout()}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+              <BrowserChromeTooltip
+                label={expandedLayout ? "Restore layout" : "Expand"}
               >
-                {expandedLayout ? (
-                  <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-                ) : (
-                  <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-                )}
-              </button>
+                <button
+                  type="button"
+                  aria-label={expandedLayout ? "Restore layout" : "Expand"}
+                  onClick={() => toggleExpandedLayout()}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+                >
+                  {expandedLayout ? (
+                    <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  ) : (
+                    <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  )}
+                </button>
+              </BrowserChromeTooltip>
             ) : null}
             {panelMode === "collapsed" ? null : (
-              <button
-                type="button"
-                aria-label="Leave project"
-                title="Leave project"
-                onClick={() => backToSpaceHome()}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-              </button>
+              <BrowserChromeTooltip label="Leave project">
+                <button
+                  type="button"
+                  aria-label="Leave project"
+                  onClick={() => backToSpaceHome()}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                </button>
+              </BrowserChromeTooltip>
             )}
             {chatArmed ? <PanelToggle /> : null}
           </span>
@@ -571,53 +578,51 @@ export function ProjectBrowserPanel() {
       )}
 
       {mobile ? null : (
-        <div className="flex h-[45px] min-w-0 shrink-0 items-center gap-0.5 border-t border-border bg-sidebar px-2">
-          <RailBtn
-            label="Back"
-            disabled={!canBack}
-            onClick={() => goHistory(-1)}
-          >
-            <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
-          </RailBtn>
-          <RailBtn
-            label="Forward"
-            disabled={!canForward}
-            onClick={() => goHistory(1)}
-          >
-            <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
-          </RailBtn>
-          <RailBtn label="Reload" onClick={() => setReloadKey((value) => value + 1)}>
-            <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
-          </RailBtn>
-          <form
-            className="min-w-0 flex-1"
-            onSubmit={(event) => {
-              event.preventDefault();
-              commitUrl();
-            }}
-          >
-            <input
-              value={urlDraft}
-              onChange={(event) => setUrlDraft(event.target.value)}
-              onBlur={commitUrl}
-              spellCheck={false}
-              aria-label="Address"
-              className="h-7 w-full bg-transparent px-2 font-mono text-[12px] text-muted-foreground outline-none"
+        <div className="relative flex h-[45px] min-w-0 shrink-0 items-center gap-0.5 border-t border-border bg-sidebar px-2">
+          <div className="flex shrink-0 items-center gap-0.5">
+            <RailBtn
+              label="Back"
+              disabled={!canBack}
+              onClick={() => goHistory(-1)}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
+            </RailBtn>
+            <RailBtn
+              label="Forward"
+              disabled={!canForward}
+              onClick={() => goHistory(1)}
+            >
+              <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
+            </RailBtn>
+            <RailBtn label="Reload" onClick={() => setReloadKey((value) => value + 1)}>
+              <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
+            </RailBtn>
+          </div>
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-[7.5rem]">
+            <BrowserAddressField
+              className="pointer-events-auto w-full"
+              url={address}
+              faviconUrl={active.faviconUrl}
+              draft={urlDraft}
+              onDraftChange={setUrlDraft}
+              onCommit={commitUrl}
             />
-          </form>
-          <DesktopProjectToolsMenu
-            selectMode={selectMode}
-            canRename={canRename}
-            onRename={() => setDesktopRenameOpen(true)}
-            onPublish={() => openOverlay("publish")}
-            onDomain={() => openOverlay("publish")}
-            onOpenExternal={() => window.open(address, "_blank")}
-            onSelectElement={() => setSelectMode(!selectMode)}
-            onRefresh={() => {
-              refreshPreview();
-              setReloadKey((value) => value + 1);
-            }}
-          />
+          </div>
+          <div className="ml-auto flex shrink-0 items-center">
+            <DesktopProjectToolsMenu
+              selectMode={selectMode}
+              canRename={canRename}
+              onRename={() => setDesktopRenameOpen(true)}
+              onPublish={() => openOverlay("publish")}
+              onDomain={() => openOverlay("publish")}
+              onOpenExternal={() => window.open(address, "_blank")}
+              onSelectElement={() => setSelectMode(!selectMode)}
+              onRefresh={() => {
+                refreshPreview();
+                setReloadKey((value) => value + 1);
+              }}
+            />
+          </div>
         </div>
       )}
 
@@ -667,8 +672,9 @@ export function ProjectBrowserPanel() {
         </div>
       ) : null}
 
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
-        <ProjectBrowserBody
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-white dark:bg-neutral-950">
+        <div className="absolute inset-0 min-h-0">
+          <ProjectBrowserBody
           tab={active}
           projects={allProjects}
           fallbackName={project?.name ?? "Project"}
@@ -677,7 +683,8 @@ export function ProjectBrowserPanel() {
           userId={actor.id}
           browserKey={key}
           surfaceActive={surfaceActive}
-        />
+          />
+        </div>
         {mobile && mobileNavOpen ? (
           <MobileBrowserNavSheet
             urlDraft={urlDraft}
@@ -784,7 +791,11 @@ function ProjectBrowserBody({
     getActiveComputerSessionSnapshot,
   );
 
-  const syncSurfaceMeta = (patch: { url?: string; title?: string }) => {
+  const syncSurfaceMeta = (patch: {
+    url?: string;
+    title?: string;
+    faviconUrl?: string | null;
+  }) => {
     const current = getProjectBrowserSession(
       browserKey,
       defaultProjectBrowserSession({
@@ -800,6 +811,12 @@ function ProjectBrowserBody({
         next = navigateProjectBrowserTab(next, patch.url, patch.title);
       } else if (patch.title && patch.title !== item.title) {
         next = { ...next, title: patch.title };
+      }
+      if (
+        patch.faviconUrl !== undefined &&
+        patch.faviconUrl !== item.faviconUrl
+      ) {
+        next = { ...next, faviconUrl: patch.faviconUrl };
       }
       return next;
     });
@@ -834,16 +851,19 @@ function ProjectBrowserBody({
 
   if (tab.kind === "web") {
     return (
-      <BrowserSurfaceHost
-        tabId={tab.id}
-        url={tab.url}
-        reloadKey={reloadKey}
-        title={tab.title}
-        userId={userId}
-        active={surfaceActive}
-        onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
-        onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
-      />
+      <div className="relative h-full min-h-0">
+        <BrowserSurfaceHost
+          tabId={tab.id}
+          url={tab.url}
+          reloadKey={reloadKey}
+          title={tab.title}
+          userId={userId}
+          active={surfaceActive}
+          onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
+          onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
+          onFaviconChange={(faviconUrl) => syncSurfaceMeta({ faviconUrl })}
+        />
+      </div>
     );
   }
 
@@ -856,19 +876,22 @@ function ProjectBrowserBody({
         : tab.url;
     if (previewUrl && isHttpUrl(previewUrl) && !isGoogleUrl(previewUrl)) {
       return (
-        <BrowserSurfaceHost
-          tabId={tab.id}
-          url={previewUrl}
-          previewOnly
-          isolatedPartition
-          reloadKey={reloadKey}
-          title={tab.title}
-          userId={userId}
-          projectId={tab.projectId ?? null}
-          active={surfaceActive}
-          onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
-          onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
-        />
+        <div className="relative h-full min-h-0">
+          <BrowserSurfaceHost
+            tabId={tab.id}
+            url={previewUrl}
+            previewOnly
+            isolatedPartition
+            reloadKey={reloadKey}
+            title={tab.title}
+            userId={userId}
+            projectId={tab.projectId ?? null}
+            active={surfaceActive}
+            onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
+            onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
+            onFaviconChange={(faviconUrl) => syncSurfaceMeta({ faviconUrl })}
+          />
+        </div>
       );
     }
     return (
@@ -881,16 +904,19 @@ function ProjectBrowserBody({
 
   if (isHttpUrl(tab.url) && tab.url !== "https://" && tab.url !== "http://") {
     return (
-      <BrowserSurfaceHost
-        tabId={tab.id}
-        url={tab.url}
-        reloadKey={reloadKey}
-        title={tab.title}
-        userId={userId}
-        active={surfaceActive}
-        onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
-        onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
-      />
+      <div className="relative h-full min-h-0">
+        <BrowserSurfaceHost
+          tabId={tab.id}
+          url={tab.url}
+          reloadKey={reloadKey}
+          title={tab.title}
+          userId={userId}
+          active={surfaceActive}
+          onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
+          onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
+          onFaviconChange={(faviconUrl) => syncSurfaceMeta({ faviconUrl })}
+        />
+      </div>
     );
   }
 
@@ -1047,10 +1073,13 @@ function DesktopProjectToolsMenu({
       align="end"
       matchTrigger={false}
       menuClassName="min-w-[14rem]"
-      trigger={({ toggle }) => (
-        <RailBtn label="Project tools" onClick={toggle}>
-          <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
-        </RailBtn>
+      trigger={({ open, toggle }) => (
+        <>
+          <NativeOverlayGate open={open} />
+          <RailBtn label="Project tools" onClick={toggle}>
+            <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </RailBtn>
+        </>
       )}
     >
       {(close) => (
@@ -1301,18 +1330,19 @@ function AddTabMenu({
       trigger={({ open, toggle }) => (
         <>
           <NativeOverlayGate open={open} />
-          <button
-            type="button"
-            aria-label="New tab"
-            title="New tab"
-            onClick={toggle}
-            className={cn(
-              "inline-flex shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground",
-              compact ? "h-9 w-9 rounded-full" : "h-7 w-7 rounded-lg",
-            )}
-          >
-            <Plus className={compact ? "h-4 w-4" : "h-3.5 w-3.5"} strokeWidth={1.8} />
-          </button>
+          <BrowserChromeTooltip label="New tab">
+            <button
+              type="button"
+              aria-label="New tab"
+              onClick={toggle}
+              className={cn(
+                "inline-flex shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground",
+                compact ? "h-9 w-9 rounded-full" : "h-7 w-7 rounded-lg",
+              )}
+            >
+              <Plus className={compact ? "h-4 w-4" : "h-3.5 w-3.5"} strokeWidth={1.8} />
+            </button>
+          </BrowserChromeTooltip>
         </>
       )}
     >
@@ -1370,20 +1400,15 @@ function TabGlyph({
   if (tab.kind === "agent-browser") {
     return <MousePointer2 className={cn("h-3.5 w-3.5 shrink-0", className)} strokeWidth={1.6} />;
   }
-  if (tab.kind === "web") {
-    if (isGoogleUrl(tab.url)) {
-      return (
-        <span
-          aria-hidden
-          className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[11px] font-medium leading-none"
-        >
-          <span className="bg-gradient-to-br from-[#4285F4] via-[#34A853] to-[#EA4335] bg-clip-text text-transparent">
-            G
-          </span>
-        </span>
-      );
-    }
-    return <Globe className={cn("h-3.5 w-3.5 shrink-0", className)} strokeWidth={1.6} />;
+  if (tab.kind === "web" || isHttpUrl(tab.url)) {
+    return (
+      <FaviconImage
+        url={tab.url}
+        faviconUrl={tab.faviconUrl}
+        className={className}
+        size={14}
+      />
+    );
   }
   return <KindGlyph kind={kind} className={className} />;
 }
@@ -1408,17 +1433,18 @@ function RailBtn({
   disabled?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-lg px-1.5 text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
-      )}
-    >
-      {children}
-    </button>
+    <BrowserChromeTooltip label={label}>
+      <button
+        type="button"
+        aria-label={label}
+        onClick={onClick}
+        disabled={disabled}
+        className={cn(
+          "inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-lg px-1.5 text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
+        )}
+      >
+        {children}
+      </button>
+    </BrowserChromeTooltip>
   );
 }

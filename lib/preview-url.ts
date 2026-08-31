@@ -42,6 +42,21 @@ export function isGoogleUrl(url: string) {
   }
 }
 
+export function displayHostFromUrl(url: string) {
+  if (!url || url === "about:blank") return "";
+  return titleFromUrl(url);
+}
+
+export function faviconUrlForSite(url: string, size = 32) {
+  try {
+    const host = new URL(url).hostname;
+    if (!host) return null;
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=${size}`;
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeBrowserUrl(raw: string) {
   const trimmed = raw.trim();
   if (!trimmed || trimmed === "https://" || trimmed === "http://") {

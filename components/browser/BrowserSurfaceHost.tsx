@@ -30,6 +30,7 @@ type BrowserSurfaceHostProps = {
   active?: boolean;
   onUrlChange?: (url: string) => void;
   onTitleChange?: (title: string) => void;
+  onFaviconChange?: (faviconUrl: string | null) => void;
 };
 
 /**
@@ -49,6 +50,7 @@ export function BrowserSurfaceHost({
   active = true,
   onUrlChange,
   onTitleChange,
+  onFaviconChange,
 }: BrowserSurfaceHostProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [embedBlocked, setEmbedBlocked] = useState(false);
@@ -57,8 +59,10 @@ export function BrowserSurfaceHost({
   const [recoverToken, setRecoverToken] = useState(0);
   const onUrlChangeRef = useRef(onUrlChange);
   const onTitleChangeRef = useRef(onTitleChange);
+  const onFaviconChangeRef = useRef(onFaviconChange);
   onUrlChangeRef.current = onUrlChange;
   onTitleChangeRef.current = onTitleChange;
+  onFaviconChangeRef.current = onFaviconChange;
 
   const suppressed = useSyncExternalStore(
     subscribeNativeBrowserSurfaceSuppress,
@@ -140,6 +144,11 @@ export function BrowserSurfaceHost({
       }
       if (event.type === "title" && "title" in event) {
         onTitleChangeRef.current?.(String(event.title));
+      }
+      if (event.type === "favicon" && "faviconUrl" in event) {
+        onFaviconChangeRef.current?.(
+          event.faviconUrl ? String(event.faviconUrl) : null,
+        );
       }
       if (event.type === "processGone") {
         setRecoverToken((n) => n + 1);
@@ -311,7 +320,7 @@ export function BrowserSurfaceHost({
   return (
     <div
       ref={hostRef}
-      className="h-full w-full bg-black/5"
+      className="absolute inset-0 bg-white dark:bg-neutral-950"
       data-browser-surface={adapterId}
       data-tab-id={tabId}
       aria-label={title}

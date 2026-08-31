@@ -15,7 +15,7 @@ const SHELL_BUILD = "2026-08-30-speech-composer";
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
 /** Classic Mac titlebar / chrome row height (traffic-light axis). */
 const TITLEBAR_PX = 52;
-/** Left inset so header controls sit just past custom traffic lights. */
+/** Left inset so header controls sit just past native macOS traffic lights. */
 const TRAFFIC_CLEAR_PX = 84;
 
 /** @type {BrowserWindow | null} */
