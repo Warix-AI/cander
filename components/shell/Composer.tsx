@@ -133,6 +133,8 @@ export function Composer({
     setPin,
     clearPin,
     overlay,
+    turnActive,
+    stopTurn,
   } = useApp();
   const floating = useShellStyle() === "floating";
   const mobile = useMobileShell();
@@ -878,8 +880,10 @@ export function Composer({
                   compact
                   canSend={hasPayload}
                   hasVoice={entitlements.hasVoice}
+                  turnActive={turnActive}
                   onStartDictation={startDictation}
                   onSend={submit}
+                  onStop={stopTurn}
                 />
               </div>
             </div>
@@ -1044,13 +1048,10 @@ export function Composer({
               <ToolBtn
                 label="Add"
                 active={menu === "plus"}
-                emphasize={mobile}
+                emphasize
                 onClick={() => toggleMenu("plus")}
               >
-                <Plus
-                  className={mobile ? "h-5 w-5" : "h-4 w-4"}
-                  strokeWidth={mobile ? 2.25 : 1.7}
-                />
+                <Plus className="h-5 w-5" strokeWidth={2.25} />
               </ToolBtn>
               <textarea
                 ref={textRef}
@@ -1114,8 +1115,10 @@ export function Composer({
                 <ComposerTrailingActions
                   canSend={hasPayload}
                   hasVoice={entitlements.hasVoice}
+                  turnActive={turnActive}
                   onStartDictation={startDictation}
                   onSend={submit}
+                  onStop={stopTurn}
                 />
               </div>
             </div>
@@ -1295,7 +1298,7 @@ function ToolBtn({
   onClick: () => void;
   active?: boolean;
   size?: "md" | "sm";
-  /** Mobile: white + ~25% larger plus control */
+  /** Emphasized plus control (all platforms). */
   emphasize?: boolean;
 }) {
   return (

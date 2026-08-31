@@ -60,6 +60,7 @@ export async function fetchPrivateAiReply(opts: {
   images?: string[];
   attachmentIds?: string[];
   onProgress?: (progress: AgentTurnProgress) => void;
+  signal?: AbortSignal;
 }): Promise<{
   aiChatId: string;
   content: string;
@@ -72,6 +73,7 @@ export async function fetchPrivateAiReply(opts: {
   citations?: AiGenerateResult["citations"];
   blocks?: AiGenerateResult["blocks"];
   generatedAttachmentIds?: string[];
+  cancelled?: boolean;
 }> {
   try {
     const result = await runAssistantTurn(
@@ -87,7 +89,7 @@ export async function fetchPrivateAiReply(opts: {
         images: opts.images,
         attachmentIds: opts.attachmentIds,
       },
-      { onProgress: opts.onProgress },
+      { onProgress: opts.onProgress, signal: opts.signal },
     );
     return {
       aiChatId: result.aiChatId ?? opts.aiChatId ?? "",
@@ -103,6 +105,20 @@ export async function fetchPrivateAiReply(opts: {
       generatedAttachmentIds: result.generatedAttachmentIds,
     };
   } catch (err) {
+    if (
+      opts.signal?.aborted ||
+      (err instanceof AiRuntimeError && err.code === "cancelled") ||
+      (err instanceof DOMException && err.name === "AbortError")
+    ) {
+      return {
+        aiChatId: opts.aiChatId ?? "",
+        content: "",
+        offline: false,
+        condensationOccurred: false,
+        runtime: "cancelled",
+        cancelled: true,
+      };
+    }
     if (err instanceof AiRuntimeError) {
       return {
         aiChatId: opts.aiChatId ?? "",

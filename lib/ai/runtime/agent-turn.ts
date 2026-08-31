@@ -62,6 +62,7 @@ export type AgentTurnProgress = {
 
 export type AgentTurnOptions = {
   onProgress?: (progress: AgentTurnProgress) => void;
+  signal?: AbortSignal;
 };
 
 function looksLikeClaimedSearch(text: string): boolean {

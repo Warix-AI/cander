@@ -2,11 +2,6 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import {
-  Briefcase,
-  Hammer,
-  Telescope,
-} from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { CanderMark } from "@/components/brand/CanderMark";
 import { ClarificationCardSlot } from "@/components/chat/ClarificationCard";
@@ -14,8 +9,7 @@ import { ChatMessage } from "@/components/chat/MessageBlocks";
 import { SessionSummaryBubble } from "@/components/chat/SessionSummaryBubble";
 import { Composer } from "@/components/shell/Composer";
 import { APP_TAGLINE } from "@/lib/app-brand";
-import { chatSpaceCopy, spaceIconTint } from "@/lib/space-icons";
-import { homeSuggestions } from "@/lib/suggestions";
+import { chatSpaceCopy } from "@/lib/space-icons";
 import type {
   ChatFileAttachment,
   ChatImageAttachment,
@@ -29,12 +23,6 @@ import { useChatCanvasCentered } from "@/lib/chat-layout";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
-
-const homePromptIcons = {
-  p0: Briefcase,
-  p1: Hammer,
-  p2: Telescope,
-} as const;
 
 function ComposerDock({
   onSend,
@@ -323,7 +311,6 @@ function EmptyChat({
   autoFocusComposer?: boolean;
 }) {
   const copy = drafting ? emptyCopy(spaceId) : null;
-  const homePrompts = copy ? [] : homeSuggestions();
   const shellRef = useRef<HTMLDivElement>(null);
   const clusterRef = useRef<HTMLDivElement>(null);
   const baseHeightRef = useRef(0);
@@ -363,7 +350,7 @@ function EmptyChat({
       ro.disconnect();
       window.removeEventListener("resize", place);
     };
-  }, [copy?.headline, homePrompts.length, spaceId]);
+  }, [copy?.headline, spaceId]);
 
   return (
     <div
@@ -395,31 +382,6 @@ function EmptyChat({
         <div className="mt-8 w-full">
           <Composer onSend={onPrompt} landing autoFocus={autoFocusComposer} />
         </div>
-        {homePrompts.length ? (
-          <div className="landing-suggestions mt-3 grid w-full grid-cols-3 gap-2.5">
-            {homePrompts.map((item) => {
-              const Icon =
-                homePromptIcons[item.id as keyof typeof homePromptIcons] ??
-                Hammer;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onPrompt(item.label)}
-                  className="landing-suggestion flex min-h-[6.25rem] flex-col justify-between rounded-[15px] border border-border bg-transparent p-3 text-left transition-colors duration-200"
-                >
-                  <Icon
-                    className={cn("h-3.5 w-3.5", spaceIconTint(item.space))}
-                    strokeWidth={1.6}
-                  />
-                  <span className="text-[12.5px] leading-snug tracking-[-0.02em]">
-                    {item.label.replace(/\.$/, "")}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
       </div>
     </div>
   );

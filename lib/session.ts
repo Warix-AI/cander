@@ -390,6 +390,16 @@ const pinListeners = new Set<Listener>();
 const emptyPins: Pin[] = [];
 let pins: Pin[] = emptyPins;
 let pinsHydrated = false;
+/** Bumped on local pin/unpin so remote hydrate cannot resurrect stale pins. */
+let pinsLocalEpoch = 0;
+let pinsDirty = false;
+const PINS_SYNCED_FP_KEY = "courier-pins-synced-fp";
+
+function pinsFingerprintLocal(list: Pin[]) {
+  return list
+    .map((pin, index) => `${pin.kind}:${pin.id}:${pin.tier}:${index}`)
+    .join("|");
+}
 
 function normalizePin(item: Pin): Pin {
   return {
@@ -428,6 +438,13 @@ function hydratePins() {
   if (pinsHydrated || typeof window === "undefined") return;
   pinsHydrated = true;
   pins = parsePins(window.localStorage.getItem("courier-pins"));
+  const synced = window.localStorage.getItem(PINS_SYNCED_FP_KEY) ?? "";
+  const current = pinsFingerprintLocal(pins);
+  // Unsynced local edits survive reload — block remote resurrect until push.
+  if (synced !== current) {
+    pinsDirty = true;
+    pinsLocalEpoch = Math.max(pinsLocalEpoch, 1);
+  }
 }
 
 export function subscribePins(listener: Listener) {
@@ -447,13 +464,34 @@ export function getPinsServerSnapshot(): Pin[] {
   return emptyPins;
 }
 
+export function getPinsLocalEpoch() {
+  return pinsLocalEpoch;
+}
+
+export function arePinsDirty() {
+  return pinsDirty;
+}
+
+export function markPinsSynced(epoch: number) {
+  if (epoch < pinsLocalEpoch) return;
+  pinsDirty = false;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(
+      PINS_SYNCED_FP_KEY,
+      pinsFingerprintLocal(pins),
+    );
+  }
+}
+
 export function persistPins(next: Pin[]) {
   pins = next.length ? next.map(normalizePin) : emptyPins;
+  pinsLocalEpoch += 1;
+  pinsDirty = true;
   window.localStorage.setItem("courier-pins", JSON.stringify(pins));
   emitPins();
 }
 
-/** Replace pins (Supabase hydrate). */
+/** Replace pins (Supabase hydrate). Does not mark local dirty. */
 export function replacePinsState(next: Pin[]) {
   const normalized = next.length ? next.map(normalizePin) : emptyPins;
   const same =
@@ -468,6 +506,11 @@ export function replacePinsState(next: Pin[]) {
   pins = normalized;
   if (typeof window !== "undefined") {
     window.localStorage.setItem("courier-pins", JSON.stringify(pins));
+    window.localStorage.setItem(
+      PINS_SYNCED_FP_KEY,
+      pinsFingerprintLocal(pins),
+    );
+    pinsDirty = false;
   }
   emitPins();
 }

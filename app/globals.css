@@ -1123,6 +1123,87 @@ html:not(.dark) .shell-panel :is(.bg-sidebar, .bg-background) {
   }
 }
 
+/* Cander mark pinwheel — spin, ease into rest at top, brief pause, repeat. */
+@keyframes cander-pinwheel {
+  0% {
+    transform: rotate(0deg);
+  }
+  72% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.cander-pinwheel {
+  transform-origin: center center;
+  animation: cander-pinwheel 1.85s cubic-bezier(0.33, 0.05, 0.2, 1) infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cander-pinwheel {
+    animation: none;
+  }
+}
+
+/* Soft flowing wash for image-generation placeholders. */
+@keyframes image-gen-wash {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.image-gen-placeholder {
+  background-image: linear-gradient(
+    115deg,
+    color-mix(in oklch, var(--muted) 88%, var(--foreground)) 0%,
+    color-mix(in oklch, var(--muted) 55%, transparent) 42%,
+    color-mix(in oklch, var(--muted) 92%, var(--background)) 58%,
+    color-mix(in oklch, var(--muted) 70%, var(--foreground)) 100%
+  );
+  background-size: 220% 220%;
+  animation: image-gen-wash 5.5s ease-in-out infinite;
+}
+
+html.dark .image-gen-placeholder {
+  background-image: linear-gradient(
+    115deg,
+    color-mix(in oklch, var(--muted) 75%, var(--background)) 0%,
+    color-mix(in oklch, var(--muted) 45%, transparent) 40%,
+    color-mix(in oklch, var(--muted) 85%, white) 62%,
+    color-mix(in oklch, var(--muted) 65%, var(--background)) 100%
+  );
+}
+
+@keyframes assistant-reply-enter {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.assistant-reply-enter {
+  animation: assistant-reply-enter 0.28s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-reply-enter {
+    animation: none;
+  }
+}
+
 /* Marketing pages — normal document scroll; no nested overflow containers. */
 .marketing {
   position: relative;

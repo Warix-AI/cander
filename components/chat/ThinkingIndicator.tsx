@@ -1,72 +1,69 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  formatTurnActivityLine,
-  labelForPhase,
-  type TurnActivityPhase,
-} from "@/lib/ai/turn-activity";
+import { useEffect, useRef, useState } from "react";
+import { CanderActivityMark } from "@/components/brand/CanderActivityMark";
+import type { TurnActivityPhase } from "@/lib/ai/turn-activity";
+import { labelForPhase } from "@/lib/ai/turn-activity";
 import { cn } from "@/lib/utils";
 
 /**
- * Single activity row for an in-flight turn.
- * Example: "Generating · 2s" — never stacks Thinking + Generating.
+ * In-flight turn indicator — spinning Cander mark (no elapsed timer text).
+ * Fades out smoothly when `active` becomes false.
  */
 export function ThinkingIndicator({
   className,
   phase,
-  startedAt,
   label,
+  active = true,
 }: {
   className?: string;
   phase?: TurnActivityPhase;
-  /** Turn start — timer continues across phase label changes. */
   startedAt?: number;
   /** Legacy fallback when phase is missing. */
   label?: string;
+  active?: boolean;
 }) {
-  const resolvedPhase: TurnActivityPhase = phase ?? "generating";
-  const displayLabel = phase
-    ? labelForPhase(phase)
-    : label && !/^Thinking\b/i.test(label)
-      ? label
-      : "Generating";
+  const accessible =
+    (phase ? labelForPhase(phase) : null) ||
+    (label && !/^Thinking\b/i.test(label) ? label : null) ||
+    "Generating";
 
-  const [elapsedSec, setElapsedSec] = useState(() =>
-    startedAt
-      ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
-      : 0,
-  );
+  const [exiting, setExiting] = useState(false);
+  const [mounted, setMounted] = useState(active);
+  const exitTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    const anchor = startedAt ?? Date.now();
-    setElapsedSec(Math.max(0, Math.floor((Date.now() - anchor) / 1000)));
-    const id = window.setInterval(() => {
-      setElapsedSec(Math.max(0, Math.floor((Date.now() - anchor) / 1000)));
-    }, 250);
-    return () => window.clearInterval(id);
-    // Only re-anchor when the turn starts — not when phase changes.
-  }, [startedAt]);
+    if (exitTimer.current) {
+      window.clearTimeout(exitTimer.current);
+      exitTimer.current = null;
+    }
+    if (active) {
+      setMounted(true);
+      setExiting(false);
+      return;
+    }
+    setExiting(true);
+    exitTimer.current = window.setTimeout(() => {
+      setMounted(false);
+      setExiting(false);
+      exitTimer.current = null;
+    }, 320);
+    return () => {
+      if (exitTimer.current) window.clearTimeout(exitTimer.current);
+    };
+  }, [active]);
 
-  const line = formatTurnActivityLine({
-    phase: resolvedPhase,
-    elapsedSeconds: elapsedSec,
-  });
-  // Prefer phase-driven line; if legacy label differs from Generating, still show elapsed.
-  const visible =
-    phase || !label || /^Thinking\b/i.test(label)
-      ? line
-      : `${displayLabel} · ${elapsedSec}s`;
+  if (!mounted) return null;
 
   return (
     <div
-      className={cn("flex w-full items-start", className)}
-      aria-live="polite"
-      aria-label={visible}
+      className={cn(
+        "flex w-full items-center transition-opacity duration-300 ease-out",
+        exiting ? "opacity-0" : "opacity-100",
+        className,
+      )}
     >
-      <div className="text-[14.5px] leading-relaxed tracking-[-0.01em]">
-        <span className="thinking-shimmer tabular-nums">{visible}</span>
-      </div>
+      <CanderActivityMark label={accessible} />
     </div>
   );
 }

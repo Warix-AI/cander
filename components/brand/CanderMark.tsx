@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { cn } from "@/lib/utils";
 
-const MARK_VERSION = "11";
+const MARK_VERSION = "12";
 
 function subscribeHtmlDark(onStoreChange: () => void) {
   if (typeof document === "undefined") return () => {};

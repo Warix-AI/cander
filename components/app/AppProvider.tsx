@@ -173,6 +173,14 @@ import {
 } from "@/lib/ai/attachment-context";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
 import { isRawOpenAIModeEnabled } from "@/lib/ai/raw-openai/flags";
+import { detectImageGenerationIntent } from "@/lib/ai/raw-openai/image-generation";
+import {
+  cancelImageGenerationJob,
+  createGeneratingImageBlock,
+  newClientImageGenerationId,
+  startImageGenerationJob,
+  waitForImageGenerationJob,
+} from "@/lib/ai/raw-openai/image-jobs-client";
 import {
   linkRawOpenAIAttachments,
   uploadRawOpenAIAttachment,
@@ -342,6 +350,21 @@ type AppContextValue = {
   clearPin: (kind: PinKind, id: string) => void;
   /** Pin or unpin. New pins use the single Pinned list. */
   togglePin: (kind: PinKind, id: string) => void;
+  cancelImageGeneration: (
+    generationId: string,
+    threadId: string,
+    messageId: string,
+  ) => void;
+  retryImageGeneration: (
+    generationId: string,
+    threadId: string,
+    messageId: string,
+    prompt: string,
+  ) => void;
+  /** True while a reply is streaming/pending or an image job is generating. */
+  turnActive: boolean;
+  /** Stop the in-flight chat turn and/or cancel generating images. */
+  stopTurn: () => void;
   reorderPins: (
     from: { kind: PinKind; id: string },
     to: { kind: PinKind; id: string },
@@ -1322,6 +1345,253 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [threadId],
   );
 
+  const patchImageGenerationBlock = useCallback(
+    (
+      threadId: string,
+      messageId: string,
+      generationId: string,
+      patch: Partial<{
+        status: "generating" | "completed" | "failed" | "cancelled";
+        imageUrl: string | null;
+        error?: string;
+        attachmentId?: string;
+        openaiFileId?: string;
+        mime?: string;
+        name?: string;
+      }>,
+    ) => {
+      setThreads((current) =>
+        current.map((item) => {
+          if (item.id !== threadId) return item;
+          return {
+            ...item,
+            updatedAt: new Date().toISOString(),
+            messages: item.messages.map((message) => {
+              if (message.id !== messageId) return message;
+              return {
+                ...message,
+                blocks: (message.blocks || []).map((block) => {
+                  if (
+                    block.type !== "image_generation" ||
+                    block.generationId !== generationId
+                  ) {
+                    return block;
+                  }
+                  return { ...block, ...patch };
+                }),
+              };
+            }),
+          };
+        }),
+      );
+    },
+    [setThreads],
+  );
+
+  const imageJobPollRef = useRef(new Set<string>());
+  const turnAbortRef = useRef<AbortController | null>(null);
+
+  const trackImageGenerationJob = useCallback(
+    async (opts: {
+      generationId: string;
+      prompt: string;
+      threadId: string;
+      messageId: string;
+      /** `poll` resumes an existing job after reload — do not POST a new job. */
+      mode?: "start" | "poll";
+    }) => {
+      if (imageJobPollRef.current.has(opts.generationId)) return;
+      imageJobPollRef.current.add(opts.generationId);
+      try {
+        if (opts.mode !== "poll") {
+          const started = await startImageGenerationJob({
+            prompt: opts.prompt,
+            generationId: opts.generationId,
+            threadId: opts.threadId,
+            messageId: opts.messageId,
+          });
+          if (!started.ok) {
+            patchImageGenerationBlock(
+              opts.threadId,
+              opts.messageId,
+              opts.generationId,
+              { status: "failed", error: started.error },
+            );
+            return;
+          }
+        }
+        const result = await waitForImageGenerationJob(opts.generationId, {
+          intervalMs: 1200,
+          timeoutMs: 180_000,
+        });
+        if (result.status === "completed" && result.dataUrl) {
+          patchImageGenerationBlock(
+            opts.threadId,
+            opts.messageId,
+            opts.generationId,
+            {
+              status: "completed",
+              imageUrl: result.dataUrl,
+              mime: result.mimeType || "image/png",
+              name: "generated.png",
+              attachmentId: result.attachmentId,
+              openaiFileId: result.openaiFileId,
+            },
+          );
+          if (result.attachmentId) {
+            void linkRawOpenAIAttachments({
+              attachmentIds: [result.attachmentId],
+              messageId: opts.messageId,
+              threadId: opts.threadId,
+            });
+          }
+          return;
+        }
+        if (result.status === "cancelled") {
+          patchImageGenerationBlock(
+            opts.threadId,
+            opts.messageId,
+            opts.generationId,
+            { status: "cancelled", imageUrl: null },
+          );
+          return;
+        }
+        patchImageGenerationBlock(
+          opts.threadId,
+          opts.messageId,
+          opts.generationId,
+          {
+            status: "failed",
+            error: result.error || "Image generation failed.",
+            imageUrl: null,
+          },
+        );
+      } finally {
+        imageJobPollRef.current.delete(opts.generationId);
+      }
+    },
+    [patchImageGenerationBlock],
+  );
+
+  const cancelImageGeneration = useCallback(
+    (generationId: string, threadId: string, messageId: string) => {
+      patchImageGenerationBlock(threadId, messageId, generationId, {
+        status: "cancelled",
+        imageUrl: null,
+      });
+      void cancelImageGenerationJob(generationId);
+    },
+    [patchImageGenerationBlock],
+  );
+
+  const retryImageGeneration = useCallback(
+    (
+      _oldGenerationId: string,
+      threadId: string,
+      messageId: string,
+      prompt: string,
+    ) => {
+      const generationId = newClientImageGenerationId();
+      setThreads((current) =>
+        current.map((item) => {
+          if (item.id !== threadId) return item;
+          return {
+            ...item,
+            messages: item.messages.map((message) => {
+              if (message.id !== messageId) return message;
+              return {
+                ...message,
+                blocks: [
+                  createGeneratingImageBlock({ generationId, prompt }),
+                ],
+              };
+            }),
+          };
+        }),
+      );
+      void trackImageGenerationJob({
+        generationId,
+        prompt,
+        threadId,
+        messageId,
+      });
+    },
+    [setThreads, trackImageGenerationJob],
+  );
+
+  const turnActive = useMemo(() => {
+    if (!thread) return false;
+    return thread.messages.some(
+      (message) =>
+        message.status === "pending" ||
+        message.status === "streaming" ||
+        Boolean(
+          message.blocks?.some(
+            (b) =>
+              b.type === "image_generation" && b.status === "generating",
+          ),
+        ),
+    );
+  }, [thread]);
+
+  const stopTurn = useCallback(() => {
+    turnAbortRef.current?.abort();
+    turnAbortRef.current = null;
+    if (!thread) return;
+    const tid = thread.id;
+    for (const message of thread.messages) {
+      for (const block of message.blocks || []) {
+        if (
+          block.type === "image_generation" &&
+          block.status === "generating"
+        ) {
+          cancelImageGeneration(block.generationId, tid, message.id);
+        }
+      }
+    }
+    setThreads((current) =>
+      current.map((item) => {
+        if (item.id !== tid) return item;
+        return {
+          ...item,
+          updatedAt: new Date().toISOString(),
+          messages: item.messages.map((message) => {
+            if (
+              message.role === "assistant" &&
+              (message.status === "pending" || message.status === "streaming")
+            ) {
+              return {
+                ...message,
+                status: "complete" as const,
+                activity: null,
+                content: message.content?.trim() ? message.content : "",
+              };
+            }
+            return message;
+          }),
+        };
+      }),
+    );
+  }, [thread, cancelImageGeneration, setThreads]);
+
+  // Resume polling for generating image jobs after reload / hydrate.
+  useEffect(() => {
+    for (const t of threads) {
+      for (const m of t.messages) {
+        for (const b of m.blocks || []) {
+          if (b.type !== "image_generation" || b.status !== "generating") continue;
+          void trackImageGenerationJob({
+            generationId: b.generationId,
+            prompt: b.prompt,
+            threadId: t.id,
+            messageId: m.id,
+            mode: "poll",
+          });
+        }
+      }
+    }
+  }, [threads, trackImageGenerationJob]);
+
   const sendMessage = useCallback(
     (text: string, opts?: SendOpts) => {
       const sendAttachments = opts?.sendAttachments ?? [];
@@ -1494,6 +1764,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             kind: "idle",
           },
         };
+      }
+
+      // Async image generation — placeholder card immediately; no chat lock.
+      const imageGenIntent =
+        useLiveAi &&
+        isRawOpenAIModeEnabled() &&
+        detectImageGenerationIntent(trimmed) &&
+        attachments.length === 0 &&
+        fileAttachments.length === 0;
+      let imageGenerationId: string | null = null;
+      if (imageGenIntent) {
+        imageGenerationId = newClientImageGenerationId();
+        assistantMsg = {
+          ...assistantMsg,
+          content: "",
+          status: "complete",
+          activity: null,
+          blocks: [
+            createGeneratingImageBlock({
+              generationId: imageGenerationId,
+              prompt: trimmed,
+            }),
+          ],
+        };
+        console.log("[IMAGE_JOB]", {
+          event: "image_intent_detected",
+          generationId: imageGenerationId,
+        });
       }
 
       const turnVision = collectTurnVisionImages(attachments.map((a) => a.url));
@@ -1903,6 +2201,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         const runReply = async () => {
+          turnAbortRef.current?.abort();
+          const ac = new AbortController();
+          turnAbortRef.current = ac;
           let attachmentIds: string[] = [];
           if (rawMode && (sendAttachments.length > 0 || attachments.length > 0 || fileAttachments.length > 0)) {
             setThreads((current) =>
@@ -2022,6 +2323,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             projectId: replyProjectId,
             projectSpace: replyProjectSpace,
             messages: historyMessages,
+            signal: ac.signal,
             ...(rawMode
               ? attachmentIds.length
                 ? { attachmentIds }
@@ -2032,6 +2334,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 ? { images: imageUrls }
                 : {}),
             onProgress: (progress) => {
+              if (ac.signal.aborted) return;
               setThreads((current) =>
                 current.map((item) => ({
                   ...item,
@@ -2053,7 +2356,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         void runReply()
           .then((result) => {
-            if (!result) return;
+            if (!result || result.cancelled) return;
             const isPendingAssistant = (message: Message) =>
               message.id === assistantId ||
               (message.role === "assistant" &&
@@ -2226,7 +2529,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           jobId: null,
           skillId: null,
         });
-        kickLiveAi();
+        if (imageGenerationId) {
+          void trackImageGenerationJob({
+            generationId: imageGenerationId,
+            prompt: trimmed,
+            threadId: activeId,
+            messageId: assistantId,
+          });
+        } else {
+          kickLiveAi();
+        }
         return;
       }
       const keepSpace =
@@ -2278,7 +2590,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         jobId: onUnscopedChat ? jobId : (intent.jobId ?? jobId),
         skillId: skillId ?? opts?.skillId ?? null,
       });
-      kickLiveAi();
+      if (imageGenerationId) {
+        void trackImageGenerationJob({
+          generationId: imageGenerationId,
+          prompt: trimmed,
+          threadId: activeId,
+          messageId: assistantId,
+        });
+      } else {
+        kickLiveAi();
+      }
     },
     [
       threadId,
@@ -2306,6 +2627,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       actor.id,
       voiceActive,
       setThreads,
+      trackImageGenerationJob,
     ],
   );
 
@@ -2612,6 +2934,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const dest = target;
+    // Primary spaces open the continuous chat panel (last chat), not browse-only.
+    if (isChatSpace(dest)) {
+      openSpaceChat(dest);
+      return;
+    }
+
     const chatActive = Boolean(threadId) || drafting;
 
     if (dest === spaceId && projectId && isChatSpace(dest)) {
@@ -2739,6 +3067,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     panelMode,
     projectId,
     thread,
+    openSpaceChat,
   ]);
 
   const openRecents = useCallback(() => {
@@ -3905,6 +4234,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPin,
       clearPin,
       togglePin,
+      cancelImageGeneration,
+      retryImageGeneration,
+      turnActive,
+      stopTurn,
       reorderPins,
       moveSidebarNav: moveNavItem,
       openProject,
@@ -4048,6 +4381,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPin,
       clearPin,
       togglePin,
+      cancelImageGeneration,
+      retryImageGeneration,
+      turnActive,
+      stopTurn,
       reorderPins,
       moveNavItem,
       openProject,

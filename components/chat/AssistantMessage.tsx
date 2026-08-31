@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Circle, Copy, Download } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Circle, Copy, Download, RotateCcw } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
@@ -12,6 +12,7 @@ import type { ChatBlock, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function AssistantMessage({ message }: { message: Message }) {
+  const { thread } = useApp();
   const pending = message.status === "pending";
   const streaming = message.status === "streaming";
   const showThinking =
@@ -23,21 +24,41 @@ export function AssistantMessage({ message }: { message: Message }) {
     ? sanitizeAssistantVisibleText(message.content)
     : "";
 
+  const [holdThinking, setHoldThinking] = useState(showThinking);
+  useEffect(() => {
+    if (showThinking) {
+      setHoldThinking(true);
+      return;
+    }
+    if (!holdThinking) return;
+    const id = window.setTimeout(() => setHoldThinking(false), 340);
+    return () => window.clearTimeout(id);
+  }, [showThinking, holdThinking]);
+
   return (
     <div className="w-full space-y-2">
-      {showThinking ? (
+      {showThinking || holdThinking ? (
         <ThinkingIndicator
+          active={showThinking}
           phase={message.activity?.phase}
           startedAt={message.activity?.startedAt}
           label={message.activity?.label}
         />
-      ) : visibleContent ? (
-        <MarkdownRenderer content={visibleContent} />
+      ) : null}
+      {!showThinking && visibleContent ? (
+        <div className="assistant-reply-enter">
+          <MarkdownRenderer content={visibleContent} />
+        </div>
       ) : null}
       {message.blocks
         ?.filter((b) => b.type !== "tool")
         .map((block, index) => (
-          <BlockView key={index} block={block} />
+          <BlockView
+            key={index}
+            block={block}
+            messageId={message.id}
+            threadId={thread?.id}
+          />
         ))}
       {!pending && !streaming ? (
         <MessageFooter message={message} visibleContent={visibleContent} />
@@ -234,7 +255,15 @@ function ActionSourcesRow({
   );
 }
 
-function BlockView({ block }: { block: ChatBlock }) {
+function BlockView({
+  block,
+  messageId,
+  threadId,
+}: {
+  block: ChatBlock;
+  messageId?: string;
+  threadId?: string;
+}) {
   switch (block.type) {
     case "text":
       return (
@@ -280,6 +309,16 @@ function BlockView({ block }: { block: ChatBlock }) {
       );
     case "image":
       return <GeneratedImageBlock block={block} />;
+    case "image_generation":
+      return (
+        <ImageGenerationJobBlock
+          block={block}
+          messageId={messageId}
+          threadId={threadId}
+        />
+      );
+    case "file":
+      return null;
   }
 }
 
@@ -292,14 +331,14 @@ function GeneratedImageBlock({
   const [saveNote, setSaveNote] = useState<string | null>(null);
 
   return (
-    <div className="my-1 flex max-w-full flex-col gap-1">
-      <div className="flex max-w-full items-start gap-2">
-        <div className="min-w-0 flex-1 overflow-hidden rounded-[10px] border border-border bg-muted/20">
+    <div className="my-1 flex max-w-md flex-col gap-1">
+      <div className="flex max-w-full items-center gap-2">
+        <div className="relative aspect-square min-w-0 flex-1 overflow-hidden rounded-[14px] border border-border bg-muted/20">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={block.url}
             alt={block.name}
-            className="mx-auto max-h-[min(28rem,70vh)] w-full max-w-full object-contain"
+            className="absolute inset-0 h-full w-full object-cover"
           />
         </div>
         <button
@@ -320,7 +359,7 @@ function GeneratedImageBlock({
               })
               .finally(() => setSaving(false));
           }}
-          className="mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center self-start rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center self-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
         >
           <Download className="h-3.5 w-3.5" strokeWidth={2} />
         </button>
@@ -329,6 +368,86 @@ function GeneratedImageBlock({
         <p className="text-right text-[11px] text-muted-foreground" role="status">
           {saveNote}
         </p>
+      ) : null}
+    </div>
+  );
+}
+
+function ImageGenerationJobBlock({
+  block,
+  messageId,
+  threadId,
+}: {
+  block: Extract<ChatBlock, { type: "image_generation" }>;
+  messageId?: string;
+  threadId?: string;
+}) {
+  const { retryImageGeneration } = useApp();
+  const [retrying, setRetrying] = useState(false);
+
+  if (block.status === "completed" && block.imageUrl) {
+    return (
+      <GeneratedImageBlock
+        block={{
+          type: "image",
+          url: block.imageUrl,
+          name: block.name || "generated.png",
+          mime: block.mime,
+          attachmentId: block.attachmentId,
+          openaiFileId: block.openaiFileId,
+        }}
+      />
+    );
+  }
+
+  if (block.status === "generating") {
+    return (
+      <div className="my-1 flex max-w-md flex-col gap-2">
+        <div
+          className="image-gen-placeholder aspect-square min-w-0 w-full overflow-hidden rounded-[14px] border border-border"
+          aria-label="Generating image"
+          role="status"
+        />
+      </div>
+    );
+  }
+
+  if (block.status === "cancelled") {
+    return (
+      <div className="my-1 max-w-md rounded-[14px] border border-border bg-muted/20 px-3 py-3 text-[13px] text-muted-foreground">
+        Image generation cancelled.
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-1 flex max-w-md items-center gap-3 rounded-[14px] border border-border bg-muted/20 px-3 py-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-[13.5px] font-medium">Image generation failed</p>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">
+          {block.error || "Something went wrong."}
+        </p>
+      </div>
+      {threadId && messageId ? (
+        <button
+          type="button"
+          aria-label="Retry"
+          title="Retry"
+          disabled={retrying}
+          onClick={() => {
+            setRetrying(true);
+            retryImageGeneration(
+              block.generationId,
+              threadId,
+              messageId,
+              block.prompt,
+            );
+            setRetrying(false);
+          }}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
       ) : null}
     </div>
   );

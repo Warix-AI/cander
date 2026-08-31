@@ -170,22 +170,32 @@ export function ComposerDictationButton({
 /**
  * Trailing actions for the normal (non-recording) composer.
  * Dictation only — no live / realtime voice control.
+ * When a turn is active, the send control becomes Stop.
  */
 export function ComposerTrailingActions({
   canSend,
   hasVoice,
   compact = false,
+  turnActive = false,
   onStartDictation,
   onSend,
+  onStop,
 }: {
   /** True when there is text, images, or files to send. */
   canSend: boolean;
   hasVoice: boolean;
   compact?: boolean;
+  turnActive?: boolean;
   onStartDictation: () => void;
   onSend?: () => void;
+  onStop?: () => void;
 }) {
+  const stopBtn = turnActive ? (
+    <ComposerStopButton compact={compact} onClick={onStop} />
+  ) : null;
+
   if (!hasVoice) {
+    if (turnActive) return stopBtn;
     return canSend ? (
       <ComposerSendButton compact={compact} onClick={onSend} />
     ) : null;
@@ -194,13 +204,51 @@ export function ComposerTrailingActions({
   return (
     <>
       <ComposerDictationButton onClick={onStartDictation} compact={compact} />
-      <ComposerSendButton
-        compact={compact}
-        onClick={onSend}
-        disabled={!canSend}
-        className={!canSend ? "opacity-40" : undefined}
-      />
+      {turnActive ? (
+        stopBtn
+      ) : (
+        <ComposerSendButton
+          compact={compact}
+          onClick={onSend}
+          disabled={!canSend}
+          className={!canSend ? "opacity-40" : undefined}
+        />
+      )}
     </>
+  );
+}
+
+export function ComposerStopButton({
+  compact = false,
+  className,
+  onClick,
+}: {
+  compact?: boolean;
+  className?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label="Stop"
+      onPointerDown={(event) => {
+        event.preventDefault();
+      }}
+      onClick={(event) => {
+        event.preventDefault();
+        onClick?.();
+      }}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors duration-200 hover:bg-foreground",
+        compact ? "h-7 w-7" : "h-8 w-8",
+        className,
+      )}
+    >
+      <Square
+        className={compact ? "h-2.5 w-2.5 fill-current" : "h-3 w-3 fill-current"}
+        strokeWidth={0}
+      />
+    </button>
   );
 }
 

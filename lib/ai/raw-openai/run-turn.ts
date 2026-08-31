@@ -81,8 +81,12 @@ export async function runRawOpenAITurn(
         threadId: request.threadId,
         title: request.title,
       }),
+      signal: opts?.signal,
     });
   } catch (e) {
+    if (opts?.signal?.aborted || (e instanceof DOMException && e.name === "AbortError")) {
+      throw new AiRuntimeError("cancelled", "Turn cancelled.");
+    }
     const msg = e instanceof Error ? e.message : "network_error";
     logTrace({
       provider: "openai",

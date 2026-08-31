@@ -28,6 +28,9 @@ import {
 import {
   getPinsSnapshot,
   getSidebarSnapshot,
+  arePinsDirty,
+  getPinsLocalEpoch,
+  markPinsSynced,
   replacePinsState,
   replaceSidebarState,
   SIDEBAR_STORAGE_VERSION,
@@ -41,10 +44,18 @@ import type { WorkspacePolicy } from "@/lib/types";
 const POLICY_IMPORT_FLAG = "courier-org-policy-imported-v1";
 const PREFS_IMPORT_FLAG = "courier-user-prefs-imported-v1";
 const SYNC_DEBOUNCE_MS = 600;
+/** Pins must land remotely before hydrate can resurrect them. */
+const PINS_SYNC_DEBOUNCE_MS = 0;
 
 let skipRemoteSync = false;
 /** Last applied remote pins fingerprint — skip no-op replaces. */
 let lastRemotePinsFingerprint = "";
+
+function pinsFingerprint(pins: ReturnType<typeof getPinsSnapshot>) {
+  return pins
+    .map((pin, index) => `${pin.kind}:${pin.id}:${pin.tier}:${index}`)
+    .join("|");
+}
 
 async function listMemberWorkspaceIds(profileId: string) {
   const supabase = createSupabaseBrowserClient();
@@ -240,6 +251,7 @@ async function syncWorkspacesCatalog(ctx: WorkspaceCtx) {
 
 export async function syncUserPrefsToSupabase(ctx: WorkspaceCtx) {
   const supabase = createSupabaseBrowserClient();
+  const epochAtStart = getPinsLocalEpoch();
   const pins = getPinsSnapshot();
   const sidebar = getSidebarSnapshot();
   // Block realtime hydrate from wiping local pins during delete→insert.
@@ -262,10 +274,13 @@ export async function syncUserPrefsToSupabase(ctx: WorkspaceCtx) {
       .from("sidebar_layouts")
       .upsert(sidebarRow, { onConflict: "profile_id" });
     if (sidebarError) throw sidebarError;
+
+    lastRemotePinsFingerprint = pinsFingerprint(pins);
+    markPinsSynced(epochAtStart);
   } finally {
     window.setTimeout(() => {
       skipRemoteSync = false;
-    }, 1200);
+    }, 1500);
   }
 }
 
@@ -290,11 +305,14 @@ export async function hydrateUserPrefsFromRemote(ctx: WorkspaceCtx) {
   if (sidebarResult.error) throw sidebarResult.error;
 
   const localPins = getPinsSnapshot();
-  if (pinResult.data?.length) {
+  // Local pin/unpin wins until we've successfully pushed that epoch.
+  let pushDirtyPins = false;
+  if (arePinsDirty()) {
+    console.log("[cander] skip remote pins hydrate — local pins dirty");
+    pushDirtyPins = true;
+  } else if (pinResult.data?.length) {
     const remotePins = (pinResult.data as UserPinRow[]).map(pinRowToPin);
-    const fingerprint = remotePins
-      .map((pin, index) => `${pin.kind}:${pin.id}:${pin.tier}:${index}`)
-      .join("|");
+    const fingerprint = pinsFingerprint(remotePins);
     if (fingerprint !== lastRemotePinsFingerprint) {
       lastRemotePinsFingerprint = fingerprint;
       replacePinsState(remotePins);
@@ -312,6 +330,11 @@ export async function hydrateUserPrefsFromRemote(ctx: WorkspaceCtx) {
 
   window.setTimeout(() => {
     skipRemoteSync = false;
+    if (pushDirtyPins) {
+      void syncUserPrefsToSupabase(ctx).catch((err) => {
+        console.warn("[cander] dirty pins push failed", err);
+      });
+    }
   }, 0);
 }
 
@@ -368,30 +391,44 @@ export function startOrgPolicyRemoteSync(ctx: WorkspaceCtx) {
   };
 }
 
-/** Debounced push for pins + sidebar. */
+/** Debounced push for pins + sidebar. Pins flush immediately so unpin sticks. */
 export function startUserPrefsRemoteSync(ctx: WorkspaceCtx) {
   let pinsTimer: ReturnType<typeof setTimeout> | null = null;
   let sidebarTimer: ReturnType<typeof setTimeout> | null = null;
   let syncing = false;
+  let pinsQueued = false;
+  let sidebarQueued = false;
 
   const push = () => {
-    if (syncing || skipRemoteSync) return;
+    if (syncing || skipRemoteSync) {
+      // Retry shortly if we blocked ourselves mid-window.
+      if (pinsQueued || sidebarQueued) {
+        window.setTimeout(push, 200);
+      }
+      return;
+    }
     syncing = true;
+    pinsQueued = false;
+    sidebarQueued = false;
     void syncUserPrefsToSupabase(ctx)
       .catch((err) => {
         console.warn("[cander] user prefs sync failed", err);
       })
       .finally(() => {
         syncing = false;
+        if (pinsQueued || sidebarQueued) push();
       });
   };
 
   const schedule = (which: "pins" | "sidebar") => {
-    if (skipRemoteSync) return;
+    if (skipRemoteSync && which !== "pins") return;
     if (which === "pins") {
+      pinsQueued = true;
       if (pinsTimer) clearTimeout(pinsTimer);
-      pinsTimer = setTimeout(push, SYNC_DEBOUNCE_MS);
+      pinsTimer = setTimeout(push, PINS_SYNC_DEBOUNCE_MS);
     } else {
+      if (skipRemoteSync) return;
+      sidebarQueued = true;
       if (sidebarTimer) clearTimeout(sidebarTimer);
       sidebarTimer = setTimeout(push, SYNC_DEBOUNCE_MS);
     }

@@ -244,6 +244,19 @@ export type ChatBlock =
       openaiFileId?: string;
     }
   | {
+      /** Async GPT Image job — placeholder until completed. */
+      type: "image_generation";
+      status: "generating" | "completed" | "failed" | "cancelled";
+      generationId: string;
+      prompt: string;
+      imageUrl: string | null;
+      mime?: string;
+      name?: string;
+      error?: string;
+      attachmentId?: string;
+      openaiFileId?: string;
+    }
+  | {
       type: "file";
       name: string;
       /** Extracted text for model continuity — not shown in the bubble. */
