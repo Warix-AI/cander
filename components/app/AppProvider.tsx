@@ -155,10 +155,11 @@ import type {
 } from "@/lib/types";
 import { isSpaceLibrarySpace } from "@/lib/space-library";
 import {
+  ensureContinuousChat,
+  startContinuousChat,
   summarizeSession,
   threadHasTurns,
   upsertPersistentProjectThread,
-  upsertPersistentSpaceThread,
 } from "@/lib/persistent-chat";
 import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import {
@@ -724,10 +725,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           let tid = "";
           let hasMessages = false;
           setThreads((current) => {
-            const { threads: next, id: nextId } = upsertPersistentSpaceThread(
+            const { threads: next, id: nextId } = ensureContinuousChat(
               current,
               id,
               prevSpace,
+              threadId,
             );
             tid = nextId;
             hasMessages = threadHasTurns(
@@ -949,7 +951,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 projectId,
                 space,
               )
-            : upsertPersistentSpaceThread(current, workspaceId, space);
+            : ensureContinuousChat(
+                current,
+                workspaceId,
+                space,
+                threadId,
+              );
         tid = result.id;
         hasMessages = threadHasTurns(
           result.threads.find((item) => item.id === result.id),
@@ -981,25 +988,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: null,
       });
     },
-    [workspaceId, pushTarget, projectId],
+    [workspaceId, pushTarget, projectId, threadId],
   );
 
   const applyHomeNewChat = useCallback(() => {
-    setThreadId(null);
+    let tid = "";
+    setThreads((current) => {
+      const { threads: next, id } = startContinuousChat(
+        current,
+        workspaceId,
+        "work",
+      );
+      tid = id;
+      return next;
+    });
+    setThreadId(tid);
     setSpaceId(null);
     setProjectId(null);
     setConnectorId(null);
     setJobId(null);
     setSkillId(null);
     setView("chat");
-    setDrafting(false);
+    setDrafting(true);
     setPanelIntent("browse");
     setPanelMode("collapsed");
     setMobileSurface("chat");
     pushTarget({
       view: "chat",
       spaceId: null,
-      threadId: null,
+      threadId: tid,
       projectId: null,
       panelMode: "collapsed",
       panelIntent: "browse",
@@ -1007,7 +1024,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       jobId: null,
       skillId: null,
     });
-  }, [pushTarget]);
+  }, [pushTarget, workspaceId]);
 
   const newChat = useCallback(
     (space?: SpaceId) => {
@@ -1051,7 +1068,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         let tid = "";
         let hasMessages = false;
         setThreads((current) => {
-          const { threads: next, id } = upsertPersistentSpaceThread(
+          const { threads: next, id } = startContinuousChat(
             current,
             workspaceId,
             space,
@@ -1143,10 +1160,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let tid = "";
       let hasMessages = false;
       setThreads((current) => {
-        const { threads: next, id: nextId } = upsertPersistentSpaceThread(
+        const { threads: next, id: nextId } = ensureContinuousChat(
           current,
           workspaceId,
           id,
+          threadId,
         );
         tid = nextId;
         hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
@@ -1163,7 +1181,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (id === "build") setBuildTool("preview");
       if (id === "research") setResearchTool("browser");
     },
-    [workspaceId],
+    [workspaceId, threadId],
   );
 
   const selectChatSpace = useCallback(
@@ -1186,10 +1204,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             !existing.projectId &&
             existing.workspaceId === workspaceId
           ) {
-            const upserted = upsertPersistentSpaceThread(
+            const upserted = ensureContinuousChat(
               current,
               workspaceId,
               id,
+              threadId,
             );
             tid = upserted.id;
             return upserted.threads;
@@ -1620,13 +1639,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const chatSpace = chatSpaceId(space);
       const useProjectPersistent =
         Boolean(projectId) && Boolean(chatSpace) && isChatSpace(space);
-      const useSpacePersistent =
-        Boolean(chatSpace) &&
-        isChatSpace(space) &&
+      const useContinuousPersistent =
         !projectId &&
         !intent.projectId &&
-        (view === "space" || Boolean(opts?.space));
-      const usePersistent = useProjectPersistent || useSpacePersistent;
+        (view === "space" ||
+          view === "chat" ||
+          Boolean(opts?.space) ||
+          space === "connectors");
+      const usePersistent = useProjectPersistent || useContinuousPersistent;
       let activeId = threadId ?? nextId("t");
 
       setThreads((current) => {
@@ -1640,11 +1660,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           );
           list = upserted.threads;
           activeId = upserted.id;
-        } else if (useSpacePersistent && chatSpace) {
-          const upserted = upsertPersistentSpaceThread(
+        } else if (useContinuousPersistent) {
+          const lens =
+            chatSpace ??
+            (thread?.spaceId && isChatSpace(thread.spaceId)
+              ? thread.spaceId
+              : "work");
+          const upserted = ensureContinuousChat(
             list,
             workspaceId,
-            chatSpace,
+            lens,
+            threadId,
           );
           list = upserted.threads;
           activeId = upserted.id;
@@ -1658,7 +1684,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   title: item.messages.length ? item.title : displayText.slice(0, 48),
                   snippet: displayText,
                   updatedAt: new Date().toISOString(),
-                  spaceId: chatSpace ?? undefined,
+                  spaceId: chatSpace ?? item.spaceId ?? undefined,
                   projectId: useProjectPersistent
                     ? projectId ?? item.projectId
                     : (intent.projectId ?? item.projectId),
@@ -1676,7 +1702,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           title: displayText.slice(0, 52),
           workspaceId: matched?.workspaceId ?? workspaceId,
           projectId: useProjectPersistent ? projectId ?? undefined : intent.projectId,
-          spaceId: chatSpace ?? undefined,
+          spaceId:
+            chatSpace ??
+            (useContinuousPersistent ? "work" : undefined),
           updatedAt: new Date().toISOString(),
           snippet: displayText,
           messages: [userMsg, assistantMsg],
@@ -2590,10 +2618,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let tid = threadId;
       let hasMessages = Boolean(thread);
       setThreads((current) => {
-        const { threads: next, id: nextId } = upsertPersistentSpaceThread(
+        const { threads: next, id: nextId } = ensureContinuousChat(
           current,
           workspaceId,
           dest,
+          threadId,
         );
         tid = nextId;
         hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
@@ -2639,14 +2668,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setConnectorId(null);
       setJobId(null);
       setSkillId(null);
-      if (chatActive && isChatSpace(dest)) {
+      if (chatActive) {
+        const lens: SpaceId =
+          isChatSpace(dest)
+            ? dest
+            : chatSpaceId(spaceId) ??
+              (thread?.spaceId && isChatSpace(thread.spaceId)
+                ? thread.spaceId
+                : "work");
         let tid = "";
         let hasMessages = false;
         setThreads((current) => {
-          const { threads: next, id: nextId } = upsertPersistentSpaceThread(
+          const { threads: next, id: nextId } = ensureContinuousChat(
             current,
             workspaceId,
-            dest,
+            lens,
+            threadId,
           );
           tid = nextId;
           hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
@@ -2940,12 +2977,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const chatWasOpen = Boolean(threadId) || drafting;
     let tid: string | null = threadId;
     let hasMessages = Boolean(thread);
-    if (chatSpace && isChatSpace(chatSpace) && chatWasOpen) {
+    if (chatWasOpen) {
+      const lens: SpaceId =
+        chatSpace ??
+        (thread?.spaceId && isChatSpace(thread.spaceId)
+          ? thread.spaceId
+          : "work");
       setThreads((current) => {
-        const { threads: next, id: nextId } = upsertPersistentSpaceThread(
+        const { threads: next, id: nextId } = ensureContinuousChat(
           current,
           workspaceId,
-          chatSpace,
+          lens,
+          threadId,
         );
         tid = nextId;
         hasMessages = threadHasTurns(next.find((item) => item.id === nextId));
@@ -2961,7 +3004,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     layoutSnapshot.current = null;
     setExpandedLayout(false);
     setExpandedPinned(false);
-    if (chatSpace && chatWasOpen) {
+    if (chatWasOpen) {
       setThreadId(tid);
       setDrafting(!hasMessages);
       setPanelIntent("execute");
@@ -2975,10 +3018,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     pushTarget({
       view: "space",
       spaceId,
-      threadId: chatSpace && chatWasOpen ? tid : null,
+      threadId: chatWasOpen ? tid : null,
       projectId: null,
-      panelMode: chatSpace && chatWasOpen ? "split" : "collapsed",
-      panelIntent: chatSpace && chatWasOpen ? "execute" : "browse",
+      panelMode: chatWasOpen ? "split" : "collapsed",
+      panelIntent: chatWasOpen ? "execute" : "browse",
       connectorId: null,
       jobId: null,
       skillId: null,

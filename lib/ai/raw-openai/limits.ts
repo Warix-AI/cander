@@ -103,8 +103,8 @@ export function validateUpload(opts: {
 export type ComposerAttachAction =
   | "take_photo"
   | "choose_photo"
-  | "upload_image"
-  | "upload_file";
+  | "upload_file"
+  | "upload";
 
 export function composerAttachActions(opts: {
   nativeCapacitor: boolean;
@@ -113,5 +113,6 @@ export function composerAttachActions(opts: {
   if (opts.nativeCapacitor || opts.mobileShell) {
     return ["take_photo", "choose_photo", "upload_file"];
   }
-  return ["upload_image", "upload_file"];
+  // Desktop: one picker for images + documents
+  return ["upload"];
 }

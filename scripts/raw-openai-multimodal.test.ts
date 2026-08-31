@@ -20,10 +20,10 @@ import { isOpenAIWebSearchEnabled } from "../lib/ai/raw-openai/web-search.ts";
 import { resolveAssistantRuntimePath } from "../lib/ai/raw-openai/path.ts";
 
 describe("Composer attach actions by platform", () => {
-  it("desktop web: upload image + upload file", () => {
+  it("desktop web: single Upload for images + files", () => {
     assert.deepEqual(
       composerAttachActions({ nativeCapacitor: false, mobileShell: false }),
-      ["upload_image", "upload_file"],
+      ["upload"],
     );
   });
 

@@ -204,7 +204,7 @@ export function startContinuousChat(
   workspaceId: string,
   spaceId: SpaceId | null,
 ): { threads: Thread[]; id: string } {
-  const id = `t-session-${workspaceId}-${Date.now().toString(36)}`;
+  const id = `t-session-${workspaceId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const created = emptyContinuousChat(
     workspaceId,
     spaceId ?? "work",

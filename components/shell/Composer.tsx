@@ -46,6 +46,7 @@ import {
   subscribeComposerSeed,
 } from "@/lib/composer-seed";
 import {
+  ANY_ATTACH_ACCEPT,
   DOCUMENT_ACCEPT,
   filesFromList,
   isCapacitorNative,
@@ -323,7 +324,26 @@ export function Composer({
   };
 
   const toggleMenu = (id: MenuId) => {
-    setMenu((current) => (current === id ? null : id));
+    setMenu((current) => {
+      const next = current === id ? null : id;
+      if (next) {
+        // Opening + must not dismiss the soft keyboard.
+        queueMicrotask(() => {
+          textRef.current?.focus({ preventScroll: true });
+        });
+      }
+      return next;
+    });
+  };
+
+  const keepComposerKeyboard = () => {
+    const el = textRef.current;
+    if (!el) return;
+    try {
+      el.focus({ preventScroll: true });
+    } catch {
+      /* ignore */
+    }
   };
 
   const browserMode = view === "browser";
@@ -533,9 +553,7 @@ export function Composer({
       setDictating(true);
       setDictationMeter(null);
       // Keep textarea focused so the soft keyboard stays open under the overlay.
-      queueMicrotask(() => {
-        textRef.current?.focus({ preventScroll: true });
-      });
+      keepComposerKeyboard();
       logDictationTiming("recording_ui_visible", t0);
       dictationRef.current?.cancel();
       void startVoiceDictation({
@@ -550,6 +568,10 @@ export function Composer({
         .then((session) => {
           dictationRef.current = session;
           setDictationMeter(session.getMeter());
+          // Mic permission / getUserMedia often steals focus — reclaim it.
+          keepComposerKeyboard();
+          window.setTimeout(keepComposerKeyboard, 50);
+          window.setTimeout(keepComposerKeyboard, 250);
         })
         .catch((e) => {
           setDictateError(
@@ -567,9 +589,7 @@ export function Composer({
     }
     valueBaseRef.current = value.trim() ? `${value.trim()} ` : "";
     setDictating(true);
-    queueMicrotask(() => {
-      textRef.current?.focus({ preventScroll: true });
-    });
+    keepComposerKeyboard();
     speechRef.current?.stop();
     speechRef.current = startSpeechToText(
       {
@@ -602,6 +622,14 @@ export function Composer({
       dictationRef.current = null;
     };
   }, []);
+
+  // Soft keyboard must stay up for the whole dictation / transcribing session.
+  useEffect(() => {
+    if (!dictatingActive) return;
+    keepComposerKeyboard();
+    const id = window.setInterval(keepComposerKeyboard, 350);
+    return () => window.clearInterval(id);
+  }, [dictatingActive]);
   const hint =
     placeholder ??
     (activeConnector
@@ -692,8 +720,8 @@ export function Composer({
         }}
       >
         {menu === "plus" && !compact ? (
-          <ComposerMenu>
-            {pinTarget ? (
+          <ComposerMenu mobile={mobile}>
+            {!mobile && pinTarget ? (
               <MenuRow
                 icon={<Pin className={cn("h-4 w-4", pinned && "fill-current")} strokeWidth={1.7} />}
                 label={pinned ? "Unpin" : "Pin"}
@@ -704,7 +732,7 @@ export function Composer({
                 }}
               />
             ) : null}
-            {nativeShell ? (
+            {nativeShell || mobileWeb ? (
               <>
                 {attachActions.includes("take_photo") ? (
                   <MenuRow
@@ -713,18 +741,22 @@ export function Composer({
                     onClick={() => {
                       setAttachError(null);
                       setMenu(null);
-                      void (async () => {
-                        const result =
-                          await getNativeCapabilities().media.pickCameraPhoto();
-                        if (result.ok) {
-                          getNativeCapabilities().haptics.impact("select");
-                          setImages((current) =>
-                            [...current, result.image].slice(0, 4),
-                          );
-                          return;
-                        }
-                        if (!result.cancelled) setAttachError(result.message);
-                      })();
+                      if (nativeShell) {
+                        void (async () => {
+                          const result =
+                            await getNativeCapabilities().media.pickCameraPhoto();
+                          if (result.ok) {
+                            getNativeCapabilities().haptics.impact("select");
+                            setImages((current) =>
+                              [...current, result.image].slice(0, 4),
+                            );
+                            return;
+                          }
+                          if (!result.cancelled) setAttachError(result.message);
+                        })();
+                      } else {
+                        openFilePicker(cameraRef);
+                      }
                     }}
                   />
                 ) : null}
@@ -735,18 +767,22 @@ export function Composer({
                     onClick={() => {
                       setAttachError(null);
                       setMenu(null);
-                      void (async () => {
-                        const result =
-                          await getNativeCapabilities().media.pickLibraryImages();
-                        if (result.ok) {
-                          getNativeCapabilities().haptics.impact("select");
-                          setImages((current) =>
-                            [...current, result.image].slice(0, 4),
-                          );
-                          return;
-                        }
-                        if (!result.cancelled) setAttachError(result.message);
-                      })();
+                      if (nativeShell) {
+                        void (async () => {
+                          const result =
+                            await getNativeCapabilities().media.pickLibraryImages();
+                          if (result.ok) {
+                            getNativeCapabilities().haptics.impact("select");
+                            setImages((current) =>
+                              [...current, result.image].slice(0, 4),
+                            );
+                            return;
+                          }
+                          if (!result.cancelled) setAttachError(result.message);
+                        })();
+                      } else {
+                        openFilePicker(photoLibRef);
+                      }
                     }}
                   />
                 ) : null}
@@ -760,59 +796,18 @@ export function Composer({
                   }}
                 />
               </>
-            ) : mobileWeb ? (
-              <>
-                <MenuRow
-                  icon={<Camera className="h-4 w-4" strokeWidth={1.7} />}
-                  label="Take Photo"
-                  onClick={() => {
-                    setAttachError(null);
-                    openFilePicker(cameraRef);
-                    setMenu(null);
-                  }}
-                />
-                <MenuRow
-                  icon={<ImageIcon className="h-4 w-4" strokeWidth={1.7} />}
-                  label="Choose Photo"
-                  onClick={() => {
-                    setAttachError(null);
-                    openFilePicker(photoLibRef);
-                    setMenu(null);
-                  }}
-                />
-                <MenuRow
-                  icon={<FileText className="h-4 w-4" strokeWidth={1.7} />}
-                  label="Upload File"
-                  onClick={() => {
-                    setAttachError(null);
-                    openFilePicker(fileRef);
-                    setMenu(null);
-                  }}
-                />
-              </>
             ) : (
-              <>
-                <MenuRow
-                  icon={<ImageIcon className="h-4 w-4" strokeWidth={1.7} />}
-                  label="Upload Image"
-                  onClick={() => {
-                    setAttachError(null);
-                    openFilePicker(imageRef);
-                    setMenu(null);
-                  }}
-                />
-                <MenuRow
-                  icon={<FileText className="h-4 w-4" strokeWidth={1.7} />}
-                  label="Upload File"
-                  onClick={() => {
-                    setAttachError(null);
-                    openFilePicker(fileRef);
-                    setMenu(null);
-                  }}
-                />
-              </>
+              <MenuRow
+                icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
+                label="Upload"
+                onClick={() => {
+                  setAttachError(null);
+                  openFilePicker(fileRef);
+                  setMenu(null);
+                }}
+              />
             )}
-            {browserMode ? (
+            {!mobile && browserMode ? (
               <MenuRow
                 icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
                 label="Attach page"
@@ -859,7 +854,6 @@ export function Composer({
                   rows={1}
                   placeholder={hint}
                   autoFocus={autoFocus}
-                  readOnly={dictatingActive}
                   onFocus={() => {
                     suppressAutoFocusRef.current = false;
                     onFocus?.();
@@ -1043,9 +1037,13 @@ export function Composer({
               <ToolBtn
                 label="Add"
                 active={menu === "plus"}
+                emphasize={mobile}
                 onClick={() => toggleMenu("plus")}
               >
-                <Plus className="h-4 w-4" strokeWidth={1.7} />
+                <Plus
+                  className={mobile ? "h-5 w-5" : "h-4 w-4"}
+                  strokeWidth={mobile ? 2.25 : 1.7}
+                />
               </ToolBtn>
               <textarea
                 ref={textRef}
@@ -1055,7 +1053,6 @@ export function Composer({
                 autoFocus={autoFocus}
                 enterKeyHint="send"
                 autoComplete="off"
-                readOnly={dictatingActive}
                 onFocus={(event) => {
                   suppressAutoFocusRef.current = false;
                   onFocus?.();
@@ -1130,7 +1127,7 @@ export function Composer({
       ref={fileRef}
       type="file"
       multiple
-      accept={DOCUMENT_ACCEPT}
+      accept={mobile ? DOCUMENT_ACCEPT : ANY_ATTACH_ACCEPT}
       tabIndex={-1}
       className="sr-only"
       aria-hidden
@@ -1229,11 +1226,22 @@ export function Composer({
   );
 }
 
-function ComposerMenu({ children }: { children: ReactNode }) {
+function ComposerMenu({
+  children,
+  mobile = false,
+}: {
+  children: ReactNode;
+  mobile?: boolean;
+}) {
   return (
     <div
       role="menu"
-      className="absolute inset-x-0 bottom-[calc(100%+8px)] z-40 max-h-[min(24rem,50vh)] overflow-y-auto light-surface shell-g3-radius bg-popover p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.08)] dark:bg-muted"
+      className={cn(
+        "absolute z-50 overflow-y-auto p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.28)]",
+        mobile
+          ? "inset-x-0 bottom-[calc(100%+10px)] max-h-[min(22rem,46vh)] rounded-[22px] border border-white/10 bg-popover/90 backdrop-blur-xl dark:bg-zinc-900/88"
+          : "inset-x-0 bottom-[calc(100%+8px)] max-h-[min(24rem,50vh)] light-surface shell-g3-radius bg-popover dark:bg-muted",
+      )}
     >
       {children}
     </div>
@@ -1253,6 +1261,10 @@ function MenuRow({
     <button
       type="button"
       role="menuitem"
+      onPointerDown={(event) => {
+        // Keep the soft keyboard open while choosing an attach action.
+        event.preventDefault();
+      }}
       onClick={onClick}
       className="menu-row-hover flex w-full items-center gap-3 rounded-[14px] px-2 py-2 text-left transition-colors duration-200 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
     >
@@ -1270,22 +1282,38 @@ function ToolBtn({
   onClick,
   active,
   size = "md",
+  emphasize = false,
 }: {
   children: ReactNode;
   label: string;
   onClick: () => void;
   active?: boolean;
   size?: "md" | "sm";
+  /** Mobile: white + ~25% larger plus control */
+  emphasize?: boolean;
 }) {
   return (
     <button
       type="button"
       aria-label={label}
+      onPointerDown={(event) => {
+        event.preventDefault();
+      }}
       onClick={onClick}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground dark:hover:bg-background",
-        size === "sm" ? "h-7 w-7" : "h-8 w-8",
-        active && "bg-muted text-foreground dark:bg-background",
+        "inline-flex shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
+        emphasize
+          ? "text-foreground hover:bg-foreground/10 dark:text-white dark:hover:bg-white/10"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground dark:hover:bg-background",
+        emphasize
+          ? "h-10 w-10"
+          : size === "sm"
+            ? "h-7 w-7"
+            : "h-8 w-8",
+        active &&
+          (emphasize
+            ? "bg-foreground/10 text-foreground dark:bg-white/15 dark:text-white"
+            : "bg-muted text-foreground dark:bg-background"),
       )}
     >
       {children}

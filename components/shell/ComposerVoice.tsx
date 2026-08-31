@@ -151,6 +151,10 @@ export function ComposerDictationButton({
     <button
       type="button"
       aria-label="Start dictation"
+      onPointerDown={(event) => {
+        // Keep the composer textarea focused so the soft keyboard stays open.
+        event.preventDefault();
+      }}
       onClick={onClick}
       className={cn(
         "inline-flex shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:text-foreground",

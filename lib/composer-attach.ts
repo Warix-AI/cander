@@ -15,6 +15,9 @@ const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
 export const DOCUMENT_ACCEPT =
   ".pdf,.txt,.md,.markdown,.csv,.json,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/plain,text/markdown,application/pdf";
 
+/** Desktop composer “Upload” — images and documents in one picker. */
+export const ANY_ATTACH_ACCEPT = `image/*,${DOCUMENT_ACCEPT}`;
+
 export function isCapacitorNative(): boolean {
   if (typeof window === "undefined") return false;
   const cap = (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } })
