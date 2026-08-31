@@ -1,7 +1,7 @@
 # V6 Runtime Validation Report
 
 Date: 2026-08-31  
-Flag: `NEXT_PUBLIC_AI_V6_RUNTIME` / `cander:v6-runtime` (still **default OFF**)  
+Flag: `NEXT_PUBLIC_AI_V6_RUNTIME` / `cander:v6-runtime` (**default ON** as of follow-up cutover)  
 Suites: `scripts/v6-runtime.test.ts` + `scripts/v6-eval.test.ts`
 
 ## 1. Total eval cases

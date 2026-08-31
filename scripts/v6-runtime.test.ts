@@ -52,14 +52,14 @@ function emptyPacket(over?: Partial<ContextPacket>): ContextPacket {
 }
 
 describe("V6 flag", () => {
-  it("defaults off when env unset", () => {
+  it("defaults on when env unset", () => {
     const prev = process.env.NEXT_PUBLIC_AI_V6_RUNTIME;
     delete process.env.NEXT_PUBLIC_AI_V6_RUNTIME;
-    assert.equal(isV6RuntimeEnabled(), false);
+    assert.equal(isV6RuntimeEnabled(), true);
     if (prev !== undefined) process.env.NEXT_PUBLIC_AI_V6_RUNTIME = prev;
   });
 
-  it("enables via env", () => {
+  it("can opt out via env", () => {
     const prev = process.env.NEXT_PUBLIC_AI_V6_RUNTIME;
     process.env.NEXT_PUBLIC_AI_V6_RUNTIME = "1";
     assert.equal(isV6RuntimeEnabled(), true);

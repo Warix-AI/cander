@@ -45,9 +45,9 @@ export function isBuildLocalOrchestratorEnabled(): boolean {
 
 /**
  * V6 runtime — single runTurn() pipeline (surface → coverage → render).
- * Default OFF — flagged parallel beside Simple Turn / TaskGraph / Edge.
- * Set NEXT_PUBLIC_AI_V6_RUNTIME=1 to enable.
- * Desktop override: localStorage['cander:v6-runtime'] = '1'
+ * Default ON — sole path for normal chat; set NEXT_PUBLIC_AI_V6_RUNTIME=0 to roll back
+ * to Simple Turn / TaskGraph / Edge branching.
+ * Desktop override: localStorage['cander:v6-runtime'] = '0' | '1'
  */
 export function isV6RuntimeEnabled(): boolean {
   if (typeof process !== "undefined") {
@@ -64,7 +64,7 @@ export function isV6RuntimeEnabled(): boolean {
       /* ignore */
     }
   }
-  return false;
+  return true;
 }
 
 /**

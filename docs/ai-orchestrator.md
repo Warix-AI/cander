@@ -81,18 +81,19 @@ New turn → deterministic delta (high confidence?)
 
 | Flag | Default | Meaning |
 |------|---------|---------|
-| `NEXT_PUBLIC_AI_V6_RUNTIME` / `cander:v6-runtime` | **off** | V6 `runTurn()` sole path when on (see below) |
+| `NEXT_PUBLIC_AI_V6_RUNTIME` / `cander:v6-runtime` | **on** | V6 `runTurn()` sole path (set `0` to roll back) |
 | `NEXT_PUBLIC_AI_AGENT_ORCHESTRATOR` | on | Use Edge agent vs legacy client agent-turn |
 | `AI_ORCHESTRATOR_V2` (Edge) | on | V2 loop vs V1 retrieve-once pipeline |
 | `NEXT_PUBLIC_AI_ORCHESTRATOR_V2` | on | Client requests `orchestratorVersion: v2` |
 
 Set any to `0`/`false`/`off` to roll back that layer.
 
-## V6 runtime (flagged parallel)
+## V6 runtime (default)
 
-**Status:** opt-in replacement architecture. Simple Turn and TaskGraph remain the default until V6 eval passes and the flag flips.
+**Status:** default path for normal chat. Simple Turn / TaskGraph remain as rollback when `NEXT_PUBLIC_AI_V6_RUNTIME=0` or `localStorage['cander:v6-runtime']='0'`.
 
-Enable: `NEXT_PUBLIC_AI_V6_RUNTIME=1` or `localStorage['cander:v6-runtime']='1'`.
+Enable/force: `NEXT_PUBLIC_AI_V6_RUNTIME=1` or `localStorage['cander:v6-runtime']='1'`.  
+Disable: `NEXT_PUBLIC_AI_V6_RUNTIME=0` or `localStorage['cander:v6-runtime']='0'`.
 
 When enabled, `runAssistantTurn` calls **only** `runTurn()` from `lib/ai/v6/`. Edge V2 is **not** a second orchestrator — it is used inside V6 as a **provider** for vision / deep research / complex synthesis.
 
