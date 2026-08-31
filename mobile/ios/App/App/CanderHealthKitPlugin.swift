@@ -247,6 +247,19 @@ public class CanderHealthKitPlugin: CAPPlugin, CAPBridgedPlugin {
         store.execute(query)
     }
 
+    private static func asleepSleepValues() -> Set<Int> {
+        if #available(iOS 16.0, *) {
+            return Set([
+                HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
+                HKCategoryValueSleepAnalysis.asleepCore.rawValue,
+                HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
+                HKCategoryValueSleepAnalysis.asleepREM.rawValue,
+                HKCategoryValueSleepAnalysis.asleep.rawValue,
+            ])
+        }
+        return Set([HKCategoryValueSleepAnalysis.asleep.rawValue])
+    }
+
     private static func querySleepHours(
         store: HKHealthStore,
         start: Date,
@@ -272,14 +285,8 @@ public class CanderHealthKitPlugin: CAPPlugin, CAPBridgedPlugin {
             let cats = samples as? [HKCategorySample] ?? []
             var seconds: TimeInterval = 0
             for s in cats {
-                // Asleep (legacy + staged). Empty ≠ permission denied.
-                let asleepValues: Set<Int> = [
-                    HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
-                    HKCategoryValueSleepAnalysis.asleepCore.rawValue,
-                    HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
-                    HKCategoryValueSleepAnalysis.asleepREM.rawValue,
-                ]
-                if asleepValues.contains(s.value) {
+                // Asleep (legacy on iOS 14–15; staged values on iOS 16+). Empty ≠ permission denied.
+                if asleepSleepValues().contains(s.value) {
                     seconds += s.endDate.timeIntervalSince(s.startDate)
                 }
             }
