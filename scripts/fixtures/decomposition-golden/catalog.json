@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "DG01-taco-sprite-calories",
+      "category": "multi-item-calories",
+      "tags": ["research-plan", "sum"],
+      "prompt": "If I had three spicy potato soft tacos from Taco Bell and a large Sprite from McDonald's, how many calories would that be?",
+      "expect": {
+        "minAsks": 1,
+        "researchObjective": "total_calories",
+        "subtaskCount": 2,
+        "subtaskQueryIncludes": ["taco bell", "sprite"]
+      }
+    },
+    {
+      "id": "DG02-phone-compare",
+      "category": "compare",
+      "tags": ["research-plan", "compare"],
+      "prompt": "Compare iPhone 17, Pixel 11, and Galaxy S26 prices and battery sizes.",
+      "expect": {
+        "minAsks": 1,
+        "researchObjective": "compare",
+        "subtaskCount": 3,
+        "subtaskQueryIncludes": ["iPhone", "Pixel", "Galaxy"]
+      }
+    },
+    {
+      "id": "DG03-food-to-sports",
+      "category": "topic-switch",
+      "tags": ["turn-relation", "isolation"],
+      "prompt": "When will Utah Utes and BYU football face off this year?",
+      "seedState": {
+        "entities": [
+          {
+            "id": "f1",
+            "type": "food",
+            "label": "In-N-Out double double",
+            "contextClass": "ACTIVE"
+          }
+        ],
+        "constraints": { "attribute": "calories" }
+      },
+      "expect": {
+        "minAsks": 1,
+        "turnRelation": "topic_switch",
+        "researchObjective": null,
+        "queryMustNotInclude": ["in-n-out", "calorie", "nutrition"]
+      }
+    },
+    {
+      "id": "DG04-litmus-contract",
+      "category": "multi-ask",
+      "tags": ["ask-extractor", "complex"],
+      "prompt": "Check whether John emailed me the contract, compare it to the contract in this workspace, tell me if anything important changed, check whether tomorrow afternoon is free, and if the contract still says $12,000 schedule John for 3 PM and send him a confirmation.",
+      "expect": {
+        "minAsks": 5
+      }
+    },
+    {
+      "id": "DG05-constraints",
+      "category": "constraints",
+      "tags": ["request-ledger"],
+      "prompt": "Schedule a call with Sarah tomorrow but nothing before noon and don't touch the mobile layout.",
+      "expect": {
+        "minAsks": 1,
+        "minConstraints": 2
+      }
+    },
+    {
+      "id": "DG06-implicit-ask",
+      "category": "implicit-ask",
+      "tags": ["ask-extractor"],
+      "prompt": "I'm trying to work out whether Sarah's proposal actually changed and whether it's worth putting time on the calendar.",
+      "expect": {
+        "askExtractorTriggers": ["implicit_ask_shape"]
+      }
+    },
+    {
+      "id": "DG07-simple-factual",
+      "category": "single-ask",
+      "tags": ["web-plan"],
+      "prompt": "What is the elevation of Denali in feet?",
+      "expect": {
+        "minAsks": 1,
+        "researchObjective": null
+      }
+    },
+    {
+      "id": "DG08-url-mention",
+      "category": "url",
+      "tags": ["request-ledger"],
+      "prompt": "Summarize https://example.com/docs and tell me the main pricing tier.",
+      "expect": {
+        "minAsks": 2
+      }
+    }
+  ]
+}

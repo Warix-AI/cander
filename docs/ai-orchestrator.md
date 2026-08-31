@@ -160,6 +160,51 @@ V2 supports progressive NDJSON via `action: "run_turn_stream"`:
 
 Token-level answer deltas still depend on bridge streaming (not required for live status).
 
+## Phase 0 — instrumentation (v4 orchestration)
+
+Before restructuring behavior, local turns emit a unified **`[TURN_AUDIT]`** log (dev-only):
+
+| Module | Role |
+|--------|------|
+| `lib/ai/orchestrator/request-scanner.ts` | Deterministic ASK / CONSTRAINT / CONTEXT spans + AskExtractor trigger hints |
+| `lib/ai/orchestrator/turn-audit.ts` | Per-turn ledger: spans, compile, tool/model calls, evidence accept/reject, coverage, stage latency |
+| `lib/ai/orchestrator/retrieval-trace.ts` | Exa retrieval subset (embedded in turn audit) |
+
+**Golden decomposition set:** `scripts/fixtures/decomposition-golden/catalog.json` — expand toward 50–100 labeled prompts.
+
+**Eval harness:** `npm run test:orchestrator` includes `scripts/decomposition-eval.test.ts` and `scripts/orchestration-audit.test.ts`.
+
+Next phases (not yet implemented): `@Generable TaskGraph`, AskExtractor FM path, Coverage Ledger terminal states beyond research completion, write idempotency.
+
+## Phase 1 — graph, gate, progressive status
+
+| Module | Role |
+|--------|------|
+| `lib/ai/orchestrator/task-graph.ts` | Compile ASK / RESEARCH / CONSTRAINT nodes from RequestLedger + ResearchTurnPlan |
+| `lib/ai/orchestrator/plan-validator.ts` | Ask coverage, constraint binding, plan health (`ok` / `degraded` / `invalid`) |
+| `lib/ai/orchestrator/evidence-gate.ts` | Hygiene + injection screen + quality gate; quarantined evidence never reaches FM |
+| `lib/ai/orchestrator/constraint-enforcement.ts` | PRE / POST / BOTH / ADVISORY modes on constraint spans |
+
+**Progressive UI:** multi-subtask turns emit `researchTasks` on `AgentTurnProgress`; `AppProvider` renders a `build`-style checklist ("Researching") via `patchMessageWithProgress`.
+
+**Tests:** `scripts/orchestration-phase1.test.ts` (+ Phase 0 eval harness).
+
+Still deferred: `@Generable` plan compiler, AskExtractor FM escalation, PCC.
+
+## Phase 2 — hardening
+
+| Module | Role |
+|--------|------|
+| `lib/ai/turn-environment/history-transform.ts` | Named `applyHistoryTransform` wrapper for per-FM transcript shaping |
+| `lib/ai/orchestrator/model-scheduler.ts` | Model call budget by category (planning / semantic / generation / tool_round) |
+| `lib/ai/orchestrator/write-safety.ts` | Write risk tiers, operation ids, NON_RECONCILABLE no-auto-retry |
+| `lib/ai/orchestrator/egress-policy.ts` | Trim outbound tool payloads (via `webSearchArguments`) |
+| `lib/ai/orchestrator/bounded-recovery.ts` | Generic max-round retry helper |
+
+**Tests:** `scripts/orchestration-phase2.test.ts`
+
+Still deferred: PCC reasoning levels, Apple Evaluations CLI integration, full provider fallback matrix.
+
 ## Remaining limits
 
 - Cross-chat retrieval uses keyword + Postgres FTS on the memory index (pgvector semantic search is a future upgrade)

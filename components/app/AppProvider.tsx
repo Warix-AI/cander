@@ -174,7 +174,7 @@ import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
 import { speakText, stopTextToSpeech } from "@/lib/voice/text-to-speech";
 import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
 import { typewriterReveal } from "@/lib/ai/typewriter";
-import { phaseFromProgress } from "@/lib/ai/turn-activity";
+import { patchMessageWithProgress } from "@/lib/ai/turn-activity";
 import { openProjectImageTab } from "@/lib/chat-image-attach";
 import {
   getSupabaseUserServerSnapshot,
@@ -1870,7 +1870,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           messages: historyMessages,
           ...(imageUrls.length ? { images: imageUrls } : {}),
           onProgress: (progress) => {
-            const phase = phaseFromProgress(progress);
             setThreads((current) =>
               current.map((item) => ({
                 ...item,
@@ -1882,19 +1881,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                         message.status === "streaming") &&
                       !message.content);
                   if (!isTarget) return message;
-                  const startedAt =
-                    message.activity?.startedAt ?? Date.now();
-                  return {
-                    ...message,
-                    activity: {
-                      phase,
-                      startedAt,
-                      kind:
-                        progress.phase === "tool"
-                          ? ("tool" as const)
-                          : ("work" as const),
-                    },
-                  };
+                  return patchMessageWithProgress(message, progress);
                 }),
               })),
             );
@@ -2291,24 +2278,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectSpace: (spaceId as SpaceId | null) ?? null,
           messages: historyMessages,
           onProgress: (progress) => {
-            const phase = phaseFromProgress(progress);
             setThreads((current) =>
               current.map((item) => ({
                 ...item,
                 messages: item.messages.map((m) => {
                   if (m.id !== assistantId) return m;
-                  const startedAt = m.activity?.startedAt ?? Date.now();
-                  return {
-                    ...m,
-                    activity: {
-                      phase,
-                      startedAt,
-                      kind:
-                        progress.phase === "tool"
-                          ? ("tool" as const)
-                          : ("work" as const),
-                    },
-                  };
+                  return patchMessageWithProgress(m, progress);
                 }),
               })),
             );

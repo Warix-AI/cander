@@ -135,6 +135,8 @@ export {
   validateResearchCompletion,
   buildResolvedFactsInstruction,
 } from "./research-turn-plan.ts";
+export { applyHistoryTransform } from "./history-transform.ts";
+export type { HistoryTransformInput } from "./history-transform.ts";
 export type {
   ResearchSubtask,
   ResearchTurnPlan,

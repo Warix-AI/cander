@@ -4,6 +4,7 @@
  */
 
 import type { AgentTurnProgress } from "./runtime/agent-turn.ts";
+import type { Message } from "@/lib/types";
 
 export const TURN_ACTIVITY_PHASES = [
   "generating",
@@ -158,3 +159,35 @@ export type MessageTurnActivity = {
   phase: TurnActivityPhase;
   startedAt: number;
 };
+
+/** Patch assistant message activity + optional research checklist blocks. */
+export function patchMessageWithProgress(
+  message: Message,
+  progress: AgentTurnProgress,
+): Message {
+  const phase = phaseFromProgress(progress);
+  const startedAt = message.activity?.startedAt ?? Date.now();
+  const blocks =
+    progress.researchTasks && progress.researchTasks.length >= 2
+      ? [
+          {
+            type: "build" as const,
+            title: "Researching",
+            items: progress.researchTasks.map((t) => ({
+              id: t.id,
+              label: t.label,
+              status: t.status,
+            })),
+          },
+        ]
+      : message.blocks;
+  return {
+    ...message,
+    activity: {
+      phase,
+      startedAt,
+      kind: progress.phase === "tool" ? ("tool" as const) : ("work" as const),
+    },
+    blocks,
+  };
+}

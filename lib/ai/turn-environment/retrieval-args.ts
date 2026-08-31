@@ -10,6 +10,7 @@ import {
   buildRetrievalQuery,
   type TurnRetrievalHints,
 } from "../../../supabase/functions/_shared/web-research-contract/retrieval-policy.ts";
+import { applyEgressPolicy } from "../orchestrator/egress-policy.ts";
 
 export function turnTaskToRetrievalHints(
   turnTask: TurnTaskResolution,
@@ -50,7 +51,7 @@ export function webSearchArguments(opts: {
       operation: opts.turnTask.operation,
       carrySubject,
     });
-  return {
+  return applyEgressPolicy({
     query,
     retrievalHints: hints,
     ...(plan
@@ -67,7 +68,7 @@ export function webSearchArguments(opts: {
       : {}),
     ...(opts.escalate ? { escalate: opts.escalate } : {}),
     ...(opts.deeper ? { deeper: true } : {}),
-  };
+  });
 }
 
 export function enrichPreRunWebSearchTasks(

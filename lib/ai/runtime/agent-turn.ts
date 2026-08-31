@@ -42,6 +42,12 @@ export type AgentTurnProgress = {
   label: string;
   detail?: string;
   toolName?: string;
+  /** Multi-part research subtasks — drives progressive checklist UI. */
+  researchTasks?: Array<{
+    id: string;
+    label: string;
+    status: "done" | "active" | "pending";
+  }>;
 };
 
 export type AgentTurnOptions = {

@@ -6,10 +6,10 @@
  */
 
 import {
-  buildSelectiveDialoguePrompt,
   hasPriorConversationTurns,
   isIdentityQuestion,
 } from "@/lib/ai/assistant-behavior";
+import { applyHistoryTransform } from "@/lib/ai/turn-environment/history-transform.ts";
 import { buildPlanCapabilityLine } from "@/lib/ai/plan-capability";
 import { buildCanderOnDeviceInstructions } from "@/lib/ai/runtime/cander-on-device-instructions";
 import {
@@ -85,10 +85,26 @@ import {
   evaluateExaSynthesisQuality,
   type ExaRetrievalMode,
 } from "@/lib/ai/web-research/index.ts";
+import { runEvidenceGate } from "@/lib/ai/orchestrator/evidence-gate.ts";
+import { scanRequest } from "@/lib/ai/orchestrator/request-scanner.ts";
 import {
-  filterEvidenceForCurrentTurn,
-  filterTaskFactsForTurn,
-} from "@/lib/ai/orchestrator/evidence-hygiene.ts";
+  applyCompletionToGraph,
+  compileTaskGraph,
+  markResearchNodesRunning,
+  researchProgressItems,
+  setSubtaskStatus,
+  type TaskGraph,
+} from "@/lib/ai/orchestrator/task-graph.ts";
+import { validateTaskPlan } from "@/lib/ai/orchestrator/plan-validator.ts";
+import { filterTaskFactsForTurn } from "@/lib/ai/orchestrator/evidence-hygiene.ts";
+import {
+  categoryForFmRound,
+  ModelScheduler,
+} from "@/lib/ai/orchestrator/model-scheduler.ts";
+import {
+  createWriteOperation,
+  isWriteTool,
+} from "@/lib/ai/orchestrator/write-safety.ts";
 import {
   getRetrievalTrace,
   logRetrievalTrace,
@@ -96,12 +112,23 @@ import {
   recordEscalation,
   recordFmInput,
   recordSearchTrace,
-  recordTurnIntent,
   recordValidationIssues,
-  resetRetrievalTrace,
   setFinalSource,
   type FinalAnswerSource,
 } from "@/lib/ai/orchestrator/retrieval-trace.ts";
+import {
+  finalizeTurnAudit,
+  logTurnAudit,
+  markStageEnd,
+  markStageStart,
+  recordAuditCoverage,
+  recordAuditEvidence,
+  recordAuditModelCall,
+  recordAuditToolCall,
+  recordTurnCompile,
+  recordTurnRelation,
+  resetTurnAudit,
+} from "@/lib/ai/orchestrator/turn-audit.ts";
 import {
   citationsFromAtoms,
   compileTurnProfile,
@@ -296,9 +323,12 @@ async function runResearchCompletionLoop(opts: {
   conversationState: ReturnType<typeof applyConversationDelta>;
   turnRelation: import("@/lib/ai/turn-environment/turn-relation.ts").TurnRelation;
   report: (progress: AgentTurnProgress) => void;
+  graph?: TaskGraph;
+  onGraphChange?: (graph: TaskGraph) => void;
 }): Promise<ResearchCompletionResult> {
   let plan = { ...opts.plan, unresolved: [...opts.plan.unresolved] };
   let completion = validateResearchCompletion(plan, opts.evidence);
+  let graph = opts.graph;
 
   while (
     plan.retrievalRound < plan.maxRetrievalRounds &&
@@ -310,6 +340,13 @@ async function runResearchCompletionLoop(opts: {
       completion.unresolved.includes(st.id),
     );
     if (!followUps.length) break;
+
+    if (graph) {
+      for (const st of followUps) {
+        graph = setSubtaskStatus(graph, st.id, "RUNNING");
+      }
+      opts.onGraphChange?.(graph);
+    }
 
     const turnTask = resolveTurnTask({
       content: opts.question,
@@ -354,11 +391,18 @@ async function runResearchCompletionLoop(opts: {
       const mapped = evidenceFromToolResult(item.value, subtaskId);
       appendEvidence(opts.evidence, mapped.evidence);
       opts.provenanceBatches.push(mapped.atoms);
+      if (graph && subtaskId) {
+        graph = setSubtaskStatus(graph, subtaskId, "SUCCEEDED");
+      }
     }
 
     completion = validateResearchCompletion(plan, opts.evidence);
     plan.unresolved = completion.unresolved;
     recordValidationIssues(completion.unresolved);
+    if (graph) {
+      graph = applyCompletionToGraph(graph, completion.unresolved);
+      opts.onGraphChange?.(graph);
+    }
   }
 
   return completion;
@@ -509,9 +553,31 @@ function finalizeTurnResult<T extends AiGenerateResult>(
   result: T,
   source: FinalAnswerSource,
 ): T {
+  markStageEnd("model_synthesis");
   setFinalSource(source);
+  finalizeTurnAudit({
+    finalSource: source,
+    answerChars: result.content?.length,
+  });
+  logTurnAudit();
   logRetrievalTrace();
   return result;
+}
+
+function reportResearchProgress(
+  report: (progress: AgentTurnProgress) => void,
+  graph: TaskGraph,
+  detail?: string,
+): void {
+  const items = researchProgressItems(graph);
+  if (items.length < 2) return;
+  report({
+    phase: "tool",
+    label: "Thinking",
+    detail: detail ?? items.find((i) => i.status === "active")?.label ?? "Searching",
+    toolName: "web.search",
+    researchTasks: items,
+  });
 }
 
 function applyEvidenceHygiene(opts: {
@@ -519,22 +585,45 @@ function applyEvidenceHygiene(opts: {
   question: string;
   conversationState: ReturnType<typeof applyConversationDelta>;
   turnRelation?: import("@/lib/ai/turn-environment/turn-relation.ts").TurnRelation;
-}): void {
+  requireQuality?: boolean;
+}): ReturnType<typeof runEvidenceGate> {
+  markStageStart("evidence_gate");
   const turnTask = resolveTurnTask({
     content: opts.question,
     previous: opts.conversationState,
     turnRelation: opts.turnRelation,
   });
-  const { evidence, dropped } = filterEvidenceForCurrentTurn(opts.evidence, {
+  const gate = runEvidenceGate({
+    evidence: opts.evidence,
+    question: opts.question,
     turnTask,
     conversationState: opts.conversationState,
-    userMessage: opts.question,
     turnRelation: opts.turnRelation,
+    deeper: true,
+    requireQuality: opts.requireQuality,
   });
-  if (dropped > 0) {
-    opts.evidence.splice(0, opts.evidence.length, ...evidence);
-    patchRetrievalTrace({ staleEvidenceDropped: dropped });
+  for (const rec of gate.records) {
+    recordAuditEvidence({
+      id: rec.id,
+      action:
+        rec.action === "inject"
+          ? "accepted"
+          : rec.action === "quarantine"
+            ? "quarantined"
+            : "rejected",
+      reason: rec.reason,
+      kind: rec.kind,
+      subtaskId: rec.subtaskId,
+    });
   }
+  if (gate.rejectCount > 0) {
+    patchRetrievalTrace({ staleEvidenceDropped: gate.rejectCount });
+  }
+  if (gate.quarantineCount > 0) {
+    recordValidationIssues([`${gate.quarantineCount} quarantined`]);
+  }
+  markStageEnd("evidence_gate");
+  return gate;
 }
 
 async function deepenRetrievalIfNeeded(opts: {
@@ -1040,16 +1129,15 @@ async function buildFmPrompt(
   const activeLabels = conv
     ? activeEntities(conv).map((e) => e.label)
     : [];
-  const prompt = buildSelectiveDialoguePrompt(
-    (pkg.messages.length ? pkg.messages : request.messages) as
-      | Array<{ role: "user" | "assistant" | "system"; content: string }>
+  const prompt = applyHistoryTransform({
+    messages: (pkg.messages.length ? pkg.messages : request.messages) as
+      | Array<{ role: string; content: string }>
       | undefined,
-    request.content,
-    {
-      relation: turnRelation ?? "continuation",
-      activeLabels,
-    },
-  );
+    latestUserContent: request.content,
+    turnRelation,
+    activeLabels,
+    reactivateLabel: undefined,
+  });
   recordFmInput(prompt.length + instructions.length);
   return { prompt, instructions, profile };
 }
@@ -1084,6 +1172,35 @@ async function runLocalTurnOrchestratorInner(
   };
 
   setTurnToolExecutionListener((event) => {
+    if (event.type === "tool_start") {
+      recordAuditToolCall({
+        name: event.name,
+        reason: event.reason,
+        deterministic: event.deterministic,
+        round: event.round,
+        subtaskId: event.reason?.startsWith("subtask:")
+          ? event.reason.slice("subtask:".length)
+          : undefined,
+      });
+    } else if (event.type === "tool_end") {
+      recordAuditToolCall({
+        name: event.name,
+        ok: event.ok,
+        durationMs: event.durationMs,
+        round: event.round,
+      });
+    } else if (event.type === "model_generate_start") {
+      recordAuditModelCall({
+        stage: event.round < 0 ? "plan" : event.round === 0 ? "synthesis" : "tool_round",
+        round: event.round,
+      });
+    } else if (event.type === "model_generate_end") {
+      recordAuditModelCall({
+        stage: event.round < 0 ? "plan" : event.round === 0 ? "synthesis" : "tool_round",
+        round: event.round,
+        structured: event.structured,
+      });
+    }
     const mapped = mapToolEventToProgressLabel(event);
     if (mapped) {
       report({
@@ -1125,6 +1242,12 @@ async function runLocalTurnOrchestratorInner(
 
     const taskState = getThreadTaskState(request.threadId);
     const priorConv = getConversationTurnState(request.threadId);
+    resetTurnAudit({
+      threadId: request.threadId ?? undefined,
+      userMessage: request.content,
+    });
+    ModelScheduler.start();
+    markStageStart("delta");
     const convDelta = await resolveConversationDelta({
       previous: priorConv,
       userMessage: request.content,
@@ -1139,7 +1262,8 @@ async function runLocalTurnOrchestratorInner(
       lastTurnRelation: relationResult.relation,
     };
     setConversationTurnState(request.threadId, conversationState);
-    resetRetrievalTrace();
+    recordTurnRelation(relationResult.relation);
+    markStageEnd("delta");
 
     const { resolveBuildTurnContext, shouldRunBuildLocally } = await import(
       "@/lib/ai/build/turn-context"
@@ -1201,6 +1325,7 @@ async function runLocalTurnOrchestratorInner(
       }
     }
 
+    markStageStart("compile");
     let profile = compileTurnProfile({
       content: request.content,
       taskState,
@@ -1252,16 +1377,31 @@ async function runLocalTurnOrchestratorInner(
         : {}),
     });
 
-    if (profile.webRetrievalPlan) {
-      recordTurnIntent({
-        intent: resolveTurnTask({
-          content: request.content,
-          previous: conversationState,
-          turnRelation: relationResult.relation,
-        }).intent,
-        relation: relationResult.relation,
-        plan: profile.webRetrievalPlan,
-      });
+    const turnTaskForAudit = resolveTurnTask({
+      content: request.content,
+      previous: conversationState,
+      turnRelation: relationResult.relation,
+    });
+    recordTurnCompile({
+      intent: turnTaskForAudit.intent,
+      relation: relationResult.relation,
+      webPlan: profile.webRetrievalPlan,
+      researchPlan: profile.researchPlan,
+    });
+    markStageEnd("compile");
+
+    const requestLedger = scanRequest(request.content);
+    let taskGraph = compileTaskGraph({
+      ledger: requestLedger,
+      researchPlan: profile.researchPlan,
+    });
+    const planValidation = validateTaskPlan({
+      ledger: requestLedger,
+      graph: taskGraph,
+      researchPlan: profile.researchPlan,
+    });
+    if (planValidation.issues.length) {
+      recordValidationIssues(planValidation.issues);
     }
 
     evidence = [];
@@ -1272,6 +1412,11 @@ async function runLocalTurnOrchestratorInner(
 
     // —— Pre-run: bypass FM for obvious retrieval ——
     if (profile.preRunTasks.length) {
+      markStageStart("pre_run");
+      if (profile.researchPlan && profile.researchPlan.subtasks.length >= 2) {
+        taskGraph = markResearchNodesRunning(taskGraph);
+        reportResearchProgress(report, taskGraph);
+      }
       emitToolExecution({ type: "model_generate_start", round: -1 });
       const parallel = await runParallelTasks({
         tasks: profile.preRunTasks.map((task, i) => ({
@@ -1349,11 +1494,15 @@ async function runLocalTurnOrchestratorInner(
       });
 
       for (const item of parallel) {
-        if (!item.ok || !item.value) continue;
-        const result = item.value;
         const subtaskId = item.id.startsWith("subtask:")
           ? item.id.slice("subtask:".length)
           : undefined;
+        if (subtaskId && !item.ok) {
+          taskGraph = setSubtaskStatus(taskGraph, subtaskId, "FAILED");
+          continue;
+        }
+        if (!item.ok || !item.value) continue;
+        const result = item.value;
         toolResults.push(result);
         retrievalAttempted =
           retrievalAttempted ||
@@ -1365,6 +1514,9 @@ async function runLocalTurnOrchestratorInner(
         const mapped = evidenceFromToolResult(result, subtaskId);
         appendEvidence(evidence, mapped.evidence);
         provenanceBatches.push(mapped.atoms);
+        if (subtaskId) {
+          taskGraph = setSubtaskStatus(taskGraph, subtaskId, "SUCCEEDED");
+        }
 
         if (
           result.name.startsWith("browser.current.") &&
@@ -1433,6 +1585,8 @@ async function runLocalTurnOrchestratorInner(
         }
       }
 
+      reportResearchProgress(report, taskGraph);
+
       await escalateExaSearchIfNeeded({
         question: request.content,
         conversationState,
@@ -1491,6 +1645,7 @@ async function runLocalTurnOrchestratorInner(
       }
 
       if (profile.researchPlan) {
+        markStageStart("completion_loop");
         researchCompletion = await runResearchCompletionLoop({
           plan: profile.researchPlan,
           evidence,
@@ -1501,7 +1656,27 @@ async function runLocalTurnOrchestratorInner(
           conversationState,
           turnRelation: relationResult.relation,
           report,
+          graph: taskGraph,
+          onGraphChange: (g) => {
+            taskGraph = g;
+            reportResearchProgress(report, taskGraph);
+          },
         });
+        taskGraph = applyCompletionToGraph(
+          taskGraph,
+          researchCompletion.unresolved,
+        );
+        reportResearchProgress(
+          report,
+          taskGraph,
+          researchCompletion.complete ? "Verifying" : "Searching",
+        );
+        recordAuditCoverage({
+          complete: researchCompletion.complete,
+          unresolved: researchCompletion.unresolved,
+          calculatedTotal: researchCompletion.calculatedTotal,
+        });
+        markStageEnd("completion_loop");
       }
 
       applyEvidenceHygiene({
@@ -1636,6 +1811,7 @@ async function runLocalTurnOrchestratorInner(
           tools: [],
         };
       }
+      markStageEnd("pre_run");
     }
 
     const atoms = () => mergeProvenanceAtoms(provenanceBatches);
@@ -1643,6 +1819,7 @@ async function runLocalTurnOrchestratorInner(
     const maxRounds = profile.budgets.maxToolRounds;
     let lastGenerate: AiGenerateResult | null = null;
 
+    markStageStart("model_synthesis");
     for (let round = 0; round < maxRounds; round++) {
       if (round > 0) {
         report({
@@ -1661,6 +1838,22 @@ async function runLocalTurnOrchestratorInner(
       );
       emitToolExecution({ type: "model_generate_start", round });
       report({ phase: "generating", label: "Thinking", detail: "Generating" });
+      const fmCategory = categoryForFmRound(round);
+      const scheduler = ModelScheduler.current();
+      if (scheduler && !scheduler.canCall(fmCategory)) {
+        console.warn("[MODEL_SCHEDULER] budget exhausted", fmCategory);
+        break;
+      }
+      scheduler?.record(fmCategory);
+      recordAuditModelCall({
+        stage:
+          fmCategory === "planning"
+            ? "plan"
+            : fmCategory === "tool_round"
+              ? "tool_round"
+              : "synthesis",
+        round,
+      });
       let fm: Awaited<ReturnType<typeof generateFmTurn>>;
       try {
         fm = await generateFmTurn({ prompt, instructions });
@@ -1886,6 +2079,18 @@ async function runLocalTurnOrchestratorInner(
         call.name === "web.open" ||
         call.name === "web.read" ||
         call.name === "web.research";
+      if (isWriteTool(call.name)) {
+        const writeOp = createWriteOperation(call.name);
+        if (writeOp?.status === "blocked") {
+          toolResults.push({
+            name: call.name,
+            ok: false,
+            output:
+              "This action requires explicit confirmation before I can proceed.",
+          });
+          continue;
+        }
+      }
       const toolStarted = Date.now();
       const result = await executeAuthorizedTool({
         name: call.name,
@@ -2038,8 +2243,14 @@ async function runLocalTurnOrchestratorInner(
   } finally {
     setTurnToolExecutionListener(null);
     if (!getRetrievalTrace().finalSource) {
-      setFinalSource(fmFinalSource(evidence));
+      const source = fmFinalSource(evidence);
+      setFinalSource(source);
+      finalizeTurnAudit({ finalSource: source });
     }
+    logTurnAudit({
+      modelScheduler: ModelScheduler.current()?.snapshot(),
+    });
+    ModelScheduler.reset();
     logRetrievalTrace();
   }
 }
