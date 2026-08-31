@@ -29,6 +29,7 @@ import { tryIntentShortcut } from "@/lib/ai/runtime/intent-actions";
 import type { AgentTurnProgress } from "@/lib/ai/runtime/agent-turn";
 import type { AiGenerateRequest, AiGenerateResult } from "@/lib/ai/runtime/types";
 import type { SpaceId } from "@/lib/types";
+import { fetchCloudTurnTrace } from "@/lib/api/turn-trace-api";
 
 export type OrchestratedTurnResult = AiGenerateResult & {
   toolResults?: AiToolCallResult[];
@@ -306,6 +307,7 @@ export async function runOrchestratedTurn(
     } finally {
       opts?.signal?.removeEventListener("abort", onAbort);
       if (activeTurnId === turnId) activeTurnId = null;
+      void fetchCloudTurnTrace(turnId).catch(() => {});
     }
   } finally {
     clearTurnContext();

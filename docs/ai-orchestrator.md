@@ -172,7 +172,46 @@ Before restructuring behavior, local turns emit a unified **`[TURN_AUDIT]`** log
 
 **Golden decomposition set:** `scripts/fixtures/decomposition-golden/catalog.json` — expand toward 50–100 labeled prompts.
 
-**Eval harness:** `npm run test:orchestrator` includes `scripts/decomposition-eval.test.ts` and `scripts/orchestration-audit.test.ts`.
+**Eval harness:** `npm run test:orchestrator` includes `scripts/decomposition-eval.test.ts`, `scripts/orchestration-audit.test.ts`, and `scripts/turn-trace.test.ts`.
+
+## End-to-end turn tracing (structured JSON)
+
+Every local FM turn gets a **`traceId`**; each task/subtask gets a **`taskId`**. Structured events capture the full pipeline without changing answer behavior.
+
+| Module | Role |
+|--------|------|
+| `lib/ai/orchestrator/turn-trace/` | `TurnTraceRecorder`, in-memory store, redaction, retrieval→answer chain |
+| `lib/ai/orchestrator/task-executor.ts` | Logs raw tool request/response before evidence mapping |
+| `lib/ai/orchestrator/local-turn-orchestrator.ts` | Compile, coverage, FM prompt/output, final response |
+
+**Stages logged:** user input, temporal grounding, RequestLedger, TaskGraph, route/capability, tool request, raw tool response, evidence accept/reject/normalize, model prompt/output, retries, validation failures, fallbacks, coverage, final response.
+
+**Retrieval chain (debug diff):**
+
+```text
+user_ask → exa_query → raw_tool_response → accepted_evidence → model_input → model_output → final_answer
+```
+
+Divergence hints flag when model output has weak overlap with accepted evidence (Exa had the fact; FM altered it).
+
+**Dev viewer:** `/dev/turn-trace` — filter by traceId, taskId, stage, failure type.
+
+**Console:** `[TURN_TRACE]` JSON on turn finalize (dev default on; set `NEXT_PUBLIC_TURN_TRACE=0` to disable).
+
+### Cloud Edge V2 tracing
+
+Edge orchestrator (`supabase/functions/_shared/agent/v2/orchestrator.ts`) emits the same JSON schema with `runtime: "cloud"`:
+
+| Module | Role |
+|--------|------|
+| `supabase/functions/_shared/agent/turn-trace/` | Deno `EdgeTurnTraceRecorder`, redaction, persist helper |
+| `ai_chat_turns.structured_trace` | Full trace JSON (migration `20260831123600_ai_turn_structured_trace.sql`) |
+
+**Stages:** controller decisions, raw web search/read responses before evidence mapping, evidence briefing, answer model prompt packet, model output, validation retries, final response.
+
+**Enable/disable (Edge):** `TURN_TRACE=1` (default on). Set `TURN_TRACE=0` in Supabase secrets to disable.
+
+**Dev viewer:** `/dev/turn-trace` loads local in-memory traces + cloud traces from `ai_chat_turns.structured_trace` (refresh pulls latest 50).
 
 Next phases (still deferred): `@Generable TaskGraph`, write idempotency.
 

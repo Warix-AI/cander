@@ -143,6 +143,11 @@ import {
   resetTurnAudit,
 } from "@/lib/ai/orchestrator/turn-audit.ts";
 import {
+  finalizeTurnTrace,
+  getTurnTraceRecorder,
+  startTurnTrace,
+} from "@/lib/ai/orchestrator/turn-trace/index.ts";
+import {
   citationsFromAtoms,
   compileTurnProfile,
   formatTurnProfileInstructions,
@@ -406,8 +411,19 @@ function finalizeTurnResult<T extends AiGenerateResult>(
     finalSource: source,
     answerChars: result.content?.length,
   });
-  logTurnAudit();
-  logRetrievalTrace();
+  const trace = getTurnTraceRecorder();
+  trace?.recordFinalResponse({
+    content: result.content ?? "",
+    citations: result.citations?.map((c) => ({
+      id: c.id,
+      url: c.url,
+      title: c.title,
+    })),
+    finalSource: source,
+  });
+  finalizeTurnTrace();
+  logTurnAudit({ traceId: trace?.traceId });
+  logRetrievalTrace({ traceId: trace?.traceId });
   return result;
 }
 
@@ -478,6 +494,26 @@ function applyEvidenceHygiene(opts: {
       kind: rec.kind,
       subtaskId: rec.subtaskId,
     });
+    const trace = getTurnTraceRecorder();
+    if (rec.action === "inject") {
+      trace?.recordEvidenceAccept({
+        taskId: rec.subtaskId,
+        evidence: {
+          id: rec.id,
+          title: rec.kind ?? rec.id,
+          content: rec.reason ?? "",
+          ...(rec.kind ? { kind: rec.kind as TurnEvidence["kind"] } : {}),
+        },
+        reason: rec.reason,
+      });
+    } else {
+      trace?.recordEvidenceReject({
+        taskId: rec.subtaskId,
+        evidenceId: rec.id,
+        reason: rec.reason ?? rec.action,
+        kind: rec.kind,
+      });
+    }
   }
   if (gate.rejectCount > 0) {
     patchRetrievalTrace({ staleEvidenceDropped: gate.rejectCount });
@@ -1018,6 +1054,11 @@ async function runLocalTurnOrchestratorInner(
       threadId: request.threadId ?? undefined,
       userMessage: request.content,
     });
+    startTurnTrace({
+      threadId: request.threadId ?? undefined,
+      aiChatId: request.aiChatId ?? undefined,
+      userInput: request.content,
+    });
     ModelScheduler.start();
 
     const preRelation = classifyTurnRelation({
@@ -1152,6 +1193,16 @@ async function runLocalTurnOrchestratorInner(
       relation: relationResult.relation,
       webPlan: profile.webRetrievalPlan,
       researchPlan: profile.researchPlan,
+    });
+
+    const traceRecorder = getTurnTraceRecorder();
+    traceRecorder?.recordTemporalGrounding(compiled.temporalGrounding);
+    traceRecorder?.recordRequestLedger(requestLedger);
+    traceRecorder?.recordTaskGraph({
+      nodes: taskGraph.nodes,
+      constraints: taskGraph.constraints,
+      objective: taskGraph.objective,
+      maxRetrievalRounds: taskGraph.maxRetrievalRounds,
     });
 
     if (planValidation.issues.length) {
@@ -1383,8 +1434,14 @@ async function runLocalTurnOrchestratorInner(
         unresolved: coverage.unresolvedAsks.map((a) => a.id),
         calculatedTotal: researchCompletion?.calculatedTotal,
       });
+      getTurnTraceRecorder()?.recordCoverage(coverage);
 
       if (shouldBlockSynthesis(coverage)) {
+        getTurnTraceRecorder()?.recordFallback({
+          decision: "block_synthesis",
+          reason: "MISSING_RETRIEVAL",
+          failureType: "fail_closed",
+        });
         return finalizeTurnResult(
           {
             content: failClosedMessage(["MISSING_RETRIEVAL"]),
@@ -1539,6 +1596,16 @@ async function runLocalTurnOrchestratorInner(
         undefined,
         researchCompletion,
       );
+      getTurnTraceRecorder()?.recordModelPrompt({
+        round,
+        prompt,
+        instructions,
+        evidencePacket: prepareSynthesisEvidence(
+          request.content,
+          evidence,
+          "onDevice",
+        ),
+      });
       emitToolExecution({ type: "model_generate_start", round });
       report({ phase: "generating", label: "Thinking", detail: "Generating" });
       const fmCategory = categoryForFmRound(round);
@@ -1700,6 +1767,11 @@ async function runLocalTurnOrchestratorInner(
       emitToolExecution({
         type: "model_generate_end",
         round,
+        structured: fm.structured,
+      });
+      getTurnTraceRecorder()?.recordModelOutput({
+        round,
+        text: fm.text,
         structured: fm.structured,
       });
       lastGenerate = {
@@ -2000,6 +2072,9 @@ async function runLocalTurnOrchestratorInner(
       const source = fmFinalSource(evidence);
       setFinalSource(source);
       finalizeTurnAudit({ finalSource: source });
+    }
+    if (getTurnTraceRecorder()) {
+      finalizeTurnTrace({ failureReason: "turn_exit_without_finalize" });
     }
     logTurnAudit({
       modelScheduler: ModelScheduler.current()?.snapshot(),

@@ -33,6 +33,11 @@ import {
 import type { AiToolCallResult } from "../runtime/tools";
 import type { ProvenanceAtom } from "../turn-environment/index.ts";
 import type { AgentTurnProgress } from "../runtime/agent-turn.ts";
+import {
+  getTurnTraceRecorder,
+  nodeTaskId,
+  traceRouteForNode,
+} from "./turn-trace/index.ts";
 
 function appendEvidence(target: TurnEvidence[], items: TurnEvidence[]): void {
   for (const item of items) {
@@ -123,6 +128,19 @@ async function executeReadyBatch(
             : capability === "web.open"
               ? "web.open"
               : "web.search";
+        const taskId = nodeTaskId(node);
+        traceRouteForNode(
+          node,
+          `${node.kind} → ${capability} (${node.status})`,
+        );
+        const toolArgs = buildArgsForNode(node, ctx);
+        const trace = getTurnTraceRecorder();
+        trace?.recordToolRequest({
+          taskId,
+          tool: toolName,
+          arguments: toolArgs,
+          reason: `task:${node.id}`,
+        });
         ctx.emitToolStart?.(toolName, `task:${node.id}`);
         ctx.report({
           phase: "tool",
@@ -133,9 +151,18 @@ async function executeReadyBatch(
         const started = Date.now();
         const result = await ctx.executeTool({
           name: toolName,
-          arguments: buildArgsForNode(node, ctx),
+          arguments: toolArgs,
         });
-        ctx.emitToolEnd?.(toolName, result.ok, Date.now() - started);
+        const durationMs = Date.now() - started;
+        trace?.recordToolResponseRaw({
+          taskId,
+          tool: toolName,
+          ok: result.ok,
+          durationMs,
+          rawData: result.data,
+          rawOutput: result.output,
+        });
+        ctx.emitToolEnd?.(toolName, result.ok, durationMs);
         if (signal.aborted) throw new Error("cancelled");
         return { node, result };
       },
@@ -162,6 +189,12 @@ async function executeReadyBatch(
     const mapped = ctx.mapToolResult(result, nodeId);
     appendEvidence(evidence, mapped.evidence);
     provenanceBatches.push(mapped.atoms);
+    getTurnTraceRecorder()?.recordEvidenceNormalize({
+      taskId: nodeId,
+      inputCount: 1,
+      outputCount: mapped.evidence.length,
+      atoms: mapped.atoms,
+    });
     // Leave RUNNING until evidence verification promotes to SUCCEEDED.
   }
 
@@ -181,10 +214,22 @@ function applyValidationResults(
     }
     const node = next.nodes.find((n) => n.id === v.nodeId || n.subtaskId === v.nodeId);
     const retries = node?.retryCount ?? 0;
+    getTurnTraceRecorder()?.recordValidationFailure({
+      taskId: v.nodeId,
+      reason: v.reason ?? "unsatisfied",
+      needsVerificationSearch: v.needsVerificationSearch,
+    });
     if (retries >= next.maxRetrievalRounds) {
       next = setSubtaskStatus(next, v.nodeId, "UNRESOLVED", v.reason);
       continue;
     }
+    getTurnTraceRecorder()?.recordRetry({
+      taskId: v.nodeId,
+      reason: v.reason ?? "retry",
+      refinedQuery: v.refinedQuery,
+      alternateCapability: v.alternateCapability,
+      attempt: retries + 1,
+    });
     next = {
       ...next,
       nodes: next.nodes.map((n) =>
@@ -223,9 +268,23 @@ export async function runTaskGraphExecution(opts: {
   const provenanceBatches = opts.provenanceBatches;
 
   for (const task of opts.preGraphTasks ?? []) {
+    const trace = getTurnTraceRecorder();
+    trace?.recordToolRequest({
+      tool: task.name,
+      arguments: task.arguments,
+      reason: task.reason,
+    });
+    const started = Date.now();
     const result = await opts.ctx.executeTool({
       name: task.name,
       arguments: task.arguments,
+    });
+    trace?.recordToolResponseRaw({
+      tool: task.name,
+      ok: result.ok,
+      durationMs: Date.now() - started,
+      rawData: result.data,
+      rawOutput: result.output,
     });
     toolResults.push(result);
     const mapped = opts.ctx.mapToolResult(result);

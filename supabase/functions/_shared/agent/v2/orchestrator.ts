@@ -72,6 +72,11 @@ import {
   assertVisionProvider,
 } from "../vision-input.ts";
 import { userFacingTurnError } from "../bridge-errors.ts";
+import {
+  EdgeTurnTraceRecorder,
+  isEdgeTurnTraceEnabled,
+  persistStructuredTrace,
+} from "../turn-trace/index.ts";
 
 const PRODUCT_SYSTEM = `You are Cander, a capable private assistant with tools.
 Be clear and direct. Never expose backend model names, training cutoffs, or provider limitations as Cander limitations.
@@ -125,6 +130,8 @@ export type V2Deps = {
   provider: ModelProvider;
   /** Progressive turn events (streaming). */
   onEvent?: (ev: StreamEvent) => void;
+  /** Structured end-to-end trace (dev/debug). */
+  trace?: EdgeTurnTraceRecorder | null;
 };
 
 export type V2Input = {
@@ -166,7 +173,26 @@ export async function runTurnOrchestratorV2(
     evidenceCount: state?.evidence.length ?? 0,
     durationMs: Date.now() - started,
     failureStage: failureStage === "done" ? null : failureStage,
+    structuredTraceId: deps.trace?.traceId ?? null,
   });
+
+  if (isEdgeTurnTraceEnabled() && !deps.trace) {
+    deps.trace = null;
+  }
+
+  const flushTrace = async (
+    patch?: Record<string, unknown>,
+    finalizeOpts?: { failureReason?: string },
+    finalize = false,
+  ) => {
+    if (!deps.trace) return;
+    const snapshot =
+      finalize || finalizeOpts
+        ? deps.trace.finalize(finalizeOpts)
+        : deps.trace.snapshot;
+    await persistStructuredTrace(deps.supabase, input.turnId, snapshot, patch);
+    if (finalize || finalizeOpts) deps.trace = null;
+  };
 
   try {
     failureStage = "load_chat";
@@ -254,6 +280,15 @@ export async function runTurnOrchestratorV2(
       throw new Error("Invalid user content");
     }
     const persistedUserContent = userContent || "(image attached)";
+
+    if (isEdgeTurnTraceEnabled() && !deps.trace) {
+      deps.trace = new EdgeTurnTraceRecorder({
+        traceId: input.turnId,
+        turnId: input.turnId,
+        chatId: input.chatId,
+        userInput: persistedUserContent,
+      });
+    }
 
     failureStage = "persist_user";
     let userMsgId = existingTurn?.user_message_id as string | null;
@@ -359,6 +394,15 @@ export async function runTurnOrchestratorV2(
       retrieval: initTurnRetrieval(userContent),
       workspaceId: (chat.workspace_id as string | null) ?? null,
     };
+
+    deps.trace?.recordTemporalContext({
+      nowIso: capabilities.serverNowIso,
+      timezone: capabilities.userTimezone ?? null,
+      locationHint: capabilities.locationHint ?? null,
+      resolvedReference: ref ?? null,
+      referenceIntent,
+      complexity,
+    });
 
     // Reuse fresh search session on follow-up questions when still relevant
     const sessionId =
@@ -589,6 +633,13 @@ export async function runTurnOrchestratorV2(
           ],
         });
         d = normalizeControllerDecision(parseJsonObject(ctrl.text));
+        deps.trace?.recordControllerDecision({
+          cycle: state.budgets.controllerCycles,
+          action: d.action,
+          reasonCode: d.reasonCode,
+          queries: d.queries,
+          sourceIds: d.sourceIdsToRead,
+        });
         await deps.supabase.from("ai_chat_turn_events").insert({
           chat_id: input.chatId,
           owner_id: deps.ownerId,
@@ -712,6 +763,7 @@ export async function runTurnOrchestratorV2(
               updated_at: new Date().toISOString(),
             })
             .eq("turn_id", input.turnId);
+          await flushTrace(paused.observability);
           try {
             deps.onEvent?.({ type: "turn.paused", result: paused });
           } catch {
@@ -913,6 +965,17 @@ export async function runTurnOrchestratorV2(
         });
 
         if (!det.valid && det.recommendedAction === "retrieve_more") {
+          deps.trace?.recordValidationFailure({
+            reason: "deterministic_validator",
+            issues: det.issues,
+            recommendedAction: det.recommendedAction,
+          });
+          deps.trace?.recordRetry({
+            taskId: `validator_${state.budgets.controllerCycles}`,
+            reason: "retrieve_more",
+            action: "web_search",
+            queries: bootstrapQueries(userContent, capabilities.locationHint),
+          });
           if (
             capabilities.webSearch &&
             state.budgets.webSearches < state.budgets.maxWebSearches
@@ -1115,6 +1178,17 @@ export async function runTurnOrchestratorV2(
       })
       .eq("turn_id", input.turnId);
 
+    deps.trace?.recordFinalResponse({
+      content: finalAnswer,
+      citations: citations.map((c) => ({
+        id: c.id,
+        url: c.url ?? undefined,
+        title: c.title,
+      })),
+      finalSource: "cloud_v2_answer",
+    });
+    await flushTrace(result.observability, undefined, true);
+
     try {
       await deps.supabase
         .from("ai_chats")
@@ -1191,6 +1265,12 @@ export async function runTurnOrchestratorV2(
 
     const offline = userFacingTurnError(message);
     const content = visionErr ? message : offline.content;
+
+    deps.trace?.recordFinalResponse({
+      content,
+      finalSource: "cloud_v2_failed",
+    });
+    await flushTrace({ ...obs(), failureStage }, { failureReason: message.slice(0, 400) }, true);
 
     const failed: V2RunResult = {
       turnId: input.turnId,
@@ -1363,6 +1443,7 @@ async function maybeBrief(deps: V2Deps, state: TurnState) {
     ],
   });
   state.briefing = parseEvidenceBriefing(raw.text);
+  deps.trace?.recordEvidenceBriefing(state.briefing);
 }
 
 function evidenceForBriefing(evidence: TurnState["evidence"]): TurnState["evidence"] {
@@ -1384,12 +1465,27 @@ async function runWebSearch(
   userContent: string,
 ): Promise<void> {
   state.budgets.webSearches += 1;
+  const taskId = `search_${state.budgets.webSearches}`;
+  deps.trace?.recordToolRequest({
+    taskId,
+    tool: "web.search",
+    arguments: { query },
+    reason: "controller_web_search",
+  });
+  const searchStarted = Date.now();
   try {
     const { raw } = await braveWebSearch({
       query,
       count: 6,
       ownerId: deps.ownerId,
       workspaceId: state.workspaceId ?? null,
+    });
+    deps.trace?.recordToolResponseRaw({
+      taskId,
+      tool: "web.search",
+      ok: true,
+      durationMs: Date.now() - searchStarted,
+      raw,
     });
     const ranked = rankSearchHits(userContent, raw, {
       requestedDomain: state.retrieval.exactUrlDomain,
@@ -1398,7 +1494,19 @@ async function runWebSearch(
     const ids: string[] = [];
     for (const hit of ranked) {
       ids.push(hit.id);
-      state.evidence.push(searchHitToEvidence(hit));
+      const item = searchHitToEvidence(hit);
+      state.evidence.push(item);
+      deps.trace?.recordEvidenceAccepted({
+        taskId,
+        item: {
+          id: item.id,
+          kind: item.kind,
+          title: item.title,
+          url: item.url,
+          content: item.content.slice(0, 500),
+        },
+        reason: "search_hit_ranked",
+      });
     }
     const { data: session } = await deps.supabase
       .from("ai_chat_search_sessions")
@@ -1448,6 +1556,13 @@ async function runWebSearch(
       topHost: ranked[0]?.url ? new URL(ranked[0].url).hostname : null,
     });
   } catch (e) {
+    deps.trace?.recordToolResponseRaw({
+      taskId,
+      tool: "web.search",
+      ok: false,
+      durationMs: Date.now() - searchStarted,
+      error: e instanceof Error ? e.message : String(e),
+    });
     console.error("[WEB_RETRIEVAL]", {
       turnId: state.turnId,
       stage: "web_search_error",
@@ -1491,6 +1606,15 @@ async function openWebPages(
     state.budgets.webOpens += 1;
     state.retrieval.openedUrls.push(key);
 
+    const taskId = `open_${state.budgets.webOpens}`;
+    deps.trace?.recordToolRequest({
+      taskId,
+      tool: "web.read",
+      arguments: { url: target.url },
+      reason: target.fromId ? `from:${target.fromId}` : "web_open",
+    });
+    const openStarted = Date.now();
+
     let ok = false;
     let finalUrl = target.url;
     let title = "";
@@ -1503,6 +1627,16 @@ async function openWebPages(
         ownerId: deps.ownerId,
         workspaceId: state.workspaceId ?? null,
       });
+      deps.trace?.recordToolResponseRaw({
+        taskId,
+        tool: "web.read",
+        ok: true,
+        durationMs: Date.now() - openStarted,
+        raw: {
+          sources: evidence.sources?.slice(0, 3),
+          evidenceTextPreview: evidence.evidenceText?.slice(0, 800),
+        },
+      });
       const primary = evidence.sources[0];
       text = evidence.evidenceText || primary?.excerpt || "";
       if (primary && text.trim()) {
@@ -1514,6 +1648,13 @@ async function openWebPages(
       }
     } catch (exaErr) {
       error = exaErr instanceof Error ? exaErr.message : "exa_contents_failed";
+      deps.trace?.recordToolResponseRaw({
+        taskId,
+        tool: "web.read",
+        ok: false,
+        durationMs: Date.now() - openStarted,
+        error,
+      });
       // No silent Brave/direct fallback — emergency flag only.
       if (webOpenDirectFetchEnabled()) {
         const page = await fetchReadablePage(target.url);
@@ -1540,6 +1681,18 @@ async function openWebPages(
           fromSourceId: target.fromId,
         }),
       );
+      const pageItem = state.evidence[state.evidence.length - 1];
+      deps.trace?.recordEvidenceAccepted({
+        taskId,
+        item: {
+          id: pageItem.id,
+          kind: pageItem.kind,
+          title: pageItem.title,
+          url: pageItem.url,
+          content: pageItem.content.slice(0, 800),
+        },
+        reason: "web_page_read",
+      });
       await deps.supabase.from("ai_chat_turn_events").insert({
         chat_id: state.chatId,
         owner_id: state.ownerId,
@@ -1712,6 +1865,23 @@ async function generateAnswer(
     recentIds: built.recentIds,
     sourceIds: state.evidence.map((e) => e.id),
   });
+  const answerPromptText = buildAnswerPrompt(state);
+  deps.trace?.recordModelPrompt({
+    round: state.budgets.modelGens,
+    promptPacket: {
+      answerPrompt: answerPromptText.slice(0, 4000),
+      evidence: state.evidence.map((e) => ({
+        id: e.id,
+        kind: e.kind,
+        title: e.title,
+        url: e.url,
+        contentPreview: e.content.slice(0, 400),
+      })),
+      briefing: state.briefing,
+      tokenEstimate: built.tokenEstimate,
+    },
+    messageCount: built.messages.length,
+  });
   const messages = [
     ...built.messages,
     ...extra.map((c) => ({ role: "system" as const, content: c })),
@@ -1720,6 +1890,10 @@ async function generateAnswer(
     purpose: "answer",
     messages,
     images: state.images,
+  });
+  deps.trace?.recordModelOutput({
+    round: state.budgets.modelGens,
+    text: res.text.trim(),
   });
   return res.text.trim();
 }
