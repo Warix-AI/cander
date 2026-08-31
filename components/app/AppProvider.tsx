@@ -171,6 +171,11 @@ import {
   modelContentFromMessage,
 } from "@/lib/ai/attachment-context";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
+import { isRawOpenAIModeEnabled } from "@/lib/ai/raw-openai/flags";
+import {
+  linkRawOpenAIAttachments,
+  uploadRawOpenAIAttachment,
+} from "@/lib/ai/raw-openai/upload-client";
 import { speakText, stopTextToSpeech } from "@/lib/voice/text-to-speech";
 import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
 import { typewriterReveal } from "@/lib/ai/typewriter";
@@ -1313,6 +1318,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         .filter((a) => a.type === "file")
         .map((a) => ({
           name: a.filename,
+          mimeType: a.mimeType,
+          size: a.size,
+          ...(a.blob ? { blob: a.blob } : {}),
           ...(a.text ? { text: a.text } : {}),
         }));
       const attachments =
@@ -1472,15 +1480,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const turnVision = collectTurnVisionImages(attachments.map((a) => a.url));
       const imageUrls = turnVision.ok ? turnVision.urls : [];
+      const rawMode = isRawOpenAIModeEnabled();
       // Only mention images to the model when real bytes will be sent.
+      // Raw OpenAI uploads files via file_id — don't inline document text.
       const aiUserContent = [
         trimmed,
-        ...fileAttachments.map((f) =>
-          f.text?.trim()
-            ? `File “${f.name}” contents:\n${f.text.trim()}`
-            : `File attached: ${f.name}`,
-        ),
-        ...(imageUrls.length ? [imageTurnHint(imageUrls.length)] : []),
+        ...(rawMode
+          ? []
+          : fileAttachments.map((f) =>
+              f.text?.trim()
+                ? `File “${f.name}” contents:\n${f.text.trim()}`
+                : `File attached: ${f.name}`,
+            )),
+        ...(imageUrls.length && !rawMode ? [imageTurnHint(imageUrls.length)] : []),
       ]
         .filter(Boolean)
         .join("\n\n");
@@ -1820,6 +1832,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           .map((m) => ({
             role: m.role as "user" | "assistant",
             content: modelContentFromMessage(m) || m.content,
+            id: m.id,
           }))
           .filter((m) => Boolean(m.content?.trim()));
         const replyProjectId =
@@ -1831,8 +1844,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           null;
         const turnVision = collectTurnVisionImages(attachments.map((a) => a.url));
         const imageUrls = turnVision.ok ? turnVision.urls : [];
+        const rawMode = isRawOpenAIModeEnabled();
         // Prefer current-turn bytes; never call the model with name-only image claims.
-        if (attachments.length > 0 && imageUrls.length === 0) {
+        if (!rawMode && attachments.length > 0 && imageUrls.length === 0) {
           setThreads((current) =>
             current.map((item) => ({
               ...item,
@@ -1860,35 +1874,148 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             size: imageUrls.reduce((n, u) => n + u.length, 0),
           });
         }
-        void fetchPrivateAiReply({
-          aiChatId: priorAiChatId,
-          threadId: activeId,
-          title: displayText.slice(0, 52) || attachments[0]?.name || "Chat",
-          content: aiUserContent,
-          workspaceId: matched?.workspaceId ?? workspaceId,
-          projectId: replyProjectId,
-          projectSpace: replyProjectSpace,
-          messages: historyMessages,
-          ...(imageUrls.length ? { images: imageUrls } : {}),
-          onProgress: (progress) => {
+
+        const runReply = async () => {
+          let attachmentIds: string[] = [];
+          if (rawMode && (sendAttachments.length > 0 || attachments.length > 0 || fileAttachments.length > 0)) {
             setThreads((current) =>
               current.map((item) => ({
                 ...item,
-                messages: item.messages.map((message) => {
-                  const isTarget =
-                    message.id === assistantId ||
-                    (message.role === "assistant" &&
-                      (message.status === "pending" ||
-                        message.status === "streaming") &&
-                      !message.content);
-                  if (!isTarget) return message;
-                  return patchMessageWithProgress(message, progress);
-                }),
+                messages: item.messages.map((message) =>
+                  message.id === assistantId
+                    ? patchMessageWithProgress(message, {
+                        phase: "thinking",
+                        label: "Uploading",
+                        detail: "Sending attachments to OpenAI",
+                      })
+                    : message,
+                ),
               })),
             );
-          },
-        })
+            try {
+              const toUpload =
+                sendAttachments.length > 0
+                  ? sendAttachments
+                  : [
+                      ...attachments.map((a, i) => ({
+                        id: `img_${i}`,
+                        type: "image" as const,
+                        filename: a.name,
+                        mimeType: a.mime,
+                        size: 0,
+                        dataUrl: a.url,
+                      })),
+                      ...fileAttachments.map((f, i) => ({
+                        id: `file_${i}`,
+                        type: "file" as const,
+                        filename: f.name,
+                        mimeType: f.mimeType || "application/octet-stream",
+                        size: f.size ?? 0,
+                        ...(f.blob ? { blob: f.blob } : {}),
+                        ...(f.text ? { text: f.text } : {}),
+                      })),
+                    ];
+              for (const att of toUpload) {
+                if (att.type === "file" && !att.blob && att.text) {
+                  // text-only fallback: upload as .txt
+                  const blob = new Blob([att.text], { type: "text/plain" });
+                  const uploaded = await uploadRawOpenAIAttachment({
+                    file: blob,
+                    filename: att.filename.endsWith(".txt")
+                      ? att.filename
+                      : `${att.filename}.txt`,
+                    mimeType: "text/plain",
+                    threadId: activeId,
+                    attachmentType: "document",
+                  });
+                  attachmentIds.push(uploaded.id);
+                  continue;
+                }
+                if (att.type === "image" && !att.dataUrl) continue;
+                if (att.type === "file" && !att.blob) {
+                  throw new Error(
+                    `Couldn’t read bytes for “${att.filename}”. Try uploading again.`,
+                  );
+                }
+                const uploaded = await uploadRawOpenAIAttachment({
+                  ...(att.type === "image"
+                    ? { dataUrl: att.dataUrl }
+                    : { file: att.blob }),
+                  filename: att.filename,
+                  mimeType: att.mimeType,
+                  threadId: activeId,
+                  attachmentType: att.type === "image" ? "image" : "document",
+                });
+                attachmentIds.push(uploaded.id);
+              }
+              await linkRawOpenAIAttachments({
+                attachmentIds,
+                messageId: userMsg.id,
+                threadId: activeId,
+              });
+            } catch (e) {
+              const msg =
+                e instanceof Error ? e.message : "Attachment upload failed.";
+              setThreads((current) =>
+                current.map((item) => ({
+                  ...item,
+                  messages: item.messages.map((message) =>
+                    message.id === assistantId
+                      ? {
+                          ...message,
+                          status: "complete" as const,
+                          activity: null,
+                          content: msg,
+                        }
+                      : message,
+                  ),
+                })),
+              );
+              return;
+            }
+          }
+
+          return fetchPrivateAiReply({
+            aiChatId: priorAiChatId,
+            threadId: activeId,
+            title: displayText.slice(0, 52) || attachments[0]?.name || "Chat",
+            content: aiUserContent || trimmed || "(attachment)",
+            workspaceId: matched?.workspaceId ?? workspaceId,
+            projectId: replyProjectId,
+            projectSpace: replyProjectSpace,
+            messages: historyMessages,
+            ...(rawMode
+              ? attachmentIds.length
+                ? { attachmentIds }
+                : imageUrls.length
+                  ? { images: imageUrls }
+                  : {}
+              : imageUrls.length
+                ? { images: imageUrls }
+                : {}),
+            onProgress: (progress) => {
+              setThreads((current) =>
+                current.map((item) => ({
+                  ...item,
+                  messages: item.messages.map((message) => {
+                    const isTarget =
+                      message.id === assistantId ||
+                      (message.role === "assistant" &&
+                        (message.status === "pending" ||
+                          message.status === "streaming") &&
+                        !message.content);
+                    if (!isTarget) return message;
+                    return patchMessageWithProgress(message, progress);
+                  }),
+                })),
+              );
+            },
+          });
+        };
+
+        void runReply()
           .then((result) => {
+            if (!result) return;
             const isPendingAssistant = (message: Message) =>
               message.id === assistantId ||
               (message.role === "assistant" &&

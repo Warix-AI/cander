@@ -58,6 +58,7 @@ export async function fetchPrivateAiReply(opts: {
     content: string;
   }>;
   images?: string[];
+  attachmentIds?: string[];
   onProgress?: (progress: AgentTurnProgress) => void;
 }): Promise<{
   aiChatId: string;
@@ -83,6 +84,7 @@ export async function fetchPrivateAiReply(opts: {
         projectSpace: opts.projectSpace,
         messages: opts.messages,
         images: opts.images,
+        attachmentIds: opts.attachmentIds,
       },
       { onProgress: opts.onProgress },
     );

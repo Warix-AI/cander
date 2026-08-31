@@ -257,6 +257,10 @@ export type ChatFileAttachment = {
   name: string;
   /** Extracted text for the model only — not shown in the bubble. */
   text?: string;
+  /** Raw bytes for OpenAI Files upload (raw mode). */
+  blob?: Blob;
+  mimeType?: string;
+  size?: number;
 };
 
 /** Unified send-path attachment (no device-local file:// URIs). */
@@ -268,8 +272,12 @@ export type ChatSendAttachment = {
   size: number;
   /** Image bytes as data URL — never capacitor:// or file:// */
   dataUrl?: string;
-  /** Extracted file text for the model */
+  /** Raw file bytes for OpenAI Files upload */
+  blob?: Blob;
+  /** Extracted file text for the model (legacy / non-raw fallback) */
   text?: string;
+  /** Server chat_attachments.id after upload */
+  openaiAttachmentId?: string;
 };
 
 export type Checkpoint = {

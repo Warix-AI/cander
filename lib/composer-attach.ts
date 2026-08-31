@@ -7,16 +7,20 @@ import type {
   ChatImageAttachment,
   ChatSendAttachment,
 } from "@/lib/types";
-import { isMobileShell } from "@/lib/mobile-shell";
 
-const MAX_IMAGE_BYTES = 2_500_000;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_TEXT_FILE_BYTES = 200_000;
+const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
 
 export const DOCUMENT_ACCEPT =
   ".pdf,.txt,.md,.markdown,.csv,.json,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/plain,text/markdown,application/pdf";
 
 export function isCapacitorNative(): boolean {
-  return isMobileShell();
+  if (typeof window === "undefined") return false;
+  const cap = (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } })
+    .Capacitor;
+  if (cap?.isNativePlatform?.()) return true;
+  return /\bCapacitor\b/i.test(navigator.userAgent || "");
 }
 
 type CapCameraPlugin = {
@@ -186,6 +190,7 @@ export async function filesFromList(
       if (att) images.push(att);
       continue;
     }
+    if (file.size > MAX_DOCUMENT_BYTES) continue;
     let text: string | undefined;
     if (
       (file.type.startsWith("text/") ||
@@ -199,7 +204,13 @@ export async function filesFromList(
         /* name-only */
       }
     }
-    files.push({ name: file.name, ...(text ? { text } : {}) });
+    files.push({
+      name: file.name,
+      blob: file,
+      mimeType: file.type || "application/octet-stream",
+      size: file.size,
+      ...(text ? { text } : {}),
+    });
   }
 
   return {
@@ -418,8 +429,9 @@ export function toSendAttachments(
       id: `file_${Math.random().toString(36).slice(2, 10)}`,
       type: "file",
       filename: f.name,
-      mimeType: "text/plain",
-      size: f.text?.length ?? 0,
+      mimeType: f.mimeType || "application/octet-stream",
+      size: f.size ?? f.text?.length ?? 0,
+      ...(f.blob ? { blob: f.blob } : {}),
       ...(f.text ? { text: f.text } : {}),
     });
   }

@@ -44,12 +44,19 @@ export type AiGenerateRequest = {
   messages?: Array<{
     role: "user" | "assistant" | "system";
     content: string;
+    /** UI message id — used to reattach prior openai_file_ids */
+    id?: string;
   }>;
   /**
    * Image data-URLs (or raw base64) for vision-capable cloud inference.
    * On-device text models cannot see these — runtime should prefer cloud.
    */
   images?: string[];
+  /**
+   * Raw OpenAI: chat_attachments ids owned by the user (current turn).
+   * Prefer these over images[] data URLs when present.
+   */
+  attachmentIds?: string[];
   /**
    * When false, providers should omit tool catalogs from instructions
    * (used for general conversation / knowledge turns).

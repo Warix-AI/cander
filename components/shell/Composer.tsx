@@ -52,6 +52,8 @@ import {
   isCapacitorNative,
   toSendAttachments,
 } from "@/lib/composer-attach";
+import { composerAttachActions } from "@/lib/ai/raw-openai/limits";
+import { isRawOpenAIModeEnabled } from "@/lib/ai/raw-openai/flags";
 import {
   applyComposerTextareaSize,
   nextComposerTextareaSize,
@@ -64,6 +66,10 @@ import {
   startSpeechToText,
   type SpeechSession,
 } from "@/lib/voice/speech-to-text";
+import {
+  isOpenAIDictationSupported,
+  startOpenAIDictation,
+} from "@/lib/voice/openai-dictation";
 import { stopTextToSpeech } from "@/lib/voice/text-to-speech";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
@@ -134,12 +140,16 @@ export function Composer({
   const usagePercent = useHourlyUsagePercent();
   const [value, setValue] = useState("");
   const [dictating, setDictating] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const [menu, setMenu] = useState<MenuId>(null);
   const [files, setFiles] = useState<ChatFileAttachment[]>([]);
   const [images, setImages] = useState<ChatImageAttachment[]>([]);
   const [dictateError, setDictateError] = useState(null as string | null);
   const [attachError, setAttachError] = useState(null as string | null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const photoLibRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const speechRef = useRef<SpeechSession | null>(null);
@@ -147,6 +157,11 @@ export function Composer({
   /** Keep the + menu visible while the native file sheet is open (iOS). */
   const awaitingFilePickRef = useRef(false);
   const nativeShell = isCapacitorNative();
+  const mobileWeb = mobile && !nativeShell;
+  const attachActions = composerAttachActions({
+    nativeCapacitor: nativeShell,
+    mobileShell: mobileWeb,
+  });
   /** Prevent re-opening keyboard after send until the user taps the composer. */
   const suppressAutoFocusRef = useRef(false);
 
@@ -321,7 +336,7 @@ export function Composer({
     !hideSpaceTools;
 
   const stayInPlace = compact || hideSpaceTools;
-  const dictatingActive = dictating;
+  const dictatingActive = dictating || transcribing;
   const hasText = value.trim().length > 0;
   const hasPayload = hasText || images.length > 0 || files.length > 0;
   const pinTarget = thread
@@ -337,6 +352,7 @@ export function Composer({
     speechRef.current?.stop();
     speechRef.current = null;
     setDictating(false);
+    setTranscribing(false);
     setDictateError(null);
   };
 
@@ -410,6 +426,43 @@ export function Composer({
     if (!entitlements.hasVoice) return;
     if (voiceActive) toggleVoice();
     setDictateError(null);
+    setTranscribing(false);
+
+    const useOpenAI = isRawOpenAIModeEnabled();
+    if (useOpenAI) {
+      if (!isOpenAIDictationSupported()) {
+        setDictateError("Microphone recording isn’t available here.");
+        return;
+      }
+      valueBaseRef.current = value.trim() ? `${value.trim()} ` : "";
+      setDictating(true);
+      speechRef.current?.stop();
+      speechRef.current = startOpenAIDictation({
+        onPartial: (text) => {
+          if (text === "Transcribing…") {
+            setTranscribing(true);
+            setDictating(false);
+          }
+        },
+        onFinal: (text) => {
+          valueBaseRef.current = `${valueBaseRef.current}${text} `.replace(
+            /\s+/g,
+            " ",
+          );
+          setValue(valueBaseRef.current);
+        },
+        onError: (message) => {
+          setDictateError(message);
+        },
+        onEnd: () => {
+          setDictating(false);
+          setTranscribing(false);
+          speechRef.current = null;
+        },
+      });
+      return;
+    }
+
     if (!isSpeechToTextSupported()) {
       setDictateError("Speech recognition isn’t available here.");
       return;
@@ -442,7 +495,9 @@ export function Composer({
   };
 
   // Voice conversation mode: listen → send → (TTS handled in AppProvider).
+  // In raw OpenAI mode, skip Apple/Web continuous voice loop (dictation-only).
   useEffect(() => {
+    if (isRawOpenAIModeEnabled()) return;
     if (!voiceActive || dictating || !entitlements.hasVoice) return;
     if (!isSpeechToTextSupported()) return;
 
@@ -582,63 +637,111 @@ export function Composer({
             ) : null}
             {nativeShell ? (
               <>
+                {attachActions.includes("take_photo") ? (
+                  <MenuRow
+                    icon={<Camera className="h-4 w-4" strokeWidth={1.7} />}
+                    label="Take Photo"
+                    onClick={() => {
+                      setAttachError(null);
+                      setMenu(null);
+                      void (async () => {
+                        const result =
+                          await getNativeCapabilities().media.pickCameraPhoto();
+                        if (result.ok) {
+                          getNativeCapabilities().haptics.impact("select");
+                          setImages((current) =>
+                            [...current, result.image].slice(0, 4),
+                          );
+                          return;
+                        }
+                        if (!result.cancelled) setAttachError(result.message);
+                      })();
+                    }}
+                  />
+                ) : null}
+                {attachActions.includes("choose_photo") ? (
+                  <MenuRow
+                    icon={<ImageIcon className="h-4 w-4" strokeWidth={1.7} />}
+                    label="Choose Photo"
+                    onClick={() => {
+                      setAttachError(null);
+                      setMenu(null);
+                      void (async () => {
+                        const result =
+                          await getNativeCapabilities().media.pickLibraryImages();
+                        if (result.ok) {
+                          getNativeCapabilities().haptics.impact("select");
+                          setImages((current) =>
+                            [...current, result.image].slice(0, 4),
+                          );
+                          return;
+                        }
+                        if (!result.cancelled) setAttachError(result.message);
+                      })();
+                    }}
+                  />
+                ) : null}
                 <MenuRow
-                  icon={<Camera className="h-4 w-4" strokeWidth={1.7} />}
-                  label="Camera"
+                  icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
+                  label="Upload File"
                   onClick={() => {
                     setAttachError(null);
+                    openFilePicker(fileRef);
                     setMenu(null);
-                    void (async () => {
-                      const result =
-                        await getNativeCapabilities().media.pickCameraPhoto();
-                      if (result.ok) {
-                        getNativeCapabilities().haptics.impact("select");
-                        setImages((current) =>
-                          [...current, result.image].slice(0, 4),
-                        );
-                        return;
-                      }
-                      if (!result.cancelled) setAttachError(result.message);
-                    })();
+                  }}
+                />
+              </>
+            ) : mobileWeb ? (
+              <>
+                <MenuRow
+                  icon={<Camera className="h-4 w-4" strokeWidth={1.7} />}
+                  label="Take Photo"
+                  onClick={() => {
+                    setAttachError(null);
+                    openFilePicker(cameraRef);
+                    setMenu(null);
                   }}
                 />
                 <MenuRow
                   icon={<ImageIcon className="h-4 w-4" strokeWidth={1.7} />}
-                  label="Photos"
+                  label="Choose Photo"
                   onClick={() => {
                     setAttachError(null);
+                    openFilePicker(photoLibRef);
                     setMenu(null);
-                    void (async () => {
-                      const result =
-                        await getNativeCapabilities().media.pickLibraryImages();
-                      if (result.ok) {
-                        getNativeCapabilities().haptics.impact("select");
-                        setImages((current) =>
-                          [...current, result.image].slice(0, 4),
-                        );
-                        return;
-                      }
-                      if (!result.cancelled) setAttachError(result.message);
-                    })();
                   }}
                 />
                 <MenuRow
-                  icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
-                  label="Files"
+                  icon={<FileText className="h-4 w-4" strokeWidth={1.7} />}
+                  label="Upload File"
                   onClick={() => {
                     setAttachError(null);
-                    // Keep user-gesture sync on iOS — open the input before React paint.
                     openFilePicker(fileRef);
                     setMenu(null);
                   }}
                 />
               </>
             ) : (
-              <MenuRow
-                icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
-                label="Attach"
-                onClick={() => openFilePicker(fileRef)}
-              />
+              <>
+                <MenuRow
+                  icon={<ImageIcon className="h-4 w-4" strokeWidth={1.7} />}
+                  label="Upload Image"
+                  onClick={() => {
+                    setAttachError(null);
+                    openFilePicker(imageRef);
+                    setMenu(null);
+                  }}
+                />
+                <MenuRow
+                  icon={<FileText className="h-4 w-4" strokeWidth={1.7} />}
+                  label="Upload File"
+                  onClick={() => {
+                    setAttachError(null);
+                    openFilePicker(fileRef);
+                    setMenu(null);
+                  }}
+                />
+              </>
             )}
             {browserMode ? (
               <MenuRow
@@ -668,6 +771,7 @@ export function Composer({
             {dictatingActive ? (
               <ComposerRecordingView
                 compact
+                status={transcribing ? "transcribing" : "recording"}
                 onCancel={endDictation}
                 onStop={endDictation}
               />
@@ -838,7 +942,11 @@ export function Composer({
               </div>
             ) : null}
             {dictatingActive ? (
-              <ComposerRecordingView onCancel={endDictation} onStop={endDictation} />
+              <ComposerRecordingView
+                status={transcribing ? "transcribing" : "recording"}
+                onCancel={endDictation}
+                onStop={endDictation}
+              />
             ) : (
             <div
               className={cn(
@@ -932,11 +1040,7 @@ export function Composer({
       ref={fileRef}
       type="file"
       multiple
-      accept={
-        nativeShell
-          ? `${DOCUMENT_ACCEPT},image/*,.heic,.heif`
-          : `${DOCUMENT_ACCEPT},image/*`
-      }
+      accept={DOCUMENT_ACCEPT}
       tabIndex={-1}
       className="sr-only"
       aria-hidden
@@ -954,6 +1058,77 @@ export function Composer({
             );
           }
           if (parsed.files.length || parsed.images.length) {
+            setMenu(null);
+          }
+        });
+        event.target.value = "";
+      }}
+    />
+    <input
+      ref={imageRef}
+      type="file"
+      multiple
+      accept="image/png,image/jpeg,image/jpg,image/webp,image/*"
+      tabIndex={-1}
+      className="sr-only"
+      aria-hidden
+      onChange={(event) => {
+        const list = event.target.files;
+        awaitingFilePickRef.current = false;
+        setAttachError(null);
+        void filesFromList(list).then((parsed) => {
+          if (parsed.images.length) {
+            setImages((current) =>
+              [...current, ...parsed.images].slice(0, 4),
+            );
+            setMenu(null);
+          } else if (list?.length) {
+            setAttachError("That didn’t look like a supported image.");
+          }
+        });
+        event.target.value = "";
+      }}
+    />
+    <input
+      ref={cameraRef}
+      type="file"
+      accept="image/*"
+      capture="environment"
+      tabIndex={-1}
+      className="sr-only"
+      aria-hidden
+      onChange={(event) => {
+        const list = event.target.files;
+        awaitingFilePickRef.current = false;
+        setAttachError(null);
+        void filesFromList(list).then((parsed) => {
+          if (parsed.images.length) {
+            setImages((current) =>
+              [...current, ...parsed.images].slice(0, 4),
+            );
+            setMenu(null);
+          }
+        });
+        event.target.value = "";
+      }}
+    />
+    <input
+      ref={photoLibRef}
+      type="file"
+      multiple
+      accept="image/*"
+      tabIndex={-1}
+      className="sr-only"
+      aria-hidden
+      onChange={(event) => {
+        const list = event.target.files;
+        awaitingFilePickRef.current = false;
+        setAttachError(null);
+        void filesFromList(list).then((parsed) => {
+          if (parsed.images.length) {
+            setImages((current) =>
+              [...current, ...parsed.images].slice(0, 4),
+            );
             setMenu(null);
           }
         });

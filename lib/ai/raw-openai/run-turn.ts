@@ -1,5 +1,5 @@
 /**
- * Client entry for raw OpenAI benchmark turns.
+ * Client entry for raw OpenAI benchmark turns (multimodal).
  * Posts conversation to /api/ai/raw-openai — never touches OpenAI keys.
  */
 
@@ -9,10 +9,12 @@ import type {
 } from "../runtime/agent-turn.ts";
 import type { AiGenerateRequest } from "../runtime/types.ts";
 import { AiRuntimeError } from "../runtime/types.ts";
+import { getRawOpenAIAuthHeaders } from "./upload-client.ts";
 
 const SYSTEM_INSTRUCTIONS = `You are a helpful assistant in the Cander chat product.
 Answer clearly and completely. Handle follow-ups, pronouns, multi-part questions, and topic changes using the conversation history provided.
-When web search is available, use it only when current or external facts would improve the answer; otherwise answer from knowledge.`;
+When web search is available, use it only when current or external facts would improve the answer; otherwise answer from knowledge.
+When files or images are attached, use their contents to answer.`;
 
 export type RawOpenAITrace = {
   provider: "openai";
@@ -21,6 +23,7 @@ export type RawOpenAITrace = {
   webSearchEnabled?: boolean;
   webSearchUsed?: boolean;
   threadMessageCount: number;
+  attachmentCount?: number;
   inputTokens?: number;
   outputTokens?: number;
   latencyMs: number;
@@ -42,6 +45,7 @@ export async function runRawOpenAITurn(
   const history = (request.messages ?? []).map((m) => ({
     role: m.role,
     content: m.content,
+    ...(m.id ? { id: m.id } : {}),
   }));
 
   const last = history[history.length - 1];
@@ -53,16 +57,23 @@ export async function runRawOpenAITurn(
     history.push({ role: "user", content: current });
   }
 
+  const attachmentIds = (request.attachmentIds || []).filter(Boolean);
   const started = Date.now();
   let res: Response;
   try {
+    const authHeaders = await getRawOpenAIAuthHeaders();
     res = await fetch("/api/ai/raw-openai", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+      },
       body: JSON.stringify({
         messages: history,
         system: SYSTEM_INSTRUCTIONS,
-        images: request.images?.slice(0, 4),
+        // Prefer uploaded file_ids; keep data-URL images only as fallback
+        images: attachmentIds.length ? undefined : request.images?.slice(0, 4),
+        attachmentIds: attachmentIds.length ? attachmentIds : undefined,
         threadId: request.threadId,
         title: request.title,
       }),
@@ -74,6 +85,7 @@ export async function runRawOpenAITurn(
       mode: "raw",
       model: "unknown",
       threadMessageCount: history.length,
+      attachmentCount: attachmentIds.length,
       latencyMs: Date.now() - started,
       success: false,
       error: msg,
@@ -108,6 +120,7 @@ export async function runRawOpenAITurn(
       webSearchEnabled,
       webSearchUsed,
       threadMessageCount: history.length,
+      attachmentCount: attachmentIds.length,
       inputTokens: data.inputTokens,
       outputTokens: data.outputTokens,
       latencyMs,
@@ -128,6 +141,7 @@ export async function runRawOpenAITurn(
     webSearchEnabled,
     webSearchUsed,
     threadMessageCount: history.length,
+    attachmentCount: attachmentIds.length,
     inputTokens: data.inputTokens,
     outputTokens: data.outputTokens,
     latencyMs,
@@ -164,6 +178,7 @@ export function buildRawOpenAIHistory(request: AiGenerateRequest): ChatTurn[] {
   const history = (request.messages ?? []).map((m) => ({
     role: m.role,
     content: m.content,
+    ...(m.id ? { id: m.id } : {}),
   }));
   const last = history[history.length - 1];
   const current = (request.content || "").trim();
@@ -176,4 +191,8 @@ export function buildRawOpenAIHistory(request: AiGenerateRequest): ChatTurn[] {
   return history;
 }
 
-type ChatTurn = { role: "user" | "assistant" | "system"; content: string };
+type ChatTurn = {
+  role: "user" | "assistant" | "system";
+  content: string;
+  id?: string;
+};

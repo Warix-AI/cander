@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react";
 import { ArrowUp, Mic, Square, X } from "lucide-react";
-import { APP_MESSAGE_PLACEHOLDER } from "@/lib/app-brand";
 import { VoiceOrb, VoiceWaveform } from "@/components/shell/VoiceOrb";
 import { VoiceWaveButton } from "@/components/shell/VoiceWaveButton";
 import { cn } from "@/lib/utils";
@@ -29,12 +28,15 @@ export function ComposerRecordingView({
   onCancel,
   onStop,
   compact = false,
+  status = "recording",
 }: {
   onCancel: () => void;
   onStop: () => void;
   compact?: boolean;
+  status?: "recording" | "transcribing";
 }) {
   const btn = compact ? 32 : 36;
+  const label = status === "transcribing" ? "Transcribing…" : "Recording…";
 
   return (
     <div className={cn("flex flex-col", compact ? "gap-2 py-0.5" : "gap-3 py-1")}>
@@ -44,7 +46,7 @@ export function ComposerRecordingView({
           compact ? "px-0.5 text-[13px]" : "px-1 text-[14px]",
         )}
       >
-        {APP_MESSAGE_PLACEHOLDER}
+        {label}
       </p>
       <div className="flex items-center gap-2">
         <CircleIconBtn
@@ -58,7 +60,7 @@ export function ComposerRecordingView({
         <VoiceWaveform
           bars={compact ? 28 : 36}
           height={compact ? 20 : 24}
-          active
+          active={status === "recording"}
           className="min-w-0 flex-1"
           barClassName="bg-muted-foreground/45"
         />
@@ -67,6 +69,7 @@ export function ComposerRecordingView({
           onClick={onStop}
           size={btn}
           className="bg-muted text-foreground hover:bg-muted/80"
+          disabled={status === "transcribing"}
         >
           <Square className="h-3 w-3 fill-current" strokeWidth={0} />
         </CircleIconBtn>
@@ -227,20 +230,24 @@ function CircleIconBtn({
   onClick,
   size,
   className,
+  disabled,
 }: {
   children: ReactNode;
   label: string;
   onClick: () => void;
   size: number;
   className?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       aria-label={label}
       onClick={onClick}
+      disabled={disabled}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full transition-colors duration-200",
+        disabled && "opacity-50",
         className,
       )}
       style={{ width: size, height: size }}

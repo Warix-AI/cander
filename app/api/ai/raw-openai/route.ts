@@ -1,29 +1,35 @@
 /**
- * Server-only Raw OpenAI Responses API.
+ * Server-only Raw OpenAI Responses API (multimodal).
  * OPENAI_API_KEY must never appear in client bundles.
- * Optional native web_search via OPENAI_WEB_SEARCH=1 (no Cander web router).
  */
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import {
+  assertThreadOwnedByUser,
+  requireBearerUser,
+} from "@/lib/ai/raw-openai/auth";
+import {
+  buildRawOpenAIInput,
+  type AttachmentRef,
+  type ChatMsg,
+} from "@/lib/ai/raw-openai/build-input";
 import { isRawOpenAIModeAllowedOnServer } from "@/lib/ai/raw-openai/flags";
+import { MAX_ATTACHMENTS_PER_TURN } from "@/lib/ai/raw-openai/limits";
 import {
   didOpenAIUseWebSearch,
   isOpenAIWebSearchEnabled,
   resolveOpenAIModel,
 } from "@/lib/ai/raw-openai/web-search";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
-
-type ChatMsg = {
-  role: "user" | "assistant" | "system";
-  content: string;
-};
 
 type Body = {
   messages?: ChatMsg[];
   system?: string;
   images?: string[];
+  attachmentIds?: string[];
   threadId?: string | null;
   title?: string;
 };
@@ -72,66 +78,136 @@ export async function POST(request: Request) {
     );
   }
 
+  const attachmentIds = Array.isArray(body.attachmentIds)
+    ? body.attachmentIds.filter((id) => typeof id === "string" && id.length > 0)
+    : [];
+
+  let userId: string | null = null;
+  const needsAuth = attachmentIds.length > 0 || Boolean(body.threadId);
+  if (needsAuth) {
+    const auth = await requireBearerUser(request);
+    if (attachmentIds.length && !auth.ok) {
+      return NextResponse.json(
+        { error: auth.error, latencyMs: Date.now() - started },
+        { status: auth.status },
+      );
+    }
+    if (auth.ok) {
+      userId = auth.user.id;
+      const ownership = await assertThreadOwnedByUser(body.threadId, userId);
+      if (!ownership.ok) {
+        return NextResponse.json(
+          { error: ownership.error, latencyMs: Date.now() - started },
+          { status: ownership.status },
+        );
+      }
+    }
+  }
+
   const model = resolveOpenAIModel();
   const webSearchEnabled = isOpenAIWebSearchEnabled();
   const system =
     (body.system || "").trim() ||
     "You are a helpful assistant. Answer clearly using the conversation history.";
 
-  // Build Responses API input: system + full thread (no Cander compression)
-  type EasyInput = OpenAI.Responses.ResponseInputItem;
-  const input: EasyInput[] = [
-    {
-      role: "system",
-      content: system,
-    },
-  ];
+  const attachmentRefs: AttachmentRef[] = [];
 
-  for (const m of messages) {
-    const role =
-      m.role === "assistant" ? "assistant" : m.role === "system" ? "system" : "user";
-    const text = (m.content || "").slice(0, 100_000);
-    if (!text.trim() && role !== "user") continue;
-    input.push({
-      role,
-      content: text,
-    });
-  }
+  if (userId) {
+    try {
+      const admin = createSupabaseAdminClient();
 
-  // Attach images to the last user turn when provided
-  const images = (body.images || []).filter((u) => typeof u === "string" && u.length > 0);
-  if (images.length) {
-    const lastUserIdx = [...input]
-      .map((item, i) => ({ item, i }))
-      .reverse()
-      .find((x) => "role" in x.item && x.item.role === "user")?.i;
-    if (lastUserIdx != null) {
-      const prev = input[lastUserIdx] as {
-        role: "user";
-        content: string | OpenAI.Responses.ResponseInputContent[];
-      };
-      const textPart = typeof prev.content === "string" ? prev.content : "";
-      const content: OpenAI.Responses.ResponseInputContent[] = [
-        { type: "input_text", text: textPart || "(see attached image)" },
-        ...images.slice(0, 4).map((url) => ({
-          type: "input_image" as const,
-          image_url: url,
-          detail: "auto" as const,
-        })),
-      ];
-      input[lastUserIdx] = { role: "user", content };
+      if (attachmentIds.length) {
+        if (attachmentIds.length > MAX_ATTACHMENTS_PER_TURN) {
+          return NextResponse.json(
+            {
+              error: `Too many attachments (max ${MAX_ATTACHMENTS_PER_TURN}).`,
+              latencyMs: Date.now() - started,
+            },
+            { status: 400 },
+          );
+        }
+        const { data: current, error } = await admin
+          .from("chat_attachments")
+          .select(
+            "id, openai_file_id, attachment_type, message_id, user_id",
+          )
+          .in("id", attachmentIds)
+          .eq("user_id", userId);
+
+        if (error) {
+          return NextResponse.json(
+            { error: "Failed to load attachments.", latencyMs: Date.now() - started },
+            { status: 500 },
+          );
+        }
+        const rows = current || [];
+        if (rows.length !== attachmentIds.length) {
+          return NextResponse.json(
+            {
+              error: "One or more attachments are not accessible.",
+              latencyMs: Date.now() - started,
+            },
+            { status: 403 },
+          );
+        }
+        for (const row of rows) {
+          if (row.attachment_type === "audio") continue;
+          attachmentRefs.push({
+            id: row.id,
+            openaiFileId: row.openai_file_id,
+            attachmentType: row.attachment_type as "image" | "document",
+            forCurrentTurn: true,
+          });
+        }
+      }
+
+      // Prior thread attachments for follow-ups
+      if (body.threadId) {
+        const { data: prior } = await admin
+          .from("chat_attachments")
+          .select("id, openai_file_id, attachment_type, message_id")
+          .eq("user_id", userId)
+          .eq("thread_id", body.threadId)
+          .not("message_id", "is", null);
+
+        const currentSet = new Set(attachmentIds);
+        for (const row of prior || []) {
+          if (currentSet.has(row.id)) continue;
+          if (row.attachment_type === "audio") continue;
+          attachmentRefs.push({
+            id: row.id,
+            openaiFileId: row.openai_file_id,
+            attachmentType: row.attachment_type as "image" | "document",
+            messageId: row.message_id,
+          });
+        }
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "attachment_load_failed";
+      return NextResponse.json(
+        { error: message.slice(0, 300), latencyMs: Date.now() - started },
+        { status: 500 },
+      );
     }
   }
 
-  const client = new OpenAI({ apiKey });
+  const fallbackImages =
+    attachmentRefs.some((a) => a.forCurrentTurn && a.attachmentType === "image")
+      ? []
+      : (body.images || []).filter((u) => typeof u === "string" && u.length > 0);
 
-  // Model decides when to search (ChatGPT-like); do not force the tool.
+  const input = buildRawOpenAIInput({
+    system,
+    messages,
+    attachments: attachmentRefs,
+    fallbackImageUrls: fallbackImages,
+  });
+
+  const client = new OpenAI({ apiKey });
   const createParams: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
     model,
-    input,
-    ...(webSearchEnabled
-      ? { tools: [{ type: "web_search" as const }] }
-      : {}),
+    input: input as OpenAI.Responses.ResponseInput,
+    ...(webSearchEnabled ? { tools: [{ type: "web_search" as const }] } : {}),
   };
 
   try {
@@ -152,6 +228,7 @@ export async function POST(request: Request) {
       model,
       webSearchEnabled,
       webSearchUsed,
+      attachmentCount: attachmentRefs.filter((a) => a.forCurrentTurn).length,
       threadMessageCount: messages.length,
       inputTokens: usage?.input_tokens,
       outputTokens: usage?.output_tokens,

@@ -97,10 +97,13 @@ Temporary A/B bypass for comparing **raw OpenAI** vs V6. **Default ON** (opt out
 | `OPENAI_API_KEY` | server only | OpenAI auth — never `NEXT_PUBLIC_` |
 | `OPENAI_MODEL` | server | Model id (default `gpt-5.6-luna`) |
 | `OPENAI_WEB_SEARCH` | server | `1` adds Responses API `tools: [{ type: "web_search" }]` (model decides when to search); `0`/unset = no tool |
+| `OPENAI_TRANSCRIPTION_MODEL` | server | Dictation model (default `gpt-transcribe`) |
 | `RAW_OPENAI_MODE` | server | Opt out with `0` (default allows `/api/ai/raw-openai`) |
 | `NEXT_PUBLIC_RAW_OPENAI_MODE` | client | Opt out with `0` (default routes to `runRawOpenAITurn` first) |
 
-When enabled (default), **no** V6 / Simple Turn / TaskGraph / Exa / KB / Apple FM runs. Full thread history is POSTed to the server and forwarded to the OpenAI Responses API. Native OpenAI web search is optional via `OPENAI_WEB_SEARCH` and never uses Exa/Cander search.
+When enabled (default), **no** V6 / Simple Turn / TaskGraph / Exa / KB / Apple FM / Apple Speech runs. Full thread history is POSTed to the server and forwarded to the OpenAI Responses API. Native OpenAI web search is optional via `OPENAI_WEB_SEARCH`. Images/docs upload via `/api/ai/raw-openai/upload` → OpenAI Files (`openai_file_id` in `chat_attachments`). Dictation uses `/api/ai/raw-openai/transcribe`.
+
+**Limits:** images 10 MB (png/jpeg/webp); documents 25 MB (pdf/txt/md/csv/json/doc/docx); audio dictation 25 MB (ephemeral).
 
 UI shows a **RAW OPENAI** badge. Trace: `[RAW_OPENAI_TRACE]` (model, `webSearchEnabled`, `webSearchUsed`, latency, tokens). Opt out: `NEXT_PUBLIC_RAW_OPENAI_MODE=0`, `RAW_OPENAI_MODE=0`, or `localStorage['cander:raw-openai-mode']='0'`.
 
