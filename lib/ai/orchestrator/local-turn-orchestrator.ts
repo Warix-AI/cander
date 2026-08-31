@@ -82,7 +82,6 @@ import {
 } from "../answer-shape/index.ts";
 import { ensureCompleteAnswer } from "@/lib/ai/orchestrator/ensure-complete-answer";
 import {
-  deeperResearchQueries,
   evaluateResearchQuality,
   extractFactualComponents,
   type EvidenceSnippet,
@@ -93,16 +92,19 @@ import {
   type ExaRetrievalMode,
 } from "@/lib/ai/web-research/index.ts";
 import { runEvidenceGate } from "@/lib/ai/orchestrator/evidence-gate.ts";
-import { scanRequest } from "@/lib/ai/orchestrator/request-scanner.ts";
 import {
-  applyCompletionToGraph,
-  compileTaskGraph,
-  markResearchNodesRunning,
+  executableNodes,
   researchProgressItems,
-  setSubtaskStatus,
   type TaskGraph,
 } from "@/lib/ai/orchestrator/task-graph.ts";
 import { validateTaskPlan } from "@/lib/ai/orchestrator/plan-validator.ts";
+import { compileTurn, mergeAskExtractorIntoGraph } from "@/lib/ai/orchestrator/turn-compile.ts";
+import { extractAsksWithFm } from "@/lib/ai/orchestrator/ask-extractor.ts";
+import { runTaskGraphExecution } from "@/lib/ai/orchestrator/task-executor.ts";
+import {
+  evaluateCoverage,
+  shouldBlockSynthesis,
+} from "@/lib/ai/orchestrator/coverage-ledger.ts";
 import { filterTaskFactsForTurn } from "@/lib/ai/orchestrator/evidence-hygiene.ts";
 import {
   categoryForFmRound,
@@ -146,7 +148,6 @@ import {
   normalizeWebSearchResult,
   parseSemanticResponse,
   resolveTurnTask,
-  runParallelTasks,
   webSearchArguments,
   applyConversationDelta,
   activeEntities,
@@ -157,10 +158,8 @@ import {
   semanticBlocksToMarkdown,
   setConversationTurnState,
   toDynamicProfilePayload,
-  validateResearchCompletion,
   type ProvenanceAtom,
   type ResearchCompletionResult,
-  type ResearchTurnPlan,
   type TurnProfile,
 } from "@/lib/ai/turn-environment";
 import type { ChatBlock } from "@/lib/types";
@@ -250,101 +249,6 @@ function evidenceAsSnippets(items: TurnEvidence[]): EvidenceSnippet[] {
       content: e.content,
       kind: e.kind,
     }));
-}
-
-async function runResearchCompletionLoop(opts: {
-  plan: ResearchTurnPlan;
-  evidence: TurnEvidence[];
-  toolResults: AiToolCallResult[];
-  provenanceBatches: ProvenanceAtom[][];
-  profile: TurnProfile;
-  question: string;
-  conversationState: ReturnType<typeof applyConversationDelta>;
-  turnRelation: import("@/lib/ai/turn-environment/turn-relation.ts").TurnRelation;
-  report: (progress: AgentTurnProgress) => void;
-  graph?: TaskGraph;
-  onGraphChange?: (graph: TaskGraph) => void;
-}): Promise<ResearchCompletionResult> {
-  let plan = { ...opts.plan, unresolved: [...opts.plan.unresolved] };
-  let completion = validateResearchCompletion(plan, opts.evidence);
-  let graph = opts.graph;
-
-  while (
-    plan.retrievalRound < plan.maxRetrievalRounds &&
-    !completion.complete &&
-    completion.unresolved.length > 0
-  ) {
-    plan.retrievalRound += 1;
-    const followUps = plan.subtasks.filter((st) =>
-      completion.unresolved.includes(st.id),
-    );
-    if (!followUps.length) break;
-
-    if (graph) {
-      for (const st of followUps) {
-        graph = setSubtaskStatus(graph, st.id, "RUNNING");
-      }
-      opts.onGraphChange?.(graph);
-    }
-
-    const turnTask = resolveTurnTask({
-      content: opts.question,
-      previous: opts.conversationState,
-      turnRelation: opts.turnRelation,
-    });
-
-    const retry = await runParallelTasks({
-      tasks: followUps.map((st) => ({
-        id: `subtask:${st.id}`,
-        run: async (signal) => {
-          if (signal.aborted) throw new Error("cancelled");
-          opts.report({
-            phase: "tool",
-            label: "Thinking",
-            detail: "Searching",
-            toolName: "web.search",
-          });
-          return executeAuthorizedTool({
-            name: "web.search",
-            arguments: webSearchArguments({
-              content: opts.question,
-              turnTask,
-              conv: opts.conversationState,
-              webRetrievalPlan: opts.profile.webRetrievalPlan,
-              query: `${st.query} official nutrition`,
-              deeper: true,
-            }),
-          });
-        },
-      })),
-      concurrency: opts.profile.budgets.concurrency,
-      timeoutMs: opts.profile.budgets.toolTimeoutMs,
-    });
-
-    for (const item of retry) {
-      if (!item.ok || !item.value) continue;
-      const subtaskId = item.id.startsWith("subtask:")
-        ? item.id.slice("subtask:".length)
-        : undefined;
-      opts.toolResults.push(item.value);
-      const mapped = evidenceFromToolResult(item.value, subtaskId);
-      appendEvidence(opts.evidence, mapped.evidence);
-      opts.provenanceBatches.push(mapped.atoms);
-      if (graph && subtaskId) {
-        graph = setSubtaskStatus(graph, subtaskId, "SUCCEEDED");
-      }
-    }
-
-    completion = validateResearchCompletion(plan, opts.evidence);
-    plan.unresolved = completion.unresolved;
-    recordValidationIssues(completion.unresolved);
-    if (graph) {
-      graph = applyCompletionToGraph(graph, completion.unresolved);
-      opts.onGraphChange?.(graph);
-    }
-  }
-
-  return completion;
 }
 
 async function escalateExaSearchIfNeeded(opts: {
@@ -579,98 +483,6 @@ function applyEvidenceHygiene(opts: {
   }
   markStageEnd("evidence_gate");
   return gate;
-}
-
-async function deepenRetrievalIfNeeded(opts: {
-  question: string;
-  evidence: TurnEvidence[];
-  toolResults: AiToolCallResult[];
-  provenanceBatches: ProvenanceAtom[][];
-  conversationState: ReturnType<typeof applyConversationDelta>;
-  report: (progress: AgentTurnProgress) => void;
-  deeper: boolean;
-}): Promise<void> {
-  const gate = evaluateResearchQuality({
-    question: opts.question,
-    evidence: evidenceAsSnippets(opts.evidence),
-    deeper: opts.deeper,
-  });
-  if (!gate.needsMoreInvestigation) return;
-
-  // Open top search URLs when we only have snippets.
-  const urls: string[] = [];
-  for (const r of opts.toolResults) {
-    if (r.name !== "web.search" && r.name !== "web.research") continue;
-    const rows =
-      (r.data?.results as Array<{ url?: string; title?: string }> | undefined) ??
-      [];
-    for (const row of rows) {
-      if (!row.url) continue;
-      if (urls.includes(row.url)) continue;
-      urls.push(row.url);
-      if (urls.length >= 3) break;
-    }
-    if (urls.length >= 3) break;
-  }
-
-  for (const url of urls.slice(0, 3)) {
-    if (
-      opts.evidence.some(
-        (e) =>
-          e.ok &&
-          (e.kind === "web_page" || e.kind === "browser") &&
-          e.url &&
-          e.url.replace(/\/$/, "") === url.replace(/\/$/, ""),
-      )
-    ) {
-      continue;
-    }
-    opts.report({
-      phase: "tool",
-      label: "Thinking",
-      detail: "Reading",
-      toolName: "web.read",
-    });
-    const result = await executeAuthorizedTool({
-      name: "web.read",
-      arguments: { url },
-    });
-    opts.toolResults.push(result);
-    const mapped = evidenceFromToolResult(result);
-    appendEvidence(opts.evidence, mapped.evidence);
-    opts.provenanceBatches.push(mapped.atoms);
-  }
-
-  // Extra searches when still weak / conflicting / correction retry.
-  const stillWeak = evaluateResearchQuality({
-    question: opts.question,
-    evidence: evidenceAsSnippets(opts.evidence),
-    deeper: true,
-  });
-  if (!stillWeak.needsMoreInvestigation && !stillWeak.conflictingEvidence) {
-    return;
-  }
-
-  const prior = opts.toolResults
-    .filter((r) => r.name === "web.search")
-    .map((r) => String(r.data?.query ?? ""))
-    .filter(Boolean);
-  for (const query of deeperResearchQueries(opts.question, prior).slice(0, 2)) {
-    opts.report({
-      phase: "tool",
-      label: "Thinking",
-      detail: "Searching",
-      toolName: "web.search",
-    });
-    const result = await executeAuthorizedTool({
-      name: "web.search",
-      arguments: { query },
-    });
-    opts.toolResults.push(result);
-    const mapped = evidenceFromToolResult(result);
-    appendEvidence(opts.evidence, mapped.evidence);
-    opts.provenanceBatches.push(mapped.atoms);
-  }
 }
 
 function evidenceFromToolResult(
@@ -1202,23 +1014,11 @@ async function runLocalTurnOrchestratorInner(
       userMessage: request.content,
     });
     ModelScheduler.start();
-    markStageStart("delta");
-    const convDelta = await resolveConversationDelta({
-      previous: priorConv,
-      userMessage: request.content,
-    });
-    const relationResult = classifyTurnRelation({
+
+    const preRelation = classifyTurnRelation({
       userMessage: request.content,
       previous: priorConv,
     });
-    let conversationState = applyConversationDelta(priorConv, convDelta);
-    conversationState = {
-      ...conversationState,
-      lastTurnRelation: relationResult.relation,
-    };
-    setConversationTurnState(request.threadId, conversationState);
-    recordTurnRelation(relationResult.relation);
-    markStageEnd("delta");
 
     const { resolveBuildTurnContext, shouldRunBuildLocally } = await import(
       "@/lib/ai/build/turn-context"
@@ -1228,7 +1028,7 @@ async function runLocalTurnOrchestratorInner(
       activeSpace: request.projectSpace,
       explicitProjectId: request.projectId,
       threadProjectId: request.projectId,
-      conversationState,
+      conversationState: priorConv,
     });
 
     const { resolveHealthCapabilities } = await import(
@@ -1254,7 +1054,6 @@ async function runLocalTurnOrchestratorInner(
       platformSupportsHealthKit,
     });
 
-    // Flagged routine Build mutations — do not touch normal chat/research.
     if (
       buildCtx.requiresBuildCapabilities &&
       shouldRunBuildLocally(buildCtx) &&
@@ -1281,68 +1080,120 @@ async function runLocalTurnOrchestratorInner(
     }
 
     markStageStart("compile");
-    let profile = compileTurnProfile({
+    const compiled = await compileTurn({
       content: request.content,
-      taskState,
-      messages: request.messages,
-      pendingStateText:
-        relationResult.relation === "topic_switch"
-          ? ""
-          : formatTaskStateForPrompt(
-              taskState
-                ? {
-                    ...taskState,
-                    facts: filterTaskFactsForTurn(taskState, {
-                      turnTask: resolveTurnTask({
-                        content: request.content,
-                        previous: conversationState,
-                        turnRelation: relationResult.relation,
+      threadId: request.threadId,
+      priorConv,
+      profileOpts: {
+        taskState,
+        messages: request.messages,
+        pendingStateText:
+          preRelation.relation === "topic_switch"
+            ? ""
+            : formatTaskStateForPrompt(
+                taskState
+                  ? {
+                      ...taskState,
+                      facts: filterTaskFactsForTurn(taskState, {
+                        turnTask: resolveTurnTask({
+                          content: request.content,
+                          previous: priorConv,
+                          turnRelation: preRelation.relation,
+                        }),
+                        conversationState: priorConv,
+                        turnRelation: preRelation.relation,
                       }),
-                      conversationState,
-                      turnRelation: relationResult.relation,
-                    }),
-                  }
-                : null,
-            ),
-      conversationState,
-      turnRelation: relationResult.relation,
-      reactivateEntityLabel: relationResult.reactivateEntityLabel,
-      isDesktop:
-        typeof navigator !== "undefined" &&
-        /Mac|Win|Linux/i.test(navigator.platform || ""),
-      ...(buildCtx.requiresBuildCapabilities
-        ? {
-            build: {
-              requiresBuildCapabilities: true,
-              buildSpecSlice: buildCtx.buildSpecSlice,
-              forceDomains: buildCtx.forceDomains,
-              readOnlyPreRun: true,
-              needsClarification: buildCtx.projectResolve.status === "clarify",
-              clarificationReason: buildCtx.projectResolve.reason,
-            },
-          }
-        : {}),
-      ...(healthCaps.requiresHealthCapabilities
-        ? {
-            health: {
-              requiresHealthCapabilities: true,
-              forceDomains: ["health"],
-            },
-          }
-        : {}),
+                    }
+                  : null,
+              ),
+        isDesktop:
+          typeof navigator !== "undefined" &&
+          /Mac|Win|Linux/i.test(navigator.platform || ""),
+        ...(buildCtx.requiresBuildCapabilities
+          ? {
+              build: {
+                requiresBuildCapabilities: true,
+                buildSpecSlice: buildCtx.buildSpecSlice,
+                forceDomains: buildCtx.forceDomains,
+                readOnlyPreRun: true,
+                needsClarification: buildCtx.projectResolve.status === "clarify",
+                clarificationReason: buildCtx.projectResolve.reason,
+              },
+            }
+          : {}),
+        ...(healthCaps.requiresHealthCapabilities
+          ? {
+              health: {
+                requiresHealthCapabilities: true,
+                forceDomains: ["health"],
+              },
+            }
+          : {}),
+      },
     });
 
-    const turnTaskForAudit = resolveTurnTask({
-      content: request.content,
-      previous: conversationState,
-      turnRelation: relationResult.relation,
-    });
+    let conversationState = compiled.conversationState;
+    const relationResult = compiled.turnRelation;
+    setConversationTurnState(request.threadId, conversationState);
+    recordTurnRelation(relationResult.relation);
+
+    let profile = compiled.profile;
+    let taskGraph = compiled.graph;
+    const requestLedger = compiled.ledger;
+    let planValidation = compiled.planValidation;
+
     recordTurnCompile({
-      intent: turnTaskForAudit.intent,
+      intent: compiled.turnTask.intent,
       relation: relationResult.relation,
       webPlan: profile.webRetrievalPlan,
       researchPlan: profile.researchPlan,
     });
+
+    if (planValidation.issues.length) {
+      recordValidationIssues(planValidation.issues);
+    }
+
+    if (planValidation.health === "invalid") {
+      markStageEnd("compile");
+      return finalizeTurnResult(
+        {
+          content:
+            "I couldn't build a reliable plan for that request. Try splitting it into separate questions.",
+          runtime: "apple-local",
+          offline: false,
+          condensationOccurred: false,
+          aiChatId: request.aiChatId ?? null,
+        },
+        "research_incomplete",
+      );
+    }
+
+    if (planValidation.needsAskExtractor) {
+      const specs = await extractAsksWithFm({
+        content: request.content,
+        ledger: requestLedger,
+        generate: async (prompt, instructions) => {
+          ModelScheduler.current()?.record("planning");
+          const fm = await generateFmTurn({ prompt, instructions });
+          return fm.text;
+        },
+      });
+      taskGraph = mergeAskExtractorIntoGraph(
+        taskGraph,
+        requestLedger,
+        specs,
+        profile.researchPlan,
+      );
+      planValidation = validateTaskPlan({
+        ledger: requestLedger,
+        graph: taskGraph,
+        researchPlan: profile.researchPlan,
+      });
+      if (planValidation.issues.length) {
+        recordValidationIssues(planValidation.issues);
+      }
+    }
+
     markStageEnd("compile");
 
     if (request.threadId) {
@@ -1358,134 +1209,59 @@ async function runLocalTurnOrchestratorInner(
       });
     }
 
-    const requestLedger = scanRequest(request.content);
-    let taskGraph = compileTaskGraph({
-      ledger: requestLedger,
-      researchPlan: profile.researchPlan,
-    });
-    const planValidation = validateTaskPlan({
-      ledger: requestLedger,
-      graph: taskGraph,
-      researchPlan: profile.researchPlan,
-    });
-    if (planValidation.issues.length) {
-      recordValidationIssues(planValidation.issues);
-    }
-
     evidence = [];
     toolResults = [];
     provenanceBatches = [];
     retrievalAttempted = false;
     let researchCompletion: ResearchCompletionResult | null = null;
 
-    // —— Pre-run: bypass FM for obvious retrieval ——
-    if (profile.preRunTasks.length) {
+    const graphTasks = executableNodes(taskGraph);
+    if (profile.preRunTasks.length || graphTasks.length) {
       markStageStart("pre_run");
-      if (profile.researchPlan && profile.researchPlan.subtasks.length >= 2) {
-        taskGraph = markResearchNodesRunning(taskGraph);
-        reportResearchProgress(report, taskGraph);
-      }
+      reportResearchProgress(report, taskGraph);
       emitToolExecution({ type: "model_generate_start", round: -1 });
-      const parallel = await runParallelTasks({
-        tasks: profile.preRunTasks.map((task, i) => ({
-          id: task.subtaskId ? `subtask:${task.subtaskId}` : `${task.name}_${i}`,
-          run: async (signal) => {
-            if (signal.aborted) throw new Error("cancelled");
+
+      const execResult = await runTaskGraphExecution({
+        graph: taskGraph,
+        ctx: {
+          content: request.content,
+          turnTask: compiled.turnTask,
+          conversationState,
+          webRetrievalPlan: profile.webRetrievalPlan,
+          researchPlan: profile.researchPlan,
+          constraints: taskGraph.constraints,
+          executeTool: ({ name, arguments: args }) =>
+            executeAuthorizedTool({ name, arguments: args }),
+          mapToolResult: evidenceFromToolResult,
+          report,
+          onGraphChange: (g) => {
+            taskGraph = g;
+            reportResearchProgress(report, taskGraph);
+          },
+          detailForTool,
+          emitToolStart: (name, reason) =>
             emitToolExecution({
               type: "tool_start",
-              name: task.name,
-              reason: task.reason,
+              name,
+              reason,
               deterministic: true,
-            });
-            console.log("[TOOL_REQUEST]", {
-              name: task.name,
-              reason: task.reason,
-              deterministic: true,
-            });
-            report({
-              phase: "tool",
-              label: "Thinking",
-              detail: detailForTool(task.name),
-              toolName: task.name,
-            });
-            const started = Date.now();
-            const result = await executeAuthorizedTool({
-              name: task.name,
-              arguments: task.arguments,
-            });
-            if (signal.aborted) {
-              emitToolExecution({
-                type: "tool_end",
-                name: result.name,
-                ok: false,
-                durationMs: Date.now() - started,
-              });
-              throw new Error("cancelled");
-            }
-            emitToolExecution({
-              type: "tool_end",
-              name: result.name,
-              ok: result.ok,
-              durationMs: Date.now() - started,
-            });
-            console.log("[TOOL_RESULT]", {
-              name: result.name,
-              ok: result.ok,
-              deterministic: true,
-            });
-            return result;
-          },
-        })),
-        concurrency: profile.budgets.concurrency,
-        timeoutMs: profile.budgets.toolTimeoutMs,
-        isSufficient: (completed) => {
-          if (!profile.budgets.earlySynthesizeWhenSufficient) return false;
-          const oks = completed.filter((c) => c.ok && c.value);
-          if (!oks.length) return false;
-          // Never early-exit on a lone search for multi-component / live facts —
-          // wait for the batch so deepenRetrieval can open pages.
-          if (extractFactualComponents(request.content).length >= 2) return false;
-          if (profile.researchPlan && profile.researchPlan.subtasks.length >= 2) {
-            return false;
-          }
-          if (conversationState.dissatisfactionSignal) return false;
-          return oks.some((c) => {
-            const r = c.value as AiToolCallResult;
-            return (
-              r.ok &&
-              (r.name === "web.read" ||
-                r.name === "web.open" ||
-                r.name.startsWith("browser.current."))
-            );
-          });
+            }),
+          emitToolEnd: (name, ok, durationMs) =>
+            emitToolExecution({ type: "tool_end", name, ok, durationMs }),
         },
+        evidence,
+        toolResults,
+        provenanceBatches,
+        preGraphTasks: profile.preRunTasks,
       });
 
-      for (const item of parallel) {
-        const subtaskId = item.id.startsWith("subtask:")
-          ? item.id.slice("subtask:".length)
-          : undefined;
-        if (subtaskId && !item.ok) {
-          taskGraph = setSubtaskStatus(taskGraph, subtaskId, "FAILED");
-          continue;
-        }
-        if (!item.ok || !item.value) continue;
-        const result = item.value;
-        toolResults.push(result);
-        retrievalAttempted =
-          retrievalAttempted ||
-          result.name === "web.search" ||
-          result.name === "web.open" ||
-          result.name === "web.read" ||
-          result.name === "web.research" ||
-          result.name.startsWith("browser.current.");
-        const mapped = evidenceFromToolResult(result, subtaskId);
-        appendEvidence(evidence, mapped.evidence);
-        provenanceBatches.push(mapped.atoms);
-        if (subtaskId) {
-          taskGraph = setSubtaskStatus(taskGraph, subtaskId, "SUCCEEDED");
-        }
+      taskGraph = execResult.graph;
+      researchCompletion = execResult.researchCompletion;
+      retrievalAttempted =
+        graphTasks.length > 0 ||
+        profile.preRunTasks.some((t) => t.name.startsWith("web."));
 
+      for (const result of toolResults) {
         if (
           result.name.startsWith("browser.current.") &&
           !result.ok &&
@@ -1553,8 +1329,6 @@ async function runLocalTurnOrchestratorInner(
         }
       }
 
-      reportResearchProgress(report, taskGraph);
-
       await escalateExaSearchIfNeeded({
         question: request.content,
         conversationState,
@@ -1597,74 +1371,33 @@ async function runLocalTurnOrchestratorInner(
         );
       }
 
-      if (!profile.researchPlan) {
-        await deepenRetrievalIfNeeded({
-          question: request.content,
-          evidence,
-          toolResults,
-          provenanceBatches,
-          conversationState,
-          report,
-          deeper: Boolean(
-            conversationState.dissatisfactionSignal ||
-              conversationState.freshnessRequirement,
-          ),
-        });
-      }
-
-      if (profile.researchPlan) {
-        markStageStart("completion_loop");
-        researchCompletion = await runResearchCompletionLoop({
-          plan: profile.researchPlan,
-          evidence,
-          toolResults,
-          provenanceBatches,
-          profile,
-          question: request.content,
-          conversationState,
-          turnRelation: relationResult.relation,
-          report,
-          graph: taskGraph,
-          onGraphChange: (g) => {
-            taskGraph = g;
-            reportResearchProgress(report, taskGraph);
-          },
-        });
-        taskGraph = applyCompletionToGraph(
-          taskGraph,
-          researchCompletion.unresolved,
-        );
-        reportResearchProgress(
-          report,
-          taskGraph,
-          researchCompletion.complete ? "Verifying" : "Searching",
-        );
-        recordAuditCoverage({
-          complete: researchCompletion.complete,
-          unresolved: researchCompletion.unresolved,
-          calculatedTotal: researchCompletion.calculatedTotal,
-        });
-        markStageEnd("completion_loop");
-      }
-
-      applyEvidenceHygiene({
-        evidence,
-        question: request.content,
-        conversationState,
-        turnRelation: relationResult.relation,
+      const coverage = evaluateCoverage(taskGraph);
+      recordAuditCoverage({
+        complete: coverage.readyForSynthesis,
+        unresolved: coverage.unresolvedAsks.map((a) => a.id),
+        calculatedTotal: researchCompletion?.calculatedTotal,
       });
 
-      if (
-        profile.researchPlan &&
-        profile.researchPlan.subtasks.length >= 2 &&
-        researchCompletion != null &&
-        !researchCompletion.complete
-      ) {
-        const completion = researchCompletion;
-        const missing = profile.researchPlan.subtasks
-          .filter((s) => completion.unresolved.includes(s.id))
-          .map((s) => s.label)
-          .join("; ");
+      if (shouldBlockSynthesis(coverage)) {
+        return finalizeTurnResult(
+          {
+            content: failClosedMessage(["MISSING_RETRIEVAL"]),
+            runtime: "apple-local",
+            offline: false,
+            condensationOccurred: false,
+            aiChatId: request.aiChatId ?? null,
+            toolResults: toolResults.length ? toolResults : undefined,
+            citations: finalizeCitations(
+              toolResults,
+              mergeProvenanceAtoms(provenanceBatches),
+            ),
+          },
+          "research_incomplete",
+        );
+      }
+
+      if (!coverage.readyForSynthesis && coverage.unresolvedAsks.length) {
+        const missing = coverage.unresolvedAsks.map((a) => a.label).join("; ");
         return finalizeTurnResult(
           {
             content: safeContent(
@@ -1686,6 +1419,13 @@ async function runLocalTurnOrchestratorInner(
           "research_incomplete",
         );
       }
+
+      applyEvidenceHygiene({
+        evidence,
+        question: request.content,
+        conversationState,
+        turnRelation: relationResult.relation,
+      });
 
       const deterministic = tryDeterministicRender({
         question: request.content,
@@ -1720,7 +1460,6 @@ async function runLocalTurnOrchestratorInner(
         );
       }
 
-      // Recompile after pre-run: usually disallowed tools → synthesis-only.
       profile = compileTurnProfile({
         content: request.content,
         taskState,
@@ -1752,8 +1491,6 @@ async function runLocalTurnOrchestratorInner(
           typeof navigator !== "undefined" &&
           /Mac|Win|Linux/i.test(navigator.platform || ""),
       });
-      // Force synthesis path when we already retrieved for live-info —
-      // but only if quality gate says evidence is enough (or we already deepened).
       const gate = evaluateResearchQuality({
         question: request.content,
         evidence: evidenceAsSnippets(evidence),
@@ -1766,6 +1503,7 @@ async function runLocalTurnOrchestratorInner(
       ) {
         profile = {
           ...profile,
+          preRunTasks: [],
           toolMode: "disallowed",
           tools: [],
         };

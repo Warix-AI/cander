@@ -106,13 +106,31 @@ describe("task graph + plan validator", () => {
     assert.ok(items.some((i) => i.id === subId && i.status === "done"));
   });
 
-  it("flags multi-ask without decomposition as degraded", () => {
+  it("decomposes multi-ask into per-ask RETRIEVE nodes with atomic queries", () => {
     const q =
       "Check whether John emailed me the contract, compare it to the workspace contract, tell me if anything changed";
     const ledger = scanRequest(q);
     const graph = compileTaskGraph({ ledger, researchPlan: null });
+    const retrieveNodes = graph.nodes.filter((n) => n.kind === "RETRIEVE");
+    assert.equal(retrieveNodes.length, ledger.asks.length);
+    assert.ok(
+      retrieveNodes.every((n) => n.query && n.query.length < q.length),
+    );
     const validation = validateTaskPlan({ ledger, graph, researchPlan: null });
-    assert.equal(validation.health, "degraded");
-    assert.ok(validation.issues.includes("multi_ask_no_decomposition"));
+    assert.ok(!validation.issues.includes("multi_ask_no_decomposition"));
+    assert.equal(validation.askCoverage, true);
+  });
+
+  it("propagates ASK to SUCCEEDED when linked RESEARCH succeeds", () => {
+    const q =
+      "If I had three tacos from Taco Bell and a Sprite from McDonald's, how many calories total?";
+    const ledger = scanRequest(q);
+    const turnTask = resolveTurnTask({ content: q, previous: null });
+    const plan = compileResearchTurnPlan({ content: q, turnTask });
+    let graph = compileTaskGraph({ ledger, researchPlan: plan });
+    const subId = plan!.subtasks[0]!.id;
+    graph = setSubtaskStatus(graph, subId, "SUCCEEDED");
+    const askNodes = graph.nodes.filter((n) => n.kind === "ASK");
+    assert.ok(askNodes.length >= 1);
   });
 });

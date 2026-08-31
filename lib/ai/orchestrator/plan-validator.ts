@@ -44,7 +44,7 @@ export function validateTaskPlan(opts: {
   if (
     ledger.asks.length >= 2 &&
     researchNodes.length === 0 &&
-    retrieveNodes.length <= 1 &&
+    retrieveNodes.length < ledger.asks.length &&
     !researchPlan
   ) {
     issues.push("multi_ask_no_decomposition");

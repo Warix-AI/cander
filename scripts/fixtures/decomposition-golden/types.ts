@@ -18,6 +18,10 @@ export type DecompositionExpect = {
   subtaskCount?: number;
   /** Substrings each subtask query should match (one per subtask). */
   subtaskQueryIncludes?: string[];
+  /** Expected RETRIEVE node count from TaskGraph (multi-ask). */
+  retrieveNodeCount?: number;
+  /** Each RETRIEVE query must be shorter than the full prompt. */
+  retrieveQueriesAtomic?: boolean;
   /** AskExtractor escalation triggers expected. */
   askExtractorTriggers?: string[];
   /** Web retrieval query must NOT contain these (topic isolation). */

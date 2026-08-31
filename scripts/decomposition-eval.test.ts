@@ -9,6 +9,7 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { scanRequest } from "../lib/ai/orchestrator/request-scanner.ts";
+import { compileTaskGraph } from "../lib/ai/orchestrator/task-graph.ts";
 import {
   classifyTurnRelation,
   compileResearchTurnPlan,
@@ -127,6 +128,29 @@ describe("decomposition golden set", () => {
               new RegExp(fragment, "i").test(s.query),
             ),
             `${c.id}: no subtask query matching ${fragment}`,
+          );
+        }
+      }
+
+      if (
+        c.expect.retrieveNodeCount != null ||
+        c.expect.retrieveQueriesAtomic
+      ) {
+        const graph = compileTaskGraph({ ledger, researchPlan, turnTask });
+        const retrieveNodes = graph.nodes.filter((n) => n.kind === "RETRIEVE");
+        if (c.expect.retrieveNodeCount != null) {
+          assert.equal(
+            retrieveNodes.length,
+            c.expect.retrieveNodeCount,
+            `${c.id}: retrieve node count`,
+          );
+        }
+        if (c.expect.retrieveQueriesAtomic) {
+          assert.ok(
+            retrieveNodes.every(
+              (n) => n.query && n.query.length < c.prompt.length,
+            ),
+            `${c.id}: retrieve queries must be atomic`,
           );
         }
       }

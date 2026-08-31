@@ -94,6 +94,17 @@
       "expect": {
         "minAsks": 2
       }
+    },
+    {
+      "id": "DG09-multi-retrieve",
+      "category": "multi-ask-retrieve",
+      "tags": ["task-graph", "multi-retrieve"],
+      "prompt": "Check whether John emailed me the contract, compare it to the workspace contract, tell me if anything changed",
+      "expect": {
+        "minAsks": 3,
+        "retrieveNodeCount": 3,
+        "retrieveQueriesAtomic": true
+      }
     }
   ]
 }

@@ -126,7 +126,8 @@ export function recordFmInput(chars: number): void {
 
 export function recordValidationIssues(issues: string[]): void {
   if (!issues.length) return;
-  patchRetrievalTrace({ validationIssues: issues });
+  const existing = activeTrace.validationIssues ?? [];
+  patchRetrievalTrace({ validationIssues: [...existing, ...issues] });
 }
 
 export function setFinalSource(source: FinalAnswerSource): void {

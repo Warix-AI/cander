@@ -174,7 +174,37 @@ Before restructuring behavior, local turns emit a unified **`[TURN_AUDIT]`** log
 
 **Eval harness:** `npm run test:orchestrator` includes `scripts/decomposition-eval.test.ts` and `scripts/orchestration-audit.test.ts`.
 
-Next phases (still deferred): `@Generable TaskGraph`, AskExtractor FM path, Coverage Ledger terminal states beyond research completion, write idempotency.
+Next phases (still deferred): `@Generable TaskGraph`, write idempotency.
+
+## TaskGraph-driven turn execution (v4 refactor)
+
+Local FM turns compile **before any tool call**:
+
+```text
+UserTurn → compileTurn (delta + scan + TaskGraph + validate)
+        → AskExtractor (FM, only when needsAskExtractor)
+        → runTaskGraphExecution (parallel/sequential waves per node)
+        → per-task evidence validation + bounded retry
+        → evaluateCoverage (gate synthesis)
+        → deterministic render / FM synthesis
+```
+
+| Module | Role |
+|--------|------|
+| `lib/ai/orchestrator/turn-compile.ts` | Unified compile: ledger + graph + profile (web pre-run only; no message-level Exa) |
+| `lib/ai/orchestrator/task-graph.ts` | Executable ASK / RETRIEVE / RESEARCH nodes with `query`, `dependsOn`, ASK propagation |
+| `lib/ai/orchestrator/ask-extractor.ts` | Heuristic multi-ask decomposition; FM JSON fallback when plan validator flags `needsAskExtractor` |
+| `lib/ai/orchestrator/task-executor.ts` | `getReadyTasks` waves; `applyPreConstraints` on per-task args; evidence tagged by node id |
+| `lib/ai/orchestrator/task-evidence-validator.ts` | Per-task satisfaction + refined query / alternate capability for retry |
+| `lib/ai/orchestrator/coverage-ledger.ts` | `readyForSynthesis` gate; partial answers for UNRESOLVED; fail-closed when all retrieval failed |
+
+**Rules:**
+
+- No `web.search` until TaskGraph exists; queries come from task nodes (atomic), not the full user message when multi-task.
+- Independent asks → parallel RETRIEVE nodes in the same wave; explicit `dependsOn` → sequential waves.
+- Synthesis blocked until every retrieval node is terminal; partial answers name unresolved asks explicitly.
+
+**Tests:** `scripts/task-graph-exec.test.ts`, `scripts/task-evidence-validator.test.ts`, `scripts/coverage-ledger.test.ts` (+ Phase 1 / decomposition golden).
 
 ## Phase 1 — graph, gate, progressive status
 
@@ -188,8 +218,6 @@ Next phases (still deferred): `@Generable TaskGraph`, AskExtractor FM path, Cove
 **Progressive UI:** multi-subtask turns emit `researchTasks` on `AgentTurnProgress`; `AppProvider` renders a `build`-style checklist ("Researching") via `patchMessageWithProgress`.
 
 **Tests:** `scripts/orchestration-phase1.test.ts` (+ Phase 0 eval harness).
-
-Still deferred: `@Generable` plan compiler, AskExtractor FM escalation.
 
 ## Phase 2 — hardening
 
