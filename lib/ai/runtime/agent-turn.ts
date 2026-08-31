@@ -30,6 +30,7 @@ import {
   isSimpleTurnRuntimeEnabled,
   isV6RuntimeEnabled,
 } from "@/lib/ai/orchestrator/flags";
+import { resolveAssistantRuntimePath } from "@/lib/ai/raw-openai/path";
 import { getAiRuntimeMode } from "@/lib/ai/runtime/mode-store";
 import { shouldUseLocalTurnOrchestrator } from "@/lib/ai/runtime/on-device-routing";
 
@@ -159,8 +160,16 @@ async function runAssistantTurnInner(
   request: AiGenerateRequest,
   opts?: AgentTurnOptions,
 ): Promise<AgentTurnResult> {
-  // V6 flagged parallel — sole path when enabled (Edge only as in-pipeline provider).
-  if (isV6RuntimeEnabled()) {
+  const path = resolveAssistantRuntimePath();
+
+  // Benchmark bypass — raw OpenAI, no Cander orchestration.
+  if (path === "raw_openai") {
+    const { runRawOpenAITurn } = await import("@/lib/ai/raw-openai/run-turn");
+    return runRawOpenAITurn(request, opts);
+  }
+
+  // V6 — sole path when enabled (Edge only as in-pipeline provider).
+  if (path === "v6") {
     const { runTurn } = await import("@/lib/ai/v6");
     return runTurn(request, opts);
   }

@@ -88,7 +88,22 @@ New turn → deterministic delta (high confidence?)
 
 Set any to `0`/`false`/`off` to roll back that layer.
 
-## V6 runtime (default)
+## Raw OpenAI benchmark mode
+
+Temporary A/B bypass for comparing **raw OpenAI** vs V6.
+
+| Var | Where | Purpose |
+|-----|--------|---------|
+| `OPENAI_API_KEY` | server only | OpenAI auth — never `NEXT_PUBLIC_` |
+| `OPENAI_MODEL` | server | Model id (default `gpt-5.6`) |
+| `RAW_OPENAI_MODE` | server | Allows `/api/ai/raw-openai` |
+| `NEXT_PUBLIC_RAW_OPENAI_MODE` | client | Routes `runAssistantTurn` → `runRawOpenAITurn` first |
+
+When both mode flags are on, **no** V6 / Simple Turn / TaskGraph / Exa / KB / Apple FM runs. Full thread history is POSTed to the server and forwarded to the OpenAI Responses API.
+
+UI shows a **RAW OPENAI** badge. Trace: `[RAW_OPENAI_TRACE]`.
+
+
 
 **Status:** default path for normal chat. Simple Turn / TaskGraph remain as rollback when `NEXT_PUBLIC_AI_V6_RUNTIME=0` or `localStorage['cander:v6-runtime']='0'`.
 
