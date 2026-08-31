@@ -202,12 +202,12 @@ Divergence hints flag when model output has weak overlap with accepted evidence 
 
 Opt-in replacement for the TaskGraph local orchestrator:
 
-`STATE → HYDRATE → INTERPRET → RUN → VERIFY → ANSWER → COMMIT`
+`STATE → HYDRATE → INTERPRET/NORMALIZE → RUN → VERIFY → ANSWER → COMMIT`
 
 - Flag: `NEXT_PUBLIC_AI_SIMPLE_TURN_RUNTIME=1` (default **off**). Desktop: `localStorage['cander:simple-turn-runtime']='1'`.
-- Module: `lib/ai/simple-turn/` — at most two Apple FM calls (INTERPRET + optional synthesis). Extra latency goes to understanding and verifying evidence, not autonomy.
-- INTERPRET emits a constrained Plan (asks, entities, temporalContext, expectedEvidence, answerShape, lookups) with an in-pass self-check that no ask/constraint was dropped.
-- VERIFY scores entity/date/freshness/authority/ask-fit/conflicts; refine once; corroborate sensitive current facts; never answer from memory when freshness was required.
+- Module: `lib/ai/simple-turn/` — INTERPRET emits an **IntentPlan** of atomic intents (entity/subject/quantity/dependsOn/canonical lookup.q). Extra latency goes to understanding, not autonomy.
+- Independent intents run in parallel; dependent intents (e.g. CALC) wait on `dependsOn`.
+- VERIFY scores each result against its exact intent; retry failed intents once; never ask the user to split multi-part prompts.
 - Branch: `agent-turn.ts` → `runSimpleTurnRuntime` when local FM + flag on; legacy `runLocalTurnOrchestrator` otherwise.
 - Tests: `scripts/simple-turn.test.ts`.
 

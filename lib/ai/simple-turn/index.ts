@@ -7,6 +7,10 @@ export type {
   CommitNotes,
   EvidenceVerifyScore,
   HydrateResult,
+  Intent,
+  IntentAction,
+  IntentPlan,
+  IntentResult,
   Lookup,
   Plan,
   PlanValidation,
@@ -15,29 +19,45 @@ export type {
   SimpleTurnTerminal,
 } from "./types.ts";
 
-export { syncPlanAliases } from "./types.ts";
+export {
+  actionToCap,
+  intentPlanToPlan,
+  isIntentAction,
+  normalizeIntentPlan,
+  syncPlanAliases,
+} from "./types.ts";
 
 export { hydrateTurn } from "./hydrate.ts";
 export {
   planTurn,
   parsePlanJson,
+  parseIntentPlanJson,
   planFromHydrateHeuristic,
+  intentPlanFromHydrateHeuristic,
   interpretSelfCheck,
 } from "./plan.ts";
 export {
   validatePlan,
+  validateIntentPlan,
   repairPlanCode,
+  repairIntentPlanCode,
   validateAndRepairPlan,
 } from "./validate-plan.ts";
-export { runLookups } from "./run.ts";
+export { runLookups, intentExecutionWaves } from "./run.ts";
 export {
   checkEvidence,
   verifyEvidence,
+  verifyIntentEvidence,
   scoreEvidence,
   isSensitiveCurrentFact,
   buildCorroborationLookups,
   authorityScore,
 } from "./check.ts";
+export {
+  buildCanonicalLookupQuery,
+  looksLikeNarrativeQuery,
+  heuristicCalorieIntents,
+} from "./query-normalize.ts";
 export { answerTurn, mergeCommitNotes } from "./answer.ts";
 export { commitTurnNotes } from "./commit.ts";
 export {

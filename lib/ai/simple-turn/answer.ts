@@ -6,6 +6,7 @@ import type {
   AnswerPacket,
   CommitNotes,
   HydrateResult,
+  IntentResult,
   Plan,
   SimpleEvidence,
 } from "./types.ts";
@@ -107,11 +108,12 @@ export async function answerTurn(opts: {
   unresolvedReason?: string;
   generate?: (prompt: string, instructions: string) => Promise<string>;
   useHeuristicOnly?: boolean;
+  intentResults?: IntentResult[];
 }): Promise<AnswerPacket> {
   if (opts.unresolved) {
     const reason = opts.unresolvedReason ?? "";
     const freshFail =
-      /fresh|no fresh|won'?t guess|live information/i.test(reason) ||
+      /fresh|no fresh|won'?t guess|live information|unresolved/i.test(reason) ||
       reason.includes("WEB selected");
     return {
       answer: freshFail
@@ -184,14 +186,31 @@ export async function answerTurn(opts: {
   const evidenceBlock = opts.accepted
     .map(
       (e, i) =>
-        `[${i + 1}] ${e.title}${e.url ? ` (${e.url})` : ""}\n${e.content.slice(0, 1200)}`,
+        `[${i + 1}] ${e.title}${e.url ? ` (${e.url})` : ""}${
+          e.intentId ? ` intent=${e.intentId}` : ""
+        }\n${e.content.slice(0, 1200)}`,
     )
     .join("\n\n");
+
+  const intentBlock = opts.intentResults?.length
+    ? [
+        "## Normalized intents",
+        ...opts.intentResults.map(
+          (r) =>
+            `- [${r.intent.id}] ${r.intent.goal} (${r.intent.action}` +
+            `${r.intent.quantity != null ? `, qty=${r.intent.quantity}` : ""}` +
+            `${r.intent.entity ? `, entity=${r.intent.entity}` : ""}) → ${r.status}` +
+            `${r.intent.lookup?.q ? ` | q="${r.intent.lookup.q}"` : ""}`,
+        ),
+        "",
+      ].join("\n")
+    : "";
 
   const prompt = [
     "## Hydrated intent",
     opts.plan.intent,
     "",
+    intentBlock,
     "## Asks",
     ...opts.plan.asks.map((a) => `- ${a}`),
     "",
@@ -204,6 +223,9 @@ export async function answerTurn(opts: {
     evidenceBlock || "(none)",
     "",
     opts.hydrate.temporalLine,
+    "",
+    "Combine quantities from intents with per-unit facts from evidence when calculating totals.",
+    "Do not ask the user to split the question into separate prompts.",
   ].join("\n");
 
   const raw = await generate(prompt, SYNTHESIS_INSTRUCTIONS);

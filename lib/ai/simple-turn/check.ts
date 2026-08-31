@@ -7,11 +7,15 @@ import type {
   CheckResult,
   EvidenceVerifyScore,
   HydrateResult,
+  Intent,
+  IntentPlan,
+  IntentResult,
   Lookup,
   Plan,
   SimpleEvidence,
 } from "./types.ts";
 import { syncPlanAliases } from "./types.ts";
+import { buildCanonicalLookupQuery } from "./query-normalize.ts";
 
 const CURRENT_YEAR_RE = /\b(20\d{2})\b/g;
 
@@ -325,8 +329,27 @@ export function buildRefineLookups(opts: {
   hydrate: HydrateResult;
   rejected: SimpleEvidence[];
   round: number;
+  failedIntents?: Intent[];
 }): Lookup[] {
   const plan = syncPlanAliases(opts.plan);
+
+  if (opts.failedIntents?.length) {
+    return opts.failedIntents.map((intent) => ({
+      cap: "WEB" as const,
+      q: buildCanonicalLookupQuery({
+        entity: intent.entity,
+        subject: intent.subject
+          ? `${intent.subject} official`
+          : `${intent.goal} official`.slice(0, 120),
+        goal: intent.goal,
+        quantity: intent.quantity,
+        rawQ: intent.lookup?.q,
+      }),
+      parallelGroup: "refine",
+      intentId: intent.id,
+    }));
+  }
+
   const reasons = new Set(
     opts.rejected.flatMap((r) => r.verify?.reasons ?? [r.rejectReason ?? ""]),
   );
@@ -383,6 +406,98 @@ export function buildRefineLookups(opts: {
   }));
 }
 
+/** Per-intent VERIFY — reject stale/wrong-entity/irrelevant for that intent only. */
+export function verifyIntentEvidence(opts: {
+  intent: Intent;
+  evidence: SimpleEvidence[];
+  hydrate: HydrateResult;
+  plan: Plan;
+}): IntentResult {
+  const { intent, hydrate, plan } = opts;
+  const related = opts.evidence.filter(
+    (e) => e.intentId === intent.id || (!e.intentId && opts.evidence.length === 1),
+  );
+  const pool = related.length ? related : opts.evidence;
+
+  if (intent.action === "ANSWER" || intent.action === "CALC") {
+    return {
+      intent,
+      status: "succeeded",
+      evidence: pool,
+      accepted: pool.filter((e) => e.ok),
+    };
+  }
+
+  const accepted: SimpleEvidence[] = [];
+  const rejected: SimpleEvidence[] = [];
+
+  for (const ev of pool) {
+    if (!ev.ok || ev.content.trim().length < 8) {
+      rejected.push({
+        ...ev,
+        accepted: false,
+        rejectReason: ev.rejectReason ?? "empty_or_failed",
+      });
+      continue;
+    }
+    const scopedPlan: Plan = {
+      ...plan,
+      entities: intent.entity ? [intent.entity] : plan.entities,
+      asks: [intent.goal],
+      freshnessRequired: intent.freshnessRequired,
+      fresh: intent.freshnessRequired,
+    };
+    const verify = scoreEvidence({
+      evidence: ev,
+      plan: scopedPlan,
+      hydrate,
+      alreadyAccepted: accepted,
+    });
+    // Stricter entity check when intent has entity
+    let entityOk = verify.entityOk;
+    if (intent.entity) {
+      const ent = intent.entity.toLowerCase();
+      entityOk =
+        ev.content.toLowerCase().includes(ent.split(/\s+/)[0] ?? ent) ||
+        ev.title.toLowerCase().includes(ent.split(/\s+/)[0] ?? ent) ||
+        Boolean(ev.url?.toLowerCase().includes(ent.replace(/\s+/g, "")));
+    }
+    const pass =
+      entityOk &&
+      verify.freshnessOk &&
+      !verify.conflicts &&
+      verify.score >= 0.4;
+    if (pass) {
+      accepted.push({ ...ev, accepted: true, verify: { ...verify, entityOk } });
+    } else {
+      rejected.push({
+        ...ev,
+        accepted: false,
+        rejectReason: !entityOk
+          ? "wrong_entity"
+          : verify.reasons[0] ?? "weak_evidence",
+        verify: { ...verify, entityOk },
+      });
+    }
+  }
+
+  if (!accepted.length) {
+    return {
+      intent,
+      status: "unresolved",
+      evidence: pool,
+      accepted: [],
+      rejectReason: rejected[0]?.rejectReason ?? "no_matching_evidence",
+    };
+  }
+  return {
+    intent,
+    status: "succeeded",
+    evidence: pool,
+    accepted,
+  };
+}
+
 /**
  * VERIFY evidence against the INTERPRET plan.
  * Max refine path is owned by the runtime (retry once → deeper search).
@@ -393,10 +508,73 @@ export function checkEvidence(opts: {
   evidence: SimpleEvidence[];
   lookupsRun: Lookup[];
   round: number;
-  /** When true, skip asking for another corroboration pass. */
   corroborationDone?: boolean;
+  intentResults?: IntentResult[];
 }): CheckResult {
   const plan = syncPlanAliases(opts.plan);
+  const intentPlan = plan.intentPlan;
+
+  // Prefer per-intent verification when IntentPlan is present
+  if (intentPlan?.intents.length) {
+    const intentResults: IntentResult[] = intentPlan.intents.map((intent) => {
+      const prior = opts.intentResults?.find((r) => r.intent.id === intent.id);
+      if (prior?.status === "skipped") return prior;
+      return verifyIntentEvidence({
+        intent,
+        evidence: opts.evidence,
+        hydrate: opts.hydrate,
+        plan,
+      });
+    });
+
+    const accepted = intentResults.flatMap((r) => r.accepted);
+    const rejected = opts.evidence.filter(
+      (e) => !accepted.some((a) => a.id === e.id),
+    );
+    const failed = intentResults.filter(
+      (r) =>
+        r.status === "unresolved" ||
+        r.status === "failed",
+    );
+    const failedToolIntents = failed.filter(
+      (r) => r.intent.action !== "ANSWER" && r.intent.action !== "CALC",
+    );
+
+    if (failedToolIntents.length && opts.round < 2) {
+      return {
+        accepted,
+        rejected,
+        needsRefine: true,
+        refineLookups: buildRefineLookups({
+          plan,
+          hydrate: opts.hydrate,
+          rejected,
+          round: opts.round,
+          failedIntents: failedToolIntents.map((f) => f.intent),
+        }),
+        needsCorroboration: false,
+        needsDeeperSearch: false,
+        unresolved: false,
+        intentResults,
+      };
+    }
+
+    const anyUnresolved = failedToolIntents.length > 0;
+    return {
+      accepted,
+      rejected,
+      needsRefine: false,
+      needsCorroboration: false,
+      needsDeeperSearch: anyUnresolved && opts.round >= 2,
+      unresolved: anyUnresolved && opts.round >= 2,
+      unresolvedReason: anyUnresolved
+        ? failedToolIntents.map((f) => f.rejectReason).filter(Boolean).join("; ") ||
+          "one or more intents unresolved"
+        : undefined,
+      intentResults,
+    };
+  }
+
   const accepted: SimpleEvidence[] = [];
   const rejected: SimpleEvidence[] = [];
 

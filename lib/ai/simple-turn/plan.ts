@@ -1,44 +1,19 @@
 /**
- * INTERPRET — Apple FM call #1: fully normalize user meaning before tools.
- * Spend latency here: understand asks, refs, temporal context, evidence needs.
+ * INTERPRET / NORMALIZE — turn messy language into atomic IntentPlan.
+ * Highest-priority stage: spend latency here before any tool call.
  */
 
-import type {
-  AnswerShape,
-  Cap,
-  HydrateResult,
-  Lookup,
-  Plan,
+import type { HydrateResult, Intent, IntentAction, IntentPlan, Plan } from "./types.ts";
+import {
+  intentPlanToPlan,
+  isIntentAction,
+  normalizeIntentPlan,
 } from "./types.ts";
-import { syncPlanAliases } from "./types.ts";
-
-const CAPS: Cap[] = [
-  "WEB",
-  "MEMORY",
-  "FILES",
-  "CALENDAR",
-  "EMAIL",
-  "CRM",
-  "CALC",
-  "BUILD",
-];
-
-const ANSWER_SHAPES: AnswerShape[] = [
-  "direct",
-  "breakdown",
-  "comparison",
-  "summary",
-  "steps",
-  "mixed",
-];
-
-function isCap(v: unknown): v is Cap {
-  return typeof v === "string" && (CAPS as string[]).includes(v);
-}
-
-function isAnswerShape(v: unknown): v is AnswerShape {
-  return typeof v === "string" && (ANSWER_SHAPES as string[]).includes(v);
-}
+import {
+  buildCanonicalLookupQuery,
+  heuristicCalorieIntents,
+  looksLikeNarrativeQuery,
+} from "./query-normalize.ts";
 
 function stringList(v: unknown, max = 12, slice = 300): string[] {
   if (!Array.isArray(v)) return [];
@@ -48,331 +23,571 @@ function stringList(v: unknown, max = 12, slice = 300): string[] {
     .slice(0, max);
 }
 
-function parseLookups(raw: unknown): Lookup[] {
-  if (!Array.isArray(raw)) return [];
-  const look: Lookup[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const row = item as Record<string, unknown>;
-    if (!isCap(row.cap) || typeof row.q !== "string" || !row.q.trim()) continue;
-    look.push({
-      cap: row.cap,
-      q: row.q.trim().slice(0, 400),
-      parallelGroup:
-        typeof row.parallelGroup === "string"
-          ? row.parallelGroup.slice(0, 40)
-          : undefined,
-    });
+function parseIntent(raw: unknown, index: number): Intent | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as Record<string, unknown>;
+  const actionRaw = row.action;
+  if (!isIntentAction(actionRaw)) return null;
+  const action: IntentAction = actionRaw;
+  const goal =
+    typeof row.goal === "string" && row.goal.trim()
+      ? row.goal.trim().slice(0, 300)
+      : "";
+  if (!goal && action !== "ANSWER") return null;
+
+  const entity =
+    typeof row.entity === "string" && row.entity.trim()
+      ? row.entity.trim().slice(0, 120)
+      : undefined;
+  const subject =
+    typeof row.subject === "string" && row.subject.trim()
+      ? row.subject.trim().slice(0, 200)
+      : undefined;
+  const quantity =
+    typeof row.quantity === "number" && Number.isFinite(row.quantity)
+      ? row.quantity
+      : typeof row.quantity === "string" && /^\d+(\.\d+)?$/.test(row.quantity)
+        ? Number(row.quantity)
+        : undefined;
+
+  let lookup: { q: string } | undefined;
+  if (row.lookup && typeof row.lookup === "object") {
+    const q = String((row.lookup as { q?: unknown }).q ?? "").trim();
+    if (q) lookup = { q: q.slice(0, 400) };
+  } else if (typeof row.q === "string" && row.q.trim()) {
+    lookup = { q: row.q.trim().slice(0, 400) };
   }
-  return look;
+
+  if (action !== "ANSWER" && action !== "CALC") {
+    lookup = {
+      q: buildCanonicalLookupQuery({
+        entity,
+        subject,
+        goal: goal || undefined,
+        action,
+        quantity,
+        rawQ: lookup?.q,
+      }),
+    };
+  } else if (action === "CALC" && lookup) {
+    lookup = {
+      q: buildCanonicalLookupQuery({
+        entity,
+        subject,
+        goal: goal || undefined,
+        rawQ: lookup.q,
+      }),
+    };
+  }
+
+  const dependsOn = Array.isArray(row.dependsOn)
+    ? row.dependsOn.map((d) => String(d)).filter(Boolean)
+    : [];
+
+  return {
+    id: typeof row.id === "string" && row.id.trim() ? row.id.trim() : String(index + 1),
+    goal: goal || "answer user",
+    action,
+    entity,
+    subject,
+    quantity,
+    constraints: stringList(row.constraints, 8, 200),
+    resolvedRefs: stringList(row.resolvedRefs, 8, 200),
+    unresolvedRefs: stringList(row.unresolvedRefs, 8, 200),
+    freshnessRequired: Boolean(row.freshnessRequired),
+    dependsOn,
+    lookup,
+  };
 }
 
-export function parsePlanJson(raw: string): Plan | null {
+export function parseIntentPlanJson(raw: string): IntentPlan | null {
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) return null;
   try {
     const parsed = JSON.parse(match[0]) as Record<string, unknown>;
-    if (typeof parsed.intent !== "string" || !parsed.intent.trim()) return null;
-    const asks = stringList(parsed.asks, 8, 300);
-    const constraints = stringList(parsed.constraints, 8, 200);
-    const entities = stringList(parsed.entities, 10, 120);
-    const resolvedRefs = stringList(parsed.resolvedRefs, 10, 200);
-    const unresolvedRefs = stringList(parsed.unresolvedRefs, 8, 200);
-    const temporalContext = stringList(parsed.temporalContext, 8, 200);
-    const expectedEvidence = stringList(parsed.expectedEvidence, 8, 200);
-    const lookups = parseLookups(parsed.lookups ?? parsed.look);
-    const freshnessRequired = Boolean(
-      parsed.freshnessRequired ?? parsed.fresh,
-    );
-    const answerShape: AnswerShape = isAnswerShape(parsed.answerShape)
-      ? parsed.answerShape
-      : inferAnswerShape(parsed.intent, asks);
 
-    return syncPlanAliases({
-      intent: parsed.intent.trim().slice(0, 400),
-      asks: asks.length
-        ? asks
-        : [parsed.intent.trim().slice(0, 300)],
-      constraints,
-      entities,
-      resolvedRefs,
-      unresolvedRefs,
-      temporalContext,
-      freshnessRequired,
-      fresh: freshnessRequired,
-      expectedEvidence,
-      answerShape,
-      lookups,
-      look: lookups.length ? lookups : undefined,
-      answer:
-        typeof parsed.answer === "string" && parsed.answer.trim()
-          ? parsed.answer.trim().slice(0, 2000)
-          : undefined,
-    });
+    // New schema
+    if (Array.isArray(parsed.intents)) {
+      const overall =
+        typeof parsed.overallIntent === "string" && parsed.overallIntent.trim()
+          ? parsed.overallIntent.trim()
+          : typeof parsed.intent === "string"
+            ? parsed.intent.trim()
+            : "";
+      if (!overall) return null;
+      const intents: Intent[] = [];
+      for (let i = 0; i < parsed.intents.length; i++) {
+        const intent = parseIntent(parsed.intents[i], i);
+        if (intent) intents.push(intent);
+      }
+      if (!intents.length) return null;
+      return normalizeIntentPlan({
+        overallIntent: overall.slice(0, 400),
+        intents,
+        answer:
+          typeof parsed.answer === "string" && parsed.answer.trim()
+            ? parsed.answer.trim().slice(0, 2000)
+            : undefined,
+      });
+    }
+
+    // Legacy Plan → IntentPlan adapter
+    if (typeof parsed.intent === "string" && parsed.intent.trim()) {
+      return legacyPlanObjectToIntentPlan(parsed);
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-function inferAnswerShape(intent: string, asks: string[]): AnswerShape {
-  const blob = `${intent} ${asks.join(" ")}`.toLowerCase();
-  if (/\bcompar|versus|\bvs\.?\b|difference between\b/.test(blob)) {
-    return "comparison";
-  }
-  if (/\bstep|how (do|to)|walk me through|procedure\b/.test(blob)) {
-    return "steps";
-  }
-  if (/\bbreakdown|break it down|itemize|list\b/.test(blob)) {
-    return "breakdown";
-  }
-  if (/\bsummar|overview|tell me about|what (does|do) it\b/.test(blob)) {
-    return "summary";
-  }
-  if (asks.length > 1) return "mixed";
-  return "direct";
+/** @deprecated alias for tests that still call parsePlanJson */
+export function parsePlanJson(raw: string): Plan | null {
+  const ip = parseIntentPlanJson(raw);
+  if (!ip) return null;
+  return intentPlanToPlan(ip);
 }
 
-/** Code-side completeness self-check after INTERPRET (same pass, no extra FM). */
-export function interpretSelfCheck(opts: {
-  plan: Plan;
-  hydrate: HydrateResult;
-}): { ok: boolean; issues: string[]; plan: Plan } {
-  const issues: string[] = [];
-  let plan = syncPlanAliases({ ...opts.plan });
-  const text = opts.hydrate.userText.toLowerCase();
+function legacyPlanObjectToIntentPlan(
+  parsed: Record<string, unknown>,
+): IntentPlan | null {
+  const overall = String(parsed.intent ?? "").trim();
+  if (!overall) return null;
+  const asks = stringList(parsed.asks, 8, 300);
+  const lookRaw = (parsed.lookups ?? parsed.look) as unknown;
+  const lookups = Array.isArray(lookRaw) ? lookRaw : [];
+  const intents: Intent[] = [];
 
-  // Dropped asks: multi-part question with single short ask
-  const multiAsk =
-    (opts.hydrate.userText.match(/\?/g) ?? []).length >= 2 ||
-    /\b.+\band\b.+\b(what|when|how|where|who|how far|how long)\b/i.test(
-      opts.hydrate.userText,
-    );
-  if (multiAsk && plan.asks.length < 2) {
-    issues.push("dropped_ask_parts");
-  }
-
-  // Constraints mentioned but missing
-  if (
-    /\b(only|must|without|except|before|after|under \$?\d|in \d{4})\b/i.test(
-      opts.hydrate.userText,
-    ) &&
-    !plan.constraints.length
-  ) {
-    issues.push("dropped_constraints");
-  }
-
-  // URL / entity dropped
-  for (const u of opts.hydrate.urls) {
-    const mentioned =
-      plan.entities.some((e) => e.toLowerCase().includes(u.domain)) ||
-      plan.intent.toLowerCase().includes(u.domain) ||
-      plan.asks.some((a) => a.toLowerCase().includes(u.domain)) ||
-      (plan.lookups ?? []).some((l) => l.q.toLowerCase().includes(u.domain));
-    if (!mentioned) issues.push(`dropped_entity:${u.domain}`);
-  }
-
-  // Temporal phrases resolved in hydrate but missing from plan
-  for (const r of opts.hydrate.resolved) {
-    if (/→/.test(r) && /today|this year|semester|tonight|this week/i.test(r)) {
-      if (
-        !plan.temporalContext.some((t) =>
-          t.toLowerCase().includes(r.split("→")[0]?.trim().replace(/"/g, "") ?? ""),
-        ) &&
-        !plan.temporalContext.length
-      ) {
-        issues.push("dropped_temporal");
-        break;
-      }
+  if (lookups.length) {
+    for (let i = 0; i < lookups.length; i++) {
+      const row = lookups[i] as Record<string, unknown>;
+      const action = isIntentAction(row.cap) ? row.cap : "WEB";
+      const q = typeof row.q === "string" ? row.q : "";
+      intents.push({
+        id: String(i + 1),
+        goal: asks[i] ?? overall,
+        action: action === "ANSWER" ? "WEB" : action,
+        entity: undefined,
+        subject: undefined,
+        constraints: stringList(parsed.constraints, 8, 200),
+        resolvedRefs: stringList(parsed.resolvedRefs, 8, 200),
+        unresolvedRefs: stringList(parsed.unresolvedRefs, 8, 200),
+        freshnessRequired: Boolean(parsed.freshnessRequired ?? parsed.fresh),
+        dependsOn: [],
+        lookup: q ? { q: buildCanonicalLookupQuery({ rawQ: q, goal: asks[i] }) } : undefined,
+      });
     }
+  } else {
+    intents.push({
+      id: "1",
+      goal: asks[0] ?? overall,
+      action: "ANSWER",
+      constraints: stringList(parsed.constraints, 8, 200),
+      resolvedRefs: stringList(parsed.resolvedRefs, 8, 200),
+      unresolvedRefs: stringList(parsed.unresolvedRefs, 8, 200),
+      freshnessRequired: false,
+      dependsOn: [],
+    });
   }
 
-  // Freshness signal in text but not marked
-  if (
-    /\b(today|this year|current|latest|news|score|schedule|price|semester)\b/i.test(
+  return normalizeIntentPlan({
+    overallIntent: overall.slice(0, 400),
+    intents,
+    answer:
+      typeof parsed.answer === "string" && parsed.answer.trim()
+        ? parsed.answer.trim().slice(0, 2000)
+        : undefined,
+  });
+}
+
+/** Deterministic INTERPRET when FM unavailable. */
+export function intentPlanFromHydrateHeuristic(
+  hydrate: HydrateResult,
+): IntentPlan {
+  const text = hydrate.userText;
+  const calorieItems = heuristicCalorieIntents(text);
+  if (calorieItems && calorieItems.length >= 1) {
+    const intents: Intent[] = calorieItems.map((item, i) => ({
+      id: String(i + 1),
+      goal: item.goal,
+      action: "WEB" as const,
+      entity: item.entity,
+      subject: item.subject,
+      quantity: item.quantity,
+      constraints: [],
+      resolvedRefs: hydrate.resolved,
+      unresolvedRefs: hydrate.unresolved,
+      freshnessRequired: false,
+      dependsOn: [],
+      lookup: { q: item.q },
+    }));
+    const calcId = String(intents.length + 1);
+    intents.push({
+      id: calcId,
+      goal: "calculate total calories",
+      action: "CALC",
+      constraints: [],
+      resolvedRefs: [],
+      unresolvedRefs: [],
+      freshnessRequired: false,
+      dependsOn: intents.filter((i) => i.action === "WEB").map((i) => i.id),
+      lookup: { q: "sum calories from prior intents" },
+    });
+    return normalizeIntentPlan({
+      overallIntent: "total calories from listed food and drink items",
+      intents,
+    });
+  }
+
+  if (hydrate.urls.length === 1) {
+    const u = hydrate.urls[0]!;
+    return normalizeIntentPlan({
+      overallIntent: `inspect ${u.domain} and summarize what it offers`,
+      intents: [
+        {
+          id: "1",
+          goal: `summarize what ${u.domain} offers`,
+          action: "WEB",
+          entity: u.domain,
+          subject: "site overview",
+          constraints: [],
+          resolvedRefs: hydrate.resolved.length
+            ? hydrate.resolved
+            : [`it = ${u.domain}`],
+          unresolvedRefs: hydrate.unresolved,
+          freshnessRequired: false,
+          dependsOn: [],
+          lookup: { q: u.url },
+        },
+      ],
+    });
+  }
+
+  const fresh =
+    /\b(today|this year|current|latest|news|score|weather|start|semester|schedule|price)\b/i.test(
       text,
-    ) &&
-    !plan.freshnessRequired
+    ) || hydrate.resolved.some((r) => /this year|today|semester/i.test(r));
+
+  if (
+    fresh ||
+    /\b(when|what|how far|distance|calories|news)\b/i.test(text)
   ) {
-    issues.push("freshness_under_marked");
-  }
-
-  // expectedEvidence empty when lookups exist
-  if ((plan.lookups?.length || plan.freshnessRequired) && !plan.expectedEvidence.length) {
-    issues.push("missing_expected_evidence");
-  }
-
-  // Repair soft issues in-place (bounded, same INTERPRET pass — no second FM)
-  if (issues.includes("freshness_under_marked")) {
-    plan = syncPlanAliases({ ...plan, freshnessRequired: true, fresh: true });
-  }
-  if (issues.some((i) => i.startsWith("dropped_entity:"))) {
-    const entities = [...plan.entities];
-    for (const u of opts.hydrate.urls) {
-      if (!entities.some((e) => e.toLowerCase().includes(u.domain))) {
-        entities.push(u.domain);
-      }
+    const entity =
+      hydrate.entityHints[0] ??
+      hydrate.topicHint?.split(/\s+/)[0] ??
+      undefined;
+    const q = buildCanonicalLookupQuery({
+      entity,
+      subject: fresh
+        ? `${text.replace(/[?!.]/g, "").slice(0, 80)} ${hydrate.year}`.trim()
+        : undefined,
+      goal: text.slice(0, 200),
+      rawQ: hydrate.topicHint
+        ? `${hydrate.topicHint} ${hydrate.year}`
+        : `${text.slice(0, 120)} ${hydrate.year}`,
+    });
+    const intents: Intent[] = [
+      {
+        id: "1",
+        goal: text.slice(0, 300),
+        action: "WEB",
+        entity,
+        subject: undefined,
+        constraints: [],
+        resolvedRefs: hydrate.resolved,
+        unresolvedRefs: hydrate.unresolved,
+        freshnessRequired: fresh,
+        dependsOn: [],
+        lookup: { q },
+      },
+    ];
+    if (/\b(how far|distance|round[- ]?trip|there and back)\b/i.test(text)) {
+      intents.push({
+        id: "2",
+        goal: "compute distance / round-trip duration",
+        action: "CALC",
+        constraints: [],
+        resolvedRefs: [],
+        unresolvedRefs: [],
+        freshnessRequired: false,
+        dependsOn: ["1"],
+        lookup: { q: "calculate distance and round trip from evidence" },
+      });
     }
-    plan = syncPlanAliases({ ...plan, entities });
-  }
-  if (issues.includes("dropped_temporal") && opts.hydrate.resolved.length) {
-    plan = syncPlanAliases({
-      ...plan,
-      temporalContext: [
-        ...plan.temporalContext,
-        ...opts.hydrate.resolved.filter((r) => /→/.test(r)),
-      ].slice(0, 8),
+    return normalizeIntentPlan({
+      overallIntent: text.slice(0, 400),
+      intents,
     });
   }
-  if (issues.includes("missing_expected_evidence")) {
-    plan = syncPlanAliases({
-      ...plan,
-      expectedEvidence: plan.asks.map(
-        (a) => `Verified answer for: ${a}`.slice(0, 200),
-      ),
-    });
+
+  return normalizeIntentPlan({
+    overallIntent: text.slice(0, 400),
+    intents: [
+      {
+        id: "1",
+        goal: text.slice(0, 300),
+        action: "ANSWER",
+        constraints: [],
+        resolvedRefs: hydrate.resolved,
+        unresolvedRefs: hydrate.unresolved,
+        freshnessRequired: false,
+        dependsOn: [],
+      },
+    ],
+    answer: undefined,
+  });
+}
+
+/** @deprecated */
+export function planFromHydrateHeuristic(hydrate: HydrateResult): Plan {
+  return intentPlanToPlan(intentPlanFromHydrateHeuristic(hydrate));
+}
+
+/**
+ * Semantic self-check before execution.
+ * Returns repaired IntentPlan when soft issues can be fixed in one pass.
+ */
+export function interpretSelfCheck(opts: {
+  plan: IntentPlan;
+  hydrate: HydrateResult;
+}): { ok: boolean; issues: string[]; plan: IntentPlan } {
+  const issues: string[] = [];
+  let plan = normalizeIntentPlan(opts.plan);
+  const text = opts.hydrate.userText;
+
+  // Every meaningful ask → intent
+  const multi =
+    (text.match(/\?/g) ?? []).length >= 2 ||
+    /\b.+\band\b.+\b(what|when|how|calories|from)\b/i.test(text);
+  if (multi && plan.intents.length < 2) {
+    issues.push("missing_intent_coverage");
   }
-  if (issues.includes("dropped_ask_parts")) {
-    const parts = opts.hydrate.userText
-      .split(/\band\b|\?/i)
-      .map((p) => p.trim())
-      .filter((p) => p.length > 8);
-    if (parts.length >= 2) {
-      plan = syncPlanAliases({
-        ...plan,
-        asks: parts.slice(0, 4).map((p) => p.slice(0, 300)),
-        answerShape: plan.answerShape === "direct" ? "mixed" : plan.answerShape,
+
+  // Entities / URLs bound
+  for (const u of opts.hydrate.urls) {
+    const bound = plan.intents.some(
+      (i) =>
+        i.entity?.toLowerCase().includes(u.domain) ||
+        i.lookup?.q.toLowerCase().includes(u.domain) ||
+        i.goal.toLowerCase().includes(u.domain),
+    );
+    if (!bound) issues.push(`unbound_entity:${u.domain}`);
+  }
+
+  // Quantities preserved for calorie-style asks
+  const qtyMention = text.match(
+    /\b(\d+|two|three|four|five|six|seven|eight|nine|ten)\s+(regular\s+)?(tacos?|burgers?|slices?)\b/i,
+  );
+  if (qtyMention && !plan.intents.some((i) => i.quantity && i.quantity > 1)) {
+    issues.push("quantity_dropped");
+  }
+
+  // Pronouns
+  if (
+    /\b(it|that|this|them)\b/i.test(text) &&
+    opts.hydrate.unresolved.some((u) => /pronoun|ambiguous/i.test(u)) &&
+    !plan.intents.some((i) => i.unresolvedRefs.length)
+  ) {
+    // hydrate already flagged — copy into intents
+    issues.push("pronoun_unmarked");
+  }
+
+  // Lookup queries clean
+  for (const intent of plan.intents) {
+    if (intent.lookup && looksLikeNarrativeQuery(intent.lookup.q)) {
+      issues.push(`narrative_query:${intent.id}`);
+    }
+    if (
+      intent.action !== "ANSWER" &&
+      intent.action !== "CALC" &&
+      !intent.lookup?.q
+    ) {
+      issues.push(`missing_lookup:${intent.id}`);
+    }
+  }
+
+  // Dependencies: CALC without dependsOn when other WEB intents exist
+  const webIds = plan.intents.filter((i) => i.action === "WEB").map((i) => i.id);
+  for (const intent of plan.intents) {
+    if (
+      intent.action === "CALC" &&
+      webIds.length &&
+      !intent.dependsOn.length
+    ) {
+      issues.push(`calc_missing_deps:${intent.id}`);
+    }
+  }
+
+  // —— one bounded repair ——
+  const repaired = plan.intents.map((intent) => {
+    let next = { ...intent };
+    if (
+      intent.lookup &&
+      (looksLikeNarrativeQuery(intent.lookup.q) ||
+        issues.includes(`narrative_query:${intent.id}`))
+    ) {
+      next = {
+        ...next,
+        lookup: {
+          q: buildCanonicalLookupQuery({
+            entity: intent.entity,
+            subject: intent.subject,
+            goal: intent.goal,
+            quantity: intent.quantity,
+            rawQ: intent.lookup.q,
+          }),
+        },
+      };
+    }
+    if (
+      intent.action === "CALC" &&
+      webIds.length &&
+      !intent.dependsOn.length
+    ) {
+      next = { ...next, dependsOn: [...webIds] };
+    }
+    return next;
+  });
+
+  // Calorie compound repair if coverage missing
+  if (issues.includes("missing_intent_coverage")) {
+    const calorie = heuristicCalorieIntents(text);
+    if (calorie && calorie.length >= 2) {
+      return {
+        ok: false,
+        issues,
+        plan: intentPlanFromHydrateHeuristic(opts.hydrate),
+      };
+    }
+  }
+
+  for (const u of opts.hydrate.urls) {
+    if (!repaired.some((i) => i.lookup?.q.includes(u.domain) || i.entity === u.domain)) {
+      repaired.push({
+        id: String(repaired.length + 1),
+        goal: `summarize ${u.domain}`,
+        action: "WEB",
+        entity: u.domain,
+        subject: "site overview",
+        constraints: [],
+        resolvedRefs: [`it = ${u.domain}`],
+        unresolvedRefs: [],
+        freshnessRequired: false,
+        dependsOn: [],
+        lookup: { q: u.url },
       });
     }
   }
 
-  return { ok: issues.length === 0, issues, plan };
-}
-
-/** Deterministic INTERPRET fallback when FM is unavailable (tests / offline). */
-export function planFromHydrateHeuristic(hydrate: HydrateResult): Plan {
-  const urls = hydrate.urls;
-  const freshnessRequired =
-    /\b(today|this year|current|latest|news|score|weather|start|semester|schedule|price)\b/i.test(
-      hydrate.userText,
-    ) || hydrate.resolved.some((r) => /this year|today|semester/i.test(r));
-
-  const temporalContext = hydrate.resolved.filter((r) => /→/.test(r));
-  const entities = [
-    ...urls.map((u) => u.domain),
-    ...hydrate.entityHints,
-  ].filter((v, i, a) => a.indexOf(v) === i);
-
-  if (urls.length === 1) {
-    const u = urls[0]!;
-    return syncPlanAliases({
-      intent: `inspect ${u.domain} and summarize what it offers`,
-      asks: [`Summarize what ${u.domain} offers`],
-      constraints: [],
-      entities,
-      resolvedRefs: hydrate.resolved.length
-        ? hydrate.resolved
-        : [`it = ${u.domain}`],
-      unresolvedRefs: hydrate.unresolved,
-      temporalContext,
-      freshnessRequired: false,
-      fresh: false,
-      expectedEvidence: [
-        `Readable page content from ${u.domain}`,
-        `Description of what ${u.domain} offers`,
-      ],
-      answerShape: "summary",
-      lookups: [{ cap: "WEB", q: u.url, parallelGroup: "url" }],
-    });
+  if (issues.includes("quantity_dropped") && qtyMention) {
+    const map: Record<string, number> = {
+      two: 2,
+      three: 3,
+      four: 4,
+      five: 5,
+      six: 6,
+      seven: 7,
+      eight: 8,
+      nine: 9,
+      ten: 10,
+    };
+    const raw = qtyMention[1]!.toLowerCase();
+    const n = map[raw] ?? Number(raw) ?? 1;
+    if (repaired[0] && repaired[0].action === "WEB") {
+      repaired[0] = { ...repaired[0], quantity: n };
+    }
   }
 
-  const lookups: Lookup[] = [];
-  if (
-    freshnessRequired ||
-    /\b(when|what|how far|distance|calories|news)\b/i.test(hydrate.userText)
-  ) {
-    const q = hydrate.topicHint
-      ? `${hydrate.userText} (${hydrate.topicHint}, ${hydrate.year})`
-      : `${hydrate.userText} ${hydrate.year}`;
-    lookups.push({ cap: "WEB", q: q.slice(0, 400), parallelGroup: "primary" });
+  if (issues.includes("pronoun_unmarked")) {
+    for (let i = 0; i < repaired.length; i++) {
+      repaired[i] = {
+        ...repaired[i]!,
+        unresolvedRefs: [
+          ...repaired[i]!.unresolvedRefs,
+          ...opts.hydrate.unresolved,
+        ],
+        resolvedRefs: [
+          ...repaired[i]!.resolvedRefs,
+          ...opts.hydrate.resolved,
+        ],
+      };
+    }
   }
 
-  if (
-    /\b(how far|distance|miles|km|round[- ]?trip|there and back)\b/i.test(
-      hydrate.userText,
-    )
-  ) {
-    lookups.push({
-      cap: "CALC",
-      q: hydrate.userText.slice(0, 400),
-      parallelGroup: "primary",
-    });
-  }
-
-  const asks =
-    hydrate.userText.split(/\band\b|\?/i).map((p) => p.trim()).filter((p) => p.length > 8)
-      .slice(0, 4);
-  const askList = asks.length >= 2 ? asks.map((a) => a.slice(0, 300)) : [
-    hydrate.userText.slice(0, 300),
-  ];
-
-  return syncPlanAliases({
-    intent: hydrate.userText.slice(0, 400),
-    asks: askList,
-    constraints: [],
-    entities,
-    resolvedRefs: hydrate.resolved,
-    unresolvedRefs: hydrate.unresolved,
-    temporalContext,
-    freshnessRequired,
-    fresh: freshnessRequired,
-    expectedEvidence: askList.map(
-      (a) => `Current verified fact answering: ${a}`.slice(0, 200),
-    ),
-    answerShape: inferAnswerShape(hydrate.userText, askList),
-    lookups,
+  plan = normalizeIntentPlan({
+    overallIntent: plan.overallIntent,
+    intents: repaired,
+    answer: plan.answer,
   });
+
+  const hard = issues.filter(
+    (i) =>
+      i.startsWith("unbound_entity") ||
+      i.startsWith("missing_lookup") ||
+      i === "missing_intent_coverage",
+  );
+  // Re-check narrative queries after repair
+  const stillNarrative = plan.intents.some(
+    (i) => i.lookup && looksLikeNarrativeQuery(i.lookup.q),
+  );
+  return {
+    ok: hard.length === 0 && !stillNarrative,
+    issues,
+    plan,
+  };
 }
 
 const INTERPRET_INSTRUCTIONS = [
-  "You INTERPRET the user message once before any tools run.",
-  "Return ONLY a JSON object matching this schema:",
+  "You INTERPRET/NORMALIZE the user message into atomic intents BEFORE any tools run.",
+  "Return ONLY JSON:",
   "{",
-  '  "intent": string,',
-  '  "asks": string[],',
-  '  "constraints": string[],',
-  '  "entities": string[],',
-  '  "resolvedRefs": string[],',
-  '  "unresolvedRefs": string[],',
-  '  "temporalContext": string[],',
-  '  "freshnessRequired": boolean,',
-  '  "expectedEvidence": string[],',
-  '  "answerShape": "direct"|"breakdown"|"comparison"|"summary"|"steps"|"mixed",',
-  '  "lookups": [{ "cap": "WEB"|"MEMORY"|"FILES"|"CALENDAR"|"EMAIL"|"CRM"|"CALC"|"BUILD", "q": string, "parallelGroup"?: string }],',
+  '  "overallIntent": string,',
+  '  "intents": [{',
+  '    "id": string,',
+  '    "goal": string,',
+  '    "action": "ANSWER"|"WEB"|"MEMORY"|"FILES"|"CALENDAR"|"EMAIL"|"CRM"|"CALC"|"BUILD",',
+  '    "entity"?: string,',
+  '    "subject"?: string,',
+  '    "quantity"?: number,',
+  '    "constraints": string[],',
+  '    "resolvedRefs": string[],',
+  '    "unresolvedRefs": string[],',
+  '    "freshnessRequired": boolean,',
+  '    "dependsOn": string[],',
+  '    "lookup"?: { "q": string }',
+  "  }],",
   '  "answer"?: string',
   "}",
   "",
-  "Determine explicitly:",
-  "- intent: what the user ultimately wants",
-  "- asks: every distinct ask (keep related parts together; split only independent asks)",
-  "- constraints: hard requirements (location, year, budget, format, exclusions)",
-  "- entities: people, orgs, products, domains/URLs involved",
-  "- resolvedRefs / unresolvedRefs: pronoun and anaphora meanings; never invent bindings",
-  "- temporalContext: today/this year/last season/etc. with resolved values from hydrate",
-  "- freshnessRequired: true for schedules, news, prices, sports, school calendars, current facts",
-  "- expectedEvidence: what would satisfy each ask (be concrete)",
-  "- answerShape: how the final answer should be structured",
-  "- lookups: minimum capabilities; use parallelGroup when independent lookups can run together",
+  "Process:",
+  "1) Understand the ENTIRE message before splitting.",
+  "2) Identify every distinct ask.",
+  "3) Preserve relationships between entities, quantities, pronouns, dates, URLs, constraints, and actions.",
+  "4) Separate independent intents from dependent ones (dependsOn).",
+  "5) Resolve conversational references from notes; mark ambiguity in unresolvedRefs — never guess.",
+  "6) Generate CANONICAL lookup queries from normalized meaning — never copy raw sentence fragments.",
   "",
-  "Rules:",
-  "- Preserve semantic relationships. Do NOT split filler like \"tell me about it\" from its target URL/entity.",
-  "- Never create a lookup whose query is only filler (\"tell me about it\", \"what it offers\").",
-  "- For URL/site inspection use lookups: [{ cap: \"WEB\", q: \"https://domain...\" }].",
-  "- When freshnessRequired, include WEB lookups; do not invent live facts in answer.",
-  "- Use conversation notes for follow-ups (e.g. first day under BYU topic).",
-  "- Only set answer when no retrieval is needed (greetings, pure opinion).",
-  "- Do not execute tools.",
+  "Query rules (critical):",
+  '- Bad: "Taco Bell If I eat three regular tacos"',
+  '- Good: "Taco Bell regular taco calories"',
+  '- Bad: "McDonald\'s I have a medium Sprite"',
+  '- Good: "McDonald\'s medium Sprite calories"',
+  "- lookup.q describes the FACT needed, not the user's wording.",
   "",
-  "SELF-CHECK before returning: ensure no meaningful user ask, constraint, entity/URL, or temporal cue was dropped. If anything was missing, include it in the JSON.",
+  "Example — calories from two brands → two WEB intents (parallel) + one CALC (dependsOn both).",
+  "URL inspect → one WEB intent with lookup.q = https://domain...",
+  "Independent intents: dependsOn=[]. Dependent: list prior intent ids.",
+  "Only set answer when action is ANSWER and no retrieval is needed.",
+  "Do not execute tools. Do not invent live facts.",
+  "",
+  "SELF-CHECK before returning:",
+  "- Did every meaningful ask become an intent?",
+  "- Are entities/actions bound?",
+  "- Are quantities preserved?",
+  "- Are pronouns resolved or marked unresolved?",
+  "- Are date refs normalized into constraints/resolvedRefs?",
+  "- Are lookup queries clean standalone queries?",
+  "- Are dependencies correct?",
 ].join("\n");
 
 export async function planTurn(opts: {
@@ -380,54 +595,51 @@ export async function planTurn(opts: {
   generate?: (prompt: string, instructions: string) => Promise<string>;
   useHeuristicOnly?: boolean;
 }): Promise<{
-  plan: Plan;
+  plan: IntentPlan;
+  flatPlan: Plan;
   raw?: string;
   usedHeuristic: boolean;
   selfCheckIssues: string[];
 }> {
-  if (opts.useHeuristicOnly || !opts.generate) {
-    const plan = planFromHydrateHeuristic(opts.hydrate);
-    const checked = interpretSelfCheck({ plan, hydrate: opts.hydrate });
-    return {
-      plan: checked.plan,
-      usedHeuristic: true,
-      selfCheckIssues: checked.issues,
-    };
-  }
-
-  const generate = opts.generate;
-
-  let raw = await generate(opts.hydrate.planPrompt, INTERPRET_INSTRUCTIONS);
-  let plan = parsePlanJson(raw);
-  if (!plan) {
-    raw = await generate(
-      `${opts.hydrate.planPrompt}\n\nPrevious output was invalid JSON. Return only the Plan JSON object. Re-check that no ask/constraint/entity was dropped.`,
-      INTERPRET_INSTRUCTIONS,
-    );
-    plan = parsePlanJson(raw);
-  }
-  if (!plan) {
-    const heuristic = planFromHydrateHeuristic(opts.hydrate);
+  const finish = (
+    ip: IntentPlan,
+    meta: { raw?: string; usedHeuristic: boolean },
+  ) => {
     const checked = interpretSelfCheck({
-      plan: heuristic,
+      plan: ip,
       hydrate: opts.hydrate,
     });
     return {
       plan: checked.plan,
-      raw,
-      usedHeuristic: true,
+      flatPlan: intentPlanToPlan(checked.plan),
+      raw: meta.raw,
+      usedHeuristic: meta.usedHeuristic,
       selfCheckIssues: checked.issues,
     };
+  };
+
+  if (opts.useHeuristicOnly || !opts.generate) {
+    return finish(intentPlanFromHydrateHeuristic(opts.hydrate), {
+      usedHeuristic: true,
+    });
   }
 
-  const checked = interpretSelfCheck({ plan, hydrate: opts.hydrate });
-  return {
-    plan: checked.plan,
-    raw,
-    usedHeuristic: false,
-    selfCheckIssues: checked.issues,
-  };
+  let raw = await opts.generate(opts.hydrate.planPrompt, INTERPRET_INSTRUCTIONS);
+  let parsed = parseIntentPlanJson(raw);
+  if (!parsed) {
+    raw = await opts.generate(
+      `${opts.hydrate.planPrompt}\n\nPrevious output was invalid. Return only IntentPlan JSON. Re-check coverage, bindings, quantities, clean queries, and dependsOn.`,
+      INTERPRET_INSTRUCTIONS,
+    );
+    parsed = parseIntentPlanJson(raw);
+  }
+  if (!parsed) {
+    return finish(intentPlanFromHydrateHeuristic(opts.hydrate), {
+      raw,
+      usedHeuristic: true,
+    });
+  }
+  return finish(parsed, { raw, usedHeuristic: false });
 }
 
-/** @deprecated alias — INTERPRET owns planning */
-export const PLAN_INSTRUCTIONS = INTERPRET_INSTRUCTIONS;
+export { INTERPRET_INSTRUCTIONS as PLAN_INSTRUCTIONS };

@@ -2,10 +2,9 @@
 
 /**
  * Simple turn runtime —
- * HYDRATE → INTERPRET → RUN → VERIFY → ANSWER → COMMIT
+ * HYDRATE → INTERPRET/NORMALIZE → RUN → VERIFY → ANSWER → COMMIT
  *
- * Extra latency is spent on understanding the request and verifying evidence,
- * not on giving the small model more autonomy.
+ * First model call's job: turn messy language into clean executable intents.
  */
 
 import { collectCitationsFromToolResults } from "../orchestrator/collect-citations.ts";
@@ -31,7 +30,6 @@ import { runLookups } from "./run.ts";
 import { loadSimpleState } from "./state-store.ts";
 import { validateAndRepairPlan } from "./validate-plan.ts";
 import type { Lookup, SimpleEvidence } from "./types.ts";
-import { syncPlanAliases } from "./types.ts";
 
 function citationsFromEvidence(items: SimpleEvidence[]) {
   return items
@@ -81,11 +79,11 @@ export async function runSimpleTurnRuntime(
       },
     });
 
-    // —— INTERPRET ——
+    // —— INTERPRET / NORMALIZE ——
     report({
       phase: "thinking",
       label: "Thinking",
-      detail: "Interpreting request",
+      detail: "Normalizing intents",
     });
     const canFm =
       typeof window !== "undefined" ||
@@ -108,21 +106,21 @@ export async function runSimpleTurnRuntime(
     trace?.recordStage("interpret", {
       decision: planned.usedHeuristic ? "heuristic" : "fm",
       output: {
-        plan: planned.plan,
+        overallIntent: planned.plan.overallIntent,
+        intents: planned.plan.intents,
         selfCheckIssues: planned.selfCheckIssues,
       },
       input: planned.raw ? { rawChars: planned.raw.length } : undefined,
     });
-    // Keep legacy stage name for existing dashboards
     trace?.recordStage("plan", {
       decision: planned.usedHeuristic ? "heuristic" : "fm",
-      output: planned.plan,
+      output: planned.flatPlan,
     });
     if (!planned.usedHeuristic) {
       trace?.recordModelPrompt({
         round: 0,
         prompt: hydrate.planPrompt.slice(0, 2000),
-        instructions: "INTERPRET schema",
+        instructions: "INTERPRET IntentPlan schema",
       });
       if (planned.raw) {
         trace?.recordModelOutput({
@@ -133,7 +131,7 @@ export async function runSimpleTurnRuntime(
       }
     }
 
-    // —— VALIDATE / REPAIR (code, not agent) ——
+    // —— VALIDATE / REPAIR (one bounded pass — never ask user to split) ——
     const validated = validateAndRepairPlan({
       plan: planned.plan,
       hydrate,
@@ -142,7 +140,10 @@ export async function runSimpleTurnRuntime(
     trace?.recordStage("plan_validate", {
       decision: validated.failed ? "failed" : "ok",
       failureType: validated.failed ? "validation_failed" : undefined,
-      output: { issues: validated.issues, plan: validated.plan },
+      output: {
+        issues: validated.issues,
+        intents: validated.plan.intents,
+      },
     });
 
     if (validated.failed) {
@@ -159,9 +160,13 @@ export async function runSimpleTurnRuntime(
       };
     }
 
-    const plan = syncPlanAliases(validated.plan);
+    const intentPlan = validated.plan;
+    const plan = validated.flatPlan;
     let allEvidence: SimpleEvidence[] = [];
-    let lookupsRun: Lookup[] = plan.lookups ?? plan.look ?? [];
+    let lookupsRun: Lookup[] = [];
+    let intentResults = undefined as
+      | import("./types.ts").IntentResult[]
+      | undefined;
     let check = checkEvidence({
       plan,
       hydrate,
@@ -171,20 +176,21 @@ export async function runSimpleTurnRuntime(
     });
     let corroborationDone = false;
 
-    const needsRetrieval =
-      (plan.lookups?.length ?? 0) > 0 ||
-      (plan.look?.length ?? 0) > 0 ||
-      plan.freshnessRequired ||
-      plan.fresh;
+    const needsRetrieval = intentPlan.intents.some(
+      (i) => i.action !== "ANSWER",
+    );
 
-    // —— RUN + VERIFY (max 2 refine rounds; optional corroboration) ——
+    // —— RUN (dependency waves) + VERIFY ——
     if (needsRetrieval) {
       for (let round = 1; round <= 2; round++) {
-        const extra =
-          round > 1
-            ? check.needsCorroboration
-              ? check.corroborateLookups
-              : check.refineLookups
+        const failedIds =
+          round > 1 && check.needsRefine
+            ? check.intentResults
+                ?.filter(
+                  (r) =>
+                    r.status === "unresolved" || r.status === "failed",
+                )
+                .map((r) => r.intent.id)
             : undefined;
 
         report({
@@ -200,46 +206,47 @@ export async function runSimpleTurnRuntime(
         });
 
         const run = await runLookups({
-          plan,
+          plan: intentPlan,
           browser: state.browser,
           userText: hydrate.userText,
           cache: state.cache,
-          extraLookups: extra,
+          extraLookups:
+            round > 1
+              ? check.needsCorroboration
+                ? check.corroborateLookups
+                : check.refineLookups
+              : undefined,
+          onlyIntentIds: failedIds?.length ? failedIds : undefined,
         });
 
         for (const look of run.lookupsRun) {
           const tool =
             look.cap === "WEB"
-              ? /^https?:\/\//i.test(look.q) || /^[a-z0-9].*\.[a-z]{2,}/i.test(look.q)
+              ? /^https?:\/\//i.test(look.q) ||
+                /^[a-z0-9].*\.[a-z]{2,}/i.test(look.q)
                 ? "web.read"
                 : "web.search"
               : look.cap.toLowerCase();
           trace?.recordToolRequest({
             tool,
-            arguments: { query: look.q },
+            arguments: { query: look.q, intentId: look.intentId },
             reason: `simple_turn_round_${round}`,
           });
         }
 
         allEvidence = [...allEvidence, ...run.evidence];
-        lookupsRun = run.lookupsRun;
+        lookupsRun = [...lookupsRun, ...run.lookupsRun];
+        intentResults = run.intentResults;
 
         for (const ev of run.evidence) {
-          if (ev.ok) {
-            trace?.recordToolResponseRaw({
-              tool: ev.sourceTool,
-              ok: true,
-              durationMs: 0,
-              rawOutput: ev.content.slice(0, 500),
-            });
-          } else {
-            trace?.recordToolResponseRaw({
-              tool: ev.sourceTool,
-              ok: false,
-              durationMs: 0,
-              rawOutput: ev.rejectReason ?? "failed",
-            });
-          }
+          trace?.recordToolResponseRaw({
+            tool: ev.sourceTool,
+            ok: ev.ok,
+            durationMs: 0,
+            rawOutput: ev.ok
+              ? ev.content.slice(0, 500)
+              : ev.rejectReason ?? "failed",
+          });
         }
 
         if (check.needsCorroboration && round > 1) {
@@ -253,7 +260,9 @@ export async function runSimpleTurnRuntime(
           lookupsRun,
           round,
           corroborationDone,
+          intentResults,
         });
+        intentResults = check.intentResults ?? intentResults;
 
         trace?.recordStage("verify", {
           decision: check.unresolved
@@ -264,36 +273,30 @@ export async function runSimpleTurnRuntime(
                 ? "corroborate"
                 : "ok",
           output: {
+            intents: intentResults?.map((r) => ({
+              id: r.intent.id,
+              status: r.status,
+              goal: r.intent.goal,
+              q: r.intent.lookup?.q,
+            })),
             accepted: check.accepted.map((a) => ({
               id: a.id,
               score: a.verify?.score,
-              authority: a.verify?.authority,
             })),
-            rejected: check.rejected.map((r) => ({
-              id: r.id,
-              reason: r.rejectReason,
-              score: r.verify?.score,
-            })),
-            needsDeeperSearch: check.needsDeeperSearch,
           },
         });
 
         for (const a of check.accepted) {
           trace?.recordStage("evidence_accept", {
             decision: "accepted",
-            output: {
-              id: a.id,
-              title: a.title,
-              query: a.query,
-              score: a.verify?.score,
-            },
+            output: { id: a.id, title: a.title, intentId: a.intentId },
           });
         }
         for (const r of check.rejected) {
           trace?.recordStage("evidence_reject", {
             decision: r.rejectReason ?? "rejected",
             failureType: "evidence_rejected",
-            output: { id: r.id, reason: r.rejectReason, verify: r.verify },
+            output: { id: r.id, reason: r.rejectReason },
           });
         }
 
@@ -304,13 +307,10 @@ export async function runSimpleTurnRuntime(
           });
           continue;
         }
-
         if (!check.needsRefine) break;
         if (round >= 2) break;
         trace?.recordStage("retry", {
-          decision: check.needsDeeperSearch
-            ? "deeper_search"
-            : "refine_retrieval",
+          decision: "refine_retrieval",
           output: check.refineLookups,
         });
       }
@@ -325,9 +325,9 @@ export async function runSimpleTurnRuntime(
       };
     }
 
-    // Never answer from memory when a fresh lookup was required and VERIFY failed.
+    // Freshness required + no accepted evidence → unresolved (no memory answer)
     if (
-      (plan.freshnessRequired || plan.fresh) &&
+      plan.freshnessRequired &&
       !check.accepted.length &&
       needsRetrieval
     ) {
@@ -337,6 +337,18 @@ export async function runSimpleTurnRuntime(
         unresolvedReason:
           check.unresolvedReason ??
           "fresh/current ask with no verified evidence",
+      };
+    }
+
+    // Answer only once every intent is completed, unresolved, or skipped
+    const pendingIntents = intentResults?.some(
+      (r) => r.status === "pending" || r.status === "running",
+    );
+    if (pendingIntents) {
+      check = {
+        ...check,
+        unresolved: true,
+        unresolvedReason: "intents incomplete",
       };
     }
 
@@ -350,6 +362,7 @@ export async function runSimpleTurnRuntime(
       unresolvedReason: check.unresolvedReason,
       generate: canFm ? generate : undefined,
       useHeuristicOnly: !canFm,
+      intentResults,
     });
 
     trace?.recordStage("answer_path", {
@@ -374,7 +387,12 @@ export async function runSimpleTurnRuntime(
         name: e.sourceTool,
         ok: e.ok,
         output: e.content,
-        data: { title: e.title, url: e.url, query: e.query },
+        data: {
+          title: e.title,
+          url: e.url,
+          query: e.query,
+          intentId: e.intentId,
+        },
       }),
     );
 

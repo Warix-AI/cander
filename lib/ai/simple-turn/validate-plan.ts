@@ -1,75 +1,64 @@
 /**
- * Validate INTERPRET plan — reject/repair before RUN.
+ * Validate IntentPlan — semantic self-check + one bounded repair before RUN.
  */
 
 import { browserRequiresWeb } from "./browser-policy.ts";
-import type { BrowserMode, HydrateResult, Plan, PlanValidation } from "./types.ts";
-import { syncPlanAliases } from "./types.ts";
+import { interpretSelfCheck } from "./plan.ts";
+import { buildCanonicalLookupQuery, looksLikeNarrativeQuery } from "./query-normalize.ts";
+import type {
+  BrowserMode,
+  HydrateResult,
+  IntentPlan,
+  Plan,
+  PlanValidation,
+} from "./types.ts";
+import { intentPlanToPlan, normalizeIntentPlan, syncPlanAliases } from "./types.ts";
 
 const FILLER_QUERY =
   /^(tell me about it|what it offers|what it's offering|write me a summary|look at it|about it)$/i;
 
-function hasAskCoverage(userText: string, asks: string[]): boolean {
-  if (!asks.length) return false;
-  const multi =
-    (userText.match(/\?/g) ?? []).length >= 2 ||
-    /\b.+\band\b.+\b(what|when|how|where|who)\b/i.test(userText);
-  if (!multi) return asks.length >= 1;
-  return asks.length >= 2 || asks.some((a) => a.length > 40);
-}
-
-function lookupsOf(plan: Plan) {
-  return plan.lookups?.length ? plan.lookups : plan.look ?? [];
-}
-
-export function validatePlan(opts: {
-  plan: Plan;
+export function validateIntentPlan(opts: {
+  plan: IntentPlan;
   hydrate: HydrateResult;
   browser: BrowserMode;
 }): PlanValidation {
   const issues: string[] = [];
-  const plan = syncPlanAliases(opts.plan);
-  const { hydrate } = opts;
+  const plan = normalizeIntentPlan(opts.plan);
 
-  if (!plan.intent.trim()) issues.push("missing_intent");
-  if (!plan.asks.length) issues.push("missing_asks");
+  if (!plan.overallIntent.trim()) issues.push("missing_intent");
+  if (!plan.intents.length) issues.push("missing_asks");
 
-  if (!hasAskCoverage(hydrate.userText, plan.asks)) {
-    issues.push("ask_coverage_gap");
-  }
-
-  for (const u of hydrate.urls) {
-    const bound = lookupsOf(plan).some(
-      (l) =>
-        l.cap === "WEB" &&
-        (l.q.toLowerCase().includes(u.domain) ||
-          l.q.toLowerCase().includes(u.url.toLowerCase())),
-    );
-    const inIntent =
-      plan.intent.toLowerCase().includes(u.domain) ||
-      plan.asks.some((a) => a.toLowerCase().includes(u.domain)) ||
-      plan.entities.some((e) => e.toLowerCase().includes(u.domain));
-    if (!bound) issues.push(`url_unbound:${u.domain}`);
-    if (!inIntent && !bound) issues.push(`url_dropped:${u.domain}`);
-  }
-
-  for (const look of lookupsOf(plan)) {
-    if (look.cap === "WEB" && FILLER_QUERY.test(look.q.trim())) {
+  for (const intent of plan.intents) {
+    if (intent.lookup && FILLER_QUERY.test(intent.lookup.q.trim())) {
       issues.push("filler_web_query");
+    }
+    if (intent.lookup && looksLikeNarrativeQuery(intent.lookup.q)) {
+      issues.push(`narrative_query:${intent.id}`);
+    }
+    if (
+      intent.action !== "ANSWER" &&
+      intent.action !== "CALC" &&
+      !intent.lookup?.q
+    ) {
+      issues.push(`missing_lookup:${intent.id}`);
     }
   }
 
-  if (
-    plan.unresolvedRefs.some((r) => /pronoun|ambiguous/i.test(r)) &&
-    plan.resolvedRefs.some((r) => /\bit\b.*=/i.test(r))
-  ) {
-    issues.push("pronoun_guessed_while_unresolved");
+  for (const u of opts.hydrate.urls) {
+    const bound = plan.intents.some(
+      (i) =>
+        i.entity?.toLowerCase().includes(u.domain) ||
+        i.lookup?.q.toLowerCase().includes(u.domain) ||
+        i.goal.toLowerCase().includes(u.domain),
+    );
+    if (!bound) issues.push(`url_unbound:${u.domain}`);
   }
 
+  const flat = intentPlanToPlan(plan);
   if (
-    plan.freshnessRequired &&
+    flat.freshnessRequired &&
     plan.answer?.trim() &&
-    !lookupsOf(plan).length
+    !plan.intents.some((i) => i.action === "WEB")
   ) {
     issues.push("fresh_answer_without_retrieval");
   }
@@ -77,121 +66,199 @@ export function validatePlan(opts: {
   if (
     browserRequiresWeb({
       browser: opts.browser,
-      plan,
-      userText: hydrate.userText,
+      plan: flat,
+      userText: opts.hydrate.userText,
     }) &&
-    !lookupsOf(plan).some((l) => l.cap === "WEB")
+    !plan.intents.some((i) => i.action === "WEB")
   ) {
     issues.push("browser_on_missing_web");
   }
 
+  // Pronoun guessed while unresolved
+  if (
+    plan.intents.some((i) =>
+      i.unresolvedRefs.some((r) => /pronoun|ambiguous/i.test(r)),
+    ) &&
+    plan.intents.some((i) => i.resolvedRefs.some((r) => /\bit\b.*=/i.test(r)))
+  ) {
+    // allowed if hydrate resolved — only flag hard guess with no hydrate support
+    if (opts.hydrate.unresolved.some((u) => /ambiguous|pronoun/i.test(u))) {
+      issues.push("pronoun_guessed_while_unresolved");
+    }
+  }
+
   if (!issues.length) return { ok: true, issues: [] };
 
-  const repaired = repairPlanCode({ plan, hydrate, issues });
-  return {
-    ok: false,
+  const repaired = repairIntentPlanCode({
+    plan,
+    hydrate: opts.hydrate,
     issues,
-    repaired,
-  };
+  });
+  return { ok: false, issues, repaired };
 }
 
-/** One bounded code repair — not an agent loop. */
-export function repairPlanCode(opts: {
-  plan: Plan;
+export function repairIntentPlanCode(opts: {
+  plan: IntentPlan;
   hydrate: HydrateResult;
   issues: string[];
-}): Plan {
-  let plan = syncPlanAliases({
-    ...opts.plan,
-    asks: [...opts.plan.asks],
-    constraints: [...(opts.plan.constraints ?? [])],
-    entities: [...(opts.plan.entities ?? [])],
-    resolvedRefs: [...opts.plan.resolvedRefs],
-    unresolvedRefs: [...opts.plan.unresolvedRefs],
-    temporalContext: [...(opts.plan.temporalContext ?? [])],
-    expectedEvidence: [...(opts.plan.expectedEvidence ?? [])],
-    lookups: [...lookupsOf(opts.plan)],
+}): IntentPlan {
+  // Prefer interpretSelfCheck repair path
+  const checked = interpretSelfCheck({
+    plan: opts.plan,
+    hydrate: opts.hydrate,
   });
+  let plan = checked.plan;
 
-  plan.lookups = plan.lookups.filter((l) => !FILLER_QUERY.test(l.q.trim()));
+  // Drop filler lookups
+  plan = {
+    ...plan,
+    intents: plan.intents
+      .map((intent) => {
+        if (intent.lookup && FILLER_QUERY.test(intent.lookup.q.trim())) {
+          return { ...intent, lookup: undefined };
+        }
+        if (intent.lookup && looksLikeNarrativeQuery(intent.lookup.q)) {
+          return {
+            ...intent,
+            lookup: {
+              q: buildCanonicalLookupQuery({
+                entity: intent.entity,
+                subject: intent.subject,
+                goal: intent.goal,
+                quantity: intent.quantity,
+                rawQ: intent.lookup.q,
+              }),
+            },
+          };
+        }
+        return intent;
+      })
+      .filter((intent) => {
+        if (intent.action === "ANSWER" || intent.action === "CALC") return true;
+        return Boolean(intent.lookup?.q);
+      }),
+  };
 
   for (const u of opts.hydrate.urls) {
-    const has = plan.lookups.some(
-      (l) => l.cap === "WEB" && l.q.toLowerCase().includes(u.domain),
+    const has = plan.intents.some(
+      (i) =>
+        i.action === "WEB" &&
+        (i.entity === u.domain || i.lookup?.q.includes(u.domain)),
     );
     if (!has) {
-      plan.lookups = [
-        ...plan.lookups,
-        { cap: "WEB", q: u.url, parallelGroup: "url" },
-      ];
-      if (!plan.intent.toLowerCase().includes(u.domain)) {
-        plan.intent = `inspect ${u.domain} and summarize what it offers`;
-      }
-      if (!plan.asks.some((a) => a.toLowerCase().includes(u.domain))) {
-        plan.asks = [`Summarize ${u.domain}`];
-      }
-      if (!plan.entities.some((e) => e.toLowerCase().includes(u.domain))) {
-        plan.entities.push(u.domain);
-      }
-      if (!plan.resolvedRefs.some((r) => r.includes(u.domain))) {
-        plan.resolvedRefs.push(`it = ${u.domain}`);
-      }
-      if (!plan.expectedEvidence.length) {
-        plan.expectedEvidence = [`Readable page content from ${u.domain}`];
-      }
-      plan.answerShape = plan.answerShape ?? "summary";
+      plan.intents.push({
+        id: String(plan.intents.length + 1),
+        goal: `summarize what ${u.domain} offers`,
+        action: "WEB",
+        entity: u.domain,
+        subject: "site overview",
+        constraints: [],
+        resolvedRefs: [`it = ${u.domain}`],
+        unresolvedRefs: [],
+        freshnessRequired: false,
+        dependsOn: [],
+        lookup: { q: u.url },
+      });
     }
   }
 
   if (
-    (opts.issues.includes("fresh_answer_without_retrieval") ||
-      opts.issues.includes("browser_on_missing_web")) &&
-    !plan.lookups.some((l) => l.cap === "WEB")
+    opts.issues.includes("fresh_answer_without_retrieval") ||
+    opts.issues.includes("browser_on_missing_web")
   ) {
-    const q = opts.hydrate.topicHint
-      ? `${opts.hydrate.userText} (${opts.hydrate.topicHint})`
-      : opts.hydrate.userText;
-    plan.lookups = [
-      ...plan.lookups,
-      { cap: "WEB", q: q.slice(0, 400), parallelGroup: "primary" },
-    ];
-    plan.answer = undefined;
-    plan.freshnessRequired = true;
-  }
-
-  if (opts.issues.includes("ask_coverage_gap") && plan.asks.length < 2) {
-    const parts = opts.hydrate.userText
-      .split(/\band\b|\?/i)
-      .map((p) => p.trim())
-      .filter((p) => p.length > 8);
-    if (parts.length >= 2) {
-      plan.asks = parts.slice(0, 4).map((p) => p.slice(0, 300));
-      plan.answerShape = "mixed";
+    if (!plan.intents.some((i) => i.action === "WEB")) {
+      plan.answer = undefined;
+      plan.intents.push({
+        id: String(plan.intents.length + 1),
+        goal: opts.hydrate.userText.slice(0, 300),
+        action: "WEB",
+        entity: opts.hydrate.entityHints[0],
+        constraints: [],
+        resolvedRefs: opts.hydrate.resolved,
+        unresolvedRefs: opts.hydrate.unresolved,
+        freshnessRequired: true,
+        dependsOn: [],
+        lookup: {
+          q: buildCanonicalLookupQuery({
+            entity: opts.hydrate.entityHints[0],
+            goal: opts.hydrate.userText.slice(0, 200),
+            rawQ: opts.hydrate.topicHint
+              ? `${opts.hydrate.topicHint} ${opts.hydrate.year}`
+              : opts.hydrate.userText.slice(0, 160),
+          }),
+        },
+      });
     }
   }
 
-  return syncPlanAliases(plan);
+  return normalizeIntentPlan(plan);
 }
 
-/** Validate, optionally take repaired plan, re-validate once. */
+/** Validate, one repair, re-validate. Never asks user to split questions. */
 export function validateAndRepairPlan(opts: {
-  plan: Plan;
+  plan: IntentPlan | Plan;
   hydrate: HydrateResult;
   browser: BrowserMode;
-}): { plan: Plan; issues: string[]; failed: boolean } {
-  const first = validatePlan(opts);
+}): { plan: IntentPlan; flatPlan: Plan; issues: string[]; failed: boolean } {
+  const asIntent: IntentPlan =
+    "intents" in opts.plan && Array.isArray((opts.plan as IntentPlan).intents)
+      ? (opts.plan as IntentPlan)
+      : (() => {
+          // Plan → IntentPlan via overall + lookups
+          const p = syncPlanAliases(opts.plan as Plan);
+          if (p.intentPlan) return p.intentPlan;
+          return {
+            overallIntent: p.intent,
+            intents: (p.lookups.length
+              ? p.lookups
+              : [{ cap: "WEB" as const, q: p.intent }]
+            ).map((l, i) => ({
+              id: String(i + 1),
+              goal: p.asks[i] ?? p.intent,
+              action: (l.cap === "WEB" ||
+              l.cap === "MEMORY" ||
+              l.cap === "FILES" ||
+              l.cap === "CALENDAR" ||
+              l.cap === "EMAIL" ||
+              l.cap === "CRM" ||
+              l.cap === "CALC" ||
+              l.cap === "BUILD"
+                ? l.cap
+                : "WEB") as IntentPlan["intents"][number]["action"],
+              constraints: p.constraints,
+              resolvedRefs: p.resolvedRefs,
+              unresolvedRefs: p.unresolvedRefs,
+              freshnessRequired: p.freshnessRequired,
+              dependsOn: [],
+              lookup: { q: l.q },
+            })),
+            answer: p.answer,
+          };
+        })();
+
+  const first = validateIntentPlan({
+    plan: asIntent,
+    hydrate: opts.hydrate,
+    browser: opts.browser,
+  });
   if (first.ok) {
-    return { plan: syncPlanAliases(opts.plan), issues: [], failed: false };
+    const plan = normalizeIntentPlan(asIntent);
+    return {
+      plan,
+      flatPlan: intentPlanToPlan(plan),
+      issues: [],
+      failed: false,
+    };
   }
 
   const repaired =
     first.repaired ??
-    repairPlanCode({
-      plan: opts.plan,
+    repairIntentPlanCode({
+      plan: asIntent,
       hydrate: opts.hydrate,
       issues: first.issues,
     });
-  const second = validatePlan({
+  const second = validateIntentPlan({
     plan: repaired,
     hydrate: opts.hydrate,
     browser: opts.browser,
@@ -200,18 +267,51 @@ export function validateAndRepairPlan(opts: {
     (i) =>
       i.startsWith("url_unbound") ||
       i === "filler_web_query" ||
-      i === "fresh_answer_without_retrieval",
+      i === "fresh_answer_without_retrieval" ||
+      i.startsWith("missing_lookup"),
   );
-  if (!hard.length) {
-    return {
-      plan: syncPlanAliases(repaired),
-      issues: first.issues,
-      failed: false,
-    };
-  }
+  const plan = normalizeIntentPlan(repaired);
   return {
-    plan: syncPlanAliases(repaired),
-    issues: second.issues,
-    failed: true,
+    plan,
+    flatPlan: intentPlanToPlan(plan),
+    issues: first.issues,
+    failed: hard.length > 0,
   };
+}
+
+/** @deprecated */
+export function validatePlan(opts: {
+  plan: Plan | IntentPlan;
+  hydrate: HydrateResult;
+  browser: BrowserMode;
+}): { ok: boolean; issues: string[]; repaired?: Plan } {
+  const result = validateAndRepairPlan(opts);
+  return {
+    ok: !result.failed && result.issues.length === 0,
+    issues: result.issues,
+    repaired: result.flatPlan,
+  };
+}
+
+/** @deprecated */
+export function repairPlanCode(opts: {
+  plan: Plan | IntentPlan;
+  hydrate: HydrateResult;
+  issues: string[];
+}): Plan {
+  const asIntent =
+    "intents" in opts.plan
+      ? (opts.plan as IntentPlan)
+      : validateAndRepairPlan({
+          plan: opts.plan,
+          hydrate: opts.hydrate,
+          browser: "auto",
+        }).plan;
+  return intentPlanToPlan(
+    repairIntentPlanCode({
+      plan: asIntent,
+      hydrate: opts.hydrate,
+      issues: opts.issues,
+    }),
+  );
 }
