@@ -6,6 +6,9 @@ Canonical paths:
 |------|---------------------------|--------------------------|
 | Mac / iOS | `runLocalTurnOrchestrator` → FM + Cander tools | `runOrchestratedTurn` → Edge V2 |
 | Web / no FM | `runOrchestratedTurn` → Edge V2 | same |
+| Build (flagged) | When `NEXT_PUBLIC_AI_BUILD_ORCHESTRATOR=1` and `requiresBuildCapabilities` and complexity=`routine`, local Build TurnPlan path (`lib/ai/build/`) | Otherwise existing cloud_work path |
+
+Build is a **capability set** on the same pipeline (not a second agent): gated by `requiresBuildCapabilities` after conversation resolution. Normal chat/research does not load `BuildSpec`. See `lib/ai/build/`.
 
 ```
 User → Context → Turn Orchestrator → FM (reason) ⇄ Cander tools (web.search, web.open, …) → validate → answer

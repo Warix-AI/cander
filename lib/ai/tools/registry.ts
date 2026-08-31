@@ -28,7 +28,8 @@ export type AiToolDefinition = {
     | "scheduling"
     | "comms"
     | "cloud_work"
-    | "review";
+    | "review"
+    | "build";
   parameters: {
     type: "object";
     required?: string[];
@@ -564,3 +565,177 @@ registerAiTool({
     },
   },
 });
+
+function registerBuildTools() {
+  const buildTools: Array<{
+    name: string;
+    description: string;
+    required?: string[];
+    properties: AiToolDefinition["parameters"]["properties"];
+    capability?: string;
+  }> = [
+    {
+      name: "build.spec.read",
+      description: "Read the active project's BuildSpec slice (not the full blob).",
+      properties: { projectId: { type: "string" } },
+    },
+    {
+      name: "build.spec.patch",
+      description:
+        "Propose a BuildSpecDelta. Runtime validates and commits only after sandbox success.",
+      required: ["delta"],
+      properties: {
+        projectId: { type: "string" },
+        delta: { type: "object", description: "BuildSpecDelta patch" },
+      },
+    },
+    {
+      name: "build.page.add",
+      description: "Add a standard page route and navigation link.",
+      required: ["route"],
+      properties: {
+        route: { type: "string" },
+        title: { type: "string" },
+      },
+    },
+    {
+      name: "build.component.search",
+      description: "Search for 3–5 component candidates by semantic role.",
+      required: ["query"],
+      properties: {
+        query: { type: "string" },
+        role: { type: "string" },
+      },
+    },
+    {
+      name: "build.component.replace",
+      description: "Replace a section component with a selected candidate id.",
+      required: ["role"],
+      properties: {
+        role: { type: "string" },
+        componentId: { type: "string" },
+      },
+    },
+    {
+      name: "build.recipe.apply",
+      description: "Apply a versioned Cander recipe (scaffold only; no silent upgrades).",
+      required: ["recipeId"],
+      properties: {
+        recipeId: { type: "string" },
+        recipeVersion: { type: "number" },
+      },
+    },
+    {
+      name: "build.auth.configure",
+      description: "Configure auth via a tested backend recipe.",
+      properties: {
+        recipeId: { type: "string" },
+        providers: { type: "array", items: { type: "string" } },
+      },
+    },
+    {
+      name: "build.dependencies.ensure",
+      description: "Ensure declared dependencies are installed in the sandbox.",
+      properties: {},
+    },
+    {
+      name: "build.validate",
+      description: "Run lint/typecheck/build validation into observations.",
+      properties: {},
+      capability: "sandbox",
+    },
+    {
+      name: "build.preview.inspect",
+      description: "Inspect the draft preview URL/session.",
+      properties: {},
+    },
+    {
+      name: "build.publish",
+      description:
+        "Gate publish of Validated Draft. Never claim success without completion criteria.",
+      properties: {
+        projectId: { type: "string" },
+      },
+      capability: "release",
+    },
+    {
+      name: "computer.files.read",
+      description: "Read a file in the project sandbox (repair path).",
+      required: ["path"],
+      properties: { path: { type: "string" }, sessionId: { type: "string" } },
+      capability: "sandbox",
+    },
+    {
+      name: "computer.files.write",
+      description: "Write a file in the project sandbox (repair path).",
+      required: ["path", "content"],
+      properties: {
+        path: { type: "string" },
+        content: { type: "string" },
+        sessionId: { type: "string" },
+      },
+      capability: "sandbox",
+    },
+    {
+      name: "computer.files.patch",
+      description: "Patch a file in the project sandbox (repair path).",
+      required: ["path", "patch"],
+      properties: {
+        path: { type: "string" },
+        patch: { type: "string" },
+        sessionId: { type: "string" },
+      },
+      capability: "sandbox",
+    },
+    {
+      name: "computer.files.list",
+      description: "List files in a sandbox directory.",
+      properties: {
+        path: { type: "string" },
+        sessionId: { type: "string" },
+      },
+      capability: "sandbox",
+    },
+    {
+      name: "computer.exec",
+      description: "Run an allowlisted command in the project sandbox.",
+      required: ["command"],
+      properties: {
+        command: { type: "string" },
+        args: { type: "array", items: { type: "string" } },
+        sessionId: { type: "string" },
+      },
+      capability: "sandbox",
+    },
+    {
+      name: "computer.port.expose",
+      description: "Expose a sandbox port for preview when available.",
+      properties: {
+        port: { type: "number" },
+        sessionId: { type: "string" },
+      },
+      capability: "sandbox",
+    },
+  ];
+
+  for (const t of buildTools) {
+    const domain = t.name.startsWith("computer.") ? "computer" : "build";
+    registerAiTool({
+      name: t.name,
+      description: t.description,
+      permission: {
+        requireWorkspaceMember: true,
+        capability: t.capability,
+      },
+      domain,
+      enabled: true,
+      parameters: {
+        type: "object",
+        required: t.required,
+        properties: t.properties,
+      },
+    });
+  }
+}
+
+registerBuildTools();

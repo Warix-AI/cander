@@ -20,7 +20,8 @@ export type ToolDomain =
   | "scheduling"
   | "comms"
   | "cloud_work"
-  | "review";
+  | "review"
+  | "build";
 
 export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
   core: [],
@@ -36,6 +37,12 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "computer.browser.click",
     "computer.browser.fill",
     "computer.browser.requestUserControl",
+    "computer.files.read",
+    "computer.files.write",
+    "computer.files.patch",
+    "computer.files.list",
+    "computer.exec",
+    "computer.port.expose",
   ],
   browser: [
     "browser.current.get_context",
@@ -51,6 +58,19 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "request_publish_approval",
   ],
   review: [],
+  build: [
+    "build.spec.read",
+    "build.spec.patch",
+    "build.page.add",
+    "build.component.search",
+    "build.component.replace",
+    "build.recipe.apply",
+    "build.auth.configure",
+    "build.dependencies.ensure",
+    "build.validate",
+    "build.preview.inspect",
+    "build.publish",
+  ],
 };
 
 export type TaskStateLike = {

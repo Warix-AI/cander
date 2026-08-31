@@ -19,3 +19,26 @@ export function preferOrchestratorV2(): boolean {
   if (v === "0" || v === "false" || v === "off") return false;
   return true;
 }
+
+/**
+ * Build capability pipeline (BuildSpec / TurnPlan / sandbox tools).
+ * Default OFF — independent of the main orchestrator flag.
+ * Set NEXT_PUBLIC_AI_BUILD_ORCHESTRATOR=1 to enable.
+ */
+export function isBuildOrchestratorEnabled(): boolean {
+  const v = process.env.NEXT_PUBLIC_AI_BUILD_ORCHESTRATOR;
+  if (v === "1" || v === "true" || v === "on") return true;
+  return false;
+}
+
+/**
+ * Local FM + sandbox for routine Build turns when Build orchestrator is on.
+ * Default follows isBuildOrchestratorEnabled(); set
+ * NEXT_PUBLIC_AI_BUILD_LOCAL=0 to keep Build on the existing cloud path.
+ */
+export function isBuildLocalOrchestratorEnabled(): boolean {
+  if (!isBuildOrchestratorEnabled()) return false;
+  const v = process.env.NEXT_PUBLIC_AI_BUILD_LOCAL;
+  if (v === "0" || v === "false" || v === "off") return false;
+  return true;
+}

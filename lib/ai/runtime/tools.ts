@@ -94,6 +94,18 @@ export async function executeAuthorizedTool(
   }
   const args = validated.args;
 
+  // Build / sandbox tools (gated by capability compiler domains).
+  if (
+    tool.name.startsWith("build.") ||
+    tool.name.startsWith("computer.files") ||
+    tool.name === "computer.exec" ||
+    tool.name === "computer.port.expose"
+  ) {
+    const { executeBuildTool } = await import("@/lib/ai/build/tool-executors");
+    const built = await executeBuildTool({ name: tool.name, args });
+    if (built) return built;
+  }
+
   // Work tasks do not need app action handlers.
   if (tool.name === "create_work_task") {
     const { authorizeToolCapability } = await import(

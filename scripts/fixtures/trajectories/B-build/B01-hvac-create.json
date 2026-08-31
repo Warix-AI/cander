@@ -1,0 +1,19 @@
+{
+  "id": "B01-hvac-create",
+  "category": "B-build",
+  "tags": ["build", "recipe", "create"],
+  "turns": [
+    {
+      "role": "user",
+      "content": "Build me an HVAC website.",
+      "expect": {
+        "route": {
+          "domainsIncludes": ["build"]
+        },
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

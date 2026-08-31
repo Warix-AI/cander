@@ -70,12 +70,37 @@ export async function shouldPreferOnDeviceForTurn(
 /**
  * Unified architecture: FM orchestrator on Apple devices for normal chat.
  * Cloud orchestrator handles images, Build/complex work, and Auto without FM.
+ * Routine Build may stay local only when NEXT_PUBLIC_AI_BUILD_ORCHESTRATOR is on.
  */
 export async function shouldUseLocalTurnOrchestrator(
   request: AiGenerateRequest,
 ): Promise<boolean> {
   if (request.images?.length) return false;
-  if (isComplexWorkIntent(request.content)) return false;
+
+  const {
+    isBuildLocalOrchestratorEnabled,
+    isBuildOrchestratorEnabled,
+  } = await import("../orchestrator/flags.ts");
+  const { resolveBuildCapabilities } = await import("../build/capabilities.ts");
+
+  const buildCaps =
+    isBuildOrchestratorEnabled() && isBuildLocalOrchestratorEnabled()
+      ? resolveBuildCapabilities({
+          content: request.content,
+          activeSpace: request.projectSpace,
+          projectId: request.projectId,
+          hasBuildSpec: Boolean(request.projectId),
+        })
+      : null;
+
+  const routineBuildLocal =
+    buildCaps?.requiresBuildCapabilities === true &&
+    buildCaps.complexity === "routine";
+
+  // Do not globally rewrite isComplexWorkIntent — only divert flagged routine Build.
+  if (!routineBuildLocal && isComplexWorkIntent(request.content)) {
+    return false;
+  }
 
   const mode = getAiRuntimeMode();
   if (mode === "cloud") return false;
@@ -84,15 +109,14 @@ export async function shouldUseLocalTurnOrchestrator(
   if (refersToActiveBrowserSurface(request.content)) {
     const avail = await getFoundationModelsAvailability();
     if (avail.available || mode === "local") return true;
-    // Even without FM, prefer local path so deterministic browser tools run
-    // before any cloud guess. Local orchestrator needs FM for the answer step —
-    // if FM missing, fall through and let cloud + client_action handle it.
     if (!avail.available) return false;
   }
 
   const avail = await getFoundationModelsAvailability();
   if (!avail.available) return false;
   if (mode === "local") return true;
+
+  if (routineBuildLocal) return true;
 
   const taskState = getThreadTaskState(request.threadId);
   const taskType = classifyTaskType({

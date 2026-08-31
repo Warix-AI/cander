@@ -1,0 +1,19 @@
+{
+  "id": "B02-weather-in-build-space",
+  "category": "B-build",
+  "tags": ["build", "nonregression", "gate"],
+  "turns": [
+    {
+      "role": "user",
+      "content": "What is the weather?",
+      "expect": {
+        "route": {
+          "domainsIncludes": []
+        },
+        "answerContract": {
+          "mustNotAskClarification": true
+        }
+      }
+    }
+  ]
+}

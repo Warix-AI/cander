@@ -56,6 +56,19 @@ export type CompileTurnOptions = {
   outputSchema?: TurnProfile["outputSchema"];
   /** Resolved conversation state from delta pipeline. */
   conversationState?: ConversationTurnState | null;
+  /**
+   * Build gate — only set when Build orchestrator is enabled AND
+   * requiresBuildCapabilities. Never set on normal chat/research.
+   */
+  build?: {
+    requiresBuildCapabilities: boolean;
+    buildSpecSlice?: string | null;
+    forceDomains?: string[];
+    /** Read-only pre-run only (spec.read). Mutating ops are not pre-run. */
+    readOnlyPreRun?: boolean;
+    needsClarification?: boolean;
+    clarificationReason?: string;
+  };
 };
 
 function buildPreRunTasks(content: string): PreRunTask[] {
@@ -198,6 +211,9 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
   const allowed = resolveAllowedToolsForTurn({
     content,
     taskState: opts.taskState,
+    forceDomains: opts.build?.requiresBuildCapabilities
+      ? (opts.build.forceDomains as import("../tools/domains.ts").ToolDomain[] | undefined)
+      : undefined,
   });
 
   // When pre-running live web, ensure web domain tools exist for residual opens,
@@ -222,12 +238,21 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     }
   }
 
-  const clarification = resolveClarificationRequired({
+  // Build: slice is already loaded by the gate — do not mutate via pre-run.
+  // (Mutating Build ops belong to the execution stage after TurnPlan.)
+
+  let clarification = resolveClarificationRequired({
     content,
     taskState: opts.taskState,
     domains: allowed.domains,
     conversationState: conv,
   });
+  if (opts.build?.needsClarification) {
+    clarification = {
+      clarificationRequired: true,
+      reason: opts.build.clarificationReason ?? "ambiguous_build_project",
+    };
+  }
 
   const toolMode = resolveToolMode({
     content,
@@ -322,6 +347,9 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
       }),
     evidence: opts.evidence ?? [],
     activeBrowserMeta: opts.activeBrowserMeta ?? "",
+    ...(opts.build?.requiresBuildCapabilities && opts.build.buildSpecSlice
+      ? { buildSpecSlice: opts.build.buildSpecSlice }
+      : {}),
   };
 
   // Carry resolved correction into pending text for FM
@@ -377,6 +405,9 @@ export function formatTurnProfileInstructions(
   }
   if (profile.contextPacket.activeBrowserMeta) {
     parts.push(profile.contextPacket.activeBrowserMeta);
+  }
+  if (profile.contextPacket.buildSpecSlice) {
+    parts.push("## BuildSpec (slice)", profile.contextPacket.buildSpecSlice);
   }
   if (profile.preRunTasks.length && profile.toolMode === "disallowed") {
     parts.push(

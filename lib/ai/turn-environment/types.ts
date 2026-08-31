@@ -86,6 +86,11 @@ export type ContextPacket = {
   memorySnippets: string[];
   evidence: TurnEvidence[];
   activeBrowserMeta: string;
+  /**
+   * Compact BuildSpec slice — only when Build capabilities are gated on.
+   * Normal chat/research turns leave this undefined.
+   */
+  buildSpecSlice?: string;
 };
 
 export type ResolvedTurnState = {

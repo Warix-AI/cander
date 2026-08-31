@@ -731,6 +731,43 @@ async function runLocalTurnOrchestratorInner(
     const conversationState = applyConversationDelta(priorConv, convDelta);
     setConversationTurnState(request.threadId, conversationState);
 
+    const { resolveBuildTurnContext, shouldRunBuildLocally } = await import(
+      "@/lib/ai/build/turn-context"
+    );
+    const buildCtx = resolveBuildTurnContext({
+      content: request.content,
+      activeSpace: request.projectSpace,
+      explicitProjectId: request.projectId,
+      threadProjectId: request.projectId,
+      conversationState,
+    });
+
+    // Flagged routine Build mutations — do not touch normal chat/research.
+    if (
+      buildCtx.requiresBuildCapabilities &&
+      shouldRunBuildLocally(buildCtx) &&
+      buildCtx.complexity === "routine"
+    ) {
+      const { runRoutineBuildMutation } = await import(
+        "@/lib/ai/build/routine-mutation"
+      );
+      const mutation = await runRoutineBuildMutation({
+        content: request.content,
+        ctx: buildCtx,
+      });
+      if (mutation.content) {
+        return {
+          content: mutation.content,
+          runtime: "apple-local",
+          offline: false,
+          condensationOccurred: false,
+          aiChatId: request.aiChatId ?? null,
+          toolResults: [],
+          citations: [],
+        };
+      }
+    }
+
     let profile = compileTurnProfile({
       content: request.content,
       taskState,
@@ -740,6 +777,18 @@ async function runLocalTurnOrchestratorInner(
       isDesktop:
         typeof navigator !== "undefined" &&
         /Mac|Win|Linux/i.test(navigator.platform || ""),
+      ...(buildCtx.requiresBuildCapabilities
+        ? {
+            build: {
+              requiresBuildCapabilities: true,
+              buildSpecSlice: buildCtx.buildSpecSlice,
+              forceDomains: buildCtx.forceDomains,
+              readOnlyPreRun: true,
+              needsClarification: buildCtx.projectResolve.status === "clarify",
+              clarificationReason: buildCtx.projectResolve.reason,
+            },
+          }
+        : {}),
     });
 
     const evidence: TurnEvidence[] = [];

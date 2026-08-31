@@ -85,6 +85,74 @@ const PURPOSE: Record<string, { purpose: string; argsHint: string }> = {
     purpose: "Hand control to the user",
     argsHint: "{}",
   },
+  "build.spec.read": {
+    purpose: "Read BuildSpec slice",
+    argsHint: "{projectId?}",
+  },
+  "build.spec.patch": {
+    purpose: "Propose BuildSpec delta",
+    argsHint: "{delta}",
+  },
+  "build.page.add": {
+    purpose: "Add a page route",
+    argsHint: "{route,title?}",
+  },
+  "build.component.search": {
+    purpose: "Find 3–5 components",
+    argsHint: "{query,role?}",
+  },
+  "build.component.replace": {
+    purpose: "Replace a component",
+    argsHint: "{role,componentId?}",
+  },
+  "build.recipe.apply": {
+    purpose: "Apply a versioned recipe",
+    argsHint: "{recipeId}",
+  },
+  "build.auth.configure": {
+    purpose: "Configure auth recipe",
+    argsHint: "{recipeId?}",
+  },
+  "build.dependencies.ensure": {
+    purpose: "Ensure dependencies",
+    argsHint: "{}",
+  },
+  "build.validate": {
+    purpose: "Validate draft build",
+    argsHint: "{}",
+  },
+  "build.preview.inspect": {
+    purpose: "Inspect draft preview",
+    argsHint: "{}",
+  },
+  "build.publish": {
+    purpose: "Gate publish of Validated Draft",
+    argsHint: "{projectId?}",
+  },
+  "computer.files.read": {
+    purpose: "Read sandbox file (repair)",
+    argsHint: "{path}",
+  },
+  "computer.files.write": {
+    purpose: "Write sandbox file (repair)",
+    argsHint: "{path,content}",
+  },
+  "computer.files.patch": {
+    purpose: "Patch sandbox file (repair)",
+    argsHint: "{path,patch}",
+  },
+  "computer.files.list": {
+    purpose: "List sandbox files",
+    argsHint: "{path?}",
+  },
+  "computer.exec": {
+    purpose: "Allowlisted sandbox exec (repair)",
+    argsHint: "{command,args?}",
+  },
+  "computer.port.expose": {
+    purpose: "Expose preview port",
+    argsHint: "{port?}",
+  },
   "ui.ask_clarification": {
     purpose: "Ask a structured clarifying question",
     argsHint: "{title,questions}",
@@ -131,9 +199,11 @@ export function selectToolCards(
   }
   // Prefer lighter tools over computer.* when capping
   const rank = (n: string) => {
+    if (n.startsWith("computer.files") || n === "computer.exec") return 55;
     if (n.startsWith("computer.")) return 50;
     if (n === "web.research") return 40;
     if (n.startsWith("browser.")) return 20;
+    if (n.startsWith("build.")) return 8;
     if (n.startsWith("web.")) return 10;
     return 15;
   };
