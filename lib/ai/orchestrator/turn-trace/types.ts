@@ -13,6 +13,8 @@ export type TraceStage =
   | "interpret"
   | "plan"
   | "plan_validate"
+  | "knowledge_route"
+  | "web_turn_trace"
   | "temporal_grounding"
   | "request_ledger"
   | "task_graph"
