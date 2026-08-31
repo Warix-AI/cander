@@ -15,7 +15,7 @@ export type UploadedAttachment = {
   size: number;
 };
 
-export async function getRawOpenAIAuthHeaders(): Promise<HeadersInit> {
+export async function getRawOpenAIAuthHeaders(): Promise<Record<string, string>> {
   try {
     const url = supabaseUrl();
     const key = supabaseAnonKey();
@@ -31,7 +31,8 @@ export async function getRawOpenAIAuthHeaders(): Promise<HeadersInit> {
 }
 
 function dataUrlToBlob(dataUrl: string): { blob: Blob; mime: string } | null {
-  const m = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(dataUrl);
+  // Avoid the /s (dotAll) flag — project TS target is below ES2018.
+  const m = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/.exec(dataUrl);
   if (!m) return null;
   const mime = m[1] || "application/octet-stream";
   const isBase64 = Boolean(m[2]);
@@ -59,7 +60,7 @@ export async function uploadRawOpenAIAttachment(opts: {
 }): Promise<UploadedAttachment> {
   opts.onProgress?.("Uploading…");
   const headers = await getRawOpenAIAuthHeaders();
-  if (!("Authorization" in headers)) {
+  if (!headers.Authorization) {
     throw new Error("Sign in to upload attachments.");
   }
 
@@ -121,11 +122,12 @@ export async function linkRawOpenAIAttachments(opts: {
   threadId?: string | null;
 }): Promise<void> {
   if (!opts.attachmentIds.length) return;
-  const headers = {
-    ...(await getRawOpenAIAuthHeaders()),
+  const auth = await getRawOpenAIAuthHeaders();
+  if (!auth.Authorization) return;
+  const headers: Record<string, string> = {
+    ...auth,
     "Content-Type": "application/json",
   };
-  if (!("Authorization" in headers)) return;
   await fetch("/api/ai/raw-openai/upload", {
     method: "PATCH",
     headers,
@@ -142,7 +144,7 @@ export async function transcribeRawOpenAIAudio(
   filename = "dictation.webm",
 ): Promise<string> {
   const headers = await getRawOpenAIAuthHeaders();
-  if (!("Authorization" in headers)) {
+  if (!headers.Authorization) {
     throw new Error("Sign in to use voice dictation.");
   }
   const form = new FormData();
