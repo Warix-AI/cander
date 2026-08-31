@@ -59,6 +59,8 @@ import {
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
 import { SessionBootScreen } from "@/components/shell/SessionBootScreen";
+import { ShareInListener } from "@/components/shell/ShareInListener";
+import { QuickAskHost } from "@/components/shell/QuickAskHost";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { completeEmailVerificationFromUrl } from "@/lib/auth/email-verify-landing";
 import {
@@ -70,6 +72,8 @@ export function AppShell() {
     <AuthProvider>
       <AppProvider>
         <SpaceDataBridge>
+          <ShareInListener />
+          <QuickAskHost />
           <Root />
         </SpaceDataBridge>
       </AppProvider>

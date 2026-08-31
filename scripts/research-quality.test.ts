@@ -210,7 +210,8 @@ describe("mobile composer keyboard policy", () => {
     const composer = readRepo("../components/shell/Composer.tsx");
     const chat = readRepo("../components/shell/ChatColumn.tsx");
     assert.match(mobile, /export function dismissNativeKeyboard/);
-    assert.match(composer, /dismissNativeKeyboard/);
+    // Composer routes dismiss through NativeCapabilities (behavior-identical wrap)
+    assert.match(composer, /getNativeCapabilities\(\)\.keyboard\.dismiss/);
     assert.match(composer, /suppressAutoFocusRef/);
     assert.match(chat, /autofocusComposer/);
     assert.match(chat, /!hasChatTurns/);

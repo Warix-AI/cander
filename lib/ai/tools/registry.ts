@@ -29,7 +29,8 @@ export type AiToolDefinition = {
     | "comms"
     | "cloud_work"
     | "review"
-    | "build";
+    | "build"
+    | "health";
   parameters: {
     type: "object";
     required?: string[];
@@ -739,3 +740,75 @@ function registerBuildTools() {
 }
 
 registerBuildTools();
+
+function registerHealthTools() {
+  const healthTools: Array<{
+    name: string;
+    description: string;
+    required?: string[];
+    properties: AiToolDefinition["parameters"]["properties"];
+  }> = [
+    {
+      name: "health.query",
+      description:
+        "Query aggregated personal HealthKit metrics (steps, workouts, activeEnergy, restingHeartRate, sleep). Never invent permission-denied from empty results.",
+      required: ["metric", "start", "end"],
+      properties: {
+        metric: {
+          type: "string",
+          enum: [
+            "steps",
+            "workouts",
+            "activeEnergy",
+            "restingHeartRate",
+            "sleep",
+          ],
+        },
+        start: { type: "string", description: "ISO start" },
+        end: { type: "string", description: "ISO end" },
+        aggregation: {
+          type: "string",
+          enum: ["sum", "average", "count"],
+        },
+      },
+    },
+    {
+      name: "health.compare",
+      description:
+        "Compare aggregated personal health metrics across two periods.",
+      required: ["metric", "periodA", "periodB"],
+      properties: {
+        metric: { type: "string" },
+        periodA: { type: "object" },
+        periodB: { type: "object" },
+        aggregation: { type: "string" },
+      },
+    },
+    {
+      name: "health.workouts",
+      description: "List workout summaries for a period (aggregated, ephemeral).",
+      required: ["start", "end"],
+      properties: {
+        start: { type: "string" },
+        end: { type: "string" },
+      },
+    },
+  ];
+
+  for (const t of healthTools) {
+    registerAiTool({
+      name: t.name,
+      description: t.description,
+      permission: { requireWorkspaceMember: false },
+      domain: "health",
+      enabled: true,
+      parameters: {
+        type: "object",
+        required: t.required,
+        properties: t.properties,
+      },
+    });
+  }
+}
+
+registerHealthTools();

@@ -106,6 +106,14 @@ export async function executeAuthorizedTool(
     if (built) return built;
   }
 
+  if (tool.name.startsWith("health.")) {
+    const { executeHealthTool } = await import(
+      "@/lib/ai/health/tool-executors"
+    );
+    const health = await executeHealthTool({ name: tool.name, args });
+    if (health) return health;
+  }
+
   // Work tasks do not need app action handlers.
   if (tool.name === "create_work_task") {
     const { authorizeToolCapability } = await import(

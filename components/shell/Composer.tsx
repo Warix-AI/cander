@@ -40,7 +40,9 @@ import { isChatSpace } from "@/lib/spaces";
 import { labelFor } from "@/lib/build-loop";
 import { useChatCanvasCentered } from "@/lib/chat-layout";
 import {
+  consumeComposerPendingInput,
   consumeComposerSeed,
+  peekComposerPendingInput,
   peekComposerSeed,
   subscribeComposerSeed,
 } from "@/lib/composer-seed";
@@ -48,10 +50,9 @@ import {
   DOCUMENT_ACCEPT,
   filesFromList,
   isCapacitorNative,
-  pickWithCapacitorCamera,
   toSendAttachments,
 } from "@/lib/composer-attach";
-import { dismissNativeKeyboard } from "@/lib/mobile-shell";
+import { getNativeCapabilities } from "@/lib/native";
 import {
   isSpeechToTextSupported,
   startSpeechToText,
@@ -145,6 +146,48 @@ export function Composer({
 
   useEffect(() => {
     const apply = () => {
+      const pending = peekComposerPendingInput()
+        ? consumeComposerPendingInput()
+        : null;
+      if (pending) {
+        if (pending.text) setValue(pending.text);
+        if (pending.attachments?.length) {
+          const imgs = pending.attachments.filter((a) => a.type === "image");
+          const filesOnly = pending.attachments.filter((a) => a.type === "file");
+          if (imgs.length) {
+            setImages((current) =>
+              [
+                ...current,
+                ...imgs.map((a) => ({
+                  name: a.filename,
+                  url: a.dataUrl || "",
+                  mime: a.mimeType,
+                })),
+              ].slice(0, 4),
+            );
+          }
+          if (filesOnly.length) {
+            setFiles((current) =>
+              [
+                ...current,
+                ...filesOnly.map((a) => ({
+                  name: a.filename,
+                  text: a.text,
+                })),
+              ].slice(0, 4),
+            );
+          }
+        }
+        window.requestAnimationFrame(() => {
+          textRef.current?.focus();
+          const el = textRef.current;
+          if (el) {
+            const end = el.value.length;
+            el.setSelectionRange(end, end);
+          }
+        });
+        return;
+      }
       const seed = consumeComposerSeed();
       if (!seed) return;
       setValue(seed);
@@ -157,7 +200,7 @@ export function Composer({
         }
       });
     };
-    if (peekComposerSeed()) apply();
+    if (peekComposerPendingInput() || peekComposerSeed()) apply();
     return subscribeComposerSeed(apply);
   }, []);
 
@@ -314,7 +357,8 @@ export function Composer({
     const sendAttachments = toSendAttachments(images, files);
     // Give the reply the screen: dismiss keyboard immediately on Capacitor.
     suppressAutoFocusRef.current = true;
-    dismissNativeKeyboard();
+    getNativeCapabilities().keyboard.dismiss();
+    getNativeCapabilities().haptics.impact("send");
     onSend(body || "", {
       ...(images.length ? { attachments: images } : {}),
       ...(files.length ? { files } : {}),
@@ -456,6 +500,47 @@ export function Composer({
           !landing && !compact && !inDock && (!floating || centered) && "mx-auto",
           !stayInPlace && "composer-dock",
         )}
+        onDragOver={(event) => {
+          if (event.dataTransfer?.types?.includes("Files")) {
+            event.preventDefault();
+          }
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          const dt = event.dataTransfer;
+          if (!dt) return;
+          void (async () => {
+            const attached =
+              await getNativeCapabilities().files.fromDataTransfer(dt);
+            if (!attached.length) return;
+            getNativeCapabilities().haptics.impact("select");
+            const nextImages = attached.filter((a) => a.type === "image");
+            const nextFiles = attached.filter((a) => a.type === "file");
+            if (nextImages.length) {
+              setImages((current) =>
+                [
+                  ...current,
+                  ...nextImages.map((a) => ({
+                    name: a.filename,
+                    url: a.dataUrl!,
+                    mime: a.mimeType,
+                  })),
+                ].slice(0, 4),
+              );
+            }
+            if (nextFiles.length) {
+              setFiles((current) =>
+                [
+                  ...current,
+                  ...nextFiles.map((a) => ({
+                    name: a.filename,
+                    text: a.text,
+                  })),
+                ].slice(0, 4),
+              );
+            }
+          })();
+        }}
       >
         {menu === "plus" && !compact ? (
           <ComposerMenu>
@@ -479,8 +564,10 @@ export function Composer({
                     setAttachError(null);
                     setMenu(null);
                     void (async () => {
-                      const result = await pickWithCapacitorCamera("camera");
+                      const result =
+                        await getNativeCapabilities().media.pickCameraPhoto();
                       if (result.ok) {
+                        getNativeCapabilities().haptics.impact("select");
                         setImages((current) =>
                           [...current, result.image].slice(0, 4),
                         );
@@ -497,8 +584,10 @@ export function Composer({
                     setAttachError(null);
                     setMenu(null);
                     void (async () => {
-                      const result = await pickWithCapacitorCamera("photos");
+                      const result =
+                        await getNativeCapabilities().media.pickLibraryImages();
                       if (result.ok) {
+                        getNativeCapabilities().haptics.impact("select");
                         setImages((current) =>
                           [...current, result.image].slice(0, 4),
                         );
@@ -511,7 +600,48 @@ export function Composer({
                 <MenuRow
                   icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
                   label="Files"
-                  onClick={() => openFilePicker(fileRef)}
+                  onClick={() => {
+                    setAttachError(null);
+                    setMenu(null);
+                    void (async () => {
+                      const attached =
+                        await getNativeCapabilities().files.pickDocuments({
+                          multiple: true,
+                          accept: DOCUMENT_ACCEPT,
+                        });
+                      if (!attached.length) return;
+                      getNativeCapabilities().haptics.impact("select");
+                      const nextImages = attached.filter(
+                        (a) => a.type === "image",
+                      );
+                      const nextFiles = attached.filter(
+                        (a) => a.type === "file",
+                      );
+                      if (nextImages.length) {
+                        setImages((current) =>
+                          [
+                            ...current,
+                            ...nextImages.map((a) => ({
+                              name: a.filename,
+                              url: a.dataUrl!,
+                              mime: a.mimeType,
+                            })),
+                          ].slice(0, 4),
+                        );
+                      }
+                      if (nextFiles.length) {
+                        setFiles((current) =>
+                          [
+                            ...current,
+                            ...nextFiles.map((a) => ({
+                              name: a.filename,
+                              text: a.text,
+                            })),
+                          ].slice(0, 4),
+                        );
+                      }
+                    })();
+                  }}
                 />
               </>
             ) : (

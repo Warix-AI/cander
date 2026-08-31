@@ -2,8 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("canderDesktop", {
   platform: process.platform,
-  shellBuild: "2026-08-30-browser-context-fix",
-  shellVersion: "0.1.3",
+  shellBuild: "2026-08-30-native-capabilities",
+  shellVersion: "0.1.4",
   window: {
     minimize: () => ipcRenderer.send("cander:window-minimize"),
     maximize: () => ipcRenderer.send("cander:window-toggle-maximize"),
@@ -14,6 +14,27 @@ contextBridge.exposeInMainWorld("canderDesktop", {
     generate: (opts) => ipcRenderer.invoke("cander:fm-generate", opts),
     generateStructured: (opts) =>
       ipcRenderer.invoke("cander:fm-generate-structured", opts),
+  },
+  files: {
+    showOpenDialog: (opts) =>
+      ipcRenderer.invoke("cander:files-open", opts || {}),
+    showSaveDialog: (opts) =>
+      ipcRenderer.invoke("cander:files-save", opts || {}),
+    revealInFolder: (path) =>
+      ipcRenderer.invoke("cander:files-reveal", path),
+    readDropPaths: (paths) =>
+      ipcRenderer.invoke("cander:files-drop", paths || []),
+  },
+  shell: {
+    captureScreen: (opts) =>
+      ipcRenderer.invoke("cander:shell-capture", opts || {}),
+    openQuickAsk: () => ipcRenderer.invoke("cander:shell-quick-ask"),
+    showMainWindow: () => ipcRenderer.invoke("cander:shell-show-main"),
+    onEvent: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on("cander:shell-event", listener);
+      return () => ipcRenderer.removeListener("cander:shell-event", listener);
+    },
   },
   browser: {
     createTab: (tabId, initialUrl, options) =>

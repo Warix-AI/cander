@@ -742,6 +742,29 @@ async function runLocalTurnOrchestratorInner(
       conversationState,
     });
 
+    const { resolveHealthCapabilities } = await import(
+      "@/lib/ai/health/capabilities"
+    );
+    let healthEnabled = false;
+    let platformSupportsHealthKit = false;
+    try {
+      const { getNativeCapabilities, isHealthKitFlagEnabled } = await import(
+        "@/lib/native"
+      );
+      if (isHealthKitFlagEnabled()) {
+        const native = getNativeCapabilities();
+        platformSupportsHealthKit = native.device.healthKit.available;
+        healthEnabled = Boolean(native.health?.isLocallyEnabled());
+      }
+    } catch {
+      // SSR / missing localStorage — treat as off
+    }
+    const healthCaps = resolveHealthCapabilities({
+      content: request.content,
+      healthEnabled,
+      platformSupportsHealthKit,
+    });
+
     // Flagged routine Build mutations — do not touch normal chat/research.
     if (
       buildCtx.requiresBuildCapabilities &&
@@ -786,6 +809,14 @@ async function runLocalTurnOrchestratorInner(
               readOnlyPreRun: true,
               needsClarification: buildCtx.projectResolve.status === "clarify",
               clarificationReason: buildCtx.projectResolve.reason,
+            },
+          }
+        : {}),
+      ...(healthCaps.requiresHealthCapabilities
+        ? {
+            health: {
+              requiresHealthCapabilities: true,
+              forceDomains: ["health"],
             },
           }
         : {}),

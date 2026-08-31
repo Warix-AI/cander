@@ -45,6 +45,7 @@ class CanderBridgeViewController: CAPBridgeViewController {
         super.capacitorDidLoad()
         bridge?.registerPluginInstance(CanderFoundationModelsPlugin())
         bridge?.registerPluginInstance(CanderBrowserPlugin())
+        bridge?.registerPluginInstance(CanderHealthKitPlugin())
         disableRootBounce()
         // Wait until the bridge webview is in a window before keyboard hooks.
         DispatchQueue.main.async { [weak self] in

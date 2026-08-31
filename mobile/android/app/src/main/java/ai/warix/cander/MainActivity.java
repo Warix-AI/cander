@@ -1,5 +1,7 @@
 package ai.warix.cander;
 
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.webkit.WebView;
@@ -32,6 +34,56 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        handleShareIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleShareIntent(intent);
+    }
+
+    /**
+     * Share-in → pending composer input (never auto-send).
+     */
+    private void handleShareIntent(Intent intent) {
+        if (intent == null) return;
+        String action = intent.getAction();
+        if (Intent.ACTION_SEND.equals(action)) {
+            String sharedText = intent.getStringExtra(Intent.EXTRA_TEXT);
+            postShareToWeb(sharedText, null);
+            return;
+        }
+        if (Intent.ACTION_VIEW.equals(action) && intent.getData() != null) {
+            Uri data = intent.getData();
+            if ("cander".equals(data.getScheme()) && "share".equals(data.getHost())) {
+                postShareToWeb(data.getQueryParameter("text"), data.getQueryParameter("url"));
+            }
+        }
+    }
+
+    private void postShareToWeb(String text, String url) {
+        WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+        if (webView == null) return;
+        String js =
+                "(function(){try{window.postMessage({type:'cander:share',text:"
+                        + jsonString(text)
+                        + ",url:"
+                        + jsonString(url)
+                        + "},'*');}catch(e){}})();";
+        webView.post(() -> webView.evaluateJavascript(js, null));
+    }
+
+    private static String jsonString(String value) {
+        if (value == null) return "null";
+        return "\""
+                + value
+                        .replace("\\", "\\\\")
+                        .replace("\"", "\\\"")
+                        .replace("\n", "\\n")
+                        .replace("\r", "")
+                + "\"";
     }
 
     @Override
@@ -44,6 +96,7 @@ public class MainActivity extends BridgeActivity {
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.evaluateJavascript(MOBILE_SHELL_JS, null);
         observeKeyboard(webView);
+        handleShareIntent(getIntent());
     }
 
     private void observeKeyboard(WebView webView) {

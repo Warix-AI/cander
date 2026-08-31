@@ -23,7 +23,8 @@ export type ToolDomain =
   | "comms"
   | "cloud_work"
   | "review"
-  | "build";
+  | "build"
+  | "health";
 
 export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
   core: [],
@@ -73,6 +74,7 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "build.preview.inspect",
     "build.publish",
   ],
+  health: ["health.query", "health.compare", "health.workouts"],
 };
 
 export type TaskStateLike = {

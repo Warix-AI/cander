@@ -2,13 +2,15 @@ const { app, BrowserWindow, shell, Menu, session, ipcMain } = require("electron"
 const path = require("path");
 const foundationModels = require("./foundation-models-bridge");
 const browserSurface = require("./browser-surface");
+const filesBridge = require("./files-bridge");
+const desktopShell = require("./desktop-shell");
 
 const APP_NAME = "Cander";
 const DEFAULT_URL = "https://cander.app";
 const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Bumped when the native shell changes — visible on <html data-cander-shell>. */
-const SHELL_BUILD = "2026-08-30-browser-context-fix";
+const SHELL_BUILD = "2026-08-30-native-capabilities";
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
 /** Classic Mac titlebar / chrome row height (traffic-light axis). */
 const TITLEBAR_PX = 52;
@@ -401,14 +403,51 @@ app.whenReady().then(() => {
     return browserSurface.captureViewport(tabId);
   });
 
+  ipcMain.handle("cander:files-open", async (_e, opts) => {
+    return filesBridge.showOpenDialog(opts || {});
+  });
+  ipcMain.handle("cander:files-save", async (_e, opts) => {
+    return filesBridge.showSaveDialog(opts || {});
+  });
+  ipcMain.handle("cander:files-reveal", async (_e, targetPath) => {
+    return filesBridge.revealInFolder(targetPath);
+  });
+  ipcMain.handle("cander:files-drop", async (_e, paths) => {
+    return filesBridge.readDropPaths(paths || []);
+  });
+
+  ipcMain.handle("cander:shell-capture", async (_e, opts) => {
+    return desktopShell.captureScreen(opts || {});
+  });
+  ipcMain.handle("cander:shell-quick-ask", async () => {
+    return desktopShell.openQuickAsk();
+  });
+  ipcMain.handle("cander:shell-show-main", async () => {
+    return desktopShell.showMainWindow();
+  });
+
   buildMenu();
-  void createWindow();
+  void createWindow().then(() => {
+    desktopShell.init({
+      getMainWindow: () => mainWindow,
+      startUrl: START_URL,
+    });
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void createWindow();
+      void createWindow().then(() => {
+        desktopShell.init({
+          getMainWindow: () => mainWindow,
+          startUrl: START_URL,
+        });
+      });
     }
   });
+});
+
+app.on("will-quit", () => {
+  desktopShell.dispose();
 });
 
 app.on("window-all-closed", () => {

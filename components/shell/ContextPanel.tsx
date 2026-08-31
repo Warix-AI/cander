@@ -2,6 +2,7 @@
 
 import { BuildPanel } from "@/components/panels/BuildPanel";
 import { ConnectorsPanel } from "@/components/panels/ConnectorsPanel";
+import { AppleHealthConnectorPanel } from "@/components/panels/AppleHealthConnectorPanel";
 import { GmailPanel } from "@/components/panels/gmail/GmailPanel";
 import { HandshakePanel } from "@/components/panels/handshake/HandshakePanel";
 import { PanelChoiceState } from "@/components/panels/PanelChoiceState";
@@ -81,6 +82,8 @@ export function ContextPanel() {
           <HandshakePanel />
         ) : spaceId === "connectors" && connectorId === "gmail" ? (
           <GmailPanel />
+        ) : spaceId === "connectors" && connectorId === "apple-health" ? (
+          <AppleHealthConnectorPanel />
         ) : spaceId === "connectors" ? (
           <ConnectorsPanel />
         ) : spaceId === "work" ? (

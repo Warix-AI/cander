@@ -795,6 +795,17 @@ function conn(
 
 export const connectors: Connector[] = [
   conn({
+    id: "apple-health",
+    name: "Apple Health",
+    category: "Health",
+    description:
+      "Read selected activity metrics on iPhone when you ask about your own data",
+    icon: "apple-health",
+    featured: true,
+    installed: false,
+    actions: ["Connect", "Manage Access", "Disconnect"],
+  }),
+  conn({
     id: "handshake",
     name: "Handshake",
     category: "Featured",

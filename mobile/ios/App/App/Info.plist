@@ -55,6 +55,19 @@
 	<string>Cander uses the microphone for dictation and voice chat.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Cander turns your speech into text for dictation and voice chat.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Cander reads selected Apple Health metrics (steps, workouts, active energy, resting heart rate, and sleep) only when you ask about your own activity. Data is processed on your device and is not sold or used for advertising.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>ai.warix.cander.share</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cander</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

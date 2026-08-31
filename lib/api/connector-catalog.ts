@@ -15,6 +15,7 @@ export const CONNECTOR_CATALOG: ConnectorInfo[] = [
   { id: "gdrive", name: "Google Drive" },
   { id: "stripe", name: "Stripe" },
   { id: "handshake", name: "Handshake" },
+  { id: "apple-health", name: "Apple Health" },
 ];
 
 export function connectorName(id: string) {
