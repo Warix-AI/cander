@@ -392,12 +392,15 @@ export const localSpaceEntityStore = {
     hydrate();
     // Drop legacy demo briefing rows so Recents/Work never resurface them from
     // localStorage after briefing-sync stopped seeding samples.
+    // Defer persist/emit — this getter can run during React render (SearchModal).
     if (state.briefingItems.some((item) => isLegacySyntheticBriefingId(item.id))) {
       state = {
         ...state,
         briefingItems: filterRealBriefingItems(state.briefingItems),
       };
-      persist();
+      queueMicrotask(() => {
+        persist();
+      });
     }
     return state.briefingItems.filter((item) => {
       if (item.workspaceId !== ctx.workspaceId) return false;

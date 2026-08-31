@@ -66,7 +66,7 @@ function ComposerDock({
             ? "px-4 sm:px-6"
             : "pr-2.5 pl-1.5 sm:pr-3 sm:pl-2"
           : "px-4 sm:px-6",
-        "pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.35rem))] sm:pb-4",
+        "pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.7rem))] sm:pb-4",
       )}
     >
       <div

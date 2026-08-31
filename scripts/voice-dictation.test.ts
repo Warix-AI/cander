@@ -72,7 +72,20 @@ describe("Dictation isolation", () => {
     assert.equal(/Listening[.…]/.test(src), false);
     assert.ok(src.includes("Transcribing…"));
     assert.equal(src.includes("VoiceWaveButton"), false);
-    assert.match(src, /REC_BTN\s*=\s*34/);
+    assert.match(src, /REC_BTN\s*=\s*28/);
+    assert.ok(src.includes("justify-center"));
+    assert.ok(src.includes('status === "transcribing"'));
+  });
+
+  it("composer keeps textarea mounted during dictation (keyboard stays open)", () => {
+    const composer = fs.readFileSync("components/shell/Composer.tsx", "utf8");
+    assert.ok(composer.includes("invisible pointer-events-none"));
+    assert.ok(composer.includes("preventScroll: true"));
+    assert.ok(
+      composer.includes('status={transcribing ? "transcribing" : "recording"}'),
+    );
+    const voice = fs.readFileSync("components/shell/ComposerVoice.tsx", "utf8");
+    assert.ok(voice.includes("onPointerDown"));
   });
 
   it("composer has no live-voice control wiring", () => {

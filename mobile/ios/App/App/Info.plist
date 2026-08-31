@@ -50,7 +50,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Cander uses your photo library to attach images to your chats.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Cander may save edited photos when you choose to keep them.</string>
+	<string>Cander saves generated images to your Photos library when you tap Download.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Cander uses the microphone for dictation and voice chat.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

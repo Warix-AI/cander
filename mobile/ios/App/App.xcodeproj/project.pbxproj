@@ -14,6 +14,7 @@
 		C4ND3RFM1FED79650016851F /* CanderFoundationModelsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4ND3RFR1FED79650016851F /* CanderFoundationModelsPlugin.swift */; };
 		C4ND3RBP1FED79650016851F /* CanderBrowserPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4ND3RBS1FED79650016851F /* CanderBrowserPlugin.swift */; };
 		C4ND3RHK1FED79650016851F /* CanderHealthKitPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4ND3RHR1FED79650016851F /* CanderHealthKitPlugin.swift */; };
+		C4ND3RPH1FED79650016851F /* CanderPhotosPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4ND3RPR1FED79650016851F /* CanderPhotosPlugin.swift */; };
 		C4ND3HHK1FED79650016851F /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C4ND3HHF1FED79650016851F /* HealthKit.framework */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
@@ -31,6 +32,7 @@
 		C4ND3RFR1FED79650016851F /* CanderFoundationModelsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanderFoundationModelsPlugin.swift; sourceTree = "<group>"; };
 		C4ND3RBS1FED79650016851F /* CanderBrowserPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanderBrowserPlugin.swift; sourceTree = "<group>"; };
 		C4ND3RHR1FED79650016851F /* CanderHealthKitPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanderHealthKitPlugin.swift; sourceTree = "<group>"; };
+		C4ND3RPR1FED79650016851F /* CanderPhotosPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanderPhotosPlugin.swift; sourceTree = "<group>"; };
 		C4ND3HHF1FED79650016851F /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
 		C4ND3ENT1FED79650016851F /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -92,6 +94,7 @@
 				C4ND3RFR1FED79650016851F /* CanderFoundationModelsPlugin.swift */,
 				C4ND3RBS1FED79650016851F /* CanderBrowserPlugin.swift */,
 				C4ND3RHR1FED79650016851F /* CanderHealthKitPlugin.swift */,
+				C4ND3RPR1FED79650016851F /* CanderPhotosPlugin.swift */,
 				C4ND3ENT1FED79650016851F /* App.entitlements */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
@@ -232,6 +235,7 @@
 				C4ND3RFM1FED79650016851F /* CanderFoundationModelsPlugin.swift in Sources */,
 				C4ND3RBP1FED79650016851F /* CanderBrowserPlugin.swift in Sources */,
 				C4ND3RHK1FED79650016851F /* CanderHealthKitPlugin.swift in Sources */,
+				C4ND3RPH1FED79650016851F /* CanderPhotosPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -239,6 +239,9 @@ export type ChatBlock =
       url: string;
       name: string;
       mime?: string;
+      /** Persisted chat_attachments row for follow-up edits */
+      attachmentId?: string;
+      openaiFileId?: string;
     }
   | {
       type: "file";

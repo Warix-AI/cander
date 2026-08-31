@@ -218,7 +218,8 @@ describe("Raw multimodal isolation", () => {
       "lib/ai/raw-openai/build-input.ts",
       "lib/ai/raw-openai/limits.ts",
       "lib/voice/openai-dictation.ts",
-      "components/chat/RawOpenAIModeBadge.tsx",
+      "lib/native/save-image.ts",
+      "components/chat/AssistantMessage.tsx",
     ]) {
       const src = fs.readFileSync(rel, "utf8");
       assert.equal(src.includes("OPENAI_API_KEY"), false, rel);
@@ -259,13 +260,25 @@ describe("Raw multimodal isolation", () => {
 
   it("image_generation tool is wired when flag enabled", () => {
     const prev = process.env.OPENAI_IMAGE_GENERATION;
+    const prevModel = process.env.OPENAI_IMAGE_MODEL;
+    const prevQuality = process.env.OPENAI_IMAGE_QUALITY;
     process.env.OPENAI_IMAGE_GENERATION = "1";
+    delete process.env.OPENAI_IMAGE_MODEL;
+    delete process.env.OPENAI_IMAGE_QUALITY;
     assert.equal(isOpenAIImageGenerationEnabled(), true);
-    assert.deepEqual(openAIImageGenerationTool(), { type: "image_generation" });
+    assert.deepEqual(openAIImageGenerationTool(), {
+      type: "image_generation",
+      model: "gpt-image-1.5",
+      quality: "medium",
+    });
     process.env.OPENAI_IMAGE_GENERATION = "0";
     assert.equal(isOpenAIImageGenerationEnabled(), false);
     if (prev === undefined) delete process.env.OPENAI_IMAGE_GENERATION;
     else process.env.OPENAI_IMAGE_GENERATION = prev;
+    if (prevModel === undefined) delete process.env.OPENAI_IMAGE_MODEL;
+    else process.env.OPENAI_IMAGE_MODEL = prevModel;
+    if (prevQuality === undefined) delete process.env.OPENAI_IMAGE_QUALITY;
+    else process.env.OPENAI_IMAGE_QUALITY = prevQuality;
 
     const route = fs.readFileSync("app/api/ai/raw-openai/route.ts", "utf8");
     assert.ok(route.includes("openAIImageGenerationTool"));
@@ -275,6 +288,8 @@ describe("Raw multimodal isolation", () => {
       "utf8",
     );
     assert.ok(toolSrc.includes('"image_generation"'));
+    assert.ok(toolSrc.includes("gpt-image-1.5"));
+    assert.ok(toolSrc.includes("medium"));
   });
 
   it("normalize keeps file blob bytes for OpenAI upload", () => {
@@ -299,5 +314,23 @@ describe("Raw multimodal isolation", () => {
     assert.ok(src.includes('status: "pending"'));
     assert.ok(src.includes("message_id: null"));
     assert.ok(src.includes('status: "attached"'));
+  });
+
+  it("generated images render with download control and Photos save path", () => {
+    const ui = fs.readFileSync("components/chat/AssistantMessage.tsx", "utf8");
+    assert.ok(ui.includes("GeneratedImageBlock"));
+    assert.ok(ui.includes("saveGeneratedImage"));
+    assert.ok(ui.includes("Download"));
+    const save = fs.readFileSync("lib/native/save-image.ts", "utf8");
+    assert.ok(save.includes("CanderPhotos"));
+    assert.ok(save.includes("photos"));
+    assert.ok(save.includes("share"));
+    assert.equal(save.includes("OPENAI_API_KEY"), false);
+    const plugin = fs.readFileSync(
+      "mobile/ios/App/App/CanderPhotosPlugin.swift",
+      "utf8",
+    );
+    assert.ok(plugin.includes("PHPhotoLibrary"));
+    assert.ok(plugin.includes("addOnly"));
   });
 });

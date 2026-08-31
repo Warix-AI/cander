@@ -444,7 +444,8 @@ html.cander-narrow .composer-keyboard-pad {
 
 html.cander-mobile[data-keyboard="1"] .composer-keyboard-pad,
 html.cander-narrow[data-keyboard="1"] .composer-keyboard-pad {
-  padding-bottom: 0.35rem !important;
+  /* Gap between composer and keyboard — doubled from 0.35rem for thumb clearance */
+  padding-bottom: 0.7rem !important;
 }
 
 /* Narrow phone / tablet shell (browser + Capacitor) — same fixed canvas */

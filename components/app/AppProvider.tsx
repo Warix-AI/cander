@@ -180,7 +180,6 @@ import { speakText, stopTextToSpeech } from "@/lib/voice/text-to-speech";
 import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
 import { typewriterReveal } from "@/lib/ai/typewriter";
 import { patchMessageWithProgress } from "@/lib/ai/turn-activity";
-import { RawOpenAIModeBadge } from "@/components/chat/RawOpenAIModeBadge";
 import { openProjectImageTab } from "@/lib/chat-image-attach";
 import {
   getSupabaseUserServerSnapshot,
@@ -4050,7 +4049,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppContext.Provider value={value}>
       {children}
-      <RawOpenAIModeBadge />
     </AppContext.Provider>
   );
 }

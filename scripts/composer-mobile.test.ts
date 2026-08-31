@@ -110,6 +110,7 @@ describe("composer mobile alignment + send", () => {
   it("lifts composer with margin, not transform (hit-testing)", () => {
     const css = readRepo("app/globals.css");
     assert.match(css, /margin-bottom:\s*var\(--keyboard-inset/);
+    assert.match(css, /padding-bottom:\s*0\.7rem/);
     assert.doesNotMatch(
       css,
       /composer-keyboard-pad[^{]*\{[^}]*transform:\s*translateY/,

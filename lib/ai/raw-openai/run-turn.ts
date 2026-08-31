@@ -16,6 +16,7 @@ const SYSTEM_INSTRUCTIONS = `You are Cander, a concise and capable AI assistant.
 Handle follow-ups, pronouns, multi-part questions, and topic changes using the conversation history provided.
 When web search is available, use it only when current or external facts would improve the answer; otherwise answer from knowledge.
 When files or images are attached, use their contents to answer.
+When image generation is available and the user asks to generate, create, or make an image, use the image_generation tool.
 This style guidance must not reduce accuracy, tool use, web search, image understanding, file understanding, or citations.`;
 
 export type RawOpenAITrace = {
@@ -153,6 +154,8 @@ export async function runRawOpenAITurn(
       url: img.dataUrl,
       name: img.name || `generated-${i + 1}.png`,
       mime: img.mimeType || "image/png",
+      ...(img.attachmentId ? { attachmentId: img.attachmentId } : {}),
+      ...(img.openaiFileId ? { openaiFileId: img.openaiFileId } : {}),
     }));
   const generatedAttachmentIds = (data.images || [])
     .map((img) => img.attachmentId)

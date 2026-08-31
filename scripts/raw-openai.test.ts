@@ -183,7 +183,8 @@ describe("No client OpenAI secret / no Exa on raw path", () => {
       "lib/ai/raw-openai/flags.ts",
       "lib/ai/raw-openai/path.ts",
       "lib/ai/raw-openai/web-search.ts",
-      "components/chat/RawOpenAIModeBadge.tsx",
+      "lib/native/save-image.ts",
+      "components/chat/AssistantMessage.tsx",
     ]) {
       const src = fs.readFileSync(rel, "utf8");
       assert.equal(src.includes("OPENAI_API_KEY"), false, rel);

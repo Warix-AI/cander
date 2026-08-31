@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Circle, Copy } from "lucide-react";
+import { Check, Circle, Copy, Download } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
 import { formatClarificationAnswersForDisplay } from "@/lib/ai/clarification/schema";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
+import { saveGeneratedImage } from "@/lib/native/save-image";
 import type { ChatBlock, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -278,22 +279,59 @@ function BlockView({ block }: { block: ChatBlock }) {
         </div>
       );
     case "image":
-      return (
-        <a
-          href={block.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="my-1 block max-w-full overflow-hidden rounded-[10px] border border-border"
-        >
+      return <GeneratedImageBlock block={block} />;
+  }
+}
+
+function GeneratedImageBlock({
+  block,
+}: {
+  block: Extract<ChatBlock, { type: "image" }>;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
+
+  return (
+    <div className="my-1 flex max-w-full flex-col gap-1">
+      <div className="flex max-w-full items-start gap-2">
+        <div className="min-w-0 flex-1 overflow-hidden rounded-[10px] border border-border bg-muted/20">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={block.url}
             alt={block.name}
-            className="max-h-64 max-w-full object-contain"
+            className="mx-auto max-h-[min(28rem,70vh)] w-full max-w-full object-contain"
           />
-        </a>
-      );
-  }
+        </div>
+        <button
+          type="button"
+          aria-label="Download image"
+          title="Download"
+          disabled={saving}
+          onClick={() => {
+            setSaving(true);
+            setSaveNote(null);
+            void saveGeneratedImage({ url: block.url, name: block.name })
+              .then((res) => {
+                if (!res.ok) {
+                  setSaveNote(res.error || "Couldn’t save");
+                  return;
+                }
+                if (res.method === "photos") setSaveNote("Saved to Photos");
+              })
+              .finally(() => setSaving(false));
+          }}
+          className="mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center self-start rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+        >
+          <Download className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+      </div>
+      {saveNote ? (
+        <p className="text-right text-[11px] text-muted-foreground" role="status">
+          {saveNote}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function PlanBlock({

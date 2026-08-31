@@ -532,6 +532,10 @@ export function Composer({
       // Show recording UI immediately — do not wait for getUserMedia
       setDictating(true);
       setDictationMeter(null);
+      // Keep textarea focused so the soft keyboard stays open under the overlay.
+      queueMicrotask(() => {
+        textRef.current?.focus({ preventScroll: true });
+      });
       logDictationTiming("recording_ui_visible", t0);
       dictationRef.current?.cancel();
       void startVoiceDictation({
@@ -563,6 +567,9 @@ export function Composer({
     }
     valueBaseRef.current = value.trim() ? `${value.trim()} ` : "";
     setDictating(true);
+    queueMicrotask(() => {
+      textRef.current?.focus({ preventScroll: true });
+    });
     speechRef.current?.stop();
     speechRef.current = startSpeechToText(
       {
@@ -620,13 +627,13 @@ export function Composer({
                     : "pr-2.5 pl-1.5 sm:pr-3 sm:pl-2",
                   showUsageBar
                     ? "pb-0"
-                    : "composer-keyboard-pad pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.35rem))] sm:pb-4",
+                    : "composer-keyboard-pad pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.7rem))] sm:pb-4",
                 )
               : cn(
                   "px-4 sm:px-6",
                   showUsageBar
                     ? "pb-0"
-                    : "composer-keyboard-pad pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.35rem))] sm:pb-4",
+                    : "composer-keyboard-pad pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.7rem))] sm:pb-4",
                 )
       }
       onSubmit={(event) => {
@@ -826,28 +833,43 @@ export function Composer({
 
         {compact ? (
           <div className="composer-shell py-1.5 pr-1.5 pl-3">
-            {dictatingActive ? (
-              <ComposerRecordingView
-                compact
-                status={transcribing ? "transcribing" : "recording"}
-                meter={dictationMeter}
-                onCancel={cancelDictation}
-                onStop={() => stopDictationAndTranscribe("insert")}
-                onSend={() => stopDictationAndTranscribe("send")}
-              />
-            ) : (
-              <div className="flex h-9 items-center gap-0.5">
+            <div className={cn("relative", dictatingActive && "h-9")}>
+              {dictatingActive ? (
+                <div className="absolute inset-0 z-10 flex items-center">
+                  <ComposerRecordingView
+                    compact
+                    status={transcribing ? "transcribing" : "recording"}
+                    meter={dictationMeter}
+                    onCancel={cancelDictation}
+                    onStop={() => stopDictationAndTranscribe("insert")}
+                    onSend={() => stopDictationAndTranscribe("send")}
+                  />
+                </div>
+              ) : null}
+              <div
+                className={cn(
+                  "flex h-9 items-center gap-0.5",
+                  dictatingActive && "invisible pointer-events-none",
+                )}
+                aria-hidden={dictatingActive || undefined}
+              >
                 <textarea
+                  ref={textRef}
                   value={value}
                   rows={1}
                   placeholder={hint}
                   autoFocus={autoFocus}
+                  readOnly={dictatingActive}
                   onFocus={() => {
                     suppressAutoFocusRef.current = false;
                     onFocus?.();
                   }}
                   onChange={(event) => setValue(event.target.value)}
                   onKeyDown={(event) => {
+                    if (dictatingActive) {
+                      event.preventDefault();
+                      return;
+                    }
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
                       submit();
@@ -866,7 +888,7 @@ export function Composer({
                   onSend={submit}
                 />
               </div>
-            )}
+            </div>
           </div>
         ) : (
           <div
@@ -998,20 +1020,25 @@ export function Composer({
                 ) : null}
               </div>
             ) : null}
-            {dictatingActive ? (
-              <ComposerRecordingView
-                status={transcribing ? "transcribing" : "recording"}
-                meter={dictationMeter}
-                onCancel={cancelDictation}
-                onStop={() => stopDictationAndTranscribe("insert")}
-                onSend={() => stopDictationAndTranscribe("send")}
-              />
-            ) : (
+            <div className={cn("relative", dictatingActive && "h-8 overflow-hidden")}>
+              {dictatingActive ? (
+                <div className="absolute inset-0 z-10 flex items-center">
+                  <ComposerRecordingView
+                    status={transcribing ? "transcribing" : "recording"}
+                    meter={dictationMeter}
+                    onCancel={cancelDictation}
+                    onStop={() => stopDictationAndTranscribe("insert")}
+                    onSend={() => stopDictationAndTranscribe("send")}
+                  />
+                </div>
+              ) : null}
             <div
               className={cn(
                 "flex min-h-8 gap-1",
                 mobile ? "items-end" : !hasText ? "items-center" : "items-start",
+                dictatingActive && "invisible pointer-events-none",
               )}
+              aria-hidden={dictatingActive || undefined}
             >
               <ToolBtn
                 label="Add"
@@ -1028,6 +1055,7 @@ export function Composer({
                 autoFocus={autoFocus}
                 enterKeyHint="send"
                 autoComplete="off"
+                readOnly={dictatingActive}
                 onFocus={(event) => {
                   suppressAutoFocusRef.current = false;
                   onFocus?.();
@@ -1040,6 +1068,7 @@ export function Composer({
                   }, 50);
                 }}
                 onChange={(event) => {
+                  if (dictatingActive) return;
                   const next = event.target.value;
                   setValue(next);
                   if (landing || stayInPlace) return;
@@ -1052,6 +1081,10 @@ export function Composer({
                   }
                 }}
                 onKeyDown={(event) => {
+                  if (dictatingActive) {
+                    event.preventDefault();
+                    return;
+                  }
                   if (event.key === "/" && value === "" && !event.metaKey && !event.ctrlKey) {
                     event.preventDefault();
                     toggleMenu("plus");
@@ -1083,7 +1116,7 @@ export function Composer({
                 />
               </div>
             </div>
-            )}
+            </div>
           </div>
         )}
 
