@@ -68,8 +68,10 @@ import {
 } from "@/lib/voice/speech-to-text";
 import {
   isOpenAIDictationSupported,
-  startOpenAIDictation,
+  startVoiceDictation,
+  type VoiceDictationSession,
 } from "@/lib/voice/openai-dictation";
+import type { AudioMeter } from "@/lib/voice/audio-meter";
 import { stopTextToSpeech } from "@/lib/voice/text-to-speech";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
@@ -141,6 +143,8 @@ export function Composer({
   const [value, setValue] = useState("");
   const [dictating, setDictating] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [dictationMeter, setDictationMeter] = useState<AudioMeter | null>(null);
+  const [transcriptReveal, setTranscriptReveal] = useState(false);
   const [menu, setMenu] = useState<MenuId>(null);
   const [files, setFiles] = useState<ChatFileAttachment[]>([]);
   const [images, setImages] = useState<ChatImageAttachment[]>([]);
@@ -153,6 +157,7 @@ export function Composer({
   const wrapRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const speechRef = useRef<SpeechSession | null>(null);
+  const dictationRef = useRef<VoiceDictationSession | null>(null);
   const valueBaseRef = useRef("");
   /** Keep the + menu visible while the native file sheet is open (iOS). */
   const awaitingFilePickRef = useRef(false);
@@ -348,12 +353,54 @@ export function Composer({
         : null;
   const pinned = pinTarget ? Boolean(pinTier(pinTarget.kind, pinTarget.id)) : false;
 
-  const endDictation = () => {
+  const cancelDictation = () => {
+    dictationRef.current?.cancel();
+    dictationRef.current = null;
     speechRef.current?.stop();
     speechRef.current = null;
+    setDictationMeter(null);
     setDictating(false);
     setTranscribing(false);
     setDictateError(null);
+  };
+
+  const stopDictationAndTranscribe = () => {
+    const session = dictationRef.current;
+    if (!session) {
+      cancelDictation();
+      return;
+    }
+    setDictating(false);
+    setTranscribing(true);
+    setDictationMeter(null);
+    void session
+      .stopAndTranscribe()
+      .then((text) => {
+        const next = `${valueBaseRef.current}${text} `.replace(/\s+/g, " ");
+        valueBaseRef.current = next;
+        setTranscriptReveal(true);
+        setValue(next);
+        window.setTimeout(() => {
+          setTranscriptReveal(false);
+          const el = textRef.current;
+          if (el) {
+            el.focus();
+            const end = el.value.length;
+            el.setSelectionRange(end, end);
+          }
+        }, 220);
+      })
+      .catch((e) => {
+        setDictateError(
+          e instanceof Error ? e.message : "Transcription failed.",
+        );
+      })
+      .finally(() => {
+        dictationRef.current = null;
+        setTranscribing(false);
+        setDictating(false);
+        setDictationMeter(null);
+      });
   };
 
   const stopVoice = () => {
@@ -364,8 +411,9 @@ export function Composer({
   };
 
   const submit = () => {
-    if (dictatingActive && !hasText && !images.length && !files.length) {
-      endDictation();
+    if (transcribing) return;
+    if (dictating) {
+      stopDictationAndTranscribe();
       return;
     }
     const refPrefix = pageReference
@@ -378,6 +426,8 @@ export function Composer({
     if (!body && !images.length && !files.length) return;
     speechRef.current?.stop();
     speechRef.current = null;
+    dictationRef.current?.cancel();
+    dictationRef.current = null;
     const usableImages = images.filter((img) =>
       img.url?.startsWith("data:image/"),
     );
@@ -410,6 +460,7 @@ export function Composer({
     setImages([]);
     setMenu(null);
     setDictating(false);
+    setTranscribing(false);
     setDictateError(null);
     setAttachError(null);
     clearPageReference();
@@ -436,30 +487,26 @@ export function Composer({
       }
       valueBaseRef.current = value.trim() ? `${value.trim()} ` : "";
       setDictating(true);
-      speechRef.current?.stop();
-      speechRef.current = startOpenAIDictation({
-        onPartial: (text) => {
-          if (text === "Transcribing…") {
-            setTranscribing(true);
-            setDictating(false);
-          }
-        },
-        onFinal: (text) => {
-          valueBaseRef.current = `${valueBaseRef.current}${text} `.replace(
-            /\s+/g,
-            " ",
-          );
-          setValue(valueBaseRef.current);
-        },
+      dictationRef.current?.cancel();
+      void startVoiceDictation({
         onError: (message) => {
           setDictateError(message);
-        },
-        onEnd: () => {
           setDictating(false);
-          setTranscribing(false);
-          speechRef.current = null;
+          setDictationMeter(null);
+          dictationRef.current = null;
         },
-      });
+      })
+        .then((session) => {
+          dictationRef.current = session;
+          setDictationMeter(session.getMeter());
+        })
+        .catch((e) => {
+          setDictateError(
+            e instanceof Error ? e.message : "Couldn’t start recording.",
+          );
+          setDictating(false);
+          setDictationMeter(null);
+        });
       return;
     }
 
@@ -533,6 +580,13 @@ export function Composer({
     };
   }, [voiceActive, dictating, entitlements.hasVoice, onSend]);
 
+  // Cleanup dictation session on unmount
+  useEffect(() => {
+    return () => {
+      dictationRef.current?.cancel();
+      dictationRef.current = null;
+    };
+  }, []);
   const hint =
     placeholder ??
     (activeConnector
@@ -772,8 +826,9 @@ export function Composer({
               <ComposerRecordingView
                 compact
                 status={transcribing ? "transcribing" : "recording"}
-                onCancel={endDictation}
-                onStop={endDictation}
+                meter={dictationMeter}
+                onCancel={cancelDictation}
+                onStop={stopDictationAndTranscribe}
               />
             ) : (
               <div className="flex h-9 items-center gap-0.5">
@@ -944,8 +999,9 @@ export function Composer({
             {dictatingActive ? (
               <ComposerRecordingView
                 status={transcribing ? "transcribing" : "recording"}
-                onCancel={endDictation}
-                onStop={endDictation}
+                meter={dictationMeter}
+                onCancel={cancelDictation}
+                onStop={stopDictationAndTranscribe}
               />
             ) : (
             <div
@@ -1007,6 +1063,7 @@ export function Composer({
                   "min-h-8 min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent text-[16px] outline-none placeholder:text-muted-foreground sm:text-[14px]",
                   mobile ? "max-h-[none]" : "max-h-[212px]",
                   hasText ? "h-auto py-1.5 leading-5" : "h-8 py-0 leading-8",
+                  transcriptReveal && "opacity-100 transition-opacity duration-200",
                 )}
               />
               <div

@@ -2,8 +2,10 @@
 
 import type { ReactNode } from "react";
 import { ArrowUp, Mic, Square, X } from "lucide-react";
-import { VoiceOrb, VoiceWaveform } from "@/components/shell/VoiceOrb";
+import { VoiceOrb } from "@/components/shell/VoiceOrb";
 import { VoiceWaveButton } from "@/components/shell/VoiceWaveButton";
+import { VoiceDictationWaveform } from "@/components/shell/VoiceDictationWaveform";
+import type { AudioMeter } from "@/lib/voice/audio-meter";
 import { cn } from "@/lib/utils";
 
 /** Listening orb — sits above the composer while voice mode is on. */
@@ -29,24 +31,35 @@ export function ComposerRecordingView({
   onStop,
   compact = false,
   status = "recording",
+  meter = null,
 }: {
   onCancel: () => void;
   onStop: () => void;
   compact?: boolean;
   status?: "recording" | "transcribing";
+  meter?: AudioMeter | null;
 }) {
-  const btn = compact ? 32 : 36;
-  const label = status === "transcribing" ? "Transcribing…" : "Recording…";
+  const btn = compact ? 36 : 40;
+  const waveH = compact ? 24 : 28;
+  const isTranscribing = status === "transcribing";
 
   return (
-    <div className={cn("flex flex-col", compact ? "gap-2 py-0.5" : "gap-3 py-1")}>
+    <div
+      className={cn(
+        "flex flex-col",
+        compact ? "gap-2 py-0.5" : "gap-2.5 py-1",
+      )}
+      role="status"
+      aria-live="polite"
+    >
       <p
         className={cn(
-          "select-none text-muted-foreground",
+          "select-none text-muted-foreground transition-opacity duration-200",
           compact ? "px-0.5 text-[13px]" : "px-1 text-[14px]",
+          isTranscribing ? "opacity-100" : "opacity-80",
         )}
       >
-        {label}
+        {isTranscribing ? "Transcribing…" : "Listening…"}
       </p>
       <div className="flex items-center gap-2">
         <CircleIconBtn
@@ -54,35 +67,31 @@ export function ComposerRecordingView({
           onClick={onCancel}
           size={btn}
           className="bg-muted text-foreground hover:bg-muted/80"
+          disabled={isTranscribing}
         >
           <X className="h-4 w-4" strokeWidth={2} />
         </CircleIconBtn>
-        <VoiceWaveform
-          bars={compact ? 28 : 36}
-          height={compact ? 20 : 24}
-          active={status === "recording"}
-          className="min-w-0 flex-1"
-          barClassName="bg-muted-foreground/45"
-        />
+        <div
+          className={cn(
+            "min-w-0 flex-1 transition-opacity duration-200",
+            isTranscribing && "opacity-40",
+          )}
+        >
+          <VoiceDictationWaveform
+            meter={meter}
+            active={!isTranscribing}
+            height={waveH}
+          />
+        </div>
         <CircleIconBtn
-          label="Stop recording"
+          label={isTranscribing ? "Transcribing" : "Stop and transcribe"}
           onClick={onStop}
           size={btn}
-          className="bg-muted text-foreground hover:bg-muted/80"
-          disabled={status === "transcribing"}
+          className="bg-foreground text-background hover:bg-foreground/90"
+          disabled={isTranscribing}
         >
           <Square className="h-3 w-3 fill-current" strokeWidth={0} />
         </CircleIconBtn>
-        <button
-          type="submit"
-          aria-label="Send"
-          className={cn(
-            "inline-flex shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors duration-200 hover:bg-foreground",
-            compact ? "h-8 w-8" : "h-9 w-9",
-          )}
-        >
-          <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
-        </button>
       </div>
     </div>
   );
@@ -247,7 +256,7 @@ function CircleIconBtn({
       disabled={disabled}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full transition-colors duration-200",
-        disabled && "opacity-50",
+        disabled && "pointer-events-none opacity-50",
         className,
       )}
       style={{ width: size, height: size }}

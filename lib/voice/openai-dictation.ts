@@ -1,11 +1,32 @@
 /**
- * OpenAI-only dictation for RAW_OPENAI_MODE.
- * Records mic audio → /api/ai/raw-openai/transcribe → transcript text.
- * Does not use Apple Speech, Electron SpeechHelper, or Web Speech.
+ * OpenAI dictation recorder — MediaRecorder + shared mic stream for metering.
+ * Cancel discards audio (no API). Stop uploads to Cander → OpenAI transcription.
  */
 
-import { transcribeRawOpenAIAudio } from "@/lib/ai/raw-openai/upload-client";
-import type { SpeechSession, SpeechToTextHandlers } from "@/lib/voice/speech-to-text";
+import { createAudioMeter, type AudioMeter } from "./audio-meter.ts";
+import { transcribeRawOpenAIAudio } from "../ai/raw-openai/upload-client.ts";
+
+export type DictationMime = {
+  mimeType: string;
+  extension: string;
+};
+
+export function pickDictationMime(): DictationMime {
+  if (typeof MediaRecorder === "undefined") {
+    return { mimeType: "", extension: "webm" };
+  }
+  const candidates: Array<{ mimeType: string; extension: string }> = [
+    { mimeType: "audio/webm;codecs=opus", extension: "webm" },
+    { mimeType: "audio/webm", extension: "webm" },
+    { mimeType: "audio/mp4", extension: "m4a" },
+    { mimeType: "audio/aac", extension: "aac" },
+    { mimeType: "audio/ogg;codecs=opus", extension: "ogg" },
+  ];
+  for (const c of candidates) {
+    if (MediaRecorder.isTypeSupported(c.mimeType)) return c;
+  }
+  return { mimeType: "", extension: "webm" };
+}
 
 export function isOpenAIDictationSupported(): boolean {
   return (
@@ -16,102 +37,130 @@ export function isOpenAIDictationSupported(): boolean {
   );
 }
 
-export function startOpenAIDictation(
-  handlers: SpeechToTextHandlers,
-): SpeechSession {
-  let mediaRecorder: MediaRecorder | null = null;
-  let stream: MediaStream | null = null;
-  let chunks: BlobPart[] = [];
-  let stopped = false;
+export type VoiceDictationSession = {
+  /** Live amplitude meter (Web Audio). Null until stream is ready. */
+  getMeter: () => AudioMeter | null;
+  /** MIME actually used by MediaRecorder */
+  getMime: () => DictationMime;
+  /** Stop mic + discard blob — never calls OpenAI */
+  cancel: () => void;
+  /** Stop mic + MediaRecorder → transcribe via OpenAI */
+  stopAndTranscribe: () => Promise<string>;
+};
 
-  const cleanup = () => {
+export type StartVoiceDictationHandlers = {
+  onReady?: (mime: DictationMime) => void;
+  onError?: (message: string) => void;
+};
+
+export async function startVoiceDictation(
+  handlers?: StartVoiceDictationHandlers,
+): Promise<VoiceDictationSession> {
+  let stream: MediaStream | null = null;
+  let recorder: MediaRecorder | null = null;
+  let meter: AudioMeter | null = null;
+  let chunks: BlobPart[] = [];
+  let closed = false;
+  const mime = pickDictationMime();
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+  } catch {
+    throw new Error("Microphone permission is required for voice dictation.");
+  }
+
+  meter = createAudioMeter(stream);
+
+  try {
+    recorder = mime.mimeType
+      ? new MediaRecorder(stream, { mimeType: mime.mimeType })
+      : new MediaRecorder(stream);
+  } catch {
+    meter.stop();
+    stream.getTracks().forEach((t) => t.stop());
+    throw new Error("Recording isn’t supported in this browser.");
+  }
+
+  chunks = [];
+  recorder.ondataavailable = (ev) => {
+    if (ev.data.size > 0) chunks.push(ev.data);
+  };
+  recorder.onerror = () => {
+    handlers?.onError?.("Microphone recording failed.");
+  };
+  recorder.start(200);
+  handlers?.onReady?.(mime);
+
+  const releaseHardware = () => {
+    meter?.stop();
+    meter = null;
     try {
-      mediaRecorder?.stop();
+      if (recorder && recorder.state !== "inactive") recorder.stop();
     } catch {
       /* ignore */
     }
-    mediaRecorder = null;
+    recorder = null;
     stream?.getTracks().forEach((t) => t.stop());
     stream = null;
-    chunks = [];
   };
 
-  void (async () => {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm")
-          ? "audio/webm"
-          : MediaRecorder.isTypeSupported("audio/mp4")
-            ? "audio/mp4"
-            : "";
-      mediaRecorder = mime
-        ? new MediaRecorder(stream, { mimeType: mime })
-        : new MediaRecorder(stream);
-      chunks = [];
-      mediaRecorder.ondataavailable = (ev) => {
-        if (ev.data.size > 0) chunks.push(ev.data);
-      };
-      mediaRecorder.onerror = () => {
-        handlers.onError?.("Microphone recording failed.");
-        cleanup();
-        handlers.onEnd?.();
-      };
-      mediaRecorder.start(250);
-    } catch {
-      handlers.onError?.(
-        "Microphone permission is required for voice dictation.",
-      );
-      cleanup();
-      handlers.onEnd?.();
-    }
-  })();
-
-  return {
-    stop: () => {
-      if (stopped) return;
-      stopped = true;
-      const recorder = mediaRecorder;
-      const activeStream = stream;
-      if (!recorder || recorder.state === "inactive") {
-        activeStream?.getTracks().forEach((t) => t.stop());
-        handlers.onEnd?.();
+  const waitForBlob = (): Promise<Blob | null> =>
+    new Promise((resolve) => {
+      const rec = recorder;
+      if (!rec || rec.state === "inactive") {
+        const type = mime.mimeType || "audio/webm";
+        const blob = chunks.length ? new Blob(chunks, { type }) : null;
+        resolve(blob);
         return;
       }
-      recorder.onstop = () => {
-        const type = recorder.mimeType || "audio/webm";
-        const blob = new Blob(chunks, { type });
-        activeStream?.getTracks().forEach((t) => t.stop());
-        mediaRecorder = null;
-        stream = null;
-        chunks = [];
-        if (!blob.size) {
-          handlers.onError?.("No audio captured.");
-          handlers.onEnd?.();
-          return;
-        }
-        handlers.onPartial?.("Transcribing…");
-        const ext = type.includes("mp4") ? "m4a" : "webm";
-        void transcribeRawOpenAIAudio(blob, `dictation.${ext}`)
-          .then((text) => {
-            if (text) handlers.onFinal?.(text);
-            else handlers.onError?.("No speech detected.");
-          })
-          .catch((e) => {
-            handlers.onError?.(
-              e instanceof Error ? e.message : "Transcription failed.",
-            );
-          })
-          .finally(() => {
-            handlers.onEnd?.();
-          });
+      rec.onstop = () => {
+        const type = rec.mimeType || mime.mimeType || "audio/webm";
+        const blob = chunks.length ? new Blob(chunks, { type }) : null;
+        resolve(blob);
       };
       try {
-        recorder.stop();
+        rec.stop();
       } catch {
-        handlers.onEnd?.();
+        resolve(null);
       }
+    });
+
+  return {
+    getMeter: () => meter,
+    getMime: () => mime,
+    cancel: () => {
+      if (closed) return;
+      closed = true;
+      chunks = [];
+      releaseHardware();
+    },
+    stopAndTranscribe: async () => {
+      if (closed) throw new Error("Recording already ended.");
+      closed = true;
+      // Release metering immediately so the UI can settle while MediaRecorder finalizes.
+      meter?.stop();
+      meter = null;
+      const blob = await waitForBlob();
+      stream?.getTracks().forEach((t) => t.stop());
+      stream = null;
+      recorder = null;
+
+      if (!blob || blob.size < 64) {
+        throw new Error("No speech detected.");
+      }
+      const filename = `dictation.${mime.extension || "webm"}`;
+      const text = await transcribeRawOpenAIAudio(blob, filename);
+      if (!text.trim()) throw new Error("No speech detected.");
+      return text.trim();
     },
   };
 }
+
+/** @deprecated Prefer startVoiceDictation — kept for older callers */
+export { startVoiceDictation as startOpenAIDictation };

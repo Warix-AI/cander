@@ -226,10 +226,10 @@ describe("Raw multimodal isolation", () => {
     }
   });
 
-  it("openai-dictation uses MediaRecorder + transcribe endpoint only", () => {
+  it("openai-dictation uses MediaRecorder + transcribe helper only", () => {
     const src = fs.readFileSync("lib/voice/openai-dictation.ts", "utf8");
     assert.ok(src.includes("MediaRecorder"));
-    assert.ok(src.includes("/api/ai/raw-openai/transcribe"));
+    assert.ok(src.includes("transcribeRawOpenAIAudio"));
     assert.equal(src.includes("startSpeechToText"), false);
     assert.equal(src.includes("@capacitor-community/speech-recognition"), false);
   });
