@@ -4,6 +4,13 @@
 
 import type { TurnEvidence } from "./evidence.ts";
 import { requiresExternalEvidence } from "./deterministic-triggers.ts";
+import {
+  answerClaimsUnsupportedCurrentFact,
+  isRetrievalRequiredForTurn,
+} from "./retrieval-requirements.ts";
+import type { ConversationTurnState } from "@/lib/ai/turn-environment/conversation-types.ts";
+import type { TurnTaskResolution } from "@/lib/ai/turn-environment/turn-task.ts";
+import type { TemporalGrounding } from "./temporal-grounding.ts";
 
 const CLAIMED_BROWSE =
   /\b(i (visited|opened|read|checked)|according to (the )?(site|page|website)|on (their|the) (site|homepage|website))\b/i;
@@ -86,10 +93,21 @@ export function validateLocalGrounding(opts: {
   userRequest: string;
   evidence: TurnEvidence[];
   retrievalAttempted: boolean;
+  retrievalRequired?: boolean;
+  turnTask?: TurnTaskResolution;
+  temporalGrounding?: TemporalGrounding | null;
+  conversationState?: ConversationTurnState | null;
 }): GroundingValidation {
   const issues: string[] = [];
   const answer = opts.answer.trim();
-  const needsExternal = requiresExternalEvidence(opts.userRequest);
+  const needsExternal =
+    opts.retrievalRequired ??
+    (isRetrievalRequiredForTurn({
+      turnTask: opts.turnTask,
+      temporalGrounding: opts.temporalGrounding,
+      conversationState: opts.conversationState,
+    }) ||
+      requiresExternalEvidence(opts.userRequest));
   const okEvidence = opts.evidence.filter((e) => e.ok && e.content.trim());
   const webEvidence = okEvidence.filter(
     (e) =>
@@ -106,6 +124,14 @@ export function validateLocalGrounding(opts: {
 
   if (needsExternal && !retrievalDone) {
     issues.push("MISSING_RETRIEVAL");
+  }
+
+  if (
+    needsExternal &&
+    !usable &&
+    answerClaimsUnsupportedCurrentFact(answer, opts.evidence)
+  ) {
+    issues.push("UNGROUNDED_CURRENT_FACT");
   }
 
   if (
@@ -146,7 +172,11 @@ export function validateLocalGrounding(opts: {
     };
   }
 
-  if (issues.includes("MISSING_RETRIEVAL") || issues.includes("UNRESOLVED_EXTERNAL_FACT")) {
+  if (
+    issues.includes("MISSING_RETRIEVAL") ||
+    issues.includes("UNRESOLVED_EXTERNAL_FACT") ||
+    issues.includes("UNGROUNDED_CURRENT_FACT")
+  ) {
     return { valid: false, issues, recommendedAction: "fail_closed" };
   }
 
@@ -158,8 +188,12 @@ export function validateLocalGrounding(opts: {
 }
 
 export function failClosedMessage(issues: string[]): string {
-  if (issues.includes("MISSING_RETRIEVAL") || issues.includes("UNRESOLVED_EXTERNAL_FACT")) {
-    return "I couldn't read the active page or retrieve live information for that, so I won't guess. Select a tab in the right panel and try again.";
+  if (
+    issues.includes("MISSING_RETRIEVAL") ||
+    issues.includes("UNRESOLVED_EXTERNAL_FACT") ||
+    issues.includes("UNGROUNDED_CURRENT_FACT")
+  ) {
+    return "I couldn't retrieve live information for that question, so I won't guess. Please try again in a moment.";
   }
   return "I couldn't verify that answer against retrieved sources.";
 }

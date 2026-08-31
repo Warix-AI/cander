@@ -14,6 +14,7 @@ import {
   type FinalAnswerSource,
   type TurnRetrievalTrace,
 } from "./retrieval-trace.ts";
+import type { TurnTerminalState } from "./retrieval-requirements.ts";
 import { scanRequest, type RequestLedger } from "./request-scanner.ts";
 
 export type AuditStage =
@@ -92,6 +93,7 @@ export type TurnAudit = {
   finalSource?: FinalAnswerSource;
   failureReason?: string;
   answerChars?: number;
+  terminalState?: TurnTerminalState;
 };
 
 let activeAudit: TurnAudit | null = null;
@@ -227,6 +229,7 @@ export function finalizeTurnAudit(opts: {
   finalSource: FinalAnswerSource;
   answerChars?: number;
   failureReason?: string;
+  terminalState?: TurnTerminalState;
 }): TurnAudit | null {
   if (!activeAudit) return null;
   activeAudit.finishedAt = Date.now();
@@ -234,6 +237,7 @@ export function finalizeTurnAudit(opts: {
   activeAudit.finalSource = opts.finalSource;
   activeAudit.answerChars = opts.answerChars;
   activeAudit.failureReason = opts.failureReason;
+  activeAudit.terminalState = opts.terminalState;
   activeAudit.retrieval = getRetrievalTrace();
   patchRetrievalTrace({ finalSource: opts.finalSource });
   return getTurnAudit();

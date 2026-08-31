@@ -73,10 +73,16 @@ export function atomicQueryFromAsk(
   return trimmed.slice(0, 400);
 }
 
+export function retrievalNodesForGraph(graph: TaskGraph): TaskNode[] {
+  return graph.nodes.filter((n) => n.kind === "RETRIEVE" || n.kind === "RESEARCH");
+}
+
 export function compileTaskGraph(opts: {
   ledger: RequestLedger;
   researchPlan?: ResearchTurnPlan | null;
   turnTask?: TurnTaskResolution;
+  /** When true, every ASK gets a linked RETRIEVE node (unless research plan owns retrieval). */
+  retrievalRequired?: boolean;
   /** Pre-built RETRIEVE nodes from AskExtractor. */
   retrieveSpecs?: Array<{
     id: string;
@@ -129,8 +135,10 @@ export function compileTaskGraph(opts: {
       });
     }
   } else if (opts.ledger.asks.length >= 1) {
+    const retrievalRequired = opts.retrievalRequired ?? false;
     for (const ask of opts.ledger.asks) {
       const needsRetrieve =
+        retrievalRequired ||
         requiresExternalEvidence(ask.text) ||
         requiresExternalEvidence(opts.ledger.rawInput);
       if (!needsRetrieve && opts.ledger.asks.length === 1) continue;
@@ -165,6 +173,106 @@ export function compileTaskGraph(opts: {
     objective: opts.researchPlan?.objective,
     maxRetrievalRounds: opts.researchPlan?.maxRetrievalRounds ?? 2,
     retrievalRound: 0,
+  };
+}
+
+/**
+ * Repair graph when retrieval is required but no RETRIEVE/RESEARCH nodes exist.
+ */
+export function ensureRetrievalNodes(opts: {
+  graph: TaskGraph;
+  ledger: RequestLedger;
+  turnTask?: TurnTaskResolution;
+  researchPlan?: ResearchTurnPlan | null;
+  retrievalRequired: boolean;
+}): { graph: TaskGraph; repaired: boolean; issues: string[] } {
+  const issues: string[] = [];
+  if (!opts.retrievalRequired) {
+    return { graph: opts.graph, repaired: false, issues };
+  }
+  if (opts.researchPlan?.subtasks.length) {
+    return { graph: opts.graph, repaired: false, issues };
+  }
+  if (retrievalNodesForGraph(opts.graph).length > 0) {
+    return { graph: opts.graph, repaired: false, issues };
+  }
+  if (!opts.ledger.asks.length) {
+    issues.push("retrieval_required_no_asks");
+    return { graph: opts.graph, repaired: false, issues };
+  }
+
+  const injected: TaskNode[] = [];
+  for (const ask of opts.ledger.asks) {
+    const id =
+      opts.ledger.asks.length === 1 ? "retrieve_primary" : `retrieve_${ask.id}`;
+    injected.push({
+      id,
+      kind: "RETRIEVE",
+      label: ask.text.slice(0, 100),
+      status: "PENDING",
+      spanId: ask.id,
+      askId: `ask_${ask.id}`,
+      subtaskId: id,
+      query: atomicQueryFromAsk(ask.text, opts.turnTask),
+      capability: "web.search",
+    });
+  }
+
+  issues.push("retrieval_node_injected");
+  const nodes = propagateAskStatus([...opts.graph.nodes, ...injected]);
+  return {
+    graph: { ...opts.graph, nodes },
+    repaired: true,
+    issues,
+  };
+}
+
+export function validateRetrievalGraph(opts: {
+  graph: TaskGraph;
+  ledger: RequestLedger;
+  researchPlan?: ResearchTurnPlan | null;
+  retrievalRequired: boolean;
+}): string[] {
+  const issues: string[] = [];
+  if (!opts.retrievalRequired) return issues;
+  if (opts.researchPlan?.subtasks.length) return issues;
+  if (retrievalNodesForGraph(opts.graph).length === 0) {
+    issues.push("retrieval_required_no_nodes");
+    return issues;
+  }
+  for (const ask of opts.ledger.asks) {
+    const askId = `ask_${ask.id}`;
+    const linked = opts.graph.nodes.filter(
+      (n) =>
+        (n.kind === "RETRIEVE" || n.kind === "RESEARCH") &&
+        (n.askId === askId || n.spanId === ask.id),
+    );
+    if (!linked.length) {
+      issues.push(`retrieval_missing_for_ask:${ask.id}`);
+    }
+  }
+  return issues;
+}
+
+export function bumpRetrievalRound(graph: TaskGraph): TaskGraph {
+  return resetRetrievalForRetry(graph);
+}
+
+/** Re-open RETRIEVE nodes for a deeper retrieval round (e.g. dissatisfaction retry). */
+export function resetRetrievalForRetry(graph: TaskGraph): TaskGraph {
+  const nodes = graph.nodes.map((n) => {
+    if (n.kind !== "RETRIEVE") return n;
+    return {
+      ...n,
+      status: "PENDING" as const,
+      terminalReason: undefined,
+      retryCount: (n.retryCount ?? 0) + 1,
+    };
+  });
+  return {
+    ...graph,
+    retrievalRound: graph.retrievalRound + 1,
+    nodes: propagateAskStatus(nodes),
   };
 }
 

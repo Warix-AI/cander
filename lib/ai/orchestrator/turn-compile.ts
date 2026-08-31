@@ -5,8 +5,10 @@
 import { scanRequest, type RequestLedger } from "./request-scanner.ts";
 import {
   compileTaskGraph,
+  ensureRetrievalNodes,
   type TaskGraph,
 } from "./task-graph.ts";
+import { isRetrievalRequiredForTurn } from "./retrieval-requirements.ts";
 import { validateTaskPlan, type PlanValidationResult } from "./plan-validator.ts";
 import {
   applyConversationDelta,
@@ -49,6 +51,7 @@ export type TurnCompileResult = {
   profile: TurnProfile;
   webRetrievalPlan: ReturnType<typeof compileWebRetrievalPlan>;
   temporalGrounding: TemporalGrounding;
+  retrievalRequired: boolean;
 };
 
 export type CompileTurnInput = {
@@ -124,17 +127,35 @@ export async function compileTurn(input: CompileTurnInput): Promise<TurnCompileR
       ? heuristicAskDecomposition(ledger, turnTask)
       : undefined;
 
+  const retrievalRequired = isRetrievalRequiredForTurn({
+    turnTask,
+    temporalGrounding,
+    conversationState,
+    ledger,
+  });
+
   let graph = compileTaskGraph({
     ledger,
     researchPlan,
     turnTask,
     retrieveSpecs,
+    retrievalRequired,
   });
+
+  const repair = ensureRetrievalNodes({
+    graph,
+    ledger,
+    turnTask,
+    researchPlan,
+    retrievalRequired,
+  });
+  graph = repair.graph;
 
   let planValidation = validateTaskPlan({
     ledger,
     graph,
     researchPlan,
+    retrievalRequired,
   });
 
   const webRetrievalPlan = compileWebRetrievalPlan({
@@ -165,6 +186,7 @@ export async function compileTurn(input: CompileTurnInput): Promise<TurnCompileR
     planValidation,
     turnTask,
     researchPlan,
+    retrievalRequired,
     profile: {
       ...profile,
       researchPlan: researchPlan ?? undefined,

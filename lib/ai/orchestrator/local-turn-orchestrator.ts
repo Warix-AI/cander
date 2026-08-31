@@ -94,10 +94,19 @@ import {
 import { runEvidenceGate } from "@/lib/ai/orchestrator/evidence-gate.ts";
 import {
   executableNodes,
+  ensureRetrievalNodes,
   researchProgressItems,
+  resetRetrievalForRetry,
   type TaskGraph,
 } from "@/lib/ai/orchestrator/task-graph.ts";
 import { validateTaskPlan } from "@/lib/ai/orchestrator/plan-validator.ts";
+import {
+  acceptedEvidence,
+  hasAcceptedEvidence,
+  resolveTurnTerminalState,
+  shouldBlockSynthesisWithoutEvidence,
+  type TurnTerminalState,
+} from "@/lib/ai/orchestrator/retrieval-requirements.ts";
 import { compileTurn, mergeAskExtractorIntoGraph } from "@/lib/ai/orchestrator/turn-compile.ts";
 import { extractAsksWithFm } from "@/lib/ai/orchestrator/ask-extractor.ts";
 import { runTaskGraphExecution } from "@/lib/ai/orchestrator/task-executor.ts";
@@ -404,12 +413,14 @@ function fmFinalSource(evidence: TurnEvidence[]): FinalAnswerSource {
 function finalizeTurnResult<T extends AiGenerateResult>(
   result: T,
   source: FinalAnswerSource,
+  terminalState?: TurnTerminalState,
 ): T {
   markStageEnd("model_synthesis");
   setFinalSource(source);
   finalizeTurnAudit({
     finalSource: source,
     answerChars: result.content?.length,
+    terminalState,
   });
   const trace = getTurnTraceRecorder();
   trace?.recordFinalResponse({
@@ -1187,6 +1198,11 @@ async function runLocalTurnOrchestratorInner(
     let taskGraph = compiled.graph;
     const requestLedger = compiled.ledger;
     let planValidation = compiled.planValidation;
+    const retrievalRequired = compiled.retrievalRequired;
+
+    if (conversationState.dissatisfactionSignal) {
+      taskGraph = resetRetrievalForRetry(taskGraph);
+    }
 
     recordTurnCompile({
       intent: compiled.turnTask.intent,
@@ -1240,10 +1256,19 @@ async function runLocalTurnOrchestratorInner(
         specs,
         profile.researchPlan,
       );
+      const repair = ensureRetrievalNodes({
+        graph: taskGraph,
+        ledger: requestLedger,
+        turnTask: compiled.turnTask,
+        researchPlan: profile.researchPlan,
+        retrievalRequired,
+      });
+      taskGraph = repair.graph;
       planValidation = validateTaskPlan({
         ledger: requestLedger,
         graph: taskGraph,
         researchPlan: profile.researchPlan,
+        retrievalRequired,
       });
       if (planValidation.issues.length) {
         recordValidationIssues(planValidation.issues);
@@ -1270,6 +1295,17 @@ async function runLocalTurnOrchestratorInner(
     provenanceBatches = [];
     retrievalAttempted = false;
     let researchCompletion: ResearchCompletionResult | null = null;
+
+    if (retrievalRequired && executableNodes(taskGraph).length === 0) {
+      const repair = ensureRetrievalNodes({
+        graph: taskGraph,
+        ledger: requestLedger,
+        turnTask: compiled.turnTask,
+        researchPlan: profile.researchPlan,
+        retrievalRequired: true,
+      });
+      taskGraph = repair.graph;
+    }
 
     const graphTasks = executableNodes(taskGraph);
     if (profile.preRunTasks.length || graphTasks.length) {
@@ -1436,7 +1472,10 @@ async function runLocalTurnOrchestratorInner(
       });
       getTurnTraceRecorder()?.recordCoverage(coverage);
 
-      if (shouldBlockSynthesis(coverage)) {
+      if (shouldBlockSynthesis(coverage, {
+        retrievalRequired,
+        evidenceCount: acceptedEvidence(evidence).length,
+      })) {
         getTurnTraceRecorder()?.recordFallback({
           decision: "block_synthesis",
           reason: "MISSING_RETRIEVAL",
@@ -1456,6 +1495,7 @@ async function runLocalTurnOrchestratorInner(
             ),
           },
           "research_incomplete",
+          "UNRESOLVED",
         );
       }
 
@@ -1572,6 +1612,33 @@ async function runLocalTurnOrchestratorInner(
         };
       }
       markStageEnd("pre_run");
+    }
+
+    if (
+      shouldBlockSynthesisWithoutEvidence({
+        retrievalRequired,
+        evidence,
+        retrievalAttempted,
+      })
+    ) {
+      getTurnTraceRecorder()?.recordFallback({
+        decision: "block_synthesis_no_evidence",
+        reason: "UNGROUNDED_CURRENT_FACT",
+        failureType: "fail_closed",
+      });
+      return finalizeTurnResult(
+        {
+          content: failClosedMessage(["UNGROUNDED_CURRENT_FACT"]),
+          runtime: "apple-local",
+          offline: false,
+          condensationOccurred: false,
+          aiChatId: request.aiChatId ?? null,
+          toolResults: toolResults.length ? toolResults : undefined,
+          citations: finalizeCitations(toolResults, mergeProvenanceAtoms(provenanceBatches)),
+        },
+        "research_incomplete",
+        "UNRESOLVED",
+      );
     }
 
     const atoms = () => mergeProvenanceAtoms(provenanceBatches);
@@ -1794,6 +1861,10 @@ async function runLocalTurnOrchestratorInner(
           userRequest: request.content,
           evidence,
           retrievalAttempted,
+          retrievalRequired,
+          turnTask: compiled.turnTask,
+          temporalGrounding: compiled.temporalGrounding,
+          conversationState,
         });
         if (grounding.recommendedAction === "use_evidence_fallback") {
           const narrow = narrowDeterministicFallback({
@@ -1810,12 +1881,16 @@ async function runLocalTurnOrchestratorInner(
           }
         }
         if (!grounding.valid && grounding.recommendedAction === "fail_closed") {
-          return {
-            ...lastGenerate,
-            content: failClosedMessage(grounding.issues),
-            toolResults: toolResults.length ? toolResults : undefined,
-            citations: finalizeCitations(toolResults, atoms()),
-          };
+          return finalizeTurnResult(
+            {
+              ...lastGenerate!,
+              content: failClosedMessage(grounding.issues),
+              toolResults: toolResults.length ? toolResults : undefined,
+              citations: finalizeCitations(toolResults, atoms()),
+            },
+            "research_incomplete",
+            "UNRESOLVED",
+          );
         }
         report({
           phase: "generating",
@@ -1845,6 +1920,12 @@ async function runLocalTurnOrchestratorInner(
               ...(parsed.blocks?.length ? { blocks: parsed.blocks } : {}),
             },
             fmFinalSource(evidence),
+            resolveTurnTerminalState({
+              retrievalRequired,
+              evidence,
+              retrievalAttempted,
+              grounded: hasAcceptedEvidence(evidence),
+            }),
           ),
           presentationStreamed: fm.streamed,
         };
@@ -2037,6 +2118,10 @@ async function runLocalTurnOrchestratorInner(
       userRequest: request.content,
       evidence,
       retrievalAttempted,
+      retrievalRequired,
+      turnTask: compiled.turnTask,
+      temporalGrounding: compiled.temporalGrounding,
+      conversationState,
     });
     if (grounding.recommendedAction === "use_evidence_fallback") {
       const narrow = narrowDeterministicFallback({
@@ -2053,25 +2138,41 @@ async function runLocalTurnOrchestratorInner(
       }
     }
     if (!grounding.valid && grounding.recommendedAction === "fail_closed") {
-      return {
+      return finalizeTurnResult(
+        {
+          ...(lastGenerate as AiGenerateResult),
+          content: failClosedMessage(grounding.issues),
+          toolResults,
+          citations: finalizeCitations(toolResults, atoms()),
+        },
+        "research_incomplete",
+        "UNRESOLVED",
+      );
+    }
+    return finalizeTurnResult(
+      {
         ...(lastGenerate as AiGenerateResult),
-        content: failClosedMessage(grounding.issues),
+        content: fallback,
         toolResults,
         citations: finalizeCitations(toolResults, atoms()),
-      };
-    }
-    return {
-      ...(lastGenerate as AiGenerateResult),
-      content: fallback,
-      toolResults,
-      citations: finalizeCitations(toolResults, atoms()),
-    };
+      },
+      fmFinalSource(evidence),
+      resolveTurnTerminalState({
+        retrievalRequired,
+        evidence,
+        retrievalAttempted,
+        grounded: hasAcceptedEvidence(evidence),
+      }),
+    );
   } finally {
     setTurnToolExecutionListener(null);
     if (!getRetrievalTrace().finalSource) {
       const source = fmFinalSource(evidence);
       setFinalSource(source);
-      finalizeTurnAudit({ finalSource: source });
+      finalizeTurnAudit({
+        finalSource: source,
+        terminalState: "FAILED",
+      });
     }
     if (getTurnTraceRecorder()) {
       finalizeTurnTrace({ failureReason: "turn_exit_without_finalize" });

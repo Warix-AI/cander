@@ -72,7 +72,13 @@ export function buildPartialAnswerPrefix(coverage: CoverageResult): string {
   return coverage.partialMessage;
 }
 
-export function shouldBlockSynthesis(coverage: CoverageResult): boolean {
+export function shouldBlockSynthesis(
+  coverage: CoverageResult,
+  opts?: { retrievalRequired?: boolean; evidenceCount?: number },
+): boolean {
+  if (opts?.retrievalRequired && (opts.evidenceCount ?? 0) === 0) {
+    return true;
+  }
   const retrieval = Object.entries(coverage.terminal).filter(([id]) =>
     id.startsWith("retrieve_") || id.startsWith("st_") || id === "retrieve_primary",
   );
