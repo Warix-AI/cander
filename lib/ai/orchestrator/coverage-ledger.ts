@@ -36,7 +36,13 @@ export function evaluateCoverage(graph: TaskGraph): CoverageResult {
   const retrieval = executableNodes(graph);
   const terminal: Record<string, CoverageStatus> = {};
   for (const n of graph.nodes) {
-    if (n.kind === "ASK" || n.kind === "RETRIEVE" || n.kind === "RESEARCH") {
+    if (
+      n.kind === "ASK" ||
+      n.kind === "RETRIEVE" ||
+      n.kind === "RESEARCH" ||
+      n.kind === "FETCH_URL" ||
+      n.kind === "SUMMARIZE_SITE"
+    ) {
       terminal[n.id] = toCoverageStatus(n.status);
     }
   }

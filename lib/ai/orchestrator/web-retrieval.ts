@@ -77,7 +77,7 @@ export function extractRequestedUrl(userRequest: string): RequestedUrl | null {
   }
 
   const directive = text.match(
-    /\b(?:view|visit|open|check(?: out)?|see|go to|look at|browse|read)\s+(?:the\s+)?(?:site\s+|website\s+|page\s+at\s+)?([a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:\/[^\s]*)?)/i,
+    /\b(?:view|visit|open|check(?: out)?|see|go to|look at|browse|read|review)\s+(?:the\s+)?(?:site\s+|website\s+|page\s+at\s+)?([a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:\/[^\s]*)?)/i,
   );
   if (directive?.[1]) {
     const hostPath = directive[1].replace(/[.,!?;:]+$/, "");
@@ -94,7 +94,7 @@ export function extractRequestedUrl(userRequest: string): RequestedUrl | null {
   );
   if (
     bareDomain &&
-    /\b(?:what is|tell me about|describe|summarize|website|site|homepage)\b/i.test(
+    /\b(?:what is|tell me about|describe|summarize|summary|review|website|site|homepage|write me|what (?:it|they) (?:offer|do))\b/i.test(
       text,
     )
   ) {

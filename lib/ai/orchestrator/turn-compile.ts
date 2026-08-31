@@ -6,8 +6,10 @@ import { scanRequest, type RequestLedger } from "./request-scanner.ts";
 import {
   compileTaskGraph,
   ensureRetrievalNodes,
+  ensureUrlFetchNodes,
   type TaskGraph,
 } from "./task-graph.ts";
+import { bindEntitiesToActions } from "./entity-action-binding.ts";
 import { isRetrievalRequiredForTurn } from "./retrieval-requirements.ts";
 import { validateTaskPlan, type PlanValidationResult } from "./plan-validator.ts";
 import {
@@ -91,10 +93,13 @@ export async function compileTurn(input: CompileTurnInput): Promise<TurnCompileR
     lastTurnRelation: turnRelation.relation,
   };
 
-  const ledger = enrichLedgerFromConversation(
+  let ledger = enrichLedgerFromConversation(
     scanRequest(input.content),
     conversationState,
   );
+
+  const bound = bindEntitiesToActions(ledger);
+  ledger = bound.ledger;
 
   const temporalGrounding = resolveTemporalGrounding({
     content: input.content,
@@ -123,16 +128,19 @@ export async function compileTurn(input: CompileTurnInput): Promise<TurnCompileR
   });
 
   const retrieveSpecs =
-    ledger.asks.length >= 2 && !researchPlan?.subtasks.length
+    ledger.asks.length >= 2 &&
+    !researchPlan?.subtasks.length &&
+    !bound.urlWorkflows.length
       ? heuristicAskDecomposition(ledger, turnTask)
       : undefined;
 
-  const retrievalRequired = isRetrievalRequiredForTurn({
-    turnTask,
-    temporalGrounding,
-    conversationState,
-    ledger,
-  });
+  const retrievalRequired =
+    isRetrievalRequiredForTurn({
+      turnTask,
+      temporalGrounding,
+      conversationState,
+      ledger,
+    }) || bound.urlWorkflows.length > 0;
 
   let graph = compileTaskGraph({
     ledger,
@@ -140,6 +148,7 @@ export async function compileTurn(input: CompileTurnInput): Promise<TurnCompileR
     turnTask,
     retrieveSpecs,
     retrievalRequired,
+    urlWorkflows: bound.urlWorkflows,
   });
 
   const repair = ensureRetrievalNodes({
@@ -150,6 +159,9 @@ export async function compileTurn(input: CompileTurnInput): Promise<TurnCompileR
     retrievalRequired,
   });
   graph = repair.graph;
+
+  const urlRepair = ensureUrlFetchNodes({ graph, ledger });
+  graph = urlRepair.graph;
 
   let planValidation = validateTaskPlan({
     ledger,

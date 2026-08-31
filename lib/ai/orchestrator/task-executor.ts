@@ -80,7 +80,8 @@ function buildArgsForNode(
   node: TaskNode,
   ctx: TaskExecutorContext,
 ): Record<string, unknown> {
-  const capability = node.capability ?? "web.search";
+  const capability =
+    node.kind === "FETCH_URL" ? "web.read" : (node.capability ?? "web.search");
   if (capability === "web.read" || capability === "web.open") {
     const url = node.query?.startsWith("http") ? node.query : undefined;
     return applyPreConstraints(
@@ -121,7 +122,10 @@ async function executeReadyBatch(
       id: node.subtaskId ?? node.id,
       run: async (signal) => {
         if (signal.aborted) throw new Error("cancelled");
-        const capability = node.capability ?? "web.search";
+        const capability =
+          node.kind === "FETCH_URL"
+            ? "web.read"
+            : (node.capability ?? "web.search");
         const toolName =
           capability === "web.read"
             ? "web.read"
@@ -341,7 +345,9 @@ export async function runTaskGraphExecution(opts: {
   }
 
   for (const n of graph.nodes) {
-    if (n.kind !== "RETRIEVE" && n.kind !== "RESEARCH") continue;
+    if (n.kind !== "RETRIEVE" && n.kind !== "RESEARCH" && n.kind !== "FETCH_URL") {
+      continue;
+    }
     if (n.status === "PENDING" || n.status === "READY" || n.status === "RUNNING") {
       graph = setSubtaskStatus(graph, n.id, "UNRESOLVED", "max_rounds");
     }

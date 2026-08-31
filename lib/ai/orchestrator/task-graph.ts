@@ -7,6 +7,13 @@ import type { RequestLedger } from "./request-scanner.ts";
 import type { ResearchTurnPlan } from "@/lib/ai/turn-environment/research-turn-plan.ts";
 import type { TurnTaskResolution } from "@/lib/ai/turn-environment/turn-task.ts";
 import { bindConstraints, type BoundConstraint } from "./constraint-enforcement.ts";
+import type { UrlWorkflowSpec } from "./entity-action-binding.ts";
+import {
+  collectEntitiesFromMessage,
+  graphHasFetchForDomain,
+  slugDomain,
+  wantsUrlWorkflow,
+} from "./entity-action-binding.ts";
 import { requiresExternalEvidence } from "./deterministic-triggers.ts";
 
 export type TaskNodeStatus =
@@ -19,7 +26,13 @@ export type TaskNodeStatus =
   | "BLOCKED_UPSTREAM_FAILED"
   | "UNRESOLVED";
 
-export type TaskNodeKind = "ASK" | "RESEARCH" | "RETRIEVE" | "CONSTRAINT";
+export type TaskNodeKind =
+  | "ASK"
+  | "RESEARCH"
+  | "RETRIEVE"
+  | "CONSTRAINT"
+  | "FETCH_URL"
+  | "SUMMARIZE_SITE";
 
 export type TaskCapability = "web.search" | "web.read" | "web.open" | "none";
 
@@ -74,7 +87,22 @@ export function atomicQueryFromAsk(
 }
 
 export function retrievalNodesForGraph(graph: TaskGraph): TaskNode[] {
-  return graph.nodes.filter((n) => n.kind === "RETRIEVE" || n.kind === "RESEARCH");
+  return graph.nodes.filter(
+    (n) =>
+      n.kind === "RETRIEVE" ||
+      n.kind === "RESEARCH" ||
+      n.kind === "FETCH_URL" ||
+      n.kind === "SUMMARIZE_SITE",
+  );
+}
+
+function isRetrievalKind(kind: TaskNodeKind): boolean {
+  return (
+    kind === "RETRIEVE" ||
+    kind === "RESEARCH" ||
+    kind === "FETCH_URL" ||
+    kind === "SUMMARIZE_SITE"
+  );
 }
 
 export function compileTaskGraph(opts: {
@@ -83,6 +111,8 @@ export function compileTaskGraph(opts: {
   turnTask?: TurnTaskResolution;
   /** When true, every ASK gets a linked RETRIEVE node (unless research plan owns retrieval). */
   retrievalRequired?: boolean;
+  /** Compound URL fetch → summarize workflows from entity binding. */
+  urlWorkflows?: UrlWorkflowSpec[];
   /** Pre-built RETRIEVE nodes from AskExtractor. */
   retrieveSpecs?: Array<{
     id: string;
@@ -117,6 +147,31 @@ export function compileTaskGraph(opts: {
         dependsOn: st.dependsOn,
         query: st.query,
         capability: "web.search",
+      });
+    }
+  } else if (opts.urlWorkflows?.length) {
+    for (const wf of opts.urlWorkflows) {
+      nodes.push({
+        id: wf.fetchId,
+        kind: "FETCH_URL",
+        label: `Fetch ${wf.entity.domain}`,
+        status: "PENDING",
+        query: wf.entity.url,
+        capability: "web.read",
+        spanId: wf.askSpanId,
+        askId: `ask_${wf.askSpanId}`,
+        subtaskId: wf.fetchId,
+      });
+      nodes.push({
+        id: wf.summarizeId,
+        kind: "SUMMARIZE_SITE",
+        label: `Summarize ${wf.entity.domain}`,
+        status: "PENDING",
+        dependsOn: [wf.fetchId],
+        spanId: wf.askSpanId,
+        askId: `ask_${wf.askSpanId}`,
+        subtaskId: wf.summarizeId,
+        capability: "none",
       });
     }
   } else if (opts.retrieveSpecs?.length) {
@@ -227,6 +282,72 @@ export function ensureRetrievalNodes(opts: {
   };
 }
 
+/**
+ * Repair graph when message contains a URL/domain but no fetch/browse task exists.
+ */
+export function ensureUrlFetchNodes(opts: {
+  graph: TaskGraph;
+  ledger: RequestLedger;
+}): { graph: TaskGraph; repaired: boolean; issues: string[] } {
+  const issues: string[] = [];
+  const entities = collectEntitiesFromMessage(opts.ledger.rawInput);
+  if (!entities.length) {
+    return { graph: opts.graph, repaired: false, issues };
+  }
+  if (!wantsUrlWorkflow(opts.ledger.rawInput, entities)) {
+    return { graph: opts.graph, repaired: false, issues };
+  }
+
+  const missing = entities.filter(
+    (e) => !graphHasFetchForDomain(opts.graph, e.domain),
+  );
+  if (!missing.length) {
+    return { graph: opts.graph, repaired: false, issues };
+  }
+
+  issues.push("url_fetch_injected");
+  const urlWorkflows: UrlWorkflowSpec[] = missing.map((entity) => {
+    const slug = slugDomain(entity.domain);
+    return {
+      entity,
+      fetchId: `fetch_${slug}`,
+      summarizeId: `summarize_${slug}`,
+      askSpanId: `bound_${slug}`,
+    };
+  });
+
+  const rebuilt = compileTaskGraph({
+    ledger: opts.ledger,
+    urlWorkflows,
+  });
+
+  const existingIds = new Set(opts.graph.nodes.map((n) => n.id));
+  const injected = rebuilt.nodes.filter((n) => !existingIds.has(n.id));
+  const nodes = propagateAskStatus([...opts.graph.nodes, ...injected]);
+
+  return {
+    graph: { ...opts.graph, nodes },
+    repaired: true,
+    issues,
+  };
+}
+
+export function validateUrlFetchGraph(opts: {
+  graph: TaskGraph;
+  ledger: RequestLedger;
+}): string[] {
+  const issues: string[] = [];
+  const entities = collectEntitiesFromMessage(opts.ledger.rawInput);
+  if (!entities.length) return issues;
+  if (!wantsUrlWorkflow(opts.ledger.rawInput, entities)) return issues;
+  for (const entity of entities) {
+    if (!graphHasFetchForDomain(opts.graph, entity.domain)) {
+      issues.push(`url_without_fetch:${entity.domain}`);
+    }
+  }
+  return issues;
+}
+
 export function validateRetrievalGraph(opts: {
   graph: TaskGraph;
   ledger: RequestLedger;
@@ -244,7 +365,7 @@ export function validateRetrievalGraph(opts: {
     const askId = `ask_${ask.id}`;
     const linked = opts.graph.nodes.filter(
       (n) =>
-        (n.kind === "RETRIEVE" || n.kind === "RESEARCH") &&
+        isRetrievalKind(n.kind) &&
         (n.askId === askId || n.spanId === ask.id),
     );
     if (!linked.length) {
@@ -261,7 +382,7 @@ export function bumpRetrievalRound(graph: TaskGraph): TaskGraph {
 /** Re-open RETRIEVE nodes for a deeper retrieval round (e.g. dissatisfaction retry). */
 export function resetRetrievalForRetry(graph: TaskGraph): TaskGraph {
   const nodes = graph.nodes.map((n) => {
-    if (n.kind !== "RETRIEVE") return n;
+    if (n.kind !== "RETRIEVE" && n.kind !== "FETCH_URL") return n;
     return {
       ...n,
       status: "PENDING" as const,
@@ -302,19 +423,40 @@ export function setSubtaskStatus(
   return setTaskStatus(graph, subtaskId, status, terminalReason);
 }
 
+/** When fetch completes, summarize gates become ready for synthesis. */
+function promoteSummarizeNodes(nodes: TaskNode[]): TaskNode[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  return nodes.map((n) => {
+    if (n.kind !== "SUMMARIZE_SITE" || n.status !== "PENDING") return n;
+    const deps = n.dependsOn ?? [];
+    if (!deps.length) return n;
+    const fetchReady = deps.every((depId) => {
+      const dep = byId.get(depId);
+      return (
+        dep &&
+        (dep.status === "SUCCEEDED" || dep.status === "SKIPPED_BY_CONDITION")
+      );
+    });
+    return fetchReady ? { ...n, status: "SUCCEEDED" as const } : n;
+  });
+}
+
 /** Propagate retrieval status to linked ASK nodes. */
 export function propagateAskStatus(nodes: TaskNode[]): TaskNode[] {
+  const promoted = promoteSummarizeNodes(nodes);
   const retrievalByAsk = new Map<string, TaskNode[]>();
-  for (const n of nodes) {
-    if (n.kind !== "RETRIEVE" && n.kind !== "RESEARCH") continue;
-    const askId = n.askId ?? (n.id.startsWith("retrieve_") ? `ask_${n.spanId}` : undefined);
+  for (const n of promoted) {
+    if (!isRetrievalKind(n.kind)) continue;
+    const askId =
+      n.askId ??
+      (n.id.startsWith("retrieve_") ? `ask_${n.spanId}` : undefined);
     if (!askId) continue;
     const list = retrievalByAsk.get(askId) ?? [];
     list.push(n);
     retrievalByAsk.set(askId, list);
   }
 
-  return nodes.map((n) => {
+  return promoted.map((n) => {
     if (n.kind !== "ASK") return n;
     const linked = retrievalByAsk.get(n.id) ?? [];
     if (!linked.length) return n;
@@ -340,8 +482,11 @@ export function propagateAskStatus(nodes: TaskNode[]): TaskNode[] {
 export function executableNodes(graph: TaskGraph): TaskNode[] {
   return graph.nodes.filter(
     (n) =>
-      (n.kind === "RETRIEVE" || n.kind === "RESEARCH") &&
-      (n.capability === "web.search" || n.capability === "web.read" || n.capability === "web.open"),
+      (n.kind === "RETRIEVE" || n.kind === "RESEARCH" || n.kind === "FETCH_URL") &&
+      (n.kind === "FETCH_URL" ||
+        n.capability === "web.search" ||
+        n.capability === "web.read" ||
+        n.capability === "web.open"),
   );
 }
 
@@ -381,7 +526,10 @@ export function markResearchNodesRunning(graph: TaskGraph): TaskGraph {
     ...graph,
     nodes: propagateAskStatus(
       graph.nodes.map((n) =>
-        (n.kind === "RESEARCH" || n.kind === "RETRIEVE") && n.status === "PENDING"
+        (n.kind === "RESEARCH" ||
+          n.kind === "RETRIEVE" ||
+          n.kind === "FETCH_URL") &&
+        n.status === "PENDING"
           ? { ...n, status: "RUNNING" as const }
           : n,
       ),
@@ -394,7 +542,13 @@ export function researchProgressItems(
   graph: TaskGraph,
 ): Array<{ id: string; label: string; status: "done" | "active" | "pending" }> {
   return graph.nodes
-    .filter((n) => n.kind === "RESEARCH" || n.kind === "RETRIEVE")
+    .filter(
+      (n) =>
+        n.kind === "RESEARCH" ||
+        n.kind === "RETRIEVE" ||
+        n.kind === "FETCH_URL" ||
+        n.kind === "SUMMARIZE_SITE",
+    )
     .map((n) => ({
       id: n.id,
       label: n.label,
@@ -412,7 +566,9 @@ export function applyCompletionToGraph(
   unresolved: string[],
 ): TaskGraph {
   const nodes = graph.nodes.map((n) => {
-    if (n.kind !== "RESEARCH" && n.kind !== "RETRIEVE") return n;
+    if (n.kind !== "RESEARCH" && n.kind !== "RETRIEVE" && n.kind !== "FETCH_URL") {
+      return n;
+    }
     if (unresolved.includes(n.id) || unresolved.includes(n.subtaskId ?? "")) {
       return { ...n, status: "UNRESOLVED" as const, terminalReason: "evidence_insufficient" };
     }

@@ -46,7 +46,7 @@ const CONSTRAINT_PATTERNS: Array<{ re: RegExp; rule: string }> = [
 
 const ASK_PATTERNS: Array<{ re: RegExp; rule: string }> = [
   { re: /\?/, rule: "question_mark" },
-  { re: /^(check|compare|tell me|find|look up|schedule|send|draft|create|add|remove|delete|list|show|summarize|explain)\b/i, rule: "leading_imperative" },
+  { re: /^(check|compare|tell me|find|look up|look at|review|schedule|send|draft|create|add|remove|delete|list|show|summarize|explain|write)\b/i, rule: "leading_imperative" },
   { re: /\b(check whether|compare|tell me if|find out|look up|how many|how much|what is|who is|when is|where is)\b/i, rule: "ask_phrase" },
   { re: /\b(if .{8,40},?\s+(then )?(schedule|send|create|add))\b/i, rule: "conditional_ask" },
 ];
@@ -79,7 +79,7 @@ export function splitRequestSpans(rawInput: string): string[] {
 
 function classifySpan(text: string): { kind: SpanKind; rule: string } {
   if (
-    /^(check|compare|tell me|find|look up|schedule|send|draft|create|add|remove|delete|list|show|summarize|explain)\b/i.test(
+    /^(check|compare|tell me|find|look up|look at|review|schedule|send|draft|create|add|remove|delete|list|show|summarize|explain|write|can you)\b/i.test(
       text,
     )
   ) {

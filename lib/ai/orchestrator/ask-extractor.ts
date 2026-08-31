@@ -7,6 +7,10 @@ import type { RequestLedger } from "./request-scanner.ts";
 import type { TurnTaskResolution } from "@/lib/ai/turn-environment/turn-task.ts";
 import { atomicQueryFromAsk } from "./task-graph.ts";
 import { requiresExternalEvidence } from "./deterministic-triggers.ts";
+import {
+  collectEntitiesFromMessage,
+  isFillerAskText,
+} from "./entity-action-binding.ts";
 
 export type RetrieveTaskSpec = {
   id: string;
@@ -24,15 +28,24 @@ export function heuristicAskDecomposition(
   turnTask?: TurnTaskResolution,
 ): RetrieveTaskSpec[] {
   const specs: RetrieveTaskSpec[] = [];
+  const entities = collectEntitiesFromMessage(ledger.rawInput);
   for (const ask of ledger.asks) {
-    if (!requiresExternalEvidence(ask.text) && !requiresExternalEvidence(ledger.rawInput)) {
+    if (isFillerAskText(ask.text, entities)) continue;
+    if (
+      !requiresExternalEvidence(ask.text) &&
+      !requiresExternalEvidence(ledger.rawInput) &&
+      !entities.length
+    ) {
       continue;
     }
+    const entity = entities.find((e) =>
+      ask.text.toLowerCase().includes(e.domain),
+    );
     specs.push({
       id: `retrieve_${ask.id}`,
       label: ask.text.slice(0, 100),
-      query: atomicQueryFromAsk(ask.text, turnTask),
-      capability: "web.search",
+      query: entity?.url ?? atomicQueryFromAsk(ask.text, turnTask),
+      capability: entity ? "web.read" : "web.search",
       spanId: ask.id,
       askId: `ask_${ask.id}`,
     });

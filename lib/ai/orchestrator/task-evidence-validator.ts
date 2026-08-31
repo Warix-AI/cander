@@ -142,7 +142,7 @@ export function validateAllTasks(opts: {
   turnTask?: TurnTaskResolution;
 }): TaskValidationResult[] {
   return opts.graph.nodes
-    .filter((n) => n.kind === "RETRIEVE" || n.kind === "RESEARCH")
+    .filter((n) => n.kind === "RETRIEVE" || n.kind === "RESEARCH" || n.kind === "FETCH_URL")
     .filter((n) => n.status === "RUNNING" || n.status === "SUCCEEDED")
     .map((node) =>
       validateTaskEvidence({

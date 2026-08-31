@@ -5,7 +5,7 @@
 import type { RequestLedger } from "./request-scanner.ts";
 import type { ResearchTurnPlan } from "@/lib/ai/turn-environment/research-turn-plan.ts";
 import type { TaskGraph } from "./task-graph.ts";
-import { validateRetrievalGraph } from "./task-graph.ts";
+import { validateRetrievalGraph, validateUrlFetchGraph } from "./task-graph.ts";
 import { bindConstraints } from "./constraint-enforcement.ts";
 
 export type PlanHealth = "ok" | "degraded" | "invalid";
@@ -41,6 +41,8 @@ export function validateTaskPlan(opts: {
       }),
     );
   }
+
+  issues.push(...validateUrlFetchGraph({ graph, ledger }));
 
   if (ledger.asks.length > 0 && askNodes.length < ledger.asks.length) {
     issues.push("ask_coverage_gap");
@@ -92,7 +94,8 @@ export function validateTaskPlan(opts: {
       (i) =>
         i === "research_subtask_mismatch" ||
         i.startsWith("retrieval_required_no_") ||
-        i.startsWith("retrieval_missing_for_ask:"),
+        i.startsWith("retrieval_missing_for_ask:") ||
+        i.startsWith("url_without_fetch:"),
     )
   ) {
     health = "invalid";

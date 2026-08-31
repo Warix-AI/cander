@@ -196,6 +196,8 @@ Divergence hints flag when model output has weak overlap with accepted evidence 
 
 **Retrieval invariants (deterministic):** When `retrievalNeeded`, `freshnessRequired`, or temporal grounding marks a turn time-sensitive, `compileTaskGraph` must emit a `RETRIEVE` node (`retrieve_primary`) before synthesis. `ensureRetrievalNodes` repairs missing nodes; `validateTaskPlan` fails `retrieval_required_no_nodes`. Synthesis is blocked when retrieval was required but `acceptedEvidence.length === 0`. FM answers claiming current facts without evidence fail closed (`UNGROUNDED_CURRENT_FACT`). Tests: `scripts/retrieval-invariants.test.ts`.
 
+**URL entity/action binding:** `bindEntitiesToActions` (after `scanRequest`) binds domains/URLs to compound workflows: `FETCH_URL(domain)` → `SUMMARIZE_SITE` (via `web.read`, then FM synthesis). Filler phrases (`tell me about it`, `write me a summary`) are not decomposed into separate search tasks. `ensureUrlFetchNodes` repairs missing fetch nodes when a domain is present. Tests: `scripts/url-workflow.test.ts`.
+
 **Dev viewer:** `/dev/turn-trace` — filter by traceId, taskId, stage, failure type.
 
 **Console:** `[TURN_TRACE]` JSON on turn finalize (dev default on; set `NEXT_PUBLIC_TURN_TRACE=0` to disable).

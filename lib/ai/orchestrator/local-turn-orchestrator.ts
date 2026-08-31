@@ -95,6 +95,7 @@ import { runEvidenceGate } from "@/lib/ai/orchestrator/evidence-gate.ts";
 import {
   executableNodes,
   ensureRetrievalNodes,
+  ensureUrlFetchNodes,
   researchProgressItems,
   resetRetrievalForRetry,
   type TaskGraph,
@@ -1226,17 +1227,34 @@ async function runLocalTurnOrchestratorInner(
     }
 
     if (planValidation.health === "invalid") {
+      const urlRepair = ensureUrlFetchNodes({
+        graph: taskGraph,
+        ledger: requestLedger,
+      });
+      if (urlRepair.repaired) {
+        taskGraph = urlRepair.graph;
+        planValidation = validateTaskPlan({
+          ledger: requestLedger,
+          graph: taskGraph,
+          researchPlan: profile.researchPlan,
+          retrievalRequired,
+        });
+      }
+    }
+
+    if (planValidation.health === "invalid") {
       markStageEnd("compile");
       return finalizeTurnResult(
         {
           content:
-            "I couldn't build a reliable plan for that request. Try splitting it into separate questions.",
+            "I couldn't prepare that request right now. Please try again in a moment.",
           runtime: "apple-local",
           offline: false,
           condensationOccurred: false,
           aiChatId: request.aiChatId ?? null,
         },
         "research_incomplete",
+        "FAILED",
       );
     }
 
