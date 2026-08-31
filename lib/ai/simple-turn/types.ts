@@ -17,15 +17,37 @@ export type Cap =
 export type Lookup = {
   cap: Cap;
   q: string;
+  /** Optional parallel group — same group may run together. */
+  parallelGroup?: string;
 };
 
+export type AnswerShape =
+  | "direct"
+  | "breakdown"
+  | "comparison"
+  | "summary"
+  | "steps"
+  | "mixed";
+
+/**
+ * INTERPRET output — constrained plan before any tool executes.
+ * `look` / `fresh` kept as aliases of `lookups` / `freshnessRequired`.
+ */
 export type Plan = {
   intent: string;
   asks: string[];
   constraints: string[];
+  entities: string[];
   resolvedRefs: string[];
   unresolvedRefs: string[];
+  temporalContext: string[];
+  freshnessRequired: boolean;
+  /** @deprecated use freshnessRequired — kept in sync for callers */
   fresh: boolean;
+  expectedEvidence: string[];
+  answerShape: AnswerShape;
+  lookups: Lookup[];
+  /** @deprecated use lookups — kept in sync for callers */
   look?: Lookup[];
   answer?: string;
 };
@@ -43,6 +65,19 @@ export type SimpleEvidence = {
   retrievedAt: string;
   sourceTool: string;
   cacheHit?: boolean;
+  /** VERIFY scores (0–1) when scored */
+  verify?: EvidenceVerifyScore;
+};
+
+export type EvidenceVerifyScore = {
+  entityOk: boolean;
+  dateOk: boolean;
+  freshnessOk: boolean;
+  authority: number;
+  answersAsk: boolean;
+  conflicts: boolean;
+  score: number;
+  reasons: string[];
 };
 
 export type CommitNotes = {
@@ -89,6 +124,9 @@ export type CheckResult = {
   rejected: SimpleEvidence[];
   needsRefine: boolean;
   refineLookups?: Lookup[];
+  needsCorroboration: boolean;
+  corroborateLookups?: Lookup[];
+  needsDeeperSearch: boolean;
   unresolved: boolean;
   unresolvedReason?: string;
 };
@@ -107,3 +145,25 @@ export type SimpleTurnTerminal =
   | "UNRESOLVED"
   | "FAILED"
   | "PAUSED";
+
+export function syncPlanAliases(plan: Plan): Plan {
+  const lookups = plan.lookups?.length
+    ? plan.lookups
+    : plan.look?.length
+      ? plan.look
+      : [];
+  const freshnessRequired = Boolean(
+    plan.freshnessRequired || plan.fresh,
+  );
+  return {
+    ...plan,
+    entities: plan.entities ?? [],
+    temporalContext: plan.temporalContext ?? [],
+    expectedEvidence: plan.expectedEvidence ?? [],
+    answerShape: plan.answerShape ?? "direct",
+    freshnessRequired,
+    fresh: freshnessRequired,
+    lookups,
+    look: lookups.length ? lookups : undefined,
+  };
+}

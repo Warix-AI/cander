@@ -1,8 +1,11 @@
 "use client";
 
 /**
- * Simple turn runtime — HYDRATE → PLAN → RUN → CHECK → ANSWER → COMMIT.
- * Flag-gated replacement for TaskGraph local orchestration.
+ * Simple turn runtime —
+ * HYDRATE → INTERPRET → RUN → VERIFY → ANSWER → COMMIT
+ *
+ * Extra latency is spent on understanding the request and verifying evidence,
+ * not on giving the small model more autonomy.
  */
 
 import { collectCitationsFromToolResults } from "../orchestrator/collect-citations.ts";
@@ -27,7 +30,8 @@ import { planTurn } from "./plan.ts";
 import { runLookups } from "./run.ts";
 import { loadSimpleState } from "./state-store.ts";
 import { validateAndRepairPlan } from "./validate-plan.ts";
-import type { SimpleEvidence } from "./types.ts";
+import type { Lookup, SimpleEvidence } from "./types.ts";
+import { syncPlanAliases } from "./types.ts";
 
 function citationsFromEvidence(items: SimpleEvidence[]) {
   return items
@@ -77,8 +81,12 @@ export async function runSimpleTurnRuntime(
       },
     });
 
-    // —— PLAN ——
-    report({ phase: "thinking", label: "Thinking", detail: "Interpreting request" });
+    // —— INTERPRET ——
+    report({
+      phase: "thinking",
+      label: "Thinking",
+      detail: "Interpreting request",
+    });
     const canFm =
       typeof window !== "undefined" ||
       process.env.NODE_ENV === "development";
@@ -97,16 +105,24 @@ export async function runSimpleTurnRuntime(
       generate: canFm ? generate : undefined,
       useHeuristicOnly: !canFm,
     });
+    trace?.recordStage("interpret", {
+      decision: planned.usedHeuristic ? "heuristic" : "fm",
+      output: {
+        plan: planned.plan,
+        selfCheckIssues: planned.selfCheckIssues,
+      },
+      input: planned.raw ? { rawChars: planned.raw.length } : undefined,
+    });
+    // Keep legacy stage name for existing dashboards
     trace?.recordStage("plan", {
       decision: planned.usedHeuristic ? "heuristic" : "fm",
       output: planned.plan,
-      input: planned.raw ? { rawChars: planned.raw.length } : undefined,
     });
     if (!planned.usedHeuristic) {
       trace?.recordModelPrompt({
         round: 0,
         prompt: hydrate.planPrompt.slice(0, 2000),
-        instructions: "PLAN schema",
+        instructions: "INTERPRET schema",
       });
       if (planned.raw) {
         trace?.recordModelOutput({
@@ -117,7 +133,7 @@ export async function runSimpleTurnRuntime(
       }
     }
 
-    // —— VALIDATE / REPAIR ——
+    // —— VALIDATE / REPAIR (code, not agent) ——
     const validated = validateAndRepairPlan({
       plan: planned.plan,
       hydrate,
@@ -143,9 +159,9 @@ export async function runSimpleTurnRuntime(
       };
     }
 
-    const plan = validated.plan;
+    const plan = syncPlanAliases(validated.plan);
     let allEvidence: SimpleEvidence[] = [];
-    let lookupsRun = plan.look ?? [];
+    let lookupsRun: Lookup[] = plan.lookups ?? plan.look ?? [];
     let check = checkEvidence({
       plan,
       hydrate,
@@ -153,14 +169,33 @@ export async function runSimpleTurnRuntime(
       lookupsRun: [],
       round: 0,
     });
+    let corroborationDone = false;
 
-    // —— RUN + CHECK (max 2 rounds) ——
-    if (plan.look?.length || plan.fresh) {
+    const needsRetrieval =
+      (plan.lookups?.length ?? 0) > 0 ||
+      (plan.look?.length ?? 0) > 0 ||
+      plan.freshnessRequired ||
+      plan.fresh;
+
+    // —— RUN + VERIFY (max 2 refine rounds; optional corroboration) ——
+    if (needsRetrieval) {
       for (let round = 1; round <= 2; round++) {
+        const extra =
+          round > 1
+            ? check.needsCorroboration
+              ? check.corroborateLookups
+              : check.refineLookups
+            : undefined;
+
         report({
           phase: "tool",
           label: "Thinking",
-          detail: round === 1 ? "Looking things up" : "Refining search",
+          detail:
+            round === 1
+              ? "Looking things up"
+              : check.needsCorroboration
+                ? "Double-checking sources"
+                : "Refining search",
           toolName: "web.search",
         });
 
@@ -169,12 +204,18 @@ export async function runSimpleTurnRuntime(
           browser: state.browser,
           userText: hydrate.userText,
           cache: state.cache,
-          extraLookups: round > 1 ? check.refineLookups : undefined,
+          extraLookups: extra,
         });
 
         for (const look of run.lookupsRun) {
+          const tool =
+            look.cap === "WEB"
+              ? /^https?:\/\//i.test(look.q) || /^[a-z0-9].*\.[a-z]{2,}/i.test(look.q)
+                ? "web.read"
+                : "web.search"
+              : look.cap.toLowerCase();
           trace?.recordToolRequest({
-            tool: look.cap === "WEB" ? "web.search" : look.cap.toLowerCase(),
+            tool,
             arguments: { query: look.q },
             reason: `simple_turn_round_${round}`,
           });
@@ -201,32 +242,75 @@ export async function runSimpleTurnRuntime(
           }
         }
 
+        if (check.needsCorroboration && round > 1) {
+          corroborationDone = true;
+        }
+
         check = checkEvidence({
           plan,
           hydrate,
           evidence: allEvidence,
           lookupsRun,
           round,
+          corroborationDone,
+        });
+
+        trace?.recordStage("verify", {
+          decision: check.unresolved
+            ? "unresolved"
+            : check.needsRefine
+              ? "refine"
+              : check.needsCorroboration
+                ? "corroborate"
+                : "ok",
+          output: {
+            accepted: check.accepted.map((a) => ({
+              id: a.id,
+              score: a.verify?.score,
+              authority: a.verify?.authority,
+            })),
+            rejected: check.rejected.map((r) => ({
+              id: r.id,
+              reason: r.rejectReason,
+              score: r.verify?.score,
+            })),
+            needsDeeperSearch: check.needsDeeperSearch,
+          },
         });
 
         for (const a of check.accepted) {
           trace?.recordStage("evidence_accept", {
             decision: "accepted",
-            output: { id: a.id, title: a.title, query: a.query },
+            output: {
+              id: a.id,
+              title: a.title,
+              query: a.query,
+              score: a.verify?.score,
+            },
           });
         }
         for (const r of check.rejected) {
           trace?.recordStage("evidence_reject", {
             decision: r.rejectReason ?? "rejected",
             failureType: "evidence_rejected",
-            output: { id: r.id, reason: r.rejectReason },
+            output: { id: r.id, reason: r.rejectReason, verify: r.verify },
           });
+        }
+
+        if (check.needsCorroboration && !corroborationDone && round < 2) {
+          trace?.recordStage("retry", {
+            decision: "corroborate",
+            output: check.corroborateLookups,
+          });
+          continue;
         }
 
         if (!check.needsRefine) break;
         if (round >= 2) break;
         trace?.recordStage("retry", {
-          decision: "refine_retrieval",
+          decision: check.needsDeeperSearch
+            ? "deeper_search"
+            : "refine_retrieval",
           output: check.refineLookups,
         });
       }
@@ -235,7 +319,24 @@ export async function runSimpleTurnRuntime(
         accepted: [],
         rejected: [],
         needsRefine: false,
+        needsCorroboration: false,
+        needsDeeperSearch: false,
         unresolved: false,
+      };
+    }
+
+    // Never answer from memory when a fresh lookup was required and VERIFY failed.
+    if (
+      (plan.freshnessRequired || plan.fresh) &&
+      !check.accepted.length &&
+      needsRetrieval
+    ) {
+      check = {
+        ...check,
+        unresolved: true,
+        unresolvedReason:
+          check.unresolvedReason ??
+          "fresh/current ask with no verified evidence",
       };
     }
 

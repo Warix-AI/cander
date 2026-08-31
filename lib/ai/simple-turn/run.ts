@@ -23,7 +23,9 @@ export async function runLookups(opts: {
   blocked: Lookup[];
 }> {
   const requested = [
-    ...(opts.plan.look ?? []),
+    ...(opts.plan.lookups?.length
+      ? opts.plan.lookups
+      : opts.plan.look ?? []),
     ...(opts.extraLookups ?? []),
   ];
   const allowed = filterLookupsByBrowser(

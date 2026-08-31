@@ -34,7 +34,11 @@ export function browserRequiresWeb(opts: {
   userText: string;
 }): boolean {
   if (opts.browser !== "on") return false;
-  if (!opts.plan.fresh && !/\b(news|today|current|live|weather|score)\b/i.test(opts.userText)) {
+  if (
+    !opts.plan.freshnessRequired &&
+    !opts.plan.fresh &&
+    !/\b(news|today|current|live|weather|score)\b/i.test(opts.userText)
+  ) {
     return false;
   }
   return true;

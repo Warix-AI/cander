@@ -4,12 +4,17 @@
 
 export type TraceStage =
   | "user_input"
+  | "hydrate"
+  | "interpret"
+  | "plan"
+  | "plan_validate"
   | "temporal_grounding"
   | "request_ledger"
   | "task_graph"
   | "route_capability"
   | "tool_request"
   | "tool_response_raw"
+  | "verify"
   | "evidence_accept"
   | "evidence_reject"
   | "evidence_normalize"
@@ -19,6 +24,8 @@ export type TraceStage =
   | "validation_failure"
   | "fallback"
   | "coverage"
+  | "answer_path"
+  | "commit"
   | "final_response";
 
 export type TraceFailureType =

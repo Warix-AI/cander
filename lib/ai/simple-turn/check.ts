@@ -1,45 +1,406 @@
 /**
- * CHECK — evidence gate before answer influence.
+ * VERIFY — evidence gate after tools return.
+ * Retrieval success ≠ answer success. Score entity/date/freshness/authority/fit/conflicts.
  */
 
 import type {
   CheckResult,
+  EvidenceVerifyScore,
   HydrateResult,
   Lookup,
   Plan,
   SimpleEvidence,
 } from "./types.ts";
+import { syncPlanAliases } from "./types.ts";
 
 const CURRENT_YEAR_RE = /\b(20\d{2})\b/g;
 
+const AUTHORITATIVE_HOST_HINTS = [
+  ".gov",
+  ".edu",
+  "wikipedia.org",
+  "byu.edu",
+  "ncaa.com",
+  "mlb.com",
+  "nba.com",
+  "nfl.com",
+  "nhl.com",
+  "reuters.com",
+  "apnews.com",
+  "bbc.",
+  "nytimes.com",
+  "wsj.com",
+  "stripe.com",
+  "vercel.com",
+  "apple.com",
+  "microsoft.com",
+  "google.com",
+];
+
+const SENSITIVE_FACT_RE =
+  /\b(schedule|schedules|date|dates|when|semester|calendar|score|scores|news|headline|price|prices|cost|stock|weather|kickoff|game|match|tournament|election)\b/i;
+
 function contentMentionsEntity(content: string, entity: string): boolean {
   const c = content.toLowerCase();
-  const parts = entity.toLowerCase().split(/[.\s_-]+/).filter((p) => p.length > 2);
-  if (!parts.length) return c.includes(entity.toLowerCase());
+  const want = entity.toLowerCase();
+  if (c.includes(want)) return true;
+  const parts = want
+    .split(/[.\s_-]+/)
+    .filter(
+      (p) =>
+        p.length > 3 &&
+        !/^(com|org|net|edu|gov|www|http|https)$/i.test(p),
+    );
+  if (!parts.length) return false;
   return parts.some((p) => c.includes(p));
 }
 
 function isStaleForYear(content: string, year: number): boolean {
   const years = [...content.matchAll(CURRENT_YEAR_RE)].map((m) => Number(m[1]));
   if (!years.length) return false;
-  // Reject if only older years and question is about current year
   const hasCurrent = years.includes(year);
   const hasOnlyOlder = years.every((y) => y < year);
   return !hasCurrent && hasOnlyOlder;
 }
 
+function hostFromUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+export function authorityScore(
+  ev: SimpleEvidence,
+  plan: Plan,
+): number {
+  const host = hostFromUrl(ev.url);
+  const blob = `${ev.title} ${ev.url ?? ""} ${ev.content}`.toLowerCase();
+  let score = 0.35;
+
+  if (ev.sourceTool === "web.read") score += 0.2;
+  if (AUTHORITATIVE_HOST_HINTS.some((h) => host.includes(h) || blob.includes(h))) {
+    score += 0.35;
+  }
+  for (const ent of plan.entities) {
+    const d = ent.toLowerCase().replace(/^www\./, "");
+    if (d.includes(".") && (host.includes(d) || host.endsWith(d))) {
+      score += 0.25;
+      break;
+    }
+  }
+  if (/\b(official|primary source|from the|according to)\b/i.test(blob)) {
+    score += 0.1;
+  }
+  return Math.max(0, Math.min(1, score));
+}
+
+function extractDateTokens(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(
+    /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:,?\s*20\d{2})?\b/gi,
+  )) {
+    out.push(m[0]!.toLowerCase().replace(/\s+/g, " "));
+  }
+  for (const m of text.matchAll(/\b20\d{2}-\d{2}-\d{2}\b/g)) {
+    out.push(m[0]!);
+  }
+  return out;
+}
+
+function conflictsWithAccepted(
+  candidate: SimpleEvidence,
+  accepted: SimpleEvidence[],
+): boolean {
+  if (!accepted.length) return false;
+  const candDates = extractDateTokens(candidate.content);
+  if (!candDates.length) return false;
+  for (const a of accepted) {
+    const aDates = extractDateTokens(a.content);
+    if (!aDates.length) continue;
+    // Conflict when both assert concrete dates and share no overlap
+    const overlap = candDates.some((d) =>
+      aDates.some(
+        (ad) => ad.includes(d.slice(0, 6)) || d.includes(ad.slice(0, 6)),
+      ),
+    );
+    if (!overlap) return true;
+  }
+  return false;
+}
+
+function answersAsk(
+  ev: SimpleEvidence,
+  plan: Plan,
+): boolean {
+  const content = ev.content.toLowerCase();
+  if (content.length < 12) return false;
+  // URL summary path: page content about the domain is enough
+  if (
+    plan.answerShape === "summary" &&
+    plan.entities.some(
+      (e) =>
+        contentMentionsEntity(content, e) || (ev.url ?? "").includes(e),
+    )
+  ) {
+    return content.length >= 40;
+  }
+  for (const ask of plan.asks) {
+    const tokens = ask
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter(
+        (t) =>
+          t.length > 3 &&
+          !/^(what|when|where|which|does|about|tell|give|quick|this|year|start)$/.test(
+            t,
+          ),
+      );
+    if (!tokens.length) {
+      // Date/schedule asks often only have stopwords left — accept dated content for the entity
+      if (
+        plan.freshnessRequired &&
+        /\b(20\d{2}|january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(
+          content,
+        ) &&
+        plan.entities.some(
+          (e) =>
+            contentMentionsEntity(content, e) ||
+            contentMentionsEntity(ev.title, e) ||
+            (ev.url ?? "").toLowerCase().includes(e.toLowerCase()),
+        )
+      ) {
+        return true;
+      }
+      continue;
+    }
+    const hits = tokens.filter((t) => content.includes(t) || ev.title.toLowerCase().includes(t)).length;
+    if (hits >= Math.min(2, tokens.length) || hits / tokens.length >= 0.4) {
+      return true;
+    }
+  }
+  // Entity + concrete date is enough for fresh schedule/date asks
+  if (
+    plan.freshnessRequired &&
+    extractDateTokens(ev.content).length > 0 &&
+    plan.entities.some(
+      (e) =>
+        contentMentionsEntity(content, e) ||
+        contentMentionsEntity(ev.title, e) ||
+        (ev.url ?? "").toLowerCase().includes(e.toLowerCase()),
+    )
+  ) {
+    return true;
+  }
+  for (const exp of plan.expectedEvidence) {
+    const parts = exp
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((t) => t.length > 3);
+    if (parts.some((p) => content.includes(p) || ev.title.toLowerCase().includes(p))) {
+      return content.length >= 24;
+    }
+  }
+  return content.length >= 80 && /\d/.test(content);
+}
+
+export function scoreEvidence(opts: {
+  evidence: SimpleEvidence;
+  plan: Plan;
+  hydrate: HydrateResult;
+  alreadyAccepted: SimpleEvidence[];
+}): EvidenceVerifyScore {
+  const { evidence: ev, plan, hydrate } = opts;
+  const reasons: string[] = [];
+  const entities =
+    plan.entities.length > 0
+      ? plan.entities
+      : hydrate.entityHints.length
+        ? hydrate.entityHints
+        : hydrate.urls.map((u) => u.domain);
+
+  let entityOk = true;
+  if (hydrate.urls.length === 1) {
+    const domain = hydrate.urls[0]!.domain;
+    entityOk =
+      contentMentionsEntity(ev.content, domain) ||
+      contentMentionsEntity(ev.title, domain) ||
+      Boolean(ev.url && ev.url.toLowerCase().includes(domain.toLowerCase()));
+    if (!entityOk) reasons.push("wrong_entity");
+  } else if (entities.length === 1) {
+    const ent = entities[0]!;
+    entityOk =
+      contentMentionsEntity(ev.content, ent) ||
+      contentMentionsEntity(ev.title, ent) ||
+      Boolean(ev.url && ev.url.toLowerCase().includes(ent.toLowerCase()));
+    if (!entityOk) reasons.push("wrong_entity");
+  } else if (entities.length > 1) {
+    entityOk = entities.some(
+      (ent) =>
+        contentMentionsEntity(ev.content, ent) ||
+        contentMentionsEntity(ev.title, ent) ||
+        Boolean(ev.url && ev.url.toLowerCase().includes(ent.toLowerCase())),
+    );
+    if (!entityOk) reasons.push("wrong_entity");
+  }
+
+  const freshnessOk =
+    !plan.freshnessRequired || !isStaleForYear(ev.content, hydrate.year);
+  if (!freshnessOk) reasons.push("stale_year");
+
+  const dateOk =
+    !plan.temporalContext.length ||
+    plan.temporalContext.some((t) => {
+      const year = t.match(/20\d{2}/)?.[0];
+      if (year) return ev.content.includes(year);
+      return true;
+    }) ||
+    !plan.freshnessRequired;
+  if (!dateOk && plan.freshnessRequired) reasons.push("date_mismatch");
+
+  const authority = authorityScore(ev, plan);
+  if (authority < 0.4 && plan.freshnessRequired) {
+    reasons.push("low_authority");
+  }
+
+  const answers = answersAsk(ev, plan);
+  if (!answers) reasons.push("does_not_answer_ask");
+
+  const conflicts = conflictsWithAccepted(ev, opts.alreadyAccepted);
+  if (conflicts) reasons.push("conflicts_with_accepted");
+
+  let score = 0;
+  if (entityOk) score += 0.25;
+  if (dateOk) score += 0.15;
+  if (freshnessOk) score += 0.2;
+  score += authority * 0.2;
+  if (answers) score += 0.2;
+  if (conflicts) score -= 0.35;
+
+  return {
+    entityOk,
+    dateOk,
+    freshnessOk,
+    authority,
+    answersAsk: answers,
+    conflicts,
+    score: Math.max(0, Math.min(1, score)),
+    reasons,
+  };
+}
+
+export function isSensitiveCurrentFact(plan: Plan, hydrate: HydrateResult): boolean {
+  if (!plan.freshnessRequired && !plan.fresh) return false;
+  const blob = `${plan.intent} ${plan.asks.join(" ")} ${hydrate.userText}`;
+  return SENSITIVE_FACT_RE.test(blob);
+}
+
+export function buildCorroborationLookups(opts: {
+  plan: Plan;
+  hydrate: HydrateResult;
+  accepted: SimpleEvidence[];
+}): Lookup[] {
+  const plan = syncPlanAliases(opts.plan);
+  const primary = opts.accepted[0];
+  const ask = plan.asks[0] ?? plan.intent;
+  const year = opts.hydrate.year;
+  const entity = plan.entities[0] ?? opts.hydrate.entityHints[0] ?? "";
+  const q = [
+    ask,
+    entity,
+    String(year),
+    "official",
+    primary?.url ? `confirm` : "",
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 400);
+  return [{ cap: "WEB", q, parallelGroup: "corroborate" }];
+}
+
+export function buildRefineLookups(opts: {
+  plan: Plan;
+  hydrate: HydrateResult;
+  rejected: SimpleEvidence[];
+  round: number;
+}): Lookup[] {
+  const plan = syncPlanAliases(opts.plan);
+  const reasons = new Set(
+    opts.rejected.flatMap((r) => r.verify?.reasons ?? [r.rejectReason ?? ""]),
+  );
+
+  if (opts.hydrate.urls.length === 1) {
+    const u = opts.hydrate.urls[0]!;
+    return [
+      {
+        cap: "WEB",
+        q: opts.round >= 1 ? `site:${u.domain}` : u.url,
+        parallelGroup: "refine",
+      },
+    ];
+  }
+
+  const ask = plan.asks[0] ?? plan.intent;
+  const entity = plan.entities[0] ?? "";
+  const year = opts.hydrate.year;
+
+  if (reasons.has("stale_year") || reasons.has("date_mismatch")) {
+    return [
+      {
+        cap: "WEB",
+        q: `${ask} ${entity} ${year} official`.trim().slice(0, 400),
+        parallelGroup: "refine",
+      },
+    ];
+  }
+  if (reasons.has("wrong_entity")) {
+    return [
+      {
+        cap: "WEB",
+        q: `${entity} ${ask}`.trim().slice(0, 400),
+        parallelGroup: "refine",
+      },
+    ];
+  }
+  if (reasons.has("low_authority") || reasons.has("does_not_answer_ask")) {
+    return [
+      {
+        cap: "WEB",
+        q: `${ask} ${entity} official primary source ${year}`
+          .trim()
+          .slice(0, 400),
+        parallelGroup: "refine",
+      },
+    ];
+  }
+
+  return (plan.lookups?.length ? plan.lookups : plan.look ?? []).map((l) => ({
+    ...l,
+    q: `${l.q} ${year} verified`.slice(0, 400),
+    parallelGroup: "refine",
+  }));
+}
+
+/**
+ * VERIFY evidence against the INTERPRET plan.
+ * Max refine path is owned by the runtime (retry once → deeper search).
+ */
 export function checkEvidence(opts: {
   plan: Plan;
   hydrate: HydrateResult;
   evidence: SimpleEvidence[];
   lookupsRun: Lookup[];
   round: number;
+  /** When true, skip asking for another corroboration pass. */
+  corroborationDone?: boolean;
 }): CheckResult {
+  const plan = syncPlanAliases(opts.plan);
   const accepted: SimpleEvidence[] = [];
   const rejected: SimpleEvidence[] = [];
-  const refineLookups: Lookup[] = [];
 
-  const needsWeb = (opts.plan.look ?? []).some((l) => l.cap === "WEB");
+  const needsWeb = (plan.lookups ?? plan.look ?? []).some((l) => l.cap === "WEB");
   const webRan = opts.lookupsRun.some((l) => l.cap === "WEB");
   const webOk = opts.evidence.some((e) => e.cap === "WEB" && e.ok);
 
@@ -48,7 +409,9 @@ export function checkEvidence(opts: {
       accepted: [],
       rejected: opts.evidence,
       needsRefine: opts.round < 2,
-      refineLookups: opts.plan.look?.filter((l) => l.cap === "WEB"),
+      refineLookups: (plan.lookups ?? plan.look)?.filter((l) => l.cap === "WEB"),
+      needsCorroboration: false,
+      needsDeeperSearch: opts.round >= 2,
       unresolved: opts.round >= 2,
       unresolvedReason: "WEB selected but no web call executed",
     };
@@ -64,75 +427,91 @@ export function checkEvidence(opts: {
           e.content.toLowerCase().includes(u.domain)),
     );
     if (!fetched) {
-      const refineQ =
-        opts.round >= 1
-          ? `site:${u.domain}`
-          : u.url;
+      const refineQ = opts.round >= 1 ? `site:${u.domain}` : u.url;
       return {
         accepted: [],
         rejected: opts.evidence,
         needsRefine: opts.round < 2,
-        refineLookups: [{ cap: "WEB", q: refineQ }],
+        refineLookups: [{ cap: "WEB", q: refineQ, parallelGroup: "refine" }],
+        needsCorroboration: false,
+        needsDeeperSearch: opts.round >= 2,
         unresolved: opts.round >= 2,
         unresolvedReason: `explicit URL ${u.domain} never fetched`,
       };
     }
   }
 
-  for (const ev of opts.evidence) {
-    if (!ev.ok || ev.content.trim().length < 8) {
-      rejected.push({
-        ...ev,
-        accepted: false,
-        rejectReason: ev.rejectReason ?? "empty_or_failed",
-      });
-      continue;
-    }
-
-    // Wrong entity check when we have a clear URL/domain target
-    if (opts.hydrate.urls.length === 1) {
-      const domain = opts.hydrate.urls[0]!.domain;
-      if (
-        ev.cap === "WEB" &&
-        !contentMentionsEntity(ev.content, domain) &&
-        !(ev.url && ev.url.includes(domain))
-      ) {
-        rejected.push({
-          ...ev,
-          accepted: false,
-          rejectReason: "wrong_entity",
-        });
-        continue;
+  // Score each result; prefer higher authority when accepting
+  const scored = opts.evidence
+    .map((ev) => {
+      if (!ev.ok || ev.content.trim().length < 8) {
+        return {
+          ev: {
+            ...ev,
+            accepted: false,
+            rejectReason: ev.rejectReason ?? "empty_or_failed",
+          },
+          verify: null as EvidenceVerifyScore | null,
+        };
       }
-    }
+      const verify = scoreEvidence({
+        evidence: ev,
+        plan,
+        hydrate: opts.hydrate,
+        alreadyAccepted: accepted,
+      });
+      return { ev, verify };
+    })
+    .sort((a, b) => (b.verify?.score ?? -1) - (a.verify?.score ?? -1));
 
-    if (opts.plan.fresh && isStaleForYear(ev.content, opts.hydrate.year)) {
-      rejected.push({
-        ...ev,
-        accepted: false,
-        rejectReason: "stale_year",
-      });
-      refineLookups.push({
-        cap: "WEB",
-        q: `${opts.plan.asks[0] ?? opts.plan.intent} ${opts.hydrate.year}`.slice(
-          0,
-          400,
-        ),
-      });
+  for (const row of scored) {
+    if (!row.verify) {
+      rejected.push(row.ev);
       continue;
     }
+    const verify = row.verify;
+    const pass =
+      verify.entityOk &&
+      verify.freshnessOk &&
+      !verify.conflicts &&
+      verify.answersAsk &&
+      verify.score >= 0.45;
 
-    accepted.push({ ...ev, accepted: true });
+    if (pass) {
+      accepted.push({
+        ...row.ev,
+        accepted: true,
+        verify,
+      });
+    } else {
+      rejected.push({
+        ...row.ev,
+        accepted: false,
+        rejectReason: verify.reasons[0] ?? "weak_evidence",
+        verify,
+      });
+    }
   }
 
-  if (opts.plan.fresh && !accepted.length) {
+  // Prefer primary/official among accepted
+  accepted.sort(
+    (a, b) => (b.verify?.authority ?? 0) - (a.verify?.authority ?? 0),
+  );
+
+  if (plan.freshnessRequired && !accepted.length) {
+    const refineLookups = buildRefineLookups({
+      plan,
+      hydrate: opts.hydrate,
+      rejected,
+      round: opts.round,
+    });
     return {
       accepted: [],
       rejected,
       needsRefine: opts.round < 2,
-      refineLookups: refineLookups.length
-        ? refineLookups
-        : [{ cap: "WEB", q: opts.plan.intent.slice(0, 400) }],
+      refineLookups,
+      needsCorroboration: false,
+      needsDeeperSearch: opts.round >= 2,
       unresolved: opts.round >= 2,
       unresolvedReason: "fresh/current ask with no fresh accepted evidence",
     };
@@ -143,39 +522,126 @@ export function checkEvidence(opts: {
       accepted: [],
       rejected,
       needsRefine: opts.round < 2,
-      refineLookups: opts.plan.look?.filter((l) => l.cap === "WEB"),
+      refineLookups: (plan.lookups ?? plan.look)?.filter((l) => l.cap === "WEB"),
+      needsCorroboration: false,
+      needsDeeperSearch: opts.round >= 2,
       unresolved: opts.round >= 2,
       unresolvedReason: "web lookup failed",
     };
   }
 
-  // No lookups required
-  if (!(opts.plan.look?.length) && !opts.plan.fresh) {
+  if (!(plan.lookups?.length || plan.look?.length) && !plan.freshnessRequired) {
     return {
       accepted,
       rejected,
       needsRefine: false,
+      needsCorroboration: false,
+      needsDeeperSearch: false,
       unresolved: false,
     };
   }
 
-  if (!accepted.length && (opts.plan.look?.length || opts.plan.fresh)) {
+  if (!accepted.length && (plan.lookups?.length || plan.freshnessRequired)) {
+    const refineLookups = buildRefineLookups({
+      plan,
+      hydrate: opts.hydrate,
+      rejected,
+      round: opts.round,
+    });
     return {
       accepted: [],
       rejected,
       needsRefine: opts.round < 2,
-      refineLookups: refineLookups.length
-        ? refineLookups
-        : opts.plan.look,
+      refineLookups,
+      needsCorroboration: false,
+      needsDeeperSearch: opts.round >= 2,
       unresolved: opts.round >= 2,
       unresolvedReason: "result does not answer the ask",
     };
+  }
+
+  // Bounded double-check for sensitive/current facts
+  const sensitive = isSensitiveCurrentFact(plan, opts.hydrate);
+  const bestAuthority = accepted[0]?.verify?.authority ?? 0;
+  const needsCorroboration =
+    sensitive &&
+    !opts.corroborationDone &&
+    accepted.length === 1 &&
+    bestAuthority < 0.7 &&
+    opts.round < 2;
+
+  if (needsCorroboration) {
+    return {
+      accepted,
+      rejected,
+      needsRefine: false,
+      needsCorroboration: true,
+      corroborateLookups: buildCorroborationLookups({
+        plan,
+        hydrate: opts.hydrate,
+        accepted,
+      }),
+      needsDeeperSearch: false,
+      unresolved: false,
+    };
+  }
+
+  // After corroboration: if two sources conflict on dates, prefer higher authority
+  // or escalate one final targeted verification
+  if (
+    opts.corroborationDone &&
+    accepted.length >= 2 &&
+    conflictsWithAccepted(accepted[1]!, [accepted[0]!])
+  ) {
+    const top = accepted[0]!;
+    const second = accepted[1]!;
+    if ((top.verify?.authority ?? 0) >= (second.verify?.authority ?? 0) + 0.15) {
+      return {
+        accepted: [top],
+        rejected: [
+          ...rejected,
+          {
+            ...second,
+            accepted: false,
+            rejectReason: "conflicts_prefer_authoritative",
+          },
+        ],
+        needsRefine: false,
+        needsCorroboration: false,
+        needsDeeperSearch: false,
+        unresolved: false,
+      };
+    }
+    if (opts.round < 2) {
+      return {
+        accepted: [top],
+        rejected,
+        needsRefine: true,
+        refineLookups: [
+          {
+            cap: "WEB",
+            q: `${plan.asks[0] ?? plan.intent} ${plan.entities[0] ?? ""} ${opts.hydrate.year} official verify`
+              .trim()
+              .slice(0, 400),
+            parallelGroup: "verify_final",
+          },
+        ],
+        needsCorroboration: false,
+        needsDeeperSearch: false,
+        unresolved: false,
+      };
+    }
   }
 
   return {
     accepted,
     rejected,
     needsRefine: false,
+    needsCorroboration: false,
+    needsDeeperSearch: false,
     unresolved: false,
   };
 }
+
+/** Alias for clarity in traces / docs */
+export const verifyEvidence = checkEvidence;

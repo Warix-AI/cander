@@ -10,6 +10,7 @@ import type { CoverageResult } from "../coverage-ledger.ts";
 export type TraceStage =
   | "user_input"
   | "hydrate"
+  | "interpret"
   | "plan"
   | "plan_validate"
   | "temporal_grounding"
@@ -18,6 +19,7 @@ export type TraceStage =
   | "route_capability"
   | "tool_request"
   | "tool_response_raw"
+  | "verify"
   | "evidence_accept"
   | "evidence_reject"
   | "evidence_normalize"

@@ -1,9 +1,11 @@
 export type {
   AnswerPacket,
+  AnswerShape,
   BrowserMode,
   Cap,
   CheckResult,
   CommitNotes,
+  EvidenceVerifyScore,
   HydrateResult,
   Lookup,
   Plan,
@@ -13,15 +15,29 @@ export type {
   SimpleTurnTerminal,
 } from "./types.ts";
 
+export { syncPlanAliases } from "./types.ts";
+
 export { hydrateTurn } from "./hydrate.ts";
-export { planTurn, parsePlanJson, planFromHydrateHeuristic } from "./plan.ts";
+export {
+  planTurn,
+  parsePlanJson,
+  planFromHydrateHeuristic,
+  interpretSelfCheck,
+} from "./plan.ts";
 export {
   validatePlan,
   repairPlanCode,
   validateAndRepairPlan,
 } from "./validate-plan.ts";
 export { runLookups } from "./run.ts";
-export { checkEvidence } from "./check.ts";
+export {
+  checkEvidence,
+  verifyEvidence,
+  scoreEvidence,
+  isSensitiveCurrentFact,
+  buildCorroborationLookups,
+  authorityScore,
+} from "./check.ts";
 export { answerTurn, mergeCommitNotes } from "./answer.ts";
 export { commitTurnNotes } from "./commit.ts";
 export {

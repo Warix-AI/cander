@@ -74,6 +74,14 @@ function isSimpleScalarEvidence(items: SimpleEvidence[]): string | null {
 
 function needsSynthesis(plan: Plan, evidence: SimpleEvidence[]): boolean {
   if (plan.asks.length > 1) return true;
+  if (
+    plan.answerShape === "comparison" ||
+    plan.answerShape === "breakdown" ||
+    plan.answerShape === "steps" ||
+    plan.answerShape === "mixed"
+  ) {
+    return true;
+  }
   if (/summar|compar|explain|draft|nuance|caveat/i.test(plan.intent)) return true;
   if (evidence.length > 1) return true;
   if (evidence.some((e) => e.content.length > 400)) return true;
@@ -119,7 +127,12 @@ export async function answerTurn(opts: {
   }
 
   // Direct answer from PLAN when no retrieval needed
-  if (!(opts.plan.look?.length) && opts.plan.answer?.trim() && !opts.plan.fresh) {
+  if (
+    !(opts.plan.lookups?.length || opts.plan.look?.length) &&
+    opts.plan.answer?.trim() &&
+    !opts.plan.freshnessRequired &&
+    !opts.plan.fresh
+  ) {
     return {
       answer: opts.plan.answer.trim(),
       path: "deterministic",
