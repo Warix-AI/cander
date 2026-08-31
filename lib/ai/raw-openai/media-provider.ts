@@ -123,3 +123,32 @@ export async function persistGeneratedImageFile(
   });
   return { openaiFileId, bytes, mimeType, size: bytes.byteLength };
 }
+
+/**
+ * Direct Images API fallback when the chat model skips the image_generation tool.
+ */
+export async function generateImageViaImagesApi(
+  client: OpenAI,
+  prompt: string,
+  opts?: { model?: string; quality?: "low" | "medium" | "high" | "auto" },
+): Promise<GeneratedImageResult> {
+  const model = opts?.model || "gpt-image-1.5";
+  const quality =
+    opts?.quality === "auto" ? "medium" : opts?.quality || "medium";
+  const result = await client.images.generate({
+    model,
+    prompt: prompt.slice(0, 32000),
+    quality,
+    size: "1024x1024",
+    // gpt-image returns b64_json by default for these models
+  });
+  const b64 = result.data?.[0]?.b64_json?.trim();
+  if (!b64) {
+    throw new Error("Images API returned no image data.");
+  }
+  const mimeType = "image/png";
+  return {
+    dataUrl: `data:${mimeType};base64,${b64}`,
+    mimeType,
+  };
+}

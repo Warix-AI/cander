@@ -141,8 +141,12 @@ export function findContinuousChat(
   preferredId?: string | null,
 ) {
   if (preferredId) {
+    // Keep whatever non-project chat is active (New Chat or Recents) across spaces.
     const preferred = threads.find(
-      (item) => item.id === preferredId && isContinuousThread(item, workspaceId),
+      (item) =>
+        item.id === preferredId &&
+        item.workspaceId === workspaceId &&
+        !item.projectId,
     );
     if (preferred) return preferred;
   }

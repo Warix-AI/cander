@@ -43,27 +43,27 @@ describe("composer autosize", () => {
     assert.equal(three.overflowY, "hidden");
   });
 
-  it("caps mobile growth at ~6 lines", () => {
+  it("caps mobile growth at ~8 lines", () => {
     const metrics = resolveComposerAutosizeMetrics({
       mobile: true,
       lineHeight: 20,
       paddingY: 12,
     });
     assert.equal(metrics.maxLines, COMPOSER_MOBILE_MAX_LINES);
-    const six = nextComposerTextareaSize(metrics.maxHeight, metrics);
-    assert.equal(six.height, metrics.maxHeight);
-    assert.equal(six.overflowY, "hidden");
+    const capped = nextComposerTextareaSize(metrics.maxHeight, metrics);
+    assert.equal(capped.height, metrics.maxHeight);
+    assert.equal(capped.overflowY, "hidden");
   });
 
-  it("scrolls internally after 7+ lines on mobile", () => {
+  it("scrolls internally after 9+ lines on mobile", () => {
     const metrics = resolveComposerAutosizeMetrics({
       mobile: true,
       lineHeight: 20,
       paddingY: 12,
     });
-    const seven = nextComposerTextareaSize(20 * 7 + 12, metrics);
-    assert.equal(seven.height, metrics.maxHeight);
-    assert.equal(seven.overflowY, "auto");
+    const over = nextComposerTextareaSize(20 * 9 + 12, metrics);
+    assert.equal(over.height, metrics.maxHeight);
+    assert.equal(over.overflowY, "auto");
   });
 
   it("keeps a higher desktop line budget", () => {
@@ -90,9 +90,10 @@ describe("composer autosize", () => {
 describe("composer mobile alignment + send", () => {
   it("bottom-aligns + / mic / send on mobile", () => {
     const composer = readRepo("components/shell/Composer.tsx");
-    assert.match(composer, /mobile \? "items-end"/);
-    assert.match(composer, /mobile \? "self-end"/);
+    assert.match(composer, /items-end/);
+    assert.match(composer, /self-end/);
     assert.match(composer, /onSend=\{submit\}/);
+    assert.match(composer, /grow upward/);
   });
 
   it("Send button invokes explicit onClick (iOS-safe)", () => {

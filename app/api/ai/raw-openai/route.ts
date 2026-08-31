@@ -16,15 +16,20 @@ import {
 } from "@/lib/ai/raw-openai/build-input";
 import { isRawOpenAIModeAllowedOnServer } from "@/lib/ai/raw-openai/flags";
 import {
+  detectImageGenerationIntent,
   isOpenAIImageGenerationEnabled,
   openAIImageGenerationTool,
+  openAIImageGenerationToolChoice,
+  resolveOpenAIImageModel,
+  resolveOpenAIImageQuality,
 } from "@/lib/ai/raw-openai/image-generation";
 import { MAX_ATTACHMENTS_PER_TURN } from "@/lib/ai/raw-openai/limits";
 import {
   createOpenAIMediaClient,
-  didOpenAIUseImageGeneration,
   extractGeneratedImages,
+  generateImageViaImagesApi,
   persistGeneratedImageFile,
+  type GeneratedImageResult,
 } from "@/lib/ai/raw-openai/media-provider";
 import {
   didOpenAIUseWebSearch,
@@ -238,6 +243,13 @@ export async function POST(request: Request) {
       ? []
       : (body.images || []).filter((u) => typeof u === "string" && u.length > 0);
 
+  const lastUserText = [...messages]
+    .reverse()
+    .find((m) => m.role === "user")
+    ?.content?.trim() || "";
+  const imageIntent =
+    imageGenEnabled && detectImageGenerationIntent(lastUserText);
+
   const input = buildRawOpenAIInput({
     system,
     messages,
@@ -246,7 +258,7 @@ export async function POST(request: Request) {
   });
 
   const tools: OpenAI.Responses.Tool[] = [];
-  if (webSearchEnabled) tools.push({ type: "web_search" });
+  if (webSearchEnabled && !imageIntent) tools.push({ type: "web_search" });
   if (imageGenEnabled) tools.push(openAIImageGenerationTool());
 
   const client = createOpenAIMediaClient(apiKey);
@@ -254,17 +266,100 @@ export async function POST(request: Request) {
     model,
     input: input as OpenAI.Responses.ResponseInput,
     ...(tools.length ? { tools } : {}),
+    ...(imageIntent
+      ? { tool_choice: openAIImageGenerationToolChoice() }
+      : {}),
   };
 
+  console.log("[RAW_OPENAI_TRACE]", {
+    mode: "image_intent",
+    imageGenerationEnabled: imageGenEnabled,
+    imageIntent,
+    imageModel: imageGenEnabled ? resolveOpenAIImageModel() : undefined,
+    imageQuality: imageGenEnabled ? resolveOpenAIImageQuality() : undefined,
+    toolChoice: imageIntent ? "image_generation" : "auto",
+    lastUserPreview: lastUserText.slice(0, 120),
+  });
+
   try {
-    const response = await client.responses.create(createParams);
+    let response: OpenAI.Responses.Response | null = null;
+    let generated: GeneratedImageResult[] = [];
+    let content = "";
+    let usage: OpenAI.Responses.Response["usage"] | undefined;
+    let imagePath: "responses_tool" | "images_api" | "none" = "none";
+    let imageError: string | undefined;
 
-    const content =
-      (typeof response.output_text === "string" && response.output_text) ||
-      extractText(response) ||
-      "";
+    if (imageIntent && imageGenEnabled) {
+      // Prefer forced Responses tool; fall back to Images API if the model
+      // still returns text without an image_generation_call.
+      try {
+        response = await client.responses.create(createParams);
+        content =
+          (typeof response.output_text === "string" && response.output_text) ||
+          extractText(response) ||
+          "";
+        generated = extractGeneratedImages(response.output);
+        usage = response.usage;
+        if (generated.length) imagePath = "responses_tool";
+      } catch (e) {
+        imageError = e instanceof Error ? e.message : "responses_image_tool_failed";
+        console.log("[RAW_OPENAI_TRACE]", {
+          mode: "image_gen_tool_error",
+          success: false,
+          error: imageError.slice(0, 300),
+        });
+      }
 
-    const generated = extractGeneratedImages(response.output);
+      if (!generated.length) {
+        try {
+          console.log("[RAW_OPENAI_TRACE]", {
+            mode: "image_gen_fallback",
+            reason: imageError || "no_image_generation_call",
+            model: resolveOpenAIImageModel(),
+            quality: resolveOpenAIImageQuality(),
+          });
+          const direct = await generateImageViaImagesApi(client, lastUserText, {
+            model: resolveOpenAIImageModel(),
+            quality: resolveOpenAIImageQuality(),
+          });
+          generated = [direct];
+          imagePath = "images_api";
+          content = "";
+          imageError = undefined;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "images_api_failed";
+          imageError = imageError ? `${imageError}; ${msg}` : msg;
+          console.log("[RAW_OPENAI_TRACE]", {
+            mode: "image_gen_fallback_error",
+            success: false,
+            error: msg.slice(0, 300),
+          });
+          if (!content) {
+            return NextResponse.json(
+              {
+                error: `Image generation failed: ${imageError.slice(0, 400)}`,
+                model,
+                imageGenerationEnabled: true,
+                imageGenerationUsed: false,
+                imageIntent: true,
+                latencyMs: Date.now() - started,
+              },
+              { status: 502 },
+            );
+          }
+        }
+      }
+    } else {
+      response = await client.responses.create(createParams);
+      content =
+        (typeof response.output_text === "string" && response.output_text) ||
+        extractText(response) ||
+        "";
+      generated = extractGeneratedImages(response.output);
+      usage = response.usage;
+      if (generated.length) imagePath = "responses_tool";
+    }
+
     const images: Array<{
       dataUrl: string;
       mimeType: string;
@@ -341,10 +436,20 @@ export async function POST(request: Request) {
       }
     }
 
-    const usage = response.usage;
+    // Never leave the model’s “I can’t generate images” text when we actually
+    // produced an image (or when intent failed with a real error above).
+    if (images.length) {
+      content = content
+        .replace(
+          /I can[’']t generate images[\s\S]*?(?=\n\n|$)/gi,
+          "",
+        )
+        .trim();
+    }
+
     const latencyMs = Date.now() - started;
-    const webSearchUsed = didOpenAIUseWebSearch(response.output);
-    const imageGenerationUsed = didOpenAIUseImageGeneration(response.output);
+    const webSearchUsed = didOpenAIUseWebSearch(response?.output);
+    const imageGenerationUsed = images.length > 0;
 
     console.log("[RAW_OPENAI_TRACE]", {
       provider: "openai",
@@ -353,7 +458,10 @@ export async function POST(request: Request) {
       webSearchEnabled,
       webSearchUsed,
       imageGenerationEnabled: imageGenEnabled,
+      imageIntent,
       imageGenerationUsed,
+      imagePath,
+      imageModel: resolveOpenAIImageModel(),
       generatedImageCount: images.length,
       attachmentCount: attachmentRefs.filter((a) => a.forCurrentTurn).length,
       threadMessageCount: messages.length,
@@ -372,6 +480,8 @@ export async function POST(request: Request) {
       webSearchUsed,
       imageGenerationEnabled: imageGenEnabled,
       imageGenerationUsed,
+      imageIntent,
+      imagePath,
       inputTokens: usage?.input_tokens,
       outputTokens: usage?.output_tokens,
       latencyMs,
@@ -386,6 +496,7 @@ export async function POST(request: Request) {
       webSearchEnabled,
       webSearchUsed: false,
       imageGenerationEnabled: imageGenEnabled,
+      imageIntent,
       imageGenerationUsed: false,
       threadMessageCount: messages.length,
       latencyMs,
@@ -400,6 +511,7 @@ export async function POST(request: Request) {
         webSearchUsed: false,
         imageGenerationEnabled: imageGenEnabled,
         imageGenerationUsed: false,
+        imageIntent,
         latencyMs,
       },
       { status: 502 },

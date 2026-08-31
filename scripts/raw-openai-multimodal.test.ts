@@ -15,6 +15,7 @@ import {
 import {
   isOpenAIImageGenerationEnabled,
   openAIImageGenerationTool,
+  detectImageGenerationIntent,
 } from "../lib/ai/raw-openai/image-generation.ts";
 import { isOpenAIWebSearchEnabled } from "../lib/ai/raw-openai/web-search.ts";
 import { resolveAssistantRuntimePath } from "../lib/ai/raw-openai/path.ts";
@@ -270,6 +271,7 @@ describe("Raw multimodal isolation", () => {
       type: "image_generation",
       model: "gpt-image-1.5",
       quality: "medium",
+      action: "generate",
     });
     process.env.OPENAI_IMAGE_GENERATION = "0";
     assert.equal(isOpenAIImageGenerationEnabled(), false);
@@ -283,6 +285,9 @@ describe("Raw multimodal isolation", () => {
     const route = fs.readFileSync("app/api/ai/raw-openai/route.ts", "utf8");
     assert.ok(route.includes("openAIImageGenerationTool"));
     assert.ok(route.includes("extractGeneratedImages"));
+    assert.ok(route.includes("detectImageGenerationIntent"));
+    assert.ok(route.includes("generateImageViaImagesApi"));
+    assert.ok(route.includes("tool_choice"));
     const toolSrc = fs.readFileSync(
       "lib/ai/raw-openai/image-generation.ts",
       "utf8",
@@ -290,6 +295,29 @@ describe("Raw multimodal isolation", () => {
     assert.ok(toolSrc.includes('"image_generation"'));
     assert.ok(toolSrc.includes("gpt-image-1.5"));
     assert.ok(toolSrc.includes("medium"));
+  });
+
+  it("detects image generation intent vs meta questions", () => {
+    assert.equal(
+      detectImageGenerationIntent("Generate me an image of the capital of Utah."),
+      true,
+    );
+    assert.equal(
+      detectImageGenerationIntent("Create a cartoon dog wearing sunglasses."),
+      true,
+    );
+    assert.equal(
+      detectImageGenerationIntent("Draw a sunset over the mountains"),
+      true,
+    );
+    assert.equal(
+      detectImageGenerationIntent("What model do you use to generate images?"),
+      false,
+    );
+    assert.equal(
+      detectImageGenerationIntent("How does image generation work?"),
+      false,
+    );
   });
 
   it("normalize keeps file blob bytes for OpenAI upload", () => {

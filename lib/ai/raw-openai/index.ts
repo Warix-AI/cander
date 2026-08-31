@@ -8,6 +8,7 @@ export {
 export {
   isOpenAIImageGenerationEnabled,
   openAIImageGenerationTool,
+  detectImageGenerationIntent,
 } from "./image-generation.ts";
 export {
   composerAttachActions,
@@ -22,4 +23,5 @@ export {
   prepareDocumentInput,
   extractGeneratedImages,
   didOpenAIUseImageGeneration,
+  generateImageViaImagesApi,
 } from "./media-provider.ts";

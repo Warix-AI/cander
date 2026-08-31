@@ -2,7 +2,7 @@
  * Composer textarea autosize helpers — pure so mobile growth can be tested.
  */
 
-export const COMPOSER_MOBILE_MAX_LINES = 6;
+export const COMPOSER_MOBILE_MAX_LINES = 8;
 export const COMPOSER_DESKTOP_MAX_LINES = 10;
 export const COMPOSER_FALLBACK_LINE_HEIGHT = 20;
 export const COMPOSER_FALLBACK_MIN_HEIGHT = 32;

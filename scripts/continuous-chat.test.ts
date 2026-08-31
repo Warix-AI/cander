@@ -43,4 +43,22 @@ describe("continuous chat across spaces", () => {
     const back = ensureContinuousChat(project.threads, "ws1", "build", session.id);
     assert.equal(back.id, session.id);
   });
+
+  it("keeps a Recents non-project thread across spaces", () => {
+    const legacy = {
+      id: "t-space-ws1-work",
+      title: "Chat",
+      workspaceId: "ws1",
+      spaceId: "work" as const,
+      updatedAt: new Date().toISOString(),
+      snippet: "hi",
+      messages: [],
+      persistent: true,
+      sessionSummary: null,
+    };
+    const switched = ensureContinuousChat([legacy], "ws1", "research", legacy.id);
+    assert.equal(switched.id, legacy.id);
+    const t = findContinuousChat(switched.threads, "ws1", legacy.id);
+    assert.equal(t?.spaceId, "research");
+  });
 });

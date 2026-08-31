@@ -887,7 +887,8 @@ export function Composer({
         ) : (
           <div
             className={cn(
-              "composer-shell px-2.5 py-2",
+              "composer-shell px-2.5",
+              mobile ? "py-1.5" : "py-2",
               showUsageBar && "mb-2.5",
             )}
           >
@@ -1029,7 +1030,13 @@ export function Composer({
             <div
               className={cn(
                 "flex min-h-8 gap-1",
-                mobile ? "items-end" : !hasText ? "items-center" : "items-start",
+                // Mobile: grow upward — controls stay on the bottom axis.
+                // Desktop: grow downward — controls stay top-aligned with text.
+                mobile
+                  ? "items-end"
+                  : hasText
+                    ? "items-start"
+                    : "items-center",
                 dictatingActive && "invisible pointer-events-none",
               )}
               aria-hidden={dictatingActive || undefined}
@@ -1093,16 +1100,15 @@ export function Composer({
                   }
                 }}
                 className={cn(
-                  "min-h-8 min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent text-[16px] outline-none placeholder:text-muted-foreground sm:text-[14px]",
-                  mobile ? "max-h-[none]" : "max-h-[212px]",
-                  hasText ? "h-auto py-1.5 leading-5" : "h-8 py-0 leading-8",
+                  "min-h-8 min-w-0 flex-1 resize-none bg-transparent text-[16px] leading-5 outline-none placeholder:text-muted-foreground sm:text-[14px]",
+                  hasText ? "py-1.5" : "py-[6px]",
                   transcriptReveal && "opacity-100 transition-opacity duration-200",
                 )}
               />
               <div
                 className={cn(
                   "flex shrink-0 items-center gap-0.5",
-                  mobile ? "self-end" : "self-end md:self-start",
+                  mobile ? "self-end" : hasText ? "self-start" : "self-center",
                 )}
               >
                 <ComposerTrailingActions
@@ -1305,11 +1311,8 @@ function ToolBtn({
         emphasize
           ? "text-foreground hover:bg-foreground/10 dark:text-white dark:hover:bg-white/10"
           : "text-muted-foreground hover:bg-muted hover:text-foreground dark:hover:bg-background",
-        emphasize
-          ? "h-10 w-10"
-          : size === "sm"
-            ? "h-7 w-7"
-            : "h-8 w-8",
+        // Keep plus on the same h-8 axis as mic/send; icon can still read larger.
+        size === "sm" ? "h-7 w-7" : "h-8 w-8",
         active &&
           (emphasize
             ? "bg-foreground/10 text-foreground dark:bg-white/15 dark:text-white"
