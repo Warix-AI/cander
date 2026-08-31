@@ -11,6 +11,8 @@ import {
   type TurnRetrievalHints,
 } from "../web-research/index.ts";
 import { requiresExternalEvidence } from "../orchestrator/deterministic-triggers.ts";
+import type { TemporalGrounding } from "../orchestrator/temporal-grounding.ts";
+import { anchorRetrievalQuery, maybeAnchorRetrievalQuery } from "../orchestrator/temporal-grounding.ts";
 import type { ConversationTurnState } from "./conversation-types.ts";
 import type { TurnRelation } from "./turn-relation.ts";
 import type { TurnTaskResolution } from "./turn-task.ts";
@@ -109,6 +111,7 @@ export function compileWebRetrievalPlan(opts: {
   carrySubject?: boolean;
   deeper?: boolean;
   escalate?: ExaRetrievalMode | null;
+  temporalGrounding?: TemporalGrounding | null;
 }): WebRetrievalPlan {
   const content = (opts.content || "").trim();
   const carrySubject =
@@ -119,7 +122,10 @@ export function compileWebRetrievalPlan(opts: {
     operation: opts.turnTask.operation,
     requestedFields: opts.turnTask.requestedFields,
     requestedItemCount: opts.turnTask.requestedItemCount,
-    freshness: opts.turnTask.freshness || Boolean(opts.conv?.freshnessRequirement),
+    freshness:
+      opts.turnTask.freshness ||
+      Boolean(opts.conv?.freshnessRequirement) ||
+      Boolean(opts.temporalGrounding?.freshnessRequired),
     depth: opts.turnTask.depth,
     presentation: opts.turnTask.presentation,
     dissatisfaction: Boolean(opts.conv?.dissatisfactionSignal),
@@ -128,7 +134,8 @@ export function compileWebRetrievalPlan(opts: {
   const needsRetrieval =
     requiresExternalEvidence(content) ||
     opts.turnTask.retrievalNeeded ||
-    Boolean(opts.conv?.externalRetrievalRequired);
+    Boolean(opts.conv?.externalRetrievalRequired) ||
+    Boolean(opts.temporalGrounding?.timeSensitive);
 
   if (wantsAutonomousResearch(content)) {
     return {
@@ -141,13 +148,16 @@ export function compileWebRetrievalPlan(opts: {
       category: null,
       location: extractLocation(content, opts.conv),
       contentNeeded: "subpages",
-      query: buildRetrievalQuery({
-        content,
-        subject: carrySubject ? opts.turnTask.subject : null,
-        requestedFields: opts.turnTask.requestedFields,
-        operation: opts.turnTask.operation,
-        carrySubject,
-      }),
+      query: maybeAnchorRetrievalQuery(
+        buildRetrievalQuery({
+          content,
+          subject: carrySubject ? opts.turnTask.subject : null,
+          requestedFields: opts.turnTask.requestedFields,
+          operation: opts.turnTask.operation,
+          carrySubject,
+        }),
+        opts.temporalGrounding,
+      ),
       carrySubject,
       escalationChain: ["agent"],
       exaMode: null,
@@ -200,13 +210,16 @@ export function compileWebRetrievalPlan(opts: {
     category: opts.conv?.constraints.industry ?? opts.conv?.constraints.category ?? null,
     location: extractLocation(content, opts.conv),
     contentNeeded,
-    query: buildRetrievalQuery({
-      content,
-      subject: carrySubject ? opts.turnTask.subject : null,
-      requestedFields: opts.turnTask.requestedFields,
-      operation: opts.turnTask.operation,
-      carrySubject,
-    }),
+    query: maybeAnchorRetrievalQuery(
+      buildRetrievalQuery({
+        content,
+        subject: carrySubject ? opts.turnTask.subject : null,
+        requestedFields: opts.turnTask.requestedFields,
+        operation: opts.turnTask.operation,
+        carrySubject,
+      }),
+      opts.temporalGrounding,
+    ),
     carrySubject,
     escalationChain,
     exaMode: planModeToExa(planMode),

@@ -40,6 +40,8 @@ import { autoRetrieveMemorySnippets } from "./memory-auto.ts";
 import { filterMemorySnippetsForTurn } from "../orchestrator/evidence-hygiene.ts";
 import { wantsAutonomousResearch } from "../web-research/index.ts";
 import { compileWebRetrievalPlan } from "./web-retrieval-plan.ts";
+import type { TemporalGrounding } from "../orchestrator/temporal-grounding.ts";
+import { formatTemporalContextForPrompt } from "../orchestrator/temporal-grounding.ts";
 import {
   compileResearchTurnPlan,
   subtaskPreRunTasks,
@@ -74,6 +76,7 @@ export type CompileTurnOptions = {
   /** Classified relation to prior context. */
   turnRelation?: import("./turn-relation.ts").TurnRelation;
   reactivateEntityLabel?: string;
+  temporalGrounding?: TemporalGrounding | null;
   /**
    * Build gate — only set when Build orchestrator is enabled AND
    * requiresBuildCapabilities. Never set on normal chat/research.
@@ -468,6 +471,9 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
     pendingBits.push(opts.pendingStateText);
   }
   pendingBits.push(formatTurnTaskForPrompt(turnTask));
+  if (opts.temporalGrounding) {
+    pendingBits.push(formatTemporalContextForPrompt(opts.temporalGrounding));
+  }
   if (
     turnRelation !== "topic_switch" &&
     conv?.constraints &&

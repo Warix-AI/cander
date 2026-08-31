@@ -27,6 +27,11 @@ import type { TurnTaskResolution } from "@/lib/ai/turn-environment/turn-task.ts"
 import type { ResearchTurnPlan } from "@/lib/ai/turn-environment/research-turn-plan.ts";
 import type { CompileTurnOptions } from "@/lib/ai/turn-environment/compile.ts";
 import { heuristicAskDecomposition } from "./ask-extractor.ts";
+import {
+  applyTemporalToTurnTask,
+  resolveTemporalGrounding,
+  type TemporalGrounding,
+} from "./temporal-grounding.ts";
 
 export type TurnRelationResult = {
   relation: TurnRelation;
@@ -43,6 +48,7 @@ export type TurnCompileResult = {
   researchPlan: ResearchTurnPlan | null;
   profile: TurnProfile;
   webRetrievalPlan: ReturnType<typeof compileWebRetrievalPlan>;
+  temporalGrounding: TemporalGrounding;
 };
 
 export type CompileTurnInput = {
@@ -87,12 +93,26 @@ export async function compileTurn(input: CompileTurnInput): Promise<TurnCompileR
     conversationState,
   );
 
-  const turnTask = resolveTurnTask({
+  const temporalGrounding = resolveTemporalGrounding({
+    content: input.content,
+    conv: conversationState,
+  });
+
+  let turnTask = resolveTurnTask({
     content: input.content,
     previous: conversationState,
     turnRelation: turnRelation.relation,
     reactivateEntityLabel: turnRelation.reactivateEntityLabel,
   });
+  turnTask = applyTemporalToTurnTask(turnTask, temporalGrounding);
+
+  if (temporalGrounding.freshnessRequired) {
+    conversationState = {
+      ...conversationState,
+      freshnessRequirement: true,
+      externalRetrievalRequired: true,
+    };
+  }
 
   const researchPlan = compileResearchTurnPlan({
     content: input.content,
@@ -124,6 +144,7 @@ export async function compileTurn(input: CompileTurnInput): Promise<TurnCompileR
     turnRelation: turnRelation.relation,
     carrySubject: turnRelation.relation !== "topic_switch" && turnTask.subject != null,
     deeper: Boolean(conversationState.dissatisfactionSignal),
+    temporalGrounding,
   });
 
   const profile = compileTurnProfile({
@@ -133,6 +154,7 @@ export async function compileTurn(input: CompileTurnInput): Promise<TurnCompileR
     turnRelation: turnRelation.relation,
     reactivateEntityLabel: turnRelation.reactivateEntityLabel,
     evidence: undefined,
+    temporalGrounding,
   });
 
   return {
@@ -151,6 +173,7 @@ export async function compileTurn(input: CompileTurnInput): Promise<TurnCompileR
       preRunTasks: profile.preRunTasks.filter((t) => !t.name.startsWith("web.")),
     },
     webRetrievalPlan,
+    temporalGrounding,
   };
 }
 

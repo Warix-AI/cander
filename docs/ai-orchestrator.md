@@ -197,14 +197,18 @@ UserTurn → compileTurn (delta + scan + TaskGraph + validate)
 | `lib/ai/orchestrator/task-executor.ts` | `getReadyTasks` waves; `applyPreConstraints` on per-task args; evidence tagged by node id |
 | `lib/ai/orchestrator/task-evidence-validator.ts` | Per-task satisfaction + refined query / alternate capability for retry |
 | `lib/ai/orchestrator/coverage-ledger.ts` | `readyForSynthesis` gate; partial answers for UNRESOLVED; fail-closed when all retrieval failed |
+| `lib/ai/orchestrator/temporal-grounding.ts` | Inject date/timezone/location; resolve “today/this year/last year/this semester” before search |
+| `lib/ai/orchestrator/evidence-verification.ts` | Post-retrieval entity/date/freshness/authority checks; rank and cap display citations to 1–3 |
 
 **Rules:**
 
 - No `web.search` until TaskGraph exists; queries come from task nodes (atomic), not the full user message when multi-task.
+- Time-sensitive turns force live retrieval; relative dates are resolved to calendar anchors before Exa.
+- A successful search API response is not success — tasks verify evidence before promotion to `SUCCEEDED`.
 - Independent asks → parallel RETRIEVE nodes in the same wave; explicit `dependsOn` → sequential waves.
 - Synthesis blocked until every retrieval node is terminal; partial answers name unresolved asks explicitly.
 
-**Tests:** `scripts/task-graph-exec.test.ts`, `scripts/task-evidence-validator.test.ts`, `scripts/coverage-ledger.test.ts` (+ Phase 1 / decomposition golden).
+**Tests:** `scripts/task-graph-exec.test.ts`, `scripts/task-evidence-validator.test.ts`, `scripts/coverage-ledger.test.ts`, `scripts/temporal-grounding.test.ts`, `scripts/evidence-verification.test.ts` (+ Phase 1 / decomposition golden).
 
 ## Phase 1 — graph, gate, progressive status
 

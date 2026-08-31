@@ -1,5 +1,6 @@
 /**
  * Per-task evidence validation (v4 TaskGraph refactor).
+ * API success ≠ task success — evidence must verify against the ask.
  */
 
 import type { TaskNode, TaskGraph } from "./task-graph.ts";
@@ -10,6 +11,9 @@ import {
   type ResearchCompletionResult,
 } from "../turn-environment/research-turn-plan.ts";
 import { hasUsableEvidenceSnippets } from "./grounding-validator.ts";
+import { verifyEvidenceForTask } from "./evidence-verification.ts";
+import type { TemporalGrounding } from "./temporal-grounding.ts";
+import type { TurnTaskResolution } from "../turn-environment/turn-task.ts";
 
 export type TaskValidationResult = {
   nodeId: string;
@@ -17,6 +21,7 @@ export type TaskValidationResult = {
   reason?: string;
   refinedQuery?: string;
   alternateCapability?: "web.read" | "web.search";
+  needsVerificationSearch?: boolean;
 };
 
 function evidenceForNode(node: TaskNode, evidence: TurnEvidence[]): TurnEvidence[] {
@@ -31,26 +36,13 @@ function evidenceForNode(node: TaskNode, evidence: TurnEvidence[]): TurnEvidence
   );
 }
 
-function genericAskSatisfied(node: TaskNode, items: TurnEvidence[]): boolean {
-  if (!items.length) return false;
-  const direct = items.find((e) => e.kind === "exa_synthesis" && e.content.trim().length >= 12);
-  if (direct) return true;
-  const combined = items.map((e) => e.content).join(" ");
-  if (combined.length < 40) return false;
-  if (/\d/.test(combined)) return true;
-  const qWords = (node.query ?? node.label)
-    .toLowerCase()
-    .split(/\W+/)
-    .filter((w) => w.length > 3);
-  const hit = qWords.filter((w) => combined.toLowerCase().includes(w)).length;
-  return hit >= Math.min(2, qWords.length);
-}
-
 export function validateTaskEvidence(opts: {
   node: TaskNode;
   evidence: TurnEvidence[];
   researchPlan?: ResearchTurnPlan | null;
   researchCompletion?: ResearchCompletionResult | null;
+  temporalGrounding?: TemporalGrounding | null;
+  turnTask?: TurnTaskResolution;
 }): TaskValidationResult {
   const { node } = opts;
   const nodeId = node.subtaskId ?? node.id;
@@ -63,7 +55,7 @@ export function validateTaskEvidence(opts: {
         satisfied: false,
         reason: "research_subtask_unresolved",
         refinedQuery: node.query
-          ? `${node.query} official verified source`
+          ? `${node.query} official verified source ${opts.temporalGrounding?.year ?? ""}`.trim()
           : undefined,
       };
     }
@@ -71,7 +63,53 @@ export function validateTaskEvidence(opts: {
   }
 
   const items = evidenceForNode(node, opts.evidence);
-  if (genericAskSatisfied(node, items)) {
+
+  if (opts.temporalGrounding) {
+    const verification = verifyEvidenceForTask({
+      node,
+      evidence: opts.evidence,
+      grounding: opts.temporalGrounding,
+      turnTask: opts.turnTask,
+    });
+    if (verification.verified) {
+      return { nodeId, satisfied: true };
+    }
+    if (verification.issues.includes("snippets_only") && items.some((e) => e.url)) {
+      return {
+        nodeId,
+        satisfied: false,
+        reason: "snippets_only",
+        alternateCapability: "web.read",
+        refinedQuery: verification.refinedQuery ?? node.query,
+        needsVerificationSearch: verification.needsVerificationSearch,
+      };
+    }
+    return {
+      nodeId,
+      satisfied: false,
+      reason: verification.reason ?? "evidence_unverified",
+      refinedQuery: verification.refinedQuery,
+      alternateCapability: "web.search",
+      needsVerificationSearch: verification.needsVerificationSearch,
+    };
+  }
+
+  if (!items.length) {
+    return {
+      nodeId,
+      satisfied: false,
+      reason: "no_evidence",
+      refinedQuery: node.query
+        ? `${node.query} official source verified`
+        : node.label.slice(0, 200),
+    };
+  }
+
+  const direct = items.find((e) => e.kind === "exa_synthesis" && e.content.trim().length >= 12);
+  if (direct) return { nodeId, satisfied: true };
+
+  const combined = items.map((e) => e.content).join(" ");
+  if (combined.length >= 40 && /\d/.test(combined)) {
     return { nodeId, satisfied: true };
   }
 
@@ -88,7 +126,7 @@ export function validateTaskEvidence(opts: {
   return {
     nodeId,
     satisfied: false,
-    reason: items.length ? "weak_evidence" : "no_evidence",
+    reason: "weak_evidence",
     refinedQuery: node.query
       ? `${node.query} official source verified`
       : node.label.slice(0, 200),
@@ -100,6 +138,8 @@ export function validateAllTasks(opts: {
   evidence: TurnEvidence[];
   researchPlan?: ResearchTurnPlan | null;
   researchCompletion?: ResearchCompletionResult | null;
+  temporalGrounding?: TemporalGrounding | null;
+  turnTask?: TurnTaskResolution;
 }): TaskValidationResult[] {
   return opts.graph.nodes
     .filter((n) => n.kind === "RETRIEVE" || n.kind === "RESEARCH")
@@ -110,6 +150,8 @@ export function validateAllTasks(opts: {
         evidence: opts.evidence,
         researchPlan: opts.researchPlan,
         researchCompletion: opts.researchCompletion,
+        temporalGrounding: opts.temporalGrounding,
+        turnTask: opts.turnTask,
       }),
     );
 }

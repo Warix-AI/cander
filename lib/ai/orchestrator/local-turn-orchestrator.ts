@@ -105,6 +105,10 @@ import {
   evaluateCoverage,
   shouldBlockSynthesis,
 } from "@/lib/ai/orchestrator/coverage-ledger.ts";
+import {
+  rankAndCapCitations,
+  rankProvenanceAtoms,
+} from "@/lib/ai/orchestrator/evidence-verification.ts";
 import { filterTaskFactsForTurn } from "@/lib/ai/orchestrator/evidence-hygiene.ts";
 import {
   categoryForFmRound,
@@ -677,9 +681,10 @@ function finalizeCitations(
   toolResults: AiToolCallResult[],
   atoms: ProvenanceAtom[],
 ) {
-  const fromAtoms = citationsFromAtoms(atoms);
+  const ranked = rankProvenanceAtoms(atoms);
+  const fromAtoms = rankAndCapCitations(citationsFromAtoms(ranked));
   if (fromAtoms.length) return fromAtoms;
-  return collectCitationsFromToolResults(toolResults);
+  return rankAndCapCitations(collectCitationsFromToolResults(toolResults));
 }
 
 function answerFromFmText(text: string): {
@@ -1229,6 +1234,7 @@ async function runLocalTurnOrchestratorInner(
           conversationState,
           webRetrievalPlan: profile.webRetrievalPlan,
           researchPlan: profile.researchPlan,
+          temporalGrounding: compiled.temporalGrounding,
           constraints: taskGraph.constraints,
           executeTool: ({ name, arguments: args }) =>
             executeAuthorizedTool({ name, arguments: args }),

@@ -11,6 +11,10 @@ import {
   type TurnRetrievalHints,
 } from "../../../supabase/functions/_shared/web-research-contract/retrieval-policy.ts";
 import { applyEgressPolicy } from "../orchestrator/egress-policy.ts";
+import {
+  anchorRetrievalQuery,
+  type TemporalGrounding,
+} from "../orchestrator/temporal-grounding.ts";
 
 export function turnTaskToRetrievalHints(
   turnTask: TurnTaskResolution,
@@ -37,11 +41,15 @@ export function webSearchArguments(opts: {
   query?: string;
   escalate?: string;
   deeper?: boolean;
+  temporalGrounding?: TemporalGrounding | null;
 }): Record<string, unknown> {
   const plan = opts.webRetrievalPlan;
   const carrySubject = plan?.carrySubject ?? opts.turnTask.subject != null;
   const hints = turnTaskToRetrievalHints(opts.turnTask, opts.conv, carrySubject);
-  const query =
+  if (opts.temporalGrounding?.freshnessRequired) {
+    hints.freshness = true;
+  }
+  let query =
     opts.query ??
     plan?.query ??
     buildRetrievalQuery({
@@ -51,6 +59,9 @@ export function webSearchArguments(opts: {
       operation: opts.turnTask.operation,
       carrySubject,
     });
+  if (opts.temporalGrounding) {
+    query = anchorRetrievalQuery(query, opts.temporalGrounding);
+  }
   return applyEgressPolicy({
     query,
     retrievalHints: hints,
@@ -62,10 +73,21 @@ export function webSearchArguments(opts: {
             resultCount: plan.resultCount,
             contentNeeded: plan.contentNeeded,
             domains: plan.domains,
-            location: plan.location,
+            location: plan.location ?? opts.temporalGrounding?.location ?? undefined,
+            startPublishedDate:
+              opts.temporalGrounding?.startPublishedDate ?? undefined,
+            endPublishedDate:
+              opts.temporalGrounding?.endPublishedDate ?? undefined,
           },
         }
-      : {}),
+      : opts.temporalGrounding?.startPublishedDate
+        ? {
+            retrievalPlan: {
+              startPublishedDate: opts.temporalGrounding.startPublishedDate,
+              endPublishedDate: opts.temporalGrounding.endPublishedDate,
+            },
+          }
+        : {}),
     ...(opts.escalate ? { escalate: opts.escalate } : {}),
     ...(opts.deeper ? { deeper: true } : {}),
   });

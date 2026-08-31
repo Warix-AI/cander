@@ -26,6 +26,7 @@ import type {
   ResearchTurnPlan,
   ResearchCompletionResult,
 } from "../turn-environment/research-turn-plan.ts";
+import type { TemporalGrounding } from "./temporal-grounding.ts";
 import {
   type TurnEvidence,
 } from "./evidence.ts";
@@ -45,6 +46,7 @@ export type TaskExecutorContext = {
   conversationState: ConversationTurnState;
   webRetrievalPlan?: WebRetrievalPlan;
   researchPlan?: ResearchTurnPlan | null;
+  temporalGrounding?: TemporalGrounding | null;
   constraints: TaskGraph["constraints"];
   executeTool: (opts: {
     name: string;
@@ -88,6 +90,7 @@ function buildArgsForNode(
     webRetrievalPlan: ctx.webRetrievalPlan,
     query: node.query ?? node.label,
     deeper: Boolean(ctx.conversationState.dissatisfactionSignal),
+    temporalGrounding: ctx.temporalGrounding,
   });
   return applyPreConstraints(args, ctx.constraints);
 }
@@ -159,7 +162,7 @@ async function executeReadyBatch(
     const mapped = ctx.mapToolResult(result, nodeId);
     appendEvidence(evidence, mapped.evidence);
     provenanceBatches.push(mapped.atoms);
-    nextGraph = setSubtaskStatus(nextGraph, nodeId, "SUCCEEDED");
+    // Leave RUNNING until evidence verification promotes to SUCCEEDED.
   }
 
   ctx.onGraphChange?.(nextGraph);
@@ -256,6 +259,8 @@ export async function runTaskGraphExecution(opts: {
       evidence,
       researchPlan: opts.ctx.researchPlan,
       researchCompletion,
+      temporalGrounding: opts.ctx.temporalGrounding,
+      turnTask: opts.ctx.turnTask,
     });
     graph = applyValidationResults(graph, validations);
 
