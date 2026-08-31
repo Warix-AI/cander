@@ -39,7 +39,7 @@ export function ComposerRecordingView({
   status?: "recording" | "transcribing";
   meter?: AudioMeter | null;
 }) {
-  const btn = compact ? 36 : 40;
+  const btn = compact ? 26 : 28;
   const waveH = compact ? 24 : 28;
   const isTranscribing = status === "transcribing";
 
@@ -66,10 +66,11 @@ export function ComposerRecordingView({
           label="Cancel recording"
           onClick={onCancel}
           size={btn}
+          hitSize={compact ? 36 : 40}
           className="bg-muted text-foreground hover:bg-muted/80"
           disabled={isTranscribing}
         >
-          <X className="h-4 w-4" strokeWidth={2} />
+          <X className="h-3.5 w-3.5" strokeWidth={2} />
         </CircleIconBtn>
         <div
           className={cn(
@@ -87,10 +88,11 @@ export function ComposerRecordingView({
           label={isTranscribing ? "Transcribing" : "Stop and transcribe"}
           onClick={onStop}
           size={btn}
+          hitSize={compact ? 36 : 40}
           className="bg-foreground text-background hover:bg-foreground/90"
           disabled={isTranscribing}
         >
-          <Square className="h-3 w-3 fill-current" strokeWidth={0} />
+          <Square className="h-2.5 w-2.5 fill-current" strokeWidth={0} />
         </CircleIconBtn>
       </div>
     </div>
@@ -238,6 +240,7 @@ function CircleIconBtn({
   label,
   onClick,
   size,
+  hitSize,
   className,
   disabled,
 }: {
@@ -245,9 +248,12 @@ function CircleIconBtn({
   label: string;
   onClick: () => void;
   size: number;
+  /** Invisible touch target (can exceed visual size on mobile). */
+  hitSize?: number;
   className?: string;
   disabled?: boolean;
 }) {
+  const hit = hitSize ?? size;
   return (
     <button
       type="button"
@@ -257,11 +263,18 @@ function CircleIconBtn({
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full transition-colors duration-200",
         disabled && "pointer-events-none opacity-50",
-        className,
       )}
-      style={{ width: size, height: size }}
+      style={{ width: hit, height: hit }}
     >
-      {children}
+      <span
+        className={cn(
+          "inline-flex items-center justify-center rounded-full",
+          className,
+        )}
+        style={{ width: size, height: size }}
+      >
+        {children}
+      </span>
     </button>
   );
 }

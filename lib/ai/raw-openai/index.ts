@@ -6,6 +6,10 @@ export {
   resolveOpenAIModel,
 } from "./web-search.ts";
 export {
+  isOpenAIImageGenerationEnabled,
+  openAIImageGenerationTool,
+} from "./image-generation.ts";
+export {
   composerAttachActions,
   validateUpload,
   MAX_IMAGE_BYTES,
@@ -13,3 +17,9 @@ export {
   MAX_AUDIO_BYTES,
 } from "./limits.ts";
 export { buildRawOpenAIInput } from "./build-input.ts";
+export {
+  prepareImageInput,
+  prepareDocumentInput,
+  extractGeneratedImages,
+  didOpenAIUseImageGeneration,
+} from "./media-provider.ts";

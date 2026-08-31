@@ -141,23 +141,16 @@ export function createNativeFiles(): NativeFiles {
         authorizedPathHandle: f.pathHandle,
         bytes: f.dataBase64 ? base64ToBytes(f.dataBase64) : undefined,
       }));
-      // Prefer text extraction already done in main when present
+      // Always normalize to ChatSendAttachment with actual bytes (no path-only).
       const out: ChatSendAttachment[] = [];
       for (let i = 0; i < picked.length; i++) {
-        const src = res.files[i]!;
-        if (src.text != null && !src.mime.startsWith("image/")) {
-          out.push({
-            id: `file_${Math.random().toString(36).slice(2, 10)}`,
-            type: "file",
-            filename: src.name,
-            mimeType: src.mime,
-            size: src.size,
-            text: src.text,
-          });
-          continue;
-        }
         const n = await normalizePickedFile(picked[i]!);
-        if (n) out.push(n);
+        if (!n) continue;
+        const src = res.files[i]!;
+        if (src.text && n.type === "file" && !n.text) {
+          n.text = src.text;
+        }
+        out.push(n);
       }
       return out;
     },

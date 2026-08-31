@@ -12,6 +12,10 @@ import {
   MAX_IMAGE_BYTES,
   MAX_DOCUMENT_BYTES,
 } from "../lib/ai/raw-openai/limits.ts";
+import {
+  isOpenAIImageGenerationEnabled,
+  openAIImageGenerationTool,
+} from "../lib/ai/raw-openai/image-generation.ts";
 import { isOpenAIWebSearchEnabled } from "../lib/ai/raw-openai/web-search.ts";
 import { resolveAssistantRuntimePath } from "../lib/ai/raw-openai/path.ts";
 
@@ -251,5 +255,49 @@ describe("Raw multimodal isolation", () => {
     const src = fs.readFileSync("app/api/ai/raw-openai/route.ts", "utf8");
     assert.ok(src.includes('.eq("user_id", userId)'));
     assert.ok(src.includes("403"));
+  });
+
+  it("image_generation tool is wired when flag enabled", () => {
+    const prev = process.env.OPENAI_IMAGE_GENERATION;
+    process.env.OPENAI_IMAGE_GENERATION = "1";
+    assert.equal(isOpenAIImageGenerationEnabled(), true);
+    assert.deepEqual(openAIImageGenerationTool(), { type: "image_generation" });
+    process.env.OPENAI_IMAGE_GENERATION = "0";
+    assert.equal(isOpenAIImageGenerationEnabled(), false);
+    if (prev === undefined) delete process.env.OPENAI_IMAGE_GENERATION;
+    else process.env.OPENAI_IMAGE_GENERATION = prev;
+
+    const route = fs.readFileSync("app/api/ai/raw-openai/route.ts", "utf8");
+    assert.ok(route.includes("openAIImageGenerationTool"));
+    assert.ok(route.includes("extractGeneratedImages"));
+    const toolSrc = fs.readFileSync(
+      "lib/ai/raw-openai/image-generation.ts",
+      "utf8",
+    );
+    assert.ok(toolSrc.includes('"image_generation"'));
+  });
+
+  it("normalize keeps file blob bytes for OpenAI upload", () => {
+    const src = fs.readFileSync("lib/native/normalize.ts", "utf8");
+    assert.ok(src.includes("keep bytes for OpenAI"));
+    assert.ok(src.includes("OpenAI receives actual PDF bytes via blob"));
+    assert.match(src, /size: blob\.size,\n\s*blob,/);
+  });
+
+  it("Electron files bridge always returns dataBase64 bytes", () => {
+    const src = fs.readFileSync("desktop/src/files-bridge.js", "utf8");
+    assert.ok(src.includes("Always return bytes"));
+    assert.ok(src.includes("dataBase64"));
+    assert.equal(src.includes("metadata + handle only"), false);
+  });
+
+  it("upload route supports pending attachments without message_id", () => {
+    const src = fs.readFileSync(
+      "app/api/ai/raw-openai/upload/route.ts",
+      "utf8",
+    );
+    assert.ok(src.includes('status: "pending"'));
+    assert.ok(src.includes("message_id: null"));
+    assert.ok(src.includes('status: "attached"'));
   });
 });

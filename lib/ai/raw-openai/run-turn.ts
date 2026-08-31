@@ -98,9 +98,18 @@ export async function runRawOpenAITurn(
 
   const data = (await res.json().catch(() => ({}))) as {
     content?: string;
+    images?: Array<{
+      dataUrl: string;
+      mimeType?: string;
+      name?: string;
+      attachmentId?: string;
+      openaiFileId?: string;
+    }>;
     model?: string;
     webSearchEnabled?: boolean;
     webSearchUsed?: boolean;
+    imageGenerationEnabled?: boolean;
+    imageGenerationUsed?: boolean;
     inputTokens?: number;
     outputTokens?: number;
     error?: string;
@@ -111,6 +120,7 @@ export async function runRawOpenAITurn(
   const model = data.model || "unknown";
   const webSearchEnabled = Boolean(data.webSearchEnabled);
   const webSearchUsed = Boolean(data.webSearchUsed);
+  const imageGenerationUsed = Boolean(data.imageGenerationUsed);
 
   if (!res.ok || data.error) {
     logTrace({
@@ -134,6 +144,18 @@ export async function runRawOpenAITurn(
   }
 
   const content = (data.content || "").trim();
+  const imageBlocks = (data.images || [])
+    .filter((img) => typeof img?.dataUrl === "string" && img.dataUrl.length > 0)
+    .map((img, i) => ({
+      type: "image" as const,
+      url: img.dataUrl,
+      name: img.name || `generated-${i + 1}.png`,
+      mime: img.mimeType || "image/png",
+    }));
+  const generatedAttachmentIds = (data.images || [])
+    .map((img) => img.attachmentId)
+    .filter((id): id is string => Boolean(id));
+
   logTrace({
     provider: "openai",
     mode: "raw",
@@ -151,21 +173,31 @@ export async function runRawOpenAITurn(
   report({
     phase: "generating",
     label: "RAW OPENAI",
-    detail: webSearchUsed
-      ? `${model} · web search`
-      : webSearchEnabled
-        ? `${model} · web search available`
-        : model,
+    detail: imageGenerationUsed
+      ? `${model} · image generation`
+      : webSearchUsed
+        ? `${model} · web search`
+        : webSearchEnabled
+          ? `${model} · web search available`
+          : model,
     contentDelta: content,
     contentStreaming: false,
   });
 
   return {
-    content: content || "OpenAI returned an empty response.",
+    content:
+      content ||
+      (imageBlocks.length
+        ? ""
+        : "OpenAI returned an empty response."),
     runtime: "cloud",
     offline: false,
     condensationOccurred: false,
     aiChatId: request.aiChatId,
+    ...(imageBlocks.length ? { blocks: imageBlocks } : {}),
+    ...(generatedAttachmentIds.length
+      ? { generatedAttachmentIds }
+      : {}),
   };
 }
 

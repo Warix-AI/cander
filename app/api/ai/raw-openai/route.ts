@@ -1,5 +1,5 @@
 /**
- * Server-only Raw OpenAI Responses API (multimodal).
+ * Server-only Raw OpenAI Responses API (multimodal + optional image generation).
  * OPENAI_API_KEY must never appear in client bundles.
  */
 
@@ -15,7 +15,17 @@ import {
   type ChatMsg,
 } from "@/lib/ai/raw-openai/build-input";
 import { isRawOpenAIModeAllowedOnServer } from "@/lib/ai/raw-openai/flags";
+import {
+  isOpenAIImageGenerationEnabled,
+  openAIImageGenerationTool,
+} from "@/lib/ai/raw-openai/image-generation";
 import { MAX_ATTACHMENTS_PER_TURN } from "@/lib/ai/raw-openai/limits";
+import {
+  createOpenAIMediaClient,
+  didOpenAIUseImageGeneration,
+  extractGeneratedImages,
+  persistGeneratedImageFile,
+} from "@/lib/ai/raw-openai/media-provider";
 import {
   didOpenAIUseWebSearch,
   isOpenAIWebSearchEnabled,
@@ -33,6 +43,10 @@ type Body = {
   threadId?: string | null;
   title?: string;
 };
+
+function newAttachmentId(): string {
+  return `att_${crypto.randomUUID().replace(/-/g, "")}`;
+}
 
 export async function POST(request: Request) {
   const started = Date.now();
@@ -83,14 +97,20 @@ export async function POST(request: Request) {
     : [];
 
   let userId: string | null = null;
-  const needsAuth = attachmentIds.length > 0 || Boolean(body.threadId);
+  const imageGenEnabled = isOpenAIImageGenerationEnabled();
+  const needsAuth =
+    attachmentIds.length > 0 || Boolean(body.threadId) || imageGenEnabled;
   if (needsAuth) {
     const auth = await requireBearerUser(request);
-    if (attachmentIds.length && !auth.ok) {
-      return NextResponse.json(
-        { error: auth.error, latencyMs: Date.now() - started },
-        { status: auth.status },
-      );
+    if ((attachmentIds.length || imageGenEnabled) && !auth.ok) {
+      // Image gen persistence needs auth when possible; allow unauthenticated
+      // text-only if no attachments and gen will skip DB persist.
+      if (attachmentIds.length && !auth.ok) {
+        return NextResponse.json(
+          { error: auth.error, latencyMs: Date.now() - started },
+          { status: auth.status },
+        );
+      }
     }
     if (auth.ok) {
       userId = auth.user.id;
@@ -111,6 +131,9 @@ export async function POST(request: Request) {
     "You are a helpful assistant. Answer clearly using the conversation history.";
 
   const attachmentRefs: AttachmentRef[] = [];
+  const userMessageIds = new Set(
+    messages.filter((m) => m.role === "user" && m.id).map((m) => m.id!),
+  );
 
   if (userId) {
     try {
@@ -136,7 +159,11 @@ export async function POST(request: Request) {
 
         if (error) {
           return NextResponse.json(
-            { error: "Failed to load attachments.", latencyMs: Date.now() - started },
+            {
+              error: "Failed to load attachments.",
+              detail: error.message.slice(0, 200),
+              latencyMs: Date.now() - started,
+            },
             { status: 500 },
           );
         }
@@ -168,18 +195,33 @@ export async function POST(request: Request) {
           .select("id, openai_file_id, attachment_type, message_id")
           .eq("user_id", userId)
           .eq("thread_id", body.threadId)
-          .not("message_id", "is", null);
+          .not("openai_file_id", "is", null)
+          .order("created_at", { ascending: true });
 
         const currentSet = new Set(attachmentIds);
         for (const row of prior || []) {
           if (currentSet.has(row.id)) continue;
           if (row.attachment_type === "audio") continue;
-          attachmentRefs.push({
-            id: row.id,
-            openaiFileId: row.openai_file_id,
-            attachmentType: row.attachment_type as "image" | "document",
-            messageId: row.message_id,
-          });
+          const linkedToUser =
+            Boolean(row.message_id) && userMessageIds.has(row.message_id);
+          // User-uploaded files stay on their originating user turn.
+          // Generated / orphan attachments are available on the latest turn
+          // so follow-ups ("make it darker") can reference them.
+          if (linkedToUser) {
+            attachmentRefs.push({
+              id: row.id,
+              openaiFileId: row.openai_file_id,
+              attachmentType: row.attachment_type as "image" | "document",
+              messageId: row.message_id,
+            });
+          } else {
+            attachmentRefs.push({
+              id: row.id,
+              openaiFileId: row.openai_file_id,
+              attachmentType: row.attachment_type as "image" | "document",
+              forCurrentTurn: true,
+            });
+          }
         }
       }
     } catch (e) {
@@ -203,11 +245,15 @@ export async function POST(request: Request) {
     fallbackImageUrls: fallbackImages,
   });
 
-  const client = new OpenAI({ apiKey });
+  const tools: OpenAI.Responses.Tool[] = [];
+  if (webSearchEnabled) tools.push({ type: "web_search" });
+  if (imageGenEnabled) tools.push(openAIImageGenerationTool());
+
+  const client = createOpenAIMediaClient(apiKey);
   const createParams: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
     model,
     input: input as OpenAI.Responses.ResponseInput,
-    ...(webSearchEnabled ? { tools: [{ type: "web_search" as const }] } : {}),
+    ...(tools.length ? { tools } : {}),
   };
 
   try {
@@ -218,9 +264,87 @@ export async function POST(request: Request) {
       extractText(response) ||
       "";
 
+    const generated = extractGeneratedImages(response.output);
+    const images: Array<{
+      dataUrl: string;
+      mimeType: string;
+      name: string;
+      attachmentId?: string;
+      openaiFileId?: string;
+    }> = [];
+
+    if (generated.length && userId) {
+      const admin = createSupabaseAdminClient();
+      let threadIdForRow: string | null = null;
+      if (body.threadId) {
+        const { data } = await admin
+          .from("threads")
+          .select("id")
+          .eq("id", body.threadId)
+          .maybeSingle();
+        threadIdForRow = data?.id ?? null;
+      }
+      for (let i = 0; i < generated.length; i++) {
+        const g = generated[i]!;
+        const name = `generated-${i + 1}.png`;
+        try {
+          const persisted = await persistGeneratedImageFile(
+            client,
+            g.dataUrl,
+            name,
+          );
+          const id = newAttachmentId();
+          const { error } = await admin.from("chat_attachments").insert({
+            id,
+            user_id: userId,
+            thread_id: threadIdForRow,
+            message_id: null,
+            filename: name,
+            mime_type: persisted.mimeType,
+            size: persisted.size,
+            attachment_type: "image",
+            openai_file_id: persisted.openaiFileId,
+            status: "pending",
+          });
+          images.push({
+            dataUrl: g.dataUrl,
+            mimeType: g.mimeType,
+            name,
+            ...(error
+              ? {}
+              : {
+                  attachmentId: id,
+                  openaiFileId: persisted.openaiFileId,
+                }),
+          });
+        } catch (e) {
+          console.log("[RAW_OPENAI_TRACE]", {
+            mode: "image_gen_persist",
+            success: false,
+            error: e instanceof Error ? e.message.slice(0, 200) : "fail",
+          });
+          images.push({
+            dataUrl: g.dataUrl,
+            mimeType: g.mimeType,
+            name,
+          });
+        }
+      }
+    } else {
+      for (let i = 0; i < generated.length; i++) {
+        const g = generated[i]!;
+        images.push({
+          dataUrl: g.dataUrl,
+          mimeType: g.mimeType,
+          name: `generated-${i + 1}.png`,
+        });
+      }
+    }
+
     const usage = response.usage;
     const latencyMs = Date.now() - started;
     const webSearchUsed = didOpenAIUseWebSearch(response.output);
+    const imageGenerationUsed = didOpenAIUseImageGeneration(response.output);
 
     console.log("[RAW_OPENAI_TRACE]", {
       provider: "openai",
@@ -228,6 +352,9 @@ export async function POST(request: Request) {
       model,
       webSearchEnabled,
       webSearchUsed,
+      imageGenerationEnabled: imageGenEnabled,
+      imageGenerationUsed,
+      generatedImageCount: images.length,
       attachmentCount: attachmentRefs.filter((a) => a.forCurrentTurn).length,
       threadMessageCount: messages.length,
       inputTokens: usage?.input_tokens,
@@ -239,9 +366,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       content,
+      images: images.length ? images : undefined,
       model,
       webSearchEnabled,
       webSearchUsed,
+      imageGenerationEnabled: imageGenEnabled,
+      imageGenerationUsed,
       inputTokens: usage?.input_tokens,
       outputTokens: usage?.output_tokens,
       latencyMs,
@@ -255,6 +385,8 @@ export async function POST(request: Request) {
       model,
       webSearchEnabled,
       webSearchUsed: false,
+      imageGenerationEnabled: imageGenEnabled,
+      imageGenerationUsed: false,
       threadMessageCount: messages.length,
       latencyMs,
       success: false,
@@ -266,6 +398,8 @@ export async function POST(request: Request) {
         model,
         webSearchEnabled,
         webSearchUsed: false,
+        imageGenerationEnabled: imageGenEnabled,
+        imageGenerationUsed: false,
         latencyMs,
       },
       { status: 502 },

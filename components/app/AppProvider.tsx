@@ -1916,6 +1916,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                       })),
                     ];
               for (const att of toUpload) {
+                if (att.type === "file" && att.blob) {
+                  const uploaded = await uploadRawOpenAIAttachment({
+                    file: att.blob,
+                    filename: att.filename,
+                    mimeType: att.mimeType,
+                    threadId: activeId,
+                    attachmentType: "document",
+                  });
+                  attachmentIds.push(uploaded.id);
+                  continue;
+                }
                 if (att.type === "file" && !att.blob && att.text) {
                   // text-only fallback: upload as .txt
                   const blob = new Blob([att.text], { type: "text/plain" });
@@ -2104,6 +2115,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 result.citations,
                 result.blocks,
               );
+              if (
+                result.generatedAttachmentIds?.length &&
+                isRawOpenAIModeEnabled()
+              ) {
+                void linkRawOpenAIAttachments({
+                  attachmentIds: result.generatedAttachmentIds,
+                  messageId: assistantId,
+                  threadId: activeId,
+                });
+              }
               if (voiceActive) {
                 speakText(sanitizeAssistantVisibleText(result.content));
               }
@@ -2117,8 +2138,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 done ? result.citations : undefined,
                 done ? result.blocks : undefined,
               );
-              if (done && voiceActive) {
-                speakText(sanitizeAssistantVisibleText(result.content));
+              if (done) {
+                if (
+                  result.generatedAttachmentIds?.length &&
+                  isRawOpenAIModeEnabled()
+                ) {
+                  void linkRawOpenAIAttachments({
+                    attachmentIds: result.generatedAttachmentIds,
+                    messageId: assistantId,
+                    threadId: activeId,
+                  });
+                }
+                if (voiceActive) {
+                  speakText(sanitizeAssistantVisibleText(result.content));
+                }
               }
             });
           })

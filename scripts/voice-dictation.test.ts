@@ -32,10 +32,25 @@ describe("Dictation isolation", () => {
     const src = fs.readFileSync("lib/voice/audio-meter.ts", "utf8");
     assert.ok(src.includes("AnalyserNode") || src.includes("createAnalyser"));
     assert.ok(src.includes("getByteTimeDomainData"));
+    assert.ok(src.includes("VOICE_WAVEFORM_STEP_MS"));
+    assert.match(src, /VOICE_WAVEFORM_STEP_MS\s*=\s*100/);
     assert.equal(src.includes("OPENAI"), false);
     assert.equal(src.includes("transcribe"), false);
   });
 
+  it("waveform visual scroll is stepped, not per-frame history", () => {
+    const src = fs.readFileSync("lib/voice/audio-meter.ts", "utf8");
+    assert.ok(src.includes("lastCommit"));
+    assert.ok(src.includes("stepMs"));
+    assert.ok(src.includes("requestAnimationFrame"));
+  });
+
+  it("dictation cancel/stop controls are ~30% smaller (~28px)", () => {
+    const src = fs.readFileSync("components/shell/ComposerVoice.tsx", "utf8");
+    assert.ok(src.includes("ComposerRecordingView"));
+    assert.match(src, /const btn = compact \? 26 : 28/);
+    assert.ok(src.includes("hitSize"));
+  });
   it("waveform uses canvas + meter history", () => {
     const src = fs.readFileSync(
       "components/shell/VoiceDictationWaveform.tsx",

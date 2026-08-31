@@ -1,20 +1,58 @@
 /**
  * POST /api/ai/raw-openai/upload
- * Multipart file → OpenAI Files API → chat_attachments row.
+ * Multipart file → OpenAI Files API → chat_attachments row (pending until linked).
  */
 
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
-import { toFile } from "openai/uploads";
 import { assertThreadOwnedByUser, requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import { isRawOpenAIModeAllowedOnServer } from "@/lib/ai/raw-openai/flags";
 import { validateUpload } from "@/lib/ai/raw-openai/limits";
+import {
+  createOpenAIMediaClient,
+  uploadFileToOpenAI,
+} from "@/lib/ai/raw-openai/media-provider";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
 function newId(): string {
   return `att_${crypto.randomUUID().replace(/-/g, "")}`;
+}
+
+function asUploadBlob(
+  value: FormDataEntryValue | null,
+): { blob: Blob; filename: string; mime: string } | null {
+  if (!value || typeof value === "string") return null;
+  // Node/undici may yield File or Blob depending on runtime.
+  if (!(value instanceof Blob)) return null;
+  const filename =
+    value instanceof File && value.name
+      ? value.name
+      : "upload";
+  const mime =
+    (value.type && value.type.trim()) || "application/octet-stream";
+  return { blob: value, filename, mime };
+}
+
+/** Only store thread_id when the threads row exists (avoids orphan refs). */
+async function resolvePersistedThreadId(
+  threadId: string | null,
+  userId: string,
+): Promise<string | null> {
+  if (!threadId) return null;
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data } = await admin
+      .from("threads")
+      .select("id, created_by")
+      .eq("id", threadId)
+      .maybeSingle();
+    if (!data) return null;
+    if (data.created_by && data.created_by !== userId) return null;
+    return data.id as string;
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
@@ -53,19 +91,22 @@ export async function POST(request: Request) {
     );
   }
 
-  const file = form.get("file");
-  if (!(file instanceof File)) {
+  const parsed = asUploadBlob(form.get("file"));
+  if (!parsed) {
     return NextResponse.json(
-      { error: "file field required.", latencyMs: Date.now() - started },
+      { error: "file field required (bytes).", latencyMs: Date.now() - started },
       { status: 400 },
     );
   }
 
-  const threadId = String(form.get("threadId") || "").trim() || null;
+  const requestedThreadId = String(form.get("threadId") || "").trim() || null;
   const hint = String(form.get("attachmentType") || form.get("type") || "").trim();
-  const mime = file.type || "application/octet-stream";
+  const mime = parsed.mime;
 
-  const ownership = await assertThreadOwnedByUser(threadId, auth.user.id);
+  const ownership = await assertThreadOwnedByUser(
+    requestedThreadId,
+    auth.user.id,
+  );
   if (!ownership.ok) {
     return NextResponse.json(
       { error: ownership.error, latencyMs: Date.now() - started },
@@ -73,7 +114,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const validated = validateUpload({ mime, size: file.size, hint });
+  const validated = validateUpload({
+    mime,
+    size: parsed.blob.size,
+    hint,
+  });
   if (!validated.ok) {
     return NextResponse.json(
       { error: validated.error, latencyMs: Date.now() - started },
@@ -81,7 +126,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Dictation audio should use /transcribe — reject audio here
   if (validated.kind === "audio") {
     return NextResponse.json(
       {
@@ -93,24 +137,33 @@ export async function POST(request: Request) {
   }
 
   try {
-    const client = new OpenAI({ apiKey });
-    const bytes = Buffer.from(await file.arrayBuffer());
-    const openaiFile = await client.files.create({
-      file: await toFile(bytes, file.name || "upload", { type: mime }),
-      purpose: "user_data",
+    const bytes = Buffer.from(await parsed.blob.arrayBuffer());
+    const client = createOpenAIMediaClient(apiKey);
+    const { openaiFileId } = await uploadFileToOpenAI(client, {
+      filename: parsed.filename,
+      mimeType: mime,
+      byteLength: bytes.byteLength,
+      bytes,
+      type: validated.kind,
     });
+
+    const persistedThreadId = await resolvePersistedThreadId(
+      requestedThreadId,
+      auth.user.id,
+    );
 
     const id = newId();
     const row = {
       id,
       user_id: auth.user.id,
-      thread_id: threadId,
+      thread_id: persistedThreadId,
       message_id: null as string | null,
-      filename: file.name || "upload",
+      filename: parsed.filename || "upload",
       mime_type: mime,
-      size: file.size,
+      size: bytes.byteLength,
       attachment_type: validated.kind,
-      openai_file_id: openaiFile.id,
+      openai_file_id: openaiFileId,
+      status: "pending" as const,
     };
 
     const admin = createSupabaseAdminClient();
@@ -120,11 +173,15 @@ export async function POST(request: Request) {
         mode: "upload",
         success: false,
         error: error.message.slice(0, 300),
+        code: error.code,
+        details: error.details?.slice?.(0, 200),
         latencyMs: Date.now() - started,
       });
       return NextResponse.json(
         {
           error: "Failed to persist attachment metadata.",
+          detail: error.message.slice(0, 300),
+          code: error.code,
           latencyMs: Date.now() - started,
         },
         { status: 500 },
@@ -135,17 +192,19 @@ export async function POST(request: Request) {
       mode: "upload",
       success: true,
       attachmentType: validated.kind,
-      size: file.size,
+      size: bytes.byteLength,
+      threadPersisted: Boolean(persistedThreadId),
       latencyMs: Date.now() - started,
     });
 
     return NextResponse.json({
       id,
-      openaiFileId: openaiFile.id,
+      openaiFileId,
       attachmentType: validated.kind,
       filename: row.filename,
       mimeType: mime,
-      size: file.size,
+      size: bytes.byteLength,
+      status: "pending",
       latencyMs: Date.now() - started,
     });
   } catch (e) {
@@ -163,7 +222,7 @@ export async function POST(request: Request) {
   }
 }
 
-/** PATCH: link attachment rows to a message_id after send. */
+/** PATCH: link attachment rows to a message_id after send (pending → attached). */
 export async function PATCH(request: Request) {
   const started = Date.now();
   const auth = await requireBearerUser(request);
@@ -192,16 +251,23 @@ export async function PATCH(request: Request) {
 
   try {
     const admin = createSupabaseAdminClient();
+    const persistedThreadId = body.threadId
+      ? await resolvePersistedThreadId(body.threadId, auth.user.id)
+      : null;
     const { error } = await admin
       .from("chat_attachments")
       .update({
         message_id: messageId,
-        ...(body.threadId ? { thread_id: body.threadId } : {}),
+        status: "attached",
+        ...(persistedThreadId ? { thread_id: persistedThreadId } : {}),
       })
       .in("id", ids)
       .eq("user_id", auth.user.id);
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: 500 },
+      );
     }
     return NextResponse.json({ ok: true, linked: ids.length });
   } catch (e) {

@@ -87,6 +87,8 @@ export type AiGenerateResult = {
   aiChatId?: string | null;
   /** Optional structured chat blocks (semantic response renderer). */
   blocks?: import("@/lib/types").ChatBlock[];
+  /** Raw OpenAI generated-image attachment ids to link to the assistant message. */
+  generatedAttachmentIds?: string[];
   /** Durable web sources for Sources UI (not visible answer text). */
   citations?: Array<{
     id: string;

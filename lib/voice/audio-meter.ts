@@ -1,12 +1,17 @@
 /**
  * Local microphone amplitude metering via Web Audio AnalyserNode.
  * Does not send data to OpenAI — UI only.
+ *
+ * Amplitude is sampled every animation frame; visual history advances
+ * only every VOICE_WAVEFORM_STEP_MS (~3x slower scroll than per-frame).
  */
 
+export const VOICE_WAVEFORM_STEP_MS = 100;
+
 export type AudioMeter = {
-  /** Latest smoothed RMS 0..1 */
+  /** Latest smoothed RMS 0..1 (updates every frame) */
   getLevel: () => number;
-  /** Rolling history (oldest → newest), values 0..1 */
+  /** Rolling history (oldest → newest), values 0..1 — advances every STEP_MS */
   getHistory: () => Float32Array;
   /** Stop AudioContext + disconnect nodes */
   stop: () => void;
@@ -26,19 +31,23 @@ function rmsFromTimeDomain(data: Uint8Array): number {
 
 /**
  * Attach AnalyserNode to an existing MediaStream.
- * Call startLoop from the consumer (rAF) via pull getters, or use the
- * optional onFrame callback when provided.
  */
 export function createAudioMeter(
   stream: MediaStream,
-  opts?: { historyLen?: number; onFrame?: (level: number) => void },
+  opts?: {
+    historyLen?: number;
+    stepMs?: number;
+    onFrame?: (level: number) => void;
+  },
 ): AudioMeter {
   const historyLen = opts?.historyLen ?? HISTORY_LEN;
+  const stepMs = opts?.stepMs ?? VOICE_WAVEFORM_STEP_MS;
   const history = new Float32Array(historyLen);
   let write = 0;
   let filled = 0;
   let smoothed = 0;
   let stopped = false;
+  let lastCommit = 0;
 
   const AudioCtx =
     window.AudioContext ||
@@ -62,7 +71,7 @@ export function createAudioMeter(
   const buf = new Uint8Array(analyser.fftSize);
   let raf = 0;
 
-  const tick = () => {
+  const tick = (now: number) => {
     if (stopped) return;
     analyser.getByteTimeDomainData(buf);
     const raw = rmsFromTimeDomain(buf);
@@ -71,9 +80,19 @@ export function createAudioMeter(
     const clamped = Math.min(1, gated);
     smoothed = smoothed * SMOOTH + clamped * (1 - SMOOTH);
 
-    history[write] = smoothed;
-    write = (write + 1) % historyLen;
-    if (filled < historyLen) filled += 1;
+    // Always refresh the rightmost committed sample so loudness reacts immediately
+    // without advancing the scroll every frame.
+    if (filled > 0) {
+      const lastIdx = (write - 1 + historyLen) % historyLen;
+      history[lastIdx] = smoothed;
+    }
+
+    if (!lastCommit || now - lastCommit >= stepMs) {
+      history[write] = smoothed;
+      write = (write + 1) % historyLen;
+      if (filled < historyLen) filled += 1;
+      lastCommit = now;
+    }
 
     opts?.onFrame?.(smoothed);
     raf = requestAnimationFrame(tick);

@@ -112,7 +112,7 @@ export async function normalizePickedFile(
     let text: string | undefined;
     try {
       if (mime === "application/pdf") {
-        // Keep name only for PDF in P0 — full extract can be added later.
+        // Preview label only — OpenAI receives actual PDF bytes via blob.
         text = `[PDF attached: ${name}]`;
       } else {
         text = await blobToText(blob);
@@ -129,17 +129,19 @@ export async function normalizePickedFile(
       filename: name,
       mimeType: mime,
       size: blob.size,
-      text,
+      blob,
+      ...(text ? { text } : {}),
     };
   }
 
-  // Unknown binary — attach as file without text
+  // Unknown binary — keep bytes for OpenAI Files upload
   return {
     id: newId("file"),
     type: "file",
     filename: name,
     mimeType: mime,
     size: blob.size,
+    blob,
   };
 }
 

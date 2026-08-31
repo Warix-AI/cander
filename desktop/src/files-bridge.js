@@ -8,7 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
 
-const MAX_READ_BYTES = 2_500_000;
+const MAX_READ_BYTES = 25 * 1024 * 1024;
 const MAX_TEXT_BYTES = 200_000;
 const authorizedHandles = new Map(); // handle -> absolute path
 
@@ -36,6 +36,9 @@ function sniffMime(filePath) {
     ".md": "text/markdown",
     ".csv": "text/csv",
     ".json": "application/json",
+    ".doc": "application/msword",
+    ".docx":
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   };
   return map[ext] || "application/octet-stream";
 }
@@ -77,25 +80,30 @@ async function readAuthorizedFile(absPath) {
     };
   }
 
+  // Always return bytes for OpenAI upload — never path-only metadata.
+  const buf = await fs.promises.readFile(absPath);
+  const dataBase64 = buf.toString("base64");
+
   if (isTextMime(mime, absPath) && st.size <= MAX_TEXT_BYTES) {
-    const text = await fs.promises.readFile(absPath, "utf8");
+    const text = buf.toString("utf8").slice(0, MAX_TEXT_BYTES);
     return {
       name,
       mime,
       size: st.size,
       pathHandle: handle,
-      text: text.slice(0, MAX_TEXT_BYTES),
+      text,
+      dataBase64,
     };
   }
 
-  // Binary / PDF — metadata + handle only (or small base64 if tiny)
-  if (st.size <= MAX_READ_BYTES && mime === "application/pdf") {
+  if (mime === "application/pdf") {
     return {
       name,
       mime,
       size: st.size,
       pathHandle: handle,
       text: `[PDF attached: ${name}]`,
+      dataBase64,
     };
   }
 
@@ -104,6 +112,7 @@ async function readAuthorizedFile(absPath) {
     mime,
     size: st.size,
     pathHandle: handle,
+    dataBase64,
   };
 }
 
