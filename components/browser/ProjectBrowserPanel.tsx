@@ -1103,8 +1103,9 @@ function DesktopProjectToolsMenu({
   return (
     <Dropdown
       align="end"
+      placement="top"
       matchTrigger={false}
-      menuClassName="min-w-[14rem] z-50"
+      menuClassName="min-w-[14rem] z-[320]"
       trigger={({ toggle }) => (
         <RailBtn label="Project tools" onClick={toggle}>
           <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
@@ -1339,8 +1340,9 @@ function AddTabMenu({
   return (
     <Dropdown
       align="start"
+      placement="top"
       matchTrigger={false}
-      menuClassName="min-w-[14rem] max-h-[min(20rem,50vh)] overflow-y-auto"
+      menuClassName="min-w-[14rem] max-h-[min(20rem,50vh)] overflow-y-auto z-[320]"
       trigger={({ toggle }) => (
         <BrowserChromeTooltip label="New tab">
           <button

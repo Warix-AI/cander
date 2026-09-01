@@ -32,6 +32,11 @@ export function getBrowserSurfaceAdapter(): BrowserSurfaceAdapter {
   return cached;
 }
 
+/** Electron / Capacitor tabs render above DOM; web-pwa uses an iframe in the panel. */
+export function usesNativeBrowserSurface(): boolean {
+  return getBrowserSurfaceAdapter().id !== "web-pwa";
+}
+
 export type {
   BrowserSurfaceAdapter,
   BrowserSurfaceBounds,
