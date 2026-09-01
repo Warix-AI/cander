@@ -16,30 +16,16 @@ export function panelChoiceSuggestions(): PanelChoice[] {
     {
       id: "build",
       label: "Build",
-      hint: "Start a project from this chat",
+      hint: "Start a build with this chat",
       space: "build",
       icon: Hammer,
     },
     {
       id: "explore",
       label: "Explore",
-      hint: "Open a search session from this chat",
+      hint: "Start a search with this chat",
       space: "research",
       icon: Search,
     },
-  ];
-}
-
-export type PanelDefaultChoice = {
-  id: string;
-  label: string;
-  space: SpaceId;
-};
-
-/** Set the current draft as the sidebar default for a space. */
-export function panelDefaultChatChoices(): PanelDefaultChoice[] {
-  return [
-    { id: "default-build", label: "Build", space: "build" },
-    { id: "default-explore", label: "Explore", space: "research" },
   ];
 }

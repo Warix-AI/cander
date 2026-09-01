@@ -42,8 +42,11 @@
               : "light";
           }
           document.documentElement.dataset.theme = theme;
+          document.documentElement.style.backgroundColor =
+            theme === "dark" ? "#000000" : "#ffffff";
         } catch (e) {
           document.documentElement.dataset.theme = "light";
+          document.documentElement.style.backgroundColor = "#ffffff";
         }
       })();
     </script>

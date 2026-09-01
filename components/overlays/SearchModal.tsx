@@ -12,6 +12,7 @@ import {
   SquarePen,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { NativeOverlayGate } from "@/components/browser/NativeOverlayGate";
 import { Modal } from "@/components/ui/Modal";
 import {
   connectors,
@@ -115,14 +116,14 @@ export function SearchModal() {
       {
         id: "action-new-build",
         title: "New Build",
-        meta: "Apps, sites, and code",
+        meta: "Start a build with this chat",
         group: "Actions",
         run: () => newChat("build"),
       },
       {
         id: "action-new-research",
         title: "New Explore",
-        meta: "Sources, findings, reports",
+        meta: "Start a search with this chat",
         group: "Actions",
         run: () => newChat("research"),
       },
@@ -246,12 +247,15 @@ export function SearchModal() {
   };
 
   return (
-    <Modal
-      open={open}
-      onClose={closeOverlay}
-      labelledBy="search-title"
-      className="flex w-[min(40rem,calc(100vw-2rem))] flex-col"
-    >
+    <>
+      <NativeOverlayGate open={open} />
+      <Modal
+        open={open}
+        onClose={closeOverlay}
+        labelledBy="search-title"
+        backdropClassName="bg-black/25"
+        className="flex w-[min(40rem,calc(100vw-2rem))] flex-col"
+      >
       <div className="relative border-b border-border">
         <Search
           className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -325,6 +329,7 @@ export function SearchModal() {
         )}
       </div>
     </Modal>
+    </>
   );
 }
 

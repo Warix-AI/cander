@@ -383,7 +383,7 @@ type AppContextValue = {
   setVoiceAnchor: (anchor: VoiceAnchor) => void;
   openProject: (
     id: string,
-    opts?: { migrateFromThreadId?: string | null },
+    opts?: { migrateFromThreadId?: string | null; landOnPanel?: boolean },
   ) => string | null;
   openProjectChat: (id: string) => void;
   /** Navigate to a typed entity ref from any space dashboard. */
@@ -3207,7 +3207,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const openProject = useCallback((
     id: string,
-    opts?: { migrateFromThreadId?: string | null },
+    opts?: { migrateFromThreadId?: string | null; landOnPanel?: boolean },
   ): string | null => {
     const ctx = { workspaceId, actorId: actor.id };
     let match:
@@ -3299,9 +3299,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (space === "build") setBuildTool("preview");
     if (space === "research") setResearchTool("browser");
     setPanelMode("split");
-    // Mobile: land on project chat first (Build/Explore via the labeled arrow).
-    requestMobileSurfaceEnter("forward");
-    setMobileSurface("chat");
+    if (opts?.landOnPanel) {
+      setMobileSurface("panel");
+    } else {
+      // Mobile: land on project chat first (Build/Explore via the labeled arrow).
+      requestMobileSurfaceEnter("forward");
+      setMobileSurface("chat");
+    }
     pushTarget({
       view: "space",
       spaceId: space,
@@ -3340,9 +3344,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           summary: snap?.snippet ?? "",
         },
       );
-      openProject(project.id, { migrateFromThreadId: sourceThreadId });
+      openProject(project.id, {
+        migrateFromThreadId: sourceThreadId,
+        landOnPanel: true,
+      });
       if (space === "build") setBuildTool("preview");
-      if (space === "research") setResearchTool("sources");
+      if (space === "research") setResearchTool("browser");
     },
     [workspaceId, actor.id, threads, openProject],
   );

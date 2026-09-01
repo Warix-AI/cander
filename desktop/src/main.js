@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, Menu, session, ipcMain } = require("electron");
+const { app, BrowserWindow, shell, Menu, session, ipcMain, nativeTheme } = require("electron");
 const path = require("path");
 const foundationModels = require("./foundation-models-bridge");
 const browserSurface = require("./browser-surface");
@@ -23,6 +23,10 @@ let mainWindow = null;
 /** @type {string} */
 let activeUrl = START_URL;
 let loadAttempts = 0;
+
+function shellBackgroundColor() {
+  return nativeTheme.shouldUseDarkColors ? "#000000" : "#ffffff";
+}
 
 function markDesktopShell() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -54,8 +58,39 @@ function loadErrorPage(code, desc, failedUrl) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Cander</title>
+  <script>
+    (function () {
+      try {
+        var theme = null;
+        var a = localStorage.getItem("courier-appearance-v2");
+        if (a) {
+          try {
+            var j = JSON.parse(a);
+            if (j.colorMode === "dark" || j.colorMode === "dark-charcoal" || j.colorMode === "dark-blue") theme = "dark";
+            else if (j.colorMode === "light" || j.colorMode === "light-blue") theme = "light";
+            else if (typeof j.color === "number") theme = j.color < 45 ? "light" : "dark";
+          } catch (e) {}
+        }
+        if (!theme) {
+          var t = localStorage.getItem("theme");
+          theme = t === "dark" ? "dark" : t === "light" ? "light" : null;
+        }
+        if (!theme) {
+          theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.dataset.theme = theme;
+      } catch (e) {
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  </script>
   <style>
     html, body { margin: 0; height: 100%; font-family: ui-sans-serif, system-ui, sans-serif; background: #fafafa; color: #111; }
+    html[data-theme="dark"], html[data-theme="dark"] body { background: #000; color: #f5f5f5; }
+    html[data-theme="dark"] p { color: #aaa; }
+    html[data-theme="dark"] code { color: #ccc; }
+    html[data-theme="dark"] button.primary, html[data-theme="dark"] a.primary { background: #fff; color: #111; }
+    html[data-theme="dark"] button.secondary, html[data-theme="dark"] a.secondary { background: #222; color: #f5f5f5; }
     body { display: grid; place-items: center; -webkit-app-region: drag; }
     main { max-width: 28rem; padding: 2rem; text-align: center; -webkit-app-region: no-drag; }
     h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.5rem; letter-spacing: -0.02em; }
@@ -121,7 +156,7 @@ async function createWindow() {
     minWidth: 1024,
     minHeight: 640,
     title: "",
-    backgroundColor: "#ffffff",
+    backgroundColor: shellBackgroundColor(),
     show: false,
     // macOS: keep the system traffic lights; hide only the title-bar chrome.
     ...(isMac
@@ -329,6 +364,10 @@ function buildMenu() {
 
 app.whenReady().then(() => {
   app.setName(APP_NAME);
+  nativeTheme.on("updated", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.setBackgroundColor(shellBackgroundColor());
+  });
   if (process.platform === "darwin" && app.dock) {
     app.dock.setIcon(ICON_PATH);
   }

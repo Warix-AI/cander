@@ -12,6 +12,7 @@ export function Modal({
   children,
   lockScroll = true,
   edgeToEdge = false,
+  backdropClassName = "bg-black/72",
 }: {
   open: boolean;
   onClose: () => void;
@@ -20,6 +21,7 @@ export function Modal({
   children: ReactNode;
   lockScroll?: boolean;
   edgeToEdge?: boolean;
+  backdropClassName?: string;
 }) {
   const shell = useShellStyle();
   const floating = shell === "floating";
@@ -59,7 +61,7 @@ export function Modal({
       <button
         type="button"
         aria-label="Close dialog"
-        className="absolute inset-0 bg-black/72"
+        className={cn("absolute inset-0", backdropClassName)}
         onClick={onClose}
       />
       <div

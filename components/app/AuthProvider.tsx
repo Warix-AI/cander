@@ -13,7 +13,10 @@ import {
   validateSupabaseSession,
 } from "@/lib/supabase/auth-store";
 import { hydrateMemberFromSupabase } from "@/lib/supabase/hydrate-member";
-import { setSessionReady } from "@/lib/session-ready";
+import {
+  hasCachedSupabaseSession,
+  setSessionReady,
+} from "@/lib/session-ready";
 
 async function reconcileSupabaseUser(user: User) {
   const complete = await hasCompletedOnboarding(user.id);
@@ -34,7 +37,7 @@ async function reconcileSupabaseUser(user: User) {
 
 /** Keeps Supabase session in sync with the client auth store + member roster. */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const hadUser = useRef(false);
+  const hadUser = useRef(hasCachedSupabaseSession());
   const reconciling = useRef<string | null>(null);
 
   useEffect(() => {
@@ -42,7 +45,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSessionReady(true);
       return;
     }
-    setSessionReady(false);
+    if (!hasCachedSupabaseSession()) {
+      setSessionReady(false);
+    }
     const stopAuth = initSupabaseAuthSubscription();
 
     const reconcileIfNeeded = (user: User | null) => {
@@ -62,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (reconciling.current === user.id) return;
       reconciling.current = user.id;
       hadUser.current = true;
-      if (entering) setSessionReady(false);
+      if (entering && !hasCachedSupabaseSession()) setSessionReady(false);
       void reconcileSupabaseUser(user)
         .catch((err) => {
           console.warn("[cander] session reconcile failed", err);
