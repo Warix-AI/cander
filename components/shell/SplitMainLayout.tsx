@@ -6,7 +6,11 @@ import { TopRail } from "@/components/shell/TopRail";
 import { RightPanelToggleDock } from "@/components/shell/PanelToggle";
 import { MobileContentPager } from "@/components/shell/MobileContentPager";
 import { useApp } from "@/components/app/AppProvider";
-import { canUseRightPanel } from "@/lib/right-panel";
+import {
+  canUseRightPanel,
+  PANEL_RATIO_WIDE_FLOOR,
+  PINNED_CHAT_WIDTH,
+} from "@/lib/right-panel";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useShellStyle } from "@/lib/shell-chrome";
@@ -37,7 +41,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
   const panelPct = immersive
     ? 100
     : wide
-      ? Math.max(panelRatio, 0.58) * 100
+      ? Math.max(panelRatio, PANEL_RATIO_WIDE_FLOOR) * 100
       : panelRatio * 100;
   const canPanel = canUseRightPanel({
     view,
@@ -109,7 +113,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col",
-          immersive ? "w-[40%] min-w-[16rem] max-w-[28rem] shrink-0" : "min-w-0 flex-1",
+          immersive ? PINNED_CHAT_WIDTH : "min-w-0 flex-1",
           !immersive &&
             showPanelColumn &&
             animateLayout &&

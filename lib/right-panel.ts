@@ -1,6 +1,20 @@
 import { isChatSpace } from "@/lib/spaces";
 import type { CourierView, NavDestinationId } from "@/lib/types";
 
+/** Default right-panel share when chat + panel are split (higher = narrower chat). */
+export const DEFAULT_PANEL_RATIO = 0.68;
+/** Minimum panel share applied when opening the panel from a collapsed state. */
+export const PANEL_RATIO_OPEN_FLOOR = DEFAULT_PANEL_RATIO;
+/** Wide panel mode never gives the right column less than this share. */
+export const PANEL_RATIO_WIDE_FLOOR = DEFAULT_PANEL_RATIO;
+
+/** Pinned chat column width when the space panel is expanded. */
+export const PINNED_CHAT_WIDTH =
+  "w-[32%] min-w-[16rem] max-w-[26rem] shrink-0";
+
+/** Home / split chat column cap when the right panel is open. */
+export const SPLIT_CHAT_MAX_WIDTH = "max-w-[32rem]";
+
 /** Empty home chat — no space, thread, or draft armed. */
 export function isNewChatScreen(opts: {
   view: CourierView;

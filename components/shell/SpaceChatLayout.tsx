@@ -18,7 +18,12 @@ import {
   setMobilePanelStackDirection,
 } from "@/lib/mobile-nav-transition";
 import { useMobileShell } from "@/lib/use-media-query";
-import { showStandaloneBrowserPanel } from "@/lib/right-panel";
+import {
+  PANEL_RATIO_WIDE_FLOOR,
+  PINNED_CHAT_WIDTH,
+  showStandaloneBrowserPanel,
+  SPLIT_CHAT_MAX_WIDTH,
+} from "@/lib/right-panel";
 import { isDashboardOnlySpace } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import type { MobileSurface } from "@/lib/types";
@@ -61,7 +66,7 @@ export function SpaceChatLayout() {
   const panelPct = immersive
     ? 100
     : wide
-      ? Math.max(panelRatio, 0.58) * 100
+      ? Math.max(panelRatio, PANEL_RATIO_WIDE_FLOOR) * 100
       : panelRatio * 100;
   const targetSpacePct = !spaceOpen ? 0 : !chatOpen ? 100 : panelPct;
 
@@ -198,7 +203,8 @@ export function SpaceChatLayout() {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
-          pinChat && "w-[40%] min-w-[16rem] max-w-[28rem] shrink-0",
+          pinChat && PINNED_CHAT_WIDTH,
+          !pinChat && chatOpen && spaceOpen && SPLIT_CHAT_MAX_WIDTH,
           animateLayout &&
             !pinChat &&
             "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",

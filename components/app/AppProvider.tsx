@@ -126,6 +126,10 @@ import {
   standaloneBrowserKey,
   writeStandaloneBrowserPinned,
 } from "@/lib/standalone-browser-session";
+import {
+  DEFAULT_PANEL_RATIO,
+  PANEL_RATIO_OPEN_FLOOR,
+} from "@/lib/right-panel";
 import { isChatSpace, chatSpaceId, PRIMARY_NAV_SPACES, spaceAllowed, isDashboardOnlySpace, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
 import type {
   AccountPresetId,
@@ -550,7 +554,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>("collapsed");
   const [panelIntent, setPanelIntent] = useState<PanelIntent>("browse");
-  const [panelRatio, setPanelRatioState] = useState(0.58);
+  const [panelRatio, setPanelRatioState] = useState(DEFAULT_PANEL_RATIO);
   const [expandedLayout, setExpandedLayout] = useState(false);
   const [expandedPinned, setExpandedPinned] = useState(false);
   const layoutSnapshot = useRef<{
@@ -982,7 +986,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     setPanelMode((mode) => (mode === "collapsed" ? "split" : "collapsed"));
     // Keep a usable right-panel share when opening from empty New Chat.
-    setPanelRatioState((ratio) => (ratio < 0.5 ? 0.55 : ratio));
+    setPanelRatioState((ratio) =>
+      ratio < PANEL_RATIO_OPEN_FLOOR ? PANEL_RATIO_OPEN_FLOOR : ratio,
+    );
     setMobileSurface("chat");
   }, [panelMode]);
 
@@ -4076,7 +4082,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       writeStandaloneBrowserPinned(actor.id, workspaceId, true);
       setStandaloneBrowserOpen(true);
       setPanelMode("split");
-      setPanelRatioState((ratio) => (ratio < 0.5 ? 0.55 : ratio));
+      setPanelRatioState((ratio) =>
+      ratio < PANEL_RATIO_OPEN_FLOOR ? PANEL_RATIO_OPEN_FLOOR : ratio,
+    );
       setMobileSurface("panel");
       pushTarget({
         view,
@@ -4120,7 +4128,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setJobId(null);
     setSkillId(null);
     setPanelMode("split");
-    setPanelRatioState((ratio) => (ratio < 0.5 ? 0.55 : ratio));
+    setPanelRatioState((ratio) =>
+      ratio < PANEL_RATIO_OPEN_FLOOR ? PANEL_RATIO_OPEN_FLOOR : ratio,
+    );
     setMobileSurface("panel");
     pushTarget({
       view: "space",
