@@ -9,6 +9,9 @@ import {
   getImageGenerationJob,
   updateImageGenerationJob,
 } from "@/lib/ai/raw-openai/image-jobs-store";
+import {
+  isImageJobStale,
+} from "@/lib/ai/raw-openai/run-image-generation-job";
 
 export const runtime = "nodejs";
 
@@ -20,10 +23,19 @@ export async function GET(request: Request, ctx: Ctx) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
   const { id } = await ctx.params;
-  const job = await getImageGenerationJob(id, auth.user.id);
+  let job = await getImageGenerationJob(id, auth.user.id);
   if (!job) {
     return NextResponse.json({ error: "Job not found." }, { status: 404 });
   }
+
+  if (job.status === "generating" && isImageJobStale(job)) {
+    job =
+      (await updateImageGenerationJob(id, auth.user.id, {
+        status: "failed",
+        error: "Image generation timed out on the server.",
+      })) ?? job;
+  }
+
   return NextResponse.json({
     generationId: job.id,
     status: job.status,

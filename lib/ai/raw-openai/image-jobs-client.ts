@@ -48,7 +48,19 @@ export async function startImageGenerationJob(opts: {
   threadId?: string | null;
   messageId?: string | null;
   workspaceId?: string | null;
-}): Promise<{ ok: true; generationId: string } | { ok: false; error: string }> {
+}): Promise<
+  | {
+      ok: true;
+      generationId: string;
+      status: ImageJobClientStatus;
+      dataUrl?: string;
+      mimeType?: string;
+      attachmentId?: string;
+      openaiFileId?: string;
+      error?: string;
+    }
+  | { ok: false; error: string }
+> {
   try {
     const authHeaders = await getRawOpenAIAuthHeaders();
     const res = await fetch("/api/ai/raw-openai/image-jobs", {
@@ -65,8 +77,7 @@ export async function startImageGenerationJob(opts: {
         workspaceId: opts.workspaceId,
       }),
     });
-    const data = (await res.json().catch(() => ({}))) as {
-      generationId?: string;
+    const data = (await res.json().catch(() => ({}))) as ImageJobPollResult & {
       error?: string;
     };
     if (!res.ok) {
@@ -75,7 +86,16 @@ export async function startImageGenerationJob(opts: {
         error: data.error || `Image job failed (HTTP ${res.status})`,
       };
     }
-    return { ok: true, generationId: data.generationId || opts.generationId };
+    return {
+      ok: true,
+      generationId: data.generationId || opts.generationId,
+      status: data.status || "generating",
+      dataUrl: data.dataUrl,
+      mimeType: data.mimeType,
+      attachmentId: data.attachmentId,
+      openaiFileId: data.openaiFileId,
+      error: data.error,
+    };
   } catch (e) {
     return {
       ok: false,

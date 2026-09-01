@@ -135,20 +135,33 @@ export async function generateImageViaImagesApi(
   const model = opts?.model || "gpt-image-1.5";
   const quality =
     opts?.quality === "auto" ? "medium" : opts?.quality || "medium";
-  const result = await client.images.generate({
-    model,
-    prompt: prompt.slice(0, 32000),
-    quality,
-    size: "1024x1024",
-    // gpt-image returns b64_json by default for these models
-  });
-  const b64 = result.data?.[0]?.b64_json?.trim();
-  if (!b64) {
-    throw new Error("Images API returned no image data.");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90_000);
+  try {
+    const result = await client.images.generate(
+      {
+        model,
+        prompt: prompt.slice(0, 32000),
+        quality,
+        size: "1024x1024",
+      },
+      { signal: controller.signal },
+    );
+    const b64 = result.data?.[0]?.b64_json?.trim();
+    if (!b64) {
+      throw new Error("Images API returned no image data.");
+    }
+    const mimeType = "image/png";
+    return {
+      dataUrl: `data:${mimeType};base64,${b64}`,
+      mimeType,
+    };
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error("OpenAI image generation timed out after 90s.");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
   }
-  const mimeType = "image/png";
-  return {
-    dataUrl: `data:${mimeType};base64,${b64}`,
-    mimeType,
-  };
 }

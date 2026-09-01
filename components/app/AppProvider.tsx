@@ -1474,6 +1474,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             );
             return;
           }
+          if (started.status === "completed" && started.dataUrl) {
+            patchImageGenerationBlock(
+              opts.threadId,
+              opts.messageId,
+              opts.generationId,
+              {
+                status: "completed",
+                imageUrl: started.dataUrl,
+                mime: started.mimeType || "image/png",
+                name: "generated.png",
+                attachmentId: started.attachmentId,
+                openaiFileId: started.openaiFileId,
+              },
+            );
+            if (started.attachmentId) {
+              void linkRawOpenAIAttachments({
+                attachmentIds: [started.attachmentId],
+                messageId: opts.messageId,
+                threadId: opts.threadId,
+              });
+            }
+            return;
+          }
+          if (started.status === "failed") {
+            patchImageGenerationBlock(
+              opts.threadId,
+              opts.messageId,
+              opts.generationId,
+              {
+                status: "failed",
+                error: started.error || "Image generation failed.",
+              },
+            );
+            return;
+          }
         }
         const result = await waitForImageGenerationJob(opts.generationId, {
           intervalMs: 1200,
