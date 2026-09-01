@@ -10,6 +10,7 @@ import {
   VisionInputError,
 } from "../_shared/agent/vision-input.ts";
 import { bridgeHttpFailureMessage } from "../_shared/agent/bridge-errors.ts";
+import { guardEdgeAiChatUsage } from "../_shared/usage-guard.ts";
 
 const MODEL = "llama3.2";
 const VISION_MODEL =
@@ -428,6 +429,26 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (chatError) throw chatError;
       if (!chat) return json(404, { error: "Chat not found" });
+
+      const workspaceForUsage = chat.workspace_id
+        ? String(chat.workspace_id)
+        : (
+            await supabase
+              .from("workspace_members")
+              .select("workspace_id")
+              .eq("profile_id", user.id)
+              .limit(1)
+              .maybeSingle()
+          ).data?.workspace_id;
+      if (workspaceForUsage) {
+        const usage = await guardEdgeAiChatUsage({
+          workspaceId: String(workspaceForUsage),
+          profileId: user.id,
+        });
+        if (!usage.ok) {
+          return json(usage.status, { error: usage.error });
+        }
+      }
 
       const { data: existing, error: msgErr } = await supabase
         .from("ai_chat_messages")

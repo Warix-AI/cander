@@ -23,6 +23,9 @@ import {
   pendingExpiresAtIso,
 } from "../lib/connectors/mapper.ts";
 import { sanitizeAuditDetail } from "../lib/connectors/audit.ts";
+import { composioUserId, parseComposioUserId } from "../lib/connectors/composio-identity.ts";
+import { isOAuthStateExpired } from "../lib/connectors/oauth-state.ts";
+import { authorizeConnectorToolAction } from "../lib/connectors/tool-authz.ts";
 import { resetConnectorRateLimitsForTests } from "../lib/connectors/rate-limit.ts";
 
 test("two users in one workspace may each connect the same connector", () => {
@@ -210,6 +213,42 @@ test("pending expiry detection", () => {
 
 test("rate limit resets for tests", () => {
   resetConnectorRateLimitsForTests();
+});
+
+test("composio user id mapping is deterministic", () => {
+  const id = composioUserId("ws-team", "11111111-1111-1111-1111-111111111111");
+  assert.equal(id, "cander:ws-team:11111111-1111-1111-1111-111111111111");
+  assert.deepEqual(parseComposioUserId(id), {
+    workspaceId: "ws-team",
+    profileId: "11111111-1111-1111-1111-111111111111",
+  });
+});
+
+test("oauth state expiry detection", () => {
+  assert.equal(
+    isOAuthStateExpired({
+      expires_at: new Date(Date.now() - 1000).toISOString(),
+    }),
+    true,
+  );
+  assert.equal(
+    isOAuthStateExpired({
+      expires_at: new Date(Date.now() + 60_000).toISOString(),
+    }),
+    false,
+  );
+});
+
+test("connector tool seam blocks all actions during pilot", () => {
+  const denied = authorizeConnectorToolAction({
+    workspaceId: "ws",
+    profileId: "11111111-1111-1111-1111-111111111111",
+    connectorId: "gmail",
+    action: "gmail.read",
+    connectionId: "conn_1",
+  });
+  assert.equal(denied.ok, false);
+  if (!denied.ok) assert.equal(denied.reason, "not_allowed");
 });
 
 test("client bundles do not import server-only connector modules", () => {

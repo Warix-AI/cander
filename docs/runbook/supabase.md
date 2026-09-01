@@ -63,6 +63,57 @@ Apply in sequence:
 | `025_private_ai_chat.sql` | Owner-private AI chats, messages, context refs, audit |
 | `037_image_generation_jobs.sql` | Async image generation job ledger |
 | `038_usage_protection.sql` | Usage events, window counters, audit log |
+| `039_connector_hardening.sql` | Owner-scoped connector connections, audit, RLS |
+| `040_connector_composio_prep.sql` | OAuth states, webhook receipts, reconcile RPC, client promotion block |
+| `041_connector_oauth_resilience.sql` | OAuth lifecycle leases, atomic callback completion RPC, hardened reconcile |
+
+### Connector migration 040 rollback (staging only)
+
+`040_connector_composio_prep.sql` adds server-only tables and a security-definer RPC. Roll back only on staging with explicit approval:
+
+```sql
+drop function if exists public.reconcile_connector_connection(text, text, text, text, text);
+drop trigger if exists connector_connections_block_client_promotion on public.connector_connections;
+drop function if exists public.connector_connections_block_client_promotion();
+drop table if exists public.connector_webhook_receipts;
+drop table if exists public.connector_oauth_states;
+alter table public.connector_connections drop column if exists composio_user_id;
+```
+
+Re-apply with `supabase db push` when ready.
+
+### Connector migration 041 rollback (staging only)
+
+`041_connector_oauth_resilience.sql` adds OAuth lifecycle columns and callback RPCs. Roll back only on staging with explicit approval:
+
+```sql
+drop function if exists public.list_recoverable_connector_oauth_states(integer);
+drop function if exists public.release_expired_connector_oauth_processing(text);
+drop function if exists public.fail_connector_oauth_state(text, uuid, text);
+drop function if exists public.complete_connector_oauth_callback(text, uuid, text, text);
+drop function if exists public.record_connector_oauth_verification(text, uuid, text);
+drop function if exists public.claim_connector_oauth_state_for_callback(uuid, integer);
+-- reconcile_connector_connection is replaced; re-apply 040 to restore prior version if needed
+alter table public.connector_oauth_states
+  drop column if exists lifecycle_status,
+  drop column if exists processing_started_at,
+  drop column if exists processing_expires_at,
+  drop column if exists verified_provider_connection_id,
+  drop column if exists failure_detail;
+```
+
+Re-apply with `supabase db push` when ready.
+
+### Composio (server env)
+
+See `docs/connectors/composio-integration.md` and `docs/connectors/gmail-pilot-checklist.md`.
+
+- `COMPOSIO_API_KEY`
+- `COMPOSIO_GMAIL_AUTH_CONFIG_ID`
+- `COMPOSIO_WEBHOOK_SECRET`
+- `COMPOSIO_CALLBACK_VERIFIER_URL` (must match Composio dashboard verifier URL exactly)
+
+Webhook URL: `https://<host>/api/connectors/webhooks/composio`
 
 ```bash
 supabase link --project-ref <ref>

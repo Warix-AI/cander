@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { initiateConnection } from "@/lib/connectors/lifecycle";
 import { resolveConnectorRequest } from "@/lib/connectors/server-context";
-import { checkConnectorRateLimit } from "@/lib/connectors/rate-limit";
+import { checkConnectorRateLimitAsync } from "@/lib/connectors/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -31,7 +31,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
   }
 
-  const rate = checkConnectorRateLimit(`initiate:${ctx.user.id}`);
+  const rate = await checkConnectorRateLimitAsync({
+    key: `initiate:${ctx.user.id}`,
+    category: "connector_initiate",
+    workspaceId: ctx.workspaceId,
+    profileId: ctx.user.id,
+  });
   if (!rate.ok) {
     return NextResponse.json({ error: rate.error }, { status: rate.status });
   }
@@ -50,6 +55,7 @@ export async function POST(request: Request) {
       ok: true,
       connection: result.connection,
       reused: result.reused,
+      authorizationUrl: result.authorizationUrl ?? null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not initiate connection.";

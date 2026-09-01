@@ -10,6 +10,11 @@ import {
   connectionNotFoundError,
   conflictError,
 } from "./authz.ts";
+import { composioUserId } from "./composio-identity.ts";
+import { createOAuthState } from "./oauth-state.ts";
+import { getConnectorProvider } from "./provider/index.ts";
+import { reconcileConnectionDisconnected, reconcileConnectionFailed } from "./reconcile.ts";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveInitiateExisting } from "./lifecycle-logic.ts";
 import {
   catalogRowToPublic,
@@ -81,7 +86,7 @@ export async function initiateConnection(input: {
   ownerId: string;
   connectorId: string;
 }): Promise<
-  | { ok: true; connection: ConnectorConnection; reused: boolean }
+  | { ok: true; connection: ConnectorConnection; reused: boolean; authorizationUrl?: string }
   | { ok: false; status: number; error: string }
 > {
   await expireStalePendingConnections({
@@ -99,7 +104,9 @@ export async function initiateConnection(input: {
   if (!catalog?.enabled) {
     return { ok: false, status: 404, error: "Connector not found." };
   }
-
+  if (input.connectorId !== "gmail") {
+    return { ok: false, status: 404, error: "Connector not found." };
+  }
   const { data: existing, error: existingError } = await input.client
     .from("connector_connections")
     .select("*")
@@ -116,10 +123,17 @@ export async function initiateConnection(input: {
     const row = existing as ConnectorConnectionRow;
     const decision = resolveInitiateExisting(row);
     if (decision.action === "reuse") {
+      const auth = await beginProviderAuthorization({
+        connectionId: row.id,
+        workspaceId: input.workspaceId,
+        ownerId: input.ownerId,
+        connectorId: input.connectorId,
+      });
       return {
         ok: true,
         connection: connectionRowToPublic(row),
         reused: true,
+        authorizationUrl: auth.authorizationUrl,
       };
     }
     if (decision.action === "conflict") {
@@ -161,10 +175,17 @@ export async function initiateConnection(input: {
         .is("deleted_at", null)
         .maybeSingle();
       if (raced) {
+        const auth = await beginProviderAuthorization({
+          connectionId: raced.id,
+          workspaceId: input.workspaceId,
+          ownerId: input.ownerId,
+          connectorId: input.connectorId,
+        });
         return {
           ok: true,
           connection: connectionRowToPublic(raced as ConnectorConnectionRow),
           reused: true,
+          authorizationUrl: auth.authorizationUrl,
         };
       }
       return { ok: false, ...conflictError() };
@@ -181,11 +202,195 @@ export async function initiateConnection(input: {
     detail: { reason_code: "initiated", connector_id: input.connectorId, connection_id: id, workspace_id: input.workspaceId },
   });
 
+  const auth = await beginProviderAuthorization({
+    connectionId: id,
+    workspaceId: input.workspaceId,
+    ownerId: input.ownerId,
+    connectorId: input.connectorId,
+  });
+
   return {
     ok: true,
     connection: connectionRowToPublic(inserted as ConnectorConnectionRow),
     reused: false,
+    authorizationUrl: auth.authorizationUrl,
   };
+}
+
+async function beginProviderAuthorization(input: {
+  connectionId: string;
+  workspaceId: string;
+  ownerId: string;
+  connectorId: string;
+}): Promise<{ authorizationUrl?: string }> {
+  const provider = getConnectorProvider();
+  if (provider.name === "noop") return {};
+
+  const begin = await provider.beginAuthorization({
+    connectorId: input.connectorId,
+    workspaceId: input.workspaceId,
+    ownerId: input.ownerId,
+  });
+  if (!begin.ok || !begin.authorizationUrl) {
+    return {};
+  }
+
+  const admin = createSupabaseAdminClient();
+  await createOAuthState(admin, {
+    connectionId: input.connectionId,
+    workspaceId: input.workspaceId,
+    ownerId: input.ownerId,
+    connectorId: input.connectorId,
+    linkSessionRef: begin.linkSessionRef ?? null,
+  });
+  await admin
+    .from("connector_connections")
+    .update({
+      composio_user_id: composioUserId(input.workspaceId, input.ownerId),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.connectionId)
+    .eq("owner_id", input.ownerId);
+
+  return { authorizationUrl: begin.authorizationUrl };
+}
+
+export async function verifyOAuthCallback(input: {
+  ownerId: string;
+  sessionUri: string;
+}): Promise<
+  | { ok: true; connection: ConnectorConnection; workspaceId: string }
+  | { ok: false; status: number; error: string }
+> {
+  const admin = createSupabaseAdminClient();
+  const {
+    claimOAuthStateForCallback,
+    recordOAuthVerification,
+    completeOAuthCallbackAtomic,
+    failOAuthState,
+  } = await import("./oauth-callback.ts");
+  const { recoverOAuthStateForOwner } = await import("./oauth-recovery.ts");
+
+  const claim = await claimOAuthStateForCallback(admin, input.ownerId);
+  if (!claim.ok) {
+    if (claim.reason === "processing") {
+      const recovered = await recoverOAuthStateForOwner(admin, input.ownerId);
+      if (recovered) {
+        return {
+          ok: true,
+          connection: recovered,
+          workspaceId: recovered.workspaceId,
+        };
+      }
+      const active = await findActiveConnectionForOwnerOAuth(admin, input.ownerId);
+      if (active) {
+        return {
+          ok: true,
+          connection: active.connection,
+          workspaceId: active.workspaceId,
+        };
+      }
+      return {
+        ok: false,
+        status: 409,
+        error: "Connection request is already being processed.",
+      };
+    }
+    const status = claim.reason === "not_found" ? 404 : 410;
+    return { ok: false, status, error: "Connection request is no longer valid." };
+  }
+
+  const state = claim.state;
+  if (claim.alreadyActive) {
+    const { data: connectionRow, error: connectionError } = await admin
+      .from("connector_connections")
+      .select("*")
+      .eq("id", state.connection_id)
+      .eq("owner_id", input.ownerId)
+      .eq("workspace_id", state.workspace_id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (connectionError) throw connectionError;
+    if (!connectionRow || connectionRow.status !== "active") {
+      return { ok: false, status: 409, error: "Connection request is no longer valid." };
+    }
+    return {
+      ok: true,
+      connection: connectionRowToPublic(connectionRow as ConnectorConnectionRow),
+      workspaceId: state.workspace_id,
+    };
+  }
+
+  const { data: connectionRow, error: connectionError } = await admin
+    .from("connector_connections")
+    .select("*")
+    .eq("id", state.connection_id)
+    .eq("owner_id", input.ownerId)
+    .eq("workspace_id", state.workspace_id)
+    .eq("connector_id", state.connector_id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (connectionError) throw connectionError;
+  if (!connectionRow) {
+    return { ok: false, status: 404, error: "Connection request is no longer valid." };
+  }
+  const row = connectionRow as ConnectorConnectionRow;
+  if (row.status !== "pending") {
+    return { ok: false, status: 409, error: "Connection request is no longer valid." };
+  }
+
+  const provider = getConnectorProvider();
+  const verified = await provider.completeCallbackVerification({
+    sessionUri: input.sessionUri,
+    composioUserId: state.composio_user_id,
+    expectedLinkSessionRef: state.link_session_ref,
+  });
+  if (!verified.ok || !verified.providerConnectionId) {
+    await failOAuthState(admin, {
+      oauthStateId: state.id,
+      ownerId: input.ownerId,
+      failureDetail: verified.failureDetail ?? "Authorization could not be verified.",
+    });
+    return { ok: false, status: 400, error: "Connection could not be verified." };
+  }
+
+  await recordOAuthVerification(admin, {
+    oauthStateId: state.id,
+    ownerId: input.ownerId,
+    providerConnectionId: verified.providerConnectionId,
+  });
+
+  const connection = await completeOAuthCallbackAtomic(admin, {
+    oauthStateId: state.id,
+    ownerId: input.ownerId,
+    providerConnectionId: verified.providerConnectionId,
+    composioUserId: state.composio_user_id,
+  });
+
+  return {
+    ok: true,
+    connection,
+    workspaceId: state.workspace_id,
+  };
+}
+
+async function findActiveConnectionForOwnerOAuth(
+  admin: SupabaseClient,
+  ownerId: string,
+): Promise<{ connection: ConnectorConnection; workspaceId: string } | null> {
+  const { data, error } = await admin
+    .from("connector_connections")
+    .select("*")
+    .eq("owner_id", ownerId)
+    .eq("status", "active")
+    .is("deleted_at", null)
+    .order("connected_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const connection = connectionRowToPublic(data as ConnectorConnectionRow);
+  return { connection, workspaceId: connection.workspaceId };
 }
 
 export async function disconnectConnection(input: {
@@ -219,19 +424,23 @@ export async function disconnectConnection(input: {
     };
   }
 
-  const now = new Date().toISOString();
-  const { data: updated, error: updateError } = await input.client
-    .from("connector_connections")
-    .update({
-      status: "disconnected",
-      disconnected_at: now,
-      pending_expires_at: null,
-    })
-    .eq("id", input.connectionId)
-    .eq("owner_id", input.ownerId)
-    .select("*")
-    .single();
-  if (updateError) throw updateError;
+  const providerRef = row.provider_connection_id?.trim();
+  if (providerRef) {
+    const provider = getConnectorProvider();
+    if (provider.name !== "noop") {
+      const revoked = await provider.disconnect({ providerConnectionId: providerRef });
+      if (!revoked.ok) {
+        return {
+          ok: false,
+          status: 502,
+          error: "Could not disconnect from provider. Try again shortly.",
+        };
+      }
+    }
+  }
+
+  const admin = createSupabaseAdminClient();
+  const updated = await reconcileConnectionDisconnected(admin, input.connectionId);
 
   await recordConnectorAuditEvent(input.client, {
     workspaceId: input.workspaceId,
@@ -249,7 +458,7 @@ export async function disconnectConnection(input: {
 
   return {
     ok: true,
-    connection: connectionRowToPublic(updated as ConnectorConnectionRow),
+    connection: updated,
     alreadyDisconnected: false,
   };
 }

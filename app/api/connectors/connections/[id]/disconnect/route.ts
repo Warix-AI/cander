@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { disconnectConnection } from "@/lib/connectors/lifecycle";
 import { resolveConnectorRequest } from "@/lib/connectors/server-context";
-import { checkConnectorRateLimit } from "@/lib/connectors/rate-limit";
+import { checkConnectorRateLimitAsync } from "@/lib/connectors/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -31,7 +31,12 @@ export async function POST(
     return NextResponse.json({ error: ctx.error }, { status: ctx.status });
   }
 
-  const rate = checkConnectorRateLimit(`disconnect:${ctx.user.id}`);
+  const rate = await checkConnectorRateLimitAsync({
+    key: `disconnect:${ctx.user.id}`,
+    category: "connector_disconnect",
+    workspaceId: ctx.workspaceId,
+    profileId: ctx.user.id,
+  });
   if (!rate.ok) {
     return NextResponse.json({ error: rate.error }, { status: rate.status });
   }

@@ -67,13 +67,19 @@ export function createSupabaseConnectorApi(
     },
 
     async connect(ctx, connectorId) {
-      const connection = await initiateConnectorConnection({
+      if (connectorId !== "gmail") {
+        throw new Error("Connector not available.");
+      }
+      const { connection, authorizationUrl } = await initiateConnectorConnection({
         workspaceId: ctx.workspaceId,
         connectorId,
       });
       const all = await fetchConnectorConnections(ctx.workspaceId);
       replaceConnectorConnectionsForWorkspace(ctx.workspaceId, all);
       attachWorkConnector(ctx.workspaceId, connectorId);
+      if (authorizationUrl) {
+        window.location.assign(authorizationUrl);
+      }
       return connection;
     },
 

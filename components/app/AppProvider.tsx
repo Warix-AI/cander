@@ -797,6 +797,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      clearConnectorConnectionsCache();
+
       const prevView = view;
       const prevSpace = spaceId;
       const chatWasOpen =

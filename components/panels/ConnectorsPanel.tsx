@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore, useState } from "react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import { PanelChrome } from "@/components/panels/PanelChrome";
@@ -21,6 +21,8 @@ import {
   getConnectorConnectionsSnapshot,
   subscribeConnectorConnections,
 } from "@/lib/connector-connections-store";
+import { fetchConnectorConnections, initiateConnectorConnection } from "@/lib/api/connector-client";
+import { replaceConnectorConnectionsForWorkspace } from "@/lib/connector-connections-store";
 
 export function ConnectorsPanel() {
   const {
@@ -33,6 +35,7 @@ export function ConnectorsPanel() {
     panelIntent,
     billingPlan,
   } = useApp();
+  const [connectError, setConnectError] = useState("");
   useSyncExternalStore(
     subscribeConnectorConnections,
     getConnectorConnectionsSnapshot,
@@ -197,9 +200,33 @@ export function ConnectorsPanel() {
               )}
             </div>
             <div className="mt-3 px-3 pb-3">
+              {connectError ? (
+                <p className="mb-2 text-[12px] text-destructive">{connectError}</p>
+              ) : null}
               <button
                 type="button"
-                className="inline-flex h-10 items-center rounded-full border border-foreground/20 px-4 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
+                disabled={selected.id !== "gmail"}
+                onClick={async () => {
+                  setConnectError("");
+                  try {
+                    const { authorizationUrl } = await initiateConnectorConnection({
+                      workspaceId,
+                      connectorId: selected.id,
+                    });
+                    const connections = await fetchConnectorConnections(workspaceId);
+                    replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+                    if (authorizationUrl) {
+                      window.location.assign(authorizationUrl);
+                    }
+                  } catch (err) {
+                    setConnectError(
+                      err instanceof Error
+                        ? err.message
+                        : "Could not start connection.",
+                    );
+                  }
+                }}
+                className="inline-flex h-10 items-center rounded-full border border-foreground/20 px-4 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Add connection
               </button>

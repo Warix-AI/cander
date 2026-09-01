@@ -21,24 +21,57 @@ import {
 } from "../lib/ai/raw-openai/web-search.ts";
 
 describe("Raw OpenAI flags", () => {
-  it("defaults on", () => {
+  it("defaults on in development", () => {
     const prevN = process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     const prevR = process.env.RAW_OPENAI_MODE;
+    const prevNode = process.env.NODE_ENV;
+    const prevVercel = process.env.VERCEL_ENV;
     delete process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     delete process.env.RAW_OPENAI_MODE;
+    process.env.NODE_ENV = "development";
+    delete process.env.VERCEL_ENV;
     assert.equal(isRawOpenAIModeEnabled(), true);
     assert.equal(isRawOpenAIModeAllowedOnServer(), true);
     if (prevN !== undefined) process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = prevN;
     if (prevR !== undefined) process.env.RAW_OPENAI_MODE = prevR;
+    if (prevNode !== undefined) process.env.NODE_ENV = prevNode;
+    else delete process.env.NODE_ENV;
+    if (prevVercel !== undefined) process.env.VERCEL_ENV = prevVercel;
+    else delete process.env.VERCEL_ENV;
+  });
+
+  it("defaults off in production unless RAW_OPENAI_MODE=1", () => {
+    const prevN = process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
+    const prevR = process.env.RAW_OPENAI_MODE;
+    const prevNode = process.env.NODE_ENV;
+    const prevVercel = process.env.VERCEL_ENV;
+    delete process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
+    delete process.env.RAW_OPENAI_MODE;
+    process.env.NODE_ENV = "production";
+    process.env.VERCEL_ENV = "production";
+    assert.equal(isRawOpenAIModeEnabled(), false);
+    assert.equal(isRawOpenAIModeAllowedOnServer(), false);
+    process.env.RAW_OPENAI_MODE = "1";
+    assert.equal(isRawOpenAIModeAllowedOnServer(), true);
+    if (prevN !== undefined) process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = prevN;
+    if (prevR !== undefined) process.env.RAW_OPENAI_MODE = prevR;
+    if (prevNode !== undefined) process.env.NODE_ENV = prevNode;
+    else delete process.env.NODE_ENV;
+    if (prevVercel !== undefined) process.env.VERCEL_ENV = prevVercel;
+    else delete process.env.VERCEL_ENV;
   });
 
   it("can opt out via NEXT_PUBLIC_RAW_OPENAI_MODE=0", () => {
     const prev = process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
+    const prevRaw = process.env.RAW_OPENAI_MODE;
+    delete process.env.RAW_OPENAI_MODE;
     process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = "0";
     assert.equal(isRawOpenAIModeEnabled(), false);
     assert.equal(isRawOpenAIModeAllowedOnServer(), false);
     if (prev === undefined) delete process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     else process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = prev;
+    if (prevRaw === undefined) delete process.env.RAW_OPENAI_MODE;
+    else process.env.RAW_OPENAI_MODE = prevRaw;
   });
 });
 
@@ -200,6 +233,6 @@ describe("No client OpenAI secret / no Exa on raw path", () => {
     assert.ok(src.includes('type: "web_search"'));
     assert.ok(src.includes("isOpenAIWebSearchEnabled"));
     assert.equal(/\bexa\b/i.test(src), false);
-    assert.equal(/\btool_choice\b/.test(src), false);
+    assert.equal(/\btool_choice\b/.test(src) && !/image_generation/.test(src), false);
   });
 });

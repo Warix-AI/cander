@@ -30,8 +30,10 @@ import {
   getConnectorConnectionsServerSnapshot,
   getConnectorConnectionsSnapshot,
   pendingConnectorIdsLive,
+  replaceConnectorConnectionsForWorkspace,
   subscribeConnectorConnections,
 } from "@/lib/connector-connections-store";
+import { fetchConnectorConnections } from "@/lib/api/connector-client";
 
 const SECTION_ORDER = [
   "Featured",
@@ -96,6 +98,24 @@ export function ConnectorsDashboard() {
   useEffect(() => {
     setWorkAttachFor(peekWorkConnectorAttach());
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const connector = params.get("connectors");
+    const result = params.get("result");
+    if (connector !== "gmail" || !result) return;
+    void fetchConnectorConnections(workspaceId)
+      .then((connections) => {
+        replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+      })
+      .catch(() => undefined);
+    if (result === "success") {
+      setInfo("Gmail connection updated. Refresh if status looks stale.");
+    } else if (result === "error") {
+      setInfo("Gmail connection could not be completed. Try again.");
+    }
+  }, [workspaceId]);
 
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus();

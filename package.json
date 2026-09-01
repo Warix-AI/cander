@@ -9,7 +9,7 @@
     "lint": "eslint",
     "check:migrations": "bash scripts/check-migrations.sh",
     "test:security": "node --experimental-strip-types --test scripts/security-denial.test.ts",
-    "test:connectors": "node --experimental-strip-types --test scripts/connector-security.test.ts",
+    "test:connectors": "node --experimental-strip-types --test scripts/connector-security.test.ts scripts/composio-security.test.ts scripts/composio-oauth-resilience.test.ts",
     "test:isolation": "node --experimental-strip-types scripts/security-isolation-probe.ts",
     "test:assistant": "node --experimental-strip-types --test scripts/assistant-behavior.test.ts",
     "test:intelligence": "node --experimental-strip-types --test scripts/intelligence.test.ts",
@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@agent-browser/sandbox": "^0.35.1",
+    "@composio/core": "0.18.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.8",
     "@vercel/sandbox": "^3.2.1",

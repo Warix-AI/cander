@@ -45,7 +45,7 @@ export async function fetchConnectorConnections(
 export async function initiateConnectorConnection(input: {
   workspaceId: string;
   connectorId: string;
-}): Promise<ConnectorConnection> {
+}): Promise<{ connection: ConnectorConnection; authorizationUrl?: string | null }> {
   const headers = await authHeaders();
   const response = await fetch("/api/connectors/connections/initiate", {
     method: "POST",
@@ -62,7 +62,10 @@ export async function initiateConnectorConnection(input: {
   if (!response.ok) {
     throw new Error(data.error ?? "Could not initiate connection.");
   }
-  return data.connection as ConnectorConnection;
+  return {
+    connection: data.connection as ConnectorConnection,
+    authorizationUrl: (data.authorizationUrl as string | null | undefined) ?? null,
+  };
 }
 
 export async function disconnectConnectorConnection(input: {

@@ -6,6 +6,16 @@
 export type ProviderAuthorizationBegin = {
   ok: boolean;
   authorizationUrl?: string;
+  /** Server-only Composio link session ref — never expose to clients. */
+  linkSessionRef?: string;
+  error?: string;
+};
+
+export type ProviderCallbackVerification = {
+  ok: boolean;
+  providerConnectionId?: string;
+  toolkitSlug?: string;
+  failureDetail?: string;
   error?: string;
 };
 
@@ -20,6 +30,10 @@ export type ProviderConnectionStatus = {
 export type ProviderWebhookVerifyResult = {
   ok: boolean;
   eventId?: string;
+  connectedAccountId?: string;
+  status?: string;
+  composioUserId?: string;
+  eventType?: string;
   error?: string;
 };
 
@@ -29,8 +43,12 @@ export type ConnectorProviderAdapter = {
     connectorId: string;
     workspaceId: string;
     ownerId: string;
-    redirectUrl: string;
   }): Promise<ProviderAuthorizationBegin>;
+  completeCallbackVerification(input: {
+    sessionUri: string;
+    composioUserId: string;
+    expectedLinkSessionRef?: string | null;
+  }): Promise<ProviderCallbackVerification>;
   reconcileConnection(input: {
     connectionId: string;
     providerConnectionId: string;

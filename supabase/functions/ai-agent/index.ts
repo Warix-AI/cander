@@ -11,6 +11,7 @@ import {
   runTurnOrchestratorV2,
   type StreamEvent,
 } from "../_shared/agent/v2/orchestrator.ts";
+import { guardEdgeAiChatUsage } from "../_shared/usage-guard.ts";
 
 type Json = Record<string, unknown>;
 
@@ -140,6 +141,23 @@ Deno.serve(async (req) => {
       const parsed = parseRunTurnBody(body);
       if (!parsed.turnId || !parsed.chatId || !parsed.content) {
         return json(400, { error: "turnId, chatId, and content required" });
+      }
+
+      const { data: chatRow } = await supabase
+        .from("ai_chats")
+        .select("workspace_id")
+        .eq("id", parsed.chatId)
+        .eq("owner_id", user.id)
+        .maybeSingle();
+      if (!chatRow?.workspace_id) {
+        return json(404, { error: "Chat not found" });
+      }
+      const usage = await guardEdgeAiChatUsage({
+        workspaceId: String(chatRow.workspace_id),
+        profileId: user.id,
+      });
+      if (!usage.ok) {
+        return json(usage.status, { error: usage.error });
       }
 
       let provider;

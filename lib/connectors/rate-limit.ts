@@ -1,5 +1,6 @@
 /**
  * Lightweight per-user rate limit for connector lifecycle routes.
+ * Falls back to in-memory when durable store is unavailable.
  */
 
 const WINDOW_MS = 60_000;
@@ -9,7 +10,7 @@ type Bucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, Bucket>();
 
-export function checkConnectorRateLimit(key: string): {
+function checkInMemoryRateLimit(key: string): {
   ok: true;
 } | {
   ok: false;
@@ -31,6 +32,39 @@ export function checkConnectorRateLimit(key: string): {
   }
   bucket.count += 1;
   return { ok: true };
+}
+
+export function checkConnectorRateLimit(key: string): {
+  ok: true;
+} | {
+  ok: false;
+  status: 429;
+  error: string;
+} {
+  return checkInMemoryRateLimit(key);
+}
+
+export async function checkConnectorRateLimitAsync(input: {
+  key: string;
+  category: import("./durable-rate-limit.ts").ConnectorRateCategory;
+  workspaceId: string;
+  profileId: string;
+}): Promise<
+  | { ok: true }
+  | { ok: false; status: 429; error: string }
+> {
+  try {
+    const { checkConnectorRateLimitDurable } = await import("./durable-rate-limit.ts");
+    const durable = await checkConnectorRateLimitDurable({
+      category: input.category,
+      workspaceId: input.workspaceId,
+      profileId: input.profileId,
+    });
+    if (!durable.ok) return durable;
+  } catch {
+    /* durable unavailable */
+  }
+  return checkInMemoryRateLimit(input.key);
 }
 
 /** Test helper */

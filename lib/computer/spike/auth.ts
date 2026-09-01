@@ -42,7 +42,10 @@ export async function requireComputerAuth(
     // Cookie auth unavailable in this context.
   }
 
-  if (process.env.NODE_ENV === "development") {
+  if (
+    process.env.NODE_ENV === "development" &&
+    process.env.VERCEL_ENV !== "production"
+  ) {
     const devUserId = process.env.COMPUTER_DEV_USER_ID?.trim();
     if (devUserId) {
       return { userId: devUserId };

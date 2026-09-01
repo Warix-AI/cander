@@ -11,6 +11,9 @@ export const noopConnectorProvider: ConnectorProviderAdapter = {
   async beginAuthorization() {
     return { ok: false, error: NOT_CONFIGURED };
   },
+  async completeCallbackVerification() {
+    return { ok: false, error: NOT_CONFIGURED };
+  },
   async reconcileConnection() {
     return { ok: false, error: NOT_CONFIGURED };
   },

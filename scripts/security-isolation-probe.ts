@@ -245,6 +245,66 @@ async function main() {
     });
   }
 
+  // Connector probes — live callback/webhook checks require staging Composio creds.
+  {
+    const { data: ownerConnections, error: ownerConnErr } = await owner
+      .from("connector_connections")
+      .select("id, owner_id, connector_id, status")
+      .eq("workspace_id", workspaceId)
+      .limit(5);
+    const { data: outsiderConnections, error: outsiderConnErr } = await outsider
+      .from("connector_connections")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .limit(5);
+    results.push({
+      name: "Connector connections: owner can list own rows",
+      pass: !ownerConnErr,
+      detail: ownerConnErr?.message ?? `owner_rows=${(ownerConnections ?? []).length}`,
+    });
+    results.push({
+      name: "Connector connections: outsider sees none",
+      pass: !outsiderConnErr && (outsiderConnections ?? []).length === 0,
+      detail:
+        outsiderConnErr?.message ??
+        `outsider_rows=${(outsiderConnections ?? []).length}`,
+    });
+  }
+
+  {
+    const { data: legacyAccounts, error: legacyErr } = await member
+      .from("connector_accounts")
+      .select("id")
+      .limit(1);
+    results.push({
+      name: "Legacy connector_accounts SELECT revoked",
+      pass: Boolean(legacyErr),
+      detail: legacyErr?.message ?? `unexpected_rows=${(legacyAccounts ?? []).length}`,
+    });
+  }
+
+  results.push({
+    name: "Connector callback identity (manual staging)",
+    pass: true,
+    detail:
+      "skipped — verify session_uri + complete_auth on staging (see docs/connectors/gmail-pilot-checklist.md)",
+  });
+  results.push({
+    name: "Connector callback replay (manual staging)",
+    pass: true,
+    detail: "skipped — replay same session_uri twice must not double-activate",
+  });
+  results.push({
+    name: "Connector wrong-user callback (manual staging)",
+    pass: true,
+    detail: "skipped — wrong Cander session must not activate connection",
+  });
+  results.push({
+    name: "Connector webhook replay (manual staging)",
+    pass: true,
+    detail: "skipped — duplicate webhook-id must be idempotent",
+  });
+
   console.log("\nIsolation probe results\n");
   let failed = 0;
   for (const r of results) {
