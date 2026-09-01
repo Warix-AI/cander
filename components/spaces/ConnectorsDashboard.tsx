@@ -33,7 +33,7 @@ import {
   replaceConnectorConnectionsForWorkspace,
   subscribeConnectorConnections,
 } from "@/lib/connector-connections-store";
-import { fetchConnectorConnections } from "@/lib/api/connector-client";
+import { fetchConnectorConnections, initiateConnectorConnection } from "@/lib/api/connector-client";
 
 const SECTION_ORDER = [
   "Featured",
@@ -46,11 +46,6 @@ const SECTION_ORDER = [
 ] as const;
 
 const PREVIEW_ROWS = 6;
-
-/** Real OAuth installs ship later — catalog browse stays on. */
-const CONNECTORS_INSTALL_LIVE = false;
-const CONNECTORS_COMING_SOON =
-  "Connector installs are coming soon. You can browse the catalog today.";
 
 const connectorScopeOptions = [
   { id: "connectors", label: "Connectors" },
@@ -151,14 +146,27 @@ export function ConnectorsDashboard() {
     setWorkAttachFor(null);
   };
 
-  const showComingSoon = () => {
-    setInfo(CONNECTORS_COMING_SOON);
-  };
-
-  const install = (id: string) => {
+  const connectConnector = async (id: string) => {
     if (blockedIds.includes(id)) return;
-    if (!CONNECTORS_INSTALL_LIVE) {
-      showComingSoon();
+    if (id === "gmail") {
+      setInfo("");
+      try {
+        const { authorizationUrl } = await initiateConnectorConnection({
+          workspaceId,
+          connectorId: id,
+        });
+        const connections = await fetchConnectorConnections(workspaceId);
+        replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+        if (authorizationUrl) {
+          window.location.assign(authorizationUrl);
+          return;
+        }
+        setInfo("Could not start Gmail authorization.");
+      } catch (err) {
+        setInfo(
+          err instanceof Error ? err.message : "Could not start connection.",
+        );
+      }
       return;
     }
     installConnector(id);
@@ -168,8 +176,8 @@ export function ConnectorsDashboard() {
 
   const selectConnector = (id: string) => {
     if (workAttachFor) {
-      if (!CONNECTORS_INSTALL_LIVE) {
-        showComingSoon();
+      if (id === "gmail") {
+        void connectConnector(id);
         return;
       }
       installConnector(id);
@@ -235,7 +243,7 @@ export function ConnectorsDashboard() {
     <DashFrame
       banner={false}
       title="Connectors"
-      subtitle="Browse apps to connect — installs are coming soon."
+      subtitle="Connect apps to your workspace."
     >
         {info ? (
           <p className="mb-4 rounded-[10px] border border-border bg-muted/40 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
@@ -391,7 +399,7 @@ export function ConnectorsDashboard() {
                       active={connectorId === item.id}
                       tier={pinTier("connector", item.id)}
                       onOpen={() => selectConnector(item.id)}
-                      onInstall={() => install(item.id)}
+                      onInstall={() => void connectConnector(item.id)}
                       onUninstall={() => uninstall(item.id)}
                       onSetPin={() => setPin("connector", item.id, "primary")}
                       onClearPin={() => clearPin("connector", item.id)}
@@ -554,7 +562,11 @@ function DirectoryItem({
               onClick={onInstall}
               className="inline-flex h-7 shrink-0 items-center rounded-full border border-foreground/15 px-2.5 text-[11.5px] font-medium tracking-[-0.01em] hover:bg-muted"
             >
-              {workAttach ? "Add to Work" : CONNECTORS_INSTALL_LIVE ? "Install" : "Coming soon"}
+              {workAttach
+                ? "Add to Work"
+                : item.id === "gmail"
+                  ? "Connect"
+                  : "Install"}
             </button>
           )}
         </div>
