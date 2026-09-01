@@ -377,3 +377,16 @@ export function resolveAllowedToolsForTurn(opts: {
   const toolNames = toolsForDomains(domains);
   return { domains: [...domains], toolNames };
 }
+
+/** True when the user message should unlock Gmail connector tools. */
+export function isCommsConnectorIntent(content: string): boolean {
+  const text = (content || "").trim();
+  if (!text) return false;
+  return (
+    /\b(gmail|inbox|e-?mail|emails?|mailbox)\b/i.test(text) ||
+    /\b(unread|sent|drafts?)\b[\s\S]{0,32}\b(mail|email|message)/i.test(text) ||
+    /\b(check|read|search|find|summarize|show|list)\b[\s\S]{0,40}\b(my )?(email|mail|inbox|gmail)\b/i.test(
+      text,
+    )
+  );
+}

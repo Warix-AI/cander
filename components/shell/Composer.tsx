@@ -52,8 +52,9 @@ import {
   isCapacitorNative,
   toSendAttachments,
 } from "@/lib/composer-attach";
+import { isDesktopShell } from "@/lib/desktop-shell";
+import { isMobileShell } from "@/lib/mobile-shell";
 import { composerAttachActions } from "@/lib/ai/raw-openai/limits";
-import { isRawOpenAIModeEnabled } from "@/lib/ai/raw-openai/flags";
 import {
   applyComposerTextareaSize,
   nextComposerTextareaSize,
@@ -543,7 +544,8 @@ export function Composer({
     setTranscribing(false);
     afterTranscriptionRef.current = "insert";
 
-    const useOpenAI = isRawOpenAIModeEnabled();
+    const useOpenAI =
+      !isDesktopShell() && !isMobileShell() && isOpenAIDictationSupported();
     if (useOpenAI) {
       if (!isOpenAIDictationSupported()) {
         setDictateError("Microphone recording isn’t available here.");

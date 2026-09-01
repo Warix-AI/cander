@@ -102,9 +102,10 @@ describe("Dictation isolation", () => {
     assert.equal(src.includes("toggleVoice"), false);
   });
 
-  it("raw OpenAI system instruction prefers concise answers", () => {
-    const src = fs.readFileSync("lib/ai/raw-openai/run-turn.ts", "utf8");
-    assert.ok(src.includes("concise and capable AI assistant"));
-    assert.ok(src.includes("Prefer compact, natural responses"));
+  it("composer uses OpenAI dictation on web without raw chat mode flag", () => {
+    const src = fs.readFileSync("components/shell/Composer.tsx", "utf8");
+    assert.equal(src.includes("isRawOpenAIModeEnabled"), false);
+    assert.ok(src.includes("isOpenAIDictationSupported"));
+    assert.ok(src.includes("isDesktopShell"));
   });
 });

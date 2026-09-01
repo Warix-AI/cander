@@ -197,6 +197,13 @@ async function runAssistantTurnInner(
 
   // V6 — sole path when enabled (Edge only as in-pipeline provider).
   if (path === "v6") {
+    const { isCommsConnectorIntent } = await import("@/lib/ai/tools/domains");
+    if (isCommsConnectorIntent(request.content)) {
+      const { runCommsConnectorTurn } = await import(
+        "@/lib/ai/connectors/comms-turn"
+      );
+      return runCommsConnectorTurn(request, opts);
+    }
     const { runTurn } = await import("@/lib/ai/v6");
     return runTurn(request, opts);
   }

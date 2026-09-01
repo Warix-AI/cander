@@ -6,6 +6,7 @@ import {
   redactComposioPayload,
 } from "../lib/connectors/composio-tools.ts";
 import { authorizeConnectorToolAction } from "../lib/connectors/tool-authz.ts";
+import { isCommsConnectorIntent } from "../lib/ai/tools/domains.ts";
 
 test("mapGmailToolArguments maps search and read args", () => {
   assert.deepEqual(mapGmailToolArguments("gmail.search", { query: "is:unread" }), {
@@ -68,6 +69,11 @@ test("formatGmailToolOutput summarizes search results without secrets", () => {
   assert.equal(parsed.messages[0]?.id, "msg_1");
   assert.equal(parsed.messages[0]?.subject, "Weekly update");
   assert.equal("connected_account_id" in parsed, false);
+});
+
+test("isCommsConnectorIntent unlocks gmail email asks", () => {
+  assert.equal(isCommsConnectorIntent("check my gmail inbox"), true);
+  assert.equal(isCommsConnectorIntent("Are there any sports going on"), false);
 });
 
 test("connector tool seam allows gmail.read and blocks send", () => {
