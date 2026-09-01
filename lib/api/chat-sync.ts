@@ -53,8 +53,12 @@ function mergeMessageBlocks(
 ): ChatBlock[] | undefined {
   if (!remoteBlocks?.length) return localBlocks;
   if (!localBlocks?.length) return remoteBlocks;
+
   const merged = remoteBlocks.map((remoteBlock, index) => {
-    const localBlock = localBlocks[index];
+    const localBlock =
+      localBlocks[index]?.type === remoteBlock.type
+        ? localBlocks[index]
+        : localBlocks.find((candidate) => blocksMatch(candidate, remoteBlock));
     if (!localBlock || localBlock.type !== remoteBlock.type) return remoteBlock;
     if (remoteBlock.type === "image" && localBlock.type === "image") {
       if (!remoteBlock.url?.trim() && localBlock.url?.trim()) {
@@ -65,29 +69,44 @@ function mergeMessageBlocks(
       remoteBlock.type === "image_generation" &&
       localBlock.type === "image_generation"
     ) {
+      if (localBlock.status === "generating") return localBlock;
       if (
-        localBlock.status === "generating" ||
-        (localBlock.imageUrl?.trim() && !remoteBlock.imageUrl?.trim())
+        localBlock.status === "completed" &&
+        localBlock.imageUrl?.trim() &&
+        (!remoteBlock.imageUrl?.trim() ||
+          remoteBlock.status !== "completed")
       ) {
         return localBlock;
       }
     }
     return remoteBlock;
   });
+
   for (const localBlock of localBlocks) {
     if (
       localBlock.type === "image_generation" &&
-      localBlock.status === "generating" &&
-      !merged.some(
-        (block) =>
-          block.type === "image_generation" &&
-          block.generationId === localBlock.generationId,
-      )
+      (localBlock.status === "generating" ||
+        (localBlock.status === "completed" && localBlock.imageUrl?.trim())) &&
+      !merged.some((block) => blocksMatch(block, localBlock))
     ) {
       merged.push(localBlock);
     }
   }
   return merged;
+}
+
+function blocksMatch(a: ChatBlock, b: ChatBlock): boolean {
+  if (a.type !== b.type) return false;
+  if (a.type === "image_generation" && b.type === "image_generation") {
+    return a.generationId === b.generationId;
+  }
+  if (a.type === "image" && b.type === "image") {
+    return (
+      Boolean(a.attachmentId && a.attachmentId === b.attachmentId) ||
+      Boolean(a.url && a.url === b.url)
+    );
+  }
+  return false;
 }
 
 /** Merge a remote thread hydrate with the in-memory copy to avoid image flicker. */
@@ -150,20 +169,7 @@ export async function hydrateChatFromRemote(
   const mergedRemote = remote.map((remoteThread) => {
     const local = latest.find((item) => item.id === remoteThread.id);
     if (!local || local.workspaceId !== ctx.workspaceId) return remoteThread;
-    const localPendingAi = local.messages.some((message) =>
-      messageHasPendingAi(message),
-    );
-    if (localPendingAi) return local;
-    if (
-      threadHasTurns(local) &&
-      local.messages.length > remoteThread.messages.length
-    ) {
-      return local;
-    }
-    const localAt = Date.parse(local.updatedAt || "") || 0;
-    const remoteAt = Date.parse(remoteThread.updatedAt || "") || 0;
-    if (localAt > remoteAt && threadHasTurns(local)) return local;
-    return remoteThread;
+    return mergeHydratedThread(local, remoteThread);
   });
   replaceChatThreads([...otherWorkspaces, ...mergedRemote, ...localPending]);
   window.setTimeout(() => {
@@ -190,9 +196,26 @@ function threadSyncSig(thread: {
   title: string;
   snippet: string;
   sessionSummary?: string | null;
-  messages: { id: string; content: string; status?: string }[];
+  messages: {
+    id: string;
+    content: string;
+    status?: string;
+    blocks?: import("@/lib/types").Message["blocks"];
+  }[];
 }) {
   const last = thread.messages[thread.messages.length - 1];
+  const blockSig =
+    last?.blocks
+      ?.map((block) => {
+        if (block.type === "image_generation") {
+          return `${block.generationId}:${block.status}:${block.imageUrl?.slice(0, 96) ?? ""}`;
+        }
+        if (block.type === "image") {
+          return `image:${block.attachmentId ?? block.url?.slice(0, 96) ?? ""}`;
+        }
+        return block.type;
+      })
+      .join("|") ?? "";
   return [
     thread.updatedAt,
     thread.title,
@@ -202,6 +225,7 @@ function threadSyncSig(thread: {
     last?.id ?? "",
     last?.content?.slice(0, 80) ?? "",
     last?.status ?? "",
+    blockSig,
   ].join("|");
 }
 

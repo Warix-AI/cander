@@ -1,4 +1,5 @@
 import type { Message, SpaceId, Thread } from "@/lib/types";
+import { resolveChatImageUrl } from "@/lib/chat-attachment-image-url";
 
 export type ThreadRow = {
   id: string;
@@ -116,12 +117,40 @@ export function messageToUpsertRow(
   workspaceId: string,
   sortOrder: number,
 ): Record<string, unknown> {
-  const row = messageToRow(message, threadId, workspaceId, sortOrder);
+  const normalized =
+    message.blocks === undefined
+      ? message
+      : { ...message, blocks: sanitizeBlocksForRemoteSync(message.blocks) };
+  const row = messageToRow(normalized, threadId, workspaceId, sortOrder);
   if (message.blocks === undefined) {
     const { blocks: _blocks, ...rest } = row;
     return rest;
   }
   return row;
+}
+
+function sanitizeBlocksForRemoteSync(
+  blocks: NonNullable<Message["blocks"]>,
+): NonNullable<Message["blocks"]> {
+  return blocks.map((block) => {
+    if (block.type === "image_generation") {
+      const imageUrl = resolveChatImageUrl({
+        attachmentId: block.attachmentId,
+        dataUrl: block.imageUrl,
+      });
+      if (!imageUrl || imageUrl === block.imageUrl) return block;
+      return { ...block, imageUrl };
+    }
+    if (block.type === "image") {
+      const url = resolveChatImageUrl({
+        attachmentId: block.attachmentId,
+        dataUrl: block.url,
+      });
+      if (!url || url === block.url) return block;
+      return { ...block, url };
+    }
+    return block;
+  });
 }
 
 export function messageRowToMessage(row: MessageRow): Message {

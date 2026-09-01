@@ -33,6 +33,7 @@ import { registerAppActionHandlers } from "@/lib/ai/runtime/app-actions";
 import { executeAuthorizedTool } from "@/lib/ai/runtime/tools";
 import { createApiBundle } from "@/lib/api";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
+import { resolveChatImageUrl } from "@/lib/chat-attachment-image-url";
 import {
   getChatStoreServerSnapshot,
   getChatStoreSnapshot,
@@ -1430,7 +1431,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   ) {
                     return block;
                   }
-                  return { ...block, ...patch };
+                  const next = { ...block, ...patch };
+                  if (
+                    next.status === "completed" &&
+                    (next.imageUrl?.trim() || patch.attachmentId)
+                  ) {
+                    const durable = resolveChatImageUrl({
+                      attachmentId: next.attachmentId ?? patch.attachmentId,
+                      dataUrl: next.imageUrl,
+                    });
+                    if (durable) next.imageUrl = durable;
+                  }
+                  return next;
                 }),
               };
             }),
