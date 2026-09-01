@@ -4,7 +4,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceApi, useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
-import { upsertChatThread } from "@/lib/api/chat-store";
+import { upsertChatThread, getChatStoreSnapshot } from "@/lib/api/chat-store";
+import { mergeHydratedThread } from "@/lib/api/chat-sync";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { CanderMark } from "@/components/brand/CanderMark";
 import { ClarificationCardSlot } from "@/components/chat/ClarificationCard";
@@ -118,7 +119,8 @@ export function ChatColumn() {
     let cancelled = false;
     void api.chat.getThread(ctx, threadId).then((remote) => {
       if (cancelled || !remote) return;
-      upsertChatThread(remote);
+      const local = getChatStoreSnapshot().threads.find((t) => t.id === threadId);
+      upsertChatThread(mergeHydratedThread(local, remote));
     });
     return () => {
       cancelled = true;

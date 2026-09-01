@@ -28,6 +28,7 @@ export function Dropdown({
   placement = "bottom",
   align = "start",
   matchTrigger = true,
+  onOpenChange,
 }: {
   trigger: (props: { open: boolean; toggle: () => void }) => ReactNode;
   children: (close: () => void) => ReactNode;
@@ -36,6 +37,7 @@ export function Dropdown({
   placement?: "bottom" | "top" | "right";
   align?: "start" | "end";
   matchTrigger?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{
@@ -77,11 +79,18 @@ export function Dropdown({
           : rect.bottom + gap;
 
     if (placement !== "right" && top + menuHeight > window.innerHeight - pad) {
-      top = Math.max(pad, rect.top - menuHeight - gap);
+      const above = rect.top - menuHeight - gap;
+      if (above >= pad) {
+        top = above;
+      } else {
+        top = Math.max(pad, window.innerHeight - menuHeight - pad);
+      }
     }
     if (placement === "right") {
       top = Math.min(top, window.innerHeight - menuHeight - pad);
       top = Math.max(pad, top);
+    } else {
+      top = Math.max(pad, Math.min(top, window.innerHeight - menuHeight - pad));
     }
 
     setPos({
@@ -120,6 +129,10 @@ export function Dropdown({
       releaseSidebarPeek();
     };
   }, [open]);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
 
   const close = () => setOpen(false);
   const mobile = useMobileShell();

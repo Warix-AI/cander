@@ -165,6 +165,32 @@ async function runAssistantTurnInner(
 
   // Benchmark bypass — raw OpenAI, no Cander orchestration.
   if (path === "raw_openai") {
+    const hasImages = Boolean(request.images?.length);
+    if (!hasImages) {
+      const { isSimpleConversational } = await import(
+        "@/lib/ai/v6/surface/prepass"
+      );
+      if (isSimpleConversational(request.content)) {
+        const text = request.content.trim();
+        let content = "Happy to help — what would you like to know?";
+        if (/thanks|thank you/i.test(text)) content = "You're welcome.";
+        else if (/^(hi|hello|hey)\b/i.test(text)) content = "Hi — how can I help?";
+        else if (/bye|good night/i.test(text)) content = "Goodbye.";
+        opts?.onProgress?.({
+          phase: "generating",
+          label: "Thinking",
+          contentDelta: content,
+          contentStreaming: true,
+        });
+        return {
+          content,
+          runtime: "cloud",
+          offline: false,
+          condensationOccurred: false,
+          aiChatId: request.aiChatId ?? null,
+        };
+      }
+    }
     const { runRawOpenAITurn } = await import("@/lib/ai/raw-openai/run-turn");
     return runRawOpenAITurn(request, opts);
   }

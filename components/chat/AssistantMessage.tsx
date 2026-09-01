@@ -12,6 +12,21 @@ import { isMobileShell } from "@/lib/mobile-shell";
 import type { ChatBlock, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+function blockKey(block: ChatBlock, index: number): string {
+  switch (block.type) {
+    case "image_generation":
+      return `gen-${block.generationId}`;
+    case "image":
+      return `img-${block.attachmentId ?? block.url.slice(0, 48)}`;
+    case "build":
+      return `build-${block.title}-${index}`;
+    case "clarification":
+      return `clarify-${block.title}-${index}`;
+    default:
+      return `${block.type}-${index}`;
+  }
+}
+
 export function AssistantMessage({ message }: { message: Message }) {
   const { thread } = useApp();
   const pending = message.status === "pending";
@@ -55,7 +70,7 @@ export function AssistantMessage({ message }: { message: Message }) {
         ?.filter((b) => b.type !== "tool")
         .map((block, index) => (
           <BlockView
-            key={index}
+            key={blockKey(block, index)}
             block={block}
             messageId={message.id}
             threadId={thread?.id}
@@ -330,31 +345,9 @@ function GeneratedImageBlock({
 }) {
   const [saving, setSaving] = useState(false);
   const [saveNote, setSaveNote] = useState<string | null>(null);
-  const [displayUrl, setDisplayUrl] = useState(block.url);
   const mobile = isMobileShell();
 
-  useEffect(() => {
-    if (!block.url.startsWith("data:")) {
-      setDisplayUrl(block.url);
-      return;
-    }
-    let cancelled = false;
-    let objectUrl: string | null = null;
-    void fetch(block.url)
-      .then((response) => response.blob())
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setDisplayUrl(objectUrl);
-      })
-      .catch(() => {
-        if (!cancelled) setDisplayUrl(block.url);
-      });
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [block.url]);
+  if (!block.url?.trim()) return null;
 
   return (
     <div className="my-1 flex max-w-md flex-col gap-1">
@@ -362,9 +355,10 @@ function GeneratedImageBlock({
         <div className="relative aspect-square min-w-0 flex-1 overflow-hidden rounded-[14px] border border-border bg-muted/20">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={displayUrl}
+            src={block.url}
             alt={block.name}
             draggable={false}
+            decoding="async"
             className="absolute inset-0 h-full w-full object-cover select-none"
             style={mobile ? { WebkitTouchCallout: "none" } : undefined}
             onContextMenu={(event) => event.preventDefault()}

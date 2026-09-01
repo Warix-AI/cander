@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from "react";
 import {
   AppWindow,
   ChevronLeft,
@@ -24,10 +24,11 @@ import {
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { BrowserSurfaceHost } from "@/components/browser/BrowserSurfaceHost";
+import { NativeOverlayGate } from "@/components/browser/NativeOverlayGate";
 import { BrowserAddressField } from "@/components/browser/BrowserAddressField";
 import { BrowserChromeTooltip } from "@/components/browser/BrowserChromeTooltip";
 import { FaviconImage } from "@/components/browser/FaviconImage";
-import { getBrowserSurfaceAdapter } from "@/lib/browser-surface";
+import { getBrowserSurfaceAdapter, usesNativeBrowserSurface } from "@/lib/browser-surface";
 import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import {
   MobileBottomSheet,
@@ -1081,6 +1082,24 @@ function ProjectMobileTabBar({
   );
 }
 
+function BrowserChromeDropdown(props: ComponentProps<typeof Dropdown>) {
+  const [open, setOpen] = useState(false);
+  const nativeSurface = usesNativeBrowserSurface();
+
+  return (
+    <>
+      <NativeOverlayGate open={open && nativeSurface} />
+      <Dropdown
+        {...props}
+        onOpenChange={(next) => {
+          setOpen(next);
+          props.onOpenChange?.(next);
+        }}
+      />
+    </>
+  );
+}
+
 function DesktopProjectToolsMenu({
   selectMode,
   canRename,
@@ -1101,9 +1120,8 @@ function DesktopProjectToolsMenu({
   onRefresh: () => void;
 }) {
   return (
-    <Dropdown
+    <BrowserChromeDropdown
       align="end"
-      placement="top"
       matchTrigger={false}
       menuClassName="min-w-[14rem] z-[320]"
       trigger={({ toggle }) => (
@@ -1173,7 +1191,7 @@ function DesktopProjectToolsMenu({
           </DesktopMenuItem>
         </>
       )}
-    </Dropdown>
+    </BrowserChromeDropdown>
   );
 }
 
@@ -1338,9 +1356,8 @@ function AddTabMenu({
   compact?: boolean;
 }) {
   return (
-    <Dropdown
+    <BrowserChromeDropdown
       align="start"
-      placement="top"
       matchTrigger={false}
       menuClassName="min-w-[14rem] max-h-[min(20rem,50vh)] overflow-y-auto z-[320]"
       trigger={({ toggle }) => (
@@ -1397,7 +1414,7 @@ function AddTabMenu({
           ) : null}
         </>
       )}
-    </Dropdown>
+    </BrowserChromeDropdown>
   );
 }
 
