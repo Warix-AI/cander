@@ -2,7 +2,7 @@ import type { SpaceId } from "./types";
 
 export type BannerKey = SpaceId;
 
-export type BannerPresetId = "host" | "price" | "spaces" | "dusk";
+export type BannerPresetId = "host" | "price" | "spaces" | "dusk" | "promo";
 
 export type SpaceBannerChoice = {
   preset: BannerPresetId;
@@ -19,6 +19,8 @@ const LEGACY_PRESET: Record<string, BannerPresetId> = {
   price: "price",
   spaces: "spaces",
   dusk: "dusk",
+  promo: "promo",
+  studio: "promo",
 };
 
 export const BANNER_PRESETS: {
@@ -30,10 +32,14 @@ export const BANNER_PRESETS: {
   { id: "price", label: "Indigo", className: "panel-wash-price" },
   { id: "spaces", label: "Aurora", className: "panel-wash-spaces" },
   { id: "dusk", label: "Dusk", className: "panel-wash-dusk" },
+  { id: "promo", label: "Studio", className: "panel-wash-promo" },
 ];
 
+/** Default wash for previews — lighter Studio orange (panel-wash-promo). */
+export const DEFAULT_CHAT_PREVIEW_PRESET: BannerPresetId = "promo";
+
 export const defaultBannerPreset: Record<BannerKey, BannerPresetId> = {
-  home: "dusk",
+  home: "promo",
   work: "price",
   build: "spaces",
   research: "host",

@@ -27,12 +27,12 @@ const ThemeContext = createContext<{
 function applyTheme(next: Theme) {
   const appearance = getAppearanceSnapshot();
 
-  if (next === "light" && appearance.colorMode === "dark") {
-    setAppearance({ colorMode: "light" });
-    return;
-  }
-  if (next === "dark" && appearance.colorMode === "light") {
-    setAppearance({ colorMode: "dark" });
+  if (
+    appearance.colorMode === "system" ||
+    (next === "light" && appearance.colorMode === "dark") ||
+    (next === "dark" && appearance.colorMode === "light")
+  ) {
+    setAppearance({ colorMode: next });
     return;
   }
   persistTheme(next);

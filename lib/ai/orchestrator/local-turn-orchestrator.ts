@@ -922,6 +922,7 @@ async function buildFmPrompt(
       includeInventory,
       toolsEnabled,
       identityAsked: isIdentityQuestion(request.content),
+      userMessage: request.content,
     }),
     pkg.taskStateText,
     toolBlock,

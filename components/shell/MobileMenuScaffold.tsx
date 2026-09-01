@@ -20,7 +20,7 @@ export const MOBILE_MENU_WIDTH = 0.75;
  */
 export function MobileMenuScaffold({ children }: { children: ReactNode }) {
   const mobile = useMobileShell();
-  const { mobileSurface, setMobileSurface } = useApp();
+  const { mobileSurface, mobileContentSurface, setMobileSurface } = useApp();
 
   if (!mobile) return <>{children}</>;
 
@@ -74,7 +74,7 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
           data-allow-swipe=""
           className="absolute inset-y-0 right-0 z-30"
           style={{ width: `${peekPct}%` }}
-          onClick={() => setMobileSurface("chat")}
+          onClick={() => setMobileSurface(mobileContentSurface)}
         />
       ) : null}
     </div>

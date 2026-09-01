@@ -1,27 +1,36 @@
 "use client";
 
-import { useMemo } from "react";
-import { ChevronRight } from "lucide-react";
+import { useCallback, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import {
   DashBtn,
   DashFrame,
   DashToolbar,
   LayoutToggle,
+  ScopeToggle,
   useSpaceChatClosed,
 } from "@/components/spaces/ItemSet";
-import { workEmptyCopy, type WorkTone } from "@/lib/work-catalog";
-import type { BriefingItem } from "@/lib/space-entities";
-import { useSpaceBriefingItems } from "@/lib/hooks/use-space-query";
+import { WorkCollectionFilter } from "@/components/spaces/work/WorkCollectionFilter";
+import { WorkSpaceView } from "@/components/spaces/work/WorkSpaceView";
+import { WorkTodayView } from "@/components/spaces/work/WorkTodayView";
+import type { WorkCollectionCategory } from "@/lib/work-screen-data";
+import { WORK_COLLECTION_CATEGORY_OPTIONS } from "@/lib/work-screen-data";
+import {
+  readWorkScreenView,
+  writeWorkScreenView,
+  type WorkScreenView,
+} from "@/lib/work-view-preference";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
+const WORK_VIEW_OPTIONS = [
+  { id: "today", label: "Today" },
+  { id: "space", label: "Space" },
+] as const;
+
 export function WorkDashboard() {
   const {
-    workspaceId,
-    openSpace,
     openSpaceChat,
-    openSpaceEntity,
     spaceLayout,
     setSpaceLayout,
     mobileSurface,
@@ -32,189 +41,90 @@ export function WorkDashboard() {
   const hoistFilters =
     mobile && view === "space" && mobileSurface === "panel";
 
-  const { data: briefingItems, loading: briefingLoading } =
-    useSpaceBriefingItems();
-
-  const todayItems = useMemo(
-    () =>
-      briefingItems.filter((item) => item.workspaceId === workspaceId),
-    [briefingItems, workspaceId],
+  const [workView, setWorkViewState] = useState<WorkScreenView>(
+    readWorkScreenView,
+  );
+  const [category, setCategory] = useState<"all" | WorkCollectionCategory>(
+    "all",
   );
 
-  const openBriefing = (item: BriefingItem) => {
-    openSpaceEntity({
-      type: "briefing",
-      id: item.id,
-      space: "work",
-      workspaceId: item.workspaceId,
-      label: item.title,
-      snapshot: item.prompt,
-    });
-  };
+  const setWorkView = useCallback((next: WorkScreenView) => {
+    setWorkViewState(next);
+    writeWorkScreenView(next);
+  }, []);
+
+  const isSpace = workView === "space";
 
   return (
     <DashFrame
       banner={false}
       title="Work"
-      subtitle="Use and organize what you build and connect."
+      subtitle="Plan your day and organize what you use."
     >
       <DashToolbar
         active={hoistFilters}
-        onNewChat={chatClosed ? () => openSpaceChat("work") : undefined}
+        onNewChat={
+          chatClosed ? () => openSpaceChat("work", { landOnPanel: false }) : undefined
+        }
         newChatLabel="Ask"
-        layout={{ value: spaceLayout, onChange: setSpaceLayout }}
-        extras={[
-          {
-            id: "connectors",
-            label: "Connectors",
-            onClick: () => openSpace("connectors"),
-          },
-        ]}
+        scope={{
+          value: workView,
+          onChange: (id) => setWorkView(id as WorkScreenView),
+          options: WORK_VIEW_OPTIONS.map((item) => ({
+            id: item.id,
+            label: item.label,
+          })),
+          label: "View",
+        }}
+        layout={
+          isSpace
+            ? { value: spaceLayout, onChange: setSpaceLayout }
+            : undefined
+        }
+        extras={
+          isSpace
+            ? WORK_COLLECTION_CATEGORY_OPTIONS.map((item) => ({
+                id: item.id,
+                label: item.label,
+                active: category === item.id,
+                onClick: () => setCategory(item.id),
+              }))
+            : undefined
+        }
         actions={
           <>
             {chatClosed ? (
-              <DashBtn primary onClick={() => openSpaceChat("work")}>
+              <DashBtn primary onClick={() => openSpaceChat("work", { landOnPanel: false })}>
                 Ask
               </DashBtn>
             ) : null}
-            <DashBtn onClick={() => openSpace("connectors")}>Connectors</DashBtn>
+            {isSpace ? (
+              <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
+            ) : null}
           </>
         }
       >
-        <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
+        <div className={cn("flex shrink-0 items-center gap-2")}>
+          <ScopeToggle
+            value={workView}
+            onChange={(id) => setWorkView(id as WorkScreenView)}
+            options={[...WORK_VIEW_OPTIONS]}
+          />
+          {isSpace ? (
+            <WorkCollectionFilter value={category} onChange={setCategory} />
+          ) : null}
+        </div>
       </DashToolbar>
 
-      <section className="mt-5 lg:mt-5">
-        <h2 className="text-[13px] font-medium tracking-[-0.01em] text-muted-foreground">
-          Today
-        </h2>
-
-        {briefingLoading || !todayItems.length ? (
-          <div className="mt-3">
-            <WorkDayOverview />
-            {!briefingLoading ? (
-              <p className="mt-4 px-1 text-[13px] leading-relaxed text-muted-foreground">
-                {workEmptyCopy("today")}
-              </p>
-            ) : null}
-          </div>
-        ) : spaceLayout === "cards" ? (
-          <div className="mt-3 grid grid-cols-1 gap-x-3 gap-y-5 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3">
-            {todayItems.map((item) => (
-              <BriefingCard
-                key={item.id}
-                item={item}
-                onOpen={() => openBriefing(item)}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="mt-3 divide-y divide-border rounded-[10px] border border-border">
-            {todayItems.map((item) => (
-              <BriefingRow
-                key={item.id}
-                item={item}
-                onOpen={() => openBriefing(item)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+      {isSpace ? (
+        <div className="mt-7">
+          <WorkSpaceView layout={spaceLayout} category={category} />
+        </div>
+      ) : (
+        <div className="mt-7">
+          <WorkTodayView />
+        </div>
+      )}
     </DashFrame>
   );
 }
-
-function WorkDayOverview() {
-  const lanes = [
-    { title: "Tasks", detail: "Replies, approvals, and follow-ups" },
-    { title: "Activity", detail: "What moved since you last looked" },
-    { title: "Alerts", detail: "Items that need attention today" },
-  ];
-  return (
-    <div className="grid gap-2">
-      {lanes.map((lane) => (
-        <div
-          key={lane.title}
-          className="rounded-[10px] border border-border bg-muted/30 px-4 py-3.5"
-        >
-          <p className="text-[14px] font-medium tracking-[-0.02em]">{lane.title}</p>
-          <p className="mt-0.5 text-[12.5px] text-muted-foreground">{lane.detail}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function BriefingCard({
-  item,
-  onOpen,
-}: {
-  item: BriefingItem;
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex h-full min-w-0 flex-col rounded-[10px] border border-border p-4 text-left transition-colors duration-200 hover:bg-muted/30 dark:hover:bg-muted/20"
-    >
-      <ToneDot tone={item.tone} />
-      <p className="mt-2 line-clamp-2 text-[14px] font-medium tracking-[-0.02em]">
-        {item.title}
-      </p>
-      <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
-        {item.summary}
-      </p>
-    </button>
-  );
-}
-
-function BriefingRow({
-  item,
-  onOpen,
-}: {
-  item: BriefingItem;
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex w-full items-center gap-3 py-3.5 text-left transition-colors duration-200 hover:bg-muted/40 dark:hover:bg-muted/30 first:rounded-t-[10px] last:rounded-b-[10px]"
-    >
-      <ToneDot tone={item.tone} />
-      <span className="min-w-0 flex-1">
-        <span className="block text-[14px] font-medium tracking-[-0.02em]">
-          {item.title}
-        </span>
-        <span className="mt-0.5 block text-[13px] leading-relaxed text-muted-foreground">
-          {item.summary}
-        </span>
-      </span>
-      <ChevronRight
-        className="h-4 w-4 shrink-0 text-muted-foreground"
-        strokeWidth={1.6}
-      />
-    </button>
-  );
-}
-
-function ToneDot({
-  tone,
-}: {
-  tone?: WorkTone | BriefingItem["tone"];
-}) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "h-2 w-2 shrink-0 rounded-full",
-        tone === "urgent" && "bg-rose-500",
-        tone === "waiting" && "bg-amber-500",
-        tone === "ready" && "bg-sky-500",
-        (!tone || tone === "neutral") && "bg-muted-foreground/35",
-      )}
-    />
-  );
-}
-

@@ -5,12 +5,24 @@
 export type MobileSurfaceEnter = "forward" | "back";
 
 let skipPagerTransitionOnce = false;
+let skipSpaceEnterOnce = false;
 let surfaceEnter: MobileSurfaceEnter | null = null;
 let panelStackDirection: MobileSurfaceEnter = "forward";
 
 /** Jump the chat|panel pager without its strip animation (paired with a surface enter). */
 export function skipMobilePagerTransitionOnce() {
   skipPagerTransitionOnce = true;
+}
+
+/** Skip the dashboard content enter animation (menu + pager already moved). */
+export function skipMobileSpaceEnterOnce() {
+  skipSpaceEnterOnce = true;
+}
+
+export function consumeSkipMobileSpaceEnter() {
+  if (!skipSpaceEnterOnce) return false;
+  skipSpaceEnterOnce = false;
+  return true;
 }
 
 export function consumeSkipMobilePagerTransition() {

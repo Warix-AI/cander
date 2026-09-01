@@ -46,7 +46,14 @@ export function isChatSpace(
   );
 }
 
-/** Dashboard-only destinations — no chat column or composer. */
+/** Work / Build / Explore / Home — Home chat opens on demand via Ask. */
+export function isDockChatSpace(
+  id: SpaceId | NavDestinationId | null | undefined,
+): id is ChatSpaceId | "home" {
+  return id === "home" || isChatSpace(id);
+}
+
+/** Dashboard-only destinations — chat closed until Ask. */
 export function isDashboardOnlySpace(
   id: SpaceId | NavDestinationId | null | undefined,
 ): boolean {
@@ -57,8 +64,8 @@ export function isDashboardOnlySpace(
 export function chatSpaceId(
   id: NavDestinationId | null | undefined,
 ): SpaceId | null {
-  if (!id || id === "connectors" || id === "home" || id === "studio") return null;
-  return id;
+  if (!id || id === "connectors" || id === "studio") return null;
+  return id as SpaceId;
 }
 
 export function isExtraNavId(id: string): id is ExtraNavId {

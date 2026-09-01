@@ -1,5 +1,5 @@
-import { isChatSpace } from "@/lib/spaces";
-import type { CourierView, NavDestinationId } from "@/lib/types";
+import { isDockChatSpace } from "@/lib/spaces";
+import type { CourierView, NavDestinationId, SpaceId } from "@/lib/types";
 
 /** Default right-panel share when chat + panel are split (higher = narrower chat). */
 export const DEFAULT_PANEL_RATIO = 0.68;
@@ -85,7 +85,7 @@ export function canUseRightPanel(opts: {
   if (!chatIsActive(opts)) return false;
   if (opts.view !== "space") return false;
   return (
-    isChatSpace(opts.spaceId) ||
+    isDockChatSpace(opts.spaceId as SpaceId | null) ||
     Boolean(opts.connectorId) ||
     Boolean(opts.projectId) ||
     Boolean(opts.jobId) ||

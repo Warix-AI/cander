@@ -2,18 +2,30 @@ import { useSyncExternalStore } from "react";
 import { persistTheme } from "@/lib/session";
 import { type ShellStyle } from "@/lib/shell-chrome";
 
-export type ColorModeId = "light" | "dark";
+export type ColorModeId = "light" | "dark" | "system";
 
 export const COLOR_MODE_PRESETS: {
   id: ColorModeId;
   label: string;
 }[] = [
+  { id: "system", label: "System" },
   { id: "light", label: "Light" },
   { id: "dark", label: "Dark" },
 ];
 
+export function resolveEffectiveColorMode(
+  mode: ColorModeId,
+): Exclude<ColorModeId, "system"> {
+  if (mode !== "system") return mode;
+  if (typeof window === "undefined") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
 export function colorPaletteForMode(id: ColorModeId): ColorPalette {
-  switch (id) {
+  const mode = id === "system" ? resolveEffectiveColorMode(id) : id;
+  switch (mode) {
     case "light":
       return {
         theme: "light",
@@ -35,7 +47,8 @@ export function colorPaletteForMode(id: ColorModeId): ColorPalette {
 
 /** Preview swatch — matches applied CSS vars closely. */
 export function swatchForMode(id: ColorModeId): string {
-  switch (id) {
+  const mode = id === "system" ? "light" : id;
+  switch (mode) {
     case "light":
       return "oklch(0.97 0.004 260)";
     case "dark":
@@ -44,7 +57,7 @@ export function swatchForMode(id: ColorModeId): string {
 }
 
 function isColorModeId(value: unknown): value is ColorModeId {
-  return COLOR_MODE_PRESETS.some((preset) => preset.id === value);
+  return value === "light" || value === "dark" || value === "system";
 }
 
 /** Exported for remote appearance hydration. */
@@ -53,6 +66,7 @@ export function migrateColorModeForSync(value: unknown): ColorModeId {
 }
 
 function migrateColorMode(value: unknown): ColorModeId {
+  if (value === "system") return "system";
   if (value === "dark" || value === "dark-charcoal" || value === "dark-blue") {
     return "dark";
   }
@@ -173,6 +187,24 @@ const SERVER_SNAPSHOT: AppearanceState = { ...DEFAULT_APPEARANCE };
 
 let state: AppearanceState = { ...DEFAULT_APPEARANCE };
 let hydrated = false;
+let systemThemeMedia: MediaQueryList | null = null;
+
+function onSystemThemeChange() {
+  if (getAppearanceSnapshot().colorMode !== "system") return;
+  syncAppearanceSideEffects();
+}
+
+function syncSystemThemeListener() {
+  if (typeof window === "undefined") return;
+  const wantsSystem = getAppearanceSnapshot().colorMode === "system";
+  if (wantsSystem && !systemThemeMedia) {
+    systemThemeMedia = window.matchMedia("(prefers-color-scheme: dark)");
+    systemThemeMedia.addEventListener("change", onSystemThemeChange);
+  } else if (!wantsSystem && systemThemeMedia) {
+    systemThemeMedia.removeEventListener("change", onSystemThemeChange);
+    systemThemeMedia = null;
+  }
+}
 
 function emit() {
   listeners.forEach((listener) => listener());
@@ -227,6 +259,7 @@ function hydrate() {
     raw = window.localStorage.getItem(STORAGE_KEY);
   }
   state = parse(raw);
+  syncSystemThemeListener();
 }
 
 function persist(next: AppearanceState) {
@@ -423,7 +456,9 @@ export function typePresetFor(value: number): TypePreset {
 /** Sync theme so existing hooks keep working. Shell is viewport-driven in AppShell. */
 export function syncAppearanceSideEffects(next: AppearanceState = getAppearanceSnapshot()) {
   if (typeof window === "undefined") return;
-  const palette = colorPaletteForMode(next.colorMode);
+  syncSystemThemeListener();
+  const effective = resolveEffectiveColorMode(next.colorMode);
+  const palette = colorPaletteForMode(effective);
   const current: "light" | "dark" = document.documentElement.classList.contains(
     "dark",
   )

@@ -3,17 +3,18 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { ChatColumn } from "@/components/shell/ChatColumn";
-import { ResizeHandle } from "@/components/shell/ContextPanel";
 import { TopRail } from "@/components/shell/TopRail";
+import { ResizeHandle } from "@/components/shell/ContextPanel";
 import { SpaceDashboard } from "@/components/shell/SpaceDashboard";
 import { ProjectBrowserPanel } from "@/components/browser/ProjectBrowserPanel";
 import { StandaloneBrowserPanel } from "@/components/browser/StandaloneBrowserPanel";
 import { MobileContentPager } from "@/components/shell/MobileContentPager";
 import { RightPanelToggleDock } from "@/components/shell/PanelToggle";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
-import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
+import { MOBILE_APP_BG, SPACE_CANVAS_BG } from "@/lib/mobile-menu-styles";
 import {
   consumeMobileSurfaceEnter,
+  consumeSkipMobileSpaceEnter,
   getMobilePanelStackDirection,
   setMobilePanelStackDirection,
 } from "@/lib/mobile-nav-transition";
@@ -23,7 +24,7 @@ import {
   PINNED_CHAT_WIDTH,
   showStandaloneBrowserPanel,
 } from "@/lib/right-panel";
-import { isDashboardOnlySpace } from "@/lib/spaces";
+import { isDashboardOnlySpace, isDockChatSpace } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import type { MobileSurface } from "@/lib/types";
 
@@ -43,13 +44,18 @@ export function SpaceChatLayout() {
     panelRatio,
     dragging,
     mobileSurface,
+    mobileContentSurface,
     projectId,
     expandedLayout,
     expandedPinned,
   } = useApp();
   const mobile = useMobileShell();
-  const chatArmed =
-    !isDashboardOnlySpace(spaceId) && (drafting || Boolean(thread));
+  const chatActive = drafting || Boolean(thread);
+  const chatArmed = mobile
+    ? spaceId === "home"
+      ? isDockChatSpace(spaceId) && chatActive
+      : !isDashboardOnlySpace(spaceId) && chatActive
+    : isDockChatSpace(spaceId) && chatActive;
   const showStandaloneBrowser = showStandaloneBrowserPanel({
     standaloneBrowserOpen,
     standaloneBrowserEphemeral,
@@ -79,6 +85,12 @@ export function SpaceChatLayout() {
   const [panelPop, setPanelPop] = useState(false);
   /** After a pop, suppress SpaceDashboard's short enter so it doesn't double-animate. */
   const suppressSpaceEnter = useRef(false);
+  const prevSpaceIdForEnter = useRef(spaceId);
+  let skipDashboardEnter = false;
+  if (prevSpaceIdForEnter.current !== spaceId) {
+    skipDashboardEnter = consumeSkipMobileSpaceEnter();
+    prevSpaceIdForEnter.current = spaceId;
+  }
 
   useEffect(() => {
     setSkipLayoutAnimation(true);
@@ -125,9 +137,9 @@ export function SpaceChatLayout() {
 
   if (mobile) {
     const active: MobileSurface =
-      isDashboardOnlySpace(spaceId) || mobileSurface === "panel"
+      isDashboardOnlySpace(spaceId) && !chatArmed
         ? "panel"
-        : "chat";
+        : mobileContentSurface;
 
     return (
       <MobileContentPager
@@ -149,7 +161,7 @@ export function SpaceChatLayout() {
           </div>
         }
         panelPane={
-          <div className={cn("flex h-full min-h-0 flex-col overflow-hidden", MOBILE_APP_BG)}>
+          <div className={cn("flex h-full min-h-0 flex-col overflow-hidden", SPACE_CANVAS_BG)}>
             {projectId ? (
               <div
                 key={projectId}
@@ -174,7 +186,9 @@ export function SpaceChatLayout() {
                   <SpaceDashboard
                     enterDirection={getMobilePanelStackDirection()}
                     animateEnter={
-                      !panelPop && !suppressSpaceEnter.current
+                      !panelPop &&
+                      !suppressSpaceEnter.current &&
+                      !skipDashboardEnter
                     }
                   />
                 </div>

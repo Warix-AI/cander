@@ -432,6 +432,7 @@ export function DashFrame({
   subtitle,
   actions,
   titleAction,
+  subtitleAction,
   banner = true,
   surfaceClassName,
   children,
@@ -443,6 +444,7 @@ export function DashFrame({
   subtitle?: string;
   actions?: ReactNode;
   titleAction?: ReactNode;
+  subtitleAction?: ReactNode;
   banner?: boolean;
   surfaceClassName?: string;
   children: ReactNode;
@@ -494,6 +496,7 @@ export function DashFrame({
                 title={title}
                 subtitle={subtitle}
                 titleAction={titleAction}
+                subtitleAction={subtitleAction}
                 actions={
                   actions ? (
                     <span
@@ -527,6 +530,7 @@ export function DashFrame({
             title={title}
             subtitle={subtitle}
             titleAction={titleAction}
+            subtitleAction={subtitleAction}
             inPanel={inPanel}
             compact={mobile}
           />
@@ -552,6 +556,7 @@ function DashHeader({
   subtitle,
   actions,
   titleAction,
+  subtitleAction,
   onBanner = false,
   inPanel = false,
   compact = false,
@@ -561,6 +566,7 @@ function DashHeader({
   subtitle?: string;
   actions?: ReactNode;
   titleAction?: ReactNode;
+  subtitleAction?: ReactNode;
   onBanner?: boolean;
   inPanel?: boolean;
   compact?: boolean;
@@ -602,29 +608,62 @@ function DashHeader({
 
   return (
     <div className="min-w-0">
-      <div className="flex flex-wrap items-center gap-2.5">
-        <h1
-          className={cn(
-            "heading-display text-foreground",
-            compact
-              ? "text-[1.25rem] leading-tight"
-              : "text-[1.55rem] leading-tight @min-[480px]:text-[1.85rem]",
-          )}
-        >
-          {title}
-        </h1>
-        {titleAction}
-      </div>
-      {subtitle ? (
-        <p
-          className={cn(
-            "mt-1.5 max-w-xl text-[13.5px] leading-relaxed text-muted-foreground @min-[480px]:mt-2 @min-[480px]:text-[14px]",
-            compact && "text-[13px]",
-          )}
-        >
-          {subtitle}
-        </p>
-      ) : null}
+      {subtitleAction ? (
+        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-3">
+          <div className="col-start-1 row-start-1 flex flex-wrap items-center gap-2.5">
+            <h1
+              className={cn(
+                "heading-display text-foreground",
+                compact
+                  ? "text-[1.25rem] leading-tight"
+                  : "text-[1.55rem] leading-tight @min-[480px]:text-[1.85rem]",
+              )}
+            >
+              {title}
+            </h1>
+            {titleAction}
+          </div>
+          {subtitle ? (
+            <p
+              className={cn(
+                "col-start-1 row-start-2 mt-1.5 min-w-0 max-w-xl text-[13.5px] leading-snug text-muted-foreground @min-[480px]:mt-2 @min-[480px]:text-[14px]",
+                compact && "mt-1 text-[13px]",
+              )}
+            >
+              {subtitle}
+            </p>
+          ) : null}
+          <div className="col-start-2 row-start-2 shrink-0 self-center">
+            {subtitleAction}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1
+              className={cn(
+                "heading-display text-foreground",
+                compact
+                  ? "text-[1.25rem] leading-tight"
+                  : "text-[1.55rem] leading-tight @min-[480px]:text-[1.85rem]",
+              )}
+            >
+              {title}
+            </h1>
+            {titleAction}
+          </div>
+          {subtitle ? (
+            <p
+              className={cn(
+                "mt-1.5 max-w-xl text-[13.5px] leading-relaxed text-muted-foreground @min-[480px]:mt-2 @min-[480px]:text-[14px]",
+                compact && "text-[13px]",
+              )}
+            >
+              {subtitle}
+            </p>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

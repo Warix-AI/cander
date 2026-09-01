@@ -22,6 +22,8 @@ export type MobilePanelScopeConfig = {
   value: string;
   onChange: (value: string) => void;
   options: { id: string; label: string }[];
+  /** Section heading — defaults to "Filter". */
+  label?: string;
 };
 
 export type MobilePanelExtraItem = {
@@ -185,8 +187,8 @@ export function MobilePanelActionsCluster({
         onClose={() => setMenuOpen(false)}
         mode="space"
       >
-        <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
-          <div className="mb-3 space-y-0.5">
+        <div className="max-h-[min(85vh,720px)] overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
+          <div className="mb-4 space-y-0.5">
             <SheetAction
               icon={SquarePen}
               label={composeLabel}
@@ -197,9 +199,9 @@ export function MobilePanelActionsCluster({
             />
           </div>
           {scope ? (
-            <div className="mb-3">
-              <p className="px-1 pb-1.5 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-                Filter
+            <div className="mb-4">
+              <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
+                {scope.label ?? "Filter"}
               </p>
               <div className="space-y-0.5">
                 {scope.options.map((item) => (
@@ -213,9 +215,29 @@ export function MobilePanelActionsCluster({
               </div>
             </div>
           ) : null}
+          {scope?.value === "space" && extras.length ? (
+            <div className="mb-4">
+              <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
+                Category
+              </p>
+              <div className="space-y-0.5">
+                {extras.map((item) => (
+                  <SheetRow
+                    key={item.id}
+                    label={item.label}
+                    selected={item.active}
+                    onClick={() => {
+                      item.onClick();
+                      setMenuOpen(false);
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
           {layout ? (
-            <div className="mb-3">
-              <p className="px-1 pb-1.5 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
+            <div className="mb-2">
+              <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
                 Layout
               </p>
               <div className="space-y-0.5">
@@ -234,7 +256,7 @@ export function MobilePanelActionsCluster({
               </div>
             </div>
           ) : null}
-          {extras.length ? (
+          {scope?.value !== "space" && extras.length ? (
             <div className="space-y-0.5">
               {extras.map((item) => (
                 <SheetRow
@@ -269,7 +291,7 @@ function SheetRow({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-[12px] px-3 py-3 text-left text-[15px] tracking-[-0.01em] transition-colors",
+        "flex w-full items-center gap-2.5 rounded-[12px] px-3 py-3.5 text-left text-[15px] tracking-[-0.01em] transition-colors",
         selected ? "bg-muted font-medium" : "hover:bg-muted/70",
       )}
     >

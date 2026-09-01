@@ -6,7 +6,11 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { DashFrame } from "@/components/spaces/ItemSet";
+import {
+  DashBtn,
+  DashFrame,
+  useSpaceChatClosed,
+} from "@/components/spaces/ItemSet";
 import {
   HOME_RECOMMENDED,
   HOME_UPDATES,
@@ -17,6 +21,7 @@ import {
   type HomeUsageCardId,
 } from "@/lib/home-dashboard";
 import { usePinnedItems } from "@/lib/use-pinned-items";
+import { bannerClass, DEFAULT_CHAT_PREVIEW_PRESET } from "@/lib/space-banners";
 import { useUsageSnapshot } from "@/lib/use-usage-status";
 import { cn } from "@/lib/utils";
 
@@ -31,9 +36,11 @@ export function HomeDashboard() {
     openConnector,
     newChat,
     openSettings,
+    openSpaceChat,
   } = useApp();
   const { pinnedItems } = usePinnedItems();
   const { snapshot } = useUsageSnapshot();
+  const chatClosed = useSpaceChatClosed();
 
   const usageCards = useMemo(
     () =>
@@ -76,6 +83,13 @@ export function HomeDashboard() {
       title="Home"
       subtitle="Usage, recommendations, and what's in motion."
       banner={false}
+      subtitleAction={
+        chatClosed ? (
+          <DashBtn primary onClick={() => openSpaceChat("home", { landOnPanel: false })}>
+            Ask
+          </DashBtn>
+        ) : null
+      }
     >
       <HomePromoBanner
         promo={promo}
@@ -202,28 +216,37 @@ function SectionHeading({ title }: { title: string }) {
 function HomePromoBanner({
   promo,
   onCta,
+  className,
 }: {
   promo: ReturnType<typeof homePromoForPlan>;
   onCta: () => void;
+  className?: string;
 }) {
   return (
-    <div className="panel-wash-dusk relative overflow-hidden rounded-[12px] text-white">
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-[12px] text-neutral-950",
+        bannerClass(DEFAULT_CHAT_PREVIEW_PRESET),
+        className,
+      )}
+    >
+      <div className="panel-grain" />
       <div className="relative flex flex-col gap-4 p-5 @min-[640px]:flex-row @min-[640px]:items-center @min-[640px]:justify-between @min-[640px]:p-6">
         <div className="min-w-0 max-w-xl">
-          <p className="text-[11px] font-medium tracking-[0.06em] text-white/60 uppercase">
+          <p className="text-[11px] font-medium tracking-[0.06em] text-neutral-950/55 uppercase">
             {promo.eyebrow}
           </p>
           <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] @min-[640px]:text-[20px]">
             {promo.title}
           </h2>
-          <p className="mt-2 text-[13px] leading-relaxed text-white/72">
+          <p className="mt-2 text-[13px] leading-relaxed text-neutral-950/72">
             {promo.body}
           </p>
         </div>
         <button
           type="button"
           onClick={onCta}
-          className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-white px-4 text-[13px] font-medium text-neutral-950 transition-colors hover:bg-white/90"
+          className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-neutral-950 px-4 text-[13px] font-medium text-white transition-colors hover:bg-neutral-800"
         >
           {promo.cta}
         </button>

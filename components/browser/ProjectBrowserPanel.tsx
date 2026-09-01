@@ -89,7 +89,7 @@ import {
   getSidebarPeekingServerSnapshot,
   subscribeSidebarPeeking,
 } from "@/lib/sidebar-peek";
-import { isChatSpace } from "@/lib/spaces";
+import { isDockChatSpace } from "@/lib/spaces";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useProjectCoverCapture } from "@/lib/hooks/use-project-cover-capture";
 import {
@@ -99,6 +99,11 @@ import {
   standaloneBrowserKey,
   STANDALONE_BROWSER_PROJECT_ID,
 } from "@/lib/standalone-browser-session";
+import {
+  defaultWorkItemBrowserSession,
+  findWorkCollectionItem,
+  isWorkItemBrowserProjectId,
+} from "@/lib/work-item-browser";
 import { cn } from "@/lib/utils";
 
 export function ProjectBrowserPanel({
@@ -186,6 +191,10 @@ export function ProjectBrowserPanel({
         title: "Project",
         spaceId: spaceId === "connectors" ? "build" : (spaceId ?? "build"),
       });
+    }
+    const workItem = findWorkCollectionItem(projectId);
+    if (workItem) {
+      return defaultWorkItemBrowserSession(workItem);
     }
     return defaultProjectBrowserSession({
       projectId,
@@ -366,9 +375,26 @@ export function ProjectBrowserPanel({
         : (liveUrl ??
           active.url ??
           previewUrlForProject(projectId ?? "project", entity?.publishedUrl));
+  const workItem = findWorkCollectionItem(projectId);
   const projectTitle =
-    standalone ? "Browser" : (project?.name ?? entity?.title ?? active.title ?? "Project");
-  const canRename = !standalone && (spaceId === "build" || spaceId === "research");
+    standalone
+      ? "Browser"
+      : (workItem?.title ??
+        project?.name ??
+        entity?.title ??
+        active.title ??
+        "Project");
+  const previewFallbackName = workItem?.title ?? project?.name ?? "Project";
+  const previewFallbackSummary = workItem?.summary ?? project?.summary ?? "";
+  const canRename =
+    !standalone &&
+    !isWorkItemBrowserProjectId(projectId) &&
+    (spaceId === "build" || spaceId === "research");
+  /** Work space items hide URL/nav chrome until the user adds a browser tab. */
+  const isWorkItemBrowser =
+    !standalone && spaceId === "work" && isWorkItemBrowserProjectId(projectId);
+  const showBrowserNavChrome =
+    !isWorkItemBrowser || session.tabs.some((tab) => tab.kind === "web");
 
   // Selected tab only — chat browser-context tools read this pointer.
   // Keep it while chat is open (mobile) so the user can ask about the page
@@ -641,7 +667,7 @@ export function ProjectBrowserPanel({
           style={desktop ? DESKTOP_NO_DRAG : undefined}
         >
           {showHeaderNav ? <NavToggle /> : null}
-          {showHeaderNav && spaceId && isChatSpace(spaceId) ? (
+          {showHeaderNav && spaceId && isDockChatSpace(spaceId) ? (
             <RailBtn
               label="Open chat"
               onClick={() => openSpaceChat(spaceId, { keepProject: true })}
@@ -714,7 +740,7 @@ export function ProjectBrowserPanel({
         </div>
       )}
 
-      {mobile ? null : standalone ? null : (
+      {mobile ? null : standalone ? null : showBrowserNavChrome ? (
         <div className="relative flex h-[45px] min-w-0 shrink-0 items-center gap-0.5 border-t border-border bg-sidebar px-2">
           <div className="flex shrink-0 items-center gap-0.5">
             <RailBtn
@@ -773,7 +799,7 @@ export function ProjectBrowserPanel({
             )}
           </div>
         </div>
-      )}
+      ) : null}
 
       {desktopRenameOpen ? (
         <div className="absolute inset-0 z-40 flex items-start justify-center bg-black/20 pt-24">
@@ -826,8 +852,8 @@ export function ProjectBrowserPanel({
           <ProjectBrowserBody
           tab={active}
           projects={allProjects}
-          fallbackName={project?.name ?? "Project"}
-          fallbackSummary={project?.summary ?? ""}
+          fallbackName={previewFallbackName}
+          fallbackSummary={previewFallbackSummary}
           reloadKey={reloadKey}
           userId={actor.id}
           browserKey={key}
@@ -848,28 +874,28 @@ export function ProjectBrowserPanel({
           />
         ) : null}
       </div>
+      {mobile && showBrowserNavChrome ? (
+        <button
+          type="button"
+          aria-label="Edit address"
+          onClick={() => setMobileNavOpen(true)}
+          className="relative z-10 flex shrink-0 items-center border-t border-border bg-sidebar px-3 py-2.5"
+        >
+          <span className="min-w-0 flex-1 truncate text-center font-mono text-[13px] text-muted-foreground">
+            {displayHostFromUrl(address) || "Enter URL"}
+          </span>
+        </button>
+      ) : null}
       {mobile ? (
-        <>
-          <button
-            type="button"
-            aria-label="Edit address"
-            onClick={() => setMobileNavOpen(true)}
-            className="relative z-10 flex shrink-0 items-center border-t border-border bg-sidebar px-3 py-2.5"
-          >
-            <span className="min-w-0 flex-1 truncate text-center font-mono text-[13px] text-muted-foreground">
-              {displayHostFromUrl(address) || "Enter URL"}
-            </span>
-          </button>
-          <ProjectMobileTabBar
-            tabs={session.tabs}
-            activeId={active.id}
-            projects={allProjects}
-            projectTitle={projectTitle}
-            onSelect={selectTab}
-            onClose={closeTab}
-            onAdd={openAddSheet}
-          />
-        </>
+        <ProjectMobileTabBar
+          tabs={session.tabs}
+          activeId={active.id}
+          projects={allProjects}
+          projectTitle={projectTitle}
+          onSelect={selectTab}
+          onClose={closeTab}
+          onAdd={openAddSheet}
+        />
       ) : null}
 
       <MobileBottomSheet
@@ -975,11 +1001,15 @@ function ProjectBrowserBody({
     const sessionFallback =
       browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID
         ? defaultStandaloneBrowserSession()
-        : defaultProjectBrowserSession({
-            projectId: browserKey.projectId,
-            title: fallbackName,
-            spaceId: browserKey.spaceId,
-          });
+        : (() => {
+            const item = findWorkCollectionItem(browserKey.projectId);
+            if (item) return defaultWorkItemBrowserSession(item);
+            return defaultProjectBrowserSession({
+              projectId: browserKey.projectId,
+              title: fallbackName,
+              spaceId: browserKey.spaceId,
+            });
+          })();
     const current = getProjectBrowserSession(browserKey, sessionFallback);
     const nextTabs = current.tabs.map((item) => {
       if (item.id !== tab.id) return item;

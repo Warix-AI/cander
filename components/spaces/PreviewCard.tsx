@@ -21,7 +21,7 @@ import {
   SheetAction,
   DeleteProjectSheetBody,
 } from "@/components/browser/ProjectMobileSheets";
-import { BannerWash } from "@/components/spaces/BannerWash";
+import { DefaultChatPreviewWash } from "@/components/spaces/BannerWash";
 import { Dropdown } from "@/components/ui/Controls";
 import {
   useSpaceAttachments,
@@ -161,12 +161,6 @@ function PreviewFace({
   kind: PreviewKind;
   compact?: boolean;
 }) {
-  const { spaceId } = useApp();
-  const washSpace: BannerKey =
-    item.bannerKey ??
-    (spaceId as BannerKey | null) ??
-    "build";
-
   if (item.image) {
     return (
       <div
@@ -198,7 +192,7 @@ function PreviewFace({
           compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
         )}
       >
-        <BannerWash space={washSpace} />
+        <DefaultChatPreviewWash />
         <div
           className={cn(
             "absolute bg-white text-left shadow-sm",
@@ -340,7 +334,7 @@ function PreviewFace({
         compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
       )}
     >
-      <BannerWash space={washSpace} />
+      <DefaultChatPreviewWash />
       {!compact && item.badge ? (
         <span className="absolute bottom-3 left-3 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium tracking-[-0.01em] text-foreground">
           {item.badge}

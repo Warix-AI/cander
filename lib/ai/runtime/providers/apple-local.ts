@@ -147,6 +147,7 @@ export function createAppleLocalProvider(): AiRuntimeProvider {
             includeInventory,
             toolsEnabled: enableTools,
             identityAsked: isIdentityQuestion(request.content),
+            userMessage: request.content,
           }),
           pkg.taskStateText,
           pkg.toolCatalog,

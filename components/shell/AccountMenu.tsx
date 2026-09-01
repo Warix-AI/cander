@@ -1,7 +1,8 @@
 "use client";
 
-import { Blocks, History, Settings, SlidersHorizontal } from "lucide-react";
+import { Blocks, CircleUser, History, Settings } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { ColorModeToggle } from "@/components/shell/ColorModeToggle";
 import { Dropdown } from "@/components/ui/Controls";
 import { signOutAccount } from "@/lib/auth/sign-out";
 import { cn } from "@/lib/utils";
@@ -37,7 +38,7 @@ export function AccountMenu() {
           aria-label="General"
           aria-expanded={open}
         >
-          <SlidersHorizontal
+          <CircleUser
             className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
             strokeWidth={2}
           />
@@ -47,6 +48,9 @@ export function AccountMenu() {
     >
       {(close) => (
         <div className="flex flex-col gap-px">
+          <div className="border-b border-border/50 px-2 py-2">
+            <ColorModeToggle compact />
+          </div>
           <button
             type="button"
             className={flyoutRowClass}

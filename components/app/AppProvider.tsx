@@ -127,10 +127,17 @@ import {
   writeStandaloneBrowserPinned,
 } from "@/lib/standalone-browser-session";
 import {
+  primeWorkItemBrowserSession,
+  workItemBrowserKey,
+  workItemBrowserProjectId,
+} from "@/lib/work-item-browser";
+import type { WorkCollectionItem } from "@/lib/work-screen-data";
+import {
   DEFAULT_PANEL_RATIO,
   PANEL_RATIO_OPEN_FLOOR,
 } from "@/lib/right-panel";
-import { isChatSpace, chatSpaceId, PRIMARY_NAV_SPACES, spaceAllowed, isDashboardOnlySpace, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
+import { writeHomeDockChatOpen } from "@/lib/home-chat-preference";
+import { isChatSpace, chatSpaceId, isDockChatSpace, PRIMARY_NAV_SPACES, spaceAllowed, isDashboardOnlySpace, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
 import type {
   AccountPresetId,
   BuildTool,
@@ -187,6 +194,8 @@ import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import { dismissNativeKeyboard } from "@/lib/mobile-shell";
 import {
   requestMobileSurfaceEnter,
+  skipMobilePagerTransitionOnce,
+  skipMobileSpaceEnterOnce,
 } from "@/lib/mobile-nav-transition";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
@@ -281,6 +290,8 @@ type AppContextValue = {
   setPanelMode: (mode: PanelMode) => void;
   setPanelIntent: (intent: PanelIntent) => void;
   mobileSurface: MobileSurface;
+  /** Chat or panel underneath an open menu — drives peek strip + restore on close. */
+  mobileContentSurface: "chat" | "panel";
   setMobileSurface: React.Dispatch<React.SetStateAction<MobileSurface>>;
   mobileMenuScreen: MobileMenuScreen;
   setMobileMenuScreen: (screen: MobileMenuScreen) => void;
@@ -332,7 +343,10 @@ type AppContextValue = {
   /** Courier home chat — empty chat home. */
   openCourierHome: () => void;
   /** Resume (or create) the persistent dock chat for a space. */
-  openSpaceChat: (space: SpaceId, opts?: { keepProject?: boolean }) => void;
+  openSpaceChat: (
+    space: SpaceId,
+    opts?: { keepProject?: boolean; landOnPanel?: boolean },
+  ) => void;
   setChatSpace: (id: SpaceId | null) => void;
   armChatInterface: (id: SpaceId) => void;
   /** Attach a space panel to the current chat without switching threads. */
@@ -416,6 +430,8 @@ type AppContextValue = {
     id: string,
     opts?: { migrateFromThreadId?: string | null; landOnPanel?: boolean },
   ) => string | null;
+  /** Open a Work space collection item in the browser panel without switching chat. */
+  openWorkItem: (item: WorkCollectionItem) => void;
   openProjectChat: (id: string) => void;
   /** Navigate to a typed entity ref from any space dashboard. */
   openSpaceEntity: (ref: EntityRef) => void;
@@ -568,10 +584,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     panelMode: PanelMode;
   } | null>(null);
   const [mobileSurface, setMobileSurfaceState] = useState<MobileSurface>("chat");
+  const mobileContentSurfaceRef = useRef<"chat" | "panel">("chat");
   const setMobileSurface = useCallback(
     (value: MobileSurface | ((prev: MobileSurface) => MobileSurface)) => {
       setMobileSurfaceState((prev) => {
         const next = typeof value === "function" ? value(prev) : value;
+        if (next === "chat" || next === "panel") {
+          mobileContentSurfaceRef.current = next;
+        }
         if (next !== prev && next !== "chat") {
           dismissNativeKeyboard();
         }
@@ -580,6 +600,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [],
   );
+  const mobileContentSurface: "chat" | "panel" =
+    mobileSurface === "menu"
+      ? mobileContentSurfaceRef.current
+      : mobileSurface === "panel"
+        ? "panel"
+        : "chat";
   const [mobileMenuScreen, setMobileMenuScreen] =
     useState<MobileMenuScreen>("main");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -687,7 +713,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const applySnapshot = useCallback((snap: Snapshot) => {
     const normalized =
-      snap.spaceId === "home"
+      snap.spaceId === "home" && !snap.threadId
         ? {
             ...snap,
             threadId: null,
@@ -695,7 +721,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             panelMode: "collapsed" as const,
             panelIntent: "browse" as const,
           }
-        : snap;
+        : snap.spaceId === "home"
+          ? { ...snap, projectId: null }
+          : snap;
     setView(normalized.view);
     setSpaceId(normalized.spaceId);
     setThreadId(normalized.threadId);
@@ -820,7 +848,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (prevSpace === "build") setBuildTool("preview");
         if (prevSpace === "research") setResearchTool("overview");
 
-        if (chatWasOpen && isChatSpace(prevSpace)) {
+        if (chatWasOpen && isDockChatSpace(prevSpace)) {
           let tid = "";
           let hasMessages = false;
           setThreads((current) => {
@@ -1041,8 +1069,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ]);
 
   const openSpaceChat = useCallback(
-    (space: SpaceId, opts?: { keepProject?: boolean }) => {
-      if (!isChatSpace(space)) return;
+    (space: SpaceId, opts?: { keepProject?: boolean; landOnPanel?: boolean }) => {
+      if (!isDockChatSpace(space)) return;
       const keepProject = Boolean(opts?.keepProject && projectId);
       let tid = "";
       let hasMessages = false;
@@ -1075,10 +1103,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setView("space");
       setPanelIntent("execute");
       setPanelMode("split");
-      setMobileSurface("chat");
+      const leavingHomeDashboard =
+        mobile && spaceId === "home" && !threadId && !drafting;
+      if (mobile) {
+        skipMobilePagerTransitionOnce();
+        if (leavingHomeDashboard) skipMobileSpaceEnterOnce();
+      }
+      const landOnPanel = opts?.landOnPanel ?? true;
+      setMobileSurface(mobile ? (landOnPanel ? "panel" : "chat") : "chat");
       setDrafting(!hasMessages);
       if (space === "build") setBuildTool("preview");
       if (space === "research") setResearchTool("overview");
+      if (space === "home") writeHomeDockChatOpen(workspaceId, true);
       pushTarget({
         view: "space",
         spaceId: space,
@@ -1091,7 +1127,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: null,
       });
     },
-    [workspaceId, pushTarget, projectId, threadId],
+    [workspaceId, pushTarget, projectId, threadId, mobile, spaceId, drafting],
   );
 
   const applyHomeNewChat = useCallback(() => {
@@ -1340,6 +1376,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const closeSpaceChat = useCallback(() => {
     summarizeThreadById(threadId);
+    if (spaceId === "home") writeHomeDockChatOpen(workspaceId, false);
     setDrafting(false);
     setThreadId(null);
     const keepProject = Boolean(projectId);
@@ -1378,6 +1415,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     connectorId,
     jobId,
     skillId,
+    workspaceId,
   ]);
 
   const clearSessionSummary = useCallback(
@@ -2127,9 +2165,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           } else {
             const lens =
               chatSpace ??
-              (spaceId && isChatSpace(spaceId)
+              (spaceId && isDockChatSpace(spaceId)
                 ? spaceId
-                : thread?.spaceId && isChatSpace(thread.spaceId)
+                : thread?.spaceId && isDockChatSpace(thread.spaceId)
                   ? thread.spaceId
                   : "work");
             const upserted = openSpaceDefaultChat(list, workspaceId, lens);
@@ -3156,6 +3194,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const goToSpace = (dest: NavDestinationId) => {
       if (isDashboardOnlySpace(dest)) {
+        if (mobile) {
+          skipMobilePagerTransitionOnce();
+          skipMobileSpaceEnterOnce();
+        }
         setView("space");
         setSpaceId(dest);
         setProjectId(null);
@@ -3248,6 +3290,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     projectId,
     thread,
     openSpaceChat,
+    mobile,
   ]);
 
   const openRecents = useCallback(() => {
@@ -3492,6 +3535,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
     return tid;
   }, [workspaceId, actor.id, pushTarget]);
+
+  const openWorkItem = useCallback(
+    (item: WorkCollectionItem) => {
+      const browserProjectId = workItemBrowserProjectId(item);
+      const key = workItemBrowserKey(actor.id, workspaceId, item);
+      if (isStandaloneBrowserEphemeral()) {
+        endQuickSearchBrowserSession(standaloneBrowserKey(actor.id, workspaceId));
+        setStandaloneBrowserEphemeral(false);
+        setStandaloneBrowserOpen(false);
+      }
+      primeWorkItemBrowserSession(key, item);
+      const chatWasOpen = Boolean(threadId) || drafting;
+      setView("space");
+      setSpaceId("work");
+      setProjectId(browserProjectId);
+      setConnectorId(null);
+      setJobId(null);
+      setSkillId(null);
+      setPanelIntent(chatWasOpen ? "execute" : "browse");
+      setPanelMode("split");
+      setMobileSurface("panel");
+      pushTarget({
+        view: "space",
+        spaceId: "work",
+        threadId: chatWasOpen ? threadId : null,
+        projectId: browserProjectId,
+        panelMode: "split",
+        panelIntent: chatWasOpen ? "execute" : "browse",
+        connectorId: null,
+        jobId: null,
+        skillId: null,
+      });
+    },
+    [workspaceId, actor.id, threadId, drafting, pushTarget],
+  );
 
   const startDraftProject = useCallback(
     async (space: SpaceId) => {
@@ -4035,7 +4113,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     setVoiceActive(true);
 
-    if (view === "space" && spaceId && isChatSpace(spaceId) && !threadId) {
+    if (
+      view === "space" &&
+      spaceId &&
+      isDockChatSpace(spaceId) &&
+      !threadId
+    ) {
       openSpaceChat(spaceId, { keepProject: Boolean(projectId) });
       return;
     }
@@ -4520,6 +4603,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPanelMode,
       setPanelIntent,
       mobileSurface,
+      mobileContentSurface,
       setMobileSurface,
       mobileMenuScreen,
       setMobileMenuScreen,
@@ -4621,6 +4705,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       reorderPins,
       moveSidebarNav: moveNavItem,
       openProject,
+      openWorkItem,
       openProjectChat,
       openSpaceEntity,
       attachReference,
@@ -4691,6 +4776,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       panelIntent,
       panelRatio,
       mobileSurface,
+      mobileContentSurface,
       mobileMenuScreen,
       sidebarOpen,
       workspaceRailOpen,
@@ -4778,6 +4864,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       reorderPins,
       moveNavItem,
       openProject,
+      openWorkItem,
       openProjectChat,
       openSpaceEntity,
       attachReference,

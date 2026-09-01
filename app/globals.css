@@ -813,6 +813,16 @@ select:focus-visible {
     #5a4a98;
 }
 
+.panel-wash-promo {
+  background:
+    radial-gradient(130% 110% at 20% 16%, #fce8dc 0%, transparent 62%),
+    radial-gradient(95% 95% at 78% 32%, #f5c4a0 0%, transparent 58%),
+    radial-gradient(100% 90% at 10% 90%, #fae0cc 0%, transparent 58%),
+    radial-gradient(85% 75% at 90% 82%, #ffd8b8 0%, transparent 55%),
+    radial-gradient(70% 60% at 50% 58%, #f0b890 0%, transparent 52%),
+    #f2c4a4;
+}
+
 .media-a {
   background:
     radial-gradient(
@@ -1301,11 +1311,11 @@ html.dark .image-gen-card {
 
 /* Subtle desktop/in-panel enter (short nudge). */
 .cander-surface-enter {
-  animation: cander-surface-enter 240ms ease-out;
+  animation: cander-surface-enter 240ms ease-out backwards;
 }
 
 .cander-surface-enter-back {
-  animation: cander-surface-enter-back 240ms ease-out;
+  animation: cander-surface-enter-back 240ms ease-out backwards;
 }
 
 /* Full mobile push/pop — matches chat ↔ panel pager timing. */

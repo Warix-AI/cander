@@ -27,10 +27,15 @@ import { visibleSettingsTabs } from "@/lib/settings-nav";
 import {
   isChatSpace,
   isDashboardOnlySpace,
+  isDockChatSpace,
   PRIMARY_NAV_SPACES,
 } from "@/lib/spaces";
 import type { ProjectKind } from "@/lib/space-entities";
 import { previewUrlForProject } from "@/lib/preview-url";
+import {
+  findWorkCollectionItem,
+  isWorkItemBrowserProjectId,
+} from "@/lib/work-item-browser";
 import {
   getWorkspaceCatalogServerSnapshot,
   getWorkspaceCatalogSnapshot,
@@ -38,6 +43,7 @@ import {
 } from "@/lib/workspace-catalog";
 import {
   MOBILE_APP_BG,
+  SPACE_CANVAS_BG,
   mobileChromeButtonClass,
 } from "@/lib/mobile-menu-styles";
 import type { MobileSurface, SpaceId } from "@/lib/types";
@@ -64,6 +70,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     threadId,
     entitlements,
     mobileSurface,
+    mobileContentSurface,
     setMobileSurface,
     mobileMenuScreen,
     setMobileMenuScreen,
@@ -112,34 +119,34 @@ export function MobileAppChrome({ className }: { className?: string }) {
     Boolean(spaceId) &&
     (PRIMARY_NAV_SPACES as readonly string[]).includes(spaceId as string);
   const inConnector = spaceId === "connectors" && Boolean(connectorId);
-  const entityOpen = Boolean(projectId) || inConnector;
+  const isWorkItemBrowser = isWorkItemBrowserProjectId(projectId);
+  const entityOpen =
+    (Boolean(projectId) && !isWorkItemBrowser) || inConnector;
   const showEntityBack =
     entityOpen && !inChromeSub && !onMenuMain && mobileSurface !== "menu";
   const showProjectTools =
-    !inChromeSub && !onMenuMain && Boolean(projectId) && inPrimarySpace;
+    !inChromeSub &&
+    !onMenuMain &&
+    Boolean(projectId) &&
+    inPrimarySpace &&
+    !isWorkItemBrowser;
   const showHomeChatPanelToggle =
     !inChromeSub &&
     !onMenuMain &&
     view === "chat" &&
     !spaceId &&
     !projectId;
-  // Space-level Chat|Build toggle — not used inside a project (name chip instead).
+  const showWorkItemToggle = isWorkItemBrowser && spaceId === "work";
+  // Space-level Chat|{Space} toggle — not used inside a build/explore project chrome.
   const showSpaceToggle =
     !inChromeSub &&
     !onMenuMain &&
     !showProjectTools &&
-    !isDashboardOnlySpace(spaceId) &&
-    (((inPrimarySpace || inConnector) &&
-      (view === "space" || (view === "chat" && Boolean(spaceId)))) ||
-      showHomeChatPanelToggle);
-  const showDashboardTitle =
-    !inChromeSub &&
-    !onMenuMain &&
-    !showProjectTools &&
-    !showSpaceToggle &&
-    isDashboardOnlySpace(spaceId) &&
-    view === "space" &&
-    mobileSurface === "panel";
+    (showWorkItemToggle ||
+      ((!isDashboardOnlySpace(spaceId) || spaceId === "home") &&
+        (((inPrimarySpace || inConnector) &&
+          (view === "space" || (view === "chat" && Boolean(spaceId)))) ||
+          showHomeChatPanelToggle)));
 
   const settingsNav = visibleSettingsTabs(entitlements);
   const workspaceName = settingsWorkspaceId
@@ -163,9 +170,15 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const spaceLabel = spaceId ? navLabel(spaceId as SpaceId) ?? "Space" : "Space";
   const panelTabLabel = showHomeChatPanelToggle
     ? "Panel"
-    : inConnector
-      ? "Connector"
-      : spaceLabel;
+    : spaceId === "home"
+      ? "Home"
+      : inConnector
+        ? "Connector"
+        : spaceLabel;
+  const headerBg =
+    view === "space" && mobileSurface === "panel"
+      ? SPACE_CANVAS_BG
+      : MOBILE_APP_BG;
   const surface: MobileSurface =
     mobileSurface === "menu"
       ? "menu"
@@ -273,7 +286,8 @@ export function MobileAppChrome({ className }: { className?: string }) {
       (liveUrl && !liveUrl.includes("localhost")),
   );
   const canRename = spaceId === "build" || spaceId === "research";
-  const projectTitle = project?.name ?? "Project";
+  const projectTitle =
+    findWorkCollectionItem(projectId)?.title ?? project?.name ?? "Project";
 
   useEffect(() => {
     if (!renameOpen) return;
@@ -337,7 +351,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
       return;
     }
     if (mobileSurface === "menu") {
-      setMobileSurface("chat");
+      setMobileSurface(mobileContentSurface);
       return;
     }
     setMobileSurface("menu");
@@ -356,8 +370,11 @@ export function MobileAppChrome({ className }: { className?: string }) {
       return;
     }
     if (!showSpaceToggle) return;
-    if (spaceId && isChatSpace(spaceId)) {
-      openSpaceChat(spaceId);
+    if (spaceId && isDockChatSpace(spaceId)) {
+      openSpaceChat(spaceId, {
+        keepProject: Boolean(projectId),
+        landOnPanel: false,
+      });
       return;
     }
     setMobileSurface("chat");
@@ -369,14 +386,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
   const centerChrome =
     !onMenuMain &&
-    (inChromeSub || showProjectTools || showSpaceToggle || showDashboardTitle) ? (
+    (inChromeSub || showProjectTools || showSpaceToggle) ? (
       inChromeSub ? (
         <p className="truncate text-center text-[15px] font-medium tracking-[-0.01em]">
           {subTitle}
-        </p>
-      ) : showDashboardTitle ? (
-        <p className="truncate text-center text-[15px] font-medium tracking-[-0.01em]">
-          {spaceLabel}
         </p>
       ) : showProjectTools ? (
         <div
@@ -434,7 +447,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
         onTouchEnd={stopSwipe}
         className={cn(
           "shrink-0",
-          MOBILE_APP_BG,
+          headerBg,
           "pt-[calc(env(safe-area-inset-top,0px)+6px)]",
           className,
         )}

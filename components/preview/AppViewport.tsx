@@ -1,9 +1,8 @@
 "use client";
 
 import { useApp } from "@/components/app/AppProvider";
-import { BannerWash } from "@/components/spaces/BannerWash";
+import { DefaultChatPreviewWash } from "@/components/spaces/BannerWash";
 import { buildPreviews } from "@/lib/data";
-import type { BannerKey } from "@/lib/space-banners";
 import { cn } from "@/lib/utils";
 
 /**
@@ -17,16 +16,12 @@ export function AppViewport({
   name: string;
   summary: string;
 }) {
-  const { viewport, previewKey, project, spaceId } = useApp();
+  const { viewport, previewKey, project } = useApp();
 
   const framed = viewport !== "desktop";
   const cover =
     project?.cover ??
     buildPreviews.find((item) => item.projectId === project?.id)?.image;
-  const washSpace: BannerKey =
-    (project?.space as BannerKey | undefined) ??
-    (spaceId as BannerKey | null) ??
-    "build";
 
   return (
     <div
@@ -55,7 +50,7 @@ export function AppViewport({
           />
         ) : (
           <>
-            <BannerWash space={washSpace} />
+            <DefaultChatPreviewWash />
             <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center text-white">
               <p className="text-[1.5rem] font-semibold tracking-[-0.03em] md:text-[1.75rem]">
                 {name}

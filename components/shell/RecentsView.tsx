@@ -2,11 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
-import {
-  DashFrame,
-  LayoutToggle,
-  ScopeToggle,
-} from "@/components/spaces/ItemSet";
+import { DashFrame, ScopeToggle } from "@/components/spaces/ItemSet";
 import {
   PreviewGrid,
   type PreviewEntry,
@@ -25,14 +21,7 @@ import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
 import { useMobileShell } from "@/lib/use-media-query";
 
 export function RecentsView() {
-  const {
-    openThread,
-    openProject,
-    openSpaceEntity,
-    newChat,
-    spaceLayout,
-    setSpaceLayout,
-  } = useApp();
+  const { openThread, openProject, openSpaceEntity, newChat } = useApp();
   const mobile = useMobileShell();
   const [scope, setScope] = useState<string>("all");
 
@@ -95,7 +84,6 @@ export function RecentsView() {
           onNewChat={() => newChat()}
           newChatLabel="New chat"
           scope={{ value: scope, onChange: setScope, options: scopeOptions }}
-          layout={{ value: spaceLayout, onChange: setSpaceLayout }}
         >
           <ScopeToggle
             wrap
@@ -103,7 +91,6 @@ export function RecentsView() {
             onChange={setScope}
             options={scopeOptions}
           />
-          <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
         </MobileFilterBar>
         <div className="mt-5">
           {loading && items.length === 0 ? (
@@ -112,7 +99,7 @@ export function RecentsView() {
             <QueryError message={error} />
           ) : (
             <PreviewGrid
-              layout={spaceLayout}
+              layout="list"
               items={items}
               onOpen={open}
               empty="Nothing recent in this workspace yet."

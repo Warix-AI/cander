@@ -10,7 +10,11 @@ import {
   CANDER_IDENTITY_WHEN_ASKED_ON_DEVICE,
   CANDER_NO_REGREET,
 } from "@/lib/ai/assistant-behavior";
-import { APP_NAME, APP_TAGLINE } from "@/lib/app-brand";
+import { APP_NAME } from "@/lib/app-brand";
+import {
+  CANDER_PRODUCT_GUIDE,
+  isCanderHelpQuestion,
+} from "@/lib/cander-product-guide";
 
 export function buildCanderOnDeviceInstructions(opts?: {
   shortName?: string | null;
@@ -30,6 +34,8 @@ export function buildCanderOnDeviceInstructions(opts?: {
   toolsEnabled?: boolean;
   /** User asked who/what model — append identity script only then. */
   identityAsked?: boolean;
+  /** Latest user message — used to attach product help when relevant. */
+  userMessage?: string | null;
 }) {
   const whoParts: string[] = [];
   if (opts?.shortName?.trim()) {
@@ -59,6 +65,10 @@ export function buildCanderOnDeviceInstructions(opts?: {
           .join(" ")
       : "";
 
+  const includeProductGuide =
+    toolsEnabled ||
+    Boolean(opts?.userMessage && isCanderHelpQuestion(opts.userMessage));
+
   return [
     CANDER_ASSISTANT_BEHAVIOR,
     CANDER_CONVERSATION_FIRST,
@@ -70,18 +80,14 @@ export function buildCanderOnDeviceInstructions(opts?: {
     toolsEnabled
       ? [
           "",
-          `${APP_NAME} product map (use only if relevant to this request):`,
-          `Tagline: “${APP_TAGLINE}”`,
-          "- New Chat: general assistant chat (home).",
-          "- Work: work dock / briefing-style work.",
-          "- Build: create apps, websites, and projects with Preview.",
-          "- Explore: research, reports, and sources.",
-          "- Connectors: connect apps (Gmail, Slack, calendar, etc.).",
-          "- Recents: recent chats and projects.",
-          "- Settings → Hosting: choose Cloud, Auto, or On device AI.",
-          "For new projects, clarify with Build vs Explore (never say research to the user). Always confirm before deleting.",
+          `${APP_NAME} tool navigation:`,
+          "- nav.open targets: new_chat, work, build, research (Explore), recents, connectors, settings.",
+          "- panel.open / panel.close for the side panel.",
+          "- project.create / project.open for Build and Explore projects.",
+          "Say Explore to users, never research. Confirm before deleting.",
         ].join("\n")
       : null,
+    includeProductGuide ? `\n${CANDER_PRODUCT_GUIDE}` : null,
     includeInventory
       ? "A cached workspace snapshot may appear below. Use it ONLY for this in-app request."
       : null,

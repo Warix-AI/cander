@@ -31,7 +31,7 @@ export function AppearanceControls({
       {mobile ? (
         <SettingsSection title="Color mode">
           <SettingsGroup>
-            <div className="grid grid-cols-2 gap-2 p-2">
+            <div className="grid grid-cols-3 gap-2 p-2">
               {COLOR_MODE_PRESETS.map((preset) => (
                 <AppearanceOptionCard
                   key={preset.id}
@@ -66,7 +66,7 @@ export function AppearanceControls({
           <div
             className={cn(
               "grid gap-2",
-              compact ? "mt-4 grid-cols-2" : "mt-5 grid-cols-2",
+              compact ? "mt-4 grid-cols-3" : "mt-5 grid-cols-3",
             )}
           >
             {COLOR_MODE_PRESETS.map((preset) => (
