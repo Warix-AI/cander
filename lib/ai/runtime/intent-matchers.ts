@@ -15,7 +15,7 @@ export function matchNavIntent(
     {
       re: /\b(go to|open|take me to|switch to|show)\b.*\b(explore|research)\b/i,
       target: "research",
-      label: "Explore",
+      label: "Studio",
     },
     {
       re: /\b(go to|open|take me to|switch to|show)\b.*\bwork\b/i,

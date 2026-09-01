@@ -1,11 +1,41 @@
 "use client";
 
-import { PanelRight } from "lucide-react";
+import { Globe, PanelRight } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { canUseRightPanel } from "@/lib/right-panel";
+import { canUseRightPanel, isNewChatScreen } from "@/lib/right-panel";
 import { SHELL_FLOAT_INSET_PX, useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
+
+export function BrowserToggle({
+  className,
+  docked = false,
+}: {
+  className?: string;
+  docked?: boolean;
+}) {
+  const { standaloneBrowserOpen, panelMode, toggleStandaloneBrowser } = useApp();
+  const active = standaloneBrowserOpen && panelMode !== "collapsed";
+
+  return (
+    <button
+      type="button"
+      aria-label={active ? "Close browser" : "Open browser"}
+      onClick={() => toggleStandaloneBrowser()}
+      className={cn(
+        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
+        active
+          ? "bg-muted text-foreground"
+          : docked
+            ? "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+        className,
+      )}
+    >
+      <Globe className="h-4 w-4" strokeWidth={1.6} />
+    </button>
+  );
+}
 
 export function PanelToggle({
   className,
@@ -53,6 +83,7 @@ export function RightPanelToggleDock() {
   const {
     view,
     thread,
+    threadId,
     drafting,
     spaceId,
     connectorId,
@@ -74,19 +105,30 @@ export function RightPanelToggleDock() {
     skillId,
   });
   const panelOpen = panelMode !== "collapsed";
+  const onNewChat = isNewChatScreen({
+    view,
+    threadId,
+    thread,
+    spaceId,
+    projectId,
+    drafting,
+  });
 
   if (mobile || !canPanel || panelOpen) return null;
 
   return (
     <div
       className={cn(
-        "pointer-events-none fixed z-50 hidden h-11 items-center bg-background px-3 lg:flex",
+        "pointer-events-none fixed z-50 hidden h-11 items-center gap-1 bg-background px-3 lg:flex",
         floating ? "top-3" : "top-0",
       )}
       style={{
         right: `${floating ? SHELL_FLOAT_INSET_PX : 0}px`,
       }}
     >
+      {onNewChat ? (
+        <BrowserToggle docked className="pointer-events-auto" />
+      ) : null}
       <PanelToggle docked className="pointer-events-auto" />
     </div>
   );

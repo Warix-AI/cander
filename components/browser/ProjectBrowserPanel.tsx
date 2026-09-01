@@ -92,9 +92,20 @@ import {
 import { isChatSpace } from "@/lib/spaces";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useProjectCoverCapture } from "@/lib/hooks/use-project-cover-capture";
+import {
+  defaultStandaloneBrowserSession,
+  getStandaloneBrowserSession,
+  standaloneBrowserKey,
+  STANDALONE_BROWSER_PROJECT_ID,
+} from "@/lib/standalone-browser-session";
 import { cn } from "@/lib/utils";
 
-export function ProjectBrowserPanel() {
+export function ProjectBrowserPanel({
+  mode = "project",
+}: {
+  mode?: "project" | "standalone";
+}) {
+  const standalone = mode === "standalone";
   const {
     projectId,
     spaceId,
@@ -115,6 +126,7 @@ export function ProjectBrowserPanel() {
     refreshPreview,
     liveUrl,
     mobileSurface,
+    closeStandaloneBrowser,
   } = useApp();
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
@@ -132,7 +144,7 @@ export function ProjectBrowserPanel() {
     getSidebarPeekingServerSnapshot,
   );
   const chatArmed = drafting || Boolean(thread);
-  const projectFullscreen = Boolean(projectId) && !chatArmed;
+  const projectFullscreen = !standalone && Boolean(projectId) && !chatArmed;
   const showHeaderNav = projectFullscreen && !sidebarOpen && !peeking;
   const entityRevision = useSyncExternalStore(
     subscribeSpaceEntityStore,
@@ -145,8 +157,9 @@ export function ProjectBrowserPanel() {
     getProjectBrowserSessionRevision,
   );
 
-  const key: ProjectBrowserKey | null =
-    projectId && spaceId && spaceId !== "connectors"
+  const key: ProjectBrowserKey | null = standalone
+    ? standaloneBrowserKey(actor.id, workspaceId)
+    : projectId && spaceId && spaceId !== "connectors"
       ? {
           profileId: actor.id,
           workspaceId,
@@ -156,15 +169,16 @@ export function ProjectBrowserPanel() {
       : null;
 
   const entity = useMemo(() => {
-    if (!projectId) return null;
+    if (standalone || !projectId) return null;
     return (
       getSpaceEntityStoreSnapshot().projects.find(
         (item) => item.id === projectId && item.workspaceId === workspaceId,
       ) ?? null
     );
-  }, [projectId, workspaceId, entityRevision]);
+  }, [standalone, projectId, workspaceId, entityRevision]);
 
   const fallback = useMemo(() => {
+    if (standalone) return defaultStandaloneBrowserSession();
     if (!projectId) {
       return defaultProjectBrowserSession({
         projectId: "project",
@@ -178,7 +192,7 @@ export function ProjectBrowserPanel() {
       publishedUrl: entity?.publishedUrl,
       spaceId: spaceId === "connectors" ? "build" : (spaceId ?? "build"),
     });
-  }, [projectId, project?.name, entity?.title, entity?.publishedUrl, spaceId]);
+  }, [standalone, projectId, project?.name, entity?.title, entity?.publishedUrl, spaceId]);
 
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
@@ -187,7 +201,9 @@ export function ProjectBrowserPanel() {
 
   const session =
     hydrated && key
-      ? getProjectBrowserSession(key, fallback)
+      ? standalone
+        ? getStandaloneBrowserSession(key, fallback)
+        : getProjectBrowserSession(key, fallback)
       : fallback;
 
   const active =
@@ -223,7 +239,8 @@ export function ProjectBrowserPanel() {
     [workspaceId, entityRevision],
   );
 
-  if (!key || !projectId || !active) return null;
+  if (!active || !key) return null;
+  if (!standalone && !projectId) return null;
 
   const write = (next: ProjectBrowserSession) => {
     setProjectBrowserSession(key, next);
@@ -339,11 +356,14 @@ export function ProjectBrowserPanel() {
   const address =
     active.kind === "agent-browser"
       ? (computerSession?.currentUrl ?? active.url)
-      : (liveUrl ??
-        active.url ??
-        previewUrlForProject(projectId ?? "project", entity?.publishedUrl));
-  const projectTitle = project?.name ?? entity?.title ?? active.title ?? "Project";
-  const canRename = spaceId === "build" || spaceId === "research";
+      : standalone
+        ? (liveUrl ?? active.url)
+        : (liveUrl ??
+          active.url ??
+          previewUrlForProject(projectId ?? "project", entity?.publishedUrl));
+  const projectTitle =
+    standalone ? "Browser" : (project?.name ?? entity?.title ?? active.title ?? "Project");
+  const canRename = !standalone && (spaceId === "build" || spaceId === "research");
 
   // Selected tab only — chat browser-context tools read this pointer.
   // Keep it while chat is open (mobile) so the user can ask about the page
@@ -404,7 +424,7 @@ export function ProjectBrowserPanel() {
 
   // Keep browser tab labels in sync with the saved project name.
   useEffect(() => {
-    if (!key || !projectId || !projectTitle) return;
+    if (standalone || !key || !projectId || !projectTitle) return;
     const current = getProjectBrowserSession(key, fallback);
     const needsSync = current.tabs.some(
       (tab) =>
@@ -538,7 +558,74 @@ export function ProjectBrowserPanel() {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-sidebar">
-      {mobile ? null : (
+      {mobile ? null : standalone ? (
+        <>
+          <div
+            className="flex h-11 min-w-0 shrink-0 items-center gap-1 bg-sidebar px-2"
+            style={desktop ? DESKTOP_NO_DRAG : undefined}
+          >
+            <ProjectTabStrip
+              tabs={session.tabs}
+              activeId={active.id}
+              projects={allProjects}
+              onSelect={selectTab}
+              onClose={closeTab}
+              onAddUrl={() => addUrlTab()}
+              onAddProject={addProjectTab}
+              extraProjects={extraProjects}
+              webOnly
+            />
+            {panelMode !== "collapsed" ? (
+              <span className="ml-auto flex shrink-0 items-center gap-0.5">
+                <BrowserChromeTooltip label="Close browser">
+                  <button
+                    type="button"
+                    aria-label="Close browser"
+                    onClick={() => closeStandaloneBrowser()}
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  </button>
+                </BrowserChromeTooltip>
+                <PanelToggle />
+              </span>
+            ) : null}
+          </div>
+          <div className="relative flex h-10 min-w-0 shrink-0 items-center gap-0.5 border-t border-border bg-sidebar px-2">
+            <div className="flex shrink-0 items-center gap-0.5">
+              <RailBtn
+                label="Back"
+                disabled={!canBack}
+                onClick={() => runBrowserNav("back")}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </RailBtn>
+              <RailBtn
+                label="Forward"
+                disabled={!canForward}
+                onClick={() => runBrowserNav("forward")}
+              >
+                <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </RailBtn>
+              <RailBtn label="Reload" onClick={() => runBrowserNav("reload")}>
+                <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </RailBtn>
+            </div>
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-[7.5rem]">
+              <BrowserAddressField
+                className="pointer-events-auto w-full"
+                url={address}
+                faviconUrl={active.faviconUrl}
+                draft={urlDraft}
+                onDraftChange={setUrlDraft}
+                onCommit={commitUrl}
+                showFavicon={false}
+                placeholder="Search"
+              />
+            </div>
+          </div>
+        </>
+      ) : (
         <div
           className={cn(
             "flex h-[45px] min-w-0 shrink-0 items-center gap-1 bg-sidebar",
@@ -594,7 +681,18 @@ export function ProjectBrowserPanel() {
                 </button>
               </BrowserChromeTooltip>
             ) : null}
-            {panelMode === "collapsed" ? null : (
+            {panelMode === "collapsed" ? null : standalone ? (
+              <BrowserChromeTooltip label="Close browser">
+                <button
+                  type="button"
+                  aria-label="Close browser"
+                  onClick={() => closeStandaloneBrowser()}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                </button>
+              </BrowserChromeTooltip>
+            ) : (
               <BrowserChromeTooltip label="Leave project">
                 <button
                   type="button"
@@ -611,7 +709,7 @@ export function ProjectBrowserPanel() {
         </div>
       )}
 
-      {mobile ? null : (
+      {mobile ? null : standalone ? null : (
         <div className="relative flex h-[45px] min-w-0 shrink-0 items-center gap-0.5 border-t border-border bg-sidebar px-2">
           <div className="flex shrink-0 items-center gap-0.5">
             <RailBtn
@@ -644,19 +742,30 @@ export function ProjectBrowserPanel() {
             />
           </div>
           <div className="ml-auto flex shrink-0 items-center">
-            <DesktopProjectToolsMenu
-              selectMode={selectMode}
-              canRename={canRename}
-              onRename={() => setDesktopRenameOpen(true)}
-              onPublish={() => openOverlay("publish")}
-              onDomain={() => openOverlay("domains")}
-              onOpenExternal={() => window.open(address, "_blank")}
-              onSelectElement={() => setSelectMode(!selectMode)}
-              onRefresh={() => {
-                refreshPreview();
-                runBrowserNav("reload");
-              }}
-            />
+            {standalone ? (
+              <>
+                <RailBtn
+                  label="Open in new window"
+                  onClick={() => window.open(address, "_blank")}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </RailBtn>
+              </>
+            ) : (
+              <DesktopProjectToolsMenu
+                selectMode={selectMode}
+                canRename={canRename}
+                onRename={() => setDesktopRenameOpen(true)}
+                onPublish={() => openOverlay("publish")}
+                onDomain={() => openOverlay("domains")}
+                onOpenExternal={() => window.open(address, "_blank")}
+                onSelectElement={() => setSelectMode(!selectMode)}
+                onRefresh={() => {
+                  refreshPreview();
+                  runBrowserNav("reload");
+                }}
+              />
+            )}
           </div>
         </div>
       )}
@@ -784,27 +893,35 @@ export function ProjectBrowserPanel() {
           onSubmit={submitAddQuery}
         />
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] pt-1">
-          <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-            Projects
-          </p>
-          {filteredExtra.length ? (
-            filteredExtra.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  addProjectTab(item);
-                  setMobileSheet(null);
-                }}
-                className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left text-[15px] hover:bg-muted/70"
-              >
-                <KindGlyph kind={item.kind} />
-                <span className="truncate">{item.title}</span>
-              </button>
-            ))
+          {!standalone ? (
+            <>
+              <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
+                Projects
+              </p>
+              {filteredExtra.length ? (
+                filteredExtra.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      addProjectTab(item);
+                      setMobileSheet(null);
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left text-[15px] hover:bg-muted/70"
+                  >
+                    <KindGlyph kind={item.kind} />
+                    <span className="truncate">{item.title}</span>
+                  </button>
+                ))
+              ) : (
+                <p className="px-2 py-3 text-[13px] text-muted-foreground">
+                  No other projects to add. Enter a URL above to open a tab.
+                </p>
+              )}
+            </>
           ) : (
             <p className="px-2 py-3 text-[13px] text-muted-foreground">
-              No other projects to add. Enter a URL above to open a tab.
+              Enter a URL above to open a tab.
             </p>
           )}
         </div>
@@ -850,14 +967,15 @@ function ProjectBrowserBody({
     title?: string;
     faviconUrl?: string | null;
   }) => {
-    const current = getProjectBrowserSession(
-      browserKey,
-      defaultProjectBrowserSession({
-        projectId: browserKey.projectId,
-        title: fallbackName,
-        spaceId: browserKey.spaceId,
-      }),
-    );
+    const sessionFallback =
+      browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID
+        ? defaultStandaloneBrowserSession()
+        : defaultProjectBrowserSession({
+            projectId: browserKey.projectId,
+            title: fallbackName,
+            spaceId: browserKey.spaceId,
+          });
+    const current = getProjectBrowserSession(browserKey, sessionFallback);
     const nextTabs = current.tabs.map((item) => {
       if (item.id !== tab.id) return item;
       let next = item;
@@ -990,6 +1108,7 @@ function ProjectTabStrip({
   onClose,
   onAddUrl,
   onAddProject,
+  webOnly = false,
 }: {
   tabs: ProjectBrowserTab[];
   activeId: string;
@@ -999,6 +1118,7 @@ function ProjectTabStrip({
   onClose: (id: string) => void;
   onAddUrl: () => void;
   onAddProject: (project: SpaceProject) => void;
+  webOnly?: boolean;
 }) {
   return (
     <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
@@ -1012,11 +1132,24 @@ function ProjectTabStrip({
           onClose={() => onClose(tab.id)}
         />
       ))}
-      <AddTabMenu
-        extraProjects={extraProjects}
-        onAddUrl={onAddUrl}
-        onAddProject={onAddProject}
-      />
+      {webOnly ? (
+        <BrowserChromeTooltip label="New tab">
+          <button
+            type="button"
+            aria-label="New tab"
+            onClick={onAddUrl}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
+          </button>
+        </BrowserChromeTooltip>
+      ) : (
+        <AddTabMenu
+          extraProjects={extraProjects}
+          onAddUrl={onAddUrl}
+          onAddProject={onAddProject}
+        />
+      )}
     </div>
   );
 }

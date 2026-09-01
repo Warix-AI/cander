@@ -223,7 +223,7 @@ registerAiTool({
 registerAiTool({
   name: "project.create",
   description:
-    "Create a new project after title and space (build or research/Explore) are known. Prefer ui.ask_clarification if space is missing.",
+    "Create a new project after title and space (build or research/Studio) are known. Prefer ui.ask_clarification if space is missing.",
   permission: { requireWorkspaceMember: true },
   domain: "projects",
   enabled: true,

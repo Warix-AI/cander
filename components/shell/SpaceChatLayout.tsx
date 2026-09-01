@@ -7,6 +7,7 @@ import { ResizeHandle } from "@/components/shell/ContextPanel";
 import { TopRail } from "@/components/shell/TopRail";
 import { SpaceDashboard } from "@/components/shell/SpaceDashboard";
 import { ProjectBrowserPanel } from "@/components/browser/ProjectBrowserPanel";
+import { StandaloneBrowserPanel } from "@/components/browser/StandaloneBrowserPanel";
 import { MobileContentPager } from "@/components/shell/MobileContentPager";
 import { PanelToggle, RightPanelToggleDock } from "@/components/shell/PanelToggle";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
@@ -27,6 +28,7 @@ import type { MobileSurface } from "@/lib/types";
  */
 export function SpaceChatLayout() {
   const {
+    standaloneBrowserOpen,
     drafting,
     thread,
     panelMode,
@@ -138,6 +140,8 @@ export function SpaceChatLayout() {
               >
                 <ProjectBrowserPanel />
               </div>
+            ) : standaloneBrowserOpen ? (
+              <StandaloneBrowserPanel />
             ) : (
               <SpaceRenderModeProvider mode="page">
                 <div
@@ -232,7 +236,7 @@ export function SpaceChatLayout() {
           <div
             className={cn(
               "flex min-h-0 flex-1 flex-col",
-              projectId ? "overflow-hidden" : "overflow-y-auto",
+              projectId || standaloneBrowserOpen ? "overflow-hidden" : "overflow-y-auto",
             )}
           >
             {projectId ? (
@@ -242,6 +246,8 @@ export function SpaceChatLayout() {
               >
                 <ProjectBrowserPanel />
               </div>
+            ) : standaloneBrowserOpen ? (
+              <StandaloneBrowserPanel />
             ) : (
               <SpaceDashboard enterDirection={getMobilePanelStackDirection()} />
             )}

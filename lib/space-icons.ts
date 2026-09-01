@@ -4,7 +4,7 @@ import {
   Globe,
   Hammer,
   History,
-  Search,
+  Sparkles,
 } from "lucide-react";
 import { isExtraNavId, type SidebarNavId } from "./spaces";
 import type { SpaceId } from "./types";
@@ -12,7 +12,7 @@ import type { SpaceId } from "./types";
 export const spaceIcons: Record<SpaceId, typeof Hammer> = {
   work: Briefcase,
   build: Hammer,
-  research: Search,
+  research: Sparkles,
 };
 
 export const extraNavIcons: Record<

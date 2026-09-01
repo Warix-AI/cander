@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
-import { BrowserEngine } from "@/components/browser/BrowserEngine";
 import { PanelChrome } from "@/components/panels/PanelChrome";
 import { SpaceLibraryPanel } from "@/components/panels/SpaceLibraryPanel";
 import { Row } from "@/components/panels/Bits";
@@ -15,7 +14,6 @@ import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
 
 const tools: { id: ResearchTool; label: string }[] = [
   { id: "overview", label: "Overview" },
-  { id: "browser", label: "Browser" },
   { id: "sources", label: "Sources" },
   { id: "notes", label: "Notes" },
   { id: "report", label: "Report" },
@@ -30,7 +28,7 @@ export function ResearchPanel() {
     setResearchTool,
     panelIntent,
     openSpaceEntity,
-    newChat,
+    openStandaloneBrowser,
   } = useApp();
   const mobile = useMobileShell();
   const execute = panelIntent === "execute";
@@ -56,10 +54,7 @@ export function ResearchPanel() {
     return <SpaceLibraryPanel />;
   }
 
-  const tool =
-    execute && (researchTool === "overview" || !researchTool)
-      ? "browser"
-      : researchTool;
+  const tool = researchTool === "browser" ? "overview" : researchTool;
   const tabs = (
     <SegTabs
       items={tools}
@@ -71,7 +66,7 @@ export function ResearchPanel() {
   return (
     <div className={SHELL_PANEL_BODY}>
       <PanelChrome
-        kicker="Explore"
+        kicker="Studio"
         title={project?.name ?? "New brief"}
         trailing={mobile ? tabs : undefined}
       />
@@ -87,7 +82,7 @@ export function ResearchPanel() {
         {tool === "overview" ? (
           <div className="p-4">
             <p className="text-[14px] font-medium tracking-[-0.02em]">
-              {project?.summary ?? "Start a research brief or browse the web."}
+              {project?.summary ?? "Start a creative brief or open the browser."}
             </p>
             <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
               {webSources.length} sources · {notes.length} notes ·{" "}
@@ -95,30 +90,12 @@ export function ResearchPanel() {
             </p>
             <button
               type="button"
-              onClick={() => setResearchTool("browser")}
+              onClick={() => openStandaloneBrowser()}
               className="mt-4 inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:bg-foreground"
             >
               Browse
             </button>
           </div>
-        ) : null}
-
-        {tool === "browser" ? (
-          <BrowserEngine
-            projectId={projectId}
-            projectTitle={project?.name}
-            onCapture={({ sourceId, page }) => {
-              setSavedHint(page.title);
-              openSpaceEntity({
-                type: "source",
-                id: sourceId,
-                space: "research",
-                workspaceId,
-                label: page.title,
-                snapshot: page.url,
-              });
-            }}
-          />
         ) : null}
 
         {tool === "sources" ? (
@@ -144,56 +121,39 @@ export function ResearchPanel() {
         ) : null}
 
         {tool === "notes" ? (
-          <div className="py-2">
-            {notes.length ? (
-              notes.map((note) => (
-                <Row key={note.id} title={note.title} meta="Note" />
-              ))
-            ) : (
-              <p className="px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
-                Notes appear here when you save research takeaways.
-              </p>
-            )}
-          </div>
+          sourcesLoading ? (
+            <QuerySkeleton rows={4} />
+          ) : (
+            <div className="py-2">
+              {notes.length ? (
+                notes.map((note) => (
+                  <Row key={note.id} title={note.title} meta="Note" />
+                ))
+              ) : (
+                <p className="px-4 py-3 text-[13px] text-muted-foreground">
+                  No notes yet.
+                </p>
+              )}
+            </div>
+          )
         ) : null}
 
         {tool === "report" ? (
-          <div className="p-4">
-            {reports.length ? (
-              reports.map((report) => (
-                <div key={report.id} className="mb-4">
-                  <p className="text-[15px] font-medium tracking-[-0.02em]">
-                    {report.title}
-                  </p>
-                  <p className="mt-2 font-mono text-[12px] text-muted-foreground">
-                    {(report.citationMeta?.lines as string[] | undefined)?.join(
-                      "\n",
-                    ) ?? "Report draft"}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <>
-                <p className="text-[15px] font-medium tracking-[-0.02em]">
-                  Pricing comparison
+          sourcesLoading ? (
+            <QuerySkeleton rows={4} />
+          ) : (
+            <div className="py-2">
+              {reports.length ? (
+                reports.map((report) => (
+                  <Row key={report.id} title={report.title} meta="Report" />
+                ))
+              ) : (
+                <p className="px-4 py-3 text-[13px] text-muted-foreground">
+                  No reports yet.
                 </p>
-                <p className="mt-2 font-mono text-[12px] text-muted-foreground">
-                  OpenAI · usage
-                  <br />
-                  Cloud · flat
-                  <br />
-                  Cander Studio · $79
-                </p>
-                <button
-                  type="button"
-                  onClick={() => newChat("research")}
-                  className="mt-4 text-[13px] font-medium underline-offset-2 hover:underline"
-                >
-                  Generate report in chat
-                </button>
-              </>
-            )}
-          </div>
+              )}
+            </div>
+          )
         ) : null}
       </div>
     </div>

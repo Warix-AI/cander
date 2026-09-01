@@ -48,8 +48,8 @@ export function ResearchDashboard() {
   return (
     <DashFrame
       space="research"
-      title="Explore"
-      subtitle="Research, browse, analyze, and discover."
+      title="Studio"
+      subtitle="Images, video, audio, and presentations."
       actions={
         <>
           <NewExploreMenu onCreated={openProject} />

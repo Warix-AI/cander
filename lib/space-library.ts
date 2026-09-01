@@ -8,7 +8,7 @@ export function isSpaceLibrarySpace(id: string) {
 
 export const spaceLibraryLabels: Record<SpaceLibraryId, string> = {
   build: "Build library",
-  research: "Explore library",
+  research: "Studio library",
 };
 
 export function spaceLibraryLabel(id: SpaceLibraryId) {

@@ -154,7 +154,7 @@ const PLANS: {
     id: "free",
     title: "Free",
     price: "$0",
-    body: "Unlimited AI · Work, Build, Explore · Connectors",
+    body: "Unlimited AI · Work, Build, Studio · Connectors",
   },
   {
     id: "pro",
@@ -173,7 +173,7 @@ const PLANS: {
 const PLAN_PANEL_BULLETS: Record<BillingPlan, string[]> = {
   free: [
     "Unlimited AI at standard capacity",
-    "Work, Build, Explore, and Connectors",
+    "Work, Build, Studio, and Connectors",
     "Persistent memory included",
     "Upgrade anytime for more power",
   ],

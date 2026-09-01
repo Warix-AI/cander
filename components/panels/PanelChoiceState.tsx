@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { MessageSquare } from "lucide-react";
+import { Globe, MessageSquare } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { panelChoiceSuggestions } from "@/lib/panel-suggestions";
 import { useMobileShell } from "@/lib/use-media-query";
 
 export function PanelChoiceState() {
-  const { startDraftProject, setDraftAsDefaultChat } = useApp();
+  const { startDraftProject, setDraftAsDefaultChat, openStandaloneBrowser } =
+    useApp();
   const mobile = useMobileShell();
   const items = panelChoiceSuggestions();
   const [busy, setBusy] = useState<string | null>(null);
@@ -86,6 +87,27 @@ export function PanelChoiceState() {
               </span>
               <span className="block truncate text-[11.5px] text-muted-foreground">
                 Add as default chat to spaces
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(busy)}
+            onClick={() => void run("browser", () => openStandaloneBrowser())}
+            className={choiceButtonClass}
+          >
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-muted">
+              <Globe
+                className="h-3.5 w-3.5 text-foreground"
+                strokeWidth={1.65}
+              />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[13px] font-medium tracking-[-0.01em]">
+                {busy === "browser" ? "Opening…" : "Browser"}
+              </span>
+              <span className="block truncate text-[11.5px] text-muted-foreground">
+                Browse the web beside chat
               </span>
             </span>
           </button>

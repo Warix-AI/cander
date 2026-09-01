@@ -164,7 +164,7 @@ describe("clarification cards", () => {
           required: true,
           choices: [
             { id: "build", label: "Build" },
-            { id: "research", label: "Explore" },
+            { id: "research", label: "Studio" },
           ],
         },
       ],
@@ -177,17 +177,17 @@ describe("clarification cards", () => {
 
   it("normalizes explore answers and hides undefined keys in display", () => {
     const normalized = normalizeProjectCreateFromClarification(
-      { undefined: "Explore", name: "Hey Dude" },
+      { undefined: "Studio", name: "Hey Dude" },
       {},
     );
     assert.equal(normalized.space, "research");
     assert.equal(normalized.title, "Hey Dude");
 
     const rows = formatClarificationAnswersForDisplay({
-      undefined: "Explore",
+      undefined: "Studio",
     });
     assert.equal(rows[0]?.label, "Space");
-    assert.equal(rows[0]?.value, "Explore");
+    assert.equal(rows[0]?.value, "Studio");
 
     const sanitized = sanitizeClarificationQuestions([
       {

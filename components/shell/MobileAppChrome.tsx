@@ -37,6 +37,8 @@ import {
   mobileChromeButtonClass,
 } from "@/lib/mobile-menu-styles";
 import type { MobileSurface, SpaceId } from "@/lib/types";
+import { BrowserToggle } from "@/components/shell/PanelToggle";
+import { isNewChatScreen } from "@/lib/right-panel";
 import { cn } from "@/lib/utils";
 
 /**
@@ -52,6 +54,11 @@ export function MobileAppChrome({ className }: { className?: string }) {
     projectId,
     project,
     connectorId,
+    jobId,
+    skillId,
+    drafting,
+    thread,
+    threadId,
     entitlements,
     mobileSurface,
     setMobileSurface,
@@ -175,6 +182,17 @@ export function MobileAppChrome({ className }: { className?: string }) {
       (view === "recents" ||
         (view === "space" && mobileSurface === "panel" && !entityOpen)),
   );
+  const onNewChatScreen =
+    !inChromeSub &&
+    !onMenuMain &&
+    isNewChatScreen({
+      view,
+      threadId,
+      thread,
+      spaceId,
+      projectId,
+      drafting,
+    });
 
   const startNewChat = () => {
     if (spaceId && isChatSpace(spaceId)) {
@@ -389,7 +407,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     ) : null;
 
   const projectPanelLabel =
-    spaceId === "research" ? "Explore" : spaceId === "work" ? "Work" : "Build";
+    spaceId === "research" ? "Studio" : spaceId === "work" ? "Work" : "Build";
 
   return (
     <>
@@ -487,6 +505,8 @@ export function MobileAppChrome({ className }: { className?: string }) {
               />
             ) : hideNewChat ? (
               <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
+            ) : onNewChatScreen ? (
+              <BrowserToggle className="h-11 w-11" />
             ) : (
               <button
                 type="button"

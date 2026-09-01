@@ -202,7 +202,6 @@ export function Sidebar() {
 
   const navActive = (id: SidebarNavId) => {
     if (id === "recents") return view === "recents";
-    if (id === "research" && view === "browser") return true;
     // Pinned connector detail — highlight the pin, not the Connectors tab.
     if (id === "connectors" && connectorId) return false;
     // Pinned project — highlight the pin row, not the space.

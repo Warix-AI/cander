@@ -827,7 +827,7 @@ export async function executeAuthorizedTool(
               name: tool.name,
               ok: false,
               output:
-                "No active browser tab in the right panel. The user may need to open Build/Explore panel with a preview or web tab.",
+                "No active browser tab in the right panel. The user may need to open Build/Studio panel with a preview or web tab.",
             };
           }
           let domain = "";

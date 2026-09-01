@@ -117,6 +117,10 @@ import {
   workspacesFor,
   type Entitlements,
 } from "@/lib/entitlements";
+import {
+  primeStandaloneBrowserSession,
+  standaloneBrowserKey,
+} from "@/lib/standalone-browser-session";
 import { isChatSpace, chatSpaceId, PRIMARY_NAV_SPACES, spaceAllowed, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
 import type {
   AccountPresetId,
@@ -214,6 +218,7 @@ type Snapshot = {
   connectorId: string | null;
   jobId: string | null;
   skillId: string | null;
+  standaloneBrowserOpen?: boolean;
 };
 
 function sameSnap(a: Snapshot, b: Snapshot) {
@@ -340,6 +345,10 @@ type AppContextValue = {
   openSpace: (id: NavDestinationId) => void;
   openRecents: () => void;
   openBrowser: (opts?: { chat?: boolean; query?: string }) => void;
+  standaloneBrowserOpen: boolean;
+  openStandaloneBrowser: (opts?: { query?: string }) => void;
+  closeStandaloneBrowser: () => void;
+  toggleStandaloneBrowser: () => void;
   browserChatOpen: boolean;
   setBrowserChatOpen: (open: boolean) => void;
   browserChatRatio: number;
@@ -564,7 +573,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [drafting, setDrafting] = useState(false);
   const [buildTool, setBuildTool] = useState<BuildTool>("preview");
   const [studioTool, setStudioTool] = useState<StudioTool>("canvas");
-  const [researchTool, setResearchTool] = useState<ResearchTool>("browser");
+  const [researchTool, setResearchTool] = useState<ResearchTool>("overview");
+  const [standaloneBrowserOpen, setStandaloneBrowserOpen] = useState(false);
   const [skillsTool, setSkillsTool] = useState<SkillsTool>("editor");
   const [skillId, setSkillId] = useState<string | null>(null);
   const [fileId, setFileId] = useState<string | null>(null);
@@ -662,6 +672,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setConnectorId(snap.connectorId);
     setJobId(snap.jobId);
     setSkillId(snap.skillId);
+    setStandaloneBrowserOpen(Boolean(snap.standaloneBrowserOpen));
     setDrafting(false);
   }, []);
 
@@ -767,7 +778,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setView("space");
         setSpaceId(prevSpace);
         if (prevSpace === "build") setBuildTool("preview");
-        if (prevSpace === "research") setResearchTool("browser");
+        if (prevSpace === "research") setResearchTool("overview");
 
         if (chatWasOpen && isChatSpace(prevSpace)) {
           let tid = "";
@@ -937,9 +948,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (panelMode === "collapsed") return "panel";
         return surface === "panel" ? "chat" : "panel";
       });
+      if (panelMode !== "collapsed") {
+        setStandaloneBrowserOpen(false);
+      }
       return;
     }
-    setPanelMode((mode) => (mode === "collapsed" ? "split" : "collapsed"));
+    setPanelMode((mode) => {
+      if (mode !== "collapsed") {
+        setStandaloneBrowserOpen(false);
+      }
+      return mode === "collapsed" ? "split" : "collapsed";
+    });
     // Keep a usable right-panel share when opening from empty New Chat.
     setPanelRatioState((ratio) => (ratio < 0.5 ? 0.55 : ratio));
     setMobileSurface("chat");
@@ -1021,7 +1040,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMobileSurface("chat");
       setDrafting(!hasMessages);
       if (space === "build") setBuildTool("preview");
-      if (space === "research") setResearchTool("browser");
+      if (space === "research") setResearchTool("overview");
       pushTarget({
         view: "space",
         spaceId: space,
@@ -1095,7 +1114,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setPanelMode("split");
         setMobileSurface("chat");
         if (space === "build") setBuildTool("preview");
-        if (space === "research") setResearchTool("browser");
+        if (space === "research") setResearchTool("overview");
         pushTarget({
           view: "space",
           spaceId: space,
@@ -1135,7 +1154,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setPanelMode("split");
         setMobileSurface("chat");
         if (space === "build") setBuildTool("preview");
-        if (space === "research") setResearchTool("browser");
+        if (space === "research") setResearchTool("overview");
         pushTarget({
           view: "space",
           spaceId: space,
@@ -1191,7 +1210,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setChatSpace = useCallback((id: SpaceId | null) => {
     setSpaceId(id);
     setView("chat");
-    if (id === "research") setResearchTool("browser");
+    if (id === "research") setResearchTool("overview");
     if (id === "build") setBuildTool("preview");
     if (!id) {
       setDrafting(false);
@@ -1224,7 +1243,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Keep a user-collapsed right panel collapsed while arming chat.
       setMobileSurface((surface) => (surface === "menu" ? "chat" : surface));
       if (id === "build") setBuildTool("preview");
-      if (id === "research") setResearchTool("browser");
+      if (id === "research") setResearchTool("overview");
     },
     [workspaceId, threadId],
   );
@@ -1239,7 +1258,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMobileSurface((surface) => (surface === "menu" ? "chat" : surface));
       if (id === "build") setBuildTool("preview");
       if (id === "research")
-        setResearchTool(opts?.researchTool ?? "browser");
+        setResearchTool(opts?.researchTool ?? "overview");
       if (threadId && !projectId) {
         setThreads((current) =>
           current.map((item) =>
@@ -2639,30 +2658,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           });
         };
 
-      if (view === "browser") {
-        pushTarget({
-          view: "browser",
-          spaceId: null,
-          threadId: activeId,
-          projectId: null,
-          panelMode: "collapsed",
-          panelIntent: "browse",
-          connectorId: null,
-          jobId: null,
-          skillId: null,
-        });
-        if (imageGenerationId) {
-          void trackImageGenerationJob({
-            generationId: imageGenerationId,
-            prompt: trimmed,
-            threadId: activeId,
-            messageId: assistantId,
-          });
-        } else {
-          kickLiveAi();
-        }
-        return;
-      }
       const keepSpace =
         Boolean(space) &&
         (view === "space" || Boolean(opts?.space)) &&
@@ -2685,7 +2680,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setJobId(onUnscopedChat ? jobId : (intent.jobId ?? jobId));
       if (!onUnscopedChat && space && intent.buildTool) setBuildTool(intent.buildTool);
       if (!onUnscopedChat && space === "build") setBuildTool("preview");
-      if (!onUnscopedChat && space === "research") setResearchTool("browser");
+      if (!onUnscopedChat && space === "research") setResearchTool("overview");
       if (!onUnscopedChat && space && (kind === "build" || kind === "refine" || kind === "fix"))
         setBuildTool("preview");
       if (!onUnscopedChat && space && kind === "changes") setBuildTool("activity");
@@ -2711,6 +2706,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           : (intent.connectorId ?? connectorId),
         jobId: onUnscopedChat ? jobId : (intent.jobId ?? jobId),
         skillId: skillId ?? opts?.skillId ?? null,
+        standaloneBrowserOpen,
       });
       if (imageGenerationId) {
         void trackImageGenerationJob({
@@ -2737,6 +2733,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       view,
       drafting,
       panelMode,
+      standaloneBrowserOpen,
       pushTarget,
       selectedId,
       checkpoints,
@@ -3395,7 +3392,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDrafting(!hasMessages);
     setPanelIntent("execute");
     if (space === "build") setBuildTool("preview");
-    if (space === "research") setResearchTool("browser");
+    if (space === "research") setResearchTool("overview");
     setPanelMode("split");
     if (opts?.landOnPanel) {
       setMobileSurface("panel");
@@ -3447,7 +3444,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         landOnPanel: true,
       });
       if (space === "build") setBuildTool("preview");
-      if (space === "research") setResearchTool("browser");
+      if (space === "research") setResearchTool("overview");
     },
     [workspaceId, actor.id, threads, openProject],
   );
@@ -3544,7 +3541,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPanelIntent("execute");
       setView("chat");
       if (found.spaceId === "build") setBuildTool("preview");
-      if (found.spaceId === "research") setResearchTool("browser");
+      if (found.spaceId === "research") setResearchTool("overview");
       if (found.spaceId === "build") setBuildTool("preview");
       setPanelMode("split");
       setMobileSurface("chat");
@@ -3663,7 +3660,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!space || !["build", "research", "work"].includes(space)) {
           return {
             ok: false,
-            detail: "Pick a space (Build or Explore) before creating a project.",
+            detail: "Pick a space (Build or Studio) before creating a project.",
           };
         }
         const kind =
@@ -3705,7 +3702,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return {
             ok: true,
-            detail: `Created “${project.title}” in ${space === "research" ? "Explore" : space === "build" ? "Build" : "Work"}.`,
+            detail: `Created “${project.title}” in ${space === "research" ? "Studio" : space === "build" ? "Build" : "Work"}.`,
             projectId: project.id,
           };
         } catch (err) {
@@ -4002,32 +3999,92 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     pushTarget,
   ]);
 
-  const openBrowser = useCallback((opts?: { chat?: boolean; query?: string }) => {
-    const query = opts?.query?.trim() || null;
-    setView("browser");
-    setSpaceId("research");
-    setThreadId(null);
-    setProjectId(null);
-    setConnectorId(null);
-    setJobId(null);
-    setSkillId(null);
-    setDrafting(Boolean(opts?.chat));
-    setBrowserChatOpen(Boolean(opts?.chat));
-    setBrowserSearch(query);
+  const openStandaloneBrowser = useCallback(
+    (opts?: { query?: string }) => {
+      const key = standaloneBrowserKey(actor.id, workspaceId);
+      primeStandaloneBrowserSession(key, opts?.query ?? browserSearch);
+      setBrowserSearch(null);
+      setStandaloneBrowserOpen(true);
+      setPanelMode("split");
+      setPanelRatioState((ratio) => (ratio < 0.5 ? 0.55 : ratio));
+      setMobileSurface("panel");
+      pushTarget({
+        view,
+        spaceId,
+        threadId,
+        projectId,
+        panelMode: "split",
+        panelIntent,
+        connectorId,
+        jobId,
+        skillId,
+        standaloneBrowserOpen: true,
+      });
+    },
+    [
+      actor.id,
+      workspaceId,
+      browserSearch,
+      view,
+      spaceId,
+      threadId,
+      projectId,
+      panelIntent,
+      connectorId,
+      jobId,
+      skillId,
+      pushTarget,
+    ],
+  );
+
+  const closeStandaloneBrowser = useCallback(() => {
+    setStandaloneBrowserOpen(false);
     setPanelMode("collapsed");
     setMobileSurface("chat");
     pushTarget({
-      view: "browser",
-      spaceId: "research",
-      threadId: null,
-      projectId: null,
+      view,
+      spaceId,
+      threadId,
+      projectId,
       panelMode: "collapsed",
-      panelIntent: "browse",
-      connectorId: null,
-      jobId: null,
-      skillId: null,
+      panelIntent,
+      connectorId,
+      jobId,
+      skillId,
+      standaloneBrowserOpen: false,
     });
-  }, [pushTarget]);
+  }, [
+    view,
+    spaceId,
+    threadId,
+    projectId,
+    panelIntent,
+    connectorId,
+    jobId,
+    skillId,
+    pushTarget,
+  ]);
+
+  const toggleStandaloneBrowser = useCallback(() => {
+    if (standaloneBrowserOpen && panelMode !== "collapsed") {
+      closeStandaloneBrowser();
+      return;
+    }
+    openStandaloneBrowser();
+  }, [
+    standaloneBrowserOpen,
+    panelMode,
+    closeStandaloneBrowser,
+    openStandaloneBrowser,
+  ]);
+
+  const openBrowser = useCallback(
+    (opts?: { chat?: boolean; query?: string }) => {
+      if (opts?.query) setBrowserSearch(opts.query.trim());
+      openStandaloneBrowser({ query: opts?.query });
+    },
+    [openStandaloneBrowser],
+  );
 
   const clearPageReference = useCallback(() => setPageReference(null), []);
   const clearEntityReference = useCallback(() => setEntityReference(null), []);
@@ -4057,7 +4114,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMobileSurface("chat");
       if (target === "build") setBuildTool("preview");
       if (target === "build") setBuildTool("preview");
-      if (target === "research") setResearchTool("browser");
+      if (target === "research") setResearchTool("overview");
     },
     [browserPage],
   );
@@ -4072,7 +4129,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (ref.type === "source") {
         setView("space");
         setSpaceId(ref.space);
-        setResearchTool("browser");
+        setResearchTool("overview");
         setPanelIntent("execute");
         setPanelMode("split");
         setMobileSurface("panel");
@@ -4131,7 +4188,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (ref.type === "source") {
         const project = localSpaceEntityStore.createProject(ctx, {
           space: "build",
-          title: ref.label ?? "From Explore",
+          title: ref.label ?? "From Studio",
           kind: "app",
           summary: ref.snapshot ?? "",
         });
@@ -4390,6 +4447,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSpace,
       openRecents,
       openBrowser,
+      standaloneBrowserOpen,
+      openStandaloneBrowser,
+      closeStandaloneBrowser,
+      toggleStandaloneBrowser,
       browserChatOpen,
       setBrowserChatOpen,
       browserChatRatio,
@@ -4541,6 +4602,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSpace,
       openRecents,
       openBrowser,
+      standaloneBrowserOpen,
+      openStandaloneBrowser,
+      closeStandaloneBrowser,
+      toggleStandaloneBrowser,
       browserChatOpen,
       setBrowserChatOpen,
       browserChatRatio,

@@ -7,6 +7,7 @@ import { GmailPanel } from "@/components/panels/gmail/GmailPanel";
 import { HandshakePanel } from "@/components/panels/handshake/HandshakePanel";
 import { PanelChoiceState } from "@/components/panels/PanelChoiceState";
 import { PanelEmptyState } from "@/components/panels/PanelEmptyState";
+import { StandaloneBrowserPanel } from "@/components/browser/StandaloneBrowserPanel";
 import { ResearchPanel } from "@/components/panels/ResearchPanel";
 import { WorkPanel } from "@/components/panels/WorkPanel";
 import { ScheduledPanel } from "@/components/panels/ScheduledPanel";
@@ -31,6 +32,7 @@ export function ContextPanel() {
     skillId,
     jobId,
     panelMode,
+    standaloneBrowserOpen,
   } = useApp();
   const shell = useShellStyle();
   const mobile = useMobileShell();
@@ -68,7 +70,9 @@ export function ContextPanel() {
       )}
     >
       <div className="shell-panel flex min-h-0 flex-1 flex-col overflow-hidden">
-        {showEmpty || showRecentsEmpty ? (
+        {standaloneBrowserOpen ? (
+          <StandaloneBrowserPanel />
+        ) : showEmpty || showRecentsEmpty ? (
           <PanelEmptyState />
         ) : showChoice ? (
           <PanelChoiceState />

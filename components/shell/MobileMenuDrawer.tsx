@@ -50,7 +50,6 @@ export function MobileMenuDrawer() {
 
   const navActive = (id: SidebarNavId) => {
     if (id === "recents") return view === "recents";
-    if (id === "research" && view === "browser") return true;
     return spaceId === id && (view === "space" || view === "chat");
   };
 

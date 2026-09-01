@@ -34,7 +34,6 @@ import {
   subscribeOnboardingPending,
 } from "@/lib/session";
 import { useSyncExternalStore } from "react";
-import { BrowserLayout } from "@/components/browser/BrowserLayout";
 import { AppearanceProvider } from "@/components/theme/AppearanceProvider";
 import { MobilePanelActionsProvider } from "@/components/shell/mobile/MobilePanelActions";
 import { isDesktopShell } from "@/lib/desktop-shell";
@@ -311,10 +310,6 @@ function CourierMain() {
         </div>
       </SplitMainLayout>
     );
-  }
-
-  if (view === "browser") {
-    return <BrowserLayout />;
   }
 
   if (view === "space" || (view === "chat" && spaceId)) {

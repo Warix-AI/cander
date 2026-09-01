@@ -205,7 +205,8 @@ export function normalizeSpaceAnswer(
   if (typeof value !== "string") return null;
   const s = value.trim().toLowerCase();
   if (s === "build") return "build";
-  if (s === "research" || s === "explore" || s === "explorer") return "research";
+  if (s === "research" || s === "explore" || s === "explorer" || s === "studio")
+    return "research";
   if (s === "work") return "work";
   return null;
 }
@@ -217,7 +218,7 @@ function pickString(value: unknown): string | null {
 }
 
 function spaceDisplayLabel(space: "build" | "research" | "work"): string {
-  if (space === "research") return "Explore";
+  if (space === "research") return "Studio";
   if (space === "build") return "Build";
   return "Work";
 }
@@ -340,7 +341,7 @@ export function sanitizeClarificationQuestions(
       else if (!choiceId) choiceId = `opt${j}`;
       const display =
         choiceId === "research"
-          ? "Explore"
+          ? "Studio"
           : choiceId === "build"
             ? "Build"
             : choiceId === "work"
@@ -352,7 +353,7 @@ export function sanitizeClarificationQuestions(
     const blob = `${q.label ?? ""} ${q.description ?? ""} ${q.placeholder ?? ""}`.toLowerCase();
     const asksSpace =
       id === "space" ||
-      /\b(build|research|explore)\b/.test(blob);
+      /\b(build|research|explore|studio)\b/.test(blob);
     if (
       asksSpace &&
       (q.type === "text" || q.type === "textarea") &&
@@ -365,7 +366,7 @@ export function sanitizeClarificationQuestions(
         required: true,
         choices: [
           { id: "build", label: "Build" },
-          { id: "research", label: "Explore" },
+          { id: "research", label: "Studio" },
         ],
       };
     }
@@ -415,7 +416,7 @@ export const CREATE_PROJECT_SPACE_QUESTIONS: ClarificationQuestion[] = [
     required: true,
     choices: [
       { id: "build", label: "Build" },
-      { id: "research", label: "Explore" },
+      { id: "research", label: "Studio" },
     ],
   },
   {

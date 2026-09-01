@@ -103,7 +103,7 @@ export function ProjectsBrowser({
       const items = list.map((item) =>
         entry(item.id, item.name, item.id, editedMeta(item.updatedAt), "paper"),
       );
-      return pack("paper", "Projects", "No Explore projects yet. Create one to start researching.", openProject, items, items.map((item) => ({
+      return pack("paper", "Projects", "No Studio projects yet. Create one to start researching.", openProject, items, items.map((item) => ({
         name: item.name,
         items: [item],
       })));

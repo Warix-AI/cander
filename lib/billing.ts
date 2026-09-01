@@ -29,7 +29,7 @@ export const courierPlans: {
     name: "Free",
     price: 0,
     audience: "Cander",
-    blurb: "The full app — Work, Build, Explore, and Connectors.",
+    blurb: "The full app — Work, Build, Studio, and Connectors.",
     cta: "Start free",
   },
   {
@@ -57,7 +57,7 @@ export const comparisonRows = planComparisonRows();
 export const pricingFaqs: { q: string; a: string }[] = [
   {
     q: "Is every plan the same app?",
-    a: "Yes. Free, Pro, and Max all use the same Cander application — Work, Build, Explore, Connectors, and more. Plans increase power and collaboration, not separate products.",
+    a: "Yes. Free, Pro, and Max all use the same Cander application — Work, Build, Studio, Connectors, and more. Plans increase power and collaboration, not separate products.",
   },
   {
     q: "What changes between plans?",

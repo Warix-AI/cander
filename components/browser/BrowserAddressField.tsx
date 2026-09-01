@@ -13,6 +13,7 @@ export function BrowserAddressField({
   onCommit,
   className,
   showFavicon = true,
+  placeholder = "Search or enter URL",
 }: {
   url: string;
   faviconUrl?: string | null;
@@ -21,6 +22,7 @@ export function BrowserAddressField({
   onCommit: () => void;
   className?: string;
   showFavicon?: boolean;
+  placeholder?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -61,7 +63,7 @@ export function BrowserAddressField({
           onBlur={finishEdit}
           spellCheck={false}
           aria-label="Address"
-          placeholder="Search or enter URL"
+          placeholder={placeholder}
           className="h-8 w-full rounded-full border border-border/60 bg-muted/40 px-3 text-center text-[13px] text-foreground caret-foreground outline-none"
         />
       </form>
@@ -72,7 +74,7 @@ export function BrowserAddressField({
     <button
       type="button"
       onClick={beginEdit}
-      aria-label="Search or enter URL"
+      aria-label={placeholder}
       className={cn(
         "relative mx-auto flex h-8 min-w-0 max-w-[min(100%,22rem)] flex-1 items-center justify-center gap-2 rounded-full px-3 transition-colors duration-200 hover:bg-muted/50",
         className,
@@ -80,7 +82,7 @@ export function BrowserAddressField({
     >
       {showPlaceholder ? (
         <span className="truncate text-[12px] text-muted-foreground/80">
-          Search or enter URL
+          {placeholder}
         </span>
       ) : (
         <>

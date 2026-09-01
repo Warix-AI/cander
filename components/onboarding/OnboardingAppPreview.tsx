@@ -9,7 +9,7 @@ const PREVIEW_NAV = [
   { label: "New Chat", active: true },
   { label: "Work", dot: "bg-blue-500" },
   { label: "Build", dot: "bg-orange-500" },
-  { label: "Explore", dot: "bg-green-500" },
+  { label: "Studio", dot: "bg-green-500" },
   { label: "Connectors" },
   { label: "Recents" },
 ] as const;

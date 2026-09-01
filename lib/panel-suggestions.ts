@@ -22,7 +22,7 @@ export function panelChoiceSuggestions(): PanelChoice[] {
     },
     {
       id: "explore",
-      label: "Explore",
+      label: "Studio",
       hint: "Start a search with this chat",
       space: "research",
       icon: Search,

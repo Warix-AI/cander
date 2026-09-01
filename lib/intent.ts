@@ -24,7 +24,7 @@ function includesAny(text: string, words: string[]) {
 const handoffLead: Partial<Record<SpaceId, string>> = {
   work: "I’ll use Work for this.",
   build: "I’ll use Build to make this.",
-  research: "I’ll use Explore to look into this.",
+  research: "I'll use Studio to look into this.",
 };
 
 function withHandoff(
@@ -203,8 +203,8 @@ export function inferIntent(
       space: "research",
       projectId,
       reply: mentioned
-        ? `Explore is open on ${mentioned.name}.`
-        : "Explore is open — sources, notes, and reports.",
+        ? `Studio is open on ${mentioned.name}.`
+        : "Studio is open — sources, notes, and reports.",
     });
   }
 
@@ -232,7 +232,7 @@ export function nextId(prefix: string) {
 }
 
 export function labelFor(space: SpaceId) {
-  if (space === "research") return "Explore";
+  if (space === "research") return "Studio";
   if (space === "work") return "Work";
   return "Build";
 }

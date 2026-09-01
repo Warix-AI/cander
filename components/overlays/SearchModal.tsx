@@ -47,6 +47,7 @@ export function SearchModal() {
     openThread,
     openRecents,
     openBrowser,
+    standaloneBrowserOpen,
     newChat,
     view,
     browserPage,
@@ -122,13 +123,13 @@ export function SearchModal() {
       },
       {
         id: "action-new-research",
-        title: "New Explore",
+        title: "New Studio",
         meta: "Start a search with this chat",
         group: "Actions",
         run: () => newChat("research"),
       },
     ];
-    if (view === "browser") {
+    if (standaloneBrowserOpen) {
       actions.unshift({
         id: "action-current-tab",
         title: browserPage.title,
@@ -229,6 +230,7 @@ export function SearchModal() {
     openThread,
     openRecents,
     openBrowser,
+    standaloneBrowserOpen,
     newChat,
     view,
     browserPage,
