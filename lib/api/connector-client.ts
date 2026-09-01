@@ -93,3 +93,21 @@ export async function disconnectConnectorConnection(input: {
   }
   return data.connection as ConnectorConnection;
 }
+
+export async function executeConnectorToolRequest(input: {
+  workspaceId: string;
+  tool: "gmail.search" | "gmail.read";
+  arguments: Record<string, unknown>;
+}): Promise<{ output: string }> {
+  const headers = await authHeaders();
+  const response = await fetch("/api/connectors/tools/execute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify(input),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error ?? "Could not execute connector tool.");
+  }
+  return { output: String(data.output ?? "") };
+}

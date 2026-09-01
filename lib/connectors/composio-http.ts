@@ -205,3 +205,31 @@ export function composioCallbackVerifierPath(): string {
 export function allowedPostVerifyRedirectPaths(): string[] {
   return ["/", "/work", "/spaces"];
 }
+
+export async function executeComposioTool(input: {
+  toolSlug: string;
+  composioUserId: string;
+  connectedAccountId: string;
+  arguments: Record<string, unknown>;
+}): Promise<unknown> {
+  const res = await fetch(
+    `${COMPOSIO_API_BASE}/tools/execute/${encodeURIComponent(input.toolSlug)}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey(),
+      },
+      body: JSON.stringify({
+        user_id: input.composioUserId,
+        connected_account_id: input.connectedAccountId,
+        arguments: input.arguments,
+      }),
+    },
+  );
+  if (!res.ok) {
+    await res.text().catch(() => "");
+    throw new Error(`Composio tool execute failed (${res.status})`);
+  }
+  return res.json();
+}

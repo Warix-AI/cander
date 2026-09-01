@@ -119,6 +119,14 @@ export async function executeAuthorizedTool(
     if (health) return health;
   }
 
+  if (tool.name === "gmail.search" || tool.name === "gmail.read") {
+    const { executeConnectorGmailTool } = await import(
+      "@/lib/ai/connectors/tool-executors"
+    );
+    const gmail = await executeConnectorGmailTool({ name: tool.name, args });
+    if (gmail) return gmail;
+  }
+
   // Work tasks do not need app action handlers.
   if (tool.name === "create_work_task") {
     const { authorizeToolCapability } = await import(

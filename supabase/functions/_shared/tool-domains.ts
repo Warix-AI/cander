@@ -52,7 +52,7 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "browser.current.get_metadata",
   ],
   scheduling: [],
-  comms: [],
+  comms: ["gmail.search", "gmail.read"],
   cloud_work: [
     "create_work_task",
     "check_work_task",
@@ -233,6 +233,9 @@ function domainsForResumeTool(resumeTool?: string): ToolDomain[] {
   if (resumeTool === "knowledge.search") return ["knowledge", "clarification"];
   if (resumeTool === "web.search") return ["web", "clarification"];
   if (resumeTool === "create_work_task") return ["cloud_work", "clarification"];
+  if (resumeTool === "gmail.search" || resumeTool === "gmail.read") {
+    return ["comms", "clarification"];
+  }
   return ["clarification"];
 }
 
@@ -366,6 +369,15 @@ export function resolveAllowedToolsForTurn(opts: {
     }
     if (/\b(connect|connector)\b/i.test(content)) {
       domains.add("navigation");
+    }
+    if (
+      /\b(gmail|inbox|e-?mail|emails?|mailbox)\b/i.test(content) ||
+      /\b(unread|sent|drafts?)\b[\s\S]{0,32}\b(mail|email|message)/i.test(content) ||
+      /\b(check|read|search|find|summarize|show|list)\b[\s\S]{0,40}\b(my )?(email|mail|inbox|gmail)\b/i.test(
+        content,
+      )
+    ) {
+      domains.add("comms");
     }
   } else if (
     !taskActive &&

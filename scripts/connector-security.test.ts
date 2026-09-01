@@ -239,12 +239,21 @@ test("oauth state expiry detection", () => {
   );
 });
 
-test("connector tool seam blocks all actions during pilot", () => {
-  const denied = authorizeConnectorToolAction({
+test("connector tool seam allows gmail.read during pilot", () => {
+  const allowed = authorizeConnectorToolAction({
     workspaceId: "ws",
     profileId: "11111111-1111-1111-1111-111111111111",
     connectorId: "gmail",
     action: "gmail.read",
+    connectionId: "conn_1",
+  });
+  assert.equal(allowed.ok, true);
+
+  const denied = authorizeConnectorToolAction({
+    workspaceId: "ws",
+    profileId: "11111111-1111-1111-1111-111111111111",
+    connectorId: "gmail",
+    action: "gmail.send",
     connectionId: "conn_1",
   });
   assert.equal(denied.ok, false);
@@ -252,11 +261,14 @@ test("connector tool seam blocks all actions during pilot", () => {
 });
 
 test("client bundles do not import server-only connector modules", () => {
-  const clientRoots = ["components", "lib/api", "lib/hooks"];
+  const clientRoots = ["components", "lib/api", "lib/hooks", "lib/ai/connectors"];
   const forbidden = [
     "lib/connectors/lifecycle",
     "lib/connectors/server-context",
     "lib/connectors/provider/",
+    "lib/connectors/composio-http",
+    "lib/connectors/composio-tools",
+    "lib/connectors/tool-execute",
     "lib/supabase/admin",
   ];
   const hits: string[] = [];

@@ -122,6 +122,20 @@ export function normalizeToolArguments(
     if (t === "home") input.target = "new_chat";
   }
 
+  if (toolName === "gmail.read") {
+    if (input.message_id != null && input.messageId == null) {
+      input.messageId = input.message_id;
+    }
+    delete input.message_id;
+  }
+
+  if (toolName === "gmail.search") {
+    if (input.max_results != null && input.maxResults == null) {
+      input.maxResults = input.max_results;
+    }
+    delete input.max_results;
+  }
+
   return input;
 }
 
@@ -812,3 +826,48 @@ function registerHealthTools() {
 }
 
 registerHealthTools();
+
+function registerGmailTools() {
+  registerAiTool({
+    name: "gmail.search",
+    description:
+      "Search the user's connected Gmail using Gmail query syntax (read-only). Returns message summaries with IDs.",
+    permission: { requireWorkspaceMember: true },
+    domain: "comms",
+    enabled: true,
+    parameters: {
+      type: "object",
+      required: ["query"],
+      properties: {
+        query: {
+          type: "string",
+          description: "Gmail search query, e.g. is:unread from:alice newer_than:7d",
+        },
+        maxResults: {
+          type: "number",
+          description: "Maximum messages to return (1-25, default 10).",
+        },
+      },
+    },
+  });
+  registerAiTool({
+    name: "gmail.read",
+    description:
+      "Read a single Gmail message by ID (read-only). Use gmail.search first to discover message IDs.",
+    permission: { requireWorkspaceMember: true },
+    domain: "comms",
+    enabled: true,
+    parameters: {
+      type: "object",
+      required: ["messageId"],
+      properties: {
+        messageId: {
+          type: "string",
+          description: "Gmail message ID from gmail.search results.",
+        },
+      },
+    },
+  });
+}
+
+registerGmailTools();

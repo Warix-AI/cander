@@ -1,10 +1,10 @@
 /**
- * Future connector tool authorization seam — contract only (no AI wiring).
+ * Connector tool authorization seam — Gmail pilot (read-only).
  */
 
 export type ConnectorToolAction = "gmail.read" | "gmail.send";
 
-const PILOT_ALLOWLIST: ConnectorToolAction[] = [];
+const PILOT_ALLOWLIST: ConnectorToolAction[] = ["gmail.read"];
 
 export type ConnectorToolAuthzInput = {
   workspaceId: string;

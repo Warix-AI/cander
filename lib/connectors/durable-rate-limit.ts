@@ -9,13 +9,15 @@ export type ConnectorRateCategory =
   | "connector_initiate"
   | "connector_callback"
   | "connector_disconnect"
-  | "connector_webhook";
+  | "connector_webhook"
+  | "connector_tool_execute";
 
 const LIMITS: Record<ConnectorRateCategory, { perMinute: number }> = {
   connector_initiate: { perMinute: 10 },
   connector_callback: { perMinute: 20 },
   connector_disconnect: { perMinute: 10 },
   connector_webhook: { perMinute: 120 },
+  connector_tool_execute: { perMinute: 30 },
 };
 
 export async function checkConnectorRateLimitDurable(input: {
