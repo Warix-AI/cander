@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Search } from "lucide-react";
+import { Search, SquarePen } from "lucide-react";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { useApp } from "@/components/app/AppProvider";
 import {
@@ -11,6 +11,9 @@ import {
 } from "@/lib/desktop-shell";
 import { cn } from "@/lib/utils";
 
+const headerIconClass =
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground/75 transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground";
+
 export function WindowChrome({
   clearTrafficLights = false,
   hideHistory = false,
@@ -18,7 +21,7 @@ export function WindowChrome({
 }: {
   /** Pad past macOS traffic lights when chrome shares their row. */
   clearTrafficLights?: boolean;
-  /** Hide Search / Back / Forward (e.g. floating sidebar peek over project tabs). */
+  /** Hide header actions (e.g. floating sidebar peek over project tabs). */
   hideHistory?: boolean;
   className?: string;
 }) {
@@ -45,18 +48,23 @@ export function WindowChrome({
       )}
     >
       <NavToggle />
-      {!hideHistory ? <HistoryButtons dragSpacer={dragSpacer} /> : dragSpacer}
+      {!hideHistory ? (
+        <DesktopHeaderActions dragSpacer={dragSpacer} />
+      ) : (
+        dragSpacer
+      )}
     </div>
   );
 }
 
-function HistoryButtons({ dragSpacer }: { dragSpacer: ReactNode }) {
-  const { canGoBack, canGoForward, goBack, goForward, openOverlay } = useApp();
+function DesktopHeaderActions({ dragSpacer }: { dragSpacer: ReactNode }) {
+  const { view, threadId, spaceId, newChat, openOverlay } = useApp();
   const desktop = useDesktopShell();
+  const chatActive = view === "chat" && !threadId && !spaceId;
 
   return (
     <div
-      className="flex min-w-0 flex-1 items-center"
+      className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden"
       style={desktop ? DESKTOP_NO_DRAG : undefined}
     >
       <button
@@ -64,46 +72,23 @@ function HistoryButtons({ dragSpacer }: { dragSpacer: ReactNode }) {
         aria-label="Search"
         style={desktop ? DESKTOP_NO_DRAG : undefined}
         onClick={() => openOverlay("search")}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/75 transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+        className={headerIconClass}
       >
         <Search className="h-4 w-4" strokeWidth={1.7} />
       </button>
-      {dragSpacer}
-      <div
-        className="flex items-center"
+      <button
+        type="button"
+        aria-label="New chat"
         style={desktop ? DESKTOP_NO_DRAG : undefined}
+        onClick={() => newChat()}
+        className={cn(
+          headerIconClass,
+          chatActive && "bg-sidebar-accent text-foreground",
+        )}
       >
-        <button
-          type="button"
-          aria-label="Back"
-          style={desktop ? DESKTOP_NO_DRAG : undefined}
-          disabled={!canGoBack}
-          onClick={goBack}
-          className={cn(
-            "inline-flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/75 transition-colors duration-200",
-            canGoBack
-              ? "hover:bg-sidebar-accent hover:text-foreground"
-              : "opacity-35",
-          )}
-        >
-          <ArrowLeft className="h-4 w-4" strokeWidth={1.7} />
-        </button>
-        <button
-          type="button"
-          aria-label="Forward"
-          style={desktop ? DESKTOP_NO_DRAG : undefined}
-          disabled={!canGoForward}
-          onClick={goForward}
-          className={cn(
-            "inline-flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/75 transition-colors duration-200",
-            canGoForward
-              ? "hover:bg-sidebar-accent hover:text-foreground"
-              : "opacity-35",
-          )}
-        >
-          <ArrowRight className="h-4 w-4" strokeWidth={1.7} />
-        </button>
-      </div>
+        <SquarePen className="h-4 w-4" strokeWidth={1.7} />
+      </button>
+      {dragSpacer}
     </div>
   );
 }

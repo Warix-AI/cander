@@ -134,7 +134,7 @@ export function planComparisonRows(): {
     { label: "Chat", values: all({ free: true, pro: true, max: true }) },
     { label: "Work", values: all({ free: true, pro: true, max: true }) },
     { label: "Build", values: all({ free: true, pro: true, max: true }) },
-    { label: "Studio", values: all({ free: true, pro: true, max: true }) },
+    { label: "Explore", values: all({ free: true, pro: true, max: true }) },
     {
       label: "Connectors",
       values: all({ free: true, pro: true, max: true }),

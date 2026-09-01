@@ -1,14 +1,19 @@
 import type { BillingPlan, NavDestinationId, SpaceId } from "./types";
 
-/** Product spaces — Work, Build, Explore (research in code). */
+/** Product spaces — Home, Work, Build, Explore (research), Studio. */
 export const PRIMARY_NAV_SPACES: SpaceId[] = [
+  "home",
   "work",
   "build",
   "research",
+  "studio",
 ];
 
-/** Hide Studio from sidebar / mobile menu until the space is ready for GA. */
-export const SHOW_STUDIO_NAV = false;
+/** Re-enabled in sidebar — Work, Build, Explore. */
+export const SHOW_STUDIO_NAV = true;
+
+/** Nav-only for now — shown disabled with “Coming soon”. */
+export const COMING_SOON_NAV_SPACES: SpaceId[] = ["studio"];
 
 export const NAV_SPACES: SpaceId[] = [...PRIMARY_NAV_SPACES];
 export const ALL_SPACE_IDS: SpaceId[] = [...PRIMARY_NAV_SPACES];
@@ -27,17 +32,32 @@ export type SidebarNavOpts = {
   billingPlan?: BillingPlan;
 };
 
+export function isComingSoonNav(
+  id: SidebarNavId,
+): id is (typeof COMING_SOON_NAV_SPACES)[number] {
+  return COMING_SOON_NAV_SPACES.includes(id as SpaceId);
+}
+
 export function isChatSpace(
   id: SpaceId | NavDestinationId | null | undefined,
 ): id is ChatSpaceId {
-  return Boolean(id && id !== "connectors" && (CHAT_SPACES as readonly string[]).includes(id));
+  return Boolean(
+    id && id !== "connectors" && (CHAT_SPACES as readonly string[]).includes(id),
+  );
+}
+
+/** Dashboard-only destinations — no chat column or composer. */
+export function isDashboardOnlySpace(
+  id: SpaceId | NavDestinationId | null | undefined,
+): boolean {
+  return id === "home";
 }
 
 /** Product space for chat persistence — excludes Connectors nav. */
 export function chatSpaceId(
   id: NavDestinationId | null | undefined,
 ): SpaceId | null {
-  if (!id || id === "connectors") return null;
+  if (!id || id === "connectors" || id === "home" || id === "studio") return null;
   return id;
 }
 
@@ -57,7 +77,7 @@ export function isSidebarNavId(id: string): id is SidebarNavId {
 /** Connectors nav visible for all plans — installs ship later. */
 export const SHOW_CONNECTORS_NAV = true;
 
-/** Default sidebar — Work, Build, Explore, Connectors, Recents. */
+/** Default sidebar — Home, Work, Build, Explore, Studio, Connectors, Recents. */
 export const DEFAULT_SIDEBAR_MAIN: SidebarNavId[] = [
   ...PRIMARY_NAV_SPACES,
   ...(SHOW_CONNECTORS_NAV ? (["connectors"] as const) : []),
@@ -99,6 +119,7 @@ export function spaceAllowed(
   if (id === "browser") return false;
   if (id === "connectors") return SHOW_CONNECTORS_NAV;
   if (id === "recents") return true;
+  if (id === "home" || id === "studio") return true;
   return allowed.includes(id as SpaceId);
 }
 
@@ -119,7 +140,6 @@ export function migrateSidebarId(id: string): SidebarNavId | null {
     id === "files" ||
     id === "skills" ||
     id === "scheduled" ||
-    id === "studio" ||
     id === "personal" ||
     id === "finances" ||
     id === "health"

@@ -26,6 +26,11 @@ export type SpaceSettingsConfig = {
 };
 
 export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
+  home: {
+    title: "Home",
+    subtitle: "Your starting point — in progress work and where to go next.",
+    sections: [],
+  },
   work: {
     title: "Work",
     subtitle: "Inbox, calendar, and customers — the day-to-day, not another app.",
@@ -327,5 +332,10 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
         ],
       },
     ],
+  },
+  studio: {
+    title: "Studio",
+    subtitle: "Images, video, audio, and presentations — coming soon.",
+    sections: [],
   },
 };

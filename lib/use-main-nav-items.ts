@@ -2,16 +2,19 @@
 
 import { useApp } from "@/components/app/AppProvider";
 import {
+  isComingSoonNav,
   isExtraNavId,
+  PRIMARY_NAV_SPACES,
   resolveSidebarNav,
   type SidebarNavId,
 } from "@/lib/spaces";
 import { memberSpaces } from "@/lib/workspace-policy";
 import { spaces } from "@/lib/data";
 import { extraNavLabels, navIcon } from "@/lib/space-icons";
+import type { SpaceId } from "@/lib/types";
 
 const PRIMARY_NAV_LABELS: Partial<Record<SidebarNavId, string>> = {
-  research: "Studio",
+  research: "Explore",
 };
 
 export function navLabel(id: SidebarNavId) {
@@ -20,7 +23,14 @@ export function navLabel(id: SidebarNavId) {
   return spaces.find((item) => item.id === id)?.label;
 }
 
-export function useMainNavItems() {
+export type MainNavItem = {
+  id: SidebarNavId;
+  label: string;
+  Icon: ReturnType<typeof navIcon>;
+  comingSoon?: boolean;
+};
+
+export function useMainNavItems(opts?: { spacesOnly?: boolean }) {
   const { workspaceId, actor, workspacePolicies, sidebarLayout, billingPlan } =
     useApp();
 
@@ -30,11 +40,19 @@ export function useMainNavItems() {
     { billingPlan },
   );
 
-  return main
-    .map((id) => {
-      const label = navLabel(id);
-      if (!label) return null;
-      return { id, label, Icon: navIcon(id) };
-    })
-    .filter((item): item is NonNullable<typeof item> => item !== null);
+  const visible = opts?.spacesOnly
+    ? main.filter((id) => PRIMARY_NAV_SPACES.includes(id as SpaceId))
+    : main;
+
+  return visible.flatMap((id) => {
+    const label = navLabel(id);
+    if (!label) return [];
+    const item: MainNavItem = {
+      id,
+      label,
+      Icon: navIcon(id),
+      comingSoon: isComingSoonNav(id),
+    };
+    return [item];
+  });
 }

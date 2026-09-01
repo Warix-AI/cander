@@ -300,8 +300,8 @@ function ReferenceMenu({
           />
           <MenuItem
             icon={Clapperboard}
-            title="Use in Studio"
-            body="Send this page into Studio as visual reference."
+            title="Use in Explore"
+            body="Send this page into Explore as a source."
             tint="text-violet-400"
             onClick={() => {
               onStudio();

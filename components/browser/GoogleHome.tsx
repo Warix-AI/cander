@@ -19,7 +19,7 @@ const results = [
     crumb: "cander.com",
     title: "Cander — AI that ships with you",
     snippet:
-      "Cander is the workspace for building, researching, and shipping product. Start a new Build, open Studio, or browse the web beside chat.",
+      "Cander is the workspace for building, researching, and shipping product. Start a new Build, open Explore, or browse the web beside chat.",
   },
   {
     url: "https://about.google",

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Check, ChevronDown, LayoutGrid, List, Pin, Settings } from "lucide-react";
+import { Check, ChevronDown, LayoutGrid, List, Pin, Plus, Settings } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { SpaceBanner } from "@/components/spaces/SpaceBanner";
@@ -11,12 +11,24 @@ import { useDesktopShell } from "@/lib/desktop-shell";
 import { useMobileShell } from "@/lib/use-media-query";
 import type { SpaceId, SpaceLayout } from "@/lib/types";
 import type { BannerKey } from "@/lib/space-banners";
-import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
+import {
+  MobileFilterBar,
+  type MobilePanelExtraItem,
+  type MobilePanelScopeConfig,
+} from "@/components/shell/mobile/MobilePanelActions";
+import { SPACE_CANVAS_BG } from "@/lib/mobile-menu-styles";
+import { isDashboardOnlySpace } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import {
   FLOAT_CONTROL_SHELL,
   FLOAT_TOGGLE_ACTIVE,
 } from "@/lib/shell-chrome";
+
+/** True when the space chat column is dismissed (no active thread or draft). */
+export function useSpaceChatClosed() {
+  const { drafting, threadId } = useApp();
+  return !(drafting || threadId);
+}
 
 export function LayoutToggle({
   layout,
@@ -421,6 +433,7 @@ export function DashFrame({
   actions,
   titleAction,
   banner = true,
+  surfaceClassName,
   children,
 }: {
   space?: SpaceId;
@@ -431,6 +444,7 @@ export function DashFrame({
   actions?: ReactNode;
   titleAction?: ReactNode;
   banner?: boolean;
+  surfaceClassName?: string;
   children: ReactNode;
 }) {
   const { spaceId, sidebarOpen, view } = useApp();
@@ -438,19 +452,23 @@ export function DashFrame({
   const inPanel = mode === "panel";
   const desktop = useDesktopShell();
   const mobile = useMobileShell();
-  const rawBanner = bannerKey ?? space ?? spaceId;
+  const rawBanner = banner
+    ? (bannerKey ?? space ?? spaceId)
+    : null;
   const bannerSpace =
-    banner && rawBanner && rawBanner !== "connectors"
+    rawBanner &&
+    rawBanner !== "connectors" &&
+    !isDashboardOnlySpace(rawBanner)
       ? (rawBanner as BannerKey)
       : null;
-  // Mobile: skip space gradient + title — filters/projects sit under MobileAppChrome.
-  const hideMobileHero = mobile && Boolean(bannerSpace);
+  // Mobile: skip in-page hero — app chrome or panel split owns the title row.
+  const hideMobileHero = mobile && (Boolean(bannerSpace) || !banner);
 
   return (
     <div
       className={cn(
         "@container relative flex min-h-0 flex-1 flex-col overflow-y-auto",
-        mobile ? MOBILE_APP_BG : "bg-white dark:bg-background",
+        surfaceClassName ?? SPACE_CANVAS_BG,
       )}
     >
       {view === "space" && !bannerSpace && !inPanel && !desktop ? (
@@ -497,33 +515,29 @@ export function DashFrame({
       ) : (
         <div
           className={cn(
-            "mx-auto w-full px-4 pt-6 @min-[480px]:px-8 @min-[480px]:pt-8",
-            mobile && "px-4 pt-3",
-            inPanel ? "max-w-none" : "max-w-6xl",
+            "mx-auto w-full px-4 @min-[480px]:px-8",
+            inPanel
+              ? "max-w-none pt-5 pb-3 pr-12 @min-[480px]:pt-6"
+              : "max-w-6xl pb-3 pt-6 @min-[480px]:pt-8",
+            mobile && !inPanel && "px-4 pt-3 pb-2",
           )}
         >
           <DashHeader
             kicker={kicker}
             title={title}
-            subtitle={mobile && inPanel ? undefined : subtitle}
+            subtitle={subtitle}
             titleAction={titleAction}
-            actions={
-              inPanel ? (
-                <span className="[&>button:first-child]:hidden">{actions}</span>
-              ) : (
-                actions
-              )
-            }
+            inPanel={inPanel}
             compact={mobile}
           />
         </div>
       )}
       <div
         className={cn(
-          "mx-auto w-full px-4 py-4 @min-[480px]:px-8 @min-[480px]:py-6",
+          "mx-auto w-full px-4 pt-3 pb-4 @min-[480px]:px-8 @min-[480px]:pb-6",
           mobile && "px-4 py-3",
           hideMobileHero && "pt-3",
-          inPanel ? "max-w-none" : "max-w-6xl",
+          inPanel ? "max-w-none pr-12" : "max-w-6xl",
         )}
       >
         {children}
@@ -539,6 +553,7 @@ function DashHeader({
   actions,
   titleAction,
   onBanner = false,
+  inPanel = false,
   compact = false,
 }: {
   kicker?: string;
@@ -547,53 +562,112 @@ function DashHeader({
   actions?: ReactNode;
   titleAction?: ReactNode;
   onBanner?: boolean;
+  inPanel?: boolean;
   compact?: boolean;
 }) {
-  return (
-    <div className="flex w-full flex-col items-start justify-between gap-3 @min-[520px]:flex-row @min-[520px]:items-end @min-[520px]:flex-wrap">
-      <div className="min-w-0">
-        {kicker ? (
-          <p
+  if (onBanner) {
+    return (
+      <div className="flex w-full flex-col items-start justify-between gap-3 @min-[520px]:flex-row @min-[520px]:items-end @min-[520px]:flex-wrap">
+        <div className="min-w-0">
+          {kicker ? (
+            <p className="flex items-center gap-1.5 text-[11px] tracking-[0.06em] text-white/65 uppercase">
+              {kicker}
+            </p>
+          ) : null}
+          <div
             className={cn(
-              "flex items-center gap-1.5 text-[11px] tracking-[0.06em] uppercase",
-              onBanner ? "text-white/65" : "text-muted-foreground",
+              "flex flex-wrap items-center gap-3",
+              kicker && "mt-1.5 max-lg:mt-2",
             )}
           >
-            {kicker}
-          </p>
-        ) : null}
-        <div className={cn("flex flex-wrap items-center gap-3", kicker && "mt-1.5 max-lg:mt-2")}>
-          <h1
-            className={cn(
-              "heading-display",
-              compact
-                ? "text-[1.35rem] leading-tight"
-                : "text-[1.55rem] @min-[480px]:text-[1.85rem]",
-              onBanner && "text-white",
-            )}
-          >
-            {title}
-          </h1>
-          {titleAction}
+            <h1 className="heading-display text-[1.55rem] text-white @min-[480px]:text-[1.85rem]">
+              {title}
+            </h1>
+            {titleAction}
+          </div>
+          {subtitle ? (
+            <p className="mt-1.5 max-w-xl text-[13.5px] leading-relaxed text-white/70 @min-[480px]:mt-2 @min-[480px]:text-[14px]">
+              {subtitle}
+            </p>
+          ) : null}
         </div>
-        {subtitle ? (
-          <p
-            className={cn(
-              "mt-1.5 max-w-xl text-[13.5px] leading-relaxed @min-[480px]:mt-2 @min-[480px]:text-[14px]",
-              compact && "text-[13px]",
-              onBanner ? "text-white/70" : "text-muted-foreground",
-            )}
-          >
-            {subtitle}
-          </p>
+        {actions ? (
+          <div className="flex flex-wrap items-center gap-2 max-lg:w-full">
+            {actions}
+          </div>
         ) : null}
       </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <h1
+          className={cn(
+            "heading-display text-foreground",
+            compact
+              ? "text-[1.25rem] leading-tight"
+              : "text-[1.55rem] leading-tight @min-[480px]:text-[1.85rem]",
+          )}
+        >
+          {title}
+        </h1>
+        {titleAction}
+      </div>
+      {subtitle ? (
+        <p
+          className={cn(
+            "mt-1.5 max-w-xl text-[13.5px] leading-relaxed text-muted-foreground @min-[480px]:mt-2 @min-[480px]:text-[14px]",
+            compact && "text-[13px]",
+          )}
+        >
+          {subtitle}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Layout toggle on the left, space actions on the right — one row under the title. */
+export function DashToolbar({
+  active = false,
+  actions,
+  children,
+  className,
+  onNewChat,
+  newChatLabel,
+  scope,
+  layout,
+  extras,
+}: {
+  active?: boolean;
+  actions?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  onNewChat?: () => void;
+  newChatLabel?: string;
+  scope?: MobilePanelScopeConfig;
+  layout?: { value: SpaceLayout; onChange: (value: SpaceLayout) => void };
+  extras?: MobilePanelExtraItem[];
+}) {
+  return (
+    <MobileFilterBar
+      active={active}
+      onNewChat={onNewChat}
+      newChatLabel={newChatLabel}
+      scope={scope}
+      layout={layout}
+      extras={extras}
+      className={cn(className)}
+    >
+      <div className="flex shrink-0 items-center">{children}</div>
       {actions ? (
-        <div className="flex flex-wrap items-center gap-2 max-lg:w-full">
+        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
           {actions}
         </div>
       ) : null}
-    </div>
+    </MobileFilterBar>
   );
 }
 
@@ -640,7 +714,7 @@ export function DashBtn({
       aria-label={label}
       onClick={onClick}
       className={cn(
-        "inline-flex h-10 items-center gap-1.5 rounded-[10px] text-[13.5px] font-medium tracking-[-0.01em] transition-colors duration-200",
+        "inline-flex h-9 items-center gap-1.5 rounded-[10px] text-[13px] font-medium tracking-[-0.01em] transition-colors duration-200",
         icon ? "w-10 justify-center px-0" : "px-4",
         primary
           ? "bg-primary text-primary-foreground hover:bg-foreground"

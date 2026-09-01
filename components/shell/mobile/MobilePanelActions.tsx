@@ -142,7 +142,7 @@ export function MobileFilterBar({
   return (
     <div
       className={cn(
-        "hidden flex-row flex-wrap items-center justify-between gap-2 @min-[420px]:gap-3 lg:flex",
+        "hidden w-full flex-row flex-nowrap items-center gap-2 @min-[420px]:gap-3 lg:flex",
         className,
       )}
     >

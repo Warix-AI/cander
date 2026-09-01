@@ -80,7 +80,7 @@ export function PreviewGrid({
 
   if (!items.length) {
     return (
-      <p className="mt-3 px-3 py-4 text-[13px] text-muted-foreground">{empty}</p>
+      <p className="mt-3 py-4 text-[13px] text-muted-foreground">{empty}</p>
     );
   }
 
@@ -362,7 +362,7 @@ function PreviewListRow({
   onOpen: (projectId: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-[10px] py-2 canvas-hover">
+    <div className="flex items-center gap-3 rounded-[10px] py-2 transition-colors duration-200 hover:bg-muted/40 dark:hover:bg-muted/30">
       <button
         type="button"
         onClick={() => onOpen(item.projectId)}

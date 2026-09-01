@@ -2,6 +2,7 @@
 
 import { BuildDashboard } from "@/components/spaces/BuildDashboard";
 import { ConnectorsDashboard } from "@/components/spaces/ConnectorsDashboard";
+import { HomeDashboard } from "@/components/spaces/HomeDashboard";
 import { ResearchDashboard } from "@/components/spaces/ResearchDashboard";
 import { WorkDashboard } from "@/components/spaces/WorkDashboard";
 import { useApp } from "@/components/app/AppProvider";
@@ -20,7 +21,9 @@ export function SpaceDashboard({
   const { spaceId } = useApp();
   const mobile = useMobileShell();
   const body =
-    spaceId === "work" ? (
+    spaceId === "home" ? (
+      <HomeDashboard />
+    ) : spaceId === "work" ? (
       <WorkDashboard />
     ) : spaceId === "build" ? (
       <BuildDashboard />

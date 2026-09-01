@@ -125,7 +125,7 @@ export function SearchModal() {
         ? [
             {
               id: "action-new-research",
-              title: "New Studio",
+              title: "New Explore",
               meta: "Start a search with this chat",
               group: "Actions" as const,
               run: () => newChat("research"),

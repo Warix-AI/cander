@@ -2,30 +2,38 @@
 
 import { useMemo } from "react";
 import { useApp } from "@/components/app/AppProvider";
+import { useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
 import {
   DashFrame,
   DashBtn,
+  DashToolbar,
   LayoutToggle,
-  SpaceSettingsButton,
+  useSpaceChatClosed,
 } from "@/components/spaces/ItemSet";
-import { NewExploreMenu } from "@/components/spaces/NewExploreMenu";
+import {
+  EXPLORE_CREATE_OPTIONS,
+  NewExploreMenu,
+} from "@/components/spaces/NewExploreMenu";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import { editedMeta } from "@/lib/format-relative-time";
-import { useSpaceProjects } from "@/lib/hooks/use-space-query";
+import { useSpaceMutation, useSpaceProjects } from "@/lib/hooks/use-space-query";
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
-import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
 import { useMobileShell } from "@/lib/use-media-query";
 
 export function ResearchDashboard() {
   const {
     openProject,
+    openSpaceChat,
+    openQuickSearchBrowser,
     spaceLayout,
     setSpaceLayout,
-    newChat,
     mobileSurface,
     view,
   } = useApp();
+  const ctx = useWorkspaceCtx();
+  const { createProject } = useSpaceMutation();
   const mobile = useMobileShell();
+  const chatClosed = useSpaceChatClosed();
   const hoistFilters =
     mobile && view === "space" && mobileSurface === "panel";
 
@@ -45,27 +53,50 @@ export function ResearchDashboard() {
     [spaceProjects],
   );
 
+  const createExploreProject = () => {
+    const item = EXPLORE_CREATE_OPTIONS[0]!;
+    void createProject(ctx, {
+      space: "research",
+      title: item.title,
+      kind: item.kind,
+      summary: item.summary,
+    }).then((project) => openProject(project.id));
+  };
+
   return (
     <DashFrame
-      space="research"
-      title="Studio"
-      subtitle="Images, video, audio, and presentations."
-      actions={
-        <>
-          <NewExploreMenu onCreated={openProject} />
-          <DashBtn onClick={() => newChat("research")}>Ask</DashBtn>
-          <SpaceSettingsButton space="research" />
-        </>
-      }
+      banner={false}
+      title="Explore"
+      subtitle="Research, browse, analyze, and discover."
     >
-      <MobileFilterBar
+      <DashToolbar
         active={hoistFilters}
-        onNewChat={() => newChat("research")}
-        newChatLabel="New search"
+        onNewChat={chatClosed ? () => openSpaceChat("research") : undefined}
+        newChatLabel="Ask"
         layout={{ value: spaceLayout, onChange: setSpaceLayout }}
+        extras={[
+          {
+            id: "quick-search",
+            label: "Quick search",
+            onClick: () => openQuickSearchBrowser(),
+          },
+          {
+            id: "new-project",
+            label: "New project",
+            onClick: createExploreProject,
+          },
+        ]}
+        actions={
+          <>
+            {chatClosed ? (
+              <DashBtn onClick={() => openSpaceChat("research")}>Ask</DashBtn>
+            ) : null}
+            <NewExploreMenu onCreated={openProject} />
+          </>
+        }
       >
         <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
-      </MobileFilterBar>
+      </DashToolbar>
 
       <div className="mt-5">
         {projectsLoading && !projectItems.length ? (

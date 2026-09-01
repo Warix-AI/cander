@@ -6,6 +6,9 @@ export const MOBILE_MENU_BG = "mobile-menu-canvas";
 /** Main app surfaces on mobile — pure white in light, dark gray in dark. */
 export const MOBILE_APP_BG = "bg-white mobile-app-surface";
 
+/** Space dashboards — barely off-white in light (Home, Work, Build, Explore, Studio). */
+export const SPACE_CANVAS_BG = "bg-space-canvas dark:bg-background";
+
 /** Settings groups on mobile — flat surfaces that respect light/dark. */
 export const MOBILE_SETTINGS_SURFACE =
   "border border-border/60 bg-muted/40 dark:border-white/10 dark:bg-neutral-900";

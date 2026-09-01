@@ -2,18 +2,22 @@
 
 import { useMemo } from "react";
 import { useApp } from "@/components/app/AppProvider";
+import { useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
 import {
   DashBtn,
   DashFrame,
+  DashToolbar,
   LayoutToggle,
-  SpaceSettingsButton,
+  useSpaceChatClosed,
 } from "@/components/spaces/ItemSet";
-import { NewBuildMenu } from "@/components/spaces/NewBuildMenu";
+import {
+  BUILD_CREATE_OPTIONS,
+  NewBuildMenu,
+} from "@/components/spaces/NewBuildMenu";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import { editedMeta } from "@/lib/format-relative-time";
-import { useSpaceProjects } from "@/lib/hooks/use-space-query";
+import { useSpaceMutation, useSpaceProjects } from "@/lib/hooks/use-space-query";
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
-import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
   creatorLabel,
@@ -28,13 +32,16 @@ export function BuildDashboard() {
     workspaceId,
     actor,
     openProject,
-    newChat,
+    openSpaceChat,
     spaceLayout,
     setSpaceLayout,
     mobileSurface,
     view,
   } = useApp();
+  const ctx = useWorkspaceCtx();
+  const { createProject } = useSpaceMutation();
   const mobile = useMobileShell();
+  const chatClosed = useSpaceChatClosed();
   const hoistFilters =
     mobile && view === "space" && mobileSurface === "panel";
   const { data: spaceProjects, loading: projectsLoading } =
@@ -67,25 +74,38 @@ export function BuildDashboard() {
 
   return (
     <DashFrame
-      space="build"
+      banner={false}
       title="Build"
       subtitle="Ship apps, websites, automations, and your recurring tasks."
-      actions={
-        <>
-          <NewBuildMenu onCreated={openProject} />
-          <DashBtn onClick={() => newChat("build")}>Ask</DashBtn>
-          <SpaceSettingsButton space="build" />
-        </>
-      }
     >
-      <MobileFilterBar
+      <DashToolbar
         active={hoistFilters}
-        onNewChat={() => newChat("build")}
-        newChatLabel="New build"
+        onNewChat={chatClosed ? () => openSpaceChat("build") : undefined}
+        newChatLabel="Ask"
         layout={{ value: spaceLayout, onChange: setSpaceLayout }}
+        extras={BUILD_CREATE_OPTIONS.map((item) => ({
+          id: item.kind,
+          label: item.label,
+          onClick: () => {
+            void createProject(ctx, {
+              space: "build",
+              title: `New ${item.label}`,
+              kind: item.kind,
+              summary: item.summary,
+            }).then((project) => openProject(project.id));
+          },
+        }))}
+        actions={
+          <>
+            {chatClosed ? (
+              <DashBtn onClick={() => openSpaceChat("build")}>Ask</DashBtn>
+            ) : null}
+            <NewBuildMenu icon onCreated={openProject} />
+          </>
+        }
       >
         <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
-      </MobileFilterBar>
+      </DashToolbar>
 
       <div className="mt-5">
         {projectsLoading && !projectItems.length ? (

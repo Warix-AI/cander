@@ -20,18 +20,32 @@ export function isNewChatScreen(opts: {
   );
 }
 
-/** Standalone browser only belongs on home chat — never on a space or project. */
+/** Home chat route — includes armed drafts; used for right-panel chrome placement. */
+export function isHomeChatView(opts: {
+  view: CourierView;
+  spaceId?: NavDestinationId | null;
+  projectId?: string | null;
+}) {
+  return opts.view === "chat" && !opts.spaceId && !opts.projectId;
+}
+
+/** Standalone browser on home chat, or ephemeral quick search on Explore. */
 export function showStandaloneBrowserPanel(opts: {
   standaloneBrowserOpen: boolean;
+  standaloneBrowserEphemeral?: boolean;
   view: CourierView;
   spaceId: NavDestinationId | null;
   projectId?: string | null;
 }) {
+  if (!opts.standaloneBrowserOpen || opts.projectId) return false;
+
+  if (opts.standaloneBrowserEphemeral) {
+    return opts.view === "space" && opts.spaceId === "research";
+  }
+
   return (
-    opts.standaloneBrowserOpen &&
     opts.view === "chat" &&
-    !opts.spaceId &&
-    !opts.projectId
+    !opts.spaceId
   );
 }
 

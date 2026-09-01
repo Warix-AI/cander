@@ -1,6 +1,5 @@
 import type { LucideIcon } from "lucide-react";
 import { Hammer, Search } from "lucide-react";
-import { SHOW_STUDIO_NAV } from "@/lib/spaces";
 import type { SpaceId } from "./types";
 
 export type PanelChoice = {
@@ -13,7 +12,7 @@ export type PanelChoice = {
 
 /** Right-panel picks when a new chat has no space yet. */
 export function panelChoiceSuggestions(): PanelChoice[] {
-  const items: PanelChoice[] = [
+  return [
     {
       id: "build",
       label: "Build",
@@ -21,15 +20,12 @@ export function panelChoiceSuggestions(): PanelChoice[] {
       space: "build",
       icon: Hammer,
     },
-  ];
-  if (SHOW_STUDIO_NAV) {
-    items.push({
+    {
       id: "explore",
-      label: "Studio",
+      label: "Explore",
       hint: "Start a search with this chat",
       space: "research",
       icon: Search,
-    });
-  }
-  return items;
+    },
+  ];
 }

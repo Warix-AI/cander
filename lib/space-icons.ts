@@ -4,15 +4,19 @@ import {
   Globe,
   Hammer,
   History,
+  Home,
+  Search,
   Sparkles,
 } from "lucide-react";
 import { isExtraNavId, type SidebarNavId } from "./spaces";
 import type { SpaceId } from "./types";
 
 export const spaceIcons: Record<SpaceId, typeof Hammer> = {
+  home: Home,
   work: Briefcase,
   build: Hammer,
-  research: Sparkles,
+  research: Search,
+  studio: Sparkles,
 };
 
 export const extraNavIcons: Record<

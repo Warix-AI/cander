@@ -216,9 +216,11 @@ export const workspaceResources: WorkspaceResource[] = [
 ];
 
 export const spaces: { id: SpaceId; label: string }[] = [
+  { id: "home", label: "Home" },
   { id: "work", label: "Work" },
   { id: "build", label: "Build" },
-  { id: "research", label: "Studio" },
+  { id: "research", label: "Explore" },
+  { id: "studio", label: "Studio" },
 ];
 
 export const workspaces: Workspace[] = [
@@ -1952,5 +1954,16 @@ export const spaceStats: Record<
       { label: "Reports", value: "5" },
       { label: "Citations", value: "112", delta: "+14" },
     ],
+  },
+  home: {
+    kicker: "In progress and next steps",
+    stats: [
+      { label: "Pinned", value: "—" },
+      { label: "Recent chats", value: "—" },
+    ],
+  },
+  studio: {
+    kicker: "Creative production",
+    stats: [{ label: "Status", value: "Coming soon" }],
   },
 };

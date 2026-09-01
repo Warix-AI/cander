@@ -12,7 +12,7 @@ export type HardwareCapabilities = {
 };
 export type BillingPlan = "free" | "pro" | "max";
 export type Theme = "light" | "dark";
-export type SpaceId = "work" | "build" | "research";
+export type SpaceId = "home" | "work" | "build" | "research" | "studio";
 
 /** Sidebar destinations that are not product spaces (e.g. Connectors). */
 export type NavDestinationId = SpaceId | "connectors";

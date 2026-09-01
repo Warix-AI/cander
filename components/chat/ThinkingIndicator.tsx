@@ -6,9 +6,28 @@ import type { TurnActivityPhase } from "@/lib/ai/turn-activity";
 import { labelForPhase } from "@/lib/ai/turn-activity";
 import { cn } from "@/lib/utils";
 
+const STATUS_CYCLE = ["Thinking", "Searching", "Generating"] as const;
+
+function useCyclingStatus(active: boolean, intervalMs = 2200) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (!active) {
+      setIndex(0);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setIndex((value) => (value + 1) % STATUS_CYCLE.length);
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [active, intervalMs]);
+
+  return STATUS_CYCLE[index]!;
+}
+
 /**
- * In-flight turn indicator — spinning Cander mark (no elapsed timer text).
- * Fades out smoothly when `active` becomes false.
+ * In-flight turn indicator — spinning Cander mark with cycling status text.
+ * Fades out when `active` becomes false.
  */
 export function ThinkingIndicator({
   className,
@@ -23,10 +42,13 @@ export function ThinkingIndicator({
   label?: string;
   active?: boolean;
 }) {
+  const cyclingLabel = useCyclingStatus(active);
+  const visibleLabel = cyclingLabel;
+
   const accessible =
     (phase ? labelForPhase(phase) : null) ||
     (label && !/^Thinking\b/i.test(label) ? label : null) ||
-    "Generating";
+    cyclingLabel;
 
   const [exiting, setExiting] = useState(false);
   const [mounted, setMounted] = useState(active);
@@ -47,7 +69,7 @@ export function ThinkingIndicator({
       setMounted(false);
       setExiting(false);
       exitTimer.current = null;
-    }, 320);
+    }, 180);
     return () => {
       if (exitTimer.current) window.clearTimeout(exitTimer.current);
     };
@@ -58,12 +80,19 @@ export function ThinkingIndicator({
   return (
     <div
       className={cn(
-        "flex w-full items-center transition-opacity duration-300 ease-out",
+        "flex w-full items-center gap-2.5 transition-opacity duration-200 ease-out",
         exiting ? "opacity-0" : "opacity-100",
         className,
       )}
     >
       <CanderActivityMark label={accessible} />
+      <span
+        key={visibleLabel}
+        className="text-[14px] font-medium tracking-[-0.01em] text-muted-foreground"
+        aria-hidden
+      >
+        {visibleLabel}
+      </span>
     </div>
   );
 }

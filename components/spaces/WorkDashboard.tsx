@@ -6,28 +6,29 @@ import { useApp } from "@/components/app/AppProvider";
 import {
   DashBtn,
   DashFrame,
+  DashToolbar,
   LayoutToggle,
-  SpaceSettingsButton,
+  useSpaceChatClosed,
 } from "@/components/spaces/ItemSet";
 import { workEmptyCopy, type WorkTone } from "@/lib/work-catalog";
 import type { BriefingItem } from "@/lib/space-entities";
 import { useSpaceBriefingItems } from "@/lib/hooks/use-space-query";
-import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 export function WorkDashboard() {
   const {
     workspaceId,
-    newChat,
+    openSpace,
+    openSpaceChat,
     openSpaceEntity,
     spaceLayout,
     setSpaceLayout,
     mobileSurface,
     view,
-    openSpaceSettings,
   } = useApp();
   const mobile = useMobileShell();
+  const chatClosed = useSpaceChatClosed();
   const hoistFilters =
     mobile && view === "space" && mobileSurface === "panel";
 
@@ -53,33 +54,35 @@ export function WorkDashboard() {
 
   return (
     <DashFrame
-      space="work"
+      banner={false}
       title="Work"
       subtitle="Use and organize what you build and connect."
-      actions={
-        <>
-          <DashBtn primary onClick={() => newChat("work")}>
-            Ask
-          </DashBtn>
-          <SpaceSettingsButton space="work" />
-        </>
-      }
     >
-      <MobileFilterBar
+      <DashToolbar
         active={hoistFilters}
-        onNewChat={() => newChat("work")}
+        onNewChat={chatClosed ? () => openSpaceChat("work") : undefined}
         newChatLabel="Ask"
         layout={{ value: spaceLayout, onChange: setSpaceLayout }}
         extras={[
           {
-            id: "manage-work",
-            label: "Work settings",
-            onClick: () => openSpaceSettings("work"),
+            id: "connectors",
+            label: "Connectors",
+            onClick: () => openSpace("connectors"),
           },
         ]}
+        actions={
+          <>
+            {chatClosed ? (
+              <DashBtn primary onClick={() => openSpaceChat("work")}>
+                Ask
+              </DashBtn>
+            ) : null}
+            <DashBtn onClick={() => openSpace("connectors")}>Connectors</DashBtn>
+          </>
+        }
       >
         <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
-      </MobileFilterBar>
+      </DashToolbar>
 
       <section className="mt-5 lg:mt-5">
         <h2 className="text-[13px] font-medium tracking-[-0.01em] text-muted-foreground">
@@ -153,7 +156,7 @@ function BriefingCard({
     <button
       type="button"
       onClick={onOpen}
-      className="flex h-full min-w-0 flex-col rounded-[10px] border border-border p-4 text-left canvas-hover"
+      className="flex h-full min-w-0 flex-col rounded-[10px] border border-border p-4 text-left transition-colors duration-200 hover:bg-muted/30 dark:hover:bg-muted/20"
     >
       <ToneDot tone={item.tone} />
       <p className="mt-2 line-clamp-2 text-[14px] font-medium tracking-[-0.02em]">
@@ -177,7 +180,7 @@ function BriefingRow({
     <button
       type="button"
       onClick={onOpen}
-      className="canvas-hover flex w-full items-center gap-3 py-3.5 text-left transition-colors duration-200 first:rounded-t-[10px] last:rounded-b-[10px]"
+      className="flex w-full items-center gap-3 py-3.5 text-left transition-colors duration-200 hover:bg-muted/40 dark:hover:bg-muted/30 first:rounded-t-[10px] last:rounded-b-[10px]"
     >
       <ToneDot tone={item.tone} />
       <span className="min-w-0 flex-1">

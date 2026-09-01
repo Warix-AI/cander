@@ -7,7 +7,7 @@ import { AccountSheet } from "@/components/shell/mobile/AccountSheet";
 import { PinsSheet } from "@/components/shell/mobile/PinsSheet";
 import { WorkspaceSheet } from "@/components/shell/mobile/WorkspaceSheet";
 import { useMainNavItems } from "@/lib/use-main-nav-items";
-import { isChatSpace, isExtraNavId, type SidebarNavId } from "@/lib/spaces";
+import { isChatSpace, isComingSoonNav, isExtraNavId, type SidebarNavId } from "@/lib/spaces";
 import { spaceIconTint } from "@/lib/space-icons";
 import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,7 @@ export function MobileMenuDrawer() {
   };
 
   const openNav = (id: SidebarNavId) => {
+    if (isComingSoonNav(id)) return;
     if (id === "browser") openBrowser();
     else if (id === "recents") openRecents();
     else if (isChatSpace(id)) openSpaceChat(id);
@@ -109,25 +110,40 @@ export function MobileMenuDrawer() {
           </button>
 
           <div className="mt-1">
-            {items.map(({ id, label, Icon }) => {
+            {items.map(({ id, label, Icon, comingSoon }) => {
               const active = navActive(id);
               const tinted =
-                id === "work" || id === "build" || id === "research";
+                id === "home" ||
+                id === "work" ||
+                id === "build" ||
+                id === "research" ||
+                id === "studio";
               return (
                 <button
                   key={id}
                   type="button"
+                  disabled={comingSoon}
+                  aria-disabled={comingSoon || undefined}
                   onClick={() => openNav(id)}
-                  className={cn(rowClass, active && "bg-sidebar-accent font-medium")}
+                  className={cn(
+                    rowClass,
+                    active && "bg-sidebar-accent font-medium",
+                    comingSoon && "cursor-default opacity-70",
+                  )}
                 >
                   <Icon
                     className={cn(
                       "h-3.5 w-3.5 shrink-0",
-                      tinted ? spaceIconTint(id) : "text-muted-foreground",
+                      tinted ? spaceIconTint(id as SpaceId) : "text-muted-foreground",
                     )}
                     strokeWidth={2}
                   />
-                  {label}
+                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  {comingSoon ? (
+                    <span className="shrink-0 rounded-full bg-sidebar-accent px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      Coming soon
+                    </span>
+                  ) : null}
                 </button>
               );
             })}

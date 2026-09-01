@@ -1478,12 +1478,20 @@ function ProjectTabButton({
       )}
     >
       <TabGlyph tab={tab} kind={project?.kind} />
-      <span className="truncate">{tab.title}</span>
+      <span
+        className={cn(
+          "truncate",
+          !tab.title && tab.url === "about:blank" && "min-w-[2rem]",
+        )}
+      >
+        {tab.title ||
+          (tab.url !== "about:blank" ? tab.url : "")}
+      </span>
       {tab.pinned ? null : (
         <span
           role="button"
           tabIndex={0}
-          aria-label={`Close ${tab.title}`}
+          aria-label={`Close ${tab.title || "tab"}`}
           onClick={(event) => {
             event.stopPropagation();
             onClose();

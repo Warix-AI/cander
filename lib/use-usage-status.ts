@@ -11,9 +11,8 @@ const USAGE_BAR_THRESHOLD = 70;
 
 export { USAGE_BAR_THRESHOLD };
 
-export function useUsageStatusPercent(): {
-  percent: number;
-  label: string;
+export function useUsageSnapshot(): {
+  snapshot: UsageStatusSnapshot | null;
   loaded: boolean;
 } {
   const { workspaceId } = useApp();
@@ -61,6 +60,16 @@ export function useUsageStatusPercent(): {
       window.clearInterval(id);
     };
   }, [workspaceId]);
+
+  return { snapshot, loaded };
+}
+
+export function useUsageStatusPercent(): {
+  percent: number;
+  label: string;
+  loaded: boolean;
+} {
+  const { snapshot, loaded } = useUsageSnapshot();
 
   const aiChat = snapshot?.features.find((feature) => feature.feature === "ai_chat");
   if (aiChat?.percentUsed != null) {

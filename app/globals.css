@@ -22,12 +22,13 @@
   --chart-5: oklch(0.42 0.18 266);
   --popover: oklch(1 0 0);
   --primary: oklch(0.205 0 0);
-  --sidebar: oklch(0.975 0 0);
+  --sidebar: oklch(1 0 0);
   --spacing: 0.25rem;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-sans: var(--font-dm-sans), ui-sans-serif, sans-serif, system-ui;
   --secondary: oklch(0.87 0 0);
   --app-canvas: oklch(0.965 0.004 265);
+  --space-canvas: oklch(0.988 0.002 265);
   --background: var(--app-canvas);
   --canvas-hover: oklch(1 0 0);
   --canvas-active: oklch(1 0 0);
@@ -40,7 +41,7 @@
   --shadow-spread: 0px;
   --letter-spacing: 0.008em;
   --shadow-opacity: 0.1;
-  --sidebar-accent: var(--app-canvas);
+  --sidebar-accent: oklch(0.97 0 0);
   --sidebar-border: oklch(0.935 0 0);
   --card-foreground: oklch(0.145 0 0);
   --shadow-offset-x: 0;
@@ -507,6 +508,7 @@ html.cander-desktop [data-desktop-no-drag] * {
   --color-sidebar: var(--sidebar);
   --color-secondary: var(--secondary);
   --color-background: var(--background);
+  --color-space-canvas: var(--space-canvas);
   --color-canvas-hover: var(--canvas-hover);
   --color-canvas-active: var(--canvas-active);
   --color-foreground: var(--foreground);
@@ -592,9 +594,10 @@ html:not(.dark) .courier-app-appearance[data-palette="mono"] {
   --accent: oklch(0.94 calc(var(--app-chroma) * 0.9) var(--app-hue));
   --border: oklch(0.92 calc(var(--app-chroma) * 0.6) var(--app-hue));
   --input: oklch(0.96 calc(var(--app-chroma) * 0.5) var(--app-hue));
-  --sidebar: oklch(0.975 calc(var(--app-chroma) * 0.8) var(--app-hue));
-  --sidebar-accent: var(--app-canvas);
+  --sidebar: oklch(1 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
   --sidebar-border: oklch(0.935 calc(var(--app-chroma) * 0.55) var(--app-hue));
+  --space-canvas: oklch(0.988 calc(var(--app-chroma) * 0.35) var(--app-hue));
   --secondary: oklch(0.88 calc(var(--app-chroma) * 0.5) var(--app-hue));
 }
 

@@ -1,13 +1,16 @@
 import {
+  clearProjectBrowserSession,
   getProjectBrowserSession,
   getProjectBrowserSessionRevision,
   isPreviewTabKind,
   makeWebTab,
   navigateProjectBrowserTab,
   setProjectBrowserSession,
+  setProjectBrowserSessionVolatile,
   subscribeProjectBrowserSession,
   type ProjectBrowserKey,
   type ProjectBrowserSession,
+  type ProjectBrowserTab,
 } from "@/lib/project-browser-session";
 import { normalizeBrowserUrl } from "@/lib/preview-url";
 import { safeLocalStorageSetItem } from "@/lib/safe-local-storage";
@@ -15,6 +18,12 @@ import { safeLocalStorageSetItem } from "@/lib/safe-local-storage";
 export const STANDALONE_BROWSER_PROJECT_ID = "__standalone__";
 
 const PINNED_PREFIX = "courier-standalone-browser-pinned";
+
+let ephemeralQuickSearch = false;
+
+export function isStandaloneBrowserEphemeral() {
+  return ephemeralQuickSearch;
+}
 
 export function standaloneBrowserPinnedKey(
   profileId: string,
@@ -62,6 +71,17 @@ export function standaloneBrowserKey(
   };
 }
 
+/** Blank web tab — title stays empty until the user navigates to a URL. */
+export function makeQuickSearchTab(): ProjectBrowserTab {
+  const web = makeWebTab("about:blank");
+  return { ...web, title: "" };
+}
+
+export function defaultQuickSearchBrowserSession(): ProjectBrowserSession {
+  const web = makeQuickSearchTab();
+  return { tabs: [web], activeTabId: web.id };
+}
+
 export function defaultStandaloneBrowserSession(): ProjectBrowserSession {
   const web = makeWebTab("about:blank");
   return { tabs: [web], activeTabId: web.id };
@@ -84,6 +104,10 @@ export function setStandaloneBrowserSession(
   key: ProjectBrowserKey,
   session: ProjectBrowserSession,
 ) {
+  if (ephemeralQuickSearch) {
+    setProjectBrowserSessionVolatile(key, session);
+    return;
+  }
   setProjectBrowserSession(key, session);
 }
 
@@ -116,4 +140,21 @@ export function primeStandaloneBrowserSession(
       tab.id === active.id ? navigateProjectBrowserTab(tab, url) : tab,
     ),
   });
+}
+
+/** Reset to a fresh quick-search session that is not written to storage. */
+export function beginQuickSearchBrowserSession(key: ProjectBrowserKey) {
+  ephemeralQuickSearch = true;
+  clearProjectBrowserSession(key);
+  setProjectBrowserSessionVolatile(key, defaultQuickSearchBrowserSession());
+}
+
+/** Drop ephemeral quick-search state and wipe its in-memory session. */
+export function endQuickSearchBrowserSession(key: ProjectBrowserKey) {
+  ephemeralQuickSearch = false;
+  clearProjectBrowserSession(key);
+}
+
+export function clearStandaloneBrowserSession(key: ProjectBrowserKey) {
+  clearProjectBrowserSession(key);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Plus } from "lucide-react";
 import { useState } from "react";
 import { DashBtn } from "@/components/spaces/ItemSet";
 import { Dropdown } from "@/components/ui/Controls";
@@ -26,9 +26,11 @@ const buildKinds = BUILD_CREATE_OPTIONS;
 
 type NewBuildMenuProps = {
   onCreated: (projectId: string) => void;
+  /** Icon-only plus trigger (toolbar). */
+  icon?: boolean;
 };
 
-export function NewBuildMenu({ onCreated }: NewBuildMenuProps) {
+export function NewBuildMenu({ onCreated, icon = false }: NewBuildMenuProps) {
   const ctx = useWorkspaceCtx();
   const { createProject } = useSpaceMutation();
   const [busy, setBusy] = useState(false);
@@ -54,15 +56,21 @@ export function NewBuildMenu({ onCreated }: NewBuildMenuProps) {
       align="end"
       matchTrigger={false}
       menuClassName="min-w-[11rem]"
-      trigger={({ open, toggle }) => (
-        <DashBtn primary onClick={toggle} label="New build">
-          New
-          <ChevronDown
-            className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
-            strokeWidth={1.8}
-          />
-        </DashBtn>
-      )}
+      trigger={({ open, toggle }) =>
+        icon ? (
+          <DashBtn primary icon onClick={toggle} label="New build">
+            <Plus className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </DashBtn>
+        ) : (
+          <DashBtn primary onClick={toggle} label="New build">
+            New
+            <ChevronDown
+              className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+              strokeWidth={1.8}
+            />
+          </DashBtn>
+        )
+      }
     >
       {(close) => (
         <>

@@ -24,7 +24,11 @@ import { normalizeProjectTitle } from "@/lib/project-name";
 import { navLabel } from "@/lib/use-main-nav-items";
 import { dismissNativeKeyboard } from "@/lib/mobile-shell";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
-import { isChatSpace, PRIMARY_NAV_SPACES } from "@/lib/spaces";
+import {
+  isChatSpace,
+  isDashboardOnlySpace,
+  PRIMARY_NAV_SPACES,
+} from "@/lib/spaces";
 import type { ProjectKind } from "@/lib/space-entities";
 import { previewUrlForProject } from "@/lib/preview-url";
 import {
@@ -37,7 +41,6 @@ import {
   mobileChromeButtonClass,
 } from "@/lib/mobile-menu-styles";
 import type { MobileSurface, SpaceId } from "@/lib/types";
-import { BrowserToggle } from "@/components/shell/PanelToggle";
 import { isNewChatScreen } from "@/lib/right-panel";
 import { cn } from "@/lib/utils";
 
@@ -125,9 +128,18 @@ export function MobileAppChrome({ className }: { className?: string }) {
     !inChromeSub &&
     !onMenuMain &&
     !showProjectTools &&
+    !isDashboardOnlySpace(spaceId) &&
     (((inPrimarySpace || inConnector) &&
       (view === "space" || (view === "chat" && Boolean(spaceId)))) ||
       showHomeChatPanelToggle);
+  const showDashboardTitle =
+    !inChromeSub &&
+    !onMenuMain &&
+    !showProjectTools &&
+    !showSpaceToggle &&
+    isDashboardOnlySpace(spaceId) &&
+    view === "space" &&
+    mobileSurface === "panel";
 
   const settingsNav = visibleSettingsTabs(entitlements);
   const workspaceName = settingsWorkspaceId
@@ -356,10 +368,15 @@ export function MobileAppChrome({ className }: { className?: string }) {
   };
 
   const centerChrome =
-    !onMenuMain && (inChromeSub || showProjectTools || showSpaceToggle) ? (
+    !onMenuMain &&
+    (inChromeSub || showProjectTools || showSpaceToggle || showDashboardTitle) ? (
       inChromeSub ? (
         <p className="truncate text-center text-[15px] font-medium tracking-[-0.01em]">
           {subTitle}
+        </p>
+      ) : showDashboardTitle ? (
+        <p className="truncate text-center text-[15px] font-medium tracking-[-0.01em]">
+          {spaceLabel}
         </p>
       ) : showProjectTools ? (
         <div
@@ -407,7 +424,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     ) : null;
 
   const projectPanelLabel =
-    spaceId === "research" ? "Studio" : spaceId === "work" ? "Work" : "Build";
+    spaceId === "research" ? "Explore" : spaceId === "work" ? "Work" : "Build";
 
   return (
     <>
@@ -503,10 +520,8 @@ export function MobileAppChrome({ className }: { className?: string }) {
                 config={panelActions}
                 onCompose={handlePanelCompose}
               />
-            ) : hideNewChat ? (
+            ) : hideNewChat || onNewChatScreen ? (
               <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
-            ) : onNewChatScreen ? (
-              <BrowserToggle className="h-11 w-11" />
             ) : (
               <button
                 type="button"

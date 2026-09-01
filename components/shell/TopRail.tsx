@@ -28,9 +28,8 @@ export function TopRail() {
   const chatPanelOpen = view === "chat" && panelMode !== "collapsed";
   const showMobileSurfaceToggle =
     mobile && (spaceChatOpen || chatPanelOpen);
-  const dockVisible =
+  const panelDockRoom =
     !mobile &&
-    panelMode === "collapsed" &&
     canUseRightPanel({
       view,
       thread,
@@ -48,11 +47,11 @@ export function TopRail() {
     <header
       className={cn(
         "flex h-11 shrink-0 items-center justify-end gap-1 bg-background pl-2",
-        dockVisible ? "pr-14" : "pr-2",
+        panelDockRoom ? "pr-14" : "pr-2",
       )}
     >
       {showMobileSurfaceToggle ? <MobileSurfaceToggle /> : null}
-      {spaceChatOpen ? (
+      {spaceChatOpen && panelMode !== "collapsed" ? (
         <button
           type="button"
           aria-label="Close chat"

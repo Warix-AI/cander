@@ -34,6 +34,7 @@ export function ContextPanel() {
     jobId,
     panelMode,
     standaloneBrowserOpen,
+    standaloneBrowserEphemeral,
   } = useApp();
   const shell = useShellStyle();
   const mobile = useMobileShell();
@@ -57,6 +58,7 @@ export function ContextPanel() {
   const showRecentsEmpty = view === "recents" && !spaceId && !projectId;
   const showStandaloneBrowser = showStandaloneBrowserPanel({
     standaloneBrowserOpen,
+    standaloneBrowserEphemeral,
     view,
     spaceId,
     projectId,

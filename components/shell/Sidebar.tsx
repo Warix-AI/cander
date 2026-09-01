@@ -24,7 +24,7 @@ import { useApp } from "@/components/app/AppProvider";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { workspacesFor } from "@/lib/entitlements";
 import { spaceIcons, spaceIconTint } from "@/lib/space-icons";
-import { type SidebarNavId, isExtraNavId } from "@/lib/spaces";
+import { type SidebarNavId, isExtraNavId, isComingSoonNav } from "@/lib/spaces";
 import {
   setSidebarPeeking,
   subscribeSidebarPeekHold,
@@ -79,7 +79,7 @@ export function Sidebar() {
     goBack,
   } = useApp();
 
-  const mainNavItems = useMainNavItems();
+  const mainNavItems = useMainNavItems({ spacesOnly: true });
   const { pinnedItems } = usePinnedItems();
   useSyncExternalStore(
     subscribeWorkspaceCatalog,
@@ -218,6 +218,7 @@ export function Sidebar() {
   };
 
   const openNav = (id: SidebarNavId) => {
+    if (isComingSoonNav(id)) return;
     if (id === "browser") openBrowser();
     else if (id === "recents") openRecents();
     else openSpace(id);
@@ -285,11 +286,6 @@ export function Sidebar() {
               : "bg-sidebar text-sidebar-foreground",
           )}
         />
-      ) : floating ? (
-        <WindowChrome
-          hideHistory={peeking}
-          className="w-full shrink-0 bg-transparent text-foreground"
-        />
       ) : null}
 
       <div
@@ -336,8 +332,8 @@ export function Sidebar() {
           // Same fill as chat — no hairline between menu and transcript.
         )}
       >
-      {/* Classic web only — floating/desktop chrome is outside the menu body. */}
-      {!chromeOutside ? <WindowChrome /> : null}
+      {/* Web / floating — header icons live inside the menu column only. */}
+      {!macDesktop ? <WindowChrome hideHistory={peeking} /> : null}
 
       {inSettings ? (
         <nav
@@ -395,22 +391,6 @@ export function Sidebar() {
             aria-label="Main"
           >
             <div className="min-h-0 shrink overflow-y-auto">
-              <button
-                type="button"
-                onClick={() => newChat()}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
-                  chatActive
-                    ? "bg-sidebar-accent font-medium"
-                    : "hover:bg-sidebar-accent",
-                )}
-              >
-                <SquarePen
-                  className="h-3.5 w-3.5 text-muted-foreground"
-                  strokeWidth={2}
-                />
-                New Chat
-              </button>
               {mainNavItems.map((item) => (
                 <SidebarNavButton
                   key={item.id}
@@ -418,6 +398,7 @@ export function Sidebar() {
                   Icon={item.Icon}
                   label={item.label}
                   active={navActive(item.id)}
+                  comingSoon={item.comingSoon}
                   onOpen={openNav}
                 />
               ))}
@@ -451,32 +432,52 @@ function SidebarNavButton({
   Icon,
   label,
   active,
+  comingSoon,
   onOpen,
 }: {
   id: SidebarNavId;
   Icon: (props: { className?: string; strokeWidth?: number }) => ReactNode;
   label: string;
   active: boolean;
+  comingSoon?: boolean;
   onOpen: (id: SidebarNavId) => void;
 }) {
-  const tinted = id === "work" || id === "build" || id === "research";
+  const tinted =
+    id === "home" ||
+    id === "work" ||
+    id === "build" ||
+    id === "research" ||
+    id === "studio";
   return (
     <button
       type="button"
-      onClick={() => onOpen(id)}
+      disabled={comingSoon}
+      aria-disabled={comingSoon || undefined}
+      onClick={() => {
+        if (!comingSoon) onOpen(id);
+      }}
       className={cn(
         "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
-        active ? "bg-sidebar-accent font-medium" : "hover:bg-sidebar-accent",
+        comingSoon
+          ? "cursor-default opacity-70"
+          : active
+            ? "bg-sidebar-accent font-medium"
+            : "hover:bg-sidebar-accent",
       )}
     >
       <Icon
         className={cn(
-          "h-3.5 w-3.5",
-          tinted ? spaceIconTint(id) : "text-muted-foreground",
+          "h-3.5 w-3.5 shrink-0",
+          tinted ? spaceIconTint(id as SpaceId) : "text-muted-foreground",
         )}
         strokeWidth={2}
       />
-      {label}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {comingSoon ? (
+        <span className="shrink-0 rounded-full bg-sidebar-accent px-2 py-0.5 text-[10px] font-medium tracking-[0.02em] text-muted-foreground">
+          Coming soon
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -490,27 +491,18 @@ function PinnedLeading({
     spaceId?: SpaceId;
   };
 }) {
+  const iconClass = "h-3.5 w-3.5 shrink-0 text-muted-foreground";
   if (item.kind === "connector") {
-    return <ConnectorMark id={item.icon ?? "connector"} size="xs" />;
+    return <ConnectorMark id={item.icon ?? "connector"} size="nav" />;
   }
   if (item.kind === "project") {
     const Icon =
       (item.spaceId && spaceIcons[item.spaceId]) || FolderKanban;
-    return (
-      <Icon
-        className="h-5 w-5 shrink-0 text-muted-foreground"
-        strokeWidth={1.9}
-      />
-    );
+    return <Icon className={iconClass} strokeWidth={2} />;
   }
   const Icon =
     (item.spaceId && spaceIcons[item.spaceId]) || MessageSquare;
-  return (
-    <Icon
-      className="h-5 w-5 shrink-0 text-muted-foreground"
-      strokeWidth={1.9}
-    />
-  );
+  return <Icon className={iconClass} strokeWidth={2} />;
 }
 
 function PinnedRow({
@@ -571,14 +563,14 @@ function PinnedRow({
           onOpen();
         }}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-3 truncate px-3 py-2 text-left text-[14.5px]",
+          "flex min-w-0 flex-1 items-center gap-2.5 truncate px-3 py-1.5 text-left text-[13.5px]",
           active && "font-medium",
         )}
       >
         {leading ?? (
           <MessageSquare
-            className="h-5 w-5 shrink-0 text-muted-foreground"
-            strokeWidth={1.9}
+            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+            strokeWidth={2}
           />
         )}
         {title}

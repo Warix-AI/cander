@@ -118,12 +118,15 @@ import {
   type Entitlements,
 } from "@/lib/entitlements";
 import {
+  beginQuickSearchBrowserSession,
+  endQuickSearchBrowserSession,
+  isStandaloneBrowserEphemeral,
   primeStandaloneBrowserSession,
   readStandaloneBrowserPinned,
   standaloneBrowserKey,
   writeStandaloneBrowserPinned,
 } from "@/lib/standalone-browser-session";
-import { isChatSpace, chatSpaceId, PRIMARY_NAV_SPACES, spaceAllowed, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
+import { isChatSpace, chatSpaceId, PRIMARY_NAV_SPACES, spaceAllowed, isDashboardOnlySpace, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
 import type {
   AccountPresetId,
   BuildTool,
@@ -348,7 +351,9 @@ type AppContextValue = {
   openRecents: () => void;
   openBrowser: (opts?: { chat?: boolean; query?: string }) => void;
   standaloneBrowserOpen: boolean;
+  standaloneBrowserEphemeral: boolean;
   openStandaloneBrowser: (opts?: { query?: string }) => void;
+  openQuickSearchBrowser: () => void;
   closeStandaloneBrowser: () => void;
   toggleStandaloneBrowser: () => void;
   browserChatOpen: boolean;
@@ -577,6 +582,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [studioTool, setStudioTool] = useState<StudioTool>("canvas");
   const [researchTool, setResearchTool] = useState<ResearchTool>("overview");
   const [standaloneBrowserOpen, setStandaloneBrowserOpen] = useState(false);
+  const [standaloneBrowserEphemeral, setStandaloneBrowserEphemeral] =
+    useState(false);
   const [skillsTool, setSkillsTool] = useState<SkillsTool>("editor");
   const [skillId, setSkillId] = useState<string | null>(null);
   const [fileId, setFileId] = useState<string | null>(null);
@@ -665,21 +672,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const applySnapshot = useCallback((snap: Snapshot) => {
-    setView(snap.view);
-    setSpaceId(snap.spaceId);
-    setThreadId(snap.threadId);
-    setProjectId(snap.projectId);
-    setPanelMode(snap.panelMode);
-    setPanelIntent(snap.panelIntent);
-    setConnectorId(snap.connectorId);
-    setJobId(snap.jobId);
-    setSkillId(snap.skillId);
+    const normalized =
+      snap.spaceId === "home"
+        ? {
+            ...snap,
+            threadId: null,
+            projectId: null,
+            panelMode: "collapsed" as const,
+            panelIntent: "browse" as const,
+          }
+        : snap;
+    setView(normalized.view);
+    setSpaceId(normalized.spaceId);
+    setThreadId(normalized.threadId);
+    setProjectId(normalized.projectId);
+    setPanelMode(normalized.panelMode);
+    setPanelIntent(normalized.panelIntent);
+    setConnectorId(normalized.connectorId);
+    setJobId(normalized.jobId);
+    setSkillId(normalized.skillId);
     const pinned = readStandaloneBrowserPinned(actor.id, workspaceId);
     const browserOpen =
-      snap.standaloneBrowserOpen ??
-      (snap.view === "chat" &&
-        !snap.spaceId &&
-        !snap.projectId &&
+      normalized.standaloneBrowserOpen ??
+      (normalized.view === "chat" &&
+        !normalized.spaceId &&
+        !normalized.projectId &&
         pinned);
     setStandaloneBrowserOpen(Boolean(browserOpen));
     setDrafting(false);
@@ -3050,8 +3067,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       target = null;
     }
     if (!target) {
-      const fallback = (["build", "research", "work"] as const).find((space) =>
-        spaceAllowed(space, allowed, planOpts),
+      const fallback = (["home", "build", "research", "work"] as const).find(
+        (space) => spaceAllowed(space, allowed, planOpts),
       );
       if (!fallback) {
         newChat();
@@ -3061,6 +3078,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const dest = target;
+    if (isStandaloneBrowserEphemeral() && dest !== "research") {
+      endQuickSearchBrowserSession(standaloneBrowserKey(actor.id, workspaceId));
+      setStandaloneBrowserEphemeral(false);
+      setStandaloneBrowserOpen(false);
+    }
     // Primary spaces open the continuous chat panel (last chat), not browse-only.
     if (isChatSpace(dest)) {
       openSpaceChat(dest);
@@ -3106,7 +3128,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (chatActive && target === spaceId) {
+    if (chatActive && target === spaceId && !isDashboardOnlySpace(target)) {
       setMobileSurface("chat");
       if (panelMode === "collapsed") {
         setPanelMode("split");
@@ -3116,6 +3138,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const goToSpace = (dest: NavDestinationId) => {
+      if (isDashboardOnlySpace(dest)) {
+        setView("space");
+        setSpaceId(dest);
+        setProjectId(null);
+        setConnectorId(null);
+        setJobId(null);
+        setSkillId(null);
+        setThreadId(null);
+        setDrafting(false);
+        setPanelIntent("browse");
+        setPanelMode("collapsed");
+        setMobileSurface("panel");
+        pushTarget({
+          view: "space",
+          spaceId: dest,
+          threadId: null,
+          projectId: null,
+          panelMode: "collapsed",
+          panelIntent: "browse",
+          connectorId: null,
+          jobId: null,
+          skillId: null,
+        });
+        return;
+      }
+
       setView("space");
       setSpaceId(dest);
       setProjectId(null);
@@ -3333,6 +3381,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       match = getSpaceEntityStoreSnapshot().projects.find((item) => item.id === id);
     }
     if (!match) return null;
+    if (isStandaloneBrowserEphemeral()) {
+      endQuickSearchBrowserSession(standaloneBrowserKey(actor.id, workspaceId));
+      setStandaloneBrowserEphemeral(false);
+      setStandaloneBrowserOpen(false);
+    }
     const space = match.space;
     const itemWorkspaceId = match.workspaceId;
     const projectKey = match.id;
@@ -3668,7 +3721,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!space || !["build", "research", "work"].includes(space)) {
           return {
             ok: false,
-            detail: "Pick a space (Build or Studio) before creating a project.",
+            detail: "Pick a space (Build or Explore) before creating a project.",
           };
         }
         const kind =
@@ -3710,7 +3763,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return {
             ok: true,
-            detail: `Created “${project.title}” in ${space === "research" ? "Studio" : space === "build" ? "Build" : "Work"}.`,
+            detail: `Created “${project.title}” in ${space === "research" ? "Explore" : space === "build" ? "Build" : "Work"}.`,
             projectId: project.id,
           };
         } catch (err) {
@@ -4013,6 +4066,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const openStandaloneBrowser = useCallback(
     (opts?: { query?: string }) => {
+      if (isStandaloneBrowserEphemeral()) {
+        endQuickSearchBrowserSession(standaloneBrowserKey(actor.id, workspaceId));
+        setStandaloneBrowserEphemeral(false);
+      }
       const key = standaloneBrowserKey(actor.id, workspaceId);
       primeStandaloneBrowserSession(key, opts?.query ?? browserSearch);
       setBrowserSearch(null);
@@ -4050,17 +4107,62 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ],
   );
 
+  const openQuickSearchBrowser = useCallback(() => {
+    const key = standaloneBrowserKey(actor.id, workspaceId);
+    beginQuickSearchBrowserSession(key);
+    setBrowserSearch(null);
+    setStandaloneBrowserEphemeral(true);
+    setStandaloneBrowserOpen(true);
+    setView("space");
+    setSpaceId("research");
+    setProjectId(null);
+    setConnectorId(null);
+    setJobId(null);
+    setSkillId(null);
+    setPanelMode("split");
+    setPanelRatioState((ratio) => (ratio < 0.5 ? 0.55 : ratio));
+    setMobileSurface("panel");
+    pushTarget({
+      view: "space",
+      spaceId: "research",
+      threadId,
+      projectId: null,
+      panelMode: "split",
+      panelIntent,
+      connectorId: null,
+      jobId: null,
+      skillId: null,
+      standaloneBrowserOpen: true,
+    });
+  }, [
+    actor.id,
+    workspaceId,
+    threadId,
+    panelIntent,
+    pushTarget,
+  ]);
+
   const closeStandaloneBrowser = useCallback(() => {
-    writeStandaloneBrowserPinned(actor.id, workspaceId, false);
+    const key = standaloneBrowserKey(actor.id, workspaceId);
+    const ephemeral = isStandaloneBrowserEphemeral();
+    if (ephemeral) {
+      endQuickSearchBrowserSession(key);
+      setStandaloneBrowserEphemeral(false);
+    } else {
+      writeStandaloneBrowserPinned(actor.id, workspaceId, false);
+    }
     setStandaloneBrowserOpen(false);
-    setPanelMode("collapsed");
-    setMobileSurface("chat");
+    const chatActive = Boolean(threadId) || drafting;
+    const nextPanelMode =
+      ephemeral && chatActive && spaceId === "research" ? "split" : "collapsed";
+    setPanelMode(nextPanelMode);
+    setMobileSurface(ephemeral && chatActive ? "panel" : "chat");
     pushTarget({
       view,
       spaceId,
       threadId,
       projectId,
-      panelMode: "collapsed",
+      panelMode: nextPanelMode,
       panelIntent,
       connectorId,
       jobId,
@@ -4073,6 +4175,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     view,
     spaceId,
     threadId,
+    drafting,
     projectId,
     panelIntent,
     connectorId,
@@ -4204,7 +4307,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (ref.type === "source") {
         const project = localSpaceEntityStore.createProject(ctx, {
           space: "build",
-          title: ref.label ?? "From Studio",
+          title: ref.label ?? "From Explore",
           kind: "app",
           summary: ref.snapshot ?? "",
         });
@@ -4464,7 +4567,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openRecents,
       openBrowser,
       standaloneBrowserOpen,
+      standaloneBrowserEphemeral,
       openStandaloneBrowser,
+      openQuickSearchBrowser,
       closeStandaloneBrowser,
       toggleStandaloneBrowser,
       browserChatOpen,
@@ -4619,7 +4724,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openRecents,
       openBrowser,
       standaloneBrowserOpen,
+      standaloneBrowserEphemeral,
       openStandaloneBrowser,
+      openQuickSearchBrowser,
       closeStandaloneBrowser,
       toggleStandaloneBrowser,
       browserChatOpen,

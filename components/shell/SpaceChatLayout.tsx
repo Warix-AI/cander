@@ -9,7 +9,7 @@ import { SpaceDashboard } from "@/components/shell/SpaceDashboard";
 import { ProjectBrowserPanel } from "@/components/browser/ProjectBrowserPanel";
 import { StandaloneBrowserPanel } from "@/components/browser/StandaloneBrowserPanel";
 import { MobileContentPager } from "@/components/shell/MobileContentPager";
-import { PanelToggle, RightPanelToggleDock } from "@/components/shell/PanelToggle";
+import { RightPanelToggleDock } from "@/components/shell/PanelToggle";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import {
@@ -17,9 +17,9 @@ import {
   getMobilePanelStackDirection,
   setMobilePanelStackDirection,
 } from "@/lib/mobile-nav-transition";
-import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { showStandaloneBrowserPanel } from "@/lib/right-panel";
+import { isDashboardOnlySpace } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import type { MobileSurface } from "@/lib/types";
 
@@ -30,6 +30,7 @@ import type { MobileSurface } from "@/lib/types";
 export function SpaceChatLayout() {
   const {
     standaloneBrowserOpen,
+    standaloneBrowserEphemeral,
     view,
     spaceId,
     drafting,
@@ -43,10 +44,11 @@ export function SpaceChatLayout() {
     expandedPinned,
   } = useApp();
   const mobile = useMobileShell();
-  const floating = useShellStyle() === "floating";
-  const chatArmed = drafting || Boolean(thread);
+  const chatArmed =
+    !isDashboardOnlySpace(spaceId) && (drafting || Boolean(thread));
   const showStandaloneBrowser = showStandaloneBrowserPanel({
     standaloneBrowserOpen,
+    standaloneBrowserEphemeral,
     view,
     spaceId,
     projectId,
@@ -119,7 +121,9 @@ export function SpaceChatLayout() {
 
   if (mobile) {
     const active: MobileSurface =
-      mobileSurface === "panel" ? "panel" : "chat";
+      isDashboardOnlySpace(spaceId) || mobileSurface === "panel"
+        ? "panel"
+        : "chat";
 
     return (
       <MobileContentPager
@@ -215,7 +219,7 @@ export function SpaceChatLayout() {
 
       <div
         className={cn(
-          "relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-white dark:bg-background @container",
+          "relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-space-canvas dark:bg-background @container",
           pinChat && "min-w-0 flex-1",
           chatOpen && liveChatPct > 0 && "border-l border-border/40",
           animateLayout &&
@@ -226,21 +230,6 @@ export function SpaceChatLayout() {
         style={pinChat ? undefined : { width: `${liveSpacePct}%` }}
         aria-hidden={liveSpacePct === 0 && !pinChat}
       >
-        {chatOpen && spaceOpen && !projectId ? (
-          <div
-            className={cn(
-              "pointer-events-none absolute z-40 hidden h-11 items-center lg:flex",
-              floating ? "top-3 right-3 px-2" : "top-0 right-0 px-3",
-            )}
-            style={
-              floating
-                ? undefined
-                : { transform: "translate(-10px, 5px)" }
-            }
-          >
-            <PanelToggle className="pointer-events-auto text-white/85 hover:bg-white/15 hover:text-white" />
-          </div>
-        ) : null}
         <SpaceRenderModeProvider mode={spaceMode}>
           <div
             className={cn(

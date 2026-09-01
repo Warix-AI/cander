@@ -33,38 +33,40 @@ export function AssistantMessage({ message }: { message: Message }) {
   const { thread } = useApp();
   const pending = message.status === "pending";
   const streaming = message.status === "streaming";
-  const showThinking =
-    pending &&
-    (!message.content ||
-      message.content === "Thinking…" ||
-      message.content === "Thinking...");
   const visibleContent = message.content
     ? sanitizeAssistantVisibleText(message.content)
     : "";
+  const hasReply =
+    Boolean(visibleContent) &&
+    visibleContent !== "Thinking…" &&
+    visibleContent !== "Thinking...";
 
-  const [holdThinking, setHoldThinking] = useState(showThinking);
+  const [holdActivity, setHoldActivity] = useState(!hasReply);
+
   useEffect(() => {
-    if (showThinking) {
-      setHoldThinking(true);
+    if (!hasReply) {
+      setHoldActivity(true);
       return;
     }
-    if (!holdThinking) return;
-    const id = window.setTimeout(() => setHoldThinking(false), 340);
+    const id = window.setTimeout(() => setHoldActivity(false), 120);
     return () => window.clearTimeout(id);
-  }, [showThinking, holdThinking]);
+  }, [hasReply]);
+
+  const inFlight = pending || streaming;
+  const showActivityRow = inFlight && (!hasReply || holdActivity);
 
   return (
     <div className="w-full space-y-2">
-      {showThinking || holdThinking ? (
+      {showActivityRow ? (
         <ThinkingIndicator
-          active={showThinking}
+          active={!hasReply}
           phase={message.activity?.phase}
           startedAt={message.activity?.startedAt}
           label={message.activity?.label}
         />
       ) : null}
-      {!showThinking && visibleContent ? (
-        <div className="assistant-reply-enter">
+      {hasReply ? (
+        <div>
           <MarkdownRenderer content={visibleContent} />
         </div>
       ) : null}

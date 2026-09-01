@@ -447,6 +447,34 @@ export function setProjectBrowserSession(
   persistKey(projectBrowserStorageKey(key), session);
 }
 
+/** In-memory session only — used for ephemeral quick-search browsing. */
+export function setProjectBrowserSessionVolatile(
+  key: ProjectBrowserKey,
+  session: ProjectBrowserSession,
+) {
+  const storageKey = projectBrowserStorageKey(key);
+  hydratedKeys.add(storageKey);
+  cache.set(storageKey, session);
+  lastChangedKey = storageKey;
+  revision += 1;
+  emit();
+}
+
+export function clearProjectBrowserSession(key: ProjectBrowserKey) {
+  const storageKey = projectBrowserStorageKey(key);
+  cache.delete(storageKey);
+  hydratedKeys.delete(storageKey);
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(`${STORAGE_PREFIX}:${storageKey}`);
+    } catch {
+      /* ignore */
+    }
+  }
+  revision += 1;
+  emit();
+}
+
 export function replaceProjectBrowserSession(
   key: ProjectBrowserKey,
   session: ProjectBrowserSession | null,

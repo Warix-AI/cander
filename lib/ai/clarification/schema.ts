@@ -218,7 +218,7 @@ function pickString(value: unknown): string | null {
 }
 
 function spaceDisplayLabel(space: "build" | "research" | "work"): string {
-  if (space === "research") return "Studio";
+  if (space === "research") return "Explore";
   if (space === "build") return "Build";
   return "Work";
 }
@@ -341,7 +341,7 @@ export function sanitizeClarificationQuestions(
       else if (!choiceId) choiceId = `opt${j}`;
       const display =
         choiceId === "research"
-          ? "Studio"
+          ? "Explore"
           : choiceId === "build"
             ? "Build"
             : choiceId === "work"
@@ -366,7 +366,7 @@ export function sanitizeClarificationQuestions(
         required: true,
         choices: [
           { id: "build", label: "Build" },
-          { id: "research", label: "Studio" },
+          { id: "research", label: "Explore" },
         ],
       };
     }
@@ -416,7 +416,7 @@ export const CREATE_PROJECT_SPACE_QUESTIONS: ClarificationQuestion[] = [
     required: true,
     choices: [
       { id: "build", label: "Build" },
-      { id: "research", label: "Studio" },
+      { id: "research", label: "Explore" },
     ],
   },
   {

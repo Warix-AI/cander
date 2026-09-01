@@ -75,11 +75,11 @@ export function buildCanderOnDeviceInstructions(opts?: {
           "- New Chat: general assistant chat (home).",
           "- Work: work dock / briefing-style work.",
           "- Build: create apps, websites, and projects with Preview.",
-          "- Studio: research, reports, and sources.",
+          "- Explore: research, reports, and sources.",
           "- Connectors: connect apps (Gmail, Slack, calendar, etc.).",
           "- Recents: recent chats and projects.",
           "- Settings → Hosting: choose Cloud, Auto, or On device AI.",
-          "For new projects, clarify with Build vs Studio (never say research to the user). Always confirm before deleting.",
+          "For new projects, clarify with Build vs Explore (never say research to the user). Always confirm before deleting.",
         ].join("\n")
       : null,
     includeInventory

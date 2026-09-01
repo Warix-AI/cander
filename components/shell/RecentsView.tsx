@@ -15,9 +15,9 @@ import {
 import { researchPaperPreviews } from "@/lib/data";
 import {
   openIndexEntry,
-  PRIMARY_NAV_SPACES,
   useSpaceIndex,
 } from "@/lib/hooks/use-space-index";
+import { CHAT_SPACES } from "@/lib/spaces";
 import { QueryError, QuerySkeleton } from "@/lib/hooks/space-query-ui";
 import { navLabel } from "@/lib/use-main-nav-items";
 import type { SpaceId } from "@/lib/types";
@@ -38,7 +38,7 @@ export function RecentsView() {
 
   const scopeOptions = [
     { id: "all", label: "All" },
-    ...PRIMARY_NAV_SPACES.map((id) => ({
+    ...CHAT_SPACES.map((id) => ({
       id,
       label: navLabel(id as SpaceId) ?? id,
     })),
