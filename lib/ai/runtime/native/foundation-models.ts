@@ -9,6 +9,8 @@
  * PRIVACY: Calls stay on-device. Do not proxy these prompts to Edge.
  */
 
+import { FM_DISABLED_MESSAGE, isFoundationModelsEnabled } from "./fm-policy.ts";
+
 export type FoundationModelsAvailability = {
   available: boolean;
   reason: string;
@@ -138,6 +140,14 @@ export function resetFoundationModelsPluginCache() {
 }
 
 export async function getFoundationModelsAvailability(): Promise<FoundationModelsAvailability> {
+  if (!isFoundationModelsEnabled()) {
+    return {
+      available: false,
+      reason: "policy_disabled",
+      streaming: false,
+      message: FM_DISABLED_MESSAGE,
+    };
+  }
   const plugin = getPlugin();
   if (!plugin) {
     return {
@@ -181,6 +191,9 @@ export async function generateWithFoundationModels(
   instructions?: string,
   sessionId?: string,
 ): Promise<string> {
+  if (!isFoundationModelsEnabled()) {
+    throw new Error(FM_DISABLED_MESSAGE);
+  }
   const plugin = getPlugin();
   if (!plugin) {
     throw new Error("On-device Apple AI plugin is not available.");
@@ -201,6 +214,9 @@ export async function generateStreamWithFoundationModels(opts: {
   sessionId?: string;
   onDelta: (chunk: string) => void;
 }): Promise<string> {
+  if (!isFoundationModelsEnabled()) {
+    throw new Error(FM_DISABLED_MESSAGE);
+  }
   const plugin = getPlugin();
   if (!plugin) {
     throw new Error("On-device Apple AI plugin is not available.");
@@ -258,6 +274,7 @@ export async function generateStructuredWithFoundationModels(
   instructions?: string,
   sessionId?: string,
 ): Promise<FoundationModelsStructuredResult | null> {
+  if (!isFoundationModelsEnabled()) return null;
   const plugin = getPlugin();
   if (!plugin?.generateStructured) return null;
   const result = await plugin.generateStructured({

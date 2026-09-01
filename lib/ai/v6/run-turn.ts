@@ -389,22 +389,27 @@ export async function runTurn(
   report({ phase: "thinking", label: "Thinking", detail: "Parsing request" });
   let generate = opts?.generate;
   if (!generate && !opts?.useHeuristicOnly) {
-    try {
-      const { getFoundationModelsAvailability } = await import(
-        "@/lib/ai/runtime/native/foundation-models"
-      );
-      const { generateFmTurn } = await import(
-        "@/lib/ai/runtime/native/fm-generate"
-      );
-      const fmAvail = await getFoundationModelsAvailability();
-      if (fmAvail.available) {
-        generate = async (prompt, instructions) => {
-          const fm = await generateFmTurn({ prompt, instructions });
-          return fm.text;
-        };
+    const { isFoundationModelsEnabled } = await import(
+      "../runtime/native/fm-policy.ts"
+    );
+    if (isFoundationModelsEnabled()) {
+      try {
+        const { getFoundationModelsAvailability } = await import(
+          "../runtime/native/foundation-models"
+        );
+        const { generateFmTurn } = await import(
+          "../runtime/native/fm-generate"
+        );
+        const fmAvail = await getFoundationModelsAvailability();
+        if (fmAvail.available) {
+          generate = async (prompt, instructions) => {
+            const fm = await generateFmTurn({ prompt, instructions });
+            return fm.text;
+          };
+        }
+      } catch {
+        generate = undefined;
       }
-    } catch {
-      generate = undefined;
     }
   }
 

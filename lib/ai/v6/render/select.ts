@@ -27,8 +27,8 @@ export function selectRenderer(args: {
   const hasWebEvidence = args.bundle.evidence.some((e) => e.sourceType === "web");
 
   if (allSimple && !hasExplain) {
-    // Raw search snippets are not user-facing answers — synthesize when web was used.
-    if (hasWebEvidence) return args.forceCloud ? "cloud" : "apple";
+    // Web snippets are not user-facing — always synthesize via OpenAI cloud.
+    if (hasWebEvidence) return "cloud";
     return "deterministic";
   }
   if (hasExplain || kinds.has("research")) return "apple";

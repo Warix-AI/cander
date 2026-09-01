@@ -58,6 +58,9 @@ export function preferOnDeviceForTurnContent(opts: {
 export async function shouldPreferOnDeviceForTurn(
   request: AiGenerateRequest,
 ): Promise<boolean> {
+  const { isFoundationModelsEnabled } = await import("./native/fm-policy.ts");
+  if (!isFoundationModelsEnabled()) return false;
+
   const avail = await getFoundationModelsAvailability();
   return preferOnDeviceForTurnContent({
     content: request.content,
@@ -75,6 +78,9 @@ export async function shouldPreferOnDeviceForTurn(
 export async function shouldUseLocalTurnOrchestrator(
   request: AiGenerateRequest,
 ): Promise<boolean> {
+  const { isFoundationModelsEnabled } = await import("./native/fm-policy.ts");
+  if (!isFoundationModelsEnabled()) return false;
+
   if (request.images?.length) return false;
 
   const {
