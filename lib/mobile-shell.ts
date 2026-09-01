@@ -20,10 +20,15 @@ type KeyboardPlugin = {
   ) => ListenerHandle | Promise<ListenerHandle> | void;
 };
 
+type StatusBarPlugin = {
+  setStyle?: (opts: { style: "LIGHT" | "DARK" | "DEFAULT" }) => Promise<void>;
+  setBackgroundColor?: (opts: { color: string }) => Promise<void>;
+};
+
 type CapacitorBridge = {
   isNativePlatform?: () => boolean;
   getPlatform?: () => string;
-  Plugins?: { Keyboard?: KeyboardPlugin };
+  Plugins?: { Keyboard?: KeyboardPlugin; StatusBar?: StatusBarPlugin };
 };
 
 function getCapacitor(): CapacitorBridge | undefined {
@@ -258,12 +263,7 @@ export function syncNativeShellChrome(theme?: "light" | "dark") {
     theme ??
     (document.documentElement.classList.contains("dark") ? "dark" : "light");
   const cap = getCapacitor();
-  const statusBar = cap?.Plugins?.StatusBar as
-    | {
-        setStyle?: (opts: { style: string }) => Promise<void>;
-        setBackgroundColor?: (opts: { color: string }) => Promise<void>;
-      }
-    | undefined;
+  const statusBar = cap?.Plugins?.StatusBar;
   if (statusBar?.setStyle) {
     void statusBar
       .setStyle({ style: resolved === "dark" ? "DARK" : "LIGHT" })
