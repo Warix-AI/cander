@@ -88,6 +88,24 @@ async function invokeAiAgent<T>(body: AgentAction): Promise<T> {
     } catch {
       // keep detail
     }
+    // #region agent log
+    fetch("http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "20f195",
+      },
+      body: JSON.stringify({
+        sessionId: "20f195",
+        runId: "post-fix",
+        hypothesisId: "H1_H2_H4",
+        location: "ai-agent-api.ts:invoke-error",
+        message: "ai-agent invoke failed",
+        data: { action: body.action, detail: detail.slice(0, 300) },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     throw new Error(detail);
   }
   if (data && typeof data === "object" && "error" in data && data.error) {
