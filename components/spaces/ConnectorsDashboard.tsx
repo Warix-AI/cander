@@ -26,11 +26,12 @@ import {
   peekWorkConnectorAttach,
 } from "@/lib/work-connectors";
 import {
-  connectionsForConnector,
-  getWorkspaceConnectionsServerSnapshot,
-  getWorkspaceConnectionsSnapshot,
-  subscribeWorkspaceConnections,
-} from "@/lib/workspace-connections";
+  activeAccountsForConnector,
+  getConnectorConnectionsServerSnapshot,
+  getConnectorConnectionsSnapshot,
+  pendingConnectorIdsLive,
+  subscribeConnectorConnections,
+} from "@/lib/connector-connections-store";
 
 const SECTION_ORDER = [
   "Featured",
@@ -79,10 +80,10 @@ export function ConnectorsDashboard() {
     getInstalledConnectorsSnapshot,
     getInstalledConnectorsServerSnapshot,
   );
-  const workspaceConnections = useSyncExternalStore(
-    subscribeWorkspaceConnections,
-    getWorkspaceConnectionsSnapshot,
-    getWorkspaceConnectionsServerSnapshot,
+  const connectionRevision = useSyncExternalStore(
+    subscribeConnectorConnections,
+    getConnectorConnectionsSnapshot,
+    getConnectorConnectionsServerSnapshot,
   );
   const [query, setQuery] = useState("");
   const [info, setInfo] = useState("");
@@ -109,20 +110,17 @@ export function ConnectorsDashboard() {
   const apps = useMemo(
     () =>
       seed.map((item) => {
-        const accounts = connectionsForConnector(
-          workspaceId,
-          item.id,
-          workspace,
-        );
+        const accounts = activeAccountsForConnector(workspaceId, item.id);
+        const pending = pendingConnectorIdsLive(workspaceId).includes(item.id);
         const installed =
-          installedIds.includes(item.id) || accounts.length > 0;
+          installedIds.includes(item.id) || accounts.length > 0 || pending;
         return {
           ...item,
           installed,
           accounts,
         };
       }),
-    [installedIds, workspace, workspaceConnections, workspaceId],
+    [installedIds, connectionRevision, workspaceId],
   );
 
   const bindToWorkIfArmed = (id: string) => {

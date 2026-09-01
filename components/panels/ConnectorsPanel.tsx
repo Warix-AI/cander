@@ -15,11 +15,12 @@ import { cn } from "@/lib/utils";
 import { SHELL_PANEL_BODY } from "@/lib/shell-chrome";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
 import {
-  connectionsForConnector,
-  getWorkspaceConnectionsServerSnapshot,
-  getWorkspaceConnectionsSnapshot,
-  subscribeWorkspaceConnections,
-} from "@/lib/workspace-connections";
+  activeAccountsForConnector,
+  connectionsForConnectorLive,
+  getConnectorConnectionsServerSnapshot,
+  getConnectorConnectionsSnapshot,
+  subscribeConnectorConnections,
+} from "@/lib/connector-connections-store";
 
 export function ConnectorsPanel() {
   const {
@@ -33,9 +34,9 @@ export function ConnectorsPanel() {
     billingPlan,
   } = useApp();
   useSyncExternalStore(
-    subscribeWorkspaceConnections,
-    getWorkspaceConnectionsSnapshot,
-    getWorkspaceConnectionsServerSnapshot,
+    subscribeConnectorConnections,
+    getConnectorConnectionsSnapshot,
+    getConnectorConnectionsServerSnapshot,
   );
   const { data: attachments } = useSpaceAttachments();
   const { data: buildProjects } = useSpaceProjects("build");
@@ -54,11 +55,7 @@ export function ConnectorsPanel() {
     allowed[0] ??
     connectors[0];
   const execute = panelIntent === "execute" || Boolean(connectorId);
-  const accounts = connectionsForConnector(
-    workspaceId,
-    selected.id,
-    workspace,
-  );
+  const accounts = activeAccountsForConnector(workspaceId, selected.id);
 
   const relatedApps = useMemo(() => {
     const fromAttach = attachments
@@ -92,11 +89,10 @@ export function ConnectorsPanel() {
           <div className="w-[42%] min-w-[10rem] border-r border-border py-3">
             <SectionLabel>Apps</SectionLabel>
             {allowed.map((item) => {
-              const count = connectionsForConnector(
+              const count = connectionsForConnectorLive(
                 workspaceId,
                 item.id,
-                workspace,
-              ).length;
+              ).filter((row) => row.status === "active" || row.status === "pending").length;
               return (
                 <Row
                   key={item.id}

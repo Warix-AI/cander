@@ -277,6 +277,11 @@ export function useSpaceMutation() {
     [api.connectors, ctx],
   );
 
+  const disconnectConnectorConnection = useCallback(
+    (connectionId: string) => api.connectors.disconnectConnection(ctx, connectionId),
+    [api.connectors, ctx],
+  );
+
   const mutateBriefing = useCallback(
     (...args: Parameters<typeof api.entities.mutateBriefingItem>) =>
       api.entities.mutateBriefingItem(...args),
@@ -293,6 +298,7 @@ export function useSpaceMutation() {
     publishBuild,
     captureBrowserReference,
     connectConnector,
+    disconnectConnectorConnection,
     mutateBriefing,
   };
 }

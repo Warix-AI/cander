@@ -110,6 +110,7 @@ import {
   subscribePolicies,
 } from "@/lib/workspace-policy";
 import { clearWorkspaceConnections } from "@/lib/workspace-connections";
+import { clearConnectorConnectionsCache } from "@/lib/connector-connections-store";
 import { clearWorkspaceIcon } from "@/lib/workspace-icons";
 import {
   entitlementsFor,
@@ -954,6 +955,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       purgeWorkspace(id);
       clearWorkspaceConnections(id);
+      clearConnectorConnectionsCache();
       clearWorkspaceIcon(id);
 
       if (workspaceId === id) {

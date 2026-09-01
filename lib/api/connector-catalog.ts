@@ -4,18 +4,18 @@ export type ConnectorInfo = {
   name: string;
 };
 
+/**
+ * Local-mode mock catalog only (`NEXT_PUBLIC_DATA_BACKEND=local`).
+ * Supabase mode reads from `connector_catalog` via GET /api/connectors/catalog.
+ */
 export const CONNECTOR_CATALOG: ConnectorInfo[] = [
   { id: "gmail", name: "Gmail" },
   { id: "slack", name: "Slack" },
   { id: "gcal", name: "Google Calendar" },
   { id: "github", name: "GitHub" },
   { id: "notion", name: "Notion" },
-  { id: "linear", name: "Linear" },
-  { id: "figma", name: "Figma" },
-  { id: "gdrive", name: "Google Drive" },
   { id: "stripe", name: "Stripe" },
-  { id: "handshake", name: "Handshake" },
-  { id: "apple-health", name: "Apple Health" },
+  { id: "vercel", name: "Vercel" },
 ];
 
 export function connectorName(id: string) {

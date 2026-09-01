@@ -8,6 +8,10 @@ import { persistOnboardingPending, persistSignedOut, resetWorkspaceSession } fro
 import { signOutSupabase } from "@/lib/supabase/auth-actions";
 import { clearSupabaseAuthState } from "@/lib/supabase/auth-store";
 import { resetPolicyStoreState } from "@/lib/workspace-policy";
+import {
+  clearConnectorConnectionsCache,
+  purgeLegacyConnectionStorage,
+} from "@/lib/connector-connections-store";
 
 const LOCAL_KEYS = [
   "courier-signed-in",
@@ -59,6 +63,8 @@ export async function signOutAccount() {
   resetSpaceEntityStore();
   resetChatStore();
   clearAppearanceLocalState();
+  clearConnectorConnectionsCache();
+  purgeLegacyConnectionStorage();
   clearLocalAuthState();
   persistSignedOut();
 }

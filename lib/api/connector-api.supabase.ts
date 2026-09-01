@@ -1,19 +1,27 @@
 "use client";
 
 import type { ConnectorApi } from "@/lib/api/connector-api";
+import {
+  disconnectConnectorConnection,
+  fetchConnectorCatalog,
+  fetchConnectorConnections,
+  initiateConnectorConnection,
+} from "@/lib/api/connector-client";
 import { subscribeAllConnectorStores } from "@/lib/api/connector-sync";
 import type { SpaceEntityApi } from "@/lib/api/space-entity-api";
 import { notifyEntityStoreChange } from "@/lib/api/space-entity-store";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
-  catalogRowToInfo,
-  type ConnectorCatalogRow,
-} from "@/lib/supabase/connector-mapper";
-import { connectionsForConnector } from "@/lib/workspace-connections";
+  activeAccountsForConnector,
+  connectedConnectorIdsLive,
+  connectionsForConnectorLive,
+  replaceConnectorConnectionsForWorkspace,
+} from "@/lib/connector-connections-store";
+import { isUiConnectedStatus } from "@/lib/connectors/authz";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { ConnectorCatalogRow } from "@/lib/supabase/connector-mapper";
 import {
   attachWorkConnector,
   detachWorkConnector,
-  workConnectorIds,
 } from "@/lib/work-connectors";
 import type {
   BriefingFilter,
@@ -36,27 +44,62 @@ export function createSupabaseConnectorApi(
 ): ConnectorApi {
   return {
     async listAvailable() {
-      const supabase = createSupabaseBrowserClient();
-      const { data, error } = await supabase
-        .from("connector_catalog")
-        .select("id, name")
-        .order("name");
-      if (error) throw error;
-      return (data ?? []).map((row) =>
-        catalogRowToInfo(row as ConnectorCatalogRow),
-      );
+      const catalog = await fetchConnectorCatalog();
+      return catalog.map((item) => ({ id: item.id, name: item.name }));
     },
 
     async listConnected(ctx) {
-      return workConnectorIds(ctx.workspaceId);
+      try {
+        const connections = await fetchConnectorConnections(ctx.workspaceId);
+        replaceConnectorConnectionsForWorkspace(ctx.workspaceId, connections);
+        return connections
+          .filter((row) => isUiConnectedStatus(row.status))
+          .map((row) => row.connectorId);
+      } catch {
+        return connectedConnectorIdsLive(ctx.workspaceId);
+      }
+    },
+
+    async listConnections(ctx) {
+      const connections = await fetchConnectorConnections(ctx.workspaceId);
+      replaceConnectorConnectionsForWorkspace(ctx.workspaceId, connections);
+      return connections;
     },
 
     async connect(ctx, connectorId) {
+      const connection = await initiateConnectorConnection({
+        workspaceId: ctx.workspaceId,
+        connectorId,
+      });
+      const all = await fetchConnectorConnections(ctx.workspaceId);
+      replaceConnectorConnectionsForWorkspace(ctx.workspaceId, all);
       attachWorkConnector(ctx.workspaceId, connectorId);
+      return connection;
     },
 
     async disconnect(ctx, connectorId) {
+      const live = connectionsForConnectorLive(ctx.workspaceId, connectorId).find(
+        (row) => row.status === "pending" || row.status === "active",
+      );
+      if (live) {
+        await disconnectConnectorConnection({
+          workspaceId: ctx.workspaceId,
+          connectionId: live.id,
+        });
+        const all = await fetchConnectorConnections(ctx.workspaceId);
+        replaceConnectorConnectionsForWorkspace(ctx.workspaceId, all);
+      }
       detachWorkConnector(ctx.workspaceId, connectorId);
+    },
+
+    async disconnectConnection(ctx, connectionId) {
+      const connection = await disconnectConnectorConnection({
+        workspaceId: ctx.workspaceId,
+        connectionId,
+      });
+      const all = await fetchConnectorConnections(ctx.workspaceId);
+      replaceConnectorConnectionsForWorkspace(ctx.workspaceId, all);
+      return connection;
     },
 
     async syncBriefing(ctx, filter) {
@@ -84,7 +127,7 @@ export function createSupabaseConnectorApi(
         .maybeSingle();
       if (error) throw error;
 
-      const accounts = connectionsForConnector(ctx.workspaceId, connectorId);
+      const accounts = activeAccountsForConnector(ctx.workspaceId, connectorId);
       const panel = panelForConnector(
         connectorId,
         (data as { panel_type?: ConnectorCatalogRow["panel_type"] } | null)

@@ -1,15 +1,20 @@
 "use client";
 
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   accountToRow,
   installationId,
-  rebuildConnectionsFromAccounts,
   rebuildProfileInstallsFromInstallations,
   rebuildWorkConnectorsFromInstallations,
-  type ConnectorAccountRow,
   type ConnectorInstallationRow,
 } from "@/lib/supabase/connector-mapper";
+import {
+  clearConnectorConnectionsCache,
+  getConnectorConnectionsRevision,
+  purgeLegacyConnectionStorage,
+  replaceConnectorConnectionsForWorkspace,
+  subscribeConnectorConnections,
+} from "@/lib/connector-connections-store";
+import { fetchConnectorConnections } from "@/lib/api/connector-client";
 import {
   getInstalledConnectorsSnapshot,
   replaceInstalledConnectorsState,
@@ -22,12 +27,7 @@ import {
   subscribeWorkConnectors,
   getWorkConnectorsRevision,
 } from "@/lib/work-connectors";
-import {
-  getWorkspaceConnectionsSnapshot,
-  replaceWorkspaceConnectionsState,
-  subscribeWorkspaceConnections,
-  getWorkspaceConnectionsRevision,
-} from "@/lib/workspace-connections";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { WorkspaceCtx } from "@/lib/space-entities";
 
 const IMPORT_FLAG = "courier-connectors-imported-v1";
@@ -45,42 +45,38 @@ async function listMemberWorkspaceIds(profileId: string) {
   return (data ?? []).map((row) => String(row.workspace_id));
 }
 
-/** Pull connector state from Supabase into local stores. */
+/** Pull installation stack from Supabase; connections from server API only. */
 export async function hydrateConnectorsFromRemote(ctx: WorkspaceCtx) {
   skipRemoteSync = true;
+  purgeLegacyConnectionStorage();
+  clearConnectorConnectionsCache();
+
   const supabase = createSupabaseBrowserClient();
   const workspaceIds = await listMemberWorkspaceIds(ctx.actorId);
 
-  const [profileInstallResult, workInstallResult, accountResult] =
-    await Promise.all([
-      supabase
-        .from("connector_installations")
-        .select("*")
-        .eq("profile_id", ctx.actorId)
-        .is("workspace_id", null),
-      workspaceIds.length
-        ? supabase
-            .from("connector_installations")
-            .select("*")
-            .in("workspace_id", workspaceIds)
-        : Promise.resolve({ data: [], error: null }),
-      workspaceIds.length
-        ? supabase
-            .from("connector_accounts")
-            .select("*")
-            .in("workspace_id", workspaceIds)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
+  const [profileInstallResult, workInstallResult] = await Promise.all([
+    supabase
+      .from("connector_installations")
+      .select("*")
+      .eq("profile_id", ctx.actorId)
+      .is("workspace_id", null),
+    workspaceIds.length
+      ? supabase
+          .from("connector_installations")
+          .select("*")
+          .eq("profile_id", ctx.actorId)
+          .not("workspace_id", "is", null)
+          .in("workspace_id", workspaceIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
 
   if (profileInstallResult.error) throw profileInstallResult.error;
   if (workInstallResult.error) throw workInstallResult.error;
-  if (accountResult.error) throw accountResult.error;
 
   const installRows = [
     ...((profileInstallResult.data ?? []) as ConnectorInstallationRow[]),
     ...((workInstallResult.data ?? []) as ConnectorInstallationRow[]),
   ];
-  const accountRows = (accountResult.data ?? []) as ConnectorAccountRow[];
 
   if (installRows.length) {
     replaceInstalledConnectorsState(
@@ -91,10 +87,13 @@ export async function hydrateConnectorsFromRemote(ctx: WorkspaceCtx) {
     );
   }
 
-  if (accountRows.length) {
-    replaceWorkspaceConnectionsState(
-      rebuildConnectionsFromAccounts(accountRows),
-    );
+  for (const workspaceId of workspaceIds) {
+    try {
+      const connections = await fetchConnectorConnections(workspaceId);
+      replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+    } catch (err) {
+      console.warn("[cander] connection hydrate failed", workspaceId, err);
+    }
   }
 
   window.setTimeout(() => {
@@ -102,12 +101,12 @@ export async function hydrateConnectorsFromRemote(ctx: WorkspaceCtx) {
   }, 0);
 }
 
+/** Installations only — never sync connection accounts from browser. */
 export async function syncConnectorsToSupabase(ctx: WorkspaceCtx) {
   const supabase = createSupabaseBrowserClient();
   const workspaceIds = await listMemberWorkspaceIds(ctx.actorId);
   const profileInstalls = getInstalledConnectorsSnapshot();
   const workByWorkspace = getWorkConnectorsSnapshot();
-  const connections = getWorkspaceConnectionsSnapshot();
 
   const { error: deleteProfileError } = await supabase
     .from("connector_installations")
@@ -132,13 +131,14 @@ export async function syncConnectorsToSupabase(ctx: WorkspaceCtx) {
 
   for (const workspaceId of workspaceIds) {
     const stack = workByWorkspace[workspaceId];
-    if (!stack?.length) continue;
-
     const { error: deleteWorkError } = await supabase
       .from("connector_installations")
       .delete()
-      .eq("workspace_id", workspaceId);
+      .eq("workspace_id", workspaceId)
+      .eq("profile_id", ctx.actorId);
     if (deleteWorkError) throw deleteWorkError;
+
+    if (!stack?.length) continue;
 
     const rows: ConnectorInstallationRow[] = stack.map((connectorId, index) => ({
       id: installationId(ctx.actorId, connectorId, workspaceId),
@@ -150,30 +150,11 @@ export async function syncConnectorsToSupabase(ctx: WorkspaceCtx) {
     const { error } = await supabase.from("connector_installations").insert(rows);
     if (error) throw error;
   }
-
-  for (const workspaceId of workspaceIds) {
-    const map = connections[workspaceId];
-    const { error: deleteAccountsError } = await supabase
-      .from("connector_accounts")
-      .delete()
-      .eq("workspace_id", workspaceId);
-    if (deleteAccountsError) throw deleteAccountsError;
-
-    if (!map) continue;
-    const rows = Object.entries(map).flatMap(([connectorId, accounts]) =>
-      accounts.map((account) =>
-        accountToRow(account, workspaceId, connectorId, ctx.actorId),
-      ),
-    );
-    if (!rows.length) continue;
-    const { error } = await supabase.from("connector_accounts").insert(rows);
-    if (error) throw error;
-  }
 }
 
-/** Live accounts stay empty — leftover prototype connector pins are not imported. */
 export async function importLocalConnectorsIfNeeded(_ctx: WorkspaceCtx) {
   if (typeof window === "undefined") return;
+  purgeLegacyConnectionStorage();
   window.localStorage.setItem(IMPORT_FLAG, "1");
 }
 
@@ -181,11 +162,10 @@ function maxRevision() {
   return Math.max(
     getWorkConnectorsRevision(),
     getInstalledConnectorsRevision(),
-    getWorkspaceConnectionsRevision(),
+    getConnectorConnectionsRevision(),
   );
 }
 
-/** Debounced push after local connector store mutations. */
 export function startConnectorRemoteSync(ctx: WorkspaceCtx) {
   let lastRevision = maxRevision();
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -196,7 +176,7 @@ export function startConnectorRemoteSync(ctx: WorkspaceCtx) {
     syncing = true;
     void syncConnectorsToSupabase(ctx)
       .catch((err) => {
-        console.warn("[cander] connector sync failed", err);
+        console.warn("[cander] connector installation sync failed", err);
       })
       .finally(() => {
         syncing = false;
@@ -214,13 +194,11 @@ export function startConnectorRemoteSync(ctx: WorkspaceCtx) {
 
   const unsubWork = subscribeWorkConnectors(schedule);
   const unsubInstall = subscribeInstalledConnectors(schedule);
-  const unsubConnections = subscribeWorkspaceConnections(schedule);
 
   return () => {
     if (timer) clearTimeout(timer);
     unsubWork();
     unsubInstall();
-    unsubConnections();
   };
 }
 
@@ -243,7 +221,12 @@ export function subscribeConnectorRealtime(
     )
     .on(
       "postgres_changes",
-      { event: "*", schema: "public", table: "connector_accounts" },
+      {
+        event: "*",
+        schema: "public",
+        table: "connector_connections",
+        filter: `owner_id=eq.${ctx.actorId}`,
+      },
       () => onChange(),
     )
     .subscribe();
@@ -288,10 +271,13 @@ export function startSupabaseConnectorSync(ctx: WorkspaceCtx) {
 export function subscribeAllConnectorStores(listener: () => void) {
   const unsubWork = subscribeWorkConnectors(listener);
   const unsubInstall = subscribeInstalledConnectors(listener);
-  const unsubConnections = subscribeWorkspaceConnections(listener);
+  const unsubConnections = subscribeConnectorConnections(listener);
   return () => {
     unsubWork();
     unsubInstall();
     unsubConnections();
   };
 }
+
+// Unused export kept for mapper compatibility in tests
+export { accountToRow };
