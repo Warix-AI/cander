@@ -20,14 +20,14 @@ function safeRedirectPath(request: Request, result: "success" | "error"): string
   const path =
     next && allowed.some((prefix) => next === prefix || next.startsWith(`${prefix}?`))
       ? next
-      : "/work";
+      : "/";
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}connectors=gmail&result=${result}`;
 }
 
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.redirect(new URL("/work?connectors=gmail&result=error", request.url));
+    return NextResponse.redirect(new URL("/?connectors=gmail&result=error", request.url));
   }
 
   const configuredVerifier = process.env.COMPOSIO_CALLBACK_VERIFIER_URL?.trim();

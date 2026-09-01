@@ -54,7 +54,7 @@ sequenceDiagram
   C-->>API: verified connected_account_id ACTIVE
   API->>DB: record verified provider ref on oauth_state
   API->>DB: complete_connector_oauth_callback (atomic: active + consumed + audit)
-  API-->>UI: redirect /work?connectors=gmail&result=success
+  API-->>UI: redirect /?connectors=gmail&result=success
 ```
 
 **Never** trust `status` or `connected_account_id` query params on the callback URL.
@@ -91,7 +91,7 @@ Register the exact verifier URL per environment in Composio dashboard (Settings 
 
 `COMPOSIO_CALLBACK_VERIFIER_URL` must match the dashboard value exactly.
 
-Post-verification redirects use an allowlisted path set (`/`, `/work`, `/spaces`) — no open redirects.
+Post-verification redirects default to `/` (signed-in app) with `connectors=gmail&result=…`. Allowlisted paths: `/`, `/work`, `/spaces` — no open redirects.
 
 ## Link-session binding
 

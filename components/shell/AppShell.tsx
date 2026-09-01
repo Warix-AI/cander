@@ -100,6 +100,7 @@ function Root() {
     overlay,
     view,
     openSettings,
+    openSpace,
     openOverlay,
     closeOverlay,
     canGoBack,
@@ -180,6 +181,15 @@ function Root() {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [signedIn, openSettings]);
+
+  useEffect(() => {
+    if (!signedIn) return;
+    const params = new URLSearchParams(window.location.search);
+    const connector = params.get("connectors");
+    const result = params.get("result");
+    if (connector !== "gmail" || !result) return;
+    openSpace("connectors");
+  }, [signedIn, openSpace]);
 
   useEffect(() => {
     if (!signedIn) return;

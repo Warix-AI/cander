@@ -21,8 +21,9 @@ import {
   getConnectorConnectionsSnapshot,
   subscribeConnectorConnections,
 } from "@/lib/connector-connections-store";
-import { fetchConnectorConnections, initiateConnectorConnection } from "@/lib/api/connector-client";
+import { fetchConnectorConnections, initiateConnectorConnection, disconnectConnectorConnection } from "@/lib/api/connector-client";
 import { replaceConnectorConnectionsForWorkspace } from "@/lib/connector-connections-store";
+import { detachWorkConnector } from "@/lib/work-connectors";
 
 export function ConnectorsPanel() {
   const {
@@ -36,6 +37,7 @@ export function ConnectorsPanel() {
     billingPlan,
   } = useApp();
   const [connectError, setConnectError] = useState("");
+  const [disconnecting, setDisconnecting] = useState(false);
   useSyncExternalStore(
     subscribeConnectorConnections,
     getConnectorConnectionsSnapshot,
@@ -62,6 +64,9 @@ export function ConnectorsPanel() {
   const accounts = activeAccountsForConnector(workspaceId, selected.id);
   const pendingConnection = liveConnections.find((row) => row.status === "pending");
   const hasActiveConnection = liveConnections.some((row) => row.status === "active");
+  const disconnectableConnections = liveConnections.filter(
+    (row) => row.status === "pending" || row.status === "active",
+  );
 
   const relatedApps = useMemo(() => {
     const fromAttach = attachments
@@ -216,37 +221,73 @@ export function ConnectorsPanel() {
               {connectError ? (
                 <p className="mb-2 text-[12px] text-destructive">{connectError}</p>
               ) : null}
-              <button
-                type="button"
-                disabled={selected.id !== "gmail" || hasActiveConnection}
-                onClick={async () => {
-                  setConnectError("");
-                  try {
-                    const { authorizationUrl } = await initiateConnectorConnection({
-                      workspaceId,
-                      connectorId: selected.id,
-                    });
-                    const connections = await fetchConnectorConnections(workspaceId);
-                    replaceConnectorConnectionsForWorkspace(workspaceId, connections);
-                    if (authorizationUrl) {
-                      window.location.assign(authorizationUrl);
-                    }
-                  } catch (err) {
-                    setConnectError(
-                      err instanceof Error
-                        ? err.message
-                        : "Could not start connection.",
-                    );
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={
+                    selected.id !== "gmail" || hasActiveConnection || disconnecting
                   }
-                }}
-                className="inline-flex h-10 items-center rounded-full border border-foreground/20 px-4 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {hasActiveConnection
-                  ? "Connected"
-                  : pendingConnection
-                    ? "Continue connecting"
-                    : "Add connection"}
-              </button>
+                  onClick={async () => {
+                    setConnectError("");
+                    try {
+                      const { authorizationUrl } = await initiateConnectorConnection({
+                        workspaceId,
+                        connectorId: selected.id,
+                      });
+                      const connections = await fetchConnectorConnections(workspaceId);
+                      replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+                      if (authorizationUrl) {
+                        window.location.assign(authorizationUrl);
+                      }
+                    } catch (err) {
+                      setConnectError(
+                        err instanceof Error
+                          ? err.message
+                          : "Could not start connection.",
+                      );
+                    }
+                  }}
+                  className="inline-flex h-10 items-center rounded-full border border-foreground/20 px-4 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {hasActiveConnection
+                    ? "Connected"
+                    : pendingConnection
+                      ? "Continue connecting"
+                      : "Add connection"}
+                </button>
+                {disconnectableConnections.length > 0 ? (
+                  <button
+                    type="button"
+                    disabled={disconnecting}
+                    onClick={async () => {
+                      setConnectError("");
+                      setDisconnecting(true);
+                      try {
+                        for (const connection of disconnectableConnections) {
+                          await disconnectConnectorConnection({
+                            workspaceId,
+                            connectionId: connection.id,
+                          });
+                        }
+                        const connections = await fetchConnectorConnections(workspaceId);
+                        replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+                        detachWorkConnector(workspaceId, selected.id);
+                      } catch (err) {
+                        setConnectError(
+                          err instanceof Error
+                            ? err.message
+                            : "Could not disconnect.",
+                        );
+                      } finally {
+                        setDisconnecting(false);
+                      }
+                    }}
+                    className="inline-flex h-10 items-center rounded-full border border-destructive/30 px-4 text-[13px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/5 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {disconnecting ? "Disconnecting…" : "Disconnect"}
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
