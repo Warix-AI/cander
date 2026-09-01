@@ -239,11 +239,18 @@ async function beginProviderAuthorization(input: {
   const provider = getConnectorProvider();
   if (provider.name === "noop") {
     const config = composioConfigurationStatus();
+    const present =
+      config.present.length > 0
+        ? ` Server sees: ${config.present.join(", ")}.`
+        : " Server sees no COMPOSIO_* variables.";
+    const emptyHint = process.env.COMPOSIO_API_KEY === ""
+      ? " COMPOSIO_API_KEY is set but empty."
+      : "";
     return {
       ok: false,
       error: config.missing.length
-        ? `Composio is not configured on the server. Missing: ${config.missing.join(", ")}. Add them in Vercel Production for the cander project, then redeploy.`
-        : "Composio is not configured on the server. Redeploy after setting env vars.",
+        ? `Composio is not configured on the server. Missing: ${config.missing.join(", ")}.${emptyHint}${present} Add missing vars on the cander Vercel project (Production), then redeploy.`
+        : `Composio is not configured on the server. Redeploy after setting env vars.${present}`,
     };
   }
 

@@ -7,7 +7,11 @@ const COMPOSIO_API_BASE = "https://backend.composio.dev/api/v3.1";
 export function composioConfigurationStatus(): {
   ok: boolean;
   missing: string[];
+  present: string[];
 } {
+  const present = Object.keys(process.env)
+    .filter((key) => key.startsWith("COMPOSIO_"))
+    .sort();
   const missing: string[] = [];
   if (!process.env.COMPOSIO_API_KEY?.trim()) {
     missing.push("COMPOSIO_API_KEY");
@@ -15,7 +19,7 @@ export function composioConfigurationStatus(): {
   if (!process.env.COMPOSIO_GMAIL_AUTH_CONFIG_ID?.trim()) {
     missing.push("COMPOSIO_GMAIL_AUTH_CONFIG_ID");
   }
-  return { ok: missing.length === 0, missing };
+  return { ok: missing.length === 0, missing, present };
 }
 
 export function isComposioConfigured(): boolean {
