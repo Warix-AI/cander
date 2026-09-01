@@ -11,7 +11,9 @@ const DEFAULT_URL = "https://cander.app";
 const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Bumped when the native shell changes — visible on <html data-cander-shell>. */
-const SHELL_BUILD = "2026-08-30-speech-composer";
+const SHELL_BUILD = "2026-08-31-g3-window-corners";
+/** macOS content-view mask — keep in sync with DESKTOP_WINDOW_RADIUS_PX in lib/shell-chrome.ts */
+const DESKTOP_WINDOW_RADIUS_PX = 24;
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
 /** Classic Mac titlebar / chrome row height (traffic-light axis). */
 const TITLEBAR_PX = 52;
@@ -36,6 +38,7 @@ function markDesktopShell() {
     document.documentElement.dataset.canderUrl = ${JSON.stringify(activeUrl)};
     document.documentElement.style.setProperty("--desktop-titlebar", "${TITLEBAR_PX}px");
     document.documentElement.style.setProperty("--desktop-traffic-clear", "${TRAFFIC_CLEAR_PX}px");
+    document.documentElement.style.setProperty("--desktop-window-radius", "${DESKTOP_WINDOW_RADIUS_PX}px");
   `);
 }
 
@@ -148,6 +151,16 @@ function loadApp(url) {
   void mainWindow?.loadURL(url);
 }
 
+function applyDesktopWindowCorners() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (process.platform !== "darwin") return;
+  try {
+    mainWindow.getContentView().setBorderRadius(DESKTOP_WINDOW_RADIUS_PX);
+  } catch (error) {
+    console.warn("[cander-desktop] window corner radius failed", error);
+  }
+}
+
 async function createWindow() {
   const isMac = process.platform === "darwin";
   mainWindow = new BrowserWindow({
@@ -156,7 +169,9 @@ async function createWindow() {
     minWidth: 1024,
     minHeight: 640,
     title: "",
-    backgroundColor: shellBackgroundColor(),
+    // Transparent shell so the content-view corner mask can exceed macOS defaults.
+    backgroundColor: isMac ? "#00000000" : shellBackgroundColor(),
+    transparent: isMac,
     show: false,
     // macOS: keep the system traffic lights; hide only the title-bar chrome.
     ...(isMac
@@ -177,6 +192,7 @@ async function createWindow() {
   });
 
   mainWindow.once("ready-to-show", () => {
+    applyDesktopWindowCorners();
     mainWindow?.show();
   });
 
@@ -205,10 +221,12 @@ async function createWindow() {
     console.log(
       `[cander-desktop] loaded ${current} (shell ${SHELL_BUILD}, titleBarStyle=hidden)`,
     );
+    applyDesktopWindowCorners();
     void mainWindow?.webContents.insertCSS(`
       html.cander-desktop {
         --desktop-titlebar: ${TITLEBAR_PX}px !important;
         --desktop-traffic-clear: ${TRAFFIC_CLEAR_PX}px !important;
+        --desktop-window-radius: ${DESKTOP_WINDOW_RADIUS_PX}px !important;
       }
       html.cander-desktop nextjs-portal {
         display: none !important;

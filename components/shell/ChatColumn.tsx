@@ -10,7 +10,6 @@ import { isSupabaseConfigured } from "@/lib/data-backend";
 import { CanderMark } from "@/components/brand/CanderMark";
 import { ClarificationCardSlot } from "@/components/chat/ClarificationCard";
 import { ChatMessage } from "@/components/chat/MessageBlocks";
-import { SessionSummaryBubble } from "@/components/chat/SessionSummaryBubble";
 import { Composer } from "@/components/shell/Composer";
 import { APP_TAGLINE } from "@/lib/app-brand";
 import { chatSpaceCopy } from "@/lib/space-icons";
@@ -244,12 +243,6 @@ export function ChatColumn() {
         <div className="chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-4 pb-4 touch-pan-y [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {hasChatTurns || thread ? (
             <div className="mx-auto flex w-full max-w-none flex-col gap-5">
-              {thread?.sessionSummary ? (
-                <SessionSummaryBubble
-                  threadId={thread.id}
-                  summary={thread.sessionSummary}
-                />
-              ) : null}
               {thread ? renderTranscript(thread.messages) : null}
             </div>
           ) : (
@@ -288,12 +281,6 @@ export function ChatColumn() {
               (!floating || centered) && "mx-auto",
             )}
           >
-            {thread?.sessionSummary ? (
-              <SessionSummaryBubble
-                threadId={thread.id}
-                summary={thread.sessionSummary}
-              />
-            ) : null}
             {thread ? renderTranscript(thread.messages) : null}
           </div>
         </div>

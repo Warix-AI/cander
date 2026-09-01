@@ -116,6 +116,11 @@
 html.cander-desktop {
   --desktop-titlebar: 52px;
   --desktop-traffic-clear: 84px;
+  --desktop-window-radius: 24px;
+  border-radius: var(--desktop-window-radius);
+  overflow: hidden;
+  -electron-corner-smoothing: system-ui;
+  background-color: var(--background);
 }
 
 /* next dev only — hide the floating Next.js badge in the desktop shell */
@@ -631,6 +636,7 @@ html.dark .courier-app-appearance[data-palette="mono"] {
 .shell-g3-radius,
 .composer-shell {
   border-radius: 20px !important;
+  -electron-corner-smoothing: system-ui;
 }
 
 /* Density shows up on common padding/gap utilities */

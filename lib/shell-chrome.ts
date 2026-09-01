@@ -10,6 +10,8 @@ const listeners = new Set<Listener>();
 
 /** G3 corner radius — matches composer-shell (20px). Use class only, not rounded-[20px]. */
 export const SHELL_G3_RADIUS_PX = 20;
+/** Electron desktop window outer radius — slightly larger than in-app G3 cards. */
+export const DESKTOP_WINDOW_RADIUS_PX = 24;
 export const SHELL_G3_RADIUS = "shell-g3-radius";
 /** Floating shell inset — matches my-3 / ml-3 / mr-3 on menu and panels. */
 export const SHELL_FLOAT_INSET_PX = 12;
