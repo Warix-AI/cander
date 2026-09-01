@@ -24,7 +24,13 @@ export function selectRenderer(args: {
   );
   const hasExplain = kinds.has("explain") || kinds.has("summarize") || kinds.has("compare");
 
-  if (allSimple && !hasExplain) return "deterministic";
+  const hasWebEvidence = args.bundle.evidence.some((e) => e.sourceType === "web");
+
+  if (allSimple && !hasExplain) {
+    // Raw search snippets are not user-facing answers — synthesize when web was used.
+    if (hasWebEvidence) return args.forceCloud ? "cloud" : "apple";
+    return "deterministic";
+  }
   if (hasExplain || kinds.has("research")) return "apple";
   return "deterministic";
 }

@@ -390,13 +390,19 @@ export async function runTurn(
   let generate = opts?.generate;
   if (!generate && !opts?.useHeuristicOnly) {
     try {
+      const { getFoundationModelsAvailability } = await import(
+        "@/lib/ai/runtime/native/foundation-models"
+      );
       const { generateFmTurn } = await import(
         "@/lib/ai/runtime/native/fm-generate"
       );
-      generate = async (prompt, instructions) => {
-        const fm = await generateFmTurn({ prompt, instructions });
-        return fm.text;
-      };
+      const fmAvail = await getFoundationModelsAvailability();
+      if (fmAvail.available) {
+        generate = async (prompt, instructions) => {
+          const fm = await generateFmTurn({ prompt, instructions });
+          return fm.text;
+        };
+      }
     } catch {
       generate = undefined;
     }
@@ -551,7 +557,7 @@ export async function runTurn(
     hasImages,
     hasResearch: outcome.spec.requests.some((r) => r.kind === "research"),
     detailDeep: outcome.spec.response.detail === "deep",
-    fmUnavailable: !generate && hasImages,
+    fmUnavailable: !generate,
   });
 
   const renderer = selectRenderer({
