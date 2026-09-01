@@ -6,8 +6,13 @@ import type {
   WorkspaceCtx,
 } from "@/lib/space-entities";
 import type { Message, Thread } from "@/lib/types";
+import { imageCoverFromMessages } from "@/lib/chat-image-cover";
 
 export type ChatApi = {
+  getThreadCoverUrls(
+    ctx: WorkspaceCtx,
+    threadIds: string[],
+  ): Promise<Map<string, string>>;
   listThreads(ctx: WorkspaceCtx, filter?: ThreadFilter): Promise<Thread[]>;
   getThread(ctx: WorkspaceCtx, id: string): Promise<Thread | null>;
   createThread(ctx: WorkspaceCtx, input: CreateThreadInput): Promise<Thread>;
@@ -41,6 +46,17 @@ export function registerChatApiBridge(bridge: ChatApiBridge | null) {
 
 export function createChatApiFromBridge(): ChatApi {
   return {
+    async getThreadCoverUrls(ctx, threadIds) {
+      if (!chatBridge) return new Map();
+      const covers = new Map<string, string>();
+      for (const id of threadIds) {
+        const thread = chatBridge.getThread(ctx, id);
+        if (!thread) continue;
+        const url = imageCoverFromMessages(thread.messages);
+        if (url) covers.set(id, url);
+      }
+      return covers;
+    },
     async listThreads(ctx, filter) {
       if (!chatBridge) return [];
       return chatBridge.listThreads(ctx, filter);

@@ -186,6 +186,8 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
     },
 
     async deleteProject(ctx, id) {
+      localSpaceEntityStore.deleteProject(ctx, id);
+      notifyEntityStoreChange();
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase
         .from("projects")
@@ -193,7 +195,6 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
         .eq("id", id)
         .eq("workspace_id", ctx.workspaceId);
       if (error) throw error;
-      notifyEntityStoreChange();
     },
 
     async listSources(ctx, opts) {

@@ -61,6 +61,8 @@ export function RecentsView() {
         openKey: entry.key,
         name: entry.title,
         projectId: entry.key,
+        threadId: entry.kind === "thread" ? entry.entityId : undefined,
+        linkedProjectId: entry.linkedProjectId,
         indexKind: entry.kind,
         meta: entry.meta,
         badge: entry.badge,

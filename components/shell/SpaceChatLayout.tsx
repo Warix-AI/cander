@@ -55,12 +55,19 @@ export function SpaceChatLayout() {
   const [spacePct, setSpacePct] = useState(targetSpacePct);
   const wasOpen = useRef(spaceOpen);
   const prevProjectId = useRef<string | null>(projectId);
+  const [skipLayoutAnimation, setSkipLayoutAnimation] = useState(false);
   /** Full-screen push into project chat (no remount — class only). */
   const [chatPush, setChatPush] = useState(false);
   /** Full-screen pop back to space home (no remount — class only). */
   const [panelPop, setPanelPop] = useState(false);
   /** After a pop, suppress SpaceDashboard's short enter so it doesn't double-animate. */
   const suppressSpaceEnter = useRef(false);
+
+  useEffect(() => {
+    setSkipLayoutAnimation(true);
+    const id = window.setTimeout(() => setSkipLayoutAnimation(false), 120);
+    return () => window.clearTimeout(id);
+  }, [expandedLayout]);
 
   useEffect(() => {
     const prev = prevProjectId.current;
@@ -90,6 +97,11 @@ export function SpaceChatLayout() {
 
   useEffect(() => {
     if (mobile) return;
+    if (skipLayoutAnimation) {
+      queueMicrotask(() => setSpacePct(targetSpacePct));
+      wasOpen.current = spaceOpen;
+      return;
+    }
     if (immersive) {
       queueMicrotask(() => setSpacePct(spaceOpen ? 100 : 0));
       wasOpen.current = spaceOpen;
@@ -111,7 +123,7 @@ export function SpaceChatLayout() {
       return () => window.cancelAnimationFrame(id);
     }
     queueMicrotask(() => setSpacePct(targetSpacePct));
-  }, [spaceOpen, immersive, targetSpacePct, mobile]);
+  }, [spaceOpen, immersive, targetSpacePct, mobile, skipLayoutAnimation]);
 
   if (mobile) {
     const active: MobileSurface =
@@ -175,7 +187,7 @@ export function SpaceChatLayout() {
   const liveSpacePct =
     dragging && chatOpen && spaceOpen && !immersive ? panelPct : spacePct;
   const liveChatPct = chatOpen ? Math.max(0, 100 - liveSpacePct) : 0;
-  const animateLayout = !dragging && !immersive;
+  const animateLayout = !dragging && !immersive && !skipLayoutAnimation;
   const pinChat =
     expandedLayout && expandedPinned && chatOpen && spaceOpen && !immersive;
   const chatReady = pinChat || liveChatPct > 8;

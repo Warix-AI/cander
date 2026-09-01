@@ -9,6 +9,7 @@ import {
   getSpaceEntityStoreSnapshot,
   localSpaceEntityStore,
 } from "@/lib/api/space-entity-store";
+import { imageCoverFromMessages } from "@/lib/chat-image-cover";
 import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
 import type { EntityRef, WorkspaceCtx } from "@/lib/space-entities";
 import {
@@ -55,39 +56,11 @@ function attributionFor(
   return creatorLabel(createdBy, actorId);
 }
 
-function readIndexSeed(ctx: WorkspaceCtx) {
-  const entity = getSpaceEntityStoreSnapshot();
-  const chat = getChatStoreSnapshot();
-  return {
-    ready: entity.seeded,
-    projects: entity.seeded ? localSpaceEntityStore.listAllProjects(ctx) : [],
-    sources: entity.seeded ? localSpaceEntityStore.listSources(ctx) : [],
-    briefing: entity.seeded
-      ? filterRealBriefingItems(localSpaceEntityStore.listBriefingItems(ctx))
-      : [],
-    threads: filterThreads(chat.threads, ctx.workspaceId),
-  };
-}
-
-function threadImageCover(thread: Thread): string | undefined {
-  // Prefer the latest generated / attached image in the thread.
-  for (let i = thread.messages.length - 1; i >= 0; i--) {
-    const blocks = thread.messages[i]?.blocks;
-    if (!blocks?.length) continue;
-    for (let j = blocks.length - 1; j >= 0; j--) {
-      const block = blocks[j];
-      if (!block) continue;
-      if (block.type === "image" && block.url) return block.url;
-      if (
-        block.type === "image_generation" &&
-        block.status === "completed" &&
-        block.imageUrl
-      ) {
-        return block.imageUrl;
-      }
-    }
-  }
-  return undefined;
+function threadCover(
+  thread: Thread,
+  remoteCovers: Record<string, string>,
+): string | undefined {
+  return remoteCovers[thread.id] ?? imageCoverFromMessages(thread.messages);
 }
 
 export function useSpaceIndex(opts?: {
@@ -98,18 +71,38 @@ export function useSpaceIndex(opts?: {
   const { api, ctx, entityRevision, chatRevision } = useSpaceData();
   const { actor } = useApp();
   const enabled = opts?.enabled !== false;
-  const seed = readIndexSeed(ctx);
-  const [projects, setProjects] = useState(seed.projects);
-  const [sources, setSources] = useState(seed.sources);
-  const [briefing, setBriefing] = useState(seed.briefing);
-  const [threads, setThreads] = useState<Thread[]>(seed.threads);
-  const [loading, setLoading] = useState(!seed.ready);
+
+  const threads = useMemo(() => {
+    void chatRevision;
+    return filterThreads(getChatStoreSnapshot().threads, ctx.workspaceId);
+  }, [ctx.workspaceId, chatRevision]);
+
+  const projects = useMemo(() => {
+    void entityRevision;
+    const entity = getSpaceEntityStoreSnapshot();
+    return entity.seeded ? localSpaceEntityStore.listAllProjects(ctx) : [];
+  }, [ctx, entityRevision]);
+
+  const sources = useMemo(() => {
+    void entityRevision;
+    const entity = getSpaceEntityStoreSnapshot();
+    return entity.seeded ? localSpaceEntityStore.listSources(ctx) : [];
+  }, [ctx, entityRevision]);
+
+  const briefing = useMemo(() => {
+    void entityRevision;
+    const entity = getSpaceEntityStoreSnapshot();
+    return entity.seeded
+      ? filterRealBriefingItems(localSpaceEntityStore.listBriefingItems(ctx))
+      : [];
+  }, [ctx, entityRevision]);
+
+  const [remoteCovers, setRemoteCovers] = useState<Record<string, string>>({});
+  const [entitiesLoading, setEntitiesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const loaded = useRef(seed.ready);
+  const coverKey = useRef("");
   const lastWorkspace = useRef(ctx.workspaceId);
 
-  // One-shot ingest. Must not depend on entityRevision: syncBriefing notifies
-  // the entity store on success, which would re-run this effect and loop.
   useEffect(() => {
     if (!enabled) return;
     void api.connectors.syncBriefing(ctx).catch(() => {});
@@ -117,52 +110,57 @@ export function useSpaceIndex(opts?: {
 
   useEffect(() => {
     if (!enabled) return;
-    const nextSeed = readIndexSeed(ctx);
-    if (!nextSeed.ready) return;
-    setProjects(nextSeed.projects);
-    setSources(nextSeed.sources);
-    setBriefing(nextSeed.briefing);
-    setThreads(nextSeed.threads);
-    loaded.current = true;
-    setLoading(false);
-  }, [ctx, entityRevision, chatRevision, enabled]);
+    const turnThreadIds = threads
+      .filter((thread) => threadHasTurns(thread))
+      .map(
+        (thread) =>
+          `${thread.id}:${thread.updatedAt}:${thread.messages.at(-1)?.id ?? ""}`,
+      )
+      .sort()
+      .join(",");
+    if (coverKey.current === turnThreadIds) return;
+    coverKey.current = turnThreadIds;
+    if (!turnThreadIds) {
+      setRemoteCovers({});
+      return;
+    }
+    let cancelled = false;
+    void api.chat
+      .getThreadCoverUrls(ctx, turnThreadIds.split(","))
+      .then((map) => {
+        if (cancelled) return;
+        setRemoteCovers(Object.fromEntries(map));
+      })
+      .catch(() => {
+        if (!cancelled) setRemoteCovers({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api.chat, ctx, enabled, threads]);
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     if (lastWorkspace.current !== ctx.workspaceId) {
       lastWorkspace.current = ctx.workspaceId;
-      loaded.current = false;
+      setRemoteCovers({});
+      coverKey.current = "";
     }
-    const nextSeed = readIndexSeed(ctx);
-    if (!loaded.current && nextSeed.ready) {
-      setProjects(nextSeed.projects);
-      setSources(nextSeed.sources);
-      setBriefing(nextSeed.briefing);
-      setThreads(nextSeed.threads);
-    } else if (!loaded.current && !nextSeed.ready) {
-      setLoading(true);
-    }
+    setEntitiesLoading(true);
     setError(null);
     Promise.all([
       api.entities.listAllProjects(ctx),
       api.entities.listSources(ctx),
       api.entities.listBriefingItems(ctx),
     ])
-      .then(([nextProjects, nextSources, nextBriefing]) => {
-        if (cancelled) return;
-        setProjects(nextProjects);
-        setSources(nextSources);
-        setBriefing(filterRealBriefingItems(nextBriefing));
-      })
       .catch((err: unknown) => {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load index");
         }
       })
       .finally(() => {
-        loaded.current = true;
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setEntitiesLoading(false);
       });
     return () => {
       cancelled = true;
@@ -174,9 +172,7 @@ export function useSpaceIndex(opts?: {
     const items: SpaceIndexEntry[] = [];
 
     for (const thread of threads) {
-      // Empty space/project docks do not belong in Recents until a turn exists.
       if (!threadHasTurns(thread)) continue;
-      // Owner-private: only the current user's chats in the index.
       if (thread.createdBy && thread.createdBy !== actor.id) continue;
       if (thread.projectId) usedProjects.add(thread.projectId);
       const creator = attributionFor(thread.workspaceId, thread.createdBy, actor.id);
@@ -197,9 +193,10 @@ export function useSpaceIndex(opts?: {
         rank: recencyRank(thread.updatedAt),
         badge: "Chat",
         snippet: thread.snippet,
-        cover: threadImageCover(thread),
+        cover: threadCover(thread, remoteCovers),
         createdById: thread.createdBy,
         createdByName: creator ?? undefined,
+        linkedProjectId: thread.projectId,
       });
     }
 
@@ -247,7 +244,6 @@ export function useSpaceIndex(opts?: {
       });
     }
 
-    // Only real connector briefing activity — never legacy demo templates.
     for (const item of filterRealBriefingItems(briefing)) {
       items.push({
         key: item.id,
@@ -273,9 +269,22 @@ export function useSpaceIndex(opts?: {
       sorted = filterIndexEntries(sorted, opts.query);
     }
     return sorted;
-  }, [threads, projects, sources, briefing, opts?.space, opts?.query, actor.id]);
+  }, [
+    threads,
+    projects,
+    sources,
+    briefing,
+    remoteCovers,
+    opts?.space,
+    opts?.query,
+    actor.id,
+  ]);
 
-  return { entries, loading: loading && entries.length === 0, error };
+  const entityReady = getSpaceEntityStoreSnapshot().seeded;
+  const loading =
+    entitiesLoading && entries.length === 0 && !entityReady && !threads.length;
+
+  return { entries, loading, error };
 }
 
 export function openIndexEntry(

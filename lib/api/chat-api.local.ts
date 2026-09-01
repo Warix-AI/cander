@@ -15,6 +15,7 @@ import type {
   WorkspaceCtx,
 } from "@/lib/space-entities";
 import type { Message, SpaceId, Thread } from "@/lib/types";
+import { imageCoverFromMessages } from "@/lib/chat-image-cover";
 
 function nowTime() {
   return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -68,6 +69,18 @@ function composeAssistantReply(
 
 export function createLocalChatApi(): ChatApi {
   return {
+    async getThreadCoverUrls(ctx, threadIds) {
+      const covers = new Map<string, string>();
+      for (const id of threadIds) {
+        const thread = getChatThreads().find(
+          (item) => item.id === id && item.workspaceId === ctx.workspaceId,
+        );
+        const url = thread ? imageCoverFromMessages(thread.messages) : undefined;
+        if (url) covers.set(id, url);
+      }
+      return covers;
+    },
+
     async listThreads(ctx, filter?: ThreadFilter) {
       return filterThreads(getChatThreads(), ctx.workspaceId, filter);
     },

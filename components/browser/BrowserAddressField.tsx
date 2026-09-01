@@ -12,6 +12,7 @@ export function BrowserAddressField({
   onDraftChange,
   onCommit,
   className,
+  showFavicon = true,
 }: {
   url: string;
   faviconUrl?: string | null;
@@ -19,6 +20,7 @@ export function BrowserAddressField({
   onDraftChange: (value: string) => void;
   onCommit: () => void;
   className?: string;
+  showFavicon?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -82,7 +84,9 @@ export function BrowserAddressField({
         </span>
       ) : (
         <>
-          <FaviconImage url={url} faviconUrl={faviconUrl} size={14} />
+          {showFavicon ? (
+            <FaviconImage url={url} faviconUrl={faviconUrl} size={14} />
+          ) : null}
           <span className="truncate text-[13px] font-normal tracking-[-0.01em] text-foreground">
             {displayHost}
           </span>

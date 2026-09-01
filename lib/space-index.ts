@@ -17,6 +17,8 @@ export type SpaceIndexEntry = {
   snippet?: string;
   createdById?: string;
   createdByName?: string;
+  /** Set when a thread row is tied to a build/explore project. */
+  linkedProjectId?: string;
 };
 
 /** Lower rank = more recent. Works with ISO timestamps and legacy relative strings. */

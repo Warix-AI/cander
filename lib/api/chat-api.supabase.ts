@@ -19,6 +19,7 @@ import type {
   WorkspaceCtx,
 } from "@/lib/space-entities";
 import type { Message, Thread } from "@/lib/types";
+import { imageCoverFromBlocks, imageCoverFromMessages } from "@/lib/chat-image-cover";
 
 const MESSAGE_COLUMNS_LIGHT =
   "id, thread_id, workspace_id, role, content, at_label, space_switch, citations, sort_order, created_at";
@@ -63,6 +64,43 @@ async function loadMessagesForThreads(
   return grouped;
 }
 
+async function loadThreadCoverUrls(threadIds: string[]) {
+  const covers = new Map<string, string>();
+  if (!threadIds.length) return covers;
+
+  const supabase = createSupabaseBrowserClient();
+  const pending = new Set(threadIds);
+  let offset = 0;
+
+  while (pending.size > 0) {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("thread_id, blocks, sort_order")
+      .in("thread_id", threadIds)
+      .not("blocks", "is", null)
+      .order("sort_order", { ascending: false })
+      .range(offset, offset + MESSAGE_PAGE_SIZE - 1);
+    if (error) throw error;
+
+    const batch = (data ?? []) as Pick<MessageRow, "thread_id" | "blocks">[];
+    if (!batch.length) break;
+
+    for (const row of batch) {
+      if (covers.has(row.thread_id)) continue;
+      const url = imageCoverFromBlocks(row.blocks);
+      if (url) {
+        covers.set(row.thread_id, url);
+        pending.delete(row.thread_id);
+      }
+    }
+
+    if (batch.length < MESSAGE_PAGE_SIZE) break;
+    offset += MESSAGE_PAGE_SIZE;
+  }
+
+  return covers;
+}
+
 function applyFilter(threads: Thread[], filter?: ThreadFilter) {
   if (!filter) return threads;
   return threads.filter((item) => {
@@ -88,6 +126,10 @@ async function callChatSendEdge(opts: {
 
 export function createSupabaseChatApi(): ChatApi {
   return {
+    async getThreadCoverUrls(_ctx, threadIds) {
+      return loadThreadCoverUrls(threadIds);
+    },
+
     async listThreads(ctx, filter) {
       const supabase = createSupabaseBrowserClient();
       const { data, error } = await supabase

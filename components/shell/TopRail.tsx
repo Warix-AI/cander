@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { X, Trash2 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { MobileSurfaceToggle } from "@/components/shell/MobileSurfaceChrome";
@@ -23,6 +24,7 @@ export function TopRail() {
     skillId,
   } = useApp();
   const mobile = useMobileShell();
+  const [deleteBlockedOpen, setDeleteBlockedOpen] = useState(false);
 
   const spaceChatOpen =
     view === "space" && (drafting || Boolean(thread));
@@ -59,7 +61,13 @@ export function TopRail() {
             <button
               type="button"
               aria-label="Delete chat"
-              onClick={() => void deleteChat(thread.id)}
+              onClick={() => {
+                if (thread.projectId) {
+                  setDeleteBlockedOpen(true);
+                  return;
+                }
+                deleteChat(thread.id);
+              }}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive"
             >
               <Trash2 className="h-4 w-4" strokeWidth={1.6} />
@@ -84,6 +92,31 @@ export function TopRail() {
         >
           <X className="h-4 w-4" strokeWidth={1.6} />
         </button>
+      ) : null}
+      {deleteBlockedOpen ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-start justify-center bg-black/20 pt-24"
+          onClick={() => setDeleteBlockedOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-[16px] border border-border bg-background p-4 shadow-lg"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-[14px] font-medium tracking-[-0.01em]">
+              Can&apos;t delete chat
+            </p>
+            <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+              This chat is tied to its project. Delete the project to remove it.
+            </p>
+            <button
+              type="button"
+              onClick={() => setDeleteBlockedOpen(false)}
+              className="mt-4 h-9 rounded-[10px] bg-foreground px-3.5 text-[13px] font-medium text-background"
+            >
+              OK
+            </button>
+          </div>
+        </div>
       ) : null}
     </header>
   );

@@ -46,6 +46,7 @@ import {
   getSpaceEntityStoreServerSnapshot,
   getSpaceEntityStoreSnapshot,
   localSpaceEntityStore,
+  notifyEntityStoreChange,
   subscribeSpaceEntityStore,
 } from "@/lib/api/space-entity-store";
 import { getDataBackend, isSupabaseConfigured } from "@/lib/data-backend";
@@ -156,6 +157,7 @@ import type {
 import { isSpaceLibrarySpace } from "@/lib/space-library";
 import {
   adoptThreadAsUniversalDefault,
+  continuousChatId,
   openSpaceDefaultChat,
   projectChatId,
   startContinuousChat,
@@ -329,7 +331,7 @@ type AppContextValue = {
   clearSessionSummary: (threadId?: string | null) => void;
   updateSessionSummary: (text: string, threadId?: string | null) => void;
   clearPersistentChat: (threadId?: string | null) => void;
-  deleteChat: (threadId?: string | null) => void;
+  deleteChat: (id?: string | null) => boolean;
   deleteProjectCompletely: (projectId: string) => Promise<void>;
   sendMessage: (text: string, opts?: SendOpts) => void;
   /** After a clarification card submit — persist answers and continue the assistant. */
@@ -1263,6 +1265,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setThreadId(tid);
     setDrafting(false);
     setSpaceId(null);
+    setProjectId(null);
     setView("chat");
     setPanelIntent("browse");
     setPanelMode("split");
@@ -1368,20 +1371,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const deleteChat = useCallback(
-    async (id?: string | null) => {
+    (id?: string | null) => {
       const target = id ?? threadId;
-      if (!target) return;
+      if (!target) return false;
       const row = threads.find((item) => item.id === target);
+      if (row?.projectId) return false;
       if (
         row?.aiChatId &&
         !row.aiChatId.startsWith("local-") &&
         supabaseUser
       ) {
-        try {
-          await deleteAiChat(row.aiChatId);
-        } catch {
+        void deleteAiChat(row.aiChatId).catch(() => {
           // Still remove locally when offline or already deleted server-side.
-        }
+        });
       }
       setThreads((current) => current.filter((item) => item.id !== target));
       if (threadId === target) {
@@ -1391,6 +1393,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setMobileSurface("panel");
         }
       }
+      return true;
     },
     [threadId, threads, supabaseUser, projectId],
   );
@@ -1998,6 +2001,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           space === "connectors");
       const usePersistent = useProjectPersistent || useContinuousPersistent;
       let activeId = threadId ?? nextId("t");
+      const detachedDraft = view === "chat" && !spaceId && !opts?.space;
 
       setThreads((current) => {
         let list = current;
@@ -2011,7 +2015,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           list = upserted.threads;
           activeId = upserted.id;
         } else if (useContinuousPersistent) {
-          const detachedDraft = view === "chat" && !spaceId && !opts?.space;
           if (detachedDraft) {
             activeId = threadId ?? nextId("t");
           } else {
@@ -2028,43 +2031,61 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         }
         const existing = list.find((item) => item.id === activeId);
-        if (existing) {
-          return list.map((item) =>
-            item.id === existing.id
-              ? {
-                  ...item,
-                  title: item.messages.length ? item.title : displayText.slice(0, 48),
-                  snippet: displayText,
-                  updatedAt: new Date().toISOString(),
-                  spaceId: chatSpace ?? item.spaceId ?? undefined,
-                  projectId: useProjectPersistent
-                    ? projectId ?? item.projectId
-                    : (intent.projectId ?? item.projectId),
-                  workspaceId: matched?.workspaceId ?? item.workspaceId,
-                  persistent: usePersistent ? true : item.persistent,
-                  sessionSummary: null,
-                  createdBy: item.createdBy ?? actor.id,
-                  messages: [...item.messages, userMsg, assistantMsg],
-                }
-              : item,
+        let next = existing
+          ? list.map((item) =>
+              item.id === existing.id
+                ? {
+                    ...item,
+                    title: item.messages.length ? item.title : displayText.slice(0, 48),
+                    snippet: displayText,
+                    updatedAt: new Date().toISOString(),
+                    spaceId: chatSpace ?? item.spaceId ?? undefined,
+                    projectId: useProjectPersistent
+                      ? projectId ?? item.projectId
+                      : (intent.projectId ?? item.projectId),
+                    workspaceId: matched?.workspaceId ?? item.workspaceId,
+                    persistent: usePersistent ? true : item.persistent,
+                    sessionSummary: null,
+                    createdBy: item.createdBy ?? actor.id,
+                    messages: [...item.messages, userMsg, assistantMsg],
+                  }
+                : item,
+            )
+          : [
+              {
+                id: activeId,
+                title: displayText.slice(0, 52),
+                workspaceId: matched?.workspaceId ?? workspaceId,
+                projectId: useProjectPersistent ? projectId ?? undefined : intent.projectId,
+                spaceId:
+                  chatSpace ??
+                  (useContinuousPersistent ? "work" : undefined),
+                updatedAt: new Date().toISOString(),
+                snippet: displayText,
+                messages: [userMsg, assistantMsg],
+                persistent: usePersistent || undefined,
+                sessionSummary: null,
+                createdBy: actor.id,
+              } satisfies Thread,
+              ...list,
+            ];
+
+        if (
+          onUnscopedChat &&
+          !projectId &&
+          detachedDraft &&
+          !next.some((item) => item.id === continuousChatId(workspaceId))
+        ) {
+          const promoted = adoptThreadAsUniversalDefault(
+            next,
+            workspaceId,
+            activeId,
           );
+          next = promoted.threads;
+          activeId = promoted.id;
         }
-        const created: Thread = {
-          id: activeId,
-          title: displayText.slice(0, 52),
-          workspaceId: matched?.workspaceId ?? workspaceId,
-          projectId: useProjectPersistent ? projectId ?? undefined : intent.projectId,
-          spaceId:
-            chatSpace ??
-            (useContinuousPersistent ? "work" : undefined),
-          updatedAt: new Date().toISOString(),
-          snippet: displayText,
-          messages: [userMsg, assistantMsg],
-          persistent: usePersistent || undefined,
-          sessionSummary: null,
-          createdBy: actor.id,
-        };
-        return [created, ...list];
+
+        return next;
       });
       setThreadId(activeId);
       setDrafting(false);
@@ -3443,9 +3464,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const pid = targetProjectId.trim();
       if (!pid) return;
       const ctx = { workspaceId, actorId: actor.id };
-      const api = createApiBundle(getDataBackend());
-      await api.entities.deleteProject(ctx, pid);
       const linkedChatId = projectChatId(workspaceId, pid);
+
+      localSpaceEntityStore.deleteProject(ctx, pid);
+      notifyEntityStoreChange();
       setThreads((current) =>
         current.filter(
           (item) => item.projectId !== pid && item.id !== linkedChatId,
@@ -3454,6 +3476,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (projectId === pid) {
         backToSpaceHome();
       }
+
+      const api = createApiBundle(getDataBackend());
+      await api.entities.deleteProject(ctx, pid);
     },
     [workspaceId, actor.id, projectId, backToSpaceHome],
   );

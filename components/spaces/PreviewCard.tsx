@@ -51,6 +51,10 @@ export type PreviewEntry = {
   bannerKey?: BannerKey;
   /** Recents index kind — drives delete chat vs delete project. */
   indexKind?: IndexEntryKind;
+  /** Chat thread id when indexKind is "thread". */
+  threadId?: string;
+  /** When set, this chat cannot be deleted independently of the project. */
+  linkedProjectId?: string;
 };
 
 export function PreviewGrid({
@@ -444,6 +448,7 @@ function PreviewActions({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteBlockedNote, setDeleteBlockedNote] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState(item.name);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameBusy, setRenameBusy] = useState(false);
@@ -488,12 +493,25 @@ function PreviewActions({
     setMenuOpen(false);
   };
 
+  const isProjectTiedChat = isChat && Boolean(item.linkedProjectId);
+  const chatThreadId = item.threadId ?? item.projectId;
+
+  const tryDeleteChat = () => {
+    if (isProjectTiedChat) {
+      setDeleteBlockedNote(
+        "This chat is tied to its project. Delete the project to remove it.",
+      );
+      return;
+    }
+    void deleteChat(chatThreadId);
+  };
+
   const confirmDeleteProject = async () => {
+    setDeleteOpen(false);
+    setDeleteConfirm("");
     setDeleteBusy(true);
     try {
       await deleteProjectCompletely(item.projectId);
-      setDeleteOpen(false);
-      setDeleteConfirm("");
     } finally {
       setDeleteBusy(false);
     }
@@ -508,7 +526,7 @@ function PreviewActions({
           destructive
           onClick={() =>
             runAndClose(() => {
-              void deleteChat(item.projectId);
+              tryDeleteChat();
             })
           }
         />
@@ -535,7 +553,7 @@ function PreviewActions({
           type="button"
           role="menuitem"
           onClick={() => {
-            void deleteChat(item.projectId);
+            tryDeleteChat();
             close();
           }}
           className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] text-destructive hover:bg-muted"
@@ -947,6 +965,55 @@ function PreviewActions({
                 }}
                 onConfirm={() => void confirmDeleteProject()}
               />
+            </div>
+          </div>
+        )
+      ) : null}
+      {deleteBlockedNote ? (
+        mobile ? (
+          <MobileBottomSheet
+            open={Boolean(deleteBlockedNote)}
+            onClose={() => setDeleteBlockedNote(null)}
+            mode="space"
+          >
+            <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
+              <p className="text-[15px] font-medium tracking-[-0.01em]">
+                Can&apos;t delete chat
+              </p>
+              <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+                {deleteBlockedNote}
+              </p>
+              <button
+                type="button"
+                onClick={() => setDeleteBlockedNote(null)}
+                className="mt-4 h-10 w-full rounded-[12px] bg-foreground text-[13px] font-medium text-background"
+              >
+                OK
+              </button>
+            </div>
+          </MobileBottomSheet>
+        ) : (
+          <div
+            className="fixed inset-0 z-[60] flex items-start justify-center bg-black/20 pt-24"
+            onClick={() => setDeleteBlockedNote(null)}
+          >
+            <div
+              className="w-full max-w-sm rounded-[16px] border border-border bg-background p-4 shadow-lg"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="text-[14px] font-medium tracking-[-0.01em]">
+                Can&apos;t delete chat
+              </p>
+              <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+                {deleteBlockedNote}
+              </p>
+              <button
+                type="button"
+                onClick={() => setDeleteBlockedNote(null)}
+                className="mt-4 h-9 rounded-[10px] bg-foreground px-3.5 text-[13px] font-medium text-background"
+              >
+                OK
+              </button>
             </div>
           </div>
         )

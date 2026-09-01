@@ -16,7 +16,6 @@ import {
   Pencil,
   Plus,
   RotateCw,
-  Trash2,
   Upload,
   Workflow,
   X,
@@ -28,12 +27,10 @@ import { BrowserSurfaceHost } from "@/components/browser/BrowserSurfaceHost";
 import { BrowserAddressField } from "@/components/browser/BrowserAddressField";
 import { BrowserChromeTooltip } from "@/components/browser/BrowserChromeTooltip";
 import { FaviconImage } from "@/components/browser/FaviconImage";
-import { NativeOverlayGate } from "@/components/browser/NativeOverlayGate";
 import { getBrowserSurfaceAdapter } from "@/lib/browser-surface";
 import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import {
   MobileBottomSheet,
-  DeleteProjectSheetBody,
   ProjectAddSheetHeader,
   ProjectRenameSheetBody,
 } from "@/components/browser/ProjectMobileSheets";
@@ -115,14 +112,10 @@ export function ProjectBrowserPanel() {
     refreshPreview,
     liveUrl,
     mobileSurface,
-    deleteProjectCompletely,
   } = useApp();
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
   const [mobileSheet, setMobileSheet] = useState<"add" | "rename" | null>(null);
-  const [desktopDeleteOpen, setDesktopDeleteOpen] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
-  const [deleteBusy, setDeleteBusy] = useState(false);
   const [addQuery, setAddQuery] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -540,22 +533,6 @@ export function ProjectBrowserPanel() {
       )
     : extraProjects;
 
-  const confirmDeleteProject = async () => {
-    if (!projectId || deleteConfirmText.trim().toLowerCase() !== "delete") return;
-    setDeleteBusy(true);
-    try {
-      await deleteProjectCompletely(projectId);
-      setDesktopDeleteOpen(false);
-      setDeleteConfirmText("");
-    } catch (err) {
-      setRenameError(
-        err instanceof Error ? err.message : "Could not delete project.",
-      );
-    } finally {
-      setDeleteBusy(false);
-    }
-  };
-
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-sidebar">
       {mobile ? null : (
@@ -660,6 +637,7 @@ export function ProjectBrowserPanel() {
               draft={urlDraft}
               onDraftChange={setUrlDraft}
               onCommit={commitUrl}
+              showFavicon={false}
             />
           </div>
           <div className="ml-auto flex shrink-0 items-center">
@@ -674,10 +652,6 @@ export function ProjectBrowserPanel() {
               onRefresh={() => {
                 refreshPreview();
                 runBrowserNav("reload");
-              }}
-              onDelete={() => {
-                setDeleteConfirmText("");
-                setDesktopDeleteOpen(true);
               }}
             />
           </div>
@@ -726,24 +700,6 @@ export function ProjectBrowserPanel() {
                 {renameBusy ? "Saving…" : "Save"}
               </button>
             </div>
-          </div>
-        </div>
-      ) : null}
-
-      {desktopDeleteOpen ? (
-        <div className="absolute inset-0 z-40 flex items-start justify-center bg-black/20 pt-24">
-          <div className="w-full max-w-sm rounded-[16px] border border-border bg-background p-4 shadow-lg">
-            <DeleteProjectSheetBody
-              projectName={projectTitle}
-              busy={deleteBusy}
-              confirmText={deleteConfirmText}
-              onConfirmTextChange={setDeleteConfirmText}
-              onCancel={() => {
-                setDesktopDeleteOpen(false);
-                setDeleteConfirmText("");
-              }}
-              onConfirm={() => void confirmDeleteProject()}
-            />
           </div>
         </div>
       ) : null}
@@ -1134,7 +1090,6 @@ function DesktopProjectToolsMenu({
   onOpenExternal,
   onSelectElement,
   onRefresh,
-  onDelete,
 }: {
   selectMode: boolean;
   canRename: boolean;
@@ -1144,20 +1099,16 @@ function DesktopProjectToolsMenu({
   onOpenExternal: () => void;
   onSelectElement: () => void;
   onRefresh: () => void;
-  onDelete: () => void;
 }) {
   return (
     <Dropdown
       align="end"
       matchTrigger={false}
-      menuClassName="min-w-[14rem]"
-      trigger={({ open, toggle }) => (
-        <>
-          <NativeOverlayGate open={open} />
-          <RailBtn label="Project tools" onClick={toggle}>
-            <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
-          </RailBtn>
-        </>
+      menuClassName="min-w-[14rem] z-50"
+      trigger={({ toggle }) => (
+        <RailBtn label="Project tools" onClick={toggle}>
+          <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
+        </RailBtn>
       )}
     >
       {(close) => (
@@ -1218,15 +1169,6 @@ function DesktopProjectToolsMenu({
             }}
           >
             Refresh
-          </DesktopMenuItem>
-          <DesktopMenuItem
-            icon={Trash2}
-            onClick={() => {
-              onDelete();
-              close();
-            }}
-          >
-            Delete project
           </DesktopMenuItem>
         </>
       )}
@@ -1399,23 +1341,20 @@ function AddTabMenu({
       align="start"
       matchTrigger={false}
       menuClassName="min-w-[14rem] max-h-[min(20rem,50vh)] overflow-y-auto"
-      trigger={({ open, toggle }) => (
-        <>
-          <NativeOverlayGate open={open} />
-          <BrowserChromeTooltip label="New tab">
-            <button
-              type="button"
-              aria-label="New tab"
-              onClick={toggle}
-              className={cn(
-                "inline-flex shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground",
-                compact ? "h-9 w-9 rounded-full" : "h-7 w-7 rounded-lg",
-              )}
-            >
-              <Plus className={compact ? "h-4 w-4" : "h-3.5 w-3.5"} strokeWidth={1.8} />
-            </button>
-          </BrowserChromeTooltip>
-        </>
+      trigger={({ toggle }) => (
+        <BrowserChromeTooltip label="New tab">
+          <button
+            type="button"
+            aria-label="New tab"
+            onClick={toggle}
+            className={cn(
+              "inline-flex shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground",
+              compact ? "h-9 w-9 rounded-full" : "h-7 w-7 rounded-lg",
+            )}
+          >
+            <Plus className={compact ? "h-4 w-4" : "h-3.5 w-3.5"} strokeWidth={1.8} />
+          </button>
+        </BrowserChromeTooltip>
       )}
     >
       {(close) => (
