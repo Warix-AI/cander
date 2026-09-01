@@ -4,6 +4,20 @@
 
 const COMPOSIO_API_BASE = "https://backend.composio.dev/api/v3.1";
 
+const COMPOSIO_API_KEY_NAMES = [
+  "COMPOSIO_API_KEY",
+  "COMPOSIO_KEY",
+  "COMPOSIO_PROJECT_API_KEY",
+] as const;
+
+function readComposioApiKey(): string | null {
+  for (const name of COMPOSIO_API_KEY_NAMES) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
 export function composioConfigurationStatus(): {
   ok: boolean;
   missing: string[];
@@ -13,7 +27,7 @@ export function composioConfigurationStatus(): {
     .filter((key) => key.startsWith("COMPOSIO_"))
     .sort();
   const missing: string[] = [];
-  if (!process.env.COMPOSIO_API_KEY?.trim()) {
+  if (!readComposioApiKey()) {
     missing.push("COMPOSIO_API_KEY");
   }
   if (!process.env.COMPOSIO_GMAIL_AUTH_CONFIG_ID?.trim()) {
@@ -27,8 +41,12 @@ export function isComposioConfigured(): boolean {
 }
 
 function apiKey(): string {
-  const key = process.env.COMPOSIO_API_KEY?.trim();
-  if (!key) throw new Error("COMPOSIO_API_KEY is not configured");
+  const key = readComposioApiKey();
+  if (!key) {
+    throw new Error(
+      "COMPOSIO_API_KEY is not configured (also accepts COMPOSIO_KEY)",
+    );
+  }
   return key;
 }
 

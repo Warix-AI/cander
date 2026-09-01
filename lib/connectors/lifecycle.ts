@@ -249,7 +249,7 @@ async function beginProviderAuthorization(input: {
     return {
       ok: false,
       error: config.missing.length
-        ? `Composio is not configured on the server. Missing: ${config.missing.join(", ")}.${emptyHint}${present} Add missing vars on the cander Vercel project (Production), then redeploy.`
+        ? `Composio is not configured on the server. Missing: ${config.missing.join(", ")}.${emptyHint}${present} Set COMPOSIO_API_KEY (or COMPOSIO_KEY) on the cander Vercel project for Production, then redeploy.`
         : `Composio is not configured on the server. Redeploy after setting env vars.${present}`,
     };
   }
