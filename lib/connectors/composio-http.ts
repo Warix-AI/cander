@@ -50,23 +50,36 @@ export async function createConnectLink(input: {
     }),
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
+    await res.text().catch(() => "");
     throw new Error(`Composio link failed (${res.status})`);
   }
-  const json = (await res.json()) as {
-    redirect_url?: string;
-    connected_account_id?: string;
-    link_token?: string;
-    expires_at?: string;
-  };
-  if (!json.redirect_url || !json.connected_account_id) {
+  const json = (await res.json()) as Record<string, unknown>;
+  const payload =
+    json && typeof json === "object" && json.data && typeof json.data === "object"
+      ? (json.data as Record<string, unknown>)
+      : json;
+  const redirectUrl =
+    (typeof payload.redirect_url === "string" && payload.redirect_url) ||
+    (typeof payload.redirectUrl === "string" && payload.redirectUrl) ||
+    null;
+  const connectedAccountId =
+    (typeof payload.connected_account_id === "string" && payload.connected_account_id) ||
+    (typeof payload.connectedAccountId === "string" && payload.connectedAccountId) ||
+    null;
+  if (!redirectUrl || !connectedAccountId) {
     throw new Error("Composio link response incomplete");
   }
   return {
-    redirectUrl: json.redirect_url,
-    connectedAccountId: json.connected_account_id,
-    linkToken: json.link_token ?? json.connected_account_id,
-    expiresAt: json.expires_at ?? new Date(Date.now() + 600_000).toISOString(),
+    redirectUrl,
+    connectedAccountId,
+    linkToken:
+      (typeof payload.link_token === "string" && payload.link_token) ||
+      (typeof payload.linkToken === "string" && payload.linkToken) ||
+      connectedAccountId,
+    expiresAt:
+      (typeof payload.expires_at === "string" && payload.expires_at) ||
+      (typeof payload.expiresAt === "string" && payload.expiresAt) ||
+      new Date(Date.now() + 600_000).toISOString(),
   };
 }
 

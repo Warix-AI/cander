@@ -129,6 +129,9 @@ export async function initiateConnection(input: {
         ownerId: input.ownerId,
         connectorId: input.connectorId,
       });
+      if (!auth.ok) {
+        return { ok: false, status: 502, error: auth.error };
+      }
       return {
         ok: true,
         connection: connectionRowToPublic(row),
@@ -181,6 +184,9 @@ export async function initiateConnection(input: {
           ownerId: input.ownerId,
           connectorId: input.connectorId,
         });
+        if (!auth.ok) {
+          return { ok: false, status: 502, error: auth.error };
+        }
         return {
           ok: true,
           connection: connectionRowToPublic(raced as ConnectorConnectionRow),
@@ -208,6 +214,9 @@ export async function initiateConnection(input: {
     ownerId: input.ownerId,
     connectorId: input.connectorId,
   });
+  if (!auth.ok) {
+    return { ok: false, status: 502, error: auth.error };
+  }
 
   return {
     ok: true,
@@ -222,9 +231,18 @@ async function beginProviderAuthorization(input: {
   workspaceId: string;
   ownerId: string;
   connectorId: string;
-}): Promise<{ authorizationUrl?: string }> {
+}): Promise<
+  | { ok: true; authorizationUrl: string }
+  | { ok: false; error: string }
+> {
   const provider = getConnectorProvider();
-  if (provider.name === "noop") return {};
+  if (provider.name === "noop") {
+    return {
+      ok: false,
+      error:
+        "Composio is not configured on the server. Set COMPOSIO_API_KEY and COMPOSIO_GMAIL_AUTH_CONFIG_ID, then redeploy.",
+    };
+  }
 
   const begin = await provider.beginAuthorization({
     connectorId: input.connectorId,
@@ -232,7 +250,10 @@ async function beginProviderAuthorization(input: {
     ownerId: input.ownerId,
   });
   if (!begin.ok || !begin.authorizationUrl) {
-    return {};
+    return {
+      ok: false,
+      error: begin.error ?? "Could not start authorization with Composio.",
+    };
   }
 
   const admin = createSupabaseAdminClient();
@@ -252,7 +273,7 @@ async function beginProviderAuthorization(input: {
     .eq("id", input.connectionId)
     .eq("owner_id", input.ownerId);
 
-  return { authorizationUrl: begin.authorizationUrl };
+  return { ok: true, authorizationUrl: begin.authorizationUrl };
 }
 
 export async function verifyOAuthCallback(input: {

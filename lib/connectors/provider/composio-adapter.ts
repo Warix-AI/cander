@@ -34,8 +34,10 @@ export const composioProviderAdapter: ConnectorProviderAdapter = {
         authorizationUrl: link.redirectUrl,
         linkSessionRef: link.connectedAccountId,
       };
-    } catch {
-      return { ok: false, error: "Could not start authorization." };
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not start authorization.";
+      return { ok: false, error: message };
     }
   },
 
