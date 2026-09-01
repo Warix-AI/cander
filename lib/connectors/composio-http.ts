@@ -4,11 +4,22 @@
 
 const COMPOSIO_API_BASE = "https://backend.composio.dev/api/v3.1";
 
+export function composioConfigurationStatus(): {
+  ok: boolean;
+  missing: string[];
+} {
+  const missing: string[] = [];
+  if (!process.env.COMPOSIO_API_KEY?.trim()) {
+    missing.push("COMPOSIO_API_KEY");
+  }
+  if (!process.env.COMPOSIO_GMAIL_AUTH_CONFIG_ID?.trim()) {
+    missing.push("COMPOSIO_GMAIL_AUTH_CONFIG_ID");
+  }
+  return { ok: missing.length === 0, missing };
+}
+
 export function isComposioConfigured(): boolean {
-  return Boolean(
-    process.env.COMPOSIO_API_KEY?.trim() &&
-      process.env.COMPOSIO_GMAIL_AUTH_CONFIG_ID?.trim(),
-  );
+  return composioConfigurationStatus().ok;
 }
 
 function apiKey(): string {

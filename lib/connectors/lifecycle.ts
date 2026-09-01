@@ -237,10 +237,12 @@ async function beginProviderAuthorization(input: {
 > {
   const provider = getConnectorProvider();
   if (provider.name === "noop") {
+    const config = composioConfigurationStatus();
     return {
       ok: false,
-      error:
-        "Composio is not configured on the server. Set COMPOSIO_API_KEY and COMPOSIO_GMAIL_AUTH_CONFIG_ID, then redeploy.",
+      error: config.missing.length
+        ? `Composio is not configured on the server. Missing: ${config.missing.join(", ")}. Add them in Vercel Production for the cander project, then redeploy.`
+        : "Composio is not configured on the server. Redeploy after setting env vars.",
     };
   }
 
