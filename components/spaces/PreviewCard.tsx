@@ -925,7 +925,7 @@ function PreviewActions({
               setDeleteOpen(false);
               setDeleteConfirm("");
             }}
-            mode="space"
+            mode="delete"
           >
             <DeleteProjectSheetBody
               projectName={item.name}
@@ -974,13 +974,13 @@ function PreviewActions({
           <MobileBottomSheet
             open={Boolean(deleteBlockedNote)}
             onClose={() => setDeleteBlockedNote(null)}
-            mode="space"
+            mode="delete"
           >
-            <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
+            <div className="flex min-h-0 flex-1 flex-col px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
               <p className="text-[15px] font-medium tracking-[-0.01em]">
                 Can&apos;t delete chat
               </p>
-              <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+              <p className="mt-2 flex-1 text-[13px] leading-relaxed text-muted-foreground">
                 {deleteBlockedNote}
               </p>
               <button

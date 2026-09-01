@@ -28,7 +28,7 @@ import { PanelToggle } from "@/components/shell/PanelToggle";
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import { cn } from "@/lib/utils";
 
-export type ProjectSheetMode = "actions" | "info" | "add" | "rename" | "space";
+export type ProjectSheetMode = "actions" | "info" | "add" | "rename" | "delete" | "space";
 
 const DISMISS_PX = 110;
 const DISMISS_VELOCITY = 0.55;
@@ -113,7 +113,7 @@ export function MobileBottomSheet({
   const heightClass =
     mode === "actions"
       ? "min-h-[min(58dvh,520px)] max-h-[92dvh]"
-      : mode === "add" || mode === "rename"
+      : mode === "add" || mode === "rename" || mode === "delete"
         ? "min-h-[min(85dvh,720px)] max-h-[92dvh]"
         : mode === "info" || mode === "space"
           ? "max-h-[92dvh]"
@@ -176,7 +176,6 @@ type ActionsPane = "main" | "publish" | "domains";
 
 export function ProjectActionsSheetBody({
   published,
-  projectName,
   selectMode,
   canRename,
   onOpenExternal,
@@ -185,7 +184,6 @@ export function ProjectActionsSheetBody({
   onDelete,
 }: {
   published?: boolean;
-  projectName?: string;
   selectMode?: boolean;
   canRename?: boolean;
   onOpenExternal: () => void;
@@ -194,10 +192,11 @@ export function ProjectActionsSheetBody({
   onDelete?: () => void;
 }) {
   const [pane, setPane] = useState<ActionsPane>("main");
+  const publishLabel = published ? "Republish" : "Publish";
 
   useEffect(() => {
     setPane("main");
-  }, [projectName]);
+  }, [published]);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -208,29 +207,25 @@ export function ProjectActionsSheetBody({
         )}
       >
         <div className="flex min-h-0 flex-1 flex-col px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2.25rem)] pt-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <span
-              className={cn(
-                "inline-block h-2 w-2 shrink-0 rounded-full",
-                published ? "bg-emerald-500" : "bg-muted-foreground/50",
-              )}
-            />
+          <div className="flex items-center gap-3 px-3 py-1">
+            <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+              <span
+                className={cn(
+                  "h-2 w-2 rounded-full",
+                  published ? "bg-emerald-500" : "bg-muted-foreground/50",
+                )}
+              />
+            </span>
             <p className="text-[15px] font-medium tracking-[-0.01em]">
               {published ? "Published" : "Draft"}
             </p>
-            {projectName ? (
-              <p className="min-w-0 truncate text-[15px] text-muted-foreground">
-                {projectName}
-              </p>
-            ) : null}
           </div>
 
-          <div className="mt-4 space-y-0.5">
+          <div className="mt-3 space-y-0.5">
             <SheetAction
               icon={Upload}
-              label="Publish"
+              label={publishLabel}
               onClick={() => setPane("publish")}
-              primary
             />
             <SheetAction
               icon={Globe}
@@ -273,9 +268,9 @@ export function ProjectActionsSheetBody({
           pane === "publish" ? "translate-x-0" : "translate-x-full",
         )}
       >
-        <SheetSubHeader title="Publish" onBack={() => setPane("main")} />
+        <SheetSubHeader title={publishLabel} onBack={() => setPane("main")} />
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2.25rem)]">
-          <PublishPaneBody />
+          <PublishPaneBody published={published} />
         </div>
       </div>
 
@@ -319,7 +314,7 @@ function SheetSubHeader({
   );
 }
 
-function PublishPaneBody() {
+function PublishPaneBody({ published = false }: { published?: boolean }) {
   const { publishApp, liveUrl, project, projectId } = useApp();
   const { project: entityProject } = useSpaceProject(projectId);
   const { publishBuild } = useSpaceMutation();
@@ -360,10 +355,12 @@ function PublishPaneBody() {
     }
   }, [busy, projectId, publishApp, publishBuild, url]);
 
+  const publishLabel = published ? "Republish" : "Publish";
+
   return (
     <div>
       <h2 className="text-[1.25rem] font-semibold tracking-[-0.02em]">
-        Publish your app
+        {published ? "Republish your app" : "Publish your app"}
       </h2>
       <p className="mt-4 text-[13px] font-medium">Domain</p>
       <div className="mt-2 space-y-2">
@@ -409,7 +406,7 @@ function PublishPaneBody() {
         onClick={() => void handlePublish()}
         className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-full bg-foreground text-[14px] font-medium text-background disabled:opacity-50"
       >
-        {busy ? "Publishing…" : "Publish"}
+        {busy ? "Publishing…" : publishLabel}
       </button>
     </div>
   );
@@ -635,7 +632,7 @@ export function DeleteProjectSheetBody({
 }) {
   const ok = confirmText.trim().toLowerCase() === "delete";
   return (
-    <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2rem)] pt-1">
+    <div className="flex min-h-0 flex-1 flex-col px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2rem)] pt-1">
       <p className="text-[17px] font-medium tracking-[-0.02em]">Delete project</p>
       <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">
         This permanently removes{" "}

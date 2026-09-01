@@ -256,7 +256,7 @@ export function ChatColumn() {
             <div ref={endRef} />
           )}
         </div>
-        <div className={cn("shrink-0", MOBILE_APP_BG)}>
+        <div className={cn("sticky bottom-0 z-20 shrink-0", MOBILE_APP_BG)}>
           <ComposerDock onSend={send} autoFocus={autofocusComposer} />
         </div>
       </section>

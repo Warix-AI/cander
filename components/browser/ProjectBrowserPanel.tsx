@@ -80,6 +80,7 @@ import {
   isHttpUrl,
   normalizeBrowserUrl,
   previewUrlForProject,
+  displayHostFromUrl,
 } from "@/lib/preview-url";
 import type { ProjectKind, SpaceProject } from "@/lib/space-entities";
 import { DESKTOP_NO_DRAG, useDesktopShell } from "@/lib/desktop-shell";
@@ -733,15 +734,27 @@ export function ProjectBrowserPanel() {
         ) : null}
       </div>
       {mobile ? (
-        <ProjectMobileTabBar
-          tabs={session.tabs}
-          activeId={active.id}
-          projects={allProjects}
-          projectTitle={projectTitle}
-          onSelect={selectTab}
-          onClose={closeTab}
-          onAdd={openAddSheet}
-        />
+        <>
+          <button
+            type="button"
+            aria-label="Edit address"
+            onClick={() => setMobileNavOpen(true)}
+            className="relative z-10 flex shrink-0 items-center border-t border-border bg-sidebar px-3 py-2.5"
+          >
+            <span className="min-w-0 flex-1 truncate text-center font-mono text-[13px] text-muted-foreground">
+              {displayHostFromUrl(address) || "Enter URL"}
+            </span>
+          </button>
+          <ProjectMobileTabBar
+            tabs={session.tabs}
+            activeId={active.id}
+            projects={allProjects}
+            projectTitle={projectTitle}
+            onSelect={selectTab}
+            onClose={closeTab}
+            onAdd={openAddSheet}
+          />
+        </>
       ) : null}
 
       <MobileBottomSheet
@@ -1025,7 +1038,7 @@ function ProjectMobileTabBar({
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-1.5 overflow-hidden border-t border-border bg-sidebar px-2 py-1.5 pb-[calc(env(safe-area-inset-bottom,0px)+0.375rem)]">
+    <div className="relative z-10 flex shrink-0 items-center gap-1.5 overflow-hidden border-t border-border bg-sidebar px-2 py-1.5 pb-[calc(env(safe-area-inset-bottom,0px)+0.375rem)]">
       {tabs.map((tab) => {
         const active = tab.id === activeId;
         const label = labelFor(tab);
@@ -1251,7 +1264,13 @@ function MobileBrowserNavSheet({
         className="absolute inset-0 bg-black/25"
         onClick={onClose}
       />
-      <div className="relative mx-3 mb-3 rounded-[16px] border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.22)]">
+      <div
+        className="relative mx-3 rounded-[16px] border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.22)]"
+        style={{
+          marginBottom:
+            "calc(env(safe-area-inset-bottom, 0px) + 0.75rem + var(--keyboard-inset, 0px))",
+        }}
+      >
         <div className="flex items-center gap-1">
           <RailBtn label="Back" disabled={!canBack} onClick={onBack}>
             <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />

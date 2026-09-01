@@ -19,9 +19,10 @@ import {
   EXPLORE_CREATE_OPTIONS,
   type ExploreStart,
 } from "@/components/spaces/NewExploreMenu";
-import { useSpaceMutation } from "@/lib/hooks/use-space-query";
+import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import { normalizeProjectTitle } from "@/lib/project-name";
 import { navLabel } from "@/lib/use-main-nav-items";
+import { dismissNativeKeyboard } from "@/lib/mobile-shell";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { isChatSpace, PRIMARY_NAV_SPACES } from "@/lib/spaces";
 import type { ProjectKind } from "@/lib/space-entities";
@@ -89,6 +90,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const [newProjectBusy, setNewProjectBusy] = useState(false);
   const { updateProject, createProject } = useSpaceMutation();
   const { ctx } = useSpaceData();
+  const { project: entityProject } = useSpaceProject(projectId);
 
   const inSettings = view === "settings";
   const inMenuSub =
@@ -236,7 +238,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
   const preview = previewAddress(project?.name);
   const address = liveUrl ?? previewUrlForProject(projectId ?? "project") ?? preview.url;
-  const published = Boolean(liveUrl && !liveUrl.includes("localhost"));
+  const published = Boolean(
+    entityProject?.publishedUrl ||
+      (liveUrl && !liveUrl.includes("localhost")),
+  );
   const canRename = spaceId === "build" || spaceId === "research";
   const projectTitle = project?.name ?? "Project";
 
@@ -310,10 +315,12 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
   const setChatOrPanel = (next: "chat" | "panel") => {
     if (next === "panel") {
+      dismissNativeKeyboard();
       setPanelMode("split");
       setMobileSurface("panel");
       return;
     }
+    dismissNativeKeyboard();
     if (projectId) {
       setMobileSurface("chat");
       return;
@@ -502,7 +509,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
         <ProjectActionsSheetBody
           key={actionsOpen ? "open" : "closed"}
           published={published}
-          projectName={projectTitle}
           selectMode={selectMode}
           canRename={canRename}
           onRename={() => {

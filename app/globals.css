@@ -448,6 +448,11 @@ html.cander-narrow[data-keyboard="1"] .composer-keyboard-pad {
   padding-bottom: 0.7rem !important;
 }
 
+html.cander-mobile [data-mobile-chat] .composer-keyboard-pad {
+  position: relative;
+  z-index: 30;
+}
+
 /* Narrow phone / tablet shell (browser + Capacitor) — same fixed canvas */
 @media (max-width: 1023px) {
   html {
