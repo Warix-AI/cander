@@ -48,7 +48,7 @@ Environment controls:
 
 | Variable | Purpose |
 | --- | --- |
-| `USAGE_ENFORCEMENT_ENABLED` | Master switch (`false` bypasses enforcement) |
+| `USAGE_ENFORCEMENT_ENABLED` | Master switch (default **on**; set `false`/`0`/`off` to bypass) |
 | `USAGE_KILL_SWITCH_*` | Per-feature emergency blocks |
 | `USAGE_GLOBAL_DAILY_CEILING_MICROS` | Platform daily spend ceiling |
 | `USAGE_GLOBAL_MONTHLY_CEILING_MICROS` | Platform monthly spend ceiling |
@@ -78,14 +78,12 @@ Codex/coding-agent responses should use `job_progress`, `file_changes`, `sandbox
 npm run test:usage
 ```
 
-## Defaults needing product approval
+## Approved plan limits (v2)
 
-Conservative starter limits are checked in — adjust in `plan-config.ts`:
+Limits in `lib/usage/plan-config.ts` are approved for launch:
 
-- Free AI chat: 150 requests/month, low rate limits
-- Free image generation: 5/month
-- Pro/Max: fair-use unlimited monthly units with rate + cost ceilings
-- Coding agent: disabled on all plans until `CODING_AGENT_ENABLED=1`
-- Workspace daily cost ceilings: $0.50 free, $15 pro, $40 max (micro-dollar fields)
+- **Free:** 150 AI chat/month, 5 images/month, 20 web research/month, tight rate limits; knowledge/sandbox deploy/coding disabled
+- **Pro / Max:** fair-use unlimited monthly units with rate + cost ceilings; coding agent still off until `CODING_AGENT_ENABLED=1`
+- **Cost ceilings:** ~$0.50/day free workspace, $15/day pro, $40/day max (micro-dollar fields)
 
-These numbers are intentionally conservative and should be tuned against real cost data before marketing "unlimited" language externally.
+Migration `038_usage_protection.sql` is applied on Supabase. Set `USAGE_ENFORCEMENT_ENABLED=true` in production env (default is on when unset).

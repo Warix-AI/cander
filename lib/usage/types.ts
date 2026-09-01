@@ -1,7 +1,7 @@
 import type { BillingPlan } from "../types.ts";
 
-/** Versioned plan config — bump when allowance structure changes. */
-export const USAGE_PLAN_CONFIG_VERSION = 1;
+/** Versioned plan config — bump when allowance structure changes. Approved 2026-08-31. */
+export const USAGE_PLAN_CONFIG_VERSION = 2;
 
 /** Normalized feature categories for metering and enforcement. */
 export type UsageFeatureCategory =

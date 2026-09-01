@@ -35,7 +35,7 @@ function feature(
   };
 }
 
-/** Conservative defaults — tune via product without touching route handlers. */
+/** Approved plan limits (v2) — adjust here without touching route handlers. */
 function freeFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
   const base = (overrides: Partial<FeatureUsageLimit>) =>
     feature({

@@ -1,5 +1,5 @@
 import type { BillingPlan } from "../types.ts";
-import { isExpensiveFeature, featureLimitFor, planUsagePolicy } from "./plan-config.ts";
+import { isExpensiveFeature, featureLimitFor, planUsagePolicy, usagePlanConfigVersion } from "./plan-config.ts";
 import {
   globalSpendCeilings,
   isFeatureKillSwitchActive,
@@ -493,7 +493,7 @@ export async function buildUsageStatusSnapshot(input: {
   return {
     plan: input.plan,
     planLabel: policy.label,
-    configVersion: 1,
+    configVersion: usagePlanConfigVersion(),
     features,
     notices: policy.marketingUnlimited
       ? ["Your plan includes generous fair-use limits for normal work."]

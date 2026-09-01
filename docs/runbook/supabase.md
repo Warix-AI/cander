@@ -61,6 +61,8 @@ Apply in sequence:
 | `023_security_hardening.sql` | Security hardening |
 | `024_project_title_unique.sql` | Unique project titles |
 | `025_private_ai_chat.sql` | Owner-private AI chats, messages, context refs, audit |
+| `037_image_generation_jobs.sql` | Async image generation job ledger |
+| `038_usage_protection.sql` | Usage events, window counters, audit log |
 
 ```bash
 supabase link --project-ref <ref>
