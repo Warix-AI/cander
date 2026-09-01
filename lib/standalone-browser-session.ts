@@ -7,6 +7,7 @@ import {
   navigateProjectBrowserTab,
   setProjectBrowserSession,
   setProjectBrowserSessionVolatile,
+  setProjectBrowserVolatilePersistence,
   subscribeProjectBrowserSession,
   type ProjectBrowserKey,
   type ProjectBrowserSession,
@@ -145,6 +146,7 @@ export function primeStandaloneBrowserSession(
 /** Reset to a fresh quick-search session that is not written to storage. */
 export function beginQuickSearchBrowserSession(key: ProjectBrowserKey) {
   ephemeralQuickSearch = true;
+  setProjectBrowserVolatilePersistence(true);
   clearProjectBrowserSession(key);
   setProjectBrowserSessionVolatile(key, defaultQuickSearchBrowserSession());
 }
@@ -152,6 +154,7 @@ export function beginQuickSearchBrowserSession(key: ProjectBrowserKey) {
 /** Drop ephemeral quick-search state and wipe its in-memory session. */
 export function endQuickSearchBrowserSession(key: ProjectBrowserKey) {
   ephemeralQuickSearch = false;
+  setProjectBrowserVolatilePersistence(false);
   clearProjectBrowserSession(key);
 }
 

@@ -95,6 +95,7 @@ import { useProjectCoverCapture } from "@/lib/hooks/use-project-cover-capture";
 import {
   defaultStandaloneBrowserSession,
   getStandaloneBrowserSession,
+  setStandaloneBrowserSession,
   standaloneBrowserKey,
   STANDALONE_BROWSER_PROJECT_ID,
 } from "@/lib/standalone-browser-session";
@@ -243,6 +244,10 @@ export function ProjectBrowserPanel({
   if (!standalone && !projectId) return null;
 
   const write = (next: ProjectBrowserSession) => {
+    if (standalone) {
+      setStandaloneBrowserSession(key, next);
+      return;
+    }
     setProjectBrowserSession(key, next);
   };
 
@@ -993,10 +998,12 @@ function ProjectBrowserBody({
       return next;
     });
     if (nextTabs.some((item, i) => item !== current.tabs[i])) {
-      setProjectBrowserSession(browserKey, {
-        ...current,
-        tabs: nextTabs,
-      });
+      const next = { ...current, tabs: nextTabs };
+      if (browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID) {
+        setStandaloneBrowserSession(browserKey, next);
+      } else {
+        setProjectBrowserSession(browserKey, next);
+      }
     }
   };
 

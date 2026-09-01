@@ -53,6 +53,12 @@ const cache = new Map<string, ProjectBrowserSession>();
 const hydratedKeys = new Set<string>();
 let revision = 0;
 let lastChangedKey = "";
+/** When true, session updates stay in memory (quick-search browsing). */
+let volatilePersistence = false;
+
+export function setProjectBrowserVolatilePersistence(volatile: boolean) {
+  volatilePersistence = volatile;
+}
 
 function emit() {
   listeners.forEach((listener) => listener());
@@ -330,7 +336,7 @@ function persistKey(key: string, session: ProjectBrowserSession) {
   // Keep in-memory cache as the live session (including agent-browser).
   cache.set(key, session);
   lastChangedKey = key;
-  if (typeof window !== "undefined") {
+  if (!volatilePersistence && typeof window !== "undefined") {
     safeLocalStorageSetItem(
       `${STORAGE_PREFIX}:${key}`,
       JSON.stringify(durable),

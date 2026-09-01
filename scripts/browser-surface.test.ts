@@ -80,6 +80,20 @@ describe("browser URL normalization", () => {
   });
 });
 
+describe("quick-search ephemeral browser", () => {
+  it("routes standalone writes through volatile persistence", () => {
+    const panel = readRepo("components/browser/ProjectBrowserPanel.tsx");
+    const standalone = readRepo("lib/standalone-browser-session.ts");
+    const session = readRepo("lib/project-browser-session.ts");
+    assert.match(panel, /setStandaloneBrowserSession\(key, next\)/);
+    assert.match(panel, /setStandaloneBrowserSession\(browserKey, next\)/);
+    assert.match(standalone, /setProjectBrowserVolatilePersistence\(true\)/);
+    assert.match(standalone, /setProjectBrowserVolatilePersistence\(false\)/);
+    assert.match(session, /volatilePersistence/);
+    assert.match(session, /if \(!volatilePersistence && typeof window !== "undefined"\)/);
+  });
+});
+
 describe("electron partition mirror", () => {
   it("matches desktop browser-security partitionFor rules", async () => {
     const { createRequire } = await import("node:module");
