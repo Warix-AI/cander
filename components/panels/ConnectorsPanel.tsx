@@ -58,7 +58,10 @@ export function ConnectorsPanel() {
     allowed[0] ??
     connectors[0];
   const execute = panelIntent === "execute" || Boolean(connectorId);
+  const liveConnections = connectionsForConnectorLive(workspaceId, selected.id);
   const accounts = activeAccountsForConnector(workspaceId, selected.id);
+  const pendingConnection = liveConnections.find((row) => row.status === "pending");
+  const hasActiveConnection = liveConnections.some((row) => row.status === "active");
 
   const relatedApps = useMemo(() => {
     const fromAttach = attachments
@@ -95,7 +98,7 @@ export function ConnectorsPanel() {
               const count = connectionsForConnectorLive(
                 workspaceId,
                 item.id,
-              ).filter((row) => row.status === "active" || row.status === "pending").length;
+              ).filter((row) => row.status === "active").length;
               return (
                 <Row
                   key={item.id}
@@ -150,6 +153,16 @@ export function ConnectorsPanel() {
                   </div>
                 </div>
               ))
+            ) : pendingConnection ? (
+              <div className="flex items-center gap-2.5 px-3 py-2">
+                <ConnectorMark id={selected.icon} size="xs" />
+                <div className="min-w-0">
+                  <p className="text-[13px]">{selected.name}</p>
+                  <p className="font-mono text-[11px] text-chart-3">
+                    Connecting — finish authorization to activate
+                  </p>
+                </div>
+              </div>
             ) : (
               <p className="px-3 py-2 text-[13px] text-muted-foreground">
                 No account connected yet.
@@ -205,7 +218,7 @@ export function ConnectorsPanel() {
               ) : null}
               <button
                 type="button"
-                disabled={selected.id !== "gmail"}
+                disabled={selected.id !== "gmail" || hasActiveConnection}
                 onClick={async () => {
                   setConnectError("");
                   try {
@@ -228,7 +241,11 @@ export function ConnectorsPanel() {
                 }}
                 className="inline-flex h-10 items-center rounded-full border border-foreground/20 px-4 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Add connection
+                {hasActiveConnection
+                  ? "Connected"
+                  : pendingConnection
+                    ? "Continue connecting"
+                    : "Add connection"}
               </button>
             </div>
           </div>

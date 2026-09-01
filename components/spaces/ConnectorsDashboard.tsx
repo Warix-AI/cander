@@ -127,11 +127,12 @@ export function ConnectorsDashboard() {
       seed.map((item) => {
         const accounts = activeAccountsForConnector(workspaceId, item.id);
         const pending = pendingConnectorIdsLive(workspaceId).includes(item.id);
-        const installed =
-          installedIds.includes(item.id) || accounts.length > 0 || pending;
+        const liveConnected = accounts.length > 0;
+        const mockInstalled = installedIds.includes(item.id) && item.id !== "gmail";
         return {
           ...item,
-          installed,
+          installed: liveConnected || mockInstalled,
+          pending,
           accounts,
         };
       }),
@@ -445,7 +446,7 @@ function DirectoryItem({
   workAttach,
   catalog = false,
 }: {
-  item: Connector;
+  item: Connector & { pending?: boolean };
   active: boolean;
   tier: PinTier | null;
   onOpen: () => void;
@@ -564,14 +565,18 @@ function DirectoryItem({
             >
               {workAttach
                 ? "Add to Work"
-                : item.id === "gmail"
-                  ? "Connect"
-                  : "Install"}
+                : item.pending
+                  ? "Continue connecting"
+                  : item.id === "gmail"
+                    ? "Connect"
+                    : "Install"}
             </button>
           )}
         </div>
         <p className="mt-0.5 truncate text-[12px] leading-snug text-muted-foreground">
-          {item.description}
+          {item.pending
+            ? "Authorization in progress — finish connecting to activate."
+            : item.description}
         </p>
       </div>
     </div>
