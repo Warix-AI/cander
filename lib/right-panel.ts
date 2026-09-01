@@ -20,6 +20,21 @@ export function isNewChatScreen(opts: {
   );
 }
 
+/** Standalone browser only belongs on home chat — never on a space or project. */
+export function showStandaloneBrowserPanel(opts: {
+  standaloneBrowserOpen: boolean;
+  view: CourierView;
+  spaceId: NavDestinationId | null;
+  projectId?: string | null;
+}) {
+  return (
+    opts.standaloneBrowserOpen &&
+    opts.view === "chat" &&
+    !opts.spaceId &&
+    !opts.projectId
+  );
+}
+
 export function chatIsActive(opts: {
   thread: unknown;
   drafting: boolean;

@@ -3207,6 +3207,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     queueMicrotask(() => setVoiceActive(false));
   }, [entitlements.hasVoice]);
 
+  // Standalone browser is scoped to home chat — clear when leaving for a space.
+  useEffect(() => {
+    if (!standaloneBrowserOpen) return;
+    if (view !== "chat" || spaceId || projectId) {
+      setStandaloneBrowserOpen(false);
+    }
+  }, [standaloneBrowserOpen, view, spaceId, projectId]);
+
   useEffect(() => {
     if (panelMode !== "collapsed") return;
     if (!drafting || threadId) return;

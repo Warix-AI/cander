@@ -14,6 +14,7 @@ import { ScheduledPanel } from "@/components/panels/ScheduledPanel";
 import { SkillsPanel } from "@/components/panels/SkillsPanel";
 import { useApp } from "@/components/app/AppProvider";
 import { SplitHandle } from "@/components/shell/SplitHandle";
+import { showStandaloneBrowserPanel } from "@/lib/right-panel";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
 import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
@@ -54,6 +55,12 @@ export function ContextPanel() {
     !showChoice;
 
   const showRecentsEmpty = view === "recents" && !spaceId && !projectId;
+  const showStandaloneBrowser = showStandaloneBrowserPanel({
+    standaloneBrowserOpen,
+    view,
+    spaceId,
+    projectId,
+  });
 
   return (
     <aside
@@ -70,7 +77,7 @@ export function ContextPanel() {
       )}
     >
       <div className="shell-panel flex min-h-0 flex-1 flex-col overflow-hidden">
-        {standaloneBrowserOpen ? (
+        {showStandaloneBrowser ? (
           <StandaloneBrowserPanel />
         ) : showEmpty || showRecentsEmpty ? (
           <PanelEmptyState />

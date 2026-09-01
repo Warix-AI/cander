@@ -19,6 +19,7 @@ import {
 } from "@/lib/mobile-nav-transition";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
+import { showStandaloneBrowserPanel } from "@/lib/right-panel";
 import { cn } from "@/lib/utils";
 import type { MobileSurface } from "@/lib/types";
 
@@ -29,6 +30,8 @@ import type { MobileSurface } from "@/lib/types";
 export function SpaceChatLayout() {
   const {
     standaloneBrowserOpen,
+    view,
+    spaceId,
     drafting,
     thread,
     panelMode,
@@ -42,6 +45,12 @@ export function SpaceChatLayout() {
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
   const chatArmed = drafting || Boolean(thread);
+  const showStandaloneBrowser = showStandaloneBrowserPanel({
+    standaloneBrowserOpen,
+    view,
+    spaceId,
+    projectId,
+  });
   const panelOn = panelMode !== "collapsed";
   const chatOpen = chatArmed;
   const spaceOpen = !chatArmed || panelOn;
@@ -140,7 +149,7 @@ export function SpaceChatLayout() {
               >
                 <ProjectBrowserPanel />
               </div>
-            ) : standaloneBrowserOpen ? (
+            ) : showStandaloneBrowser ? (
               <StandaloneBrowserPanel />
             ) : (
               <SpaceRenderModeProvider mode="page">
@@ -236,7 +245,7 @@ export function SpaceChatLayout() {
           <div
             className={cn(
               "flex min-h-0 flex-1 flex-col",
-              projectId || standaloneBrowserOpen ? "overflow-hidden" : "overflow-y-auto",
+              projectId || showStandaloneBrowser ? "overflow-hidden" : "overflow-y-auto",
             )}
           >
             {projectId ? (
@@ -246,7 +255,7 @@ export function SpaceChatLayout() {
               >
                 <ProjectBrowserPanel />
               </div>
-            ) : standaloneBrowserOpen ? (
+            ) : showStandaloneBrowser ? (
               <StandaloneBrowserPanel />
             ) : (
               <SpaceDashboard enterDirection={getMobilePanelStackDirection()} />
