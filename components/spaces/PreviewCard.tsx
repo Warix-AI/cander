@@ -2,11 +2,15 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import {
+  Briefcase,
   CalendarClock,
   Ellipsis,
   FileText,
   Folder,
+  FolderOpen,
+  Hammer,
   Link2,
+  Pencil,
   Pin,
   Sparkles,
   Trash2,
@@ -580,6 +584,7 @@ function PreviewActions({
   const menuBody = (
     <>
       <SheetAction
+        icon={FolderOpen}
         label="Open"
         onClick={() =>
           runAndClose(() => {
@@ -590,6 +595,7 @@ function PreviewActions({
       {kind === "product" || kind === "paper" ? (
         <>
           <SheetAction
+            icon={Pencil}
             label="Rename project"
             onClick={() =>
               runAndClose(() => {
@@ -614,6 +620,7 @@ function PreviewActions({
           />
           {kind === "product" ? (
             <SheetAction
+              icon={Briefcase}
               label={inWork ? "Remove from Work" : "Add to Work"}
               onClick={() =>
                 runAndClose(() => {
@@ -634,6 +641,7 @@ function PreviewActions({
           ) : (
             <>
               <SheetAction
+                icon={Hammer}
                 label="Use in Build"
                 onClick={() =>
                   runAndClose(() => {
@@ -649,6 +657,7 @@ function PreviewActions({
                 }
               />
               <SheetAction
+                icon={Briefcase}
                 label="Add to Work"
                 onClick={() =>
                   runAndClose(() => {
@@ -668,6 +677,7 @@ function PreviewActions({
       ) : kind === "file" ? (
         <>
           <SheetAction
+            icon={Hammer}
             label="Use in Build"
             onClick={() =>
               runAndClose(() => {
@@ -683,6 +693,7 @@ function PreviewActions({
             }
           />
           <SheetAction
+            icon={Briefcase}
             label="Add to Work"
             onClick={() =>
               runAndClose(() => {
@@ -723,9 +734,6 @@ function PreviewActions({
             mode="space"
           >
             <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
-              <p className="mb-3 truncate px-1 text-[15px] font-medium tracking-[-0.01em]">
-                {item.name}
-              </p>
               <div className="space-y-0.5">{menuBody}</div>
             </div>
           </MobileBottomSheet>

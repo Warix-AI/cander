@@ -17,12 +17,14 @@ export function SessionSummaryBubble({
     updateSessionSummary,
     deleteChat,
     threads,
+    view,
   } = useApp();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(summary);
   const [deleteBlockedOpen, setDeleteBlockedOpen] = useState(false);
   const linkedProjectId = threads.find((item) => item.id === threadId)?.projectId;
+  const hideChatDelete = view === "space";
 
   return (
     <div className="rounded-[10px] border border-border bg-muted/40">
@@ -108,20 +110,22 @@ export function SessionSummaryBubble({
                   <X className="h-3.5 w-3.5" strokeWidth={1.6} />
                   Dismiss
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (linkedProjectId) {
-                      setDeleteBlockedOpen(true);
-                      return;
-                    }
-                    deleteChat(threadId);
-                  }}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  Delete chat
-                </button>
+                {hideChatDelete ? null : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (linkedProjectId) {
+                        setDeleteBlockedOpen(true);
+                        return;
+                      }
+                      deleteChat(threadId);
+                    }}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+                    Delete chat
+                  </button>
+                )}
               </div>
               {deleteBlockedOpen ? (
                 <p className="mt-2 text-[12px] text-muted-foreground">
