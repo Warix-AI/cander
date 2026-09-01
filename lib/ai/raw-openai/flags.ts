@@ -1,8 +1,7 @@
 /**
  * Raw OpenAI benchmark mode — bypasses all Cander AI orchestration.
  *
- * Production default OFF. Development default ON unless opted out.
- * Opt out with RAW_OPENAI_MODE=0 or NEXT_PUBLIC_RAW_OPENAI_MODE=0.
+ * Default OFF everywhere. Opt in with RAW_OPENAI_MODE=1 or NEXT_PUBLIC_RAW_OPENAI_MODE=1.
  * localStorage override is ignored in production.
  *
  * API key is NEVER read here — only on the server route.
@@ -38,14 +37,14 @@ export function isRawOpenAIModeEnabled(): boolean {
     }
   }
 
-  return !isProductionRuntime();
+  return false;
 }
 
-/** Server-side: allow OpenAI call unless explicitly disabled. */
+/** Server-side: allow OpenAI call only when explicitly enabled. */
 export function isRawOpenAIModeAllowedOnServer(): boolean {
   const raw = readEnvFlag("RAW_OPENAI_MODE");
   if (raw !== null) return raw;
   const pub = readEnvFlag("NEXT_PUBLIC_RAW_OPENAI_MODE");
   if (pub !== null) return pub;
-  return !isProductionRuntime();
+  return false;
 }
