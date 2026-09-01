@@ -3,6 +3,10 @@ import { requireComputerAuth } from "@/lib/computer/spike/auth";
 import { getComputerProvider } from "@/lib/computer/providers/vercel-sandbox-computer-provider";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createCandidateChangeSet } from "@/lib/ai/intelligence/revisions";
+import {
+  enforceUsageForRequest,
+  finalizeUsageReservation,
+} from "@/lib/usage/server/guard-route";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -42,6 +46,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Task missing project/workspace." }, { status: 400 });
   }
 
+  const idempotencyKey =
+    request.headers.get("Idempotency-Key")?.trim() ||
+    `sandbox-build:${workspaceId}:${taskId}`;
+  const usage = await enforceUsageForRequest({
+    request,
+    feature: "sandbox_build",
+    workspaceId,
+    idempotencyKey,
+    estimatedUnits: 1,
+    provider: "vercel",
+    allowCookieAuth: true,
+    metadata: { taskId, projectId },
+  });
+  if (!usage.ok) {
+    return usage.response;
+  }
+
   try {
     const provider = getComputerProvider();
     const session = await provider.createOrReuseSession({
@@ -68,6 +89,12 @@ export async function POST(request: Request) {
       workerRunId: taskId,
     });
 
+    await finalizeUsageReservation({
+      reservationId: usage.reservationId,
+      status: "confirmed",
+      actualUnits: 1,
+    });
+
     return NextResponse.json({
       ok: true,
       sessionId: session.id,
@@ -75,6 +102,10 @@ export async function POST(request: Request) {
       resultSummary: `Build finished in sandbox session ${session.id}.`,
     });
   } catch (err) {
+    await finalizeUsageReservation({
+      reservationId: usage.reservationId,
+      status: "failed",
+    });
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }

@@ -21,8 +21,8 @@ import { ReferenceChip } from "@/components/shell/ReferenceChip";
 import { ComposerUsageBar } from "@/components/shell/ComposerUsageBar";
 import {
   USAGE_BAR_THRESHOLD,
-} from "@/lib/hourly-usage";
-import { useHourlyUsagePercent } from "@/lib/use-hourly-usage";
+  useUsageStatusPercent,
+} from "@/lib/use-usage-status";
 import {
   ComposerRecordingView,
   ComposerTrailingActions,
@@ -139,7 +139,7 @@ export function Composer({
   const floating = useShellStyle() === "floating";
   const mobile = useMobileShell();
   const { centered } = useChatCanvasCentered();
-  const usagePercent = useHourlyUsagePercent();
+  const { percent: usagePercent, label: usageLabel } = useUsageStatusPercent();
   const [value, setValue] = useState("");
   const [dictating, setDictating] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -1127,7 +1127,7 @@ export function Composer({
         )}
 
         {showUsageBar ? (
-          <ComposerUsageBar floating={floating} percent={usagePercent} />
+          <ComposerUsageBar floating={floating} percent={usagePercent} label={usageLabel} />
         ) : null}
       </div>
     </form>

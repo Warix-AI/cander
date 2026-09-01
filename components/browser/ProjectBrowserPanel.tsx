@@ -16,6 +16,7 @@ import {
   Pencil,
   Plus,
   RotateCw,
+  Trash2,
   Upload,
   Workflow,
   X,
@@ -28,9 +29,11 @@ import { BrowserAddressField } from "@/components/browser/BrowserAddressField";
 import { BrowserChromeTooltip } from "@/components/browser/BrowserChromeTooltip";
 import { FaviconImage } from "@/components/browser/FaviconImage";
 import { NativeOverlayGate } from "@/components/browser/NativeOverlayGate";
+import { getBrowserSurfaceAdapter } from "@/lib/browser-surface";
 import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import {
   MobileBottomSheet,
+  DeleteProjectSheetBody,
   ProjectAddSheetHeader,
   ProjectRenameSheetBody,
 } from "@/components/browser/ProjectMobileSheets";
@@ -112,10 +115,14 @@ export function ProjectBrowserPanel() {
     refreshPreview,
     liveUrl,
     mobileSurface,
+    deleteProjectCompletely,
   } = useApp();
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
   const [mobileSheet, setMobileSheet] = useState<"add" | "rename" | null>(null);
+  const [desktopDeleteOpen, setDesktopDeleteOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [addQuery, setAddQuery] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -290,6 +297,21 @@ export function ProjectBrowserPanel() {
         tab.id === active.id ? stepProjectBrowserTab(tab, delta) : tab,
       ),
     });
+  };
+
+  const runBrowserNav = (action: "back" | "forward" | "reload") => {
+    const adapter = getBrowserSurfaceAdapter();
+    if (adapter.id === "web-pwa") {
+      if (action === "reload") {
+        setReloadKey((value) => value + 1);
+      } else {
+        goHistory(action === "back" ? -1 : 1);
+      }
+      return;
+    }
+    if (action === "back") void adapter.back(active.id);
+    else if (action === "forward") void adapter.forward(active.id);
+    else void adapter.reload(active.id);
   };
 
   const canBack = active.historyIndex > 0;
@@ -518,6 +540,22 @@ export function ProjectBrowserPanel() {
       )
     : extraProjects;
 
+  const confirmDeleteProject = async () => {
+    if (!projectId || deleteConfirmText.trim().toLowerCase() !== "delete") return;
+    setDeleteBusy(true);
+    try {
+      await deleteProjectCompletely(projectId);
+      setDesktopDeleteOpen(false);
+      setDeleteConfirmText("");
+    } catch (err) {
+      setRenameError(
+        err instanceof Error ? err.message : "Could not delete project.",
+      );
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-sidebar">
       {mobile ? null : (
@@ -599,18 +637,18 @@ export function ProjectBrowserPanel() {
             <RailBtn
               label="Back"
               disabled={!canBack}
-              onClick={() => goHistory(-1)}
+              onClick={() => runBrowserNav("back")}
             >
               <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
             </RailBtn>
             <RailBtn
               label="Forward"
               disabled={!canForward}
-              onClick={() => goHistory(1)}
+              onClick={() => runBrowserNav("forward")}
             >
               <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
             </RailBtn>
-            <RailBtn label="Reload" onClick={() => setReloadKey((value) => value + 1)}>
+            <RailBtn label="Reload" onClick={() => runBrowserNav("reload")}>
               <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
             </RailBtn>
           </div>
@@ -635,7 +673,11 @@ export function ProjectBrowserPanel() {
               onSelectElement={() => setSelectMode(!selectMode)}
               onRefresh={() => {
                 refreshPreview();
-                setReloadKey((value) => value + 1);
+                runBrowserNav("reload");
+              }}
+              onDelete={() => {
+                setDeleteConfirmText("");
+                setDesktopDeleteOpen(true);
               }}
             />
           </div>
@@ -688,6 +730,24 @@ export function ProjectBrowserPanel() {
         </div>
       ) : null}
 
+      {desktopDeleteOpen ? (
+        <div className="absolute inset-0 z-40 flex items-start justify-center bg-black/20 pt-24">
+          <div className="w-full max-w-sm rounded-[16px] border border-border bg-background p-4 shadow-lg">
+            <DeleteProjectSheetBody
+              projectName={projectTitle}
+              busy={deleteBusy}
+              confirmText={deleteConfirmText}
+              onConfirmTextChange={setDeleteConfirmText}
+              onCancel={() => {
+                setDesktopDeleteOpen(false);
+                setDeleteConfirmText("");
+              }}
+              onConfirm={() => void confirmDeleteProject()}
+            />
+          </div>
+        </div>
+      ) : null}
+
       <div className="relative min-h-0 flex-1 overflow-hidden bg-white dark:bg-neutral-950">
         <div className="absolute inset-0 min-h-0">
           <ProjectBrowserBody
@@ -708,9 +768,9 @@ export function ProjectBrowserPanel() {
             canForward={canForward}
             onUrlChange={setUrlDraft}
             onCommitUrl={commitUrl}
-            onBack={() => goHistory(-1)}
-            onForward={() => goHistory(1)}
-            onReload={() => setReloadKey((value) => value + 1)}
+            onBack={() => runBrowserNav("back")}
+            onForward={() => runBrowserNav("forward")}
+            onReload={() => runBrowserNav("reload")}
             onClose={() => setMobileNavOpen(false)}
           />
         ) : null}
@@ -1074,6 +1134,7 @@ function DesktopProjectToolsMenu({
   onOpenExternal,
   onSelectElement,
   onRefresh,
+  onDelete,
 }: {
   selectMode: boolean;
   canRename: boolean;
@@ -1083,6 +1144,7 @@ function DesktopProjectToolsMenu({
   onOpenExternal: () => void;
   onSelectElement: () => void;
   onRefresh: () => void;
+  onDelete: () => void;
 }) {
   return (
     <Dropdown
@@ -1156,6 +1218,15 @@ function DesktopProjectToolsMenu({
             }}
           >
             Refresh
+          </DesktopMenuItem>
+          <DesktopMenuItem
+            icon={Trash2}
+            onClick={() => {
+              onDelete();
+              close();
+            }}
+          >
+            Delete project
           </DesktopMenuItem>
         </>
       )}
@@ -1245,7 +1316,7 @@ function MobileBrowserNavSheet({
               spellCheck={false}
               autoFocus
               aria-label="Address"
-              className="h-9 w-full rounded-lg bg-muted/60 px-3 font-mono text-[12px] text-foreground outline-none"
+              className="h-9 w-full rounded-lg bg-muted/60 px-3 text-[13px] text-foreground outline-none"
             />
           </form>
           <button

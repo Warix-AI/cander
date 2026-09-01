@@ -155,8 +155,9 @@ import type {
 } from "@/lib/types";
 import { isSpaceLibrarySpace } from "@/lib/space-library";
 import {
-  adoptThreadAsSpaceDefault,
+  adoptThreadAsUniversalDefault,
   openSpaceDefaultChat,
+  projectChatId,
   startContinuousChat,
   summarizeSession,
   threadHasTurns,
@@ -173,6 +174,7 @@ import {
   imageTurnHint,
   modelContentFromMessage,
 } from "@/lib/ai/attachment-context";
+import { deleteAiChat } from "@/lib/api/ai-chat-api";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
 import { isRawOpenAIModeEnabled } from "@/lib/ai/raw-openai/flags";
 import { detectImageGenerationIntent } from "@/lib/ai/raw-openai/image-generation";
@@ -319,14 +321,16 @@ type AppContextValue = {
   ) => void;
   /** Create a Build / Explore project from the active draft chat. */
   startDraftProject: (space: SpaceId) => Promise<void>;
-  /** Promote the draft chat to the sidebar default for a space. */
-  setDraftAsDefaultChat: (space: SpaceId) => void;
+  /** Promote the draft chat to the default across Work, Build, Explore, and Connectors. */
+  setDraftAsDefaultChat: () => void;
   collapseDraft: () => void;
   /** Close space chat and restore the full workspace dashboard. */
   closeSpaceChat: () => void;
   clearSessionSummary: (threadId?: string | null) => void;
   updateSessionSummary: (text: string, threadId?: string | null) => void;
   clearPersistentChat: (threadId?: string | null) => void;
+  deleteChat: (threadId?: string | null) => void;
+  deleteProjectCompletely: (projectId: string) => Promise<void>;
   sendMessage: (text: string, opts?: SendOpts) => void;
   /** After a clarification card submit — persist answers and continue the assistant. */
   continueAfterClarification: (result: ClarificationSubmitResult) => void;
@@ -1244,29 +1248,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [threadId, projectId],
   );
 
-  const setDraftAsDefaultChat = useCallback(
-    (space: SpaceId) => {
-      if (!isChatSpace(space) || !threadId) return;
-      let tid = threadId;
-      setThreads((current) => {
-        const result = adoptThreadAsSpaceDefault(
-          current,
-          workspaceId,
-          space,
-          threadId,
-        );
-        tid = result.id;
-        return result.threads;
-      });
-      setThreadId(tid);
-      setDrafting(false);
-      setSpaceId(null);
-      setView("chat");
-      setPanelIntent("browse");
-      setPanelMode("split");
-    },
-    [threadId, workspaceId],
-  );
+  const setDraftAsDefaultChat = useCallback(() => {
+    if (!threadId) return;
+    let tid = threadId;
+    setThreads((current) => {
+      const result = adoptThreadAsUniversalDefault(
+        current,
+        workspaceId,
+        threadId,
+      );
+      tid = result.id;
+      return result.threads;
+    });
+    setThreadId(tid);
+    setDrafting(false);
+    setSpaceId(null);
+    setView("chat");
+    setPanelIntent("browse");
+    setPanelMode("split");
+  }, [threadId, workspaceId]);
 
   const collapseDraft = useCallback(() => {
     setDrafting(false);
@@ -1367,6 +1367,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [threadId],
   );
 
+  const deleteChat = useCallback(
+    async (id?: string | null) => {
+      const target = id ?? threadId;
+      if (!target) return;
+      const row = threads.find((item) => item.id === target);
+      if (
+        row?.aiChatId &&
+        !row.aiChatId.startsWith("local-") &&
+        supabaseUser
+      ) {
+        try {
+          await deleteAiChat(row.aiChatId);
+        } catch {
+          // Still remove locally when offline or already deleted server-side.
+        }
+      }
+      setThreads((current) => current.filter((item) => item.id !== target));
+      if (threadId === target) {
+        setThreadId(null);
+        setDrafting(true);
+        if (projectId) {
+          setMobileSurface("panel");
+        }
+      }
+    },
+    [threadId, threads, supabaseUser, projectId],
+  );
+
   const patchImageGenerationBlock = useCallback(
     (
       threadId: string,
@@ -1419,6 +1447,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       prompt: string;
       threadId: string;
       messageId: string;
+      workspaceId?: string | null;
       /** `poll` resumes an existing job after reload — do not POST a new job. */
       mode?: "start" | "poll";
     }) => {
@@ -1431,6 +1460,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             generationId: opts.generationId,
             threadId: opts.threadId,
             messageId: opts.messageId,
+            workspaceId: opts.workspaceId ?? workspaceId,
           });
           if (!started.ok) {
             patchImageGenerationBlock(
@@ -1492,7 +1522,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         imageJobPollRef.current.delete(opts.generationId);
       }
     },
-    [patchImageGenerationBlock],
+    [patchImageGenerationBlock, workspaceId],
   );
 
   const cancelImageGeneration = useCallback(
@@ -3408,6 +3438,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [spaceId, threadId, drafting, thread, workspaceId, pushTarget]);
 
+  const deleteProjectCompletely = useCallback(
+    async (targetProjectId: string) => {
+      const pid = targetProjectId.trim();
+      if (!pid) return;
+      const ctx = { workspaceId, actorId: actor.id };
+      const api = createApiBundle(getDataBackend());
+      await api.entities.deleteProject(ctx, pid);
+      const linkedChatId = projectChatId(workspaceId, pid);
+      setThreads((current) =>
+        current.filter(
+          (item) => item.projectId !== pid && item.id !== linkedChatId,
+        ),
+      );
+      if (projectId === pid) {
+        backToSpaceHome();
+      }
+    },
+    [workspaceId, actor.id, projectId, backToSpaceHome],
+  );
+
   const openThread = useCallback(
     (id: string) => {
       const found = threads.find((item) => item.id === id);
@@ -4261,6 +4311,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearSessionSummary,
       updateSessionSummary,
       clearPersistentChat,
+      deleteChat,
+      deleteProjectCompletely,
       sendMessage,
       continueAfterClarification,
       openSpace,
@@ -4410,6 +4462,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearSessionSummary,
       updateSessionSummary,
       clearPersistentChat,
+      deleteChat,
+      deleteProjectCompletely,
       sendMessage,
       continueAfterClarification,
       openSpace,

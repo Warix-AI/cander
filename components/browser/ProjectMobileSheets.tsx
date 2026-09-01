@@ -18,6 +18,7 @@ import {
   Globe,
   MousePointer2,
   Pencil,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -181,6 +182,7 @@ export function ProjectActionsSheetBody({
   onOpenExternal,
   onSelectElement,
   onRename,
+  onDelete,
 }: {
   published?: boolean;
   projectName?: string;
@@ -189,6 +191,7 @@ export function ProjectActionsSheetBody({
   onOpenExternal: () => void;
   onSelectElement: () => void;
   onRename?: () => void;
+  onDelete?: () => void;
 }) {
   const [pane, setPane] = useState<ActionsPane>("main");
 
@@ -250,6 +253,14 @@ export function ProjectActionsSheetBody({
                 icon={Pencil}
                 label="Rename project"
                 onClick={onRename}
+              />
+            ) : null}
+            {onDelete ? (
+              <SheetAction
+                icon={Trash2}
+                label="Delete project"
+                onClick={onDelete}
+                destructive
               />
             ) : null}
           </div>
@@ -563,6 +574,7 @@ export function SheetAction({
   onClick,
   active,
   primary,
+  destructive,
   description,
 }: {
   icon?: typeof Upload;
@@ -570,6 +582,7 @@ export function SheetAction({
   onClick: () => void;
   active?: boolean;
   primary?: boolean;
+  destructive?: boolean;
   description?: string;
 }) {
   return (
@@ -580,6 +593,8 @@ export function SheetAction({
         "flex w-full items-center gap-3 rounded-[12px] px-3 py-3 text-left transition-colors",
         primary
           ? "bg-foreground text-background hover:opacity-90"
+          : destructive
+            ? "text-destructive hover:bg-destructive/10"
           : active
             ? "bg-muted text-foreground"
             : "text-foreground hover:bg-muted/70",
@@ -600,5 +615,59 @@ export function SheetAction({
         ) : null}
       </span>
     </button>
+  );
+}
+
+export function DeleteProjectSheetBody({
+  projectName,
+  busy,
+  confirmText,
+  onConfirmTextChange,
+  onCancel,
+  onConfirm,
+}: {
+  projectName: string;
+  busy?: boolean;
+  confirmText: string;
+  onConfirmTextChange: (value: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const ok = confirmText.trim().toLowerCase() === "delete";
+  return (
+    <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2rem)] pt-1">
+      <p className="text-[17px] font-medium tracking-[-0.02em]">Delete project</p>
+      <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">
+        This permanently removes{" "}
+        <span className="font-medium text-foreground">{projectName}</span> and
+        its build history from this workspace. Type{" "}
+        <span className="font-medium text-foreground">delete</span> to confirm.
+      </p>
+      <input
+        autoFocus
+        value={confirmText}
+        onChange={(event) => onConfirmTextChange(event.target.value)}
+        placeholder='Type "delete"'
+        aria-label='Type "delete" to confirm project deletion'
+        className="mt-4 h-11 w-full rounded-[12px] border border-border bg-muted/30 px-3 text-[14px] outline-none"
+      />
+      <div className="mt-4 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="h-10 rounded-[10px] px-4 text-[14px] text-muted-foreground hover:bg-muted"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!ok || busy}
+          onClick={onConfirm}
+          className="h-10 rounded-[10px] bg-destructive px-4 text-[14px] font-medium text-destructive-foreground disabled:opacity-50"
+        >
+          {busy ? "Deleting…" : "Delete project"}
+        </button>
+      </div>
+    </div>
   );
 }

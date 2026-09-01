@@ -79,6 +79,7 @@ export async function runRawOpenAITurn(
         images: attachmentIds.length ? undefined : request.images?.slice(0, 4),
         attachmentIds: attachmentIds.length ? attachmentIds : undefined,
         threadId: request.threadId,
+        workspaceId: request.workspaceId,
         title: request.title,
       }),
       signal: opts?.signal,
@@ -106,6 +107,7 @@ export async function runRawOpenAITurn(
 
   const data = (await res.json().catch(() => ({}))) as {
     content?: string;
+    blocks?: Array<Record<string, unknown>>;
     images?: Array<{
       dataUrl: string;
       mimeType?: string;
@@ -152,6 +154,9 @@ export async function runRawOpenAITurn(
   }
 
   const content = (data.content || "").trim();
+  const responseBlocks = Array.isArray(data.blocks)
+    ? (data.blocks as AgentTurnResult["blocks"])
+    : undefined;
   const imageBlocks = (data.images || [])
     .filter((img) => typeof img?.dataUrl === "string" && img.dataUrl.length > 0)
     .map((img, i) => ({
@@ -197,14 +202,16 @@ export async function runRawOpenAITurn(
   return {
     content:
       content ||
-      (imageBlocks.length
+      (imageBlocks.length || responseBlocks?.length
         ? ""
         : "OpenAI returned an empty response."),
     runtime: "cloud",
     offline: false,
     condensationOccurred: false,
     aiChatId: request.aiChatId,
-    ...(imageBlocks.length ? { blocks: imageBlocks } : {}),
+    ...(responseBlocks?.length || imageBlocks.length
+      ? { blocks: [...(responseBlocks ?? []), ...imageBlocks] }
+      : {}),
     ...(generatedAttachmentIds.length
       ? { generatedAttachmentIds }
       : {}),

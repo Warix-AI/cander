@@ -47,6 +47,7 @@ export async function startImageGenerationJob(opts: {
   generationId: string;
   threadId?: string | null;
   messageId?: string | null;
+  workspaceId?: string | null;
 }): Promise<{ ok: true; generationId: string } | { ok: false; error: string }> {
   try {
     const authHeaders = await getRawOpenAIAuthHeaders();
@@ -61,6 +62,7 @@ export async function startImageGenerationJob(opts: {
         generationId: opts.generationId,
         threadId: opts.threadId,
         messageId: opts.messageId,
+        workspaceId: opts.workspaceId,
       }),
     });
     const data = (await res.json().catch(() => ({}))) as {

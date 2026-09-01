@@ -46,7 +46,11 @@ export {
 } from "@/lib/browser-surface/local-browsing";
 export {
   areNativeBrowserSurfacesSuppressed,
+  decrementChromeOverlayCount,
+  incrementChromeOverlayCount,
+  isChromeOverlayActive,
   resumeNativeBrowserSurfaces,
+  subscribeChromeOverlay,
   subscribeNativeBrowserSurfaceSuppress,
   suppressNativeBrowserSurfaces,
 } from "@/lib/browser-surface/native-overlay";

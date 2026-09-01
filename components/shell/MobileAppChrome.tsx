@@ -6,6 +6,7 @@ import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import {
   MobileBottomSheet,
+  DeleteProjectSheetBody,
   ProjectActionsSheetBody,
   ProjectRenameSheetBody,
 } from "@/components/browser/ProjectMobileSheets";
@@ -72,6 +73,8 @@ export function MobileAppChrome({ className }: { className?: string }) {
     openProject,
     selectMode,
     setSelectMode,
+    backToSpaceHome,
+    deleteProjectCompletely,
   } = useApp();
 
   const catalog = useSyncExternalStore(
@@ -80,6 +83,9 @@ export function MobileAppChrome({ className }: { className?: string }) {
     getWorkspaceCatalogServerSnapshot,
   );
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -268,6 +274,23 @@ export function MobileAppChrome({ className }: { className?: string }) {
       );
     } finally {
       setRenameBusy(false);
+    }
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!projectId || deleteConfirmText.trim().toLowerCase() !== "delete") return;
+    setDeleteBusy(true);
+    try {
+      await deleteProjectCompletely(projectId);
+      setDeleteOpen(false);
+      setDeleteConfirmText("");
+      setActionsOpen(false);
+    } catch (err) {
+      setRenameError(
+        err instanceof Error ? err.message : "Could not delete project.",
+      );
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -518,6 +541,32 @@ export function MobileAppChrome({ className }: { className?: string }) {
             setMobileSurface("panel");
             setActionsOpen(false);
           }}
+          onDelete={() => {
+            setActionsOpen(false);
+            setDeleteConfirmText("");
+            setDeleteOpen(true);
+          }}
+        />
+      </MobileBottomSheet>
+
+      <MobileBottomSheet
+        open={deleteOpen}
+        onClose={() => {
+          setDeleteOpen(false);
+          setDeleteConfirmText("");
+        }}
+        mode="rename"
+      >
+        <DeleteProjectSheetBody
+          projectName={projectTitle}
+          busy={deleteBusy}
+          confirmText={deleteConfirmText}
+          onConfirmTextChange={setDeleteConfirmText}
+          onCancel={() => {
+            setDeleteOpen(false);
+            setDeleteConfirmText("");
+          }}
+          onConfirm={() => void confirmDeleteProject()}
         />
       </MobileBottomSheet>
 

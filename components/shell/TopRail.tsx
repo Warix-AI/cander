@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { X, Trash2 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { MobileSurfaceToggle } from "@/components/shell/MobileSurfaceChrome";
 import { canUseRightPanel } from "@/lib/right-panel";
@@ -15,6 +15,7 @@ export function TopRail() {
     panelMode,
     setPanelMode,
     closeSpaceChat,
+    deleteChat,
     spaceId,
     connectorId,
     projectId,
@@ -53,14 +54,26 @@ export function TopRail() {
     >
       {showMobileSurfaceToggle ? <MobileSurfaceToggle /> : null}
       {spaceChatOpen ? (
-        <button
-          type="button"
-          aria-label="Close chat"
-          onClick={() => closeSpaceChat()}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-        >
-          <X className="h-4 w-4" strokeWidth={1.6} />
-        </button>
+        <>
+          {thread ? (
+            <button
+              type="button"
+              aria-label="Delete chat"
+              onClick={() => void deleteChat(thread.id)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" strokeWidth={1.6} />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            aria-label="Close chat"
+            onClick={() => closeSpaceChat()}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" strokeWidth={1.6} />
+          </button>
+        </>
       ) : null}
       {chatPanelOpen && mobile ? (
         <button

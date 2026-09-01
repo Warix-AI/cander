@@ -2,7 +2,10 @@
 
 import { useEffect } from "react";
 import {
+  decrementChromeOverlayCount,
   getBrowserSurfaceAdapter,
+  incrementChromeOverlayCount,
+  isChromeOverlayActive,
   resumeNativeBrowserSurfaces,
   suppressNativeBrowserSurfaces,
 } from "@/lib/browser-surface";
@@ -12,11 +15,18 @@ export function NativeOverlayGate({ open }: { open: boolean }) {
   useEffect(() => {
     if (!open) return;
     suppressNativeBrowserSurfaces();
+    const hadOverlay = isChromeOverlayActive();
+    incrementChromeOverlayCount();
     const adapter = getBrowserSurfaceAdapter();
-    void adapter.setChromeOverlay?.(true);
+    if (!hadOverlay) {
+      void adapter.setChromeOverlay?.(true);
+    }
     return () => {
       resumeNativeBrowserSurfaces();
-      void adapter.setChromeOverlay?.(false);
+      decrementChromeOverlayCount();
+      if (!isChromeOverlayActive()) {
+        void adapter.setChromeOverlay?.(false);
+      }
     };
   }, [open]);
   return null;

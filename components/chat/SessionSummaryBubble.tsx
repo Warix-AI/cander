@@ -15,7 +15,7 @@ export function SessionSummaryBubble({
   const {
     clearSessionSummary,
     updateSessionSummary,
-    clearPersistentChat,
+    deleteChat,
   } = useApp();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -107,11 +107,11 @@ export function SessionSummaryBubble({
                 </button>
                 <button
                   type="button"
-                  onClick={() => clearPersistentChat(threadId)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => void deleteChat(threadId)}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] text-destructive hover:bg-destructive/10"
                 >
                   <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  Clear chat
+                  Delete chat
                 </button>
               </div>
             </>

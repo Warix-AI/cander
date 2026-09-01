@@ -57,6 +57,8 @@ export function BrowserSurfaceHost({
   const [adapterId, setAdapterId] = useState<string>("web-pwa");
   const [error, setError] = useState<string | null>(null);
   const [recoverToken, setRecoverToken] = useState(0);
+  const [iframeEpoch, setIframeEpoch] = useState(0);
+  const [tabReady, setTabReady] = useState(false);
   const onUrlChangeRef = useRef(onUrlChange);
   const onTitleChangeRef = useRef(onTitleChange);
   const onFaviconChangeRef = useRef(onFaviconChange);
@@ -70,33 +72,24 @@ export function BrowserSurfaceHost({
     () => false,
   );
 
+  const syncBounds = (): BrowserSurfaceBounds | null => {
+    const el = hostRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    return {
+      x: Math.round(rect.left),
+      y: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    };
+  };
+
+  // Create / destroy native tab — avoid remounting on url, overlay, or visibility changes.
   useEffect(() => {
     const adapter = getBrowserSurfaceAdapter();
     setAdapterId(adapter.id);
     let cancelled = false;
-
-    const syncBounds = (): BrowserSurfaceBounds | null => {
-      const el = hostRef.current;
-      if (!el) return null;
-      const rect = el.getBoundingClientRect();
-      return {
-        x: Math.round(rect.left),
-        y: Math.round(rect.top),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      };
-    };
-
-    const paint = async () => {
-      if (!active || suppressed) {
-        await adapter.hideTab(tabId);
-        return;
-      }
-      const bounds = syncBounds();
-      if (bounds && bounds.width > 1 && bounds.height > 1) {
-        await adapter.showTab(tabId, bounds);
-      }
-    };
+    setTabReady(false);
 
     void (async () => {
       try {
@@ -108,14 +101,14 @@ export function BrowserSurfaceHost({
         });
         await adapter.navigate(tabId, url);
         if (cancelled) return;
-        await paint();
+        setTabReady(true);
         if (
           adapter.id === "web-pwa" &&
           !isGoogleUrl(url) &&
           !canEmbedInPwa(url, previewOnly)
         ) {
-          if (!cancelled) setEmbedBlocked(true);
-        } else if (!cancelled) {
+          setEmbedBlocked(true);
+        } else {
           setEmbedBlocked(false);
           setError(null);
         }
@@ -155,6 +148,70 @@ export function BrowserSurfaceHost({
       }
     });
 
+    return () => {
+      cancelled = true;
+      setTabReady(false);
+      unsub();
+      void adapter.hideTab(tabId);
+      void adapter.destroyTab(tabId);
+    };
+  }, [
+    tabId,
+    previewOnly,
+    isolatedPartition,
+    userId,
+    projectId,
+    recoverToken,
+  ]);
+
+  // Navigate existing tab when URL changes (no destroy/recreate).
+  useEffect(() => {
+    if (!tabReady) return;
+    const adapter = getBrowserSurfaceAdapter();
+    void Promise.resolve(adapter.navigate(tabId, url)).then(() => {
+      if (
+        adapter.id === "web-pwa" &&
+        !isGoogleUrl(url) &&
+        !canEmbedInPwa(url, previewOnly)
+      ) {
+        setEmbedBlocked(true);
+      } else if (adapter.id === "web-pwa") {
+        setEmbedBlocked(false);
+        setError(null);
+      }
+    });
+  }, [tabId, url, previewOnly, tabReady]);
+
+  // Reload without tearing down native views.
+  useEffect(() => {
+    if (!tabReady || reloadKey === 0) return;
+    const adapter = getBrowserSurfaceAdapter();
+    if (adapter.id === "web-pwa") {
+      setIframeEpoch((value) => value + 1);
+      return;
+    }
+    void adapter.reload(tabId);
+  }, [reloadKey, tabId, tabReady]);
+
+  // Show / hide / reposition — overlays must not destroy the underlying tab.
+  useEffect(() => {
+    if (!tabReady) return;
+    const adapter = getBrowserSurfaceAdapter();
+    if (adapter.id === "web-pwa") return;
+
+    const paint = async () => {
+      if (!active || suppressed) {
+        await adapter.hideTab(tabId);
+        return;
+      }
+      const bounds = syncBounds();
+      if (bounds && bounds.width > 1 && bounds.height > 1) {
+        await adapter.showTab(tabId, bounds);
+      }
+    };
+
+    void paint();
+
     const onResize = () => {
       void paint();
     };
@@ -169,26 +226,11 @@ export function BrowserSurfaceHost({
     }
 
     return () => {
-      cancelled = true;
-      unsub();
       window.removeEventListener("resize", onResize);
       window.removeEventListener("orientationchange", onResize);
       ro?.disconnect();
-      void adapter.hideTab(tabId);
-      void adapter.destroyTab(tabId);
     };
-  }, [
-    tabId,
-    url,
-    previewOnly,
-    isolatedPartition,
-    reloadKey,
-    recoverToken,
-    userId,
-    projectId,
-    active,
-    suppressed,
-  ]);
+  }, [tabId, active, suppressed, tabReady]);
 
   if (url === "about:blank") {
     return (
@@ -222,7 +264,6 @@ export function BrowserSurfaceHost({
     );
   }
 
-  // Installed Electron app is older than the browser-surface bridge.
   if (isDesktopShell() && !hasDesktopBrowserBridge()) {
     return (
       <div
@@ -286,7 +327,7 @@ export function BrowserSurfaceHost({
     return (
       <div ref={hostRef} className="h-full w-full bg-white">
         <iframe
-          key={`${tabId}-${reloadKey}-${recoverToken}-${url}`}
+          key={`${tabId}-${reloadKey}-${iframeEpoch}-${recoverToken}-${url}`}
           title={title}
           data-tab-id={tabId}
           src={url}
@@ -316,7 +357,6 @@ export function BrowserSurfaceHost({
     );
   }
 
-  // Native Electron / Capacitor views are composited over this host region.
   return (
     <div
       ref={hostRef}

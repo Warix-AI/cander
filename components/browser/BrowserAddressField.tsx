@@ -60,7 +60,7 @@ export function BrowserAddressField({
           spellCheck={false}
           aria-label="Address"
           placeholder="Search or enter URL"
-          className="h-8 w-full rounded-full border border-border/60 bg-muted/40 px-3 text-center font-mono text-[12px] text-foreground caret-foreground outline-none"
+          className="h-8 w-full rounded-full border border-border/60 bg-muted/40 px-3 text-center text-[13px] text-foreground caret-foreground outline-none"
         />
       </form>
     );
@@ -83,7 +83,7 @@ export function BrowserAddressField({
       ) : (
         <>
           <FaviconImage url={url} faviconUrl={faviconUrl} size={14} />
-          <span className="truncate text-[12px] font-medium tracking-[-0.01em] text-foreground">
+          <span className="truncate text-[13px] font-normal tracking-[-0.01em] text-foreground">
             {displayHost}
           </span>
         </>

@@ -267,9 +267,9 @@ function BlockView({
   switch (block.type) {
     case "text":
       return (
-        <p className="text-[14.5px] leading-relaxed text-muted-foreground">
-          {block.text}
-        </p>
+        <div className="text-[14.5px] leading-relaxed text-muted-foreground">
+          <MarkdownRenderer content={block.text} />
+        </div>
       );
     case "plan":
       return <PlanBlock block={block} />;

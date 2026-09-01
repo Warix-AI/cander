@@ -1,15 +1,16 @@
 "use client";
 
-import { hourlyUsage } from "@/lib/hourly-usage";
 import { cn } from "@/lib/utils";
 
 export function ComposerUsageBar({
   floating = false,
-  percent = hourlyUsage().percent,
+  percent = 0,
+  label = "Usage",
   className,
 }: {
   floating?: boolean;
   percent?: number;
+  label?: string;
   className?: string;
 }) {
   return (
@@ -29,20 +30,20 @@ export function ComposerUsageBar({
           aria-valuenow={percent}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`${percent}% of hourly usage`}
+          aria-label={label}
         >
           <div
             className="h-full rounded-full bg-foreground transition-[width] duration-500 ease-out"
             style={{ width: `${percent}%` }}
           />
         </div>
-        <UsageTooltip percent={percent} />
+        <UsageTooltip label={label} />
       </div>
     </div>
   );
 }
 
-function UsageTooltip({ percent }: { percent: number }) {
+function UsageTooltip({ label }: { label: string }) {
   return (
     <div
       className={cn(
@@ -52,7 +53,7 @@ function UsageTooltip({ percent }: { percent: number }) {
         "opacity-0 transition-opacity duration-150 group-hover:opacity-100",
       )}
     >
-      {percent}% hourly usage
+      {label}
     </div>
   );
 }

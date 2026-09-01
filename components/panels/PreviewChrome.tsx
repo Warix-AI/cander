@@ -22,6 +22,7 @@ import { useApp } from "@/components/app/AppProvider";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { Dropdown } from "@/components/ui/Controls";
 import { useMobileShell } from "@/lib/use-media-query";
+import { displayHostFromUrl } from "@/lib/preview-url";
 import type { BuildTool, ViewportId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -76,14 +77,15 @@ export function PreviewChrome({
   const previewing = tool === "preview";
   const changing = tool === "activity";
   const address = liveUrl ?? url;
+  const addressLabel = displayHostFromUrl(address) || address;
 
   return (
     <div className="min-w-0 shrink-0 overflow-hidden">
       {mobile ? (
         <div className="flex h-10 min-w-0 items-center gap-2 px-3">
           <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.6} />
-          <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-muted-foreground">
-            {address}
+          <span className="min-w-0 flex-1 truncate text-[13px] tracking-[-0.01em] text-muted-foreground">
+            {addressLabel}
           </span>
           <span className="truncate text-[12px] font-medium tracking-[-0.01em]">
             {changing ? "Changes" : title}

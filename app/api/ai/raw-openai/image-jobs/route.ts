@@ -24,6 +24,10 @@ import {
   persistGeneratedImageFile,
 } from "@/lib/ai/raw-openai/media-provider";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import {
+  enforceUsageForRequest,
+  finalizeUsageReservation,
+} from "@/lib/usage/server/guard-route";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -33,6 +37,7 @@ type Body = {
   generationId?: string;
   threadId?: string | null;
   messageId?: string | null;
+  workspaceId?: string | null;
 };
 
 export async function POST(request: Request) {
@@ -77,6 +82,23 @@ export async function POST(request: Request) {
   const generationId =
     (typeof body.generationId === "string" && body.generationId.trim()) ||
     newImageGenerationId();
+
+  const idempotencyKey =
+    request.headers.get("Idempotency-Key")?.trim() ||
+    `image-job:${generationId}`;
+  const usage = await enforceUsageForRequest({
+    request,
+    feature: "image_generation",
+    workspaceId: body.workspaceId,
+    threadId: body.threadId,
+    idempotencyKey,
+    estimatedUnits: 1,
+    provider: "openai",
+    model: resolveOpenAIImageModel(),
+  });
+  if (!usage.ok) {
+    return usage.response;
+  }
 
   // Idempotent: resume/poll must not re-schedule provider work.
   const existing = await getImageGenerationJob(generationId, auth.user.id);
@@ -184,6 +206,11 @@ export async function POST(request: Request) {
         attachmentId,
         openaiFileId,
       });
+      await finalizeUsageReservation({
+        reservationId: usage.reservationId,
+        status: "confirmed",
+        actualUnits: 1,
+      });
       console.log("[IMAGE_JOB]", {
         event: "provider_request_completed",
         id: job.id,
@@ -198,6 +225,10 @@ export async function POST(request: Request) {
       await updateImageGenerationJob(job.id, auth.user.id, {
         status: "failed",
         error: message.slice(0, 500),
+      });
+      await finalizeUsageReservation({
+        reservationId: usage.reservationId,
+        status: "failed",
       });
     }
   });

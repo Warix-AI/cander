@@ -74,7 +74,57 @@ export function openSpaceDefaultChat(
   workspaceId: string,
   spaceId: SpaceId,
 ): { threads: Thread[]; id: string } {
+  const universal = threads.find(
+    (item) =>
+      item.id === continuousChatId(workspaceId) &&
+      item.persistent &&
+      !item.projectId,
+  );
+  if (universal) {
+    const updated = withSpaceSwitch(universal, spaceId);
+    if (updated === universal) {
+      return { threads, id: universal.id };
+    }
+    return {
+      threads: threads.map((item) =>
+        item.id === universal.id ? updated : item,
+      ),
+      id: universal.id,
+    };
+  }
   return upsertPersistentSpaceThread(threads, workspaceId, spaceId);
+}
+
+/**
+ * Promote a draft chat to the shared default used across Work, Build, Explore,
+ * and Connectors (via the continuous workspace chat slot).
+ */
+export function adoptThreadAsUniversalDefault(
+  threads: Thread[],
+  workspaceId: string,
+  sourceThreadId: string,
+): { threads: Thread[]; id: string } {
+  const source = threads.find((item) => item.id === sourceThreadId);
+  if (!source || source.workspaceId !== workspaceId || source.projectId) {
+    return ensureContinuousChat(threads, workspaceId, "work");
+  }
+  const defaultId = continuousChatId(workspaceId);
+  const promoted: Thread = {
+    ...source,
+    id: defaultId,
+    spaceId: source.spaceId ?? "work",
+    persistent: true,
+    projectId: undefined,
+  };
+  const removeIds = new Set<string>([
+    sourceThreadId,
+    defaultId,
+    spaceChatId(workspaceId, "work"),
+    spaceChatId(workspaceId, "build"),
+    spaceChatId(workspaceId, "research"),
+  ]);
+  const rest = threads.filter((item) => !removeIds.has(item.id));
+  return { threads: [promoted, ...rest], id: defaultId };
 }
 
 /**

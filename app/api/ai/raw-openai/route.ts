@@ -37,6 +37,11 @@ import {
   resolveOpenAIModel,
 } from "@/lib/ai/raw-openai/web-search";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import {
+  enforceUsageForRequest,
+  finalizeUsageReservation,
+} from "@/lib/usage/server/guard-route";
+import { parseAssistantRichContent } from "@/lib/usage/response-format/from-assistant-content";
 
 export const runtime = "nodejs";
 
@@ -46,6 +51,7 @@ type Body = {
   images?: string[];
   attachmentIds?: string[];
   threadId?: string | null;
+  workspaceId?: string | null;
   title?: string;
 };
 
@@ -102,6 +108,7 @@ export async function POST(request: Request) {
     : [];
 
   let userId: string | null = null;
+  let usageReservationId: string | null = null;
   const imageGenEnabled = isOpenAIImageGenerationEnabled();
   const needsAuth =
     attachmentIds.length > 0 || Boolean(body.threadId) || imageGenEnabled;
@@ -126,6 +133,24 @@ export async function POST(request: Request) {
           { status: ownership.status },
         );
       }
+
+      const idempotencyKey =
+        request.headers.get("Idempotency-Key")?.trim() ||
+        `raw-openai:${body.threadId ?? "anon"}:${messages.length}:${attachmentIds.join(",")}`;
+      const usage = await enforceUsageForRequest({
+        request,
+        feature: "ai_chat",
+        workspaceId: body.workspaceId,
+        threadId: body.threadId,
+        idempotencyKey,
+        estimatedUnits: 1,
+        provider: "openai",
+        model: resolveOpenAIModel(),
+      });
+      if (!usage.ok) {
+        return usage.response;
+      }
+      usageReservationId = usage.reservationId;
     }
   }
 
@@ -472,8 +497,17 @@ export async function POST(request: Request) {
       threadId: body.threadId ?? undefined,
     });
 
+    await finalizeUsageReservation({
+      reservationId: usageReservationId,
+      status: "confirmed",
+      actualUnits: 1,
+    });
+
+    const rich = parseAssistantRichContent(content);
+
     return NextResponse.json({
-      content,
+      content: rich.content,
+      blocks: rich.blocks,
       images: images.length ? images : undefined,
       model,
       webSearchEnabled,
@@ -487,6 +521,10 @@ export async function POST(request: Request) {
       latencyMs,
     });
   } catch (e) {
+    await finalizeUsageReservation({
+      reservationId: usageReservationId,
+      status: "failed",
+    });
     const message = e instanceof Error ? e.message : "openai_error";
     const latencyMs = Date.now() - started;
     console.log("[RAW_OPENAI_TRACE]", {

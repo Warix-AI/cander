@@ -9,6 +9,10 @@ import { toFile } from "openai/uploads";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import { isRawOpenAIModeAllowedOnServer } from "@/lib/ai/raw-openai/flags";
 import { validateUpload } from "@/lib/ai/raw-openai/limits";
+import {
+  enforceUsageForRequest,
+  finalizeUsageReservation,
+} from "@/lib/usage/server/guard-route";
 
 export const runtime = "nodejs";
 
@@ -78,6 +82,22 @@ export async function POST(request: Request) {
 
   const model = resolveTranscriptionModel();
 
+  const idempotencyKey =
+    request.headers.get("Idempotency-Key")?.trim() ||
+    `transcribe:${auth.user.id}:${file.size}:${file.name}`;
+  const usage = await enforceUsageForRequest({
+    request,
+    feature: "audio_realtime",
+    idempotencyKey,
+    estimatedUnits: 1,
+    provider: "openai",
+    model,
+    metadata: { mime, size: file.size },
+  });
+  if (!usage.ok) {
+    return usage.response;
+  }
+
   try {
     const client = new OpenAI({ apiKey });
     const bytes = Buffer.from(await file.arrayBuffer());
@@ -101,12 +121,22 @@ export async function POST(request: Request) {
       latencyMs: Date.now() - started,
     });
 
+    await finalizeUsageReservation({
+      reservationId: usage.reservationId,
+      status: "confirmed",
+      actualUnits: 1,
+    });
+
     return NextResponse.json({
       text: text.trim(),
       model,
       latencyMs: Date.now() - started,
     });
   } catch (e) {
+    await finalizeUsageReservation({
+      reservationId: usage.reservationId,
+      status: "failed",
+    });
     const message = e instanceof Error ? e.message : "transcribe_failed";
     console.log("[RAW_OPENAI_TRACE]", {
       mode: "transcribe",
