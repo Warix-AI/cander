@@ -54,6 +54,7 @@ export function BuildDashboard() {
         id: item.id,
         name: item.title,
         projectId: item.id,
+        indexKind: "project" as const,
         meta: editedMeta(
           item.updatedAt,
           showCreator ? creatorLabel(item.createdBy, actor.id) : null,

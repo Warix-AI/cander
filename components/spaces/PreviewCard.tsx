@@ -9,11 +9,13 @@ import {
   Link2,
   Pin,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import {
   MobileBottomSheet,
   SheetAction,
+  DeleteProjectSheetBody,
 } from "@/components/browser/ProjectMobileSheets";
 import { BannerWash } from "@/components/spaces/BannerWash";
 import { Dropdown } from "@/components/ui/Controls";
@@ -26,6 +28,7 @@ import { normalizeProjectTitle } from "@/lib/project-name";
 import type { SpaceAttachment } from "@/lib/space-entities";
 import type { BannerKey } from "@/lib/space-banners";
 import type { SpaceLayout } from "@/lib/types";
+import type { IndexEntryKind } from "@/lib/space-index";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +49,8 @@ export type PreviewEntry = {
   paperPreview?: { title: string; lines: string[] };
   /** When set, empty preview faces use this space’s banner wash. */
   bannerKey?: BannerKey;
+  /** Recents index kind — drives delete chat vs delete project. */
+  indexKind?: IndexEntryKind;
 };
 
 export function PreviewGrid({
@@ -413,8 +418,16 @@ function PreviewActions({
   kind: PreviewKind;
   onOpen: (projectId: string) => void;
 }) {
-  const { pinTier, setPin, clearPin, workspaceId, promoteToWork, promoteToBuild } =
-    useApp();
+  const {
+    pinTier,
+    setPin,
+    clearPin,
+    workspaceId,
+    promoteToWork,
+    promoteToBuild,
+    deleteChat,
+    deleteProjectCompletely,
+  } = useApp();
   const mobile = useMobileShell();
   const ctx = useWorkspaceCtx();
   const { attachToWork, detachFromWork, updateProject } = useSpaceMutation();
@@ -422,8 +435,15 @@ function PreviewActions({
   const tier = pinTier("project", item.projectId);
   const pinned = Boolean(tier);
   const inWork = attachments.some((row) => row.targetId === item.projectId);
+  const isChat = item.indexKind === "thread";
+  const isProject =
+    item.indexKind === "project" ||
+    (!item.indexKind && (kind === "product" || kind === "paper"));
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [renameValue, setRenameValue] = useState(item.name);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameBusy, setRenameBusy] = useState(false);
@@ -467,6 +487,77 @@ function PreviewActions({
     fn();
     setMenuOpen(false);
   };
+
+  const confirmDeleteProject = async () => {
+    setDeleteBusy(true);
+    try {
+      await deleteProjectCompletely(item.projectId);
+      setDeleteOpen(false);
+      setDeleteConfirm("");
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const deleteMenuItems = (
+    <>
+      {isChat ? (
+        <SheetAction
+          icon={Trash2}
+          label="Delete chat"
+          destructive
+          onClick={() =>
+            runAndClose(() => {
+              void deleteChat(item.projectId);
+            })
+          }
+        />
+      ) : null}
+      {isProject ? (
+        <SheetAction
+          icon={Trash2}
+          label="Delete project"
+          destructive
+          onClick={() =>
+            runAndClose(() => {
+              setDeleteOpen(true);
+            })
+          }
+        />
+      ) : null}
+    </>
+  );
+
+  const deleteDesktopItems = (close: () => void) => (
+    <>
+      {isChat ? (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            void deleteChat(item.projectId);
+            close();
+          }}
+          className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] text-destructive hover:bg-muted"
+        >
+          Delete chat
+        </button>
+      ) : null}
+      {isProject ? (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            setDeleteOpen(true);
+            close();
+          }}
+          className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] text-destructive hover:bg-muted"
+        >
+          Delete project
+        </button>
+      ) : null}
+    </>
+  );
 
   const menuBody = (
     <>
@@ -589,6 +680,7 @@ function PreviewActions({
           />
         </>
       ) : null}
+      {deleteMenuItems}
     </>
   );
 
@@ -802,10 +894,63 @@ function PreviewActions({
                   </button>
                 </>
               ) : null}
+              {deleteDesktopItems(close)}
             </>
           )}
         </Dropdown>
       )}
+      {deleteOpen ? (
+        mobile ? (
+          <MobileBottomSheet
+            open={deleteOpen}
+            onClose={() => {
+              setDeleteOpen(false);
+              setDeleteConfirm("");
+            }}
+            mode="space"
+          >
+            <DeleteProjectSheetBody
+              projectName={item.name}
+              busy={deleteBusy}
+              confirmText={deleteConfirm}
+              onConfirmTextChange={setDeleteConfirm}
+              onCancel={() => {
+                setDeleteOpen(false);
+                setDeleteConfirm("");
+              }}
+              onConfirm={() => void confirmDeleteProject()}
+            />
+          </MobileBottomSheet>
+        ) : (
+          <div
+            className="fixed inset-0 z-[60] flex items-start justify-center bg-black/20 pt-24"
+            onClick={(event) => {
+              event.stopPropagation();
+              if (event.target === event.currentTarget) {
+                setDeleteOpen(false);
+                setDeleteConfirm("");
+              }
+            }}
+          >
+            <div
+              className="w-full max-w-sm rounded-[16px] border border-border bg-background p-4 shadow-lg"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <DeleteProjectSheetBody
+                projectName={item.name}
+                busy={deleteBusy}
+                confirmText={deleteConfirm}
+                onConfirmTextChange={setDeleteConfirm}
+                onCancel={() => {
+                  setDeleteOpen(false);
+                  setDeleteConfirm("");
+                }}
+                onConfirm={() => void confirmDeleteProject()}
+              />
+            </div>
+          </div>
+        )
+      ) : null}
       {renameOpen ? (
         mobile ? (
           <MobileBottomSheet

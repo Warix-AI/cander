@@ -3,6 +3,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useApp } from "@/components/app/AppProvider";
+import { useSpaceApi, useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
+import { upsertChatThread } from "@/lib/api/chat-store";
+import { isSupabaseConfigured } from "@/lib/data-backend";
 import { CanderMark } from "@/components/brand/CanderMark";
 import { ClarificationCardSlot } from "@/components/chat/ClarificationCard";
 import { ChatMessage } from "@/components/chat/MessageBlocks";
@@ -82,6 +85,8 @@ function ComposerDock({
 export function ChatColumn() {
   const { thread, spaceId, sendMessage, drafting, view, projectId, overlay } =
     useApp();
+  const api = useSpaceApi();
+  const ctx = useWorkspaceCtx();
   const browserMode = view === "browser";
   const mobile = useMobileShell();
   const hasChatTurns = Boolean(
@@ -105,6 +110,20 @@ export function ChatColumn() {
     .find((m) => m.role === "user")?.id;
   const floating = useShellStyle() === "floating";
   const { centered } = useChatCanvasCentered();
+
+  // Bulk listThreads omits heavy image blocks; hydrate the open thread on demand.
+  useEffect(() => {
+    const threadId = thread?.id;
+    if (!threadId || !isSupabaseConfigured()) return;
+    let cancelled = false;
+    void api.chat.getThread(ctx, threadId).then((remote) => {
+      if (cancelled || !remote) return;
+      upsertChatThread(remote);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [api.chat, ctx, thread?.id]);
 
   useLayoutEffect(() => {
     const threadId = thread?.id ?? null;

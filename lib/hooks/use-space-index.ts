@@ -135,31 +135,25 @@ export function useSpaceIndex(opts?: {
       loaded.current = false;
     }
     const nextSeed = readIndexSeed(ctx);
-    if (!loaded.current) {
-      if (nextSeed.ready) {
-        setProjects(nextSeed.projects);
-        setSources(nextSeed.sources);
-        setBriefing(nextSeed.briefing);
-        setThreads(nextSeed.threads);
-        loaded.current = true;
-        setLoading(false);
-      } else {
-        setLoading(true);
-      }
+    if (!loaded.current && nextSeed.ready) {
+      setProjects(nextSeed.projects);
+      setSources(nextSeed.sources);
+      setBriefing(nextSeed.briefing);
+      setThreads(nextSeed.threads);
+    } else if (!loaded.current && !nextSeed.ready) {
+      setLoading(true);
     }
     setError(null);
     Promise.all([
       api.entities.listAllProjects(ctx),
       api.entities.listSources(ctx),
       api.entities.listBriefingItems(ctx),
-      api.chat.listThreads(ctx),
     ])
-      .then(([nextProjects, nextSources, nextBriefing, nextThreads]) => {
+      .then(([nextProjects, nextSources, nextBriefing]) => {
         if (cancelled) return;
         setProjects(nextProjects);
         setSources(nextSources);
         setBriefing(filterRealBriefingItems(nextBriefing));
-        setThreads(nextThreads);
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -173,7 +167,7 @@ export function useSpaceIndex(opts?: {
     return () => {
       cancelled = true;
     };
-  }, [api.entities, api.chat, ctx, enabled]);
+  }, [api.entities, ctx, enabled]);
 
   const entries = useMemo(() => {
     const usedProjects = new Set<string>();

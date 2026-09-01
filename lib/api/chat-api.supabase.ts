@@ -5,6 +5,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   messageRowToMessage,
   messageToRow,
+  messageToUpsertRow,
   threadRowToThread,
   threadToRow,
   type MessageRow,
@@ -19,18 +20,42 @@ import type {
 } from "@/lib/space-entities";
 import type { Message, Thread } from "@/lib/types";
 
-async function loadMessagesForThreads(threadIds: string[]) {
+const MESSAGE_COLUMNS_LIGHT =
+  "id, thread_id, workspace_id, role, content, at_label, space_switch, citations, sort_order, created_at";
+
+const MESSAGE_PAGE_SIZE = 1000;
+
+async function loadMessagesForThreads(
+  threadIds: string[],
+  opts?: { includeBlocks?: boolean },
+) {
   if (!threadIds.length) return new Map<string, Message[]>();
   const supabase = createSupabaseBrowserClient();
-  const { data, error } = await supabase
-    .from("messages")
-    .select("*")
-    .in("thread_id", threadIds)
-    .order("sort_order", { ascending: true });
-  if (error) throw error;
+  const allRows: MessageRow[] = [];
+  let offset = 0;
+
+  while (true) {
+    const base = supabase.from("messages");
+    const { data, error } = opts?.includeBlocks
+      ? await base
+          .select("*")
+          .in("thread_id", threadIds)
+          .order("sort_order", { ascending: true })
+          .range(offset, offset + MESSAGE_PAGE_SIZE - 1)
+      : await base
+          .select(MESSAGE_COLUMNS_LIGHT)
+          .in("thread_id", threadIds)
+          .order("sort_order", { ascending: true })
+          .range(offset, offset + MESSAGE_PAGE_SIZE - 1);
+    if (error) throw error;
+    const batch = (data ?? []) as MessageRow[];
+    allRows.push(...batch);
+    if (batch.length < MESSAGE_PAGE_SIZE) break;
+    offset += MESSAGE_PAGE_SIZE;
+  }
 
   const grouped = new Map<string, Message[]>();
-  for (const row of (data ?? []) as MessageRow[]) {
+  for (const row of allRows) {
     const list = grouped.get(row.thread_id) ?? [];
     list.push(messageRowToMessage(row));
     grouped.set(row.thread_id, list);
@@ -73,7 +98,10 @@ export function createSupabaseChatApi(): ChatApi {
       if (error) throw error;
 
       const rows = (data ?? []) as ThreadRow[];
-      const messageMap = await loadMessagesForThreads(rows.map((row) => row.id));
+      const messageMap = await loadMessagesForThreads(
+        rows.map((row) => row.id),
+        { includeBlocks: false },
+      );
       const threads = rows.map((row) =>
         threadRowToThread(row, messageMap.get(row.id) ?? []),
       );
@@ -92,7 +120,9 @@ export function createSupabaseChatApi(): ChatApi {
       if (!data) return null;
 
       const row = data as ThreadRow;
-      const messageMap = await loadMessagesForThreads([row.id]);
+      const messageMap = await loadMessagesForThreads([row.id], {
+        includeBlocks: true,
+      });
       return threadRowToThread(row, messageMap.get(row.id) ?? []);
     },
 
@@ -242,7 +272,7 @@ export async function upsertThreadsToSupabase(
 
   const messageRows = threads.flatMap((thread) =>
     thread.messages.map((message, index) =>
-      messageToRow(message, thread.id, thread.workspaceId, index),
+      messageToUpsertRow(message, thread.id, thread.workspaceId, index),
     ),
   );
   if (!messageRows.length) return;

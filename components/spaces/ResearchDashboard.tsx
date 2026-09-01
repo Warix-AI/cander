@@ -38,6 +38,7 @@ export function ResearchDashboard() {
         id: item.id,
         name: item.title,
         projectId: item.id,
+        indexKind: "project" as const,
         meta: editedMeta(item.updatedAt),
         image: item.cover,
       })),

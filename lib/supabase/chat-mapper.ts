@@ -109,6 +109,21 @@ export function messageToRow(
   };
 }
 
+/** Omit blocks when not loaded locally so upserts don't wipe remote image payloads. */
+export function messageToUpsertRow(
+  message: Message,
+  threadId: string,
+  workspaceId: string,
+  sortOrder: number,
+): Record<string, unknown> {
+  const row = messageToRow(message, threadId, workspaceId, sortOrder);
+  if (message.blocks === undefined) {
+    const { blocks: _blocks, ...rest } = row;
+    return rest;
+  }
+  return row;
+}
+
 export function messageRowToMessage(row: MessageRow): Message {
   const condensed = row.content === "__CHAT_CONDENSED__";
   return {

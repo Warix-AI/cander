@@ -29,7 +29,11 @@ function getCapPhotos(): CapPhotosPlugin | null {
   return cap?.Plugins?.CanderPhotos ?? null;
 }
 
-function dataUrlToBlob(dataUrl: string): Blob {
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  if (dataUrl.startsWith("data:")) {
+    const response = await fetch(dataUrl);
+    return response.blob();
+  }
   const m = /^data:([^;,]+);base64,([\s\S]+)$/.exec(dataUrl);
   if (!m) throw new Error("Invalid image data URL");
   const mime = m[1] || "image/png";
@@ -58,7 +62,7 @@ async function shareImageFile(
     return false;
   }
   try {
-    const blob = dataUrlToBlob(dataUrl);
+    const blob = await dataUrlToBlob(dataUrl);
     const file = new File([blob], filename, { type: blob.type || "image/png" });
     const payload: ShareData = { files: [file], title: filename };
     if (
@@ -121,7 +125,7 @@ export async function saveGeneratedImage(opts: {
   // Electron save dialog when we have bytes
   if (isDesktopShell() && url.startsWith("data:")) {
     try {
-      const blob = dataUrlToBlob(url);
+      const blob = await dataUrlToBlob(url);
       const buf = await blob.arrayBuffer();
       const saved = await createNativeFiles().showSaveDialog?.({
         defaultPath: filename,

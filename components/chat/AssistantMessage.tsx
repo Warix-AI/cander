@@ -8,6 +8,7 @@ import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
 import { formatClarificationAnswersForDisplay } from "@/lib/ai/clarification/schema";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
 import { saveGeneratedImage } from "@/lib/native/save-image";
+import { isMobileShell } from "@/lib/mobile-shell";
 import type { ChatBlock, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -329,6 +330,31 @@ function GeneratedImageBlock({
 }) {
   const [saving, setSaving] = useState(false);
   const [saveNote, setSaveNote] = useState<string | null>(null);
+  const [displayUrl, setDisplayUrl] = useState(block.url);
+  const mobile = isMobileShell();
+
+  useEffect(() => {
+    if (!block.url.startsWith("data:")) {
+      setDisplayUrl(block.url);
+      return;
+    }
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    void fetch(block.url)
+      .then((response) => response.blob())
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setDisplayUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setDisplayUrl(block.url);
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [block.url]);
 
   return (
     <div className="my-1 flex max-w-md flex-col gap-1">
@@ -336,9 +362,12 @@ function GeneratedImageBlock({
         <div className="relative aspect-square min-w-0 flex-1 overflow-hidden rounded-[14px] border border-border bg-muted/20">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={block.url}
+            src={displayUrl}
             alt={block.name}
-            className="absolute inset-0 h-full w-full object-cover"
+            draggable={false}
+            className="absolute inset-0 h-full w-full object-cover select-none"
+            style={mobile ? { WebkitTouchCallout: "none" } : undefined}
+            onContextMenu={(event) => event.preventDefault()}
           />
         </div>
         <button

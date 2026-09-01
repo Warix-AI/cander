@@ -61,6 +61,7 @@ export function RecentsView() {
         openKey: entry.key,
         name: entry.title,
         projectId: entry.key,
+        indexKind: entry.kind,
         meta: entry.meta,
         badge: entry.badge,
         image: entry.cover,
