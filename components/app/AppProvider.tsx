@@ -170,6 +170,10 @@ import type {
 } from "@/lib/types";
 import { isSpaceLibrarySpace } from "@/lib/space-library";
 import {
+  readSpaceLayoutPreference,
+  writeSpaceLayoutPreference,
+} from "@/lib/space-layout-preference";
+import {
   adoptThreadAsUniversalDefault,
   continuousChatId,
   openSpaceDefaultChat,
@@ -602,7 +606,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [settingsOrgMemberId, setSettingsOrgMemberId] = useState<string | null>(
     null,
   );
-  const [spaceLayout, setSpaceLayout] = useState<SpaceLayout>("list");
+  const [spaceLayout, setSpaceLayoutState] = useState<SpaceLayout>(
+    readSpaceLayoutPreference,
+  );
+  const setSpaceLayout = useCallback((layout: SpaceLayout) => {
+    setSpaceLayoutState(layout);
+    writeSpaceLayoutPreference(layout);
+  }, []);
   const [overlay, setOverlay] = useState<OverlayId>(null);
   const [settingsSpaceId, setSettingsSpaceId] = useState<SpaceId | null>(null);
   const [settingsSpaceInitialTab, setSettingsSpaceInitialTab] = useState<
@@ -2710,8 +2720,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
       setJobId(onUnscopedChat ? jobId : (intent.jobId ?? jobId));
       if (!onUnscopedChat && space && intent.buildTool) setBuildTool(intent.buildTool);
-      if (!onUnscopedChat && space === "build") setBuildTool("preview");
-      if (!onUnscopedChat && space === "research") setResearchTool("overview");
+      if (!onUnscopedChat && space === "build" && !projectId) setBuildTool("preview");
+      if (!onUnscopedChat && space === "research" && !projectId)
+        setResearchTool("overview");
       if (!onUnscopedChat && space && (kind === "build" || kind === "refine" || kind === "fix"))
         setBuildTool("preview");
       if (!onUnscopedChat && space && kind === "changes") setBuildTool("activity");

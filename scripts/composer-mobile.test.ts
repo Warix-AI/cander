@@ -88,12 +88,13 @@ describe("composer autosize", () => {
 });
 
 describe("composer mobile alignment + send", () => {
-  it("bottom-aligns + / mic / send on mobile", () => {
+  it("bottom-aligns + / mic / send when split or on mobile", () => {
     const composer = readRepo("components/shell/Composer.tsx");
+    assert.match(composer, /growUpward/);
+    assert.match(composer, /panelMode !== "collapsed"/);
     assert.match(composer, /items-end/);
     assert.match(composer, /self-end/);
     assert.match(composer, /onSend=\{submit\}/);
-    assert.match(composer, /grow upward/);
   });
 
   it("Send button invokes explicit onClick (iOS-safe)", () => {

@@ -7,7 +7,7 @@ import {
   getProjectBrowserSession,
   getProjectBrowserSessionRevision,
   parseProjectBrowserStorageKey,
-  replaceProjectBrowserWorkspaceState,
+  mergeProjectBrowserRemoteSessions,
   subscribeProjectBrowserSession,
   type ProjectBrowserSession,
 } from "@/lib/project-browser-session";
@@ -69,11 +69,12 @@ export async function hydrateProjectBrowserFromRemote(ctx: WorkspaceCtx) {
           projectId: row.project_id,
         },
         session,
+        updatedAt: row.updated_at,
       };
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
-  replaceProjectBrowserWorkspaceState(ctx.actorId, ctx.workspaceId, sessions);
+  mergeProjectBrowserRemoteSessions(ctx.actorId, ctx.workspaceId, sessions);
 
   window.setTimeout(() => {
     skipRemoteSync = false;

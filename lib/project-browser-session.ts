@@ -53,6 +53,8 @@ const cache = new Map<string, ProjectBrowserSession>();
 const hydratedKeys = new Set<string>();
 let revision = 0;
 let lastChangedKey = "";
+/** Last local write time per storage key — avoids stale remote hydrates clobbering tabs. */
+const localWriteAt = new Map<string, number>();
 /** When true, session updates stay in memory (quick-search browsing). */
 let volatilePersistence = false;
 
@@ -336,6 +338,7 @@ function persistKey(key: string, session: ProjectBrowserSession) {
   // Keep in-memory cache as the live session (including agent-browser).
   cache.set(key, session);
   lastChangedKey = key;
+  localWriteAt.set(key, Date.now());
   if (!volatilePersistence && typeof window !== "undefined") {
     safeLocalStorageSetItem(
       `${STORAGE_PREFIX}:${key}`,
@@ -462,6 +465,7 @@ export function setProjectBrowserSessionVolatile(
   hydratedKeys.add(storageKey);
   cache.set(storageKey, session);
   lastChangedKey = storageKey;
+  localWriteAt.set(storageKey, Date.now());
   revision += 1;
   emit();
 }
@@ -492,20 +496,41 @@ export function replaceProjectBrowserSession(
   persistKey(storageKey, next);
 }
 
-export function replaceProjectBrowserWorkspaceState(
+export function mergeProjectBrowserRemoteSessions(
   profileId: string,
   workspaceId: string,
-  sessions: { key: ProjectBrowserKey; session: ProjectBrowserSession }[],
+  sessions: {
+    key: ProjectBrowserKey;
+    session: ProjectBrowserSession;
+    updatedAt: string;
+  }[],
 ) {
-  const prefix = `${profileId}|${workspaceId}|`;
-  for (const existing of [...cache.keys()]) {
-    if (existing.startsWith(prefix)) {
-      cache.delete(existing);
-      hydratedKeys.delete(existing);
-    }
-  }
   for (const item of sessions) {
     const storageKey = projectBrowserStorageKey(item.key);
+    const remoteUpdatedMs = Date.parse(item.updatedAt);
+    const localWritten = localWriteAt.get(storageKey);
+    if (
+      localWritten &&
+      Number.isFinite(remoteUpdatedMs) &&
+      remoteUpdatedMs <= localWritten
+    ) {
+      continue;
+    }
+
+    let existing = cache.get(storageKey);
+    if (!existing && typeof window !== "undefined") {
+      existing =
+        parseSession(
+          window.localStorage.getItem(`${STORAGE_PREFIX}:${storageKey}`),
+          item.key.spaceId,
+        ) ?? undefined;
+    }
+    if (existing && existing.tabs.length > item.session.tabs.length) {
+      hydratedKeys.add(storageKey);
+      cache.set(storageKey, existing);
+      continue;
+    }
+
     hydratedKeys.add(storageKey);
     cache.set(storageKey, item.session);
     if (typeof window !== "undefined") {
@@ -515,9 +540,24 @@ export function replaceProjectBrowserWorkspaceState(
       );
     }
   }
-  lastChangedKey = "";
   revision += 1;
   emit();
+}
+
+/** @deprecated Prefer mergeProjectBrowserRemoteSessions — kept for imports. */
+export function replaceProjectBrowserWorkspaceState(
+  profileId: string,
+  workspaceId: string,
+  sessions: { key: ProjectBrowserKey; session: ProjectBrowserSession }[],
+) {
+  mergeProjectBrowserRemoteSessions(
+    profileId,
+    workspaceId,
+    sessions.map((item) => ({
+      ...item,
+      updatedAt: new Date(0).toISOString(),
+    })),
+  );
 }
 
 export function listCachedProjectBrowserSessions(

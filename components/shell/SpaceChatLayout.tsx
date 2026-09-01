@@ -22,7 +22,6 @@ import {
   PANEL_RATIO_WIDE_FLOOR,
   PINNED_CHAT_WIDTH,
   showStandaloneBrowserPanel,
-  SPLIT_CHAT_MAX_WIDTH,
 } from "@/lib/right-panel";
 import { isDashboardOnlySpace } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
@@ -202,9 +201,8 @@ export function SpaceChatLayout() {
       <RightPanelToggleDock />
       <div
         className={cn(
-          "flex min-h-0 min-w-0 flex-col overflow-hidden bg-background @container",
+          "flex min-h-0 min-w-0 shrink-0 flex-col overflow-hidden bg-background @container",
           pinChat && PINNED_CHAT_WIDTH,
-          !pinChat && chatOpen && spaceOpen && SPLIT_CHAT_MAX_WIDTH,
           animateLayout &&
             !pinChat &&
             "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
@@ -225,16 +223,11 @@ export function SpaceChatLayout() {
 
       <div
         className={cn(
-          "relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-space-canvas dark:bg-background @container",
-          pinChat && "min-w-0 flex-1",
+          "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-space-canvas dark:bg-background @container",
           chatOpen && liveChatPct > 0 && "border-l border-border/40",
-          animateLayout &&
-            !pinChat &&
-            "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
           !spaceOpen && !pinChat && "invisible pointer-events-none",
         )}
-        style={pinChat ? undefined : { width: `${liveSpacePct}%` }}
-        aria-hidden={liveSpacePct === 0 && !pinChat}
+        aria-hidden={!spaceOpen && !pinChat}
       >
         <SpaceRenderModeProvider mode={spaceMode}>
           <div

@@ -30,6 +30,7 @@ export function TopRail() {
     mobile && (spaceChatOpen || chatPanelOpen);
   const panelDockRoom =
     !mobile &&
+    panelMode === "collapsed" &&
     canUseRightPanel({
       view,
       thread,

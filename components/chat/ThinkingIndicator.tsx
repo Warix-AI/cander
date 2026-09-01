@@ -7,8 +7,10 @@ import { labelForPhase } from "@/lib/ai/turn-activity";
 import { cn } from "@/lib/utils";
 
 const STATUS_CYCLE = ["Thinking", "Searching", "Generating"] as const;
+/** Time each status label stays visible before cycling to the next. */
+const STATUS_CYCLE_MS = 5000;
 
-function useCyclingStatus(active: boolean, intervalMs = 2200) {
+function useCyclingStatus(active: boolean, intervalMs = STATUS_CYCLE_MS) {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {

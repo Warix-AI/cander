@@ -135,6 +135,7 @@ export function Composer({
     overlay,
     turnActive,
     stopTurn,
+    panelMode,
   } = useApp();
   const floating = useShellStyle() === "floating";
   const mobile = useMobileShell();
@@ -641,6 +642,8 @@ export function Composer({
         : APP_MESSAGE_PLACEHOLDER);
 
   const showUsageBar = !compact && usagePercent >= USAGE_BAR_THRESHOLD;
+  /** Split view / mobile: composer grows upward; controls stay on the bottom row. */
+  const growUpward = mobile || panelMode !== "collapsed";
 
   return (
     <div className={cn(showUsageBar && "composer-dock-stack")}>
@@ -1034,9 +1037,7 @@ export function Composer({
             <div
               className={cn(
                 "flex min-h-8 gap-1",
-                // Mobile: grow upward — controls stay on the bottom axis.
-                // Desktop: grow downward — controls stay top-aligned with text.
-                mobile
+                growUpward
                   ? "items-end"
                   : hasText
                     ? "items-start"
@@ -1109,7 +1110,11 @@ export function Composer({
               <div
                 className={cn(
                   "flex shrink-0 items-center gap-0.5",
-                  mobile ? "self-end" : hasText ? "self-start" : "self-center",
+                  growUpward
+                    ? "self-end"
+                    : hasText
+                      ? "self-start"
+                      : "self-center",
                 )}
               >
                 <ComposerTrailingActions
