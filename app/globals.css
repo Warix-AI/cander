@@ -61,8 +61,8 @@
 
 .dark {
   --card: oklch(0.165 0 0);
-  --mobile-menu-canvas: oklch(0.19 0.005 265);
-  --mobile-app-surface: oklch(0 0 0);
+  --mobile-menu-canvas: oklch(0 0 0);
+  --mobile-app-surface: oklch(0.19 0.005 265);
   --ring: oklch(0.556 0 0);
   --input: oklch(0.269 0 0);
   --muted: oklch(0.269 0 0);
@@ -549,7 +549,7 @@ html.dark {
   background-color: var(--mobile-menu-canvas);
 }
 
-/* Chat peek / app column — true black in dark mode. */
+/* Chat peek / app column — dark gray in dark mode. */
 .dark .mobile-app-surface {
   background-color: var(--mobile-app-surface);
 }
@@ -1178,6 +1178,7 @@ html:not(.dark) .shell-panel :is(.bg-sidebar, .bg-background) {
 .image-gen-card {
   position: relative;
   width: 100%;
+  min-height: 180px;
   overflow: hidden;
   border-radius: 18px;
   background: #f2f2f2;
@@ -1188,7 +1189,7 @@ html.dark .image-gen-card {
 }
 
 .image-gen-card-enter {
-  animation: image-gen-card-enter 200ms ease-out;
+  animation: image-gen-card-enter 200ms ease-out both;
 }
 
 .image-gen-spinner {

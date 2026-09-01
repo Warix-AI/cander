@@ -156,7 +156,7 @@ function MenuMain({
 
   return (
     <>
-      <div className="flex shrink-0 items-center px-5 pt-[calc(env(safe-area-inset-top,0px)+22px)]">
+      <div className="flex shrink-0 items-center px-3 pl-7 pt-[calc(env(safe-area-inset-top,0px)+22px)]">
         <CanderWordmark />
       </div>
 

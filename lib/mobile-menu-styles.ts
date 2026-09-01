@@ -1,9 +1,9 @@
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 
-/** Off-white menu canvas — contrasts with the white chat peek. */
+/** Off-black menu canvas — contrasts with the dark-gray chat peek. */
 export const MOBILE_MENU_BG = "mobile-menu-canvas";
 
-/** Main app surfaces on mobile — pure white in light, true black in dark. */
+/** Main app surfaces on mobile — pure white in light, dark gray in dark. */
 export const MOBILE_APP_BG = "bg-white mobile-app-surface";
 
 /** Settings groups on mobile — flat surfaces that respect light/dark. */

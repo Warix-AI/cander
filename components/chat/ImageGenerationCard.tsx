@@ -114,7 +114,28 @@ export function ImageGenerationCard({
     !imageUrl?.trim() &&
     !instant
   ) {
-    return null;
+    return (
+      <div className="my-1 flex w-full max-w-[512px] items-center gap-3 rounded-[18px] border border-border bg-muted/20 px-3 py-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13.5px] font-medium">Image unavailable</p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            {error || "The image finished generating but could not be displayed."}
+          </p>
+        </div>
+        {onRetry ? (
+          <button
+            type="button"
+            aria-label="Retry"
+            title="Retry"
+            disabled={retrying}
+            onClick={onRetry}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} />
+          </button>
+        ) : null}
+      </div>
+    );
   }
 
   if (phase === "cancelled") {
@@ -234,6 +255,6 @@ export function phaseForImageGenerationBlock(block: {
   if (block.status === "cancelled") return "cancelled";
   if (block.status === "failed") return "failed";
   if (block.status === "completed" && block.imageUrl?.trim()) return "decoding";
-  if (block.status === "completed") return "complete";
+  if (block.status === "completed") return "failed";
   return "generating";
 }

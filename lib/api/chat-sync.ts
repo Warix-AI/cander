@@ -19,28 +19,32 @@ const IMPORT_FLAG_KEY = "courier-chat-imported-v1";
 
 let skipRemoteSync = false;
 
-function hasPendingAiThinking(threads: ReturnType<typeof getChatStoreSnapshot>["threads"]) {
-  return threads.some((thread) =>
-    thread.messages.some(
-      (m) =>
-        m.role === "assistant" &&
-        (m.status === "pending" ||
-          m.status === "streaming" ||
-          m.content === "Thinking…" ||
-          m.content === "Thinking..."),
+function messageHasPendingAi(message: Thread["messages"][number]) {
+  if (message.role !== "assistant") return false;
+  if (
+    message.status === "pending" ||
+    message.status === "streaming" ||
+    message.content === "Thinking…" ||
+    message.content === "Thinking..."
+  ) {
+    return true;
+  }
+  return Boolean(
+    message.blocks?.some(
+      (block) =>
+        block.type === "image_generation" && block.status === "generating",
     ),
   );
 }
 
-function hasPendingAiInThread(thread: Thread) {
-  return thread.messages.some(
-    (m) =>
-      m.role === "assistant" &&
-      (m.status === "pending" ||
-        m.status === "streaming" ||
-        m.content === "Thinking…" ||
-        m.content === "Thinking..."),
+function hasPendingAiThinking(threads: ReturnType<typeof getChatStoreSnapshot>["threads"]) {
+  return threads.some((thread) =>
+    thread.messages.some((message) => messageHasPendingAi(message)),
   );
+}
+
+function hasPendingAiInThread(thread: Thread) {
+  return thread.messages.some((message) => messageHasPendingAi(message));
 }
 
 function mergeMessageBlocks(
@@ -49,7 +53,7 @@ function mergeMessageBlocks(
 ): ChatBlock[] | undefined {
   if (!remoteBlocks?.length) return localBlocks;
   if (!localBlocks?.length) return remoteBlocks;
-  return remoteBlocks.map((remoteBlock, index) => {
+  const merged = remoteBlocks.map((remoteBlock, index) => {
     const localBlock = localBlocks[index];
     if (!localBlock || localBlock.type !== remoteBlock.type) return remoteBlock;
     if (remoteBlock.type === "image" && localBlock.type === "image") {
@@ -70,6 +74,20 @@ function mergeMessageBlocks(
     }
     return remoteBlock;
   });
+  for (const localBlock of localBlocks) {
+    if (
+      localBlock.type === "image_generation" &&
+      localBlock.status === "generating" &&
+      !merged.some(
+        (block) =>
+          block.type === "image_generation" &&
+          block.generationId === localBlock.generationId,
+      )
+    ) {
+      merged.push(localBlock);
+    }
+  }
+  return merged;
 }
 
 /** Merge a remote thread hydrate with the in-memory copy to avoid image flicker. */
@@ -132,13 +150,8 @@ export async function hydrateChatFromRemote(
   const mergedRemote = remote.map((remoteThread) => {
     const local = latest.find((item) => item.id === remoteThread.id);
     if (!local || local.workspaceId !== ctx.workspaceId) return remoteThread;
-    const localPendingAi = local.messages.some(
-      (m) =>
-        m.role === "assistant" &&
-        (m.status === "pending" ||
-          m.status === "streaming" ||
-          m.content === "Thinking…" ||
-          m.content === "Thinking..."),
+    const localPendingAi = local.messages.some((message) =>
+      messageHasPendingAi(message),
     );
     if (localPendingAi) return local;
     if (
