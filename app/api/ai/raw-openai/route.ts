@@ -36,6 +36,7 @@ import {
   isOpenAIWebSearchEnabled,
   resolveOpenAIModel,
 } from "@/lib/ai/raw-openai/web-search";
+import { isSupabaseConfigured } from "@/lib/data-backend";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   enforceUsageForRequest,
@@ -110,20 +111,43 @@ export async function POST(request: Request) {
   let userId: string | null = null;
   let usageReservationId: string | null = null;
   const imageGenEnabled = isOpenAIImageGenerationEnabled();
-  const needsAuth =
-    attachmentIds.length > 0 || Boolean(body.threadId) || imageGenEnabled;
-  if (needsAuth) {
+
+  if (isSupabaseConfigured()) {
     const auth = await requireBearerUser(request);
-    if ((attachmentIds.length || imageGenEnabled) && !auth.ok) {
-      // Image gen persistence needs auth when possible; allow unauthenticated
-      // text-only if no attachments and gen will skip DB persist.
-      if (attachmentIds.length && !auth.ok) {
-        return NextResponse.json(
-          { error: auth.error, latencyMs: Date.now() - started },
-          { status: auth.status },
-        );
-      }
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: auth.error, latencyMs: Date.now() - started },
+        { status: auth.status },
+      );
     }
+    userId = auth.user.id;
+    const ownership = await assertThreadOwnedByUser(body.threadId, userId);
+    if (!ownership.ok) {
+      return NextResponse.json(
+        { error: ownership.error, latencyMs: Date.now() - started },
+        { status: ownership.status },
+      );
+    }
+
+    const idempotencyKey =
+      request.headers.get("Idempotency-Key")?.trim() ||
+      `raw-openai:${body.threadId ?? "anon"}:${messages.length}:${attachmentIds.join(",")}`;
+    const usage = await enforceUsageForRequest({
+      request,
+      feature: "ai_chat",
+      workspaceId: body.workspaceId,
+      threadId: body.threadId,
+      idempotencyKey,
+      estimatedUnits: 1,
+      provider: "openai",
+      model: resolveOpenAIModel(),
+    });
+    if (!usage.ok) {
+      return usage.response;
+    }
+    usageReservationId = usage.reservationId;
+  } else {
+    const auth = await requireBearerUser(request);
     if (auth.ok) {
       userId = auth.user.id;
       const ownership = await assertThreadOwnedByUser(body.threadId, userId);
@@ -133,24 +157,6 @@ export async function POST(request: Request) {
           { status: ownership.status },
         );
       }
-
-      const idempotencyKey =
-        request.headers.get("Idempotency-Key")?.trim() ||
-        `raw-openai:${body.threadId ?? "anon"}:${messages.length}:${attachmentIds.join(",")}`;
-      const usage = await enforceUsageForRequest({
-        request,
-        feature: "ai_chat",
-        workspaceId: body.workspaceId,
-        threadId: body.threadId,
-        idempotencyKey,
-        estimatedUnits: 1,
-        provider: "openai",
-        model: resolveOpenAIModel(),
-      });
-      if (!usage.ok) {
-        return usage.response;
-      }
-      usageReservationId = usage.reservationId;
     }
   }
 

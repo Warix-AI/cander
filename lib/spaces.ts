@@ -7,6 +7,9 @@ export const PRIMARY_NAV_SPACES: SpaceId[] = [
   "research",
 ];
 
+/** Hide Studio from sidebar / mobile menu until the space is ready for GA. */
+export const SHOW_STUDIO_NAV = false;
+
 export const NAV_SPACES: SpaceId[] = [...PRIMARY_NAV_SPACES];
 export const ALL_SPACE_IDS: SpaceId[] = [...PRIMARY_NAV_SPACES];
 
@@ -40,6 +43,11 @@ export function chatSpaceId(
 
 export function isExtraNavId(id: string): id is ExtraNavId {
   return (EXTRA_NAV_IDS as readonly string[]).includes(id);
+}
+
+export function isNavVisible(id: SidebarNavId): boolean {
+  if (id === "research" && !SHOW_STUDIO_NAV) return false;
+  return true;
 }
 
 export function isSidebarNavId(id: string): id is SidebarNavId {
@@ -99,7 +107,9 @@ export function allowedNavItems(
   opts?: SidebarNavOpts,
 ): SidebarNavId[] {
   return dedupeNav(
-    DEFAULT_SIDEBAR_MAIN.filter((id) => spaceAllowed(id, allowed, opts)),
+    DEFAULT_SIDEBAR_MAIN.filter(
+      (id) => spaceAllowed(id, allowed, opts) && isNavVisible(id),
+    ),
   );
 }
 

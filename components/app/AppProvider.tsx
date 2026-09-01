@@ -119,7 +119,9 @@ import {
 } from "@/lib/entitlements";
 import {
   primeStandaloneBrowserSession,
+  readStandaloneBrowserPinned,
   standaloneBrowserKey,
+  writeStandaloneBrowserPinned,
 } from "@/lib/standalone-browser-session";
 import { isChatSpace, chatSpaceId, PRIMARY_NAV_SPACES, spaceAllowed, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
 import type {
@@ -672,9 +674,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setConnectorId(snap.connectorId);
     setJobId(snap.jobId);
     setSkillId(snap.skillId);
-    setStandaloneBrowserOpen(Boolean(snap.standaloneBrowserOpen));
+    const pinned = readStandaloneBrowserPinned(actor.id, workspaceId);
+    const browserOpen =
+      snap.standaloneBrowserOpen ??
+      (snap.view === "chat" &&
+        !snap.spaceId &&
+        !snap.projectId &&
+        pinned);
+    setStandaloneBrowserOpen(Boolean(browserOpen));
     setDrafting(false);
-  }, []);
+  }, [actor.id, workspaceId]);
 
   const goBack = useCallback(() => {
     if (hist.i <= 0) return;
@@ -831,21 +840,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Target workspace doesn't have this space — home New chat.
+      const pinned = readStandaloneBrowserPinned(actor.id, id);
       setView("chat");
       setSpaceId(null);
       setDrafting(false);
-      setPanelMode("collapsed");
+      setStandaloneBrowserOpen(pinned);
+      setPanelMode(pinned ? "split" : "collapsed");
+      setMobileSurface(pinned ? "panel" : "chat");
       setPanelIntent("browse");
       pushTarget({
         view: "chat",
         spaceId: null,
         threadId: null,
         projectId: null,
-        panelMode: "collapsed",
+        panelMode: pinned ? "split" : "collapsed",
         panelIntent: "browse",
         connectorId: null,
         jobId: null,
         skillId: null,
+        standaloneBrowserOpen: pinned || undefined,
       });
     },
     [
@@ -948,17 +961,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (panelMode === "collapsed") return "panel";
         return surface === "panel" ? "chat" : "panel";
       });
-      if (panelMode !== "collapsed") {
-        setStandaloneBrowserOpen(false);
-      }
       return;
     }
-    setPanelMode((mode) => {
-      if (mode !== "collapsed") {
-        setStandaloneBrowserOpen(false);
-      }
-      return mode === "collapsed" ? "split" : "collapsed";
-    });
+    setPanelMode((mode) => (mode === "collapsed" ? "split" : "collapsed"));
     // Keep a usable right-panel share when opening from empty New Chat.
     setPanelRatioState((ratio) => (ratio < 0.5 ? 0.55 : ratio));
     setMobileSurface("chat");
@@ -1058,6 +1063,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const applyHomeNewChat = useCallback(() => {
     let tid = "";
+    const pinned = readStandaloneBrowserPinned(actor.id, workspaceId);
     setThreads((current) => {
       const { threads: next, id } = startContinuousChat(
         current,
@@ -1076,20 +1082,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setView("chat");
     setDrafting(true);
     setPanelIntent("browse");
-    setPanelMode("collapsed");
-    setMobileSurface("chat");
+    setStandaloneBrowserOpen(pinned);
+    setPanelMode(pinned ? "split" : "collapsed");
+    setMobileSurface(pinned ? "panel" : "chat");
     pushTarget({
       view: "chat",
       spaceId: null,
       threadId: tid,
       projectId: null,
-      panelMode: "collapsed",
+      panelMode: pinned ? "split" : "collapsed",
       panelIntent: "browse",
       connectorId: null,
       jobId: null,
       skillId: null,
+      standaloneBrowserOpen: pinned || undefined,
     });
-  }, [pushTarget, workspaceId]);
+  }, [pushTarget, workspaceId, actor.id]);
 
   const newChat = useCallback(
     (space?: SpaceId) => {
@@ -3207,14 +3215,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     queueMicrotask(() => setVoiceActive(false));
   }, [entitlements.hasVoice]);
 
-  // Standalone browser is scoped to home chat — clear when leaving for a space.
-  useEffect(() => {
-    if (!standaloneBrowserOpen) return;
-    if (view !== "chat" || spaceId || projectId) {
-      setStandaloneBrowserOpen(false);
-    }
-  }, [standaloneBrowserOpen, view, spaceId, projectId]);
-
   useEffect(() => {
     if (panelMode !== "collapsed") return;
     if (!drafting || threadId) return;
@@ -3890,22 +3890,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setConnectorId(null);
     setJobId(null);
     setSkillId(null);
+    const pinned = readStandaloneBrowserPinned(actor.id, workspaceId);
     setView("chat");
     setDrafting(false);
     setPanelIntent("browse");
-    setPanelMode("collapsed");
+    setStandaloneBrowserOpen(pinned);
+    setPanelMode(pinned ? "split" : "collapsed");
+    setMobileSurface(pinned ? "panel" : "chat");
     pushTarget({
       view: "chat",
       spaceId: null,
       threadId: null,
       projectId: null,
-      panelMode: "collapsed",
+      panelMode: pinned ? "split" : "collapsed",
       panelIntent: "browse",
       connectorId: null,
       jobId: null,
       skillId: null,
+      standaloneBrowserOpen: pinned || undefined,
     });
-  }, [hist.i, goBack, pushTarget]);
+  }, [hist.i, goBack, pushTarget, actor.id, workspaceId]);
 
   const selectSettingsTab = useCallback((tab: SettingsTab) => {
     setSettingsWorkspaceId(null);
@@ -4012,6 +4016,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const key = standaloneBrowserKey(actor.id, workspaceId);
       primeStandaloneBrowserSession(key, opts?.query ?? browserSearch);
       setBrowserSearch(null);
+      writeStandaloneBrowserPinned(actor.id, workspaceId, true);
       setStandaloneBrowserOpen(true);
       setPanelMode("split");
       setPanelRatioState((ratio) => (ratio < 0.5 ? 0.55 : ratio));
@@ -4046,6 +4051,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const closeStandaloneBrowser = useCallback(() => {
+    writeStandaloneBrowserPinned(actor.id, workspaceId, false);
     setStandaloneBrowserOpen(false);
     setPanelMode("collapsed");
     setMobileSurface("chat");
@@ -4062,6 +4068,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       standaloneBrowserOpen: false,
     });
   }, [
+    actor.id,
+    workspaceId,
     view,
     spaceId,
     threadId,

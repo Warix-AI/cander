@@ -24,7 +24,7 @@ import {
   useSpaceIndex,
 } from "@/lib/hooks/use-space-index";
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
-import { spaceAllowed } from "@/lib/spaces";
+import { isNavVisible, SHOW_STUDIO_NAV, spaceAllowed } from "@/lib/spaces";
 import { memberSpaces } from "@/lib/workspace-policy";
 import { cn } from "@/lib/utils";
 
@@ -121,13 +121,17 @@ export function SearchModal() {
         group: "Actions",
         run: () => newChat("build"),
       },
-      {
-        id: "action-new-research",
-        title: "New Studio",
-        meta: "Start a search with this chat",
-        group: "Actions",
-        run: () => newChat("research"),
-      },
+      ...(SHOW_STUDIO_NAV
+        ? [
+            {
+              id: "action-new-research",
+              title: "New Studio",
+              meta: "Start a search with this chat",
+              group: "Actions" as const,
+              run: () => newChat("research"),
+            },
+          ]
+        : []),
     ];
     if (standaloneBrowserOpen) {
       actions.unshift({
@@ -146,6 +150,7 @@ export function SearchModal() {
     if (!needle) return items;
 
     for (const space of spaces) {
+      if (!isNavVisible(space.id)) continue;
       if (!match(space.label)) continue;
       if (
         !spaceAllowed(

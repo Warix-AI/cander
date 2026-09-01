@@ -10,8 +10,45 @@ import {
   type ProjectBrowserSession,
 } from "@/lib/project-browser-session";
 import { normalizeBrowserUrl } from "@/lib/preview-url";
+import { safeLocalStorageSetItem } from "@/lib/safe-local-storage";
 
 export const STANDALONE_BROWSER_PROJECT_ID = "__standalone__";
+
+const PINNED_PREFIX = "courier-standalone-browser-pinned";
+
+export function standaloneBrowserPinnedKey(
+  profileId: string,
+  workspaceId: string,
+) {
+  return `${PINNED_PREFIX}:${profileId}:${workspaceId}`;
+}
+
+export function readStandaloneBrowserPinned(
+  profileId: string,
+  workspaceId: string,
+): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return (
+      window.localStorage.getItem(
+        standaloneBrowserPinnedKey(profileId, workspaceId),
+      ) === "1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function writeStandaloneBrowserPinned(
+  profileId: string,
+  workspaceId: string,
+  pinned: boolean,
+) {
+  safeLocalStorageSetItem(
+    standaloneBrowserPinnedKey(profileId, workspaceId),
+    pinned ? "1" : "0",
+  );
+}
 
 export function standaloneBrowserKey(
   profileId: string,
