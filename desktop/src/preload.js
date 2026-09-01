@@ -2,8 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("canderDesktop", {
   platform: process.platform,
-  shellBuild: "2026-08-30-speech-composer",
-  shellVersion: "0.1.5",
+  shellBuild: "2026-08-31-browser-gap-theme",
+  shellVersion: "0.1.6",
   window: {
     minimize: () => ipcRenderer.send("cander:window-minimize"),
     maximize: () => ipcRenderer.send("cander:window-toggle-maximize"),
@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld("canderDesktop", {
       ipcRenderer.invoke("cander:shell-capture", opts || {}),
     openQuickAsk: () => ipcRenderer.invoke("cander:shell-quick-ask"),
     showMainWindow: () => ipcRenderer.invoke("cander:shell-show-main"),
+    setTheme: (theme) => ipcRenderer.invoke("cander:shell-set-theme", theme),
+    getTheme: () => ipcRenderer.invoke("cander:shell-get-theme"),
     onEvent: (handler) => {
       const listener = (_event, payload) => handler(payload);
       ipcRenderer.on("cander:shell-event", listener);

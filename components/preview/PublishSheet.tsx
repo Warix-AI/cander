@@ -1,46 +1,31 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
-import { cn } from "@/lib/utils";
+import {
+  PublishDomainPicker,
+  usePublishDomainOptions,
+} from "@/components/preview/PublishDomainPicker";
+import { resolvePublishUrl } from "@/lib/publish-domain";
+import { useSpaceMutation } from "@/lib/hooks/use-space-query";
 
 export function PublishSheet() {
-  const { overlay, closeOverlay, publishApp, liveUrl, project, projectId } =
-    useApp();
-  const { project: entityProject } = useSpaceProject(projectId);
+  const { overlay, closeOverlay, publishApp, liveUrl, projectId } = useApp();
   const { publishBuild } = useSpaceMutation();
-  const displayName = entityProject?.title ?? project?.name ?? "app";
-  const slug = displayName.toLowerCase().replace(/\s+/g, "-");
-  const hostedUrl = `https://${slug}.cander.app`;
-  const domains = entityProject?.domains ?? project?.domains ?? [];
-  const options = useMemo(
-    () => [
-      {
-        id: "cander",
-        url: hostedUrl,
-        label: `${slug}.cander.app`,
-        hint: "Verified subdomain",
-      },
-      ...domains.map((domain) => ({
-        id: domain,
-        url: domain.startsWith("http") ? domain : `https://${domain}`,
-        label: domain.replace(/^https?:\/\//, ""),
-        hint: "From this Build project",
-      })),
-    ],
-    [hostedUrl, domains, slug],
-  );
+  const options = usePublishDomainOptions();
   const [selected, setSelected] = useState(options[0]?.id ?? "cander");
   const [busy, setBusy] = useState(false);
 
+  const url = useMemo(
+    () => resolvePublishUrl(options, selected, liveUrl),
+    [options, selected, liveUrl],
+  );
+
   if (overlay !== "publish") return null;
-  const chosen = options.find((item) => item.id === selected) ?? options[0];
-  const url = liveUrl && selected === "cander" ? liveUrl : chosen.url;
 
   const handlePublish = async () => {
-    if (!projectId || busy) return;
+    if (!projectId || busy || !url) return;
     setBusy(true);
     try {
       const result = await publishBuild(projectId, url);
@@ -69,40 +54,13 @@ export function PublishSheet() {
             <X className="h-4 w-4" strokeWidth={1.6} />
           </button>
         </div>
-        <p className="mt-4 text-[13px] font-medium">Domain</p>
-        <div className="mt-2 space-y-2">
-          {options.map((item) => {
-            const on = selected === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setSelected(item.id)}
-                className={cn(
-                  "flex w-full items-start gap-3 rounded-[10px] border px-3 py-2.5 text-left",
-                  on ? "border-foreground/25 bg-muted" : "border-border",
-                )}
-              >
-                <span
-                  className={cn(
-                    "mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
-                    on
-                      ? "border-foreground bg-primary text-primary-foreground"
-                      : "border-border",
-                  )}
-                >
-                  {on ? <Check className="h-2.5 w-2.5" strokeWidth={2.4} /> : null}
-                </span>
-                <span>
-                  <span className="block font-mono text-[13px]">{item.label}</span>
-                  <span className="mt-0.5 block text-[12px] text-muted-foreground">
-                    {item.hint}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <p className="mt-4 text-[13px] font-medium">Publish domain</p>
+        <PublishDomainPicker
+          options={options}
+          selected={selected}
+          onSelect={setSelected}
+          className="mt-2"
+        />
         <p className="mt-4 text-[13px] font-medium">Environment</p>
         <p className="mt-1 text-[13px] text-muted-foreground">Production</p>
         <button

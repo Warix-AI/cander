@@ -1159,39 +1159,67 @@ html:not(.dark) .shell-panel :is(.bg-sidebar, .bg-background) {
   }
 }
 
-/* Soft flowing wash for image-generation placeholders. */
-@keyframes image-gen-wash {
-  0% {
-    background-position: 0% 50%;
+/* ChatGPT-style image generation placeholder + spinner. */
+@keyframes image-gen-card-enter {
+  from {
+    opacity: 0;
   }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
+  to {
+    opacity: 1;
   }
 }
 
-.image-gen-placeholder {
-  background-image: linear-gradient(
-    115deg,
-    color-mix(in oklch, var(--muted) 88%, var(--foreground)) 0%,
-    color-mix(in oklch, var(--muted) 55%, transparent) 42%,
-    color-mix(in oklch, var(--muted) 92%, var(--background)) 58%,
-    color-mix(in oklch, var(--muted) 70%, var(--foreground)) 100%
-  );
-  background-size: 220% 220%;
-  animation: image-gen-wash 5.5s ease-in-out infinite;
+@keyframes image-gen-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-html.dark .image-gen-placeholder {
-  background-image: linear-gradient(
-    115deg,
-    color-mix(in oklch, var(--muted) 75%, var(--background)) 0%,
-    color-mix(in oklch, var(--muted) 45%, transparent) 40%,
-    color-mix(in oklch, var(--muted) 85%, white) 62%,
-    color-mix(in oklch, var(--muted) 65%, var(--background)) 100%
-  );
+.image-gen-card {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #f2f2f2;
+}
+
+html.dark .image-gen-card {
+  background: oklch(0.24 0 0);
+}
+
+.image-gen-card-enter {
+  animation: image-gen-card-enter 200ms ease-out;
+}
+
+.image-gen-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid color-mix(in oklch, var(--foreground) 14%, transparent);
+  border-top-color: color-mix(in oklch, var(--foreground) 58%, transparent);
+  border-radius: 9999px;
+  animation: image-gen-spin 1s linear infinite;
+}
+
+.image-gen-photo {
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+}
+
+.image-gen-photo-visible {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-gen-card-enter {
+    animation: none;
+  }
+  .image-gen-spinner {
+    animation: none;
+  }
+  .image-gen-photo {
+    transition: none;
+    opacity: 1;
+  }
 }
 
 @keyframes assistant-reply-enter {

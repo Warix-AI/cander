@@ -42,6 +42,12 @@
               : "light";
           }
           document.documentElement.dataset.theme = theme;
+          if (theme === "dark") {
+            document.documentElement.classList.add("dark");
+          } else {
+            document.documentElement.classList.remove("dark");
+          }
+          document.documentElement.style.colorScheme = theme;
           document.documentElement.style.backgroundColor =
             theme === "dark" ? "#000000" : "#ffffff";
         } catch (e) {

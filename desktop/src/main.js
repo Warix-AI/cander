@@ -1,4 +1,5 @@
 const { app, BrowserWindow, shell, Menu, session, ipcMain, nativeTheme } = require("electron");
+const fs = require("fs");
 const path = require("path");
 const foundationModels = require("./foundation-models-bridge");
 const browserSurface = require("./browser-surface");
@@ -11,7 +12,7 @@ const DEFAULT_URL = "https://cander.app";
 const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Bumped when the native shell changes — visible on <html data-cander-shell>. */
-const SHELL_BUILD = "2026-08-31-g3-window-corners";
+const SHELL_BUILD = "2026-08-31-browser-gap-theme";
 /** macOS content-view mask — keep in sync with DESKTOP_WINDOW_RADIUS_PX in lib/shell-chrome.ts */
 const DESKTOP_WINDOW_RADIUS_PX = 24;
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
@@ -26,8 +27,34 @@ let mainWindow = null;
 let activeUrl = START_URL;
 let loadAttempts = 0;
 
+function shellThemePath() {
+  return path.join(app.getPath("userData"), "shell-theme.json");
+}
+
+function readShellTheme() {
+  try {
+    const raw = fs.readFileSync(shellThemePath(), "utf8");
+    const parsed = JSON.parse(raw);
+    return parsed?.theme === "dark" ? "dark" : "light";
+  } catch {
+    return nativeTheme.shouldUseDarkColors ? "dark" : "light";
+  }
+}
+
+function writeShellTheme(theme) {
+  try {
+    fs.mkdirSync(app.getPath("userData"), { recursive: true });
+    fs.writeFileSync(
+      shellThemePath(),
+      JSON.stringify({ theme: theme === "dark" ? "dark" : "light" }),
+    );
+  } catch (error) {
+    console.warn("[cander-desktop] shell theme persist failed", error);
+  }
+}
+
 function shellBackgroundColor() {
-  return nativeTheme.shouldUseDarkColors ? "#000000" : "#ffffff";
+  return readShellTheme() === "dark" ? "#000000" : "#ffffff";
 }
 
 function markDesktopShell() {
@@ -482,6 +509,17 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("cander:shell-show-main", async () => {
     return desktopShell.showMainWindow();
+  });
+  ipcMain.handle("cander:shell-set-theme", async (_e, theme) => {
+    const next = theme === "dark" ? "dark" : "light";
+    writeShellTheme(next);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setBackgroundColor(next === "dark" ? "#000000" : "#ffffff");
+    }
+    return { theme: next };
+  });
+  ipcMain.handle("cander:shell-get-theme", async () => {
+    return { theme: readShellTheme() };
   });
 
   speechBridge.bindIpc(ipcMain, () => mainWindow);

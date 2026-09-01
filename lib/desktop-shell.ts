@@ -53,6 +53,16 @@ export type CanderDesktopBridge = {
       }) => void,
     ) => () => void;
   };
+  shell?: {
+    captureScreen?: (opts?: Record<string, unknown>) => Promise<unknown>;
+    openQuickAsk?: () => Promise<void>;
+    showMainWindow?: () => Promise<void>;
+    setTheme?: (theme: "light" | "dark") => Promise<{ theme: string }>;
+    getTheme?: () => Promise<{ theme: string }>;
+    onEvent?: (
+      handler: (event: Record<string, unknown>) => void,
+    ) => () => void;
+  };
   browser?: {
     createTab: (
       tabId: string,

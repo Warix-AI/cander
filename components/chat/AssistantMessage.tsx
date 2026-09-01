@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Circle, Copy, Download, RotateCcw } from "lucide-react";
+import { Check, Circle, Copy } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
+import {
+  ImageGenerationCard,
+  phaseForImageGenerationBlock,
+} from "@/components/chat/ImageGenerationCard";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
 import { formatClarificationAnswersForDisplay } from "@/lib/ai/clarification/schema";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
-import { saveGeneratedImage } from "@/lib/native/save-image";
-import { isMobileShell } from "@/lib/mobile-shell";
 import type { ChatBlock, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -324,7 +326,16 @@ function BlockView({
         </div>
       );
     case "image":
-      return <GeneratedImageBlock block={block} />;
+      if (!block.url?.trim()) return null;
+      return (
+        <ImageGenerationCard
+          cardId={block.attachmentId ?? `img-${block.url.slice(0, 48)}`}
+          phase="complete"
+          imageUrl={block.url}
+          name={block.name}
+          instant
+        />
+      );
     case "image_generation":
       return (
         <ImageGenerationJobBlock
@@ -336,64 +347,6 @@ function BlockView({
     case "file":
       return null;
   }
-}
-
-function GeneratedImageBlock({
-  block,
-}: {
-  block: Extract<ChatBlock, { type: "image" }>;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [saveNote, setSaveNote] = useState<string | null>(null);
-  const mobile = isMobileShell();
-
-  if (!block.url?.trim()) return null;
-
-  return (
-    <div className="my-1 flex max-w-md flex-col gap-1">
-      <div className="flex max-w-full items-center gap-2">
-        <div className="relative aspect-square min-w-0 flex-1 overflow-hidden rounded-[14px] border border-border bg-muted/20">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={block.url}
-            alt={block.name}
-            draggable={false}
-            decoding="async"
-            className="absolute inset-0 h-full w-full object-cover select-none"
-            style={mobile ? { WebkitTouchCallout: "none" } : undefined}
-            onContextMenu={(event) => event.preventDefault()}
-          />
-        </div>
-        <button
-          type="button"
-          aria-label="Download image"
-          title="Download"
-          disabled={saving}
-          onClick={() => {
-            setSaving(true);
-            setSaveNote(null);
-            void saveGeneratedImage({ url: block.url, name: block.name })
-              .then((res) => {
-                if (!res.ok) {
-                  setSaveNote(res.error || "Couldn’t save");
-                  return;
-                }
-                if (res.method === "photos") setSaveNote("Saved to Photos");
-              })
-              .finally(() => setSaving(false));
-          }}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center self-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-        >
-          <Download className="h-3.5 w-3.5" strokeWidth={2} />
-        </button>
-      </div>
-      {saveNote ? (
-        <p className="text-right text-[11px] text-muted-foreground" role="status">
-          {saveNote}
-        </p>
-      ) : null}
-    </div>
-  );
 }
 
 function ImageGenerationJobBlock({
@@ -408,71 +361,29 @@ function ImageGenerationJobBlock({
   const { retryImageGeneration } = useApp();
   const [retrying, setRetrying] = useState(false);
 
-  if (block.status === "completed" && block.imageUrl) {
-    return (
-      <GeneratedImageBlock
-        block={{
-          type: "image",
-          url: block.imageUrl,
-          name: block.name || "generated.png",
-          mime: block.mime,
-          attachmentId: block.attachmentId,
-          openaiFileId: block.openaiFileId,
-        }}
-      />
-    );
-  }
-
-  if (block.status === "generating") {
-    return (
-      <div className="my-1 flex max-w-md flex-col gap-2">
-        <div
-          className="image-gen-placeholder aspect-square min-w-0 w-full overflow-hidden rounded-[14px] border border-border"
-          aria-label="Generating image"
-          role="status"
-        />
-      </div>
-    );
-  }
-
-  if (block.status === "cancelled") {
-    return (
-      <div className="my-1 max-w-md rounded-[14px] border border-border bg-muted/20 px-3 py-3 text-[13px] text-muted-foreground">
-        Image generation cancelled.
-      </div>
-    );
-  }
-
   return (
-    <div className="my-1 flex max-w-md items-center gap-3 rounded-[14px] border border-border bg-muted/20 px-3 py-3">
-      <div className="min-w-0 flex-1">
-        <p className="text-[13.5px] font-medium">Image generation failed</p>
-        <p className="mt-0.5 text-[12px] text-muted-foreground">
-          {block.error || "Something went wrong."}
-        </p>
-      </div>
-      {threadId && messageId ? (
-        <button
-          type="button"
-          aria-label="Retry"
-          title="Retry"
-          disabled={retrying}
-          onClick={() => {
-            setRetrying(true);
-            retryImageGeneration(
-              block.generationId,
-              threadId,
-              messageId,
-              block.prompt,
-            );
-            setRetrying(false);
-          }}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} />
-        </button>
-      ) : null}
-    </div>
+    <ImageGenerationCard
+      cardId={block.generationId}
+      phase={phaseForImageGenerationBlock(block)}
+      imageUrl={block.imageUrl}
+      name={block.name || "generated.png"}
+      error={block.error}
+      onRetry={
+        threadId && messageId
+          ? () => {
+              setRetrying(true);
+              retryImageGeneration(
+                block.generationId,
+                threadId,
+                messageId,
+                block.prompt,
+              );
+              setRetrying(false);
+            }
+          : undefined
+      }
+      retrying={retrying}
+    />
   );
 }
 

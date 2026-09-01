@@ -5,6 +5,7 @@ import { ConnectorsDashboard } from "@/components/spaces/ConnectorsDashboard";
 import { ResearchDashboard } from "@/components/spaces/ResearchDashboard";
 import { WorkDashboard } from "@/components/spaces/WorkDashboard";
 import { useApp } from "@/components/app/AppProvider";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 export function SpaceDashboard({
@@ -17,6 +18,7 @@ export function SpaceDashboard({
   animateEnter?: boolean;
 }) {
   const { spaceId } = useApp();
+  const mobile = useMobileShell();
   const body =
     spaceId === "work" ? (
       <WorkDashboard />
@@ -33,7 +35,8 @@ export function SpaceDashboard({
       key={spaceId ?? "none"}
       className={cn(
         "min-h-0 flex-1",
-        animateEnter &&
+        mobile &&
+          animateEnter &&
           (enterDirection === "back"
             ? "cander-surface-enter-back"
             : "cander-surface-enter"),

@@ -91,6 +91,7 @@ import {
 } from "@/lib/sidebar-peek";
 import { isChatSpace } from "@/lib/spaces";
 import { useMobileShell } from "@/lib/use-media-query";
+import { useProjectCoverCapture } from "@/lib/hooks/use-project-cover-capture";
 import { cn } from "@/lib/utils";
 
 export function ProjectBrowserPanel() {
@@ -648,7 +649,7 @@ export function ProjectBrowserPanel() {
               canRename={canRename}
               onRename={() => setDesktopRenameOpen(true)}
               onPublish={() => openOverlay("publish")}
-              onDomain={() => openOverlay("publish")}
+              onDomain={() => openOverlay("domains")}
               onOpenExternal={() => window.open(address, "_blank")}
               onSelectElement={() => setSelectMode(!selectMode)}
               onRefresh={() => {
@@ -836,6 +837,13 @@ function ProjectBrowserBody({
     getActiveComputerSessionSnapshot,
     getActiveComputerSessionSnapshot,
   );
+
+  useProjectCoverCapture({
+    tabId: tab.id,
+    projectId: browserKey.projectId,
+    tabKind: tab.kind,
+    surfaceActive,
+  });
 
   const syncSurfaceMeta = (patch: {
     url?: string;

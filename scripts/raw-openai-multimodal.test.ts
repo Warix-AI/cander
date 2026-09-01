@@ -346,16 +346,18 @@ describe("Raw multimodal isolation", () => {
 
   it("generated images render with download control and Photos save path", () => {
     const ui = fs.readFileSync("components/chat/AssistantMessage.tsx", "utf8");
-    assert.ok(ui.includes("GeneratedImageBlock"));
+    const card = fs.readFileSync("components/chat/ImageGenerationCard.tsx", "utf8");
+    assert.ok(ui.includes("ImageGenerationCard"));
     assert.ok(ui.includes("ImageGenerationJobBlock"));
     assert.ok(ui.includes("image_generation"));
-    assert.ok(ui.includes("image-gen-placeholder"));
-    assert.ok(ui.includes("object-cover"));
+    assert.ok(card.includes("image-gen-spinner"));
+    assert.ok(card.includes("object-cover"));
     assert.equal(ui.includes("CanderActivityMark"), false);
+    assert.ok(card.includes("saveGeneratedImage"));
+    assert.ok(card.includes("pointer-events-none"));
     assert.ok(ui.includes("retryImageGeneration"));
     assert.ok(!ui.includes("cancelImageGeneration"));
-    assert.ok(ui.includes("saveGeneratedImage"));
-    assert.ok(ui.includes("Download"));
+    assert.ok(card.includes("Download"));
     const thinking = fs.readFileSync(
       "components/chat/ThinkingIndicator.tsx",
       "utf8",

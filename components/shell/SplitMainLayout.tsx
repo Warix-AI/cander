@@ -58,31 +58,11 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
       queueMicrotask(() => setPanelMounted(canPanel && panelOn));
       return;
     }
-    if (immersive) {
-      queueMicrotask(() => {
-        setSlideWidth(panelOn ? 100 : 0);
-        setPanelMounted(panelOn);
-      });
-      wasOpen.current = panelOn;
-      return;
-    }
-    if (!panelOn) {
-      queueMicrotask(() => setSlideWidth(0));
-      wasOpen.current = false;
-      return;
-    }
-    queueMicrotask(() => setPanelMounted(true));
-    if (!wasOpen.current) {
-      queueMicrotask(() => setSlideWidth(0));
-      const id = window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          setSlideWidth(panelPct);
-          wasOpen.current = true;
-        });
-      });
-      return () => window.cancelAnimationFrame(id);
-    }
-    queueMicrotask(() => setSlideWidth(panelPct));
+    queueMicrotask(() => {
+      setSlideWidth(panelOn ? panelPct : 0);
+      setPanelMounted(panelOn && canPanel);
+    });
+    wasOpen.current = panelOn;
   }, [panelOn, immersive, panelPct, mobile, canPanel]);
 
   if (mobile) {
@@ -116,7 +96,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
     showPanelColumn && slideWidth > 0 && !immersive && panelOn;
   const livePanelWidth =
     dragging && panelOn && !immersive ? panelPct : slideWidth;
-  const animateLayout = !dragging && !immersive;
+  const animateLayout = false;
 
   const onPanelWidthTransitionEnd = (event: TransitionEvent<HTMLDivElement>) => {
     if (event.propertyName !== "width") return;

@@ -12,7 +12,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
-  Check,
   ChevronLeft,
   ExternalLink,
   Globe,
@@ -24,8 +23,14 @@ import {
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { NativeOverlayGate } from "@/components/browser/NativeOverlayGate";
+import {
+  PublishDomainPicker,
+  ProjectDomainsManager,
+  usePublishDomainOptions,
+} from "@/components/preview/PublishDomainPicker";
 import { PanelToggle } from "@/components/shell/PanelToggle";
-import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
+import { resolvePublishUrl } from "@/lib/publish-domain";
+import { useSpaceMutation } from "@/lib/hooks/use-space-query";
 import { cn } from "@/lib/utils";
 
 export type ProjectSheetMode = "actions" | "info" | "add" | "rename" | "delete" | "space";
@@ -282,10 +287,7 @@ export function ProjectActionsSheetBody({
       >
         <SheetSubHeader title="Domains" onBack={() => setPane("main")} />
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2.25rem)]">
-          <p className="text-[14px] text-muted-foreground">
-            Connect a custom domain to this project. Domain settings are coming
-            soon.
-          </p>
+          <ProjectDomainsManager />
         </div>
       </div>
     </div>
@@ -315,34 +317,19 @@ function SheetSubHeader({
 }
 
 function PublishPaneBody({ published = false }: { published?: boolean }) {
-  const { publishApp, liveUrl, project, projectId } = useApp();
-  const { project: entityProject } = useSpaceProject(projectId);
+  const { publishApp, liveUrl, projectId } = useApp();
   const { publishBuild } = useSpaceMutation();
-  const displayName = entityProject?.title ?? project?.name ?? "app";
-  const slug = displayName.toLowerCase().replace(/\s+/g, "-");
-  const hostedUrl = `https://${slug}.cander.app`;
-  const domains = entityProject?.domains ?? project?.domains ?? [];
-  const options = useMemo(
-    () => [
-      {
-        id: "cander",
-        url: hostedUrl,
-        label: `${slug}.cander.app`,
-        hint: "Verified subdomain",
-      },
-      ...domains.map((domain) => ({
-        id: domain,
-        url: domain.startsWith("http") ? domain : `https://${domain}`,
-        label: domain.replace(/^https?:\/\//, ""),
-        hint: "From this project",
-      })),
-    ],
-    [hostedUrl, domains, slug],
-  );
+  const options = usePublishDomainOptions();
   const [selected, setSelected] = useState(options[0]?.id ?? "cander");
   const [busy, setBusy] = useState(false);
-  const chosen = options.find((item) => item.id === selected) ?? options[0];
-  const url = liveUrl && selected === "cander" ? liveUrl : chosen?.url;
+  const url = useMemo(
+    () => resolvePublishUrl(options, selected, liveUrl),
+    [options, selected, liveUrl],
+  );
+
+  useEffect(() => {
+    setSelected(options[0]?.id ?? "cander");
+  }, [options]);
 
   const handlePublish = useCallback(async () => {
     if (!projectId || busy || !url) return;
@@ -362,42 +349,13 @@ function PublishPaneBody({ published = false }: { published?: boolean }) {
       <h2 className="text-[1.25rem] font-semibold tracking-[-0.02em]">
         {published ? "Republish your app" : "Publish your app"}
       </h2>
-      <p className="mt-4 text-[13px] font-medium">Domain</p>
-      <div className="mt-2 space-y-2">
-        {options.map((item) => {
-          const on = selected === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setSelected(item.id)}
-              className={cn(
-                "flex w-full items-start gap-3 rounded-[12px] border px-3 py-2.5 text-left",
-                on ? "border-foreground/25 bg-muted" : "border-border",
-              )}
-            >
-              <span
-                className={cn(
-                  "mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
-                  on
-                    ? "border-foreground bg-primary text-primary-foreground"
-                    : "border-border",
-                )}
-              >
-                {on ? (
-                  <Check className="h-2.5 w-2.5" strokeWidth={2.4} />
-                ) : null}
-              </span>
-              <span>
-                <span className="block font-mono text-[13px]">{item.label}</span>
-                <span className="mt-0.5 block text-[12px] text-muted-foreground">
-                  {item.hint}
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <p className="mt-4 text-[13px] font-medium">Publish domain</p>
+      <PublishDomainPicker
+        options={options}
+        selected={selected}
+        onSelect={setSelected}
+        className="mt-2 [&_button]:rounded-[12px]"
+      />
       <p className="mt-4 text-[13px] font-medium">Environment</p>
       <p className="mt-1 text-[13px] text-muted-foreground">Production</p>
       <button

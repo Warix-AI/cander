@@ -252,6 +252,36 @@ export function syncNativeKeyboardStyle(theme?: "light" | "dark") {
   });
 }
 
+/** Status bar + splash chrome for Capacitor shells. */
+export function syncNativeShellChrome(theme?: "light" | "dark") {
+  const resolved =
+    theme ??
+    (document.documentElement.classList.contains("dark") ? "dark" : "light");
+  const cap = getCapacitor();
+  const statusBar = cap?.Plugins?.StatusBar as
+    | {
+        setStyle?: (opts: { style: string }) => Promise<void>;
+        setBackgroundColor?: (opts: { color: string }) => Promise<void>;
+      }
+    | undefined;
+  if (statusBar?.setStyle) {
+    void statusBar
+      .setStyle({ style: resolved === "dark" ? "DARK" : "LIGHT" })
+      .catch(() => {});
+  }
+  if (statusBar?.setBackgroundColor) {
+    void statusBar
+      .setBackgroundColor({
+        color: resolved === "dark" ? "#000000" : "#ffffff",
+      })
+      .catch(() => {});
+  }
+  if (typeof document !== "undefined") {
+    document.documentElement.style.backgroundColor =
+      resolved === "dark" ? "#000000" : "#ffffff";
+  }
+}
+
 /** Dismiss the native keyboard (Capacitor). Safe no-op on web. */
 export function dismissNativeKeyboard() {
   pluginHeight = 0;
@@ -323,6 +353,9 @@ export function useMobileShell() {
     if (!mobile) return;
     document.documentElement.classList.add("cander-mobile");
     document.documentElement.dataset.canderMobile = getMobilePlatform();
+    void import("@/lib/native-shell-theme")
+      .then((mod) => mod.syncNativeShellTheme())
+      .catch(() => {});
     const unlock = lockMobileViewport();
     return () => {
       unlock();

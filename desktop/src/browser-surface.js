@@ -164,6 +164,11 @@ function createView(tabId, initialUrl, options) {
   });
   attachViewListeners(tabId, view);
   applyBrowserUserAgent(view.webContents);
+  try {
+    view.setBackgroundColor("#FFFFFF");
+  } catch {
+    // ignore
+  }
   view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
   if (hostWindow && !hostWindow.isDestroyed()) {
     hostWindow.contentView.addChildView(view);
@@ -246,11 +251,12 @@ function destroyTab(tabId) {
 function showTab(tabId, bounds) {
   const entry = tabs.get(tabId);
   if (!entry || !hostWindow || hostWindow.isDestroyed()) return;
+  const bleed = 2;
   const nextBounds = {
-    x: Math.max(0, Math.floor(bounds.x || 0)),
-    y: Math.max(0, Math.floor(bounds.y || 0)),
-    width: Math.max(1, Math.ceil(bounds.width || 1)),
-    height: Math.max(1, Math.ceil(bounds.height || 1)),
+    x: Math.max(0, Math.round(bounds.x || 0) - bleed),
+    y: Math.max(0, Math.round(bounds.y || 0) - bleed),
+    width: Math.max(1, Math.round(bounds.width || 1) + bleed * 2),
+    height: Math.max(1, Math.round(bounds.height || 1) + bleed * 2),
   };
   entry.lastBounds = nextBounds;
   entry.visible = true;

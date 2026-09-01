@@ -39,6 +39,7 @@ export type Pin = {
 export type OverlayId =
   | "workspace"
   | "publish"
+  | "domains"
   | "search"
   | "configure"
   | "space-settings"

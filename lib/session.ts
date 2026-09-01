@@ -139,8 +139,8 @@ export function persistTheme(next: Theme) {
   window.dispatchEvent(
     new CustomEvent("cander-theme", { detail: { theme: next } }),
   );
-  void import("@/lib/mobile-shell")
-    .then((mod) => mod.syncNativeKeyboardStyle(next))
+  void import("@/lib/native-shell-theme")
+    .then((mod) => mod.syncNativeShellTheme(next))
     .catch(() => {});
 }
 

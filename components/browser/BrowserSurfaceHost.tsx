@@ -212,8 +212,17 @@ export function BrowserSurfaceHost({
 
     void paint();
 
+    let raf = 0;
+    const schedulePaint = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        void paint();
+      });
+    };
+
     const onResize = () => {
-      void paint();
+      schedulePaint();
     };
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
@@ -224,10 +233,14 @@ export function BrowserSurfaceHost({
     if (hostRef.current && ro) {
       ro.observe(hostRef.current);
     }
+    const layoutRoot = document.getElementById("courier-main");
+    layoutRoot?.addEventListener("transitionend", onResize);
 
     return () => {
+      if (raf) cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
       window.removeEventListener("orientationchange", onResize);
+      layoutRoot?.removeEventListener("transitionend", onResize);
       ro?.disconnect();
     };
   }, [tabId, active, suppressed, tabReady]);

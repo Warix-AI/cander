@@ -97,32 +97,13 @@ export function SpaceChatLayout() {
 
   useEffect(() => {
     if (mobile) return;
-    if (skipLayoutAnimation) {
-      queueMicrotask(() => setSpacePct(targetSpacePct));
+    if (skipLayoutAnimation || immersive) {
+      queueMicrotask(() => setSpacePct(spaceOpen ? targetSpacePct : 0));
       wasOpen.current = spaceOpen;
       return;
-    }
-    if (immersive) {
-      queueMicrotask(() => setSpacePct(spaceOpen ? 100 : 0));
-      wasOpen.current = spaceOpen;
-      return;
-    }
-    if (!spaceOpen) {
-      queueMicrotask(() => setSpacePct(0));
-      wasOpen.current = false;
-      return;
-    }
-    if (!wasOpen.current) {
-      queueMicrotask(() => setSpacePct(0));
-      const id = window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          setSpacePct(targetSpacePct);
-          wasOpen.current = true;
-        });
-      });
-      return () => window.cancelAnimationFrame(id);
     }
     queueMicrotask(() => setSpacePct(targetSpacePct));
+    wasOpen.current = spaceOpen;
   }, [spaceOpen, immersive, targetSpacePct, mobile, skipLayoutAnimation]);
 
   if (mobile) {
@@ -187,7 +168,7 @@ export function SpaceChatLayout() {
   const liveSpacePct =
     dragging && chatOpen && spaceOpen && !immersive ? panelPct : spacePct;
   const liveChatPct = chatOpen ? Math.max(0, 100 - liveSpacePct) : 0;
-  const animateLayout = !dragging && !immersive && !skipLayoutAnimation;
+  const animateLayout = false;
   const pinChat =
     expandedLayout && expandedPinned && chatOpen && spaceOpen && !immersive;
   const chatReady = pinChat || liveChatPct > 8;
@@ -257,7 +238,7 @@ export function SpaceChatLayout() {
             {projectId ? (
               <div
                 key={projectId}
-                className="cander-surface-enter flex min-h-0 flex-1 flex-col"
+                className="flex min-h-0 flex-1 flex-col"
               >
                 <ProjectBrowserPanel />
               </div>

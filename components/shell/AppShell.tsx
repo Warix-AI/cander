@@ -14,6 +14,7 @@ import { SplitMainLayout } from "@/components/shell/SplitMainLayout";
 import { SettingsView } from "@/components/settings/SettingsView";
 import { SharedPanel } from "@/components/panels/SharedPanel";
 import { PublishSheet } from "@/components/preview/PublishSheet";
+import { DomainsSheet } from "@/components/preview/DomainsSheet";
 import { SearchModal } from "@/components/overlays/SearchModal";
 import { ConfigureModal } from "@/components/overlays/ConfigureModal";
 import { SpaceSettingsModal } from "@/components/overlays/SpaceSettingsModal";
@@ -46,6 +47,7 @@ import { setShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useMobileSwipeGestures } from "@/lib/use-mobile-swipe";
 import { MOBILE_APP_BG, MOBILE_MENU_BG } from "@/lib/mobile-menu-styles";
+import { syncNativeShellTheme } from "@/lib/native-shell-theme";
 import { cn } from "@/lib/utils";
 import {
   getSessionReadyServerSnapshot,
@@ -142,6 +144,7 @@ function Root() {
   useEffect(() => {
     if (!isDesktopShell()) return;
     document.documentElement.classList.add("cander-desktop");
+    syncNativeShellTheme();
     return () => {
       document.documentElement.classList.remove("cander-desktop");
     };
@@ -280,6 +283,7 @@ function AuthenticatedShell() {
           <WorkspaceModal />
           <InviteWall />
           <PublishSheet />
+          <DomainsSheet />
         </div>
       </MobilePanelActionsProvider>
     </AppearanceProvider>
