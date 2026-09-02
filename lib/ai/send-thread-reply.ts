@@ -1,12 +1,9 @@
 "use client";
 
 /**
- * Client entry for private AI replies.
- *
- * Routes through AIRuntime agent turn (tools + clarification) then providers.
+ * Client entry for private AI replies — OpenAI only.
  */
 
-import "@/lib/api/turn-trace-api";
 import {
   runAssistantTurn,
   type AgentTurnProgress,
@@ -42,9 +39,6 @@ export function buildAiContextRefs(opts: {
   return refs;
 }
 
-/**
- * Ensure a private AI chat exists for this UI thread, attach context, send message.
- */
 export async function fetchPrivateAiReply(opts: {
   aiChatId?: string | null;
   threadId?: string | null;
@@ -123,9 +117,9 @@ export async function fetchPrivateAiReply(opts: {
       return {
         aiChatId: opts.aiChatId ?? "",
         content: err.message,
-        offline: err.code === "local_unavailable",
+        offline: false,
         condensationOccurred: false,
-        runtime: err.code === "vision_requires_cloud" ? "cloud" : "unavailable",
+        runtime: "error",
       };
     }
     const message =
