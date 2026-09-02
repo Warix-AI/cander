@@ -1582,8 +1582,8 @@ function MenuRow({
         className={cn(
           "composer-plus-row flex w-full items-center text-left outline-none transition-colors duration-150",
           compact
-            ? "gap-2 rounded-[10px] px-3 py-[3.6px]"
-            : "gap-2.5 rounded-[12px] px-3 py-[4.5px]",
+            ? "gap-[0.425rem] rounded-[10px] px-3 py-[3.6px]"
+            : "gap-[0.53125rem] rounded-[12px] px-3 py-[4.5px]",
           selected && "bg-foreground/[0.08] dark:bg-white/10",
         )}
     >
@@ -1598,12 +1598,12 @@ function MenuRow({
       <span
         className={cn(
           "flex min-w-0 flex-1 items-baseline truncate tracking-[-0.01em] font-normal",
-          compact ? "gap-[0.225rem] text-[12.5px]" : "gap-[0.225rem] text-[13.5px]",
+          compact ? "gap-[1ch] text-[12.5px]" : "gap-[1ch] text-[13.5px]",
         )}
       >
         <span className="text-foreground">{label}</span>
         {description ? (
-          <span className="text-muted-foreground">{description}</span>
+          <span className="text-muted-foreground/65">{description}</span>
         ) : null}
       </span>
     </button>
