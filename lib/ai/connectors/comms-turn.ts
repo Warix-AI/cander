@@ -27,8 +27,13 @@ import {
 } from "@/lib/ai/connectors/connector-response";
 import {
   inferSendMailFromThread,
-  looksLikeSendFollowUp,
+  looksLikeFalseSendClaim,
+  looksLikeReadSearchIntent,
+  looksLikeSendIntent,
 } from "@/lib/ai/connectors/comms-intent";
+import {
+  hasSuccessfulGmailSend,
+} from "@/lib/ai/connectors/connector-response";
 
 const GMAIL_READ_TOOLS = ["gmail.search", "gmail.read"] as const;
 const GMAIL_WRITE_TOOLS = ["gmail.send", "gmail.draft", "gmail.reply"] as const;
@@ -49,7 +54,9 @@ function buildGmailTurnInstructions(enabledTools: string[]): string {
   if (writeEnabled) {
     capabilityLines.push(
       "- You CAN send email with gmail.send — never say you cannot send from here.",
-      "- Send email with gmail.send when the user explicitly asks you to send a new message or confirms a draft (e.g. \"send it\").",
+      "- Send email with gmail.send when the user asks to send or confirms a draft (e.g. \"send it\").",
+      "- NEVER claim an email was sent unless gmail.send succeeded in tool results below.",
+      "- If the user asks whether you can send/read Gmail, answer from the tools listed above — do not deny access you have this turn.",
       '- Example: {"tool":"gmail.send","arguments":{"to":"alice@example.com","subject":"Hello","body":"..."}}',
       "- Create drafts with gmail.draft when the user wants a draft to review before sending.",
       '- Example: {"tool":"gmail.draft","arguments":{"to":"alice@example.com","subject":"Hello","body":"..."}}',
@@ -68,6 +75,7 @@ When you need mail data or to send mail, end your reply with exactly one JSON ob
 Rules:
 - Do NOT stop at "I will search" or "Let me check" — either emit the tool JSON or wait for results and summarize.
 - After tool results appear below, answer in plain language with what you found (or that nothing matched).
+- Stay in the email task when the conversation is about drafting or sending — do not run gmail.search unless the user asked to read or search mail.
 - ${CONNECTOR_USER_VOICE_RULES}
 ${readEnabled ? "- Use Gmail query syntax in gmail.search (e.g. is:unread, from:alice, subject:BYU, newer_than:30d)." : ""}
 ${readEnabled ? "- Never invent message IDs — use gmail.read only with IDs from gmail.search results." : ""}`;
@@ -150,6 +158,30 @@ async function ensureGmailConnected(
   }
 }
 
+function trySendFallback(input: {
+  request: AiGenerateRequest;
+  assistantText?: string;
+  allowedTools: string[];
+}): { name: string; arguments: Record<string, unknown> } | null {
+  if (!input.allowedTools.includes("gmail.send")) return null;
+  if (!looksLikeSendIntent(input.request.content)) return null;
+  const draft = inferSendMailFromThread([
+    ...(input.request.messages ?? []),
+    ...(input.assistantText
+      ? [{ role: "assistant" as const, content: input.assistantText }]
+      : []),
+  ]);
+  if (!draft) return null;
+  return {
+    name: "gmail.send",
+    arguments: {
+      to: draft.to,
+      subject: draft.subject,
+      body: draft.body,
+    },
+  };
+}
+
 export async function runCommsConnectorTurn(
   request: AiGenerateRequest,
   opts?: AgentTurnOptions,
@@ -218,13 +250,14 @@ export async function runCommsConnectorTurn(
       toolCall = null;
     }
 
-    // Model promised to search but didn't emit JSON — run search ourselves.
+    // Model promised to search but didn't emit JSON — run search only for read/search asks.
     if (
       !toolCall &&
       !toolResults.length &&
       allowedTools.includes("gmail.search") &&
-      (looksLikeSearchPromise(text || generated.content) || round === 0) &&
-      !looksLikeSendFollowUp(request.content)
+      looksLikeReadSearchIntent(request.content) &&
+      (looksLikeSearchPromise(text || generated.content) ||
+        looksLikeReadSearchIntent(request.content))
     ) {
       toolCall = {
         name: "gmail.search",
@@ -235,39 +268,41 @@ export async function runCommsConnectorTurn(
       };
     }
 
-    // User confirmed send — execute gmail.send from thread draft when model skips the tool.
-    if (
-      !toolCall &&
-      !toolResults.length &&
-      allowedTools.includes("gmail.send") &&
-      (looksLikeSendFollowUp(request.content) ||
-        looksLikeSendFollowUp(text || generated.content))
-    ) {
-      const draft = inferSendMailFromThread([
+    // User wants to send — execute gmail.send from thread draft when model skips the tool.
+    if (!toolCall && !toolResults.length) {
+      const sendFallback = trySendFallback({
+        request,
+        assistantText: text || generated.content,
+        allowedTools,
+      });
+      if (sendFallback) toolCall = sendFallback;
+    }
+
+    if (!toolCall) {
+      const pendingDraft = inferSendMailFromThread([
         ...(request.messages ?? []),
         ...(text || generated.content
           ? [{ role: "assistant" as const, content: text || generated.content }]
           : []),
       ]);
-      if (draft) {
-        toolCall = {
-          name: "gmail.send",
-          arguments: {
-            to: draft.to,
-            subject: draft.subject,
-            body: draft.body,
-          },
-        };
-      }
-    }
-
-    if (!toolCall) {
-      const content = finalizeConnectorReply({
+      let content = finalizeConnectorReply({
         text: text || generated.content,
         connectorId: "gmail",
         userMessage: request.content,
         toolResults,
+        draft: pendingDraft,
       });
+
+      if (
+        looksLikeFalseSendClaim(content) &&
+        !hasSuccessfulGmailSend(toolResults)
+      ) {
+        content =
+          pendingDraft && allowedTools.includes("gmail.send")
+            ? "I haven't sent that yet — say **send it** and I'll send it through your connected Gmail."
+            : "I haven't sent that email yet.";
+      }
+
       return {
         ...generated,
         content:
@@ -392,6 +427,7 @@ export async function runCommsConnectorTurn(
       connectorId: "gmail",
       userMessage: request.content,
       toolResults,
+      draft: inferSendMailFromThread(request.messages),
     }),
     toolResults,
   };

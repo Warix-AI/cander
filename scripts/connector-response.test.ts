@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 import {
   finalizeConnectorReply,
   gmailEmptyResultMessage,
+  gmailSendConfirmationMessage,
   isEmptyGmailSearchResult,
   looksLikeInternalConnectorReply,
 } from "../lib/ai/connectors/connector-response.ts";
@@ -65,6 +66,31 @@ describe("connector response voice", () => {
     assert.match(
       gmailEmptyResultMessage("Can you check again for a new email?"),
       /new emails/i,
+    );
+  });
+
+  it("uses tool-backed confirmation for successful sends", () => {
+    const text = finalizeConnectorReply({
+      text: "Yes, the email was successfully sent to matt@warix.co.",
+      connectorId: "gmail",
+      userMessage: "send it",
+      toolResults: [
+        {
+          name: "gmail.send",
+          ok: true,
+          output: JSON.stringify({ outcome: "ok", sent: { id: "msg_1" } }),
+        },
+      ],
+      draft: { to: "matt@warix.co", subject: "Hello" },
+    });
+    assert.match(text, /sent to \*\*matt@warix\.co\*\*/i);
+    assert.match(text, /Subject:\*\* Hello/);
+    assert.equal(
+      gmailSendConfirmationMessage(
+        [{ name: "gmail.send", ok: true, output: "{}" }],
+        { to: "a@b.co", subject: "Hi" },
+      ),
+      "Done — your email was sent to **a@b.co**.\n\n**Subject:** Hi",
     );
   });
 });

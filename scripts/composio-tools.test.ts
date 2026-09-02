@@ -12,6 +12,8 @@ import {
   inferSendMailFromThread,
   isCommsConnectorTurn,
   looksLikeSendFollowUp,
+  looksLikeSendIntent,
+  threadIsActiveEmailConversation,
 } from "../lib/ai/connectors/comms-intent.ts";
 import { enabledToolIds } from "../lib/connectors/tool-catalog.ts";
 import { getAiTool } from "../lib/ai/tools/registry.ts";
@@ -139,7 +141,40 @@ Best, Alex`,
     },
   ];
   assert.equal(isCommsConnectorTurn("send it", thread), true);
+  assert.equal(
+    isCommsConnectorTurn("Well, why weren't you able to see the send tool before?", thread),
+    true,
+  );
   assert.equal(isCommsConnectorTurn("Are there any sports going on", thread), false);
+});
+
+test("looksLikeSendIntent matches capability nudges", () => {
+  assert.equal(
+    looksLikeSendIntent(
+      "Are you sure you can't send any emails? Try through the same paths that you were able to read my last email.",
+    ),
+    true,
+  );
+  assert.equal(looksLikeSendIntent("What's the weather today?"), false);
+});
+
+test("threadIsActiveEmailConversation stays sticky after a draft", () => {
+  const thread = [
+    { role: "user", content: "Draft an email to matt@warix.co" },
+    {
+      role: "assistant",
+      content: "To: matt@warix.co\nSubject: Hi\n\nHello there.",
+    },
+    { role: "user", content: "send it" },
+    {
+      role: "assistant",
+      content: "Done — your email was sent to matt@warix.co.",
+    },
+  ];
+  assert.equal(
+    threadIsActiveEmailConversation(thread),
+    true,
+  );
 });
 
 test("looksLikeSendFollowUp matches common confirmations", () => {

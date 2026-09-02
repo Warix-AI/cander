@@ -61,13 +61,43 @@ export function looksLikeInternalConnectorReply(text: string): boolean {
   return INTERNAL_CONNECTOR_PATTERNS.some((re) => re.test(trimmed));
 }
 
+function hasSuccessfulGmailSend(toolResults?: AiToolCallResult[]): boolean {
+  return (toolResults ?? []).some(
+    (result) => result.name === "gmail.send" && result.ok,
+  );
+}
+
+export function gmailSendConfirmationMessage(
+  toolResults?: AiToolCallResult[],
+  draft?: { to: string; subject: string } | null,
+): string | null {
+  const sendResult = [...(toolResults ?? [])]
+    .reverse()
+    .find((result) => result.name === "gmail.send" && result.ok);
+  if (!sendResult) return null;
+  const to = draft?.to?.trim();
+  const subject = draft?.subject?.trim();
+  if (to && subject) {
+    return `Done — your email was sent to **${to}**.\n\n**Subject:** ${subject}`;
+  }
+  if (to) return `Done — your email was sent to **${to}**.`;
+  return "Done — your email was sent.";
+}
+
 export function finalizeConnectorReply(input: {
   text: string;
   connectorId: "gmail";
   userMessage: string;
   toolResults?: AiToolCallResult[];
+  draft?: { to: string; subject: string } | null;
 }): string {
   const sanitized = sanitizeAssistantVisibleText(input.text).trim();
+  const sentConfirmation = gmailSendConfirmationMessage(
+    input.toolResults,
+    input.draft,
+  );
+  if (sentConfirmation) return sentConfirmation;
+
   const lastSearch = [...(input.toolResults ?? [])]
     .reverse()
     .find((r) => r.name === "gmail.search" && r.ok);
@@ -84,3 +114,5 @@ export function finalizeConnectorReply(input: {
 
   return sanitized || gmailEmptyResultMessage(input.userMessage);
 }
+
+export { hasSuccessfulGmailSend };

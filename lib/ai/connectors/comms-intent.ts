@@ -29,6 +29,25 @@ export function looksLikeSendFollowUp(content: string): boolean {
   );
 }
 
+/** Broader send / retry-send intent — includes capability nudges from the user. */
+export function looksLikeSendIntent(content: string): boolean {
+  const text = (content || "").trim();
+  if (!text) return false;
+  if (looksLikeSendFollowUp(text)) return true;
+  if (looksLikeDirectSendIntent(text)) return true;
+  return (
+    /\b(can'?t you send|couldn'?t you send|won'?t you send|try (to )?send|actually send|please send|not send(ing)?|send (this|that|the email|the message))\b/i.test(
+      text,
+    ) ||
+    /\b(send tool|sending capability|ability to send|access to send|do you have access)\b/i.test(
+      text,
+    ) ||
+    /\b(try|use|same path|where you).{0,48}\b(read|gmail|send|draft|mail)\b/i.test(
+      text,
+    )
+  );
+}
+
 export function looksLikeDirectSendIntent(content: string): boolean {
   const text = (content || "").trim();
   if (!text) return false;
@@ -40,6 +59,45 @@ export function looksLikeDirectSendIntent(content: string): boolean {
   );
 }
 
+export function looksLikeReadSearchIntent(content: string): boolean {
+  const text = (content || "").trim();
+  if (!text) return false;
+  if (looksLikeSendIntent(text)) return false;
+  return (
+    /\b(check|read|search|find|summarize|show|list|inbox|unread|latest|recent|last email)\b/i.test(
+      text,
+    ) ||
+    /\b(my )?(email|mail|gmail)\b/i.test(text)
+  );
+}
+
+export function looksClearlyOffTopic(content: string): boolean {
+  const text = (content || "").trim();
+  if (!text) return false;
+  if (/\b(email|gmail|mail|inbox|send|draft|subject)\b/i.test(text)) {
+    return false;
+  }
+  return (
+    /\b(weather|sports|football|basketball|recipe|movie|stock|crypto)\b/i.test(
+      text,
+    ) && !threadHasEmailContext([{ role: "user", content: text }])
+  );
+}
+
+/** Thread is mid email draft/send workflow — keep routing to Gmail tools. */
+export function threadIsActiveEmailConversation(
+  messages?: ThreadMessage[],
+): boolean {
+  if (!messages?.length) return false;
+  const recent = [...messages].slice(-14);
+  if (threadHasEmailContext(recent)) return true;
+  if (inferSendMailFromThread(recent)) return true;
+  return recent.some(
+    (message) =>
+      message.role === "user" && looksLikeSendIntent(message.content || ""),
+  );
+}
+
 /** True when the user message should run the Gmail connector turn. */
 export function isCommsConnectorTurn(
   content: string,
@@ -47,6 +105,8 @@ export function isCommsConnectorTurn(
 ): boolean {
   const text = (content || "").trim();
   if (!text) return false;
+
+  if (looksClearlyOffTopic(text)) return false;
 
   if (
     /\b(gmail|inbox|e-?mail|emails?|mailbox)\b/i.test(text) ||
@@ -58,9 +118,9 @@ export function isCommsConnectorTurn(
     return true;
   }
 
-  if (looksLikeDirectSendIntent(text)) return true;
+  if (looksLikeSendIntent(text)) return true;
 
-  if (looksLikeSendFollowUp(text) && threadHasEmailContext(messages)) {
+  if (threadIsActiveEmailConversation(messages)) {
     return true;
   }
 
@@ -111,4 +171,25 @@ export function inferSendMailFromThread(
   }
 
   return null;
+}
+
+export function looksLikeFalseSendClaim(text: string): boolean {
+  const trimmed = (text || "").trim();
+  if (!trimmed) return false;
+  return (
+    /\b(email was )?(successfully )?sent\b/i.test(trimmed) ||
+    /\bsent (it|the email|your email|the message) to\b/i.test(trimmed) ||
+    /\bi (?:have|'ve) sent\b/i.test(trimmed)
+  );
+}
+
+export function looksLikeFalseSendDenial(text: string): boolean {
+  const trimmed = (text || "").trim();
+  if (!trimmed) return false;
+  return (
+    /\b(did not|didn't|do not|don't) have access to gmail\b/i.test(trimmed) ||
+    /\bno (email-?sending|send) tool\b/i.test(trimmed) ||
+    /\bshould(?:n't| not) have claimed\b/i.test(trimmed) ||
+    /\bemail was not sent\b/i.test(trimmed)
+  );
 }
