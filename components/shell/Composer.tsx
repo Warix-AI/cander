@@ -9,7 +9,6 @@ import {
   type RefObject,
 } from "react";
 import {
-  Compass,
   FileText,
   Hammer,
   Link2,
@@ -17,7 +16,7 @@ import {
   Paperclip,
   Pin,
   Plus,
-  X,
+  Search,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { ReferenceChip } from "@/components/shell/ReferenceChip";
@@ -56,12 +55,6 @@ import {
   toSendAttachments,
 } from "@/lib/composer-attach";
 import { composerAttachActions } from "@/lib/ai/raw-openai/limits";
-import {
-  applyComposerTextareaSize,
-  nextComposerTextareaSize,
-  readTextareaVerticalMetrics,
-  resolveComposerAutosizeMetrics,
-} from "@/lib/composer-autosize";
 import { getNativeCapabilities } from "@/lib/native";
 import {
   isSpeechToTextSupported,
@@ -90,12 +83,15 @@ import {
   subscribeConnectorConnections,
 } from "@/lib/connector-connections-store";
 import {
+  backspaceRemoveConnector,
   blocksFromText,
   connectorsFromBlocks,
   emptyComposerBlocks,
+  normalizeComposerBlocks,
   removeConnectorBlock,
   textFromBlocks,
   toggleConnectorInBlocks,
+  updateTextBlock,
   type ComposerBlock,
   type ComposerConnectorScope,
 } from "@/lib/composer-blocks";
@@ -180,11 +176,27 @@ export function Composer({
   const [menu, setMenu] = useState<MenuId>(null);
   const focusedTextKeyRef = useRef<string | null>(null);
   const textCursorRef = useRef(0);
-  const textInputRefs = useRef<Map<string, HTMLTextAreaElement | HTMLInputElement>>(
-    new Map(),
-  );
+  const textInputRefs = useRef<
+    Map<string, HTMLInputElement | HTMLTextAreaElement>
+  >(new Map());
   const setValue = (next: string) => {
-    setBlocks(blocksFromText(next));
+    setBlocks((current) => {
+      if (!next) return emptyComposerBlocks();
+      const scopes = connectorsFromBlocks(current);
+      if (!scopes.length) return blocksFromText(next);
+      return normalizeComposerBlocks([
+        ...scopes.map((scope) => ({
+          key: `c_${scope.connectionId}`,
+          type: "connector" as const,
+          scope,
+        })),
+        {
+          key: `t_${Math.random().toString(36).slice(2, 9)}`,
+          type: "text" as const,
+          value: next,
+        },
+      ]);
+    });
   };
   const connectionsByWorkspace = useSyncExternalStore(
     subscribeConnectorConnections,
@@ -251,7 +263,7 @@ export function Composer({
   const cameraRef = useRef<HTMLInputElement>(null);
   const photoLibRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLTextAreaElement>(null);
+  const textRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const speechRef = useRef<SpeechSession | null>(null);
   const dictationRef = useRef<VoiceDictationSession | null>(null);
   /** After stop: insert into composer; after send-while-recording: send immediately. */
@@ -349,38 +361,6 @@ export function Composer({
     });
     return () => window.cancelAnimationFrame(id);
   }, [autoFocus, nativeShell, overlay, view, thread?.id]);
-
-  useEffect(() => {
-    const el = textRef.current;
-    if (!el || compact) return;
-
-    const resize = () => {
-      const vertical = readTextareaVerticalMetrics(el);
-      const metrics = resolveComposerAutosizeMetrics({
-        mobile,
-        lineHeight: vertical.lineHeight,
-        paddingY: vertical.paddingY,
-      });
-      // Empty: always one line. Avoids the space-slide animation measuring
-      // the placeholder at ~0 width and locking the box at max height.
-      if (!value) {
-        applyComposerTextareaSize(
-          el,
-          nextComposerTextareaSize(0, metrics, { empty: true }),
-        );
-        return;
-      }
-      el.style.height = "auto";
-      const scroll = el.scrollHeight;
-      applyComposerTextareaSize(el, nextComposerTextareaSize(scroll, metrics));
-    };
-
-    resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(el);
-    if (wrapRef.current) ro.observe(wrapRef.current);
-    return () => ro.disconnect();
-  }, [value, compact, mobile]);
 
   useEffect(() => {
     if (!menu) return;
@@ -863,7 +843,7 @@ export function Composer({
             <div>
               <MenuSection title="Add" />
               <MenuRow
-                icon={<Paperclip className="h-4 w-4" strokeWidth={1.75} />}
+                icon={<Paperclip className="h-full w-full" strokeWidth={1.75} />}
                 label="Add photos & files"
                 onClick={() => {
                   setAttachError(null);
@@ -896,7 +876,7 @@ export function Composer({
                 <MenuRow
                   icon={
                     <Pin
-                      className={cn("h-4 w-4", pinned && "fill-current")}
+                      className={cn("h-full w-full", pinned && "fill-current")}
                       strokeWidth={1.75}
                     />
                   }
@@ -915,7 +895,7 @@ export function Composer({
               ) : null}
               {!mobile && browserMode ? (
                 <MenuRow
-                  icon={<Link2 className="h-4 w-4" strokeWidth={1.75} />}
+                  icon={<Link2 className="h-full w-full" strokeWidth={1.75} />}
                   label="Attach page"
                   description="Reference the current page"
                   onClick={() => {
@@ -929,7 +909,7 @@ export function Composer({
             <div>
               <MenuSection title="Start" />
               <MenuRow
-                icon={<Hammer className="h-4 w-4" strokeWidth={1.75} />}
+                icon={<Hammer className="h-full w-full" strokeWidth={1.75} />}
                 label="Build"
                 description="Start a build with this chat"
                 onClick={() => {
@@ -938,7 +918,7 @@ export function Composer({
                 }}
               />
               <MenuRow
-                icon={<Compass className="h-4 w-4" strokeWidth={1.75} />}
+                icon={<Search className="h-full w-full" strokeWidth={1.75} />}
                 label="Explore"
                 description="Start a search with this chat"
                 onClick={() => {
@@ -948,7 +928,7 @@ export function Composer({
               />
               <MenuRow
                 icon={
-                  <MessageSquare className="h-4 w-4" strokeWidth={1.75} />
+                  <MessageSquare className="h-full w-full" strokeWidth={1.75} />
                 }
                 label="Default chat"
                 description="Add as default chat to spaces"
@@ -983,8 +963,8 @@ export function Composer({
                       icon={
                         <ConnectorMark
                           id={catalog?.icon ?? row.connectorId}
-                          size="xs"
-                          className="!h-5 !w-5"
+                          size="nav"
+                          className="!h-full !w-full"
                         />
                       }
                       label={label}
@@ -1145,37 +1125,6 @@ export function Composer({
                 )}
               </div>
             ) : null}
-            {connectorScopes.length > 0 ? (
-              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                {connectorScopes.map((scope) => (
-                  <span
-                    key={scope.connectionId}
-                    className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-background px-2 py-1 text-[11.5px]"
-                  >
-                    <ConnectorMark
-                      id={
-                        connectors.find((c) => c.id === scope.connectorId)?.icon ??
-                        scope.connectorId
-                      }
-                      size="xs"
-                    />
-                    <span className="truncate font-medium">{scope.label}</span>
-                    <button
-                      type="button"
-                      aria-label={`Remove ${scope.label}`}
-                      onClick={() =>
-                        setBlocks((current) =>
-                          removeConnectorBlock(current, scope.connectionId),
-                        )
-                      }
-                      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-3 w-3" strokeWidth={1.8} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            ) : null}
             {pageReference || entityReference ? (
               <div className="mb-1.5 flex items-center gap-1.5">
                 {entityReference ? (
@@ -1265,65 +1214,178 @@ export function Composer({
               >
                 <Plus className="h-5 w-5" strokeWidth={2.25} />
               </ToolBtn>
-              <textarea
-                ref={textRef}
-                value={value}
-                rows={1}
-                placeholder={hint}
-                autoFocus={autoFocus}
-                enterKeyHint="send"
-                autoComplete="off"
-                onFocus={(event) => {
-                  suppressAutoFocusRef.current = false;
-                  onFocus?.();
-                  window.setTimeout(() => {
-                    event.target.scrollIntoView({
-                      block: "nearest",
-                      inline: "nearest",
-                    });
-                    window.scrollTo(0, 0);
-                  }, 50);
-                }}
-                onChange={(event) => {
-                  if (dictatingActive) return;
-                  const next = event.target.value;
-                  setValue(next);
-                  if (landing || stayInPlace) return;
-                  // Stay on the project dock — do not swap to the space chat.
-                  if (projectId) return;
-                  if (next.trim() && isChatSpace(spaceId)) {
-                    armChatInterface(spaceId);
-                  } else if (!next.trim() && !thread) {
-                    collapseDraft();
-                  }
-                }}
-                onKeyDown={(event) => {
-                  if (dictatingActive) {
-                    event.preventDefault();
-                    return;
-                  }
-                  if (event.key === "/" && value === "" && !event.metaKey && !event.ctrlKey) {
-                    event.preventDefault();
-                    toggleMenu("plus");
-                    return;
-                  }
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    submit();
-                  }
-                }}
+              <div
                 className={cn(
-                  "min-h-8 min-w-0 flex-1 resize-none bg-transparent text-[16px] leading-5 outline-none placeholder:text-muted-foreground sm:text-[14px]",
-                  hasText ? "py-1.5" : "py-[6px]",
+                  "flex min-h-8 min-w-0 flex-1 flex-wrap content-center items-center gap-x-1 gap-y-0.5",
+                  hasText || connectorScopes.length ? "py-1" : "py-[6px]",
                   transcriptReveal && "opacity-100 transition-opacity duration-200",
                 )}
-              />
+                onMouseDown={(event) => {
+                  // Clicking padding focuses the last text segment.
+                  if (event.target === event.currentTarget) {
+                    const last = [...blocks]
+                      .reverse()
+                      .find((b) => b.type === "text");
+                    if (last) focusTextKey(last.key);
+                  }
+                }}
+              >
+                {blocks.map((block, index) => {
+                  if (block.type === "connector") {
+                    const iconId =
+                      connectors.find((c) => c.id === block.scope.connectorId)
+                        ?.icon ?? block.scope.connectorId;
+                    return (
+                      <button
+                        key={block.key}
+                        type="button"
+                        aria-label={`Remove ${block.scope.label}`}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() =>
+                          setBlocks((current) =>
+                            removeConnectorBlock(
+                              current,
+                              block.scope.connectionId,
+                            ),
+                          )
+                        }
+                        className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-md px-0.5 text-[14px] text-sky-500/95 dark:text-sky-400/95"
+                      >
+                        <ConnectorMark
+                          id={iconId}
+                          size="nav"
+                          className="!h-[0.9em] !w-[0.9em]"
+                        />
+                        <span className="truncate font-medium leading-none">
+                          {block.scope.label}
+                        </span>
+                      </button>
+                    );
+                  }
+
+                  const isLastText =
+                    !blocks.slice(index + 1).some((b) => b.type === "text");
+                  const showPlaceholder =
+                    blocks.length === 1 && block.value.length === 0;
+                  const widthCh = Math.max(block.value.length + (isLastText ? 1 : 0), 1);
+
+                  return (
+                    <input
+                      key={block.key}
+                      ref={(el) => {
+                        if (el) {
+                          textInputRefs.current.set(block.key, el);
+                          if (isLastText) textRef.current = el;
+                        } else {
+                          textInputRefs.current.delete(block.key);
+                        }
+                      }}
+                      value={block.value}
+                      placeholder={showPlaceholder ? hint : undefined}
+                      autoFocus={autoFocus && isLastText && index === 0}
+                      enterKeyHint="send"
+                      autoComplete="off"
+                      onFocus={(event) => {
+                        focusedTextKeyRef.current = block.key;
+                        textCursorRef.current = event.target.selectionStart ?? 0;
+                        suppressAutoFocusRef.current = false;
+                        onFocus?.();
+                        if (!isLastText) return;
+                        window.setTimeout(() => {
+                          event.target.scrollIntoView({
+                            block: "nearest",
+                            inline: "nearest",
+                          });
+                          window.scrollTo(0, 0);
+                        }, 50);
+                      }}
+                      onSelect={(event) => {
+                        textCursorRef.current =
+                          event.currentTarget.selectionStart ?? 0;
+                      }}
+                      onChange={(event) => {
+                        if (dictatingActive) return;
+                        const next = event.target.value;
+                        textCursorRef.current =
+                          event.target.selectionStart ?? next.length;
+                        setBlocks((current) =>
+                          updateTextBlock(current, block.key, next),
+                        );
+                        if (landing || stayInPlace) return;
+                        if (projectId) return;
+                        if (next.trim() && isChatSpace(spaceId)) {
+                          armChatInterface(spaceId);
+                        } else if (
+                          !next.trim() &&
+                          !thread &&
+                          connectorsFromBlocks(blocks).length === 0
+                        ) {
+                          collapseDraft();
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if (dictatingActive) {
+                          event.preventDefault();
+                          return;
+                        }
+                        textCursorRef.current =
+                          event.currentTarget.selectionStart ?? 0;
+                        if (
+                          event.key === "Backspace" &&
+                          event.currentTarget.selectionStart === 0 &&
+                          event.currentTarget.selectionEnd === 0 &&
+                          block.value.length === 0
+                        ) {
+                          const removed = backspaceRemoveConnector(
+                            blocks,
+                            block.key,
+                          );
+                          if (removed) {
+                            event.preventDefault();
+                            setBlocks(removed.blocks);
+                            if (removed.focusKey) {
+                              focusTextKey(removed.focusKey);
+                            }
+                            return;
+                          }
+                        }
+                        if (
+                          event.key === "/" &&
+                          value === "" &&
+                          !event.metaKey &&
+                          !event.ctrlKey
+                        ) {
+                          event.preventDefault();
+                          toggleMenu("plus");
+                          return;
+                        }
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          submit();
+                        }
+                      }}
+                      className={cn(
+                        "bg-transparent text-[16px] leading-5 outline-none placeholder:text-muted-foreground sm:text-[14px]",
+                        isLastText ? "min-w-[3ch] flex-1" : "shrink-0",
+                      )}
+                      style={
+                        isLastText
+                          ? undefined
+                          : {
+                              width: `${widthCh}ch`,
+                              maxWidth: "100%",
+                            }
+                      }
+                    />
+                  );
+                })}
+              </div>
               <div
                 className={cn(
                   "flex shrink-0 items-center gap-0.5",
                   growUpward
                     ? "self-end"
-                    : hasText
+                    : hasText || connectorScopes.length
                       ? "self-start"
                       : "self-center",
                 )}
@@ -1524,7 +1586,7 @@ function MenuRow({
       <span
         className={cn(
           "inline-flex shrink-0 items-center justify-center overflow-hidden text-foreground",
-          compact ? "h-5 w-5" : "h-[18px] w-[18px]",
+          compact ? "h-[12px] w-[12px] text-[12.5px]" : "h-[13px] w-[13px] text-[13.5px]",
         )}
       >
         {icon}
