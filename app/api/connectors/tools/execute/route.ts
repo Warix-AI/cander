@@ -18,7 +18,6 @@ export async function POST(request: Request) {
     arguments?: Record<string, unknown>;
     connectionId?: string;
     toolCallId?: string;
-    confirmed?: boolean;
   };
   try {
     body = await request.json();
@@ -50,6 +49,9 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Untrusted browser path: never honor client-supplied confirmation.
+    // Agent / trusted server callers use executeConnectorToolDetailed with
+    // server-derived confirmed state instead.
     const result = await executeConnectorTool({
       client: ctx.client,
       workspaceId: ctx.workspaceId,
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
       arguments: body.arguments ?? {},
       connectionId: body.connectionId,
       toolCallId: body.toolCallId,
-      confirmed: body.confirmed,
+      confirmed: false,
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });

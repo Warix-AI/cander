@@ -40,6 +40,10 @@ export type ExecuteConnectorToolInput = {
   toolCallId?: string | null;
   turnId?: string | null;
   chatId?: string | null;
+  /**
+   * Trusted server confirmation (agent loop). Untrusted HTTP routes must pass
+   * false / omit — never forward a client `confirmed` boolean.
+   */
   confirmed?: boolean;
 };
 

@@ -169,8 +169,47 @@ test("public connection mapper strips secret fields", () => {
   const pub = connectionRowToPublic(row);
   assert.equal(pub.id, "conn_abc");
   assert.equal("provider_connection_id" in pub, false);
+  assert.equal(
+    JSON.stringify(pub).includes("secret-ref"),
+    false,
+    "provider_connection_id value must not appear in public JSON",
+  );
   assert.throws(() =>
     assertNoSecretKeys({ token_ref: "x", id: "conn_abc" }),
+  );
+});
+
+test("browser realtime sync must not subscribe to connector_connections", () => {
+  const syncSrc = readFileSync(
+    join(process.cwd(), "lib/api/connector-sync.ts"),
+    "utf8",
+  );
+  assert.match(syncSrc, /connector_connection_signals/);
+  assert.equal(
+    /table:\s*"connector_connections"/.test(syncSrc),
+    false,
+    "Realtime must not listen to connector_connections (provider_connection_id risk)",
+  );
+});
+
+test("migration removes connector_connections from realtime and adds signals", () => {
+  const migration = readFileSync(
+    join(
+      process.cwd(),
+      "supabase/migrations/045_connector_security_hardening.sql",
+    ),
+    "utf8",
+  );
+  assert.match(migration, /drop table public\.connector_connections/i);
+  assert.match(migration, /add table public\.connector_connection_signals/i);
+  const signalsCreate = migration.match(
+    /create table if not exists public\.connector_connection_signals \(([\s\S]*?)\);/i,
+  );
+  assert.ok(signalsCreate, "signals table create missing");
+  assert.equal(
+    /provider_connection_id/.test(signalsCreate![1]!),
+    false,
+    "signals table must not include provider_connection_id",
   );
 });
 

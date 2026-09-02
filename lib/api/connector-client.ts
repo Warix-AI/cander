@@ -100,13 +100,18 @@ export async function executeConnectorToolRequest(input: {
   arguments: Record<string, unknown>;
   connectionId?: string;
   toolCallId?: string;
-  confirmed?: boolean;
 }): Promise<{ output: string }> {
   const headers = await authHeaders();
   const response = await fetch("/api/connectors/tools/execute", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      workspaceId: input.workspaceId,
+      tool: input.tool,
+      arguments: input.arguments,
+      connectionId: input.connectionId,
+      toolCallId: input.toolCallId,
+    }),
   });
   const data = await response.json();
   if (!response.ok) {

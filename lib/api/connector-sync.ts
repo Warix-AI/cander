@@ -224,7 +224,7 @@ export function subscribeConnectorRealtime(
       {
         event: "*",
         schema: "public",
-        table: "connector_connections",
+        table: "connector_connection_signals",
         filter: `owner_id=eq.${ctx.actorId}`,
       },
       () => onChange(),

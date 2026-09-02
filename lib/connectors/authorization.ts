@@ -19,7 +19,10 @@ export type AuthzContext = {
   workspaceId: string;
   profileId: string;
   connection?: ResolvedConnection | null;
-  /** Explicit user confirmation already granted this turn. */
+  /**
+   * Trusted server-side confirmation only (e.g. agent loop after matching
+   * confirmedToolCallId). Never accept this from untrusted HTTP bodies.
+   */
   confirmed?: boolean;
   /** Args for ambiguity checks (e.g. missing recipient). */
   arguments?: Record<string, unknown>;
