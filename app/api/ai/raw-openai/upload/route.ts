@@ -5,7 +5,6 @@
 
 import { NextResponse } from "next/server";
 import { assertThreadOwnedByUser, requireBearerUser } from "@/lib/ai/raw-openai/auth";
-import { isRawOpenAIModeAllowedOnServer } from "@/lib/ai/raw-openai/flags";
 import { validateUpload } from "@/lib/ai/raw-openai/limits";
 import {
   createOpenAIMediaClient,
@@ -57,13 +56,6 @@ async function resolvePersistedThreadId(
 
 export async function POST(request: Request) {
   const started = Date.now();
-
-  if (!isRawOpenAIModeAllowedOnServer()) {
-    return NextResponse.json(
-      { error: "Raw OpenAI mode is disabled.", latencyMs: Date.now() - started },
-      { status: 403 },
-    );
-  }
 
   const auth = await requireBearerUser(request);
   if (!auth.ok) {

@@ -20,8 +20,8 @@ import {
   resolveOpenAIModel,
 } from "../lib/ai/raw-openai/web-search.ts";
 
-describe("Raw OpenAI flags", () => {
-  it("defaults off in development unless explicitly enabled", () => {
+describe("OpenAI chat flags", () => {
+  it("defaults on unless explicitly disabled", () => {
     const prevN = process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     const prevR = process.env.RAW_OPENAI_MODE;
     const prevNode = process.env.NODE_ENV;
@@ -30,21 +30,22 @@ describe("Raw OpenAI flags", () => {
     delete process.env.RAW_OPENAI_MODE;
     process.env.NODE_ENV = "development";
     delete process.env.VERCEL_ENV;
-    assert.equal(isRawOpenAIModeEnabled(), false);
-    assert.equal(isRawOpenAIModeAllowedOnServer(), false);
-    process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = "1";
     assert.equal(isRawOpenAIModeEnabled(), true);
     assert.equal(isRawOpenAIModeAllowedOnServer(), true);
+    process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = "0";
+    assert.equal(isRawOpenAIModeEnabled(), false);
+    assert.equal(isRawOpenAIModeAllowedOnServer(), false);
     if (prevN !== undefined) process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = prevN;
     else delete process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     if (prevR !== undefined) process.env.RAW_OPENAI_MODE = prevR;
+    else delete process.env.RAW_OPENAI_MODE;
     if (prevNode !== undefined) process.env.NODE_ENV = prevNode;
     else delete process.env.NODE_ENV;
     if (prevVercel !== undefined) process.env.VERCEL_ENV = prevVercel;
     else delete process.env.VERCEL_ENV;
   });
 
-  it("defaults off in production unless RAW_OPENAI_MODE=1", () => {
+  it("stays on in production by default", () => {
     const prevN = process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     const prevR = process.env.RAW_OPENAI_MODE;
     const prevNode = process.env.NODE_ENV;
@@ -53,10 +54,10 @@ describe("Raw OpenAI flags", () => {
     delete process.env.RAW_OPENAI_MODE;
     process.env.NODE_ENV = "production";
     process.env.VERCEL_ENV = "production";
-    assert.equal(isRawOpenAIModeEnabled(), false);
-    assert.equal(isRawOpenAIModeAllowedOnServer(), false);
-    process.env.RAW_OPENAI_MODE = "1";
+    assert.equal(isRawOpenAIModeEnabled(), true);
     assert.equal(isRawOpenAIModeAllowedOnServer(), true);
+    process.env.RAW_OPENAI_MODE = "0";
+    assert.equal(isRawOpenAIModeAllowedOnServer(), false);
     if (prevN !== undefined) process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = prevN;
     if (prevR !== undefined) process.env.RAW_OPENAI_MODE = prevR;
     if (prevNode !== undefined) process.env.NODE_ENV = prevNode;
@@ -115,37 +116,9 @@ describe("OpenAI web search flag", () => {
   });
 });
 
-describe("Raw OpenAI path bypasses V6", () => {
-  it("raw mode wins over V6 when explicitly enabled", () => {
-    const prevRaw = process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
-    const prevRawServer = process.env.RAW_OPENAI_MODE;
-    const prevV6 = process.env.NEXT_PUBLIC_AI_V6_RUNTIME;
-    process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = "1";
-    delete process.env.RAW_OPENAI_MODE;
-    process.env.NEXT_PUBLIC_AI_V6_RUNTIME = "1";
-    assert.equal(resolveAssistantRuntimePath(), "raw_openai");
-    if (prevRaw === undefined) delete process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
-    else process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = prevRaw;
-    if (prevRawServer === undefined) delete process.env.RAW_OPENAI_MODE;
-    else process.env.RAW_OPENAI_MODE = prevRawServer;
-    if (prevV6 === undefined) delete process.env.NEXT_PUBLIC_AI_V6_RUNTIME;
-    else process.env.NEXT_PUBLIC_AI_V6_RUNTIME = prevV6;
-  });
-
-  it("defaults to V6 when raw mode is off", () => {
-    const prevRaw = process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
-    const prevRawServer = process.env.RAW_OPENAI_MODE;
-    const prevV6 = process.env.NEXT_PUBLIC_AI_V6_RUNTIME;
-    process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = "0";
-    process.env.RAW_OPENAI_MODE = "0";
-    process.env.NEXT_PUBLIC_AI_V6_RUNTIME = "1";
-    assert.equal(resolveAssistantRuntimePath(), "v6");
-    if (prevRaw === undefined) delete process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
-    else process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = prevRaw;
-    if (prevRawServer === undefined) delete process.env.RAW_OPENAI_MODE;
-    else process.env.RAW_OPENAI_MODE = prevRawServer;
-    if (prevV6 === undefined) delete process.env.NEXT_PUBLIC_AI_V6_RUNTIME;
-    else process.env.NEXT_PUBLIC_AI_V6_RUNTIME = prevV6;
+describe("Chat runtime path", () => {
+  it("always uses OpenAI", () => {
+    assert.equal(resolveAssistantRuntimePath(), "openai");
   });
 });
 

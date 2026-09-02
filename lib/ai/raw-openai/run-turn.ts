@@ -42,8 +42,8 @@ export async function runRawOpenAITurn(
   const report = opts?.onProgress ?? (() => {});
   report({
     phase: "thinking",
-    label: "RAW OPENAI",
-    detail: "Sending conversation to OpenAI",
+    label: "Thinking",
+    detail: "Sending to OpenAI",
   });
 
   const history = (request.messages ?? []).map((m) => ({

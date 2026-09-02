@@ -14,7 +14,6 @@ import {
   type AttachmentRef,
   type ChatMsg,
 } from "@/lib/ai/raw-openai/build-input";
-import { isRawOpenAIModeAllowedOnServer } from "@/lib/ai/raw-openai/flags";
 import {
   detectImageGenerationIntent,
   isOpenAIImageGenerationEnabled,
@@ -62,17 +61,6 @@ function newAttachmentId(): string {
 
 export async function POST(request: Request) {
   const started = Date.now();
-
-  if (!isRawOpenAIModeAllowedOnServer()) {
-    return NextResponse.json(
-      {
-        error:
-          "Raw OpenAI mode is disabled (RAW_OPENAI_MODE / NEXT_PUBLIC_RAW_OPENAI_MODE is off).",
-        latencyMs: Date.now() - started,
-      },
-      { status: 403 },
-    );
-  }
 
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {

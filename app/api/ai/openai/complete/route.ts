@@ -98,29 +98,6 @@ export async function POST(request: Request) {
       actualUnits: 1,
     });
 
-    // #region agent log
-    fetch("http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "20f195",
-      },
-      body: JSON.stringify({
-        sessionId: "20f195",
-        runId: "post-fix",
-        hypothesisId: "H1",
-        location: "openai/complete/route.ts:ok",
-        message: "openai complete success",
-        data: {
-          model,
-          textLen: text.length,
-          latencyMs: Date.now() - started,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     return NextResponse.json({
       text,
       model,
@@ -132,25 +109,6 @@ export async function POST(request: Request) {
       status: "failed",
     });
     const message = e instanceof Error ? e.message : "openai_complete_failed";
-
-    // #region agent log
-    fetch("http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "20f195",
-      },
-      body: JSON.stringify({
-        sessionId: "20f195",
-        runId: "post-fix",
-        hypothesisId: "H1",
-        location: "openai/complete/route.ts:error",
-        message: "openai complete failed",
-        data: { model, error: message.slice(0, 300) },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
 
     return NextResponse.json(
       { error: message.slice(0, 500), model, latencyMs: Date.now() - started },

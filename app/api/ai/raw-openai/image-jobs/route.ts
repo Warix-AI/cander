@@ -5,7 +5,6 @@
 
 import { NextResponse } from "next/server";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
-import { isRawOpenAIModeAllowedOnServer } from "@/lib/ai/raw-openai/flags";
 import {
   isOpenAIImageGenerationEnabled,
   resolveOpenAIImageModel,
@@ -48,12 +47,6 @@ function jobResponse(job: NonNullable<Awaited<ReturnType<typeof getImageGenerati
 }
 
 export async function POST(request: Request) {
-  if (!isRawOpenAIModeAllowedOnServer()) {
-    return NextResponse.json(
-      { error: "Raw OpenAI mode is disabled." },
-      { status: 403 },
-    );
-  }
   if (!isOpenAIImageGenerationEnabled()) {
     return NextResponse.json(
       { error: "Image generation is disabled (OPENAI_IMAGE_GENERATION)." },

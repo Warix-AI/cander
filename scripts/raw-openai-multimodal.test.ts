@@ -197,7 +197,7 @@ describe("Raw multimodal isolation", () => {
     const prev = process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     delete process.env.NEXT_PUBLIC_RAW_OPENAI_MODE;
     delete process.env.RAW_OPENAI_MODE;
-    assert.equal(resolveAssistantRuntimePath(), "raw_openai");
+    assert.equal(resolveAssistantRuntimePath(), "openai");
     if (prev !== undefined) process.env.NEXT_PUBLIC_RAW_OPENAI_MODE = prev;
   });
 

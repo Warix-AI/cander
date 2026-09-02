@@ -91,31 +91,6 @@ export async function fetchPrivateAiReply(opts: {
       },
       { onProgress: opts.onProgress, signal: opts.signal },
     );
-    // #region agent log
-    fetch("http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "20f195",
-      },
-      body: JSON.stringify({
-        sessionId: "20f195",
-        runId: "post-fix",
-        hypothesisId: "H1",
-        location: "send-thread-reply.ts:result",
-        message: "assistant turn result",
-        data: {
-          runtime: result.runtime,
-          offline: result.offline,
-          contentPreview: result.content.slice(0, 160),
-          bridgeOffline:
-            /couldn't reach the AI service/i.test(result.content) ||
-            result.offline,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     return {
       aiChatId: result.aiChatId ?? opts.aiChatId ?? "",
       content: result.content,
