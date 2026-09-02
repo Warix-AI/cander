@@ -963,3 +963,57 @@ function registerGmailTools() {
 }
 
 registerGmailTools();
+
+function registerSlackTools() {
+  registerAiTool({
+    name: "slack.search",
+    description: "Search recent Slack messages in connected workspaces.",
+    permission: { requireWorkspaceMember: true },
+    domain: "comms",
+    enabled: true,
+    parameters: {
+      type: "object",
+      required: ["query"],
+      properties: {
+        query: { type: "string", description: "Slack search query." },
+        maxResults: {
+          type: "number",
+          description: "Maximum messages to return (1-25, default 10).",
+        },
+      },
+    },
+  });
+  registerAiTool({
+    name: "slack.read",
+    description: "Read a Slack message by channel and timestamp.",
+    permission: { requireWorkspaceMember: true },
+    domain: "comms",
+    enabled: true,
+    parameters: {
+      type: "object",
+      required: ["channel", "ts"],
+      properties: {
+        channel: { type: "string", description: "Slack channel ID." },
+        ts: { type: "string", description: "Message timestamp ID." },
+      },
+    },
+  });
+  registerAiTool({
+    name: "slack.send",
+    description:
+      "Post a message to a Slack channel. Requires send enabled in Connectors.",
+    permission: { requireWorkspaceMember: true },
+    domain: "comms",
+    enabled: true,
+    parameters: {
+      type: "object",
+      required: ["channel", "text"],
+      properties: {
+        channel: { type: "string", description: "Slack channel ID or name." },
+        text: { type: "string", description: "Message body." },
+      },
+    },
+  });
+}
+
+registerSlackTools();

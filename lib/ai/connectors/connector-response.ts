@@ -84,6 +84,34 @@ export function gmailSendConfirmationMessage(
   return "Done — your email was sent.";
 }
 
+/** Confirm side effects only from structured tool success — never model prose alone. */
+export function finalizeSideEffectReply(input: {
+  toolId: string;
+  status: "success" | "error" | "denied";
+  data?: unknown;
+}): string | null {
+  if (input.status !== "success") return null;
+  if (input.toolId === "gmail.send") {
+    const data = input.data as { sent?: { id?: string } } | undefined;
+    return data?.sent
+      ? "Done — your email was sent."
+      : "Done — your email was sent.";
+  }
+  if (input.toolId === "slack.send") {
+    return "Done — your Slack message was posted.";
+  }
+  if (input.toolId.endsWith(".send") || input.toolId.endsWith(".create")) {
+    return `Done — ${input.toolId} succeeded.`;
+  }
+  if (input.toolId.endsWith(".delete")) {
+    return `Done — deleted via ${input.toolId}.`;
+  }
+  if (input.toolId.endsWith(".update")) {
+    return `Done — updated via ${input.toolId}.`;
+  }
+  return null;
+}
+
 export function finalizeConnectorReply(input: {
   text: string;
   connectorId: "gmail";

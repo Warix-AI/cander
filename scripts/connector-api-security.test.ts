@@ -91,16 +91,26 @@ describe("connector API security contract", () => {
     }
   });
 
-  it("non-gmail connector is disabled at authz layer", () => {
-    const result = authorizeConnectorToolAction({
+  it("tool must belong to the requested connector", () => {
+    const mismatched = authorizeConnectorToolAction({
       workspaceId: "ws-a",
       profileId: "user-a",
       connectorId: "slack",
       toolName: "gmail.read",
       connectionId: "conn-1",
     });
-    assert.equal(result.ok, false);
-    if (!result.ok) assert.equal(result.reason, "connector_disabled");
+    assert.equal(mismatched.ok, false);
+    if (!mismatched.ok) assert.equal(mismatched.reason, "not_allowed");
+
+    const slackAllowed = authorizeConnectorToolAction({
+      workspaceId: "ws-a",
+      profileId: "user-a",
+      connectorId: "slack",
+      toolName: "slack.search",
+      toolPermissions: { "slack.search": true },
+      connectionId: "conn-1",
+    });
+    assert.equal(slackAllowed.ok, true);
   });
 
   it("in-memory rate limit blocks after threshold", () => {

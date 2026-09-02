@@ -20,7 +20,7 @@ export const composioProviderAdapter: ConnectorProviderAdapter = {
     if (!isComposioConfigured()) {
       return { ok: false, error: "Composio is not configured." };
     }
-    if (input.connectorId !== "gmail") {
+    if (input.connectorId !== "gmail" && input.connectorId !== "slack") {
       return { ok: false, error: "Connector not available." };
     }
     try {

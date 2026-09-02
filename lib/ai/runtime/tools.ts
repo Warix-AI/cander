@@ -120,20 +120,19 @@ export async function executeAuthorizedTool(
   }
 
   if (
-    tool.name === "gmail.search" ||
-    tool.name === "gmail.read" ||
-    tool.name === "gmail.send" ||
-    tool.name === "gmail.draft" ||
-    tool.name === "gmail.reply"
+    tool.name.startsWith("gmail.") ||
+    tool.name.startsWith("slack.") ||
+    (tool.name.includes(".") &&
+      ["gmail", "slack"].includes(tool.name.split(".")[0] ?? ""))
   ) {
-    const { executeConnectorGmailTool } = await import(
+    const { executeConnectorToolClient } = await import(
       "@/lib/ai/connectors/tool-executors"
     );
-    const gmail = await executeConnectorGmailTool(
+    const connector = await executeConnectorToolClient(
       { name: tool.name, args },
       getTurnWorkspaceId(),
     );
-    if (gmail) return gmail;
+    if (connector) return connector;
   }
 
   // Work tasks do not need app action handlers.

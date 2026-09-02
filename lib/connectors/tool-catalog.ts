@@ -1,6 +1,14 @@
 /**
- * Connector tool catalog — defines available tools and read/write tiers per connector.
+ * Connector tool catalog — derives from CanderTool registry for connector UI/permissions.
+ * Backward-compatible with existing tool-permissions and authz callers.
  */
+
+import {
+  listCanderTools,
+  listCanderToolsForConnector,
+  getCanderTool,
+} from "../ai/tools/cander-registry.ts";
+import type { ToolRisk } from "../ai/tools/types.ts";
 
 export type ConnectorToolAccess = "read" | "write";
 
@@ -11,57 +19,49 @@ export type ConnectorToolDefinition = {
   description: string;
   access: ConnectorToolAccess;
   defaultEnabled: boolean;
+  risk?: ToolRisk;
+  confirmationPolicy?: "never" | "when_ambiguous" | "always";
 };
 
-export const CONNECTOR_TOOL_CATALOG: ConnectorToolDefinition[] = [
-  {
-    id: "gmail.search",
-    connectorId: "gmail",
-    label: "Search mail",
-    description: "Find emails by subject, sender, or keywords",
-    access: "read",
-    defaultEnabled: true,
-  },
-  {
-    id: "gmail.read",
-    connectorId: "gmail",
-    label: "Read mail",
-    description: "Open a specific email thread or message",
-    access: "read",
-    defaultEnabled: true,
-  },
-  {
-    id: "gmail.send",
-    connectorId: "gmail",
-    label: "Send mail",
-    description: "Send new emails on your behalf",
-    access: "write",
-    defaultEnabled: false,
-  },
-  {
-    id: "gmail.draft",
-    connectorId: "gmail",
-    label: "Draft mail",
-    description: "Create email drafts for you to review before sending",
-    access: "write",
-    defaultEnabled: false,
-  },
-  {
-    id: "gmail.reply",
-    connectorId: "gmail",
-    label: "Reply in thread",
-    description: "Reply to an existing email thread on your behalf",
-    access: "write",
-    defaultEnabled: false,
-  },
-];
+function riskToAccess(risk: ToolRisk): ConnectorToolAccess {
+  return risk === "read" ? "read" : "write";
+}
+
+function toConnectorDef(tool: {
+  id: string;
+  connectorId?: string;
+  label: string;
+  description: string;
+  risk: ToolRisk;
+  confirmationPolicy: "never" | "when_ambiguous" | "always";
+  defaultEnabled: boolean;
+}): ConnectorToolDefinition | null {
+  if (!tool.connectorId) return null;
+  return {
+    id: tool.id,
+    connectorId: tool.connectorId,
+    label: tool.label,
+    description: tool.description,
+    access: riskToAccess(tool.risk),
+    defaultEnabled: tool.defaultEnabled,
+    risk: tool.risk,
+    confirmationPolicy: tool.confirmationPolicy,
+  };
+}
+
+export const CONNECTOR_TOOL_CATALOG: ConnectorToolDefinition[] = listCanderTools()
+  .map(toConnectorDef)
+  .filter((t): t is ConnectorToolDefinition => t != null);
 
 export function toolsForConnector(connectorId: string): ConnectorToolDefinition[] {
-  return CONNECTOR_TOOL_CATALOG.filter((tool) => tool.connectorId === connectorId);
+  return listCanderToolsForConnector(connectorId)
+    .map(toConnectorDef)
+    .filter((t): t is ConnectorToolDefinition => t != null);
 }
 
 export function toolDefinition(toolId: string): ConnectorToolDefinition | null {
-  return CONNECTOR_TOOL_CATALOG.find((tool) => tool.id === toolId) ?? null;
+  const tool = getCanderTool(toolId);
+  return tool ? toConnectorDef(tool) : null;
 }
 
 export function defaultToolPermissions(connectorId: string): Record<string, boolean> {

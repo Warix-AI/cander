@@ -56,6 +56,18 @@ function gmailAuthConfigId(): string {
   return id;
 }
 
+function slackAuthConfigId(): string {
+  const id = process.env.COMPOSIO_SLACK_AUTH_CONFIG_ID?.trim();
+  if (!id) throw new Error("COMPOSIO_SLACK_AUTH_CONFIG_ID is not configured");
+  return id;
+}
+
+function authConfigIdForConnector(connectorId: string): string {
+  if (connectorId === "gmail") return gmailAuthConfigId();
+  if (connectorId === "slack") return slackAuthConfigId();
+  throw new Error(`No Composio auth config for connector: ${connectorId}`);
+}
+
 export type ComposioLinkSession = {
   redirectUrl: string;
   connectedAccountId: string;
@@ -67,8 +79,8 @@ export async function createConnectLink(input: {
   composioUserId: string;
   connectorId: string;
 }): Promise<ComposioLinkSession> {
-  if (input.connectorId !== "gmail") {
-    throw new Error("Only Gmail is enabled for the Composio pilot");
+  if (input.connectorId !== "gmail" && input.connectorId !== "slack") {
+    throw new Error(`Connector not available via Composio: ${input.connectorId}`);
   }
   const res = await fetch(`${COMPOSIO_API_BASE}/connected_accounts/link`, {
     method: "POST",
@@ -78,7 +90,7 @@ export async function createConnectLink(input: {
     },
     body: JSON.stringify({
       user_id: input.composioUserId,
-      auth_config_id: gmailAuthConfigId(),
+      auth_config_id: authConfigIdForConnector(input.connectorId),
       allow_multiple: false,
     }),
   });

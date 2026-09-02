@@ -96,8 +96,11 @@ export async function disconnectConnectorConnection(input: {
 
 export async function executeConnectorToolRequest(input: {
   workspaceId: string;
-  tool: "gmail.search" | "gmail.read" | "gmail.send" | "gmail.draft" | "gmail.reply";
+  tool: string;
   arguments: Record<string, unknown>;
+  connectionId?: string;
+  toolCallId?: string;
+  confirmed?: boolean;
 }): Promise<{ output: string }> {
   const headers = await authHeaders();
   const response = await fetch("/api/connectors/tools/execute", {

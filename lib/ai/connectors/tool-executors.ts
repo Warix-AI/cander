@@ -5,23 +5,18 @@
 import { executeConnectorToolRequest } from "@/lib/api/connector-client";
 import { getTurnWorkspaceId } from "@/lib/ai/runtime/turn-context";
 import type { AiToolCallResult } from "@/lib/ai/runtime/tools";
+import { getCanderTool } from "@/lib/ai/tools/cander-registry";
 
-export async function executeConnectorGmailTool(
+export async function executeConnectorToolClient(
   call: {
     name: string;
     args: Record<string, unknown>;
+    connectionId?: string;
   },
   workspaceIdOverride?: string | null,
 ): Promise<AiToolCallResult | null> {
-  if (
-    call.name !== "gmail.search" &&
-    call.name !== "gmail.read" &&
-    call.name !== "gmail.send" &&
-    call.name !== "gmail.draft" &&
-    call.name !== "gmail.reply"
-  ) {
-    return null;
-  }
+  const tool = getCanderTool(call.name);
+  if (!tool?.connectorId) return null;
 
   const workspaceId =
     workspaceIdOverride?.trim() || getTurnWorkspaceId()?.trim() || null;
@@ -29,7 +24,7 @@ export async function executeConnectorGmailTool(
     return {
       name: call.name,
       ok: false,
-      output: "No active workspace for Gmail tools.",
+      output: "No active workspace for connector tools.",
     };
   }
 
@@ -38,6 +33,7 @@ export async function executeConnectorGmailTool(
       workspaceId,
       tool: call.name,
       arguments: call.args,
+      connectionId: call.connectionId,
     });
     return {
       name: call.name,
@@ -46,11 +42,22 @@ export async function executeConnectorGmailTool(
     };
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : "Gmail tool execution failed.";
+      err instanceof Error ? err.message : "Connector tool execution failed.";
     return {
       name: call.name,
       ok: false,
       output: message,
     };
   }
+}
+
+/** @deprecated Use executeConnectorToolClient */
+export async function executeConnectorGmailTool(
+  call: {
+    name: string;
+    args: Record<string, unknown>;
+  },
+  workspaceIdOverride?: string | null,
+): Promise<AiToolCallResult | null> {
+  return executeConnectorToolClient(call, workspaceIdOverride);
 }

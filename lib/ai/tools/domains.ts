@@ -54,7 +54,16 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "browser.current.get_metadata",
   ],
   scheduling: [],
-  comms: ["gmail.search", "gmail.read", "gmail.send", "gmail.draft", "gmail.reply"],
+  comms: [
+    "gmail.search",
+    "gmail.read",
+    "gmail.send",
+    "gmail.draft",
+    "gmail.reply",
+    "slack.search",
+    "slack.read",
+    "slack.send",
+  ],
   cloud_work: [
     "create_work_task",
     "check_work_task",

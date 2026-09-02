@@ -3,19 +3,9 @@ import { isSupabaseConfigured } from "@/lib/data-backend";
 import { resolveConnectorRequest } from "@/lib/connectors/server-context";
 import { checkConnectorRateLimitAsync } from "@/lib/connectors/rate-limit";
 import { executeConnectorTool } from "@/lib/connectors/tool-execute";
-import type { GmailConnectorToolName } from "@/lib/connectors/composio-tools";
+import { getCanderTool } from "@/lib/ai/tools/cander-registry";
 
 export const runtime = "nodejs";
-
-function isGmailTool(tool: string): tool is GmailConnectorToolName {
-  return (
-    tool === "gmail.search" ||
-    tool === "gmail.read" ||
-    tool === "gmail.send" ||
-    tool === "gmail.draft" ||
-    tool === "gmail.reply"
-  );
-}
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -26,6 +16,9 @@ export async function POST(request: Request) {
     workspaceId?: string;
     tool?: string;
     arguments?: Record<string, unknown>;
+    connectionId?: string;
+    toolCallId?: string;
+    confirmed?: boolean;
   };
   try {
     body = await request.json();
@@ -42,7 +35,7 @@ export async function POST(request: Request) {
   }
 
   const tool = body.tool?.trim();
-  if (!tool || !isGmailTool(tool)) {
+  if (!tool || !getCanderTool(tool)?.connectorId) {
     return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
   }
 
@@ -63,6 +56,9 @@ export async function POST(request: Request) {
       profileId: ctx.user.id,
       tool,
       arguments: body.arguments ?? {},
+      connectionId: body.connectionId,
+      toolCallId: body.toolCallId,
+      confirmed: body.confirmed,
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
