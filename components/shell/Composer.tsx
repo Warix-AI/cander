@@ -89,14 +89,20 @@ import {
   getConnectorConnectionsServerSnapshot,
   subscribeConnectorConnections,
 } from "@/lib/connector-connections-store";
+import {
+  blocksFromText,
+  connectorsFromBlocks,
+  emptyComposerBlocks,
+  removeConnectorBlock,
+  textFromBlocks,
+  toggleConnectorInBlocks,
+  type ComposerBlock,
+  type ComposerConnectorScope,
+} from "@/lib/composer-blocks";
+
+export type { ComposerConnectorScope };
 
 type MenuId = "plus" | null;
-
-export type ComposerConnectorScope = {
-  connectionId: string;
-  connectorId: string;
-  label: string;
-};
 
 export function Composer({
   onSend,
@@ -162,15 +168,24 @@ export function Composer({
   const mobile = useMobileShell();
   const { centered } = useChatCanvasCentered();
   const { percent: usagePercent, label: usageLabel } = useUsageStatusPercent();
-  const [value, setValue] = useState("");
+  const [blocks, setBlocks] = useState<ComposerBlock[]>(() =>
+    emptyComposerBlocks(),
+  );
+  const value = textFromBlocks(blocks);
+  const connectorScopes = connectorsFromBlocks(blocks);
   const [dictating, setDictating] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [dictationMeter, setDictationMeter] = useState<AudioMeter | null>(null);
   const [transcriptReveal, setTranscriptReveal] = useState(false);
   const [menu, setMenu] = useState<MenuId>(null);
-  const [connectorScopes, setConnectorScopes] = useState<
-    ComposerConnectorScope[]
-  >([]);
+  const focusedTextKeyRef = useRef<string | null>(null);
+  const textCursorRef = useRef(0);
+  const textInputRefs = useRef<Map<string, HTMLTextAreaElement | HTMLInputElement>>(
+    new Map(),
+  );
+  const setValue = (next: string) => {
+    setBlocks(blocksFromText(next));
+  };
   const connectionsByWorkspace = useSyncExternalStore(
     subscribeConnectorConnections,
     getConnectorConnectionsSnapshot,
@@ -180,20 +195,41 @@ export function Composer({
     (row) => isUiConnectedStatus(row.status),
   );
   useEffect(() => {
-    setConnectorScopes([]);
+    setBlocks(emptyComposerBlocks());
     setMenu(null);
+    focusedTextKeyRef.current = null;
+    textCursorRef.current = 0;
   }, [threadId]);
 
-  const toggleConnectorScope = (next: ComposerConnectorScope) => {
-    setConnectorScopes((current) => {
-      if (current.some((c) => c.connectionId === next.connectionId)) {
-        return current.filter((c) => c.connectionId !== next.connectionId);
+  const focusTextKey = (key: string, cursor?: number) => {
+    focusedTextKeyRef.current = key;
+    window.requestAnimationFrame(() => {
+      const el = textInputRefs.current.get(key);
+      if (!el) return;
+      el.focus();
+      const pos =
+        cursor == null ? el.value.length : Math.min(cursor, el.value.length);
+      try {
+        el.setSelectionRange(pos, pos);
+      } catch {
+        /* ignore */
       }
-      // One account per connector — replace same connectorId if present.
-      return [
-        ...current.filter((c) => c.connectorId !== next.connectorId),
+      textCursorRef.current = pos;
+    });
+  };
+
+  const toggleConnectorScope = (next: ComposerConnectorScope) => {
+    setBlocks((current) => {
+      const result = toggleConnectorInBlocks(
+        current,
         next,
-      ];
+        focusedTextKeyRef.current,
+        textCursorRef.current,
+      );
+      if (result.focusKey) {
+        window.requestAnimationFrame(() => focusTextKey(result.focusKey!));
+      }
+      return result.blocks;
     });
   };
 
@@ -1128,10 +1164,8 @@ export function Composer({
                       type="button"
                       aria-label={`Remove ${scope.label}`}
                       onClick={() =>
-                        setConnectorScopes((current) =>
-                          current.filter(
-                            (c) => c.connectionId !== scope.connectionId,
-                          ),
+                        setBlocks((current) =>
+                          removeConnectorBlock(current, scope.connectionId),
                         )
                       }
                       className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
@@ -1431,8 +1465,7 @@ function ComposerMenu({
     <div
       role="menu"
       className={cn(
-        "absolute z-50 flex gap-1 overflow-y-auto px-1.5 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.28)]",
-        openAbove ? "flex-col-reverse" : "flex-col",
+        "absolute z-50 flex flex-col gap-1 overflow-y-auto px-1.5 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.28)]",
         openAbove
           ? "inset-x-0 bottom-[calc(100%+8px)]"
           : "inset-x-0 top-[calc(100%+8px)]",

@@ -226,8 +226,59 @@ test("discovery falls back to connected families when phrasing misses hints", ()
     userMessage: "what did alex say yesterday?",
     snapshot,
   });
+  assert.equal(result.toolIds.length, 0);
+  assert.match(result.reason, /capability_index_only/);
+});
+
+test("discovery attaches connected families for actionable phrasing", () => {
+  const snapshot: CapabilitySnapshot = {
+    connectors: [
+      {
+        connectorId: "gmail",
+        label: "Gmail",
+        capabilityFamily: "email",
+        accounts: [
+          {
+            connectionId: "c1",
+            label: "Gmail",
+            status: "active",
+            capabilities: { search: true, read: true, send: false, draft: false, reply: false },
+          },
+        ],
+      },
+      {
+        connectorId: "slack",
+        label: "Slack",
+        capabilityFamily: "messaging",
+        accounts: [
+          {
+            connectionId: "c2",
+            label: "Slack",
+            status: "active",
+            capabilities: { search: true, read: true, send: false },
+          },
+        ],
+      },
+    ],
+    families: {
+      email: {
+        connected: true,
+        connectorIds: ["gmail"],
+        accounts: [],
+      },
+      messaging: {
+        connected: true,
+        connectorIds: ["slack"],
+        accounts: [],
+      },
+    },
+  };
+  const result = discoverRelevantTools({
+    userMessage: "check what alex said yesterday",
+    snapshot,
+  });
   assert.ok(result.toolIds.includes("gmail.search"));
-  assert.ok(result.toolIds.includes("slack.search") || result.toolIds.some((id) => id.startsWith("slack.")));
+  assert.ok(result.toolIds.some((id) => id.startsWith("slack.")));
   assert.match(result.reason, /all_connected_families/);
 });
 

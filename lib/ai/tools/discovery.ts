@@ -196,12 +196,24 @@ export function discoverRelevantTools(input: DiscoveryInput): DiscoveryResult {
   }
 
   if (!selectedFamilies.size && connected.size) {
-    // Fallback: expose enabled tools across connected families so the model
-    // can still act when phrasing misses FAMILY_HINTS (capped by maxTools).
-    for (const family of connected) {
-      selectedFamilies.add(family);
+    // Prefer lean turns: only dump all families when the message looks
+    // actionable (or tools were already scoped). Plain chat stays tool-free.
+    const actionable =
+      /\b(check|search|find|look|read|send|email|inbox|slack|message|schedule|meeting|deal|invoice|file|pull request|issue)\b/i.test(
+        input.userMessage,
+      );
+    if (actionable) {
+      for (const family of connected) {
+        selectedFamilies.add(family);
+      }
+      reasons.push("all_connected_families");
+    } else {
+      return {
+        toolIds: [],
+        families: [],
+        reason: "capability_index_only",
+      };
     }
-    reasons.push("all_connected_families");
   }
 
   if (!selectedFamilies.size) {
