@@ -2456,7 +2456,7 @@ function ConnectorsStep({
 }
 
 const inputClass = cn(
-  "h-11 w-full border border-border bg-background px-3.5 text-[14px] outline-none focus:border-foreground/20",
+  "h-11 w-full border border-border bg-input px-3.5 text-[14px] outline-none focus:border-foreground/20",
   SHELL_G3_RADIUS,
 );
 

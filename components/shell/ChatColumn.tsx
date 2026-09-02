@@ -104,12 +104,32 @@ export function ChatColumn() {
   const endRef = useRef<HTMLDivElement>(null);
   const latestUserRef = useRef<HTMLDivElement>(null);
   const prevThreadId = useRef<string | null>(null);
+  const userPinnedScroll = useRef(false);
+  const scrollParentRef = useRef<HTMLDivElement | null>(null);
+  const scrollUnsubRef = useRef<(() => void) | null>(null);
   const last = thread?.messages.at(-1);
   const lastUserId = [...(thread?.messages ?? [])]
     .reverse()
     .find((m) => m.role === "user")?.id;
   const floating = useShellStyle() === "floating";
   const { centered } = useChatCanvasCentered();
+
+  const bindScrollParent = (node: HTMLDivElement | null) => {
+    scrollUnsubRef.current?.();
+    scrollUnsubRef.current = null;
+    scrollParentRef.current = node;
+    if (!node) return;
+    const onScroll = () => {
+      const distanceFromBottom =
+        node.scrollHeight - node.scrollTop - node.clientHeight;
+      userPinnedScroll.current = distanceFromBottom > 80;
+    };
+    node.addEventListener("scroll", onScroll, { passive: true });
+    scrollUnsubRef.current = () =>
+      node.removeEventListener("scroll", onScroll);
+  };
+
+  useEffect(() => () => scrollUnsubRef.current?.(), []);
 
   // Bulk listThreads omits heavy image blocks; hydrate the open thread on demand.
   useEffect(() => {
@@ -130,6 +150,9 @@ export function ChatColumn() {
     const threadId = thread?.id ?? null;
     const threadSwitched = prevThreadId.current !== threadId;
     prevThreadId.current = threadId;
+    if (threadSwitched) {
+      userPinnedScroll.current = false;
+    }
 
     // Mobile project/thread switches: jump to the latest turn instantly.
     // Smooth scroll looks like a second "slide" after the surface push.
@@ -151,8 +174,9 @@ export function ChatColumn() {
   }, [lastUserId, last?.id, thread?.id, mobile, hasChatTurns, projectId]);
 
   useEffect(() => {
-    // While the assistant is typing, keep the growing reply in view without
-    // yanking the user message off the top.
+    // While the assistant is typing, follow the reply only if the user hasn't
+    // scrolled away — never trap the viewport during a response.
+    if (userPinnedScroll.current) return;
     if (last?.role === "assistant" && last.status === "streaming") {
       endRef.current?.scrollIntoView({ block: "nearest" });
     }
@@ -216,7 +240,10 @@ export function ChatColumn() {
   if (browserMode) {
     return (
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-        <div className="chat-scroll flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          ref={bindScrollParent}
+          className="chat-scroll flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        >
           {thread ? (
             <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-5">
               {renderTranscript(thread.messages)}
@@ -240,7 +267,10 @@ export function ChatColumn() {
           MOBILE_APP_BG,
         )}
       >
-        <div className="chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-4 pb-4 touch-pan-y [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          ref={bindScrollParent}
+          className="chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-4 pb-4 touch-pan-y [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        >
           {hasChatTurns || thread ? (
             <div className="mx-auto flex w-full max-w-none flex-col gap-5">
               {thread ? renderTranscript(thread.messages) : null}
@@ -266,6 +296,7 @@ export function ChatColumn() {
         <EmptyChat spaceId={chatSpaceId(spaceId)} drafting={drafting} onPrompt={send} autoFocusComposer={autofocusComposer} />
       ) : (
         <div
+          ref={bindScrollParent}
           className={cn(
             "chat-scroll flex-1 overflow-y-auto pt-4 pb-5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
             floating

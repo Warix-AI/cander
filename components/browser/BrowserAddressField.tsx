@@ -64,7 +64,7 @@ export function BrowserAddressField({
           spellCheck={false}
           aria-label="Address"
           placeholder={placeholder}
-          className="h-8 w-full rounded-full border border-border/60 bg-muted/40 px-3 text-center text-[13px] text-foreground caret-foreground outline-none"
+          className="h-8 w-full rounded-full border border-border/60 bg-input px-3 text-center text-[13px] text-foreground caret-foreground outline-none"
         />
       </form>
     );

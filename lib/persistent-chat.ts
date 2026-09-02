@@ -126,25 +126,28 @@ export function openSpaceDefaultChat(
 }
 
 /**
- * Promote a draft chat to the shared default used across Work, Build, Explore,
- * and Connectors (via the continuous workspace chat slot).
+ * Promote a draft chat to the shared default used across Work, Build, Explore.
+ * Replaces any prior universal / per-space dock slot for this workspace.
  */
 export function adoptThreadAsUniversalDefault(
   threads: Thread[],
   workspaceId: string,
   sourceThreadId: string,
-): { threads: Thread[]; id: string } {
+): { threads: Thread[]; id: string; removedIds: string[] } {
   const source = threads.find((item) => item.id === sourceThreadId);
-  if (!source || source.workspaceId !== workspaceId || source.projectId) {
-    return ensureContinuousChat(threads, workspaceId, "work");
-  }
   const defaultId = continuousChatId(workspaceId);
+  if (!source || source.workspaceId !== workspaceId) {
+    const ensured = ensureContinuousChat(threads, workspaceId, "work");
+    return { ...ensured, removedIds: [] };
+  }
+  // Project-tied chats can still become the shared default; clear the link.
   const promoted: Thread = {
     ...source,
     id: defaultId,
-    spaceId: source.spaceId ?? "work",
+    spaceId: source.spaceId && source.spaceId !== "home" ? source.spaceId : "work",
     persistent: true,
     projectId: undefined,
+    updatedAt: new Date().toISOString(),
   };
   const removeIds = new Set<string>([
     sourceThreadId,
@@ -152,9 +155,14 @@ export function adoptThreadAsUniversalDefault(
     spaceChatId(workspaceId, "work"),
     spaceChatId(workspaceId, "build"),
     spaceChatId(workspaceId, "research"),
+    spaceChatId(workspaceId, "home"),
   ]);
+  const removedIds = threads
+    .filter((item) => removeIds.has(item.id) && item.id !== sourceThreadId)
+    .map((item) => item.id);
+  if (sourceThreadId !== defaultId) removedIds.push(sourceThreadId);
   const rest = threads.filter((item) => !removeIds.has(item.id));
-  return { threads: [promoted, ...rest], id: defaultId };
+  return { threads: [promoted, ...rest], id: defaultId, removedIds };
 }
 
 /**

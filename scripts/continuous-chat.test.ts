@@ -67,6 +67,55 @@ describe("shared space default chats", () => {
       "ws1",
     ), true);
     assert.equal(promoted.threads.some((t) => t.id === draft.id), false);
+    assert.ok(promoted.removedIds.includes(draft.id));
+  });
+
+  it("Default chat replaces a prior universal default for all spaces", () => {
+    const prior = openSpaceDefaultChat([], "ws1", "work");
+    const withPrior = prior.threads.map((t) =>
+      t.id === prior.id
+        ? {
+            ...t,
+            messages: [
+              {
+                id: "u1",
+                role: "user" as const,
+                content: "old chat",
+                at: "12:00",
+              },
+            ],
+            snippet: "old chat",
+          }
+        : t,
+    );
+    const draft = startContinuousChat(withPrior, "ws1", null);
+    const trip = draft.threads.map((t) =>
+      t.id === draft.id
+        ? {
+            ...t,
+            messages: [
+              {
+                id: "u2",
+                role: "user" as const,
+                content: "plan a trip",
+                at: "12:01",
+              },
+            ],
+            snippet: "plan a trip",
+          }
+        : t,
+    );
+    const promoted = adoptThreadAsUniversalDefault(trip, "ws1", draft.id);
+    const work = openSpaceDefaultChat(promoted.threads, "ws1", "work");
+    const explore = openSpaceDefaultChat(work.threads, "ws1", "research");
+    const build = openSpaceDefaultChat(explore.threads, "ws1", "build");
+    assert.equal(work.id, continuousChatId("ws1"));
+    assert.equal(explore.id, continuousChatId("ws1"));
+    assert.equal(build.id, continuousChatId("ws1"));
+    assert.equal(
+      build.threads.find((t) => t.id === build.id)?.snippet,
+      "plan a trip",
+    );
   });
 
   it("legacy adoptThreadAsSpaceDefault still replaces a space dock id", () => {
@@ -136,9 +185,10 @@ describe("shared space default chats", () => {
       false,
       "sendMessage must not auto-promote detached drafts",
     );
+    assert.match(src, /promoteThreadToUniversalDefault/);
     assert.match(
       src,
-      /setDraftAsDefaultChat = useCallback\(\(\) => \{[\s\S]*?adoptThreadAsUniversalDefault/,
+      /setDraftAsDefaultChat = useCallback\(\s*\([\s\S]*?promoteThreadToUniversalDefault/,
     );
   });
 });

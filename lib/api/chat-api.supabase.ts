@@ -317,12 +317,51 @@ export async function upsertThreadsToSupabase(
       messageToUpsertRow(message, thread.id, thread.workspaceId, index),
     ),
   );
-  if (!messageRows.length) return;
+  if (messageRows.length) {
+    const { error: messageError } = await supabase
+      .from("messages")
+      .upsert(messageRows, { onConflict: "id" });
+    if (messageError) throw messageError;
+  }
 
-  const { error: messageError } = await supabase
-    .from("messages")
-    .upsert(messageRows, { onConflict: "id" });
-  if (messageError) throw messageError;
+  // Drop orphaned server messages so promoted defaults don't keep old turns.
+  for (const thread of threads) {
+    const keepIds = thread.messages.map((message) => message.id);
+    if (!keepIds.length) {
+      const { error } = await supabase
+        .from("messages")
+        .delete()
+        .eq("thread_id", thread.id);
+      if (error) {
+        console.warn("[cander] prune thread messages failed", thread.id, error);
+      }
+      continue;
+    }
+    const { error } = await supabase
+      .from("messages")
+      .delete()
+      .eq("thread_id", thread.id)
+      .not("id", "in", `(${keepIds.join(",")})`);
+    if (error) {
+      console.warn("[cander] prune thread messages failed", thread.id, error);
+    }
+  }
+}
+
+/** Soft-remove threads that were replaced (e.g. Default chat promote). */
+export async function deleteThreadsFromSupabase(
+  ctx: WorkspaceCtx,
+  threadIds: string[],
+) {
+  const ids = [...new Set(threadIds.filter(Boolean))];
+  if (!ids.length) return;
+  const supabase = createSupabaseBrowserClient();
+  await supabase.from("messages").delete().in("thread_id", ids);
+  await supabase
+    .from("threads")
+    .delete()
+    .in("id", ids)
+    .eq("workspace_id", ctx.workspaceId);
 }
 
 export function chatRealtimeChannelName(workspaceId: string) {

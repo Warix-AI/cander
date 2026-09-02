@@ -342,12 +342,12 @@ export function SettingsField({
 
 /** Shared input chrome for settings forms. */
 export const settingsInputClass = cn(
-  "h-10 w-full border border-border bg-background px-3 text-[13.5px] outline-none focus:border-foreground/20",
+  "h-10 w-full border border-border bg-input px-3 text-[13.5px] outline-none focus:border-foreground/20",
   SHELL_G3_RADIUS,
 );
 
 export const settingsSelectClass = cn(
-  "h-9 border border-border bg-background px-2.5 text-[13px] outline-none focus:border-foreground/20",
+  "h-9 border border-border bg-input px-2.5 text-[13px] outline-none focus:border-foreground/20",
   SHELL_G3_RADIUS,
 );
 

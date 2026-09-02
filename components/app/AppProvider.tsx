@@ -206,6 +206,7 @@ import {
   modelContentFromMessage,
 } from "@/lib/ai/attachment-context";
 import { deleteAiChat } from "@/lib/api/ai-chat-api";
+import { deleteThreadsFromSupabase } from "@/lib/api/chat-api.supabase";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
 import { isRawOpenAIModeEnabled } from "@/lib/ai/raw-openai/flags";
 import { detectImageGenerationIntent } from "@/lib/ai/raw-openai/image-generation";
@@ -362,7 +363,7 @@ type AppContextValue = {
   /** Create a Build / Explore project from the active draft chat. */
   startDraftProject: (space: SpaceId) => Promise<void>;
   /** Promote the draft chat to the default across Work, Build, Explore, and Connectors. */
-  setDraftAsDefaultChat: () => void;
+  setDraftAsDefaultChat: (destSpace?: "work" | "build" | "research") => void;
   collapseDraft: () => void;
   /** Close space chat and restore the full workspace dashboard. */
   closeSpaceChat: () => void;
@@ -694,10 +695,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const mobile = useMobileShell();
   const mobileNavTimer = useRef<number | null>(null);
+  const panelRevealTimer = useRef<number | null>(null);
+  const PANEL_REVEAL_DELAY_MS = 1000;
+
+  const clearPanelReveal = useCallback(() => {
+    if (panelRevealTimer.current) {
+      window.clearTimeout(panelRevealTimer.current);
+      panelRevealTimer.current = null;
+    }
+  }, []);
+
+  const schedulePanelReveal = useCallback(
+    (delayMs = PANEL_REVEAL_DELAY_MS) => {
+      clearPanelReveal();
+      panelRevealTimer.current = window.setTimeout(() => {
+        panelRevealTimer.current = null;
+        setPanelMode("split");
+      }, delayMs);
+    },
+    [clearPanelReveal],
+  );
 
   useEffect(() => {
     return () => {
       if (mobileNavTimer.current) clearTimeout(mobileNavTimer.current);
+      if (panelRevealTimer.current) clearTimeout(panelRevealTimer.current);
     };
   }, []);
 
@@ -1357,26 +1379,75 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [threadId, projectId],
   );
 
-  const setDraftAsDefaultChat = useCallback(() => {
-    if (!threadId) return;
-    let tid = threadId;
-    setThreads((current) => {
-      const result = adoptThreadAsUniversalDefault(
-        current,
-        workspaceId,
-        threadId,
-      );
-      tid = result.id;
-      return result.threads;
-    });
-    setThreadId(tid);
-    setDrafting(false);
-    setSpaceId(null);
-    setProjectId(null);
-    setView("chat");
-    setPanelIntent("browse");
-    setPanelMode("split");
-  }, [threadId, workspaceId]);
+  const promoteThreadToUniversalDefault = useCallback(
+    (sourceThreadId: string) => {
+      let tid = sourceThreadId;
+      let removedIds: string[] = [];
+      setThreads((current) => {
+        const result = adoptThreadAsUniversalDefault(
+          current,
+          workspaceId,
+          sourceThreadId,
+        );
+        tid = result.id;
+        removedIds = result.removedIds;
+        return result.threads;
+      });
+      if (removedIds.length && isSupabaseConfigured()) {
+        void deleteThreadsFromSupabase(
+          { workspaceId, actorId: actor.id },
+          removedIds,
+        ).catch((err) => {
+          console.warn("[cander] delete replaced chats failed", err);
+        });
+      }
+      return tid;
+    },
+    [setThreads, workspaceId, actor.id],
+  );
+
+  const setDraftAsDefaultChat = useCallback(
+    (destSpace: "work" | "build" | "research" = "work") => {
+      if (!threadId) return;
+      const tid = promoteThreadToUniversalDefault(threadId);
+      setThreadId(tid);
+      setDrafting(false);
+      setProjectId(null);
+      setConnectorId(null);
+      setJobId(null);
+      setSkillId(null);
+      // Open the target space with the shared default so every dock resumes it.
+      setSpaceId(destSpace);
+      setView("space");
+      setPanelIntent("execute");
+      setPanelMode("collapsed");
+      setMobileSurface("chat");
+      if (destSpace === "build") setBuildTool("preview");
+      if (destSpace === "research") setResearchTool("overview");
+      if (mobile) {
+        skipMobilePagerTransitionOnce();
+      }
+      pushTarget({
+        view: "space",
+        spaceId: destSpace,
+        threadId: tid,
+        projectId: null,
+        panelMode: "collapsed",
+        panelIntent: "execute",
+        connectorId: null,
+        jobId: null,
+        skillId: null,
+      });
+      schedulePanelReveal();
+    },
+    [
+      threadId,
+      promoteThreadToUniversalDefault,
+      pushTarget,
+      mobile,
+      schedulePanelReveal,
+    ],
+  );
 
   const collapseDraft = useCallback(() => {
     setDrafting(false);
@@ -2784,13 +2855,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!onUnscopedChat && space && (kind === "build" || kind === "refine" || kind === "fix"))
         setBuildTool("preview");
       if (!onUnscopedChat && space && kind === "changes") setBuildTool("activity");
-      // First turn from an empty chat opens the right panel; later turns
-      // respect a user-collapsed panel (full-window chat stays full-window).
-      const nextPanelMode =
-        panelMode === "collapsed" && !threadHasTurns(thread)
-          ? "split"
-          : panelMode;
+      // First turn: dock the chat first, then reveal the right panel after a beat.
+      const revealPanelAfterDock =
+        panelMode === "collapsed" && !threadHasTurns(thread);
+      const nextPanelMode = revealPanelAfterDock ? "collapsed" : panelMode;
       setPanelMode(nextPanelMode);
+      if (revealPanelAfterDock) {
+        schedulePanelReveal();
+      }
       setMobileSurface("chat");
       pushTarget({
         view: keepSpace ? "space" : "chat",
@@ -2847,6 +2919,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       voiceActive,
       setThreads,
       trackImageGenerationJob,
+      schedulePanelReveal,
     ],
   );
 

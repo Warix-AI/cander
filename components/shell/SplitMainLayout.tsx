@@ -100,7 +100,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
     showPanelColumn && slideWidth > 0 && !immersive && panelOn;
   const livePanelWidth =
     dragging && panelOn && !immersive ? panelPct : slideWidth;
-  const animateLayout = false;
+  const animateLayout = true;
 
   const onPanelWidthTransitionEnd = (event: TransitionEvent<HTMLDivElement>) => {
     if (event.propertyName !== "width") return;

@@ -132,7 +132,6 @@ export function Composer({
     view,
     projectId,
     threadId,
-    openSpaceChat,
     setDraftAsDefaultChat,
     armChatInterface,
     collapseDraft,
@@ -903,7 +902,7 @@ export function Composer({
                 description="Start a build with this chat"
                 onClick={() => {
                   setMenu(null);
-                  openSpaceChat("build", { landOnPanel: false });
+                  setDraftAsDefaultChat("build");
                 }}
               />
               <MenuRow
@@ -912,7 +911,7 @@ export function Composer({
                 description="Start a search with this chat"
                 onClick={() => {
                   setMenu(null);
-                  openSpaceChat("research", { landOnPanel: false });
+                  setDraftAsDefaultChat("research");
                 }}
               />
               <MenuRow
@@ -923,7 +922,7 @@ export function Composer({
                 description="Add as default chat to spaces"
                 onClick={() => {
                   setMenu(null);
-                  setDraftAsDefaultChat();
+                  setDraftAsDefaultChat("work");
                 }}
               />
             </div>

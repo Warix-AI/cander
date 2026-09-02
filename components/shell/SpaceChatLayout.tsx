@@ -203,7 +203,7 @@ export function SpaceChatLayout() {
   const liveSpacePct =
     dragging && chatOpen && spaceOpen && !immersive ? panelPct : spacePct;
   const liveChatPct = chatOpen ? Math.max(0, 100 - liveSpacePct) : 0;
-  const animateLayout = false;
+  const animateLayout = true;
   const pinChat =
     expandedLayout && expandedPinned && chatOpen && spaceOpen && !immersive;
   const chatReady = pinChat || liveChatPct > 8;
