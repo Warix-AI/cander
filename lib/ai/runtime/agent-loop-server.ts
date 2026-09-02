@@ -14,7 +14,7 @@ import {
   resolveToolsForExposure,
 } from "@/lib/ai/tools/discovery";
 import { canderToolsToOpenAIFunctions, fromOpenAIToolName } from "@/lib/ai/tools/schemas";
-import { getCanderTool } from "@/lib/ai/tools/cander-registry";
+import { getCanderTool, listCanderToolsForConnector } from "@/lib/ai/tools/cander-registry";
 import type { CapabilitySnapshot, ToolExecutionResult } from "@/lib/ai/tools/types";
 import { executeConnectorToolDetailed } from "@/lib/connectors/tool-execute";
 import {
@@ -85,6 +85,7 @@ export type AgentLoopInput = {
   /** User already confirmed a pending write. */
   confirmedToolCallId?: string | null;
   selectedConnectionId?: string | null;
+  selectedConnectionIds?: string[] | null;
   maxIterations?: number;
 };
 
@@ -178,14 +179,6 @@ export async function runAgentServerLoop(
       })
     : [];
 
-  const userMessage = lastUserMessage(input.messages);
-  let discovery = discoverRelevantTools({
-    userMessage,
-    snapshot,
-    recentEvents,
-  });
-  let exposedIds = [...discovery.toolIds];
-
   const connections = await listActiveConnections({
     client: input.client,
     workspaceId: input.workspaceId,
@@ -197,12 +190,38 @@ export async function runAgentServerLoop(
       c,
     ]),
   );
+  const scopedConnectionIds = [
+    ...(input.selectedConnectionIds ?? []),
+    ...(input.selectedConnectionId ? [input.selectedConnectionId] : []),
+  ].filter((id, i, arr) => Boolean(id) && arr.indexOf(id) === i);
+
+  const scopedConnections =
+    connections.ok && scopedConnectionIds.length
+      ? connections.connections.filter((c) =>
+          scopedConnectionIds.includes(c.connectionId),
+        )
+      : [];
+  const preferConnectorIds = scopedConnections.map((c) => c.connectorId);
+  const scopedByConnector = new Map(
+    scopedConnections.map((c) => [c.connectorId, c]),
+  );
+
+  const userMessage = lastUserMessage(input.messages);
+  let discovery = discoverRelevantTools({
+    userMessage,
+    snapshot,
+    recentEvents,
+    preferConnectorIds,
+  });
+  let exposedIds = [...discovery.toolIds];
 
   // Filter to tools that pass exposure authz for at least one account
   exposedIds = exposedIds.filter((toolId) => {
     const tool = getCanderTool(toolId);
     if (!tool?.connectorId) return false;
-    const conn = connectionByConnector.get(tool.connectorId);
+    const conn =
+      scopedByConnector.get(tool.connectorId) ??
+      connectionByConnector.get(tool.connectorId);
     if (!conn) return false;
     const authz = authorizeToolExposure(toolId, {
       workspaceId: input.workspaceId,
@@ -212,12 +231,37 @@ export async function runAgentServerLoop(
     return authz.ok;
   });
 
+  // If scoped but discovery empty, fall back to those connectors' registry tools.
+  if (preferConnectorIds.length && !exposedIds.length) {
+    for (const connectorId of preferConnectorIds) {
+      for (const tool of listCanderToolsForConnector(connectorId)) {
+        const conn =
+          scopedByConnector.get(connectorId) ??
+          connectionByConnector.get(connectorId);
+        if (!conn) continue;
+        const authz = authorizeToolExposure(tool.id, {
+          workspaceId: input.workspaceId,
+          profileId: input.profileId,
+          connection: conn,
+        });
+        if (authz.ok) exposedIds.push(tool.id);
+      }
+    }
+  }
+
   const refsPrompt = formatReferencesForPrompt(
     collectReferencesFromEvents(recentEvents),
   );
+  const scopePrompt =
+    scopedConnections.length > 0
+      ? `User scoped this turn to: ${scopedConnections
+          .map((c) => `${c.connectorId} (${c.connectionId})`)
+          .join(", ")}. Prefer those connectors’ tools and do not ask which app to use unless the request clearly needs a different connected app.`
+      : "";
   const system = [
     SYSTEM_BASE,
     formatCapabilitySnapshotForPrompt(snapshot),
+    scopePrompt,
     refsPrompt,
   ]
     .filter(Boolean)
@@ -268,6 +312,7 @@ export async function runAgentServerLoop(
           })),
         ],
         alreadyExposed: exposedIds,
+        preferConnectorIds,
       });
       for (const id of discovery.toolIds) {
         if (!exposedIds.includes(id)) exposedIds.push(id);
@@ -345,11 +390,13 @@ export async function runAgentServerLoop(
       }
 
       const conn =
+        scopedByConnector.get(tool.connectorId) ??
         (input.selectedConnectionId
           ? (connections.ok ? connections.connections : []).find(
               (c) => c.connectionId === input.selectedConnectionId,
             )
-          : null) ?? connectionByConnector.get(tool.connectorId);
+          : null) ??
+        connectionByConnector.get(tool.connectorId);
 
       if (!conn) {
         conversation.push({

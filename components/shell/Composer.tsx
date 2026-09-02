@@ -4,17 +4,20 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type RefObject,
 } from "react";
 import {
-  Camera,
+  Compass,
   FileText,
-  ImageIcon,
+  Hammer,
   Link2,
+  MessageSquare,
   Paperclip,
   Pin,
   Plus,
+  X,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { ReferenceChip } from "@/components/shell/ReferenceChip";
@@ -80,8 +83,20 @@ import type {
   ChatImageAttachment,
   ChatSendAttachment,
 } from "@/lib/types";
+import { isUiConnectedStatus } from "@/lib/connectors/authz";
+import {
+  getConnectorConnectionsSnapshot,
+  getConnectorConnectionsServerSnapshot,
+  subscribeConnectorConnections,
+} from "@/lib/connector-connections-store";
 
 type MenuId = "plus" | null;
+
+export type ComposerConnectorScope = {
+  connectionId: string;
+  connectorId: string;
+  label: string;
+};
 
 export function Composer({
   onSend,
@@ -100,6 +115,9 @@ export function Composer({
       attachments?: ChatImageAttachment[];
       files?: ChatFileAttachment[];
       sendAttachments?: ChatSendAttachment[];
+      selectedConnectionId?: string | null;
+      selectedConnectionIds?: string[] | null;
+      scopedConnectorId?: string | null;
     },
   ) => void;
   landing?: boolean;
@@ -111,10 +129,14 @@ export function Composer({
   autoFocus?: boolean;
 }) {
   const {
+    workspaceId,
     spaceId,
     connectorId,
     view,
     projectId,
+    threadId,
+    openSpaceChat,
+    setDraftAsDefaultChat,
     armChatInterface,
     collapseDraft,
     thread,
@@ -146,6 +168,44 @@ export function Composer({
   const [dictationMeter, setDictationMeter] = useState<AudioMeter | null>(null);
   const [transcriptReveal, setTranscriptReveal] = useState(false);
   const [menu, setMenu] = useState<MenuId>(null);
+  const [connectorScopes, setConnectorScopes] = useState<
+    ComposerConnectorScope[]
+  >([]);
+  const connectionsByWorkspace = useSyncExternalStore(
+    subscribeConnectorConnections,
+    getConnectorConnectionsSnapshot,
+    getConnectorConnectionsServerSnapshot,
+  );
+  const activeConnections = (connectionsByWorkspace[workspaceId] ?? []).filter(
+    (row) => isUiConnectedStatus(row.status),
+  );
+  useEffect(() => {
+    setConnectorScopes([]);
+    setMenu(null);
+  }, [threadId]);
+
+  const toggleConnectorScope = (next: ComposerConnectorScope) => {
+    setConnectorScopes((current) => {
+      if (current.some((c) => c.connectionId === next.connectionId)) {
+        return current.filter((c) => c.connectionId !== next.connectionId);
+      }
+      // One account per connector — replace same connectorId if present.
+      return [
+        ...current.filter((c) => c.connectorId !== next.connectorId),
+        next,
+      ];
+    });
+  };
+
+  const connectorScopePayload =
+    connectorScopes.length > 0
+      ? {
+          selectedConnectionIds: connectorScopes.map((c) => c.connectionId),
+          selectedConnectionId: connectorScopes[0]!.connectionId,
+          scopedConnectorId: connectorScopes[0]!.connectorId,
+        }
+      : {};
+
   const [files, setFiles] = useState<ChatFileAttachment[]>([]);
   const [images, setImages] = useState<ChatImageAttachment[]>([]);
   const [dictateError, setDictateError] = useState(null as string | null);
@@ -430,6 +490,7 @@ export function Composer({
         ...(usableImages.length ? { attachments: usableImages } : {}),
         ...(files.length ? { files } : {}),
         ...(sendAttachments.length ? { sendAttachments } : {}),
+        ...connectorScopePayload,
       });
       setValue("");
       setFiles([]);
@@ -549,6 +610,7 @@ export function Composer({
       ...(usableImages.length ? { attachments: usableImages } : {}),
       ...(files.length ? { files } : {}),
       ...(sendAttachments.length ? { sendAttachments } : {}),
+      ...connectorScopePayload,
     });
     setValue("");
     setFiles([]);
@@ -761,103 +823,149 @@ export function Composer({
         }}
       >
         {menu === "plus" && !compact ? (
-          <ComposerMenu mobile={mobile}>
-            {!mobile && pinTarget ? (
+          <ComposerMenu mobile={mobile} openAbove={!landing}>
+            <div>
+              <MenuSection title="Add" />
               <MenuRow
-                icon={<Pin className={cn("h-4 w-4", pinned && "fill-current")} strokeWidth={1.7} />}
-                label={pinned ? "Unpin" : "Pin"}
+                icon={<Paperclip className="h-4 w-4" strokeWidth={1.75} />}
+                label="Add photos & files"
                 onClick={() => {
-                  if (pinned) clearPin(pinTarget.kind, pinTarget.id);
-                  else setPin(pinTarget.kind, pinTarget.id, "primary");
+                  setAttachError(null);
                   setMenu(null);
+                  if (nativeShell) {
+                    void (async () => {
+                      const result =
+                        await getNativeCapabilities().media.pickLibraryImages();
+                      if (result.ok) {
+                        getNativeCapabilities().haptics.impact("select");
+                        setImages((current) =>
+                          [...current, result.image].slice(0, 4),
+                        );
+                        return;
+                      }
+                      if (!result.cancelled) setAttachError(result.message);
+                      openFilePicker(fileRef);
+                    })();
+                  } else if (
+                    mobileWeb &&
+                    attachActions.includes("choose_photo")
+                  ) {
+                    openFilePicker(photoLibRef);
+                  } else {
+                    openFilePicker(fileRef);
+                  }
                 }}
               />
-            ) : null}
-            {nativeShell || mobileWeb ? (
-              <>
-                {attachActions.includes("take_photo") ? (
-                  <MenuRow
-                    icon={<Camera className="h-4 w-4" strokeWidth={1.7} />}
-                    label="Take Photo"
-                    onClick={() => {
-                      setAttachError(null);
-                      setMenu(null);
-                      if (nativeShell) {
-                        void (async () => {
-                          const result =
-                            await getNativeCapabilities().media.pickCameraPhoto();
-                          if (result.ok) {
-                            getNativeCapabilities().haptics.impact("select");
-                            setImages((current) =>
-                              [...current, result.image].slice(0, 4),
-                            );
-                            return;
-                          }
-                          if (!result.cancelled) setAttachError(result.message);
-                        })();
-                      } else {
-                        openFilePicker(cameraRef);
-                      }
-                    }}
-                  />
-                ) : null}
-                {attachActions.includes("choose_photo") ? (
-                  <MenuRow
-                    icon={<ImageIcon className="h-4 w-4" strokeWidth={1.7} />}
-                    label="Choose Photo"
-                    onClick={() => {
-                      setAttachError(null);
-                      setMenu(null);
-                      if (nativeShell) {
-                        void (async () => {
-                          const result =
-                            await getNativeCapabilities().media.pickLibraryImages();
-                          if (result.ok) {
-                            getNativeCapabilities().haptics.impact("select");
-                            setImages((current) =>
-                              [...current, result.image].slice(0, 4),
-                            );
-                            return;
-                          }
-                          if (!result.cancelled) setAttachError(result.message);
-                        })();
-                      } else {
-                        openFilePicker(photoLibRef);
-                      }
-                    }}
-                  />
-                ) : null}
+              {!mobile && pinTarget ? (
                 <MenuRow
-                  icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
-                  label="Upload File"
+                  icon={
+                    <Pin
+                      className={cn("h-4 w-4", pinned && "fill-current")}
+                      strokeWidth={1.75}
+                    />
+                  }
+                  label={pinned ? "Unpin" : "Pin"}
+                  description={
+                    pinned
+                      ? "Remove from your pins"
+                      : "Pin this to the sidebar"
+                  }
                   onClick={() => {
-                    setAttachError(null);
-                    openFilePicker(fileRef);
+                    if (pinned) clearPin(pinTarget.kind, pinTarget.id);
+                    else setPin(pinTarget.kind, pinTarget.id, "primary");
                     setMenu(null);
                   }}
                 />
-              </>
-            ) : (
+              ) : null}
+              {!mobile && browserMode ? (
+                <MenuRow
+                  icon={<Link2 className="h-4 w-4" strokeWidth={1.75} />}
+                  label="Attach page"
+                  description="Reference the current page"
+                  onClick={() => {
+                    attachBrowserReference();
+                    setMenu(null);
+                  }}
+                />
+              ) : null}
+            </div>
+
+            <div>
+              <MenuSection title="Start" />
               <MenuRow
-                icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
-                label="Upload"
+                icon={<Hammer className="h-4 w-4" strokeWidth={1.75} />}
+                label="Build"
+                description="Start a build with this chat"
                 onClick={() => {
-                  setAttachError(null);
-                  openFilePicker(fileRef);
                   setMenu(null);
+                  openSpaceChat("build", { landOnPanel: false });
                 }}
               />
-            )}
-            {!mobile && browserMode ? (
               <MenuRow
-                icon={<Paperclip className="h-4 w-4" strokeWidth={1.7} />}
-                label="Attach page"
+                icon={<Compass className="h-4 w-4" strokeWidth={1.75} />}
+                label="Explore"
+                description="Start a search with this chat"
                 onClick={() => {
-                  attachBrowserReference();
                   setMenu(null);
+                  openSpaceChat("research", { landOnPanel: false });
                 }}
               />
-            ) : null}
+              <MenuRow
+                icon={
+                  <MessageSquare className="h-4 w-4" strokeWidth={1.75} />
+                }
+                label="Default chat"
+                description="Add as default chat to spaces"
+                onClick={() => {
+                  setMenu(null);
+                  setDraftAsDefaultChat();
+                }}
+              />
+            </div>
+
+            <div>
+              <MenuSection title="Connectors" />
+              {activeConnections.length === 0 ? (
+                <p className="px-3 py-1 text-[11.5px] text-muted-foreground">
+                  Connect an app in Connectors first.
+                </p>
+              ) : (
+                activeConnections.map((row) => {
+                  const catalog = connectors.find(
+                    (c) => c.id === row.connectorId,
+                  );
+                  const label = catalog?.name ?? row.connectorId;
+                  const description =
+                    catalog?.description?.trim() || row.connectorId;
+                  const selected = connectorScopes.some(
+                    (c) => c.connectionId === row.id,
+                  );
+                  return (
+                    <MenuRow
+                      key={row.id}
+                      compact
+                      icon={
+                        <ConnectorMark
+                          id={catalog?.icon ?? row.connectorId}
+                          size="xs"
+                          className="!h-5 !w-5"
+                        />
+                      }
+                      label={label}
+                      description={description}
+                      selected={selected}
+                      onClick={() => {
+                        toggleConnectorScope({
+                          connectionId: row.id,
+                          connectorId: row.connectorId,
+                          label,
+                        });
+                      }}
+                    />
+                  );
+                })
+              )}
+            </div>
           </ComposerMenu>
         ) : null}
 
@@ -999,6 +1107,39 @@ export function Composer({
                     </button>
                   ),
                 )}
+              </div>
+            ) : null}
+            {connectorScopes.length > 0 ? (
+              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                {connectorScopes.map((scope) => (
+                  <span
+                    key={scope.connectionId}
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-background px-2 py-1 text-[11.5px]"
+                  >
+                    <ConnectorMark
+                      id={
+                        connectors.find((c) => c.id === scope.connectorId)?.icon ??
+                        scope.connectorId
+                      }
+                      size="xs"
+                    />
+                    <span className="truncate font-medium">{scope.label}</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${scope.label}`}
+                      onClick={() =>
+                        setConnectorScopes((current) =>
+                          current.filter(
+                            (c) => c.connectionId !== scope.connectionId,
+                          ),
+                        )
+                      }
+                      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3 w-3" strokeWidth={1.8} />
+                    </button>
+                  </span>
+                ))}
               </div>
             ) : null}
             {pageReference || entityReference ? (
@@ -1279,18 +1420,25 @@ export function Composer({
 function ComposerMenu({
   children,
   mobile = false,
+  openAbove = true,
 }: {
   children: ReactNode;
   mobile?: boolean;
+  /** When true (docked chat), menu opens above and Add stays nearest the box. */
+  openAbove?: boolean;
 }) {
   return (
     <div
       role="menu"
       className={cn(
-        "absolute z-50 overflow-y-auto p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.28)]",
+        "absolute z-50 flex gap-1 overflow-y-auto px-1.5 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.28)]",
+        openAbove ? "flex-col-reverse" : "flex-col",
+        openAbove
+          ? "inset-x-0 bottom-[calc(100%+8px)]"
+          : "inset-x-0 top-[calc(100%+8px)]",
         mobile
-          ? "inset-x-0 bottom-[calc(100%+10px)] max-h-[min(22rem,46vh)] rounded-[22px] border border-white/10 bg-popover/90 backdrop-blur-xl dark:bg-zinc-900/88"
-          : "inset-x-0 bottom-[calc(100%+8px)] max-h-[min(24rem,50vh)] light-surface shell-g3-radius bg-popover dark:bg-muted",
+          ? "max-h-[min(20rem,42vh)] rounded-[18px] border border-white/10 bg-popover/92 backdrop-blur-xl dark:bg-zinc-900/90"
+          : "max-h-[min(22rem,48vh)] light-surface shell-g3-radius bg-popover dark:bg-zinc-900",
       )}
     >
       {children}
@@ -1298,30 +1446,70 @@ function ComposerMenu({
   );
 }
 
+function MenuSection({ title }: { title: string }) {
+  return (
+    <div className="px-3 pb-0.5 pt-2.5 text-[12.5px] font-semibold tracking-[-0.01em] text-muted-foreground first:pt-1.5">
+      {title}
+    </div>
+  );
+}
+
 function MenuRow({
   icon,
   label,
+  description,
+  selected = false,
+  compact = false,
   onClick,
 }: {
   icon: ReactNode;
   label: string;
+  description?: string;
+  selected?: boolean;
+  compact?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       role="menuitem"
+      aria-pressed={selected || undefined}
+      data-active={selected ? "true" : undefined}
       onPointerDown={(event) => {
         // Keep the soft keyboard open while choosing an attach action.
         event.preventDefault();
       }}
       onClick={onClick}
-      className="menu-row-hover flex w-full items-center gap-3 rounded-[14px] px-2 py-2 text-left transition-colors duration-200 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+        className={cn(
+          "composer-plus-row flex w-full items-center text-left outline-none transition-colors duration-150",
+          compact
+            ? "gap-2 rounded-[10px] px-3 py-1"
+            : "gap-2.5 rounded-[12px] px-3 py-[5px]",
+          selected && "bg-foreground/[0.08] dark:bg-white/10",
+        )}
     >
-      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+      <span
+        className={cn(
+          "inline-flex shrink-0 items-center justify-center overflow-hidden text-foreground",
+          compact ? "h-5 w-5" : "h-[18px] w-[18px]",
+        )}
+      >
         {icon}
       </span>
-      <span className="text-[15px] tracking-[-0.01em]">{label}</span>
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate tracking-[-0.01em]",
+          compact ? "text-[12.5px]" : "text-[13.5px]",
+        )}
+      >
+        <span className="font-medium text-foreground">{label}</span>
+        {description ? (
+          <span className="font-normal text-muted-foreground">
+            <span className="mx-1.5 text-muted-foreground/40"> </span>
+            {description}
+          </span>
+        ) : null}
+      </span>
     </button>
   );
 }

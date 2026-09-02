@@ -1,5 +1,8 @@
 import type { ChatBlock, Checkpoint, PreviewNodeId } from "./types";
-import { nextId } from "./intent";
+
+function nextId(prefix: string) {
+  return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export type TurnKind =
   | "build"
@@ -29,8 +32,14 @@ export function classifyTurn(raw: string): TurnKind {
   if (/(why did we|why did you|project memory|how did we)/.test(text)) return "why";
   if (/(publish|deploy|go live|make it live)/.test(text)) return "deploy";
   if (/(api key|secret|env var)/.test(text)) return "secret";
-  if (/(connect |stripe|supabase|clerk|vercel|resend|github|firebase|neon|cloudflare|openai|anthropic)/.test(text) &&
-    /(connect|add|integrate|set up)/.test(text))
+  // Require a known integration name + integrate intent. Bare "connect "
+  // must not match company names like "Connect Capital".
+  if (
+    /\b(stripe|supabase|clerk|vercel|resend|github|firebase|neon|cloudflare|openai|anthropic)\b/.test(
+      text,
+    ) &&
+    /\b(connect|add|integrate|set up|wire)\b/.test(text)
+  )
     return "connect";
   if (/(accessibility|seo audit|security review|performance|mobile responsive|landing page optimization|database architecture)/.test(text) ||
     text.startsWith("run "))
@@ -177,7 +186,9 @@ export function makeCheckpoint(text: string, selected?: PreviewNodeId | null): C
   };
 }
 
-export function connectService(text: string) {
+export function connectService(
+  text: string,
+): { service: string; keyName: string } | null {
   const map: [RegExp, string, string][] = [
     [/stripe/, "Stripe", "STRIPE_SECRET_KEY"],
     [/supabase/, "Supabase", "SUPABASE_URL"],
@@ -192,7 +203,8 @@ export function connectService(text: string) {
     [/cloudflare/, "Cloudflare", "CLOUDFLARE_TOKEN"],
   ];
   const hit = map.find(([re]) => re.test(text.toLowerCase()));
-  return { service: hit?.[1] ?? "Stripe", keyName: hit?.[2] ?? "STRIPE_SECRET_KEY" };
+  if (!hit) return null;
+  return { service: hit[1], keyName: hit[2] };
 }
 
 export function skillReply(text: string): { content: string; blocks: ChatBlock[] } {

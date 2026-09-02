@@ -63,6 +63,8 @@ export type DiscoveryInput = {
   recentEvents?: PersistedToolEvent[];
   alreadyExposed?: string[];
   maxTools?: number;
+  /** When set (Plus menu scope), only expose these connectors' enabled tools. */
+  preferConnectorIds?: string[] | null;
 };
 
 export type DiscoveryResult = {
@@ -115,6 +117,39 @@ export function discoverRelevantTools(input: DiscoveryInput): DiscoveryResult {
   const selectedFamilies = new Set<CapabilityFamily>();
   const ranked: string[] = [];
   const reasons: string[] = [];
+
+  const preferConnectorIds = (input.preferConnectorIds ?? [])
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (preferConnectorIds.length) {
+    const preferSet = new Set(preferConnectorIds);
+    for (const connector of input.snapshot.connectors) {
+      if (!preferSet.has(connector.connectorId)) continue;
+      selectedFamilies.add(connector.capabilityFamily);
+      reasons.push(`scoped:${connector.connectorId}`);
+      const ids = enabledToolIdsForFamily(
+        input.snapshot,
+        connector.capabilityFamily,
+      ).filter((id) => preferSet.has(getCanderTool(id)?.connectorId ?? ""));
+      for (const id of ids) {
+        if (!already.has(id) && !ranked.includes(id)) ranked.push(id);
+      }
+    }
+    if (ranked.length) {
+      ranked.sort((a, b) => {
+        const ta = getCanderTool(a);
+        const tb = getCanderTool(b);
+        const ra = ta?.risk === "read" ? 0 : 1;
+        const rb = tb?.risk === "read" ? 0 : 1;
+        return ra - rb;
+      });
+      return {
+        toolIds: ranked.slice(0, max),
+        families: [...selectedFamilies],
+        reason: reasons.join("|"),
+      };
+    }
+  }
 
   const events = input.recentEvents ?? [];
   const refs = collectReferencesFromEvents(events);

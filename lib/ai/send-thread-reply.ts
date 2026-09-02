@@ -53,6 +53,8 @@ export async function fetchPrivateAiReply(opts: {
   }>;
   images?: string[];
   attachmentIds?: string[];
+  selectedConnectionId?: string | null;
+  selectedConnectionIds?: string[] | null;
   onProgress?: (progress: AgentTurnProgress) => void;
   signal?: AbortSignal;
 }): Promise<{
@@ -83,7 +85,12 @@ export async function fetchPrivateAiReply(opts: {
         images: opts.images,
         attachmentIds: opts.attachmentIds,
       },
-      { onProgress: opts.onProgress, signal: opts.signal },
+      {
+        onProgress: opts.onProgress,
+        signal: opts.signal,
+        selectedConnectionId: opts.selectedConnectionId ?? null,
+        selectedConnectionIds: opts.selectedConnectionIds ?? null,
+      },
     );
     return {
       aiChatId: result.aiChatId ?? opts.aiChatId ?? "",

@@ -91,6 +91,94 @@ test("discovery selects email family from snapshot + message", () => {
   assert.ok(!result.toolIds.includes("gmail.draft"));
 });
 
+test("discovery respects preferConnectorId scope", () => {
+  const snapshot: CapabilitySnapshot = {
+    connectors: [
+      {
+        connectorId: "gmail",
+        label: "Gmail",
+        capabilityFamily: "email",
+        accounts: [
+          {
+            connectionId: "c1",
+            label: "Gmail",
+            status: "active",
+            capabilities: { search: true, read: true, send: true, draft: false, reply: false },
+          },
+        ],
+      },
+      {
+        connectorId: "slack",
+        label: "Slack",
+        capabilityFamily: "messaging",
+        accounts: [
+          {
+            connectionId: "c2",
+            label: "Slack",
+            status: "active",
+            capabilities: { search: true, read: true, send: true },
+          },
+        ],
+      },
+    ],
+    families: {
+      email: { connected: true, connectorIds: ["gmail"], accounts: [] },
+      messaging: { connected: true, connectorIds: ["slack"], accounts: [] },
+    },
+  };
+  const result = discoverRelevantTools({
+    userMessage: "what did alex say?",
+    snapshot,
+    preferConnectorIds: ["gmail"],
+  });
+  assert.ok(result.toolIds.every((id) => id.startsWith("gmail.")));
+  assert.match(result.reason, /scoped:gmail/);
+});
+
+test("discovery can scope multiple connectors", () => {
+  const snapshot: CapabilitySnapshot = {
+    connectors: [
+      {
+        connectorId: "gmail",
+        label: "Gmail",
+        capabilityFamily: "email",
+        accounts: [
+          {
+            connectionId: "c1",
+            label: "Gmail",
+            status: "active",
+            capabilities: { search: true, read: true, send: false, draft: false, reply: false },
+          },
+        ],
+      },
+      {
+        connectorId: "slack",
+        label: "Slack",
+        capabilityFamily: "messaging",
+        accounts: [
+          {
+            connectionId: "c2",
+            label: "Slack",
+            status: "active",
+            capabilities: { search: true, read: true, send: false },
+          },
+        ],
+      },
+    ],
+    families: {
+      email: { connected: true, connectorIds: ["gmail"], accounts: [] },
+      messaging: { connected: true, connectorIds: ["slack"], accounts: [] },
+    },
+  };
+  const result = discoverRelevantTools({
+    userMessage: "cross-check email and slack",
+    snapshot,
+    preferConnectorIds: ["gmail", "slack"],
+  });
+  assert.ok(result.toolIds.some((id) => id.startsWith("gmail.")));
+  assert.ok(result.toolIds.some((id) => id.startsWith("slack.")));
+});
+
 test("discovery falls back to connected families when phrasing misses hints", () => {
   const snapshot: CapabilitySnapshot = {
     connectors: [

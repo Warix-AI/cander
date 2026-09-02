@@ -1045,6 +1045,16 @@ html:not(.dark) .menu-row-hover[data-active="true"] {
   background: var(--muted);
 }
 
+/* Composer Plus menu — ChatGPT-like pill hover on desktop */
+@media (hover: hover) {
+  html:not(.dark) .composer-plus-row:hover {
+    background-color: oklch(0.94 0 0);
+  }
+  .dark .composer-plus-row:hover {
+    background-color: oklch(1 0 0 / 0.1);
+  }
+}
+
 /* Right panel interiors — match white shell (light) / muted shell (dark) */
 html:not(.dark) .shell-panel :is(.bg-sidebar, .bg-background) {
   background-color: oklch(1 0 0);

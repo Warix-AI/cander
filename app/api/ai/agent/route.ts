@@ -36,6 +36,7 @@ type Body = {
   title?: string;
   confirmedToolCallId?: string | null;
   selectedConnectionId?: string | null;
+  selectedConnectionIds?: string[] | null;
   clientHint?: { etag?: string };
 };
 
@@ -125,6 +126,9 @@ export async function POST(request: Request) {
       aiChatId: body.aiChatId,
       confirmedToolCallId: body.confirmedToolCallId,
       selectedConnectionId: body.selectedConnectionId,
+      selectedConnectionIds: Array.isArray(body.selectedConnectionIds)
+        ? body.selectedConnectionIds.map(String).filter(Boolean)
+        : null,
     });
 
     await finalizeUsageReservation({

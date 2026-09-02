@@ -259,6 +259,9 @@ type SendOpts = {
   attachments?: ChatImageAttachment[];
   files?: ChatFileAttachment[];
   sendAttachments?: ChatSendAttachment[];
+  selectedConnectionId?: string | null;
+  selectedConnectionIds?: string[] | null;
+  scopedConnectorId?: string | null;
 };
 
 type AppContextValue = {
@@ -1799,6 +1802,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = useCallback(
     (text: string, opts?: SendOpts) => {
       const sendAttachments = opts?.sendAttachments ?? [];
+      const selectedConnectionId = opts?.selectedConnectionId ?? null;
+      const selectedConnectionIds =
+        opts?.selectedConnectionIds?.filter(Boolean) ??
+        (selectedConnectionId ? [selectedConnectionId] : []);
       const attachmentsFromSend = sendAttachments
         .filter((a) => a.type === "image" && a.dataUrl)
         .map((a) => ({
@@ -1831,7 +1838,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           : fileAttachments.length
             ? "(file attached)"
             : "");
-      const kind = classifyTurn(contentForIntent);
+      const kindRaw = classifyTurn(contentForIntent);
+      const kind =
+        kindRaw === "connect" && !connectService(contentForIntent)
+          ? "chat"
+          : kindRaw;
       const intent = inferIntent(
         contentForIntent,
         workspaceId,
@@ -2080,24 +2091,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         };
       } else if (kind === "connect") {
         const service = connectService(trimmed);
-        assistantMsg = {
-          ...assistantMsg,
-          content: `Let’s connect ${service.service}. I’ll keep keys out of the source.`,
-          blocks: [{ type: "connect", service: service.service, status: "pending" }],
-        };
+        if (service) {
+          assistantMsg = {
+            ...assistantMsg,
+            content: `Let’s connect ${service.service}. I’ll keep keys out of the source.`,
+            blocks: [{ type: "connect", service: service.service, status: "pending" }],
+          };
+        }
       } else if (kind === "secret") {
         const service = connectService(trimmed);
-        assistantMsg = {
-          ...assistantMsg,
-          content: "",
-          blocks: [
-            {
-              type: "secret",
-              service: service.service,
-              keyName: service.keyName,
-            },
-          ],
-        };
+        if (service) {
+          assistantMsg = {
+            ...assistantMsg,
+            content: "",
+            blocks: [
+              {
+                type: "secret",
+                service: service.service,
+                keyName: service.keyName,
+              },
+            ],
+          };
+        }
       } else if (kind === "deploy") {
         const slug = (matched?.name ?? project?.name ?? "app")
           .toLowerCase()
@@ -2346,12 +2361,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       if (kind === "connect") {
         const service = connectService(trimmed);
-        setMemory((current) => ({
-          ...current,
-          integrations: current.integrations.includes(service.service)
-            ? current.integrations
-            : [...current.integrations, service.service],
-        }));
+        if (service) {
+          setMemory((current) => ({
+            ...current,
+            integrations: current.integrations.includes(service.service)
+              ? current.integrations
+              : [...current.integrations, service.service],
+          }));
+        }
       }
 
       setDrafting(false);
@@ -2548,6 +2565,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             projectSpace: replyProjectSpace,
             messages: historyMessages,
             signal: ac.signal,
+            selectedConnectionId:
+              selectedConnectionIds[0] ?? selectedConnectionId,
+            selectedConnectionIds:
+              selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
             ...(rawMode
               ? attachmentIds.length
                 ? { attachmentIds }

@@ -36,6 +36,7 @@ export type AgentTurnOptions = {
   suppressContentDelta?: boolean;
   confirmedToolCallId?: string | null;
   selectedConnectionId?: string | null;
+  selectedConnectionIds?: string[] | null;
 };
 
 let agentV2EnabledCache: boolean | null = null;

@@ -46,6 +46,7 @@ export async function runAgentClientTransport(
   opts?: AgentTurnOptions & {
     confirmedToolCallId?: string | null;
     selectedConnectionId?: string | null;
+    selectedConnectionIds?: string[] | null;
   },
 ): Promise<AgentClientResult> {
   const report = opts?.onProgress ?? (() => {});
@@ -68,6 +69,10 @@ export async function runAgentClientTransport(
     history.push({ role: "user", content: current });
   }
 
+  const selectedConnectionIds =
+    opts?.selectedConnectionIds?.filter(Boolean) ??
+    (opts?.selectedConnectionId ? [opts.selectedConnectionId] : []);
+
   let res: Response;
   try {
     const authHeaders = await getRawOpenAIAuthHeaders();
@@ -84,7 +89,9 @@ export async function runAgentClientTransport(
         aiChatId: request.aiChatId,
         title: request.title,
         confirmedToolCallId: opts?.confirmedToolCallId ?? null,
-        selectedConnectionId: opts?.selectedConnectionId ?? null,
+        selectedConnectionId: selectedConnectionIds[0] ?? null,
+        selectedConnectionIds:
+          selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
       }),
       signal: opts?.signal,
     });
