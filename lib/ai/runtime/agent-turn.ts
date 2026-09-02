@@ -46,6 +46,15 @@ export async function runAssistantTurn(
   });
   try {
     opts?.onProgress?.({ phase: "thinking", label: "Thinking" });
+
+    const { isCommsConnectorIntent } = await import("@/lib/ai/tools/domains");
+    if (isCommsConnectorIntent(request.content)) {
+      const { runCommsConnectorTurn } = await import(
+        "@/lib/ai/connectors/comms-turn"
+      );
+      return runCommsConnectorTurn(request, opts);
+    }
+
     const { runRawOpenAITurn } = await import("@/lib/ai/raw-openai/run-turn");
     return runRawOpenAITurn(request, opts);
   } finally {

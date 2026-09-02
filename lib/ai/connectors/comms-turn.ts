@@ -1,5 +1,5 @@
 /**
- * Gmail connector turns — tool loop for comms domain (bypasses V6 surface pipeline).
+ * Gmail connector turns — OpenAI decides tools; client executes gmail.search/read.
  */
 
 import type {
@@ -17,9 +17,58 @@ import {
   parseToolCallFromContent,
   sanitizeAssistantVisibleText,
 } from "@/lib/ai/tool-protocol";
+import { fetchConnectorConnections } from "@/lib/api/connector-client";
 
 const COMMS_TOOLS = ["gmail.search", "gmail.read"] as const;
-const MAX_ROUNDS = 3;
+const MAX_ROUNDS = 4;
+
+const GMAIL_TURN_INSTRUCTIONS = `You have read-only access to the user's connected Gmail for this turn.
+
+When you need mail data, end your reply with exactly one JSON object on its own line:
+{"tool":"gmail.search","arguments":{"query":"is:unread newer_than:7d"}}
+or {"tool":"gmail.read","arguments":{"messageId":"<id from search>"}}
+
+Rules:
+- Do NOT stop at "I will search" or "Let me check" — either emit the tool JSON or wait for results and summarize.
+- After tool results appear below, answer in plain language with what you found (or that nothing matched).
+- Use Gmail query syntax in gmail.search (e.g. is:unread, from:alice, subject:BYU, newer_than:30d).
+- Never invent message IDs — use gmail.read only with IDs from gmail.search results.`;
+
+function inferGmailSearchQuery(content: string): string {
+  const text = (content || "").trim();
+  const lower = text.toLowerCase();
+  if (/\bunread\b/.test(lower)) return "is:unread newer_than:30d";
+  if (/\b(sent|outbox)\b/.test(lower)) return "in:sent newer_than:30d";
+  if (/\b(draft)\b/.test(lower)) return "in:drafts newer_than:90d";
+  if (/\bbyu\b/.test(lower) && /\bfootball\b/.test(lower)) {
+    return "newer_than:90d (BYU OR cougars OR football)";
+  }
+  if (/\b(latest|recent|new)\b/.test(lower)) return "in:inbox newer_than:7d";
+  return "in:inbox newer_than:14d";
+}
+
+function looksLikeSearchPromise(text: string): boolean {
+  return /\b(i'll|i will|let me|going to)\b[\s\S]{0,40}\b(search|check|look|read)\b/i.test(
+    text,
+  );
+}
+
+async function ensureGmailConnected(
+  workspaceId: string,
+): Promise<string | null> {
+  try {
+    const connections = await fetchConnectorConnections(workspaceId);
+    const gmail = connections.find(
+      (c) => c.connectorId === "gmail" && c.status === "active",
+    );
+    if (!gmail) {
+      return "Gmail isn’t connected yet. Open **Connectors**, connect Gmail, then ask again.";
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export async function runCommsConnectorTurn(
   request: AiGenerateRequest,
@@ -32,30 +81,65 @@ export async function runCommsConnectorTurn(
     detail: "Checking Gmail…",
   });
 
+  const notConnected = await ensureGmailConnected(request.workspaceId);
+  if (notConnected) {
+    return {
+      content: notConnected,
+      runtime: "cloud",
+      offline: false,
+      condensationOccurred: false,
+      aiChatId: request.aiChatId ?? null,
+    };
+  }
+
   const toolResults: AiToolCallResult[] = [];
   let working: AiGenerateRequest = {
     ...request,
     allowTools: true,
     allowedToolNames: [...COMMS_TOOLS],
-    toolContext: formatToolsForPrompt([...COMMS_TOOLS]),
-    preferredRoute: "cander_cloud",
-    routingReason: "gmail_connector",
+    toolContext: [
+      formatToolsForPrompt([...COMMS_TOOLS]),
+      GMAIL_TURN_INSTRUCTIONS,
+    ].join("\n\n"),
   };
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
     if (round > 0) {
       report({ phase: "follow_up", label: "Thinking", detail: "Using Gmail…" });
     }
+
     const generated = await runRawOpenAITurn(working, opts);
     const { text, call } = parseToolCallFromContent(generated.content);
 
+    let toolCall = call;
     if (
-      !call ||
-      !COMMS_TOOLS.includes(call.name as (typeof COMMS_TOOLS)[number])
+      toolCall &&
+      !COMMS_TOOLS.includes(toolCall.name as (typeof COMMS_TOOLS)[number])
     ) {
+      toolCall = null;
+    }
+
+    // Model promised to search but didn't emit JSON — run search ourselves.
+    if (
+      !toolCall &&
+      !toolResults.length &&
+      (looksLikeSearchPromise(text || generated.content) || round === 0)
+    ) {
+      toolCall = {
+        name: "gmail.search",
+        arguments: {
+          query: inferGmailSearchQuery(request.content),
+          maxResults: 10,
+        },
+      };
+    }
+
+    if (!toolCall) {
       const content =
         sanitizeAssistantVisibleText(text || generated.content).trim() ||
-        "I couldn't complete that Gmail request.";
+        (toolResults.length
+          ? toolResults.map((t) => t.output).join("\n\n")
+          : "I couldn't find anything in Gmail for that request.");
       return {
         ...generated,
         content,
@@ -66,24 +150,37 @@ export async function runCommsConnectorTurn(
     report({
       phase: "tool",
       label: "Thinking",
-      detail: call.name === "gmail.read" ? "Reading email…" : "Searching Gmail…",
-      toolName: call.name,
+      detail:
+        toolCall.name === "gmail.read" ? "Reading email…" : "Searching Gmail…",
+      toolName: toolCall.name,
     });
-    const result = await executeAuthorizedTool(call);
+    const result = await executeAuthorizedTool(toolCall);
     toolResults.push(result);
 
-    const toolNote = `Tool ${call.name} (${result.ok ? "ok" : "failed"}):\n${result.output}`;
+    const toolNote = `Tool ${toolCall.name} (${result.ok ? "ok" : "failed"}):\n${result.output}`;
     working = {
       ...working,
-      allowTools: true,
-      allowedToolNames: [...COMMS_TOOLS],
       toolContext: [working.toolContext, toolNote].filter(Boolean).join("\n\n"),
       messages: [
         ...(request.messages ?? []),
         { role: "user", content: request.content },
-        { role: "assistant", content: generated.content },
+        ...(round === 0 && generated.content
+          ? [{ role: "assistant" as const, content: generated.content }]
+          : []),
       ],
     };
+
+    // After search/read, next round synthesizes a user-facing answer.
+    if (toolCall.name === "gmail.search" || toolCall.name === "gmail.read") {
+      working = {
+        ...working,
+        content: [
+          request.content,
+          "",
+          "Summarize the Gmail tool results above for the user. If nothing matched, say clearly that no matching emails were found.",
+        ].join("\n"),
+      };
+    }
   }
 
   const summary = await runRawOpenAITurn(
@@ -94,7 +191,7 @@ export async function runCommsConnectorTurn(
       content: [
         request.content,
         "",
-        "Use the Gmail tool results above. Answer in plain language.",
+        "Summarize the Gmail tool results above for the user in plain language.",
       ].join("\n"),
     },
     opts,
@@ -104,7 +201,8 @@ export async function runCommsConnectorTurn(
     ...summary,
     content:
       sanitizeAssistantVisibleText(summary.content).trim() ||
-      toolResults.map((t) => t.output).join("\n\n"),
+      toolResults.map((t) => t.output).join("\n\n") ||
+      "No matching emails were found in Gmail.",
     toolResults,
   };
 }
