@@ -19,6 +19,7 @@ Complete every item on **staging** before enabling Gmail in `connector_catalog`.
 - [ ] Connector unit tests (`npm run test:connectors`)
 - [ ] Cross-user connection access returns uniform 404
 - [ ] Duplicate initiate reuses single pending connection
+- [ ] Security audit report reviewed ([security-audit-report.md](./security-audit-report.md))
 
 ## OAuth callback identity
 

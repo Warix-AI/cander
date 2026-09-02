@@ -123,7 +123,10 @@ export async function executeAuthorizedTool(
     const { executeConnectorGmailTool } = await import(
       "@/lib/ai/connectors/tool-executors"
     );
-    const gmail = await executeConnectorGmailTool({ name: tool.name, args });
+    const gmail = await executeConnectorGmailTool(
+      { name: tool.name, args },
+      getTurnWorkspaceId(),
+    );
     if (gmail) return gmail;
   }
 

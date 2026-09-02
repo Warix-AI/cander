@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { getUserConnection } from "@/lib/connectors/lifecycle";
-import { createClient } from "@supabase/supabase-js";
-import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
-import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
+import { checkConnectorRateLimitAsync } from "@/lib/connectors/rate-limit";
+import {
+  assertWorkspaceMember,
+  resolveConnectorRequest,
+} from "@/lib/connectors/server-context";
 
 export const runtime = "nodejs";
 
@@ -15,25 +17,41 @@ export async function GET(
     return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
   }
 
-  const auth = await requireBearerUser(request);
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const { id } = await context.params;
+  const url = new URL(request.url);
+  const ctx = await resolveConnectorRequest({
+    request,
+    workspaceId: url.searchParams.get("workspaceId"),
+  });
+  if (!ctx.ok) {
+    return NextResponse.json({ error: ctx.error }, { status: ctx.status });
   }
 
-  const { id } = await context.params;
-  const client = createClient(supabaseUrl(), supabaseAnonKey(), {
-    global: { headers: { Authorization: `Bearer ${auth.token}` } },
-    auth: { autoRefreshToken: false, persistSession: false },
+  const rate = await checkConnectorRateLimitAsync({
+    key: `read:${ctx.user.id}:connection`,
+    category: "connector_read",
+    workspaceId: ctx.workspaceId,
+    profileId: ctx.user.id,
   });
+  if (!rate.ok) {
+    return NextResponse.json({ error: rate.error }, { status: rate.status });
+  }
 
   try {
     const result = await getUserConnection({
-      client,
+      client: ctx.client,
       connectionId: id,
-      ownerId: auth.user.id,
+      ownerId: ctx.user.id,
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+    if (result.connection.workspaceId !== ctx.workspaceId) {
+      return NextResponse.json({ error: "Connection not found." }, { status: 404 });
+    }
+    const member = await assertWorkspaceMember(ctx.user.id, ctx.workspaceId);
+    if (!member) {
+      return NextResponse.json({ error: "Access denied." }, { status: 403 });
     }
     return NextResponse.json({ ok: true, connection: result.connection });
   } catch (err) {

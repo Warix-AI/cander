@@ -313,7 +313,12 @@ export async function verifyOAuthCallback(input: {
           workspaceId: recovered.workspaceId,
         };
       }
-      const active = await findActiveConnectionForOwnerOAuth(admin, input.ownerId);
+      const oauthWorkspace = await findOAuthWorkspaceForOwner(admin, input.ownerId);
+      const active = await findActiveConnectionForOwnerOAuth(
+        admin,
+        input.ownerId,
+        oauthWorkspace ?? undefined,
+      );
       if (active) {
         return {
           ok: true,
@@ -405,16 +410,39 @@ export async function verifyOAuthCallback(input: {
   };
 }
 
+async function findOAuthWorkspaceForOwner(
+  admin: SupabaseClient,
+  ownerId: string,
+): Promise<string | null> {
+  const { data, error } = await admin
+    .from("connector_oauth_states")
+    .select("workspace_id")
+    .eq("owner_id", ownerId)
+    .in("status", ["pending", "processing"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  const workspaceId =
+    data && typeof data.workspace_id === "string" ? data.workspace_id.trim() : "";
+  return workspaceId || null;
+}
+
 async function findActiveConnectionForOwnerOAuth(
   admin: SupabaseClient,
   ownerId: string,
+  workspaceId?: string,
 ): Promise<{ connection: ConnectorConnection; workspaceId: string } | null> {
-  const { data, error } = await admin
+  let query = admin
     .from("connector_connections")
     .select("*")
     .eq("owner_id", ownerId)
     .eq("status", "active")
-    .is("deleted_at", null)
+    .is("deleted_at", null);
+  if (workspaceId) {
+    query = query.eq("workspace_id", workspaceId);
+  }
+  const { data, error } = await query
     .order("connected_at", { ascending: false })
     .limit(1)
     .maybeSingle();

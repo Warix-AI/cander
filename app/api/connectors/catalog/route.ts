@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { listConnectorCatalog } from "@/lib/connectors/lifecycle";
+import { checkConnectorRateLimitAsync } from "@/lib/connectors/rate-limit";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 
 export const runtime = "nodejs";
+
+const CATALOG_RATE_WORKSPACE = "catalog";
 
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -15,6 +18,16 @@ export async function GET(request: Request) {
   const auth = await requireBearerUser(request);
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const rate = await checkConnectorRateLimitAsync({
+    key: `read:${auth.user.id}:catalog`,
+    category: "connector_read",
+    workspaceId: CATALOG_RATE_WORKSPACE,
+    profileId: auth.user.id,
+  });
+  if (!rate.ok) {
+    return NextResponse.json({ error: rate.error }, { status: rate.status });
   }
 
   const client = createClient(supabaseUrl(), supabaseAnonKey(), {

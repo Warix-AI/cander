@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { listUserConnections } from "@/lib/connectors/lifecycle";
+import { checkConnectorRateLimitAsync } from "@/lib/connectors/rate-limit";
 import { resolveConnectorRequest } from "@/lib/connectors/server-context";
 
 export const runtime = "nodejs";
@@ -17,6 +18,16 @@ export async function GET(request: Request) {
   });
   if (!ctx.ok) {
     return NextResponse.json({ error: ctx.error }, { status: ctx.status });
+  }
+
+  const rate = await checkConnectorRateLimitAsync({
+    key: `read:${ctx.user.id}:connections`,
+    category: "connector_read",
+    workspaceId: ctx.workspaceId,
+    profileId: ctx.user.id,
+  });
+  if (!rate.ok) {
+    return NextResponse.json({ error: rate.error }, { status: rate.status });
   }
 
   try {

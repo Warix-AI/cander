@@ -252,6 +252,15 @@ async function main() {
       .select("id, owner_id, connector_id, status")
       .eq("workspace_id", workspaceId)
       .limit(5);
+    const { data: memberConnections, error: memberConnErr } = await member
+      .from("connector_connections")
+      .select("id, owner_id")
+      .eq("workspace_id", workspaceId)
+      .limit(10);
+    const memberUserId = (await member.auth.getUser()).data.user?.id;
+    const memberSeesOthers = (memberConnections ?? []).filter(
+      (row) => row.owner_id && row.owner_id !== memberUserId,
+    );
     const { data: outsiderConnections, error: outsiderConnErr } = await outsider
       .from("connector_connections")
       .select("id")
@@ -261,6 +270,13 @@ async function main() {
       name: "Connector connections: owner can list own rows",
       pass: !ownerConnErr,
       detail: ownerConnErr?.message ?? `owner_rows=${(ownerConnections ?? []).length}`,
+    });
+    results.push({
+      name: "Connector connections: member cannot see other owners' rows",
+      pass: !memberConnErr && memberSeesOthers.length === 0,
+      detail:
+        memberConnErr?.message ??
+        `member_rows=${(memberConnections ?? []).length} foreign_owner_rows=${memberSeesOthers.length}`,
     });
     results.push({
       name: "Connector connections: outsider sees none",

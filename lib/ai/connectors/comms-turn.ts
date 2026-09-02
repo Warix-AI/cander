@@ -87,8 +87,13 @@ async function ensureGmailConnected(
       return "Gmail isn’t connected yet. Open **Connectors**, connect Gmail, then ask again.";
     }
     return null;
-  } catch {
-    return null;
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message.trim() : "Could not verify Gmail connection.";
+    if (/not configured|403|401|unauthorized|denied/i.test(message)) {
+      return message;
+    }
+    return "Could not verify Gmail connection. Try again in a moment.";
   }
 }
 

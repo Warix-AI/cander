@@ -10,7 +10,8 @@ export type ConnectorRateCategory =
   | "connector_callback"
   | "connector_disconnect"
   | "connector_webhook"
-  | "connector_tool_execute";
+  | "connector_tool_execute"
+  | "connector_read";
 
 const LIMITS: Record<ConnectorRateCategory, { perMinute: number }> = {
   connector_initiate: { perMinute: 10 },
@@ -18,6 +19,7 @@ const LIMITS: Record<ConnectorRateCategory, { perMinute: number }> = {
   connector_disconnect: { perMinute: 10 },
   connector_webhook: { perMinute: 120 },
   connector_tool_execute: { perMinute: 30 },
+  connector_read: { perMinute: 60 },
 };
 
 export async function checkConnectorRateLimitDurable(input: {
@@ -65,6 +67,9 @@ export async function checkConnectorRateLimitDurable(input: {
     if (incError) throw incError;
     return { ok: true };
   } catch {
-    return { ok: true };
+    const { checkConnectorRateLimit } = await import("./rate-limit.ts");
+    return checkConnectorRateLimit(
+      `${input.category}:${input.workspaceId}:${input.profileId}`,
+    );
   }
 }
