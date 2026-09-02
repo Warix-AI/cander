@@ -480,5 +480,10 @@ export async function runAgentServerLoop(
 
 export function isAgentRuntimeV2Enabled(): boolean {
   const v = process.env.AI_AGENT_RUNTIME?.trim().toLowerCase();
+  // Default ON. Opt out with AI_AGENT_RUNTIME=legacy|off|0|false.
+  if (!v) return true;
+  if (v === "legacy" || v === "off" || v === "0" || v === "false" || v === "v1") {
+    return false;
+  }
   return v === "v2" || v === "1" || v === "true" || v === "on";
 }

@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   if (!isAgentRuntimeV2Enabled()) {
     return NextResponse.json(
       {
-        error: "Agent runtime v2 is not enabled (set AI_AGENT_RUNTIME=v2).",
+        error: "Agent runtime v2 is disabled (AI_AGENT_RUNTIME=legacy).",
         latencyMs: Date.now() - started,
       },
       { status: 503 },
