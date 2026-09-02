@@ -21,7 +21,12 @@ import {
   getConnectorConnectionsSnapshot,
   subscribeConnectorConnections,
 } from "@/lib/connector-connections-store";
-import { fetchConnectorConnections, initiateConnectorConnection, disconnectConnectorConnection } from "@/lib/api/connector-client";
+import { ConnectorToolPermissions } from "@/components/connectors/ConnectorToolPermissions";
+import {
+  fetchConnectorConnections,
+  initiateConnectorConnection,
+  disconnectConnectorConnection,
+} from "@/lib/api/connector-client";
 import { replaceConnectorConnectionsForWorkspace } from "@/lib/connector-connections-store";
 import { detachWorkConnector } from "@/lib/work-connectors";
 
@@ -63,7 +68,8 @@ export function ConnectorsPanel() {
   const liveConnections = connectionsForConnectorLive(workspaceId, selected.id);
   const accounts = activeAccountsForConnector(workspaceId, selected.id);
   const pendingConnection = liveConnections.find((row) => row.status === "pending");
-  const hasActiveConnection = liveConnections.some((row) => row.status === "active");
+  const activeConnection = liveConnections.find((row) => row.status === "active");
+  const hasActiveConnection = Boolean(activeConnection);
   const disconnectableConnections = liveConnections.filter(
     (row) => row.status === "pending" || row.status === "active",
   );
@@ -173,6 +179,18 @@ export function ConnectorsPanel() {
                 No account connected yet.
               </p>
             )}
+            {activeConnection ? (
+              <ConnectorToolPermissions
+                workspaceId={workspaceId}
+                connection={activeConnection}
+                className="mt-3"
+                onUpdated={() => {
+                  void fetchConnectorConnections(workspaceId).then((connections) => {
+                    replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+                  });
+                }}
+              />
+            ) : null}
             <div className="mt-3">
               <SectionLabel>Actions</SectionLabel>
               {selected.actions.map((action) => (

@@ -2,11 +2,15 @@
  * Composio Gmail tool mapping and response redaction — server-only.
  */
 
-export type GmailConnectorToolName = "gmail.search" | "gmail.read";
+export type GmailConnectorToolName =
+  | "gmail.search"
+  | "gmail.read"
+  | "gmail.send";
 
 export const GMAIL_COMPOSIO_SLUGS: Record<GmailConnectorToolName, string> = {
   "gmail.search": "GMAIL_FETCH_EMAILS",
   "gmail.read": "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID",
+  "gmail.send": "GMAIL_SEND_EMAIL",
 };
 
 const SECRET_KEYS = new Set([
@@ -33,9 +37,40 @@ export function mapGmailToolArguments(
     return { query, max_results: maxResults };
   }
 
-  const messageId = args.messageId ?? args.message_id;
-  if (!messageId) throw new Error("Missing required argument: messageId");
-  return { message_id: String(messageId) };
+  if (tool === "gmail.read") {
+    const messageId = args.messageId ?? args.message_id;
+    if (!messageId) throw new Error("Missing required argument: messageId");
+    return { message_id: String(messageId) };
+  }
+
+  const to =
+    args.to ??
+    args.recipientEmail ??
+    args.recipient_email ??
+    args.recipient;
+  if (!to || !String(to).trim()) {
+    throw new Error("Missing required argument: to");
+  }
+  const subject = args.subject != null ? String(args.subject) : "";
+  const body =
+    args.body != null
+      ? String(args.body)
+      : args.message != null
+        ? String(args.message)
+        : "";
+  if (!subject.trim() && !body.trim()) {
+    throw new Error("Provide at least a subject or body.");
+  }
+
+  const out: Record<string, unknown> = {
+    recipient_email: String(to).trim(),
+    subject,
+    body,
+  };
+  if (args.cc) out.cc = String(args.cc);
+  if (args.bcc) out.bcc = String(args.bcc);
+  if (args.isHtml === true || args.is_html === true) out.is_html = true;
+  return out;
 }
 
 export function redactComposioPayload(value: unknown): unknown {
@@ -175,6 +210,20 @@ export function formatGmailToolOutput(
       messages,
     };
     return JSON.stringify(summary);
+  }
+
+  if (tool === "gmail.send") {
+    const sent =
+      data && typeof data === "object"
+        ? (data as Record<string, unknown>)
+        : { result: data };
+    return JSON.stringify({
+      outcome: "ok",
+      sent: {
+        id: pickString(sent.id, sent.messageId, sent.message_id),
+        threadId: pickString(sent.threadId, sent.thread_id),
+      },
+    });
   }
 
   const message =

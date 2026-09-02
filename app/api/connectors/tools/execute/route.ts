@@ -8,7 +8,11 @@ import type { GmailConnectorToolName } from "@/lib/connectors/composio-tools";
 export const runtime = "nodejs";
 
 function isGmailTool(tool: string): tool is GmailConnectorToolName {
-  return tool === "gmail.search" || tool === "gmail.read";
+  return (
+    tool === "gmail.search" ||
+    tool === "gmail.read" ||
+    tool === "gmail.send"
+  );
 }
 
 export async function POST(request: Request) {

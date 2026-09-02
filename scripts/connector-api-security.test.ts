@@ -19,16 +19,26 @@ describe("connector API security contract", () => {
     assert.match(err.error, /not found/i);
   });
 
-  it("gmail.send is denied at authz layer", () => {
-    const result = authorizeConnectorToolAction({
+  it("gmail.send is denied unless write permission is enabled", () => {
+    const denied = authorizeConnectorToolAction({
       workspaceId: "ws-a",
       profileId: "user-a",
       connectorId: "gmail",
-      action: "gmail.send",
+      toolName: "gmail.send",
       connectionId: "conn-1",
     });
-    assert.equal(result.ok, false);
-    if (!result.ok) assert.equal(result.reason, "not_allowed");
+    assert.equal(denied.ok, false);
+    if (!denied.ok) assert.equal(denied.reason, "not_allowed");
+
+    const allowed = authorizeConnectorToolAction({
+      workspaceId: "ws-a",
+      profileId: "user-a",
+      connectorId: "gmail",
+      toolName: "gmail.send",
+      toolPermissions: { "gmail.send": true },
+      connectionId: "conn-1",
+    });
+    assert.equal(allowed.ok, true);
   });
 
   it("non-gmail connector is disabled at authz layer", () => {
@@ -36,7 +46,7 @@ describe("connector API security contract", () => {
       workspaceId: "ws-a",
       profileId: "user-a",
       connectorId: "slack",
-      action: "gmail.read",
+      toolName: "gmail.read",
       connectionId: "conn-1",
     });
     assert.equal(result.ok, false);

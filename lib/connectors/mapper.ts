@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { resolveToolPermissions } from "./tool-catalog.ts";
 import type {
   ConnectorCatalogItem,
   ConnectorConnection,
@@ -23,6 +24,7 @@ export type ConnectorConnectionRow = {
   last_sync_at: string | null;
   pending_expires_at: string | null;
   deleted_at: string | null;
+  tool_permissions?: Record<string, boolean> | null;
 };
 
 export type ConnectorCatalogRow = {
@@ -57,6 +59,10 @@ export function connectionRowToPublic(row: ConnectorConnectionRow): ConnectorCon
     status: row.status,
     connectionMode: row.connection_mode,
     failureDetail: row.failure_detail,
+    toolPermissions: resolveToolPermissions(
+      row.connector_id,
+      row.tool_permissions ?? {},
+    ),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     connectedAt: row.connected_at,

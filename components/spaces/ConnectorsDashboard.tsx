@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { MoreHorizontal, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import { DashFrame, ScopeToggle } from "@/components/spaces/ItemSet";
 import { FLOAT_ICON_BUTTON } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
-import { Dropdown } from "@/components/ui/Controls";
 import {
   getInstalledConnectorsServerSnapshot,
   getInstalledConnectorsSnapshot,
@@ -16,7 +15,7 @@ import {
   uninstallConnector,
 } from "@/lib/connector-install";
 import { connectors as seed } from "@/lib/data";
-import type { Connector, PinTier } from "@/lib/types";
+import type { Connector } from "@/lib/types";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
 import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
 import { useMobileShell } from "@/lib/use-media-query";
@@ -40,6 +39,8 @@ import {
   fetchConnectorConnections,
   initiateConnectorConnection,
 } from "@/lib/api/connector-client";
+import { ConnectorDetailModal } from "@/components/connectors/ConnectorDetailModal";
+import type { ConnectorConnection } from "@/lib/connectors/types";
 
 const SECTION_ORDER = [
   "Featured",
@@ -95,6 +96,8 @@ export function ConnectorsDashboard() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [workAttachFor, setWorkAttachFor] = useState<string | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [detailConnectorId, setDetailConnectorId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -163,6 +166,7 @@ export function ConnectorsDashboard() {
     if (blockedIds.includes(id)) return;
     if (id === "gmail") {
       setInfo("");
+      setConnectingId(id);
       try {
         const { authorizationUrl } = await initiateConnectorConnection({
           workspaceId,
@@ -179,6 +183,8 @@ export function ConnectorsDashboard() {
         setInfo(
           err instanceof Error ? err.message : "Could not start connection.",
         );
+      } finally {
+        setConnectingId(null);
       }
       return;
     }
@@ -187,16 +193,17 @@ export function ConnectorsDashboard() {
     openConnector(id);
   };
 
-  const selectConnector = (id: string) => {
-    if (workAttachFor) {
-      if (id === "gmail") {
-        void connectConnector(id);
-        return;
-      }
+  const openConnectorDetail = (id: string) => {
+    if (workAttachFor && id !== "gmail") {
       installConnector(id);
       bindToWorkIfArmed(id);
     }
-    openConnector(id);
+    setDetailConnectorId(id);
+    void refreshConnections();
+  };
+
+  const selectConnector = (id: string) => {
+    openConnectorDetail(id);
   };
 
   const disconnectConnector = async (id: string) => {
@@ -218,6 +225,9 @@ export function ConnectorsDashboard() {
         setInfo(`${item.name} disconnected and provider access revoked.`);
       }
       uninstallConnector(id);
+      if (detailConnectorId === id) {
+        setDetailConnectorId(null);
+      }
     } catch (err) {
       setInfo(
         err instanceof Error ? err.message : "Could not disconnect connector.",
@@ -226,6 +236,15 @@ export function ConnectorsDashboard() {
       setDisconnectingId(null);
     }
   };
+
+  const refreshConnections = async () => {
+    const connections = await fetchConnectorConnections(workspaceId);
+    replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+  };
+
+  const detailItem = detailConnectorId
+    ? apps.find((entry) => entry.id === detailConnectorId) ?? null
+    : null;
 
 
   const installed = apps.filter(
@@ -278,6 +297,7 @@ export function ConnectorsDashboard() {
   }, [directory, catalogView]);
 
   return (
+    <>
     <DashFrame
       banner={false}
       title="Connectors"
@@ -435,14 +455,8 @@ export function ConnectorsDashboard() {
                       key={item.id}
                       item={item}
                       active={connectorId === item.id}
-                      tier={pinTier("connector", item.id)}
                       disconnecting={disconnectingId === item.id}
                       onOpen={() => selectConnector(item.id)}
-                      onInstall={() => void connectConnector(item.id)}
-                      onUninstall={() => void disconnectConnector(item.id)}
-                      onSetPin={() => setPin("connector", item.id, "primary")}
-                      onClearPin={() => clearPin("connector", item.id)}
-                      workAttach={Boolean(workAttachFor)}
                     />
                   ))}
                 </div>
@@ -468,174 +482,95 @@ export function ConnectorsDashboard() {
           </p>
         )}
     </DashFrame>
+    {detailItem ? (
+      <ConnectorDetailModal
+        open={Boolean(detailItem)}
+        onClose={() => setDetailConnectorId(null)}
+        item={detailItem}
+        workspaceId={workspaceId}
+        blocked={blockedIds.includes(detailItem.id)}
+        busy={
+          connectingId === detailItem.id || disconnectingId === detailItem.id
+        }
+        tier={pinTier("connector", detailItem.id)}
+        workAttach={Boolean(workAttachFor)}
+        onConnect={async () => {
+          await connectConnector(detailItem.id);
+        }}
+        onDisconnect={async () => {
+          await disconnectConnector(detailItem.id);
+        }}
+        onConnectionsRefresh={() => {
+          void refreshConnections();
+        }}
+        onSetPin={() => setPin("connector", detailItem.id, "primary")}
+        onClearPin={() => clearPin("connector", detailItem.id)}
+      />
+    ) : null}
+    </>
   );
 }
 
 function DirectoryItem({
   item,
   active,
-  tier,
   disconnecting,
   onOpen,
-  onInstall,
-  onUninstall,
-  onSetPin,
-  onClearPin,
-  workAttach,
 }: {
   item: Connector & {
     pending?: boolean;
-    liveConnections?: { id: string; status: string }[];
+    liveConnections?: ConnectorConnection[];
+    installed?: boolean;
   };
   active: boolean;
-  tier: PinTier | null;
   disconnecting?: boolean;
   onOpen: () => void;
-  onInstall: () => void;
-  onUninstall: () => void;
-  onSetPin: () => void;
-  onClearPin: () => void;
-  workAttach?: boolean;
 }) {
-  const pinned = Boolean(tier);
   const hasServerConnection = Boolean(item.liveConnections?.length);
-  const showActionsMenu =
-    !workAttach && (item.installed || item.pending || hasServerConnection);
-  const disconnectLabel = hasServerConnection ? "Disconnect" : "Uninstall";
+  const isConnected = item.liveConnections?.some((row) => row.status === "active");
 
-  const actionsMenu = (
-    <Dropdown
-      align="end"
-      menuClassName="min-w-[9.5rem]"
-      matchTrigger={false}
-      trigger={({ toggle }) => (
-        <button
-          type="button"
-          aria-label={`More for ${item.name}`}
-          onClick={toggle}
-          disabled={disconnecting}
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
-        >
-          <MoreHorizontal className="h-4 w-4" strokeWidth={1.6} />
-        </button>
-      )}
-    >
-      {(close) => (
-        <>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              close();
-              onOpen();
-            }}
-            className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-          >
-            Open
-          </button>
-          {item.installed && !item.pending ? (
-            !pinned ? (
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  close();
-                  onSetPin();
-                }}
-                className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-              >
-                Pin
-              </button>
-            ) : (
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  close();
-                  onClearPin();
-                }}
-                className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-              >
-                Unpin
-              </button>
-            )
-          ) : null}
-          <button
-            type="button"
-            role="menuitem"
-            disabled={disconnecting}
-            onClick={() => {
-              close();
-              onUninstall();
-            }}
-            className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] text-destructive hover:bg-muted disabled:opacity-50"
-          >
-            {disconnectLabel}
-          </button>
-        </>
-      )}
-    </Dropdown>
-  );
+  const statusLabel = item.pending
+    ? "Connecting"
+    : isConnected
+      ? "Connected"
+      : item.installed || hasServerConnection
+        ? "Installed"
+        : null;
 
   return (
-    <div
-      className="canvas-hover flex items-start gap-2.5 rounded-[10px] py-2"
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={disconnecting}
+      className={cn(
+        "canvas-hover flex w-full items-start gap-2.5 rounded-[10px] py-2 text-left transition-colors",
+        disconnecting && "opacity-50",
+      )}
       data-active={active ? "true" : undefined}
     >
-      <button type="button" onClick={onOpen} className="mt-0.5 shrink-0">
+      <span className="mt-0.5 shrink-0">
         <ConnectorMark id={item.icon} size="sm" />
-      </button>
+      </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-1.5">
-          <button
-            type="button"
-            onClick={onOpen}
-            className="min-w-0 truncate text-left text-[13px] font-medium tracking-[-0.02em]"
-          >
+          <span className="min-w-0 truncate text-[13px] font-medium tracking-[-0.02em]">
             {item.name}
-          </button>
-          {item.installed ? (
-            workAttach ? (
-              <button
-                type="button"
-                onClick={onOpen}
-                className="inline-flex h-7 shrink-0 items-center rounded-full border border-foreground/15 px-2.5 text-[11.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-              >
-                Add to Work
-              </button>
-            ) : showActionsMenu ? (
-              actionsMenu
-            ) : (
-              <span className="inline-flex h-7 shrink-0 items-center px-1 text-[11.5px] font-medium tracking-[-0.01em] text-muted-foreground">
-                Connected
-              </span>
-            )
-          ) : item.pending || hasServerConnection ? (
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={onInstall}
-                disabled={disconnecting}
-                className="inline-flex h-7 items-center rounded-full border border-foreground/15 px-2.5 text-[11.5px] font-medium tracking-[-0.01em] hover:bg-muted disabled:opacity-50"
-              >
-                Continue connecting
-              </button>
-              {actionsMenu}
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={onInstall}
-              className="inline-flex h-7 shrink-0 items-center rounded-full border border-foreground/15 px-2.5 text-[11.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+          </span>
+          {statusLabel ? (
+            <span
+              className={cn(
+                "inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-[11.5px] font-medium tracking-[-0.01em]",
+                isConnected
+                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                  : "bg-muted text-muted-foreground",
+              )}
             >
-              {workAttach
-                ? "Add to Work"
-                : item.pending
-                  ? "Continue connecting"
-                  : item.id === "gmail"
-                    ? "Connect"
-                    : "Install"}
-            </button>
+              {statusLabel}
+            </span>
+          ) : (
+            <span className="inline-flex h-7 shrink-0 items-center rounded-full border border-foreground/15 px-2.5 text-[11.5px] font-medium tracking-[-0.01em] text-muted-foreground">
+              Open
+            </span>
           )}
         </div>
         <p className="mt-0.5 truncate text-[12px] leading-snug text-muted-foreground">
@@ -644,7 +579,7 @@ function DirectoryItem({
             : item.description}
         </p>
       </div>
-    </div>
+    </button>
   );
 }
 

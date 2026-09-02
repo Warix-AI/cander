@@ -1,5 +1,5 @@
 /**
- * Gmail connector turns — OpenAI decides tools; client executes gmail.search/read.
+ * Gmail connector turns — OpenAI decides tools; client executes gmail.search/read/send.
  */
 
 import type {
@@ -18,6 +18,7 @@ import {
   sanitizeAssistantVisibleText,
 } from "@/lib/ai/tool-protocol";
 import { fetchConnectorConnections } from "@/lib/api/connector-client";
+import { enabledToolIds } from "@/lib/connectors/tool-catalog";
 import {
   CONNECTOR_USER_VOICE_RULES,
   finalizeConnectorReply,
@@ -25,21 +26,43 @@ import {
   isEmptyGmailSearchResult,
 } from "@/lib/ai/connectors/connector-response";
 
-const COMMS_TOOLS = ["gmail.search", "gmail.read"] as const;
+const GMAIL_READ_TOOLS = ["gmail.search", "gmail.read"] as const;
+const GMAIL_WRITE_TOOLS = ["gmail.send"] as const;
 const MAX_ROUNDS = 4;
 
-const GMAIL_TURN_INSTRUCTIONS = `You have read-only access to the user's connected Gmail for this turn.
+function buildGmailTurnInstructions(enabledTools: string[]): string {
+  const readEnabled = GMAIL_READ_TOOLS.some((tool) => enabledTools.includes(tool));
+  const writeEnabled = GMAIL_WRITE_TOOLS.some((tool) => enabledTools.includes(tool));
 
-When you need mail data, end your reply with exactly one JSON object on its own line:
-{"tool":"gmail.search","arguments":{"query":"is:unread newer_than:7d"}}
-or {"tool":"gmail.read","arguments":{"messageId":"<id from search>"}}
+  const capabilityLines: string[] = [];
+  if (readEnabled) {
+    capabilityLines.push(
+      "- Search and read mail with gmail.search and gmail.read.",
+      '- Example: {"tool":"gmail.search","arguments":{"query":"is:unread newer_than:7d"}}',
+      '- Example: {"tool":"gmail.read","arguments":{"messageId":"<id from search>"}}',
+    );
+  }
+  if (writeEnabled) {
+    capabilityLines.push(
+      "- Send email with gmail.send when the user explicitly asks you to send or reply.",
+      '- Example: {"tool":"gmail.send","arguments":{"to":"alice@example.com","subject":"Hello","body":"..."}}',
+      "- Confirm recipient, subject, and body before sending. Never send without a clear user request.",
+    );
+  }
+
+  return `You have access to the user's connected Gmail for this turn.
+
+${capabilityLines.join("\n")}
+
+When you need mail data or to send mail, end your reply with exactly one JSON object on its own line.
 
 Rules:
 - Do NOT stop at "I will search" or "Let me check" — either emit the tool JSON or wait for results and summarize.
 - After tool results appear below, answer in plain language with what you found (or that nothing matched).
 - ${CONNECTOR_USER_VOICE_RULES}
-- Use Gmail query syntax in gmail.search (e.g. is:unread, from:alice, subject:BYU, newer_than:30d).
-- Never invent message IDs — use gmail.read only with IDs from gmail.search results.`;
+${readEnabled ? "- Use Gmail query syntax in gmail.search (e.g. is:unread, from:alice, subject:BYU, newer_than:30d)." : ""}
+${readEnabled ? "- Never invent message IDs — use gmail.read only with IDs from gmail.search results." : ""}`;
+}
 
 function inferGmailSearchQuery(content: string): string {
   const text = (content || "").trim();
@@ -72,28 +95,49 @@ function connectorToolFailureMessage(output: string): string | null {
   if (/connect gmail in connectors/i.test(text)) {
     return "Gmail isn’t connected yet. Open **Connectors**, connect Gmail, then ask again.";
   }
+  if (/write access|sending email is disabled/i.test(text)) {
+    return "Sending email is turned off. Open **Connectors**, enable **Write access** for Gmail, then ask again.";
+  }
   return null;
 }
 
 async function ensureGmailConnected(
   workspaceId: string,
-): Promise<string | null> {
+): Promise<
+  | { ok: false; message: string }
+  | { ok: true; enabledTools: string[] }
+> {
   try {
     const connections = await fetchConnectorConnections(workspaceId);
     const gmail = connections.find(
       (c) => c.connectorId === "gmail" && c.status === "active",
     );
     if (!gmail) {
-      return "Gmail isn’t connected yet. Open **Connectors**, connect Gmail, then ask again.";
+      return {
+        ok: false,
+        message:
+          "Gmail isn’t connected yet. Open **Connectors**, connect Gmail, then ask again.",
+      };
     }
-    return null;
+    const enabledTools = enabledToolIds("gmail", gmail.toolPermissions);
+    if (!enabledTools.length) {
+      return {
+        ok: false,
+        message:
+          "Gmail is connected but AI access is turned off. Open **Connectors** and enable read or write access.",
+      };
+    }
+    return { ok: true, enabledTools };
   } catch (err) {
     const message =
       err instanceof Error ? err.message.trim() : "Could not verify Gmail connection.";
     if (/not configured|403|401|unauthorized|denied/i.test(message)) {
-      return message;
+      return { ok: false, message };
     }
-    return "Could not verify Gmail connection. Try again in a moment.";
+    return {
+      ok: false,
+      message: "Could not verify Gmail connection. Try again in a moment.",
+    };
   }
 }
 
@@ -108,10 +152,10 @@ export async function runCommsConnectorTurn(
     detail: "Checking Gmail…",
   });
 
-  const notConnected = await ensureGmailConnected(request.workspaceId);
-  if (notConnected) {
+  const gmailState = await ensureGmailConnected(request.workspaceId);
+  if (!gmailState.ok) {
     return {
-      content: notConnected,
+      content: gmailState.message,
       runtime: "cloud",
       offline: false,
       condensationOccurred: false,
@@ -119,14 +163,15 @@ export async function runCommsConnectorTurn(
     };
   }
 
+  const allowedTools = gmailState.enabledTools;
   const toolResults: AiToolCallResult[] = [];
   let working: AiGenerateRequest = {
     ...request,
     allowTools: true,
-    allowedToolNames: [...COMMS_TOOLS],
+    allowedToolNames: allowedTools,
     toolContext: [
-      formatToolsForPrompt([...COMMS_TOOLS]),
-      GMAIL_TURN_INSTRUCTIONS,
+      formatToolsForPrompt(allowedTools),
+      buildGmailTurnInstructions(allowedTools),
     ].join("\n\n"),
   };
 
@@ -160,10 +205,7 @@ export async function runCommsConnectorTurn(
     }
 
     let toolCall = call;
-    if (
-      toolCall &&
-      !COMMS_TOOLS.includes(toolCall.name as (typeof COMMS_TOOLS)[number])
-    ) {
+    if (toolCall && !allowedTools.includes(toolCall.name)) {
       toolCall = null;
     }
 
@@ -171,6 +213,7 @@ export async function runCommsConnectorTurn(
     if (
       !toolCall &&
       !toolResults.length &&
+      allowedTools.includes("gmail.search") &&
       (looksLikeSearchPromise(text || generated.content) || round === 0)
     ) {
       toolCall = {
@@ -204,7 +247,11 @@ export async function runCommsConnectorTurn(
       phase: "tool",
       label: "Thinking",
       detail:
-        toolCall.name === "gmail.read" ? "Reading email…" : "Searching Gmail…",
+        toolCall.name === "gmail.read"
+          ? "Reading email…"
+          : toolCall.name === "gmail.send"
+            ? "Sending email…"
+            : "Searching Gmail…",
       toolName: toolCall.name,
       contentStreaming: true,
     });
@@ -262,13 +309,19 @@ export async function runCommsConnectorTurn(
     };
 
     // After search/read, next round synthesizes a user-facing answer.
-    if (toolCall.name === "gmail.search" || toolCall.name === "gmail.read") {
+    if (
+      toolCall.name === "gmail.search" ||
+      toolCall.name === "gmail.read" ||
+      toolCall.name === "gmail.send"
+    ) {
       working = {
         ...working,
         content: [
           request.content,
           "",
-          `Summarize the Gmail data above for the user. ${CONNECTOR_USER_VOICE_RULES}`,
+          toolCall.name === "gmail.send"
+            ? `Confirm what was sent for the user. ${CONNECTOR_USER_VOICE_RULES}`
+            : `Summarize the Gmail data above for the user. ${CONNECTOR_USER_VOICE_RULES}`,
         ].join("\n"),
       };
     }

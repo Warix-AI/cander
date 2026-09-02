@@ -1,16 +1,15 @@
 /**
- * Connector tool authorization seam — Gmail pilot (read-only).
+ * Connector tool authorization — checks catalog, connection, and owner permissions.
  */
 
-export type ConnectorToolAction = "gmail.read" | "gmail.send";
-
-const PILOT_ALLOWLIST: ConnectorToolAction[] = ["gmail.read"];
+import { resolveToolPermissions, toolDefinition } from "./tool-catalog.ts";
 
 export type ConnectorToolAuthzInput = {
   workspaceId: string;
   profileId: string;
   connectorId: string;
-  action: ConnectorToolAction;
+  toolName: string;
+  toolPermissions?: Record<string, boolean> | null;
   connectionId?: string;
 };
 
@@ -24,11 +23,23 @@ export function authorizeConnectorToolAction(
   if (input.connectorId !== "gmail") {
     return { ok: false, reason: "connector_disabled" };
   }
-  if (!PILOT_ALLOWLIST.includes(input.action)) {
+
+  const definition = toolDefinition(input.toolName);
+  if (!definition || definition.connectorId !== input.connectorId) {
     return { ok: false, reason: "not_allowed" };
   }
+
   if (!input.connectionId) {
     return { ok: false, reason: "not_connected" };
   }
+
+  const permissions = resolveToolPermissions(
+    input.connectorId,
+    input.toolPermissions,
+  );
+  if (!permissions[input.toolName]) {
+    return { ok: false, reason: "not_allowed" };
+  }
+
   return { ok: true };
 }

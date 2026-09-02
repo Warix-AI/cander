@@ -96,7 +96,7 @@ export async function disconnectConnectorConnection(input: {
 
 export async function executeConnectorToolRequest(input: {
   workspaceId: string;
-  tool: "gmail.search" | "gmail.read";
+  tool: "gmail.search" | "gmail.read" | "gmail.send";
   arguments: Record<string, unknown>;
 }): Promise<{ output: string }> {
   const headers = await authHeaders();
@@ -110,4 +110,38 @@ export async function executeConnectorToolRequest(input: {
     throw new Error(data.error ?? "Could not execute connector tool.");
   }
   return { output: String(data.output ?? "") };
+}
+
+export async function updateConnectorToolPermissions(input: {
+  workspaceId: string;
+  connectionId: string;
+  access?: "read" | "write";
+  enabled?: boolean;
+  permissions?: Record<string, boolean>;
+}): Promise<ConnectorConnection> {
+  const headers = await authHeaders();
+  const body: Record<string, unknown> = {
+    workspaceId: input.workspaceId,
+  };
+  if (input.permissions) {
+    body.permissions = input.permissions;
+  } else if (input.access && typeof input.enabled === "boolean") {
+    body.access = input.access;
+    body.enabled = input.enabled;
+  } else {
+    throw new Error("Invalid tool permission update.");
+  }
+  const response = await fetch(
+    `/api/connectors/connections/${encodeURIComponent(input.connectionId)}/permissions`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    },
+  );
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error ?? "Could not update tool permissions.");
+  }
+  return data.connection as ConnectorConnection;
 }

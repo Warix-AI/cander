@@ -136,6 +136,21 @@ export function normalizeToolArguments(
     delete input.max_results;
   }
 
+  if (toolName === "gmail.send") {
+    if (input.recipient_email != null && input.to == null) {
+      input.to = input.recipient_email;
+    }
+    if (input.recipientEmail != null && input.to == null) {
+      input.to = input.recipientEmail;
+    }
+    delete input.recipient_email;
+    delete input.recipientEmail;
+    if (input.message != null && input.body == null) {
+      input.body = input.message;
+    }
+    delete input.message;
+  }
+
   return input;
 }
 
@@ -864,6 +879,40 @@ function registerGmailTools() {
         messageId: {
           type: "string",
           description: "Gmail message ID from gmail.search results.",
+        },
+      },
+    },
+  });
+  registerAiTool({
+    name: "gmail.send",
+    description:
+      "Send an email via the user's connected Gmail. Requires write access enabled in Connectors.",
+    permission: { requireWorkspaceMember: true },
+    domain: "comms",
+    enabled: true,
+    parameters: {
+      type: "object",
+      required: ["to", "subject", "body"],
+      properties: {
+        to: {
+          type: "string",
+          description: "Recipient email address.",
+        },
+        subject: {
+          type: "string",
+          description: "Email subject line.",
+        },
+        body: {
+          type: "string",
+          description: "Plain-text email body.",
+        },
+        cc: {
+          type: "string",
+          description: "Optional CC recipients.",
+        },
+        bcc: {
+          type: "string",
+          description: "Optional BCC recipients.",
         },
       },
     },

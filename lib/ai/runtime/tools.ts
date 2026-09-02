@@ -119,7 +119,7 @@ export async function executeAuthorizedTool(
     if (health) return health;
   }
 
-  if (tool.name === "gmail.search" || tool.name === "gmail.read") {
+  if (tool.name === "gmail.search" || tool.name === "gmail.read" || tool.name === "gmail.send") {
     const { executeConnectorGmailTool } = await import(
       "@/lib/ai/connectors/tool-executors"
     );

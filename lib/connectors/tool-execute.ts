@@ -1,5 +1,5 @@
 /**
- * Connector tool execution — server-only, owner-scoped Gmail read tools.
+ * Connector tool execution — server-only, owner-scoped Gmail tools.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -27,7 +27,11 @@ export type ExecuteConnectorToolResult =
   | { ok: false; status: number; error: string };
 
 function isGmailConnectorTool(tool: string): tool is GmailConnectorToolName {
-  return tool === "gmail.search" || tool === "gmail.read";
+  return (
+    tool === "gmail.search" ||
+    tool === "gmail.read" ||
+    tool === "gmail.send"
+  );
 }
 
 async function resolveActiveGmailConnection(input: {
@@ -35,7 +39,12 @@ async function resolveActiveGmailConnection(input: {
   workspaceId: string;
   profileId: string;
 }): Promise<
-  | { ok: true; connectionId: string; providerConnectionId: string }
+  | {
+      ok: true;
+      connectionId: string;
+      providerConnectionId: string;
+      toolPermissions: Record<string, boolean>;
+    }
   | { ok: false; status: number; error: string }
 > {
   const { data: catalog, error: catalogError } = await input.client
@@ -54,7 +63,7 @@ async function resolveActiveGmailConnection(input: {
 
   const { data, error } = await input.client
     .from("connector_connections")
-    .select("id, provider_connection_id, status, connector_id, owner_id")
+    .select("id, provider_connection_id, status, connector_id, owner_id, tool_permissions")
     .eq("workspace_id", input.workspaceId)
     .eq("owner_id", input.profileId)
     .eq("connector_id", "gmail")
@@ -78,6 +87,7 @@ async function resolveActiveGmailConnection(input: {
     ok: true,
     connectionId: row.id,
     providerConnectionId: row.provider_connection_id,
+    toolPermissions: row.tool_permissions ?? {},
   };
 }
 
@@ -109,12 +119,17 @@ export async function executeConnectorTool(
     workspaceId: input.workspaceId,
     profileId: input.profileId,
     connectorId: "gmail",
-    action: "gmail.read",
+    toolName: input.tool,
+    toolPermissions: connection.toolPermissions,
     connectionId: connection.connectionId,
   });
   if (!authz.ok) {
     if (authz.reason === "not_allowed") {
-      return { ok: false, status: 403, error: "This Gmail action is not allowed." };
+      const message =
+        input.tool === "gmail.send"
+          ? "Sending email is disabled. Enable write access for Gmail in Connectors."
+          : "This Gmail action is not allowed.";
+      return { ok: false, status: 403, error: message };
     }
     if (authz.reason === "not_connected") {
       return {

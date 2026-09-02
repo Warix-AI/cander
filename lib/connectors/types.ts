@@ -15,6 +15,8 @@ export type ConnectorConnection = {
   status: ConnectorConnectionStatus;
   connectionMode: ConnectorConnectionMode;
   failureDetail: string | null;
+  /** Resolved tool id → enabled (catalog defaults merged with stored overrides). */
+  toolPermissions: Record<string, boolean>;
   createdAt: string;
   updatedAt: string;
   connectedAt: string | null;

@@ -8,7 +8,7 @@ import {
 import { authorizeConnectorToolAction } from "../lib/connectors/tool-authz.ts";
 import { isCommsConnectorIntent } from "../lib/ai/tools/domains.ts";
 
-test("mapGmailToolArguments maps search and read args", () => {
+test("mapGmailToolArguments maps search, read, and send args", () => {
   assert.deepEqual(mapGmailToolArguments("gmail.search", { query: "is:unread" }), {
     query: "is:unread",
     max_results: 10,
@@ -23,6 +23,18 @@ test("mapGmailToolArguments maps search and read args", () => {
   assert.deepEqual(
     mapGmailToolArguments("gmail.read", { messageId: "msg_123" }),
     { message_id: "msg_123" },
+  );
+  assert.deepEqual(
+    mapGmailToolArguments("gmail.send", {
+      to: "alice@example.com",
+      subject: "Hi",
+      body: "Hello",
+    }),
+    {
+      recipient_email: "alice@example.com",
+      subject: "Hi",
+      body: "Hello",
+    },
   );
 });
 
@@ -76,12 +88,12 @@ test("isCommsConnectorIntent unlocks gmail email asks", () => {
   assert.equal(isCommsConnectorIntent("Are there any sports going on"), false);
 });
 
-test("connector tool seam allows gmail.read and blocks send", () => {
+test("connector tool seam allows gmail.read and blocks send by default", () => {
   const allowed = authorizeConnectorToolAction({
     workspaceId: "ws",
     profileId: "11111111-1111-1111-1111-111111111111",
     connectorId: "gmail",
-    action: "gmail.read",
+    toolName: "gmail.read",
     connectionId: "conn_1",
   });
   assert.equal(allowed.ok, true);
@@ -90,7 +102,7 @@ test("connector tool seam allows gmail.read and blocks send", () => {
     workspaceId: "ws",
     profileId: "11111111-1111-1111-1111-111111111111",
     connectorId: "gmail",
-    action: "gmail.send",
+    toolName: "gmail.send",
     connectionId: "conn_1",
   });
   assert.equal(denied.ok, false);

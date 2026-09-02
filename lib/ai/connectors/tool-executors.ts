@@ -13,7 +13,11 @@ export async function executeConnectorGmailTool(
   },
   workspaceIdOverride?: string | null,
 ): Promise<AiToolCallResult | null> {
-  if (call.name !== "gmail.search" && call.name !== "gmail.read") {
+  if (
+    call.name !== "gmail.search" &&
+    call.name !== "gmail.read" &&
+    call.name !== "gmail.send"
+  ) {
     return null;
   }
 

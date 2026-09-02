@@ -244,7 +244,7 @@ test("connector tool seam allows gmail.read during pilot", () => {
     workspaceId: "ws",
     profileId: "11111111-1111-1111-1111-111111111111",
     connectorId: "gmail",
-    action: "gmail.read",
+    toolName: "gmail.read",
     connectionId: "conn_1",
   });
   assert.equal(allowed.ok, true);
@@ -253,11 +253,21 @@ test("connector tool seam allows gmail.read during pilot", () => {
     workspaceId: "ws",
     profileId: "11111111-1111-1111-1111-111111111111",
     connectorId: "gmail",
-    action: "gmail.send",
+    toolName: "gmail.send",
     connectionId: "conn_1",
   });
   assert.equal(denied.ok, false);
   if (!denied.ok) assert.equal(denied.reason, "not_allowed");
+
+  const sendAllowed = authorizeConnectorToolAction({
+    workspaceId: "ws",
+    profileId: "11111111-1111-1111-1111-111111111111",
+    connectorId: "gmail",
+    toolName: "gmail.send",
+    toolPermissions: { "gmail.send": true },
+    connectionId: "conn_1",
+  });
+  assert.equal(sendAllowed.ok, true);
 });
 
 test("client bundles do not import server-only connector modules", () => {
