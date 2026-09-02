@@ -91,7 +91,37 @@ function Svg({
 
 const GMAIL_ICON_SRC = "/connectors/gmail.png";
 
-function GmailMark({ className, size = "md" }: { className?: string; size?: MarkSize }) {
+const BRAND_ICON_SRC: Record<string, string> = {
+  googlecalendar: "/connectors/gcal.svg",
+  gcal: "/connectors/gcal.svg",
+  gdrive: "/connectors/gdrive.svg",
+  outlook: "/connectors/outlook.svg",
+  slack: "/connectors/slack.svg",
+  gsheets: "/connectors/gsheets.svg",
+  notion: "/connectors/notion.svg",
+  hubspot: "/connectors/hubspot.svg",
+  github: "/connectors/github.svg",
+  teams: "/connectors/teams.svg",
+  stripe: "/connectors/stripe.svg",
+  shopify: "/connectors/shopify.svg",
+  salesforce: "/connectors/salesforce.svg",
+  linear: "/connectors/linear.svg",
+  jira: "/connectors/jira.svg",
+};
+
+function BrandAssetMark({
+  id,
+  src,
+  label,
+  className,
+  size = "md",
+}: {
+  id: string;
+  src: string;
+  label: string;
+  className?: string;
+  size?: MarkSize;
+}) {
   return (
     <span
       className={cn(
@@ -102,12 +132,25 @@ function GmailMark({ className, size = "md" }: { className?: string; size?: Mark
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={GMAIL_ICON_SRC}
-        alt="Gmail"
+        src={src}
+        alt={label}
         className="h-full w-full object-contain"
         draggable={false}
+        data-connector={id}
       />
     </span>
+  );
+}
+
+function GmailMark({ className, size = "md" }: { className?: string; size?: MarkSize }) {
+  return (
+    <BrandAssetMark
+      id="gmail"
+      src={GMAIL_ICON_SRC}
+      label="Gmail"
+      className={className}
+      size={size}
+    />
   );
 }
 
@@ -693,61 +736,49 @@ function AnthropicMark({ className, size }: { className?: string; size?: MarkSiz
   );
 }
 
+function makeBrandMark(id: string, label: string) {
+  const src = BRAND_ICON_SRC[id];
+  return function BrandMark({
+    className,
+    size = "md",
+  }: {
+    className?: string;
+    size?: MarkSize;
+  }) {
+    if (!src) {
+      return <LetterMark letter={label.slice(0, 1)} className={className} size={size} />;
+    }
+    return (
+      <BrandAssetMark
+        id={id}
+        src={src}
+        label={label}
+        className={className}
+        size={size}
+      />
+    );
+  };
+}
+
 const marks: Record<
   string,
   (props: { className?: string; size?: MarkSize }) => ReactNode
 > = {
   gmail: GmailMark,
-  stripe: StripeMark,
-  github: GithubMark,
-  googlecalendar: GcalMark,
-  slack: SlackMark,
-  notion: NotionMark,
-  figma: FigmaMark,
-  linear: LinearMark,
-  hubspot: HubspotMark,
-  discord: DiscordMark,
-  dropbox: DropboxMark,
-  jira: JiraMark,
+  stripe: makeBrandMark("stripe", "Stripe"),
+  github: makeBrandMark("github", "GitHub"),
+  googlecalendar: makeBrandMark("googlecalendar", "Google Calendar"),
+  gcal: makeBrandMark("gcal", "Google Calendar"),
+  slack: makeBrandMark("slack", "Slack"),
+  notion: makeBrandMark("notion", "Notion"),
+  linear: makeBrandMark("linear", "Linear"),
+  hubspot: makeBrandMark("hubspot", "HubSpot"),
+  jira: makeBrandMark("jira", "Jira"),
+  gdrive: makeBrandMark("gdrive", "Google Drive"),
+  gsheets: makeBrandMark("gsheets", "Google Sheets"),
+  outlook: makeBrandMark("outlook", "Outlook"),
+  teams: makeBrandMark("teams", "Microsoft Teams"),
+  salesforce: makeBrandMark("salesforce", "Salesforce"),
+  shopify: makeBrandMark("shopify", "Shopify"),
   handshake: HandshakeMark,
-  gdrive: GdriveMark,
-  gdocs: GdocsMark,
-  outlook: OutlookMark,
-  zoom: ZoomMark,
-  asana: AsanaMark,
-  trello: TrelloMark,
-  todoist: TodoistMark,
-  monday: MondayMark,
-  clickup: ClickupMark,
-  calendly: CalendlyMark,
-  box: BoxMark,
-  confluence: ConfluenceMark,
-  airtable: AirtableMark,
-  zapier: ZapierMark,
-  vercel: VercelMark,
-  cloudflare: CloudflareMark,
-  sentry: SentryMark,
-  datadog: DatadogMark,
-  gitlab: GitlabMark,
-  bitbucket: BitbucketMark,
-  webflow: WebflowMark,
-  supabase: SupabaseMark,
-  firebase: FirebaseMark,
-  neon: NeonMark,
-  mixpanel: MixpanelMark,
-  amplitude: AmplitudeMark,
-  segment: SegmentMark,
-  snowflake: SnowflakeMark,
-  bigquery: BigqueryMark,
-  teams: TeamsMark,
-  intercom: IntercomMark,
-  twilio: TwilioMark,
-  front: FrontMark,
-  resend: ResendMark,
-  salesforce: SalesforceMark,
-  shopify: ShopifyMark,
-  customerio: CustomerioMark,
-  clerk: ClerkMark,
-  openai: OpenaiMark,
-  anthropic: AnthropicMark,
 };

@@ -68,6 +68,46 @@ function WorkPreviewFace({
     );
   }
 
+  // Explore projects: paper frame with first-site cover inside.
+  if (item.previewKind === "paper") {
+    return (
+      <div className={frameClass}>
+        <DefaultChatPreviewWash />
+        <div
+          className={cn(
+            "absolute overflow-hidden bg-white shadow-sm",
+            compact
+              ? "inset-x-[10%] bottom-0 top-[28%] rounded-t-[3px]"
+              : "inset-x-[10%] bottom-0 top-[18%] rounded-t-[8px]",
+          )}
+        >
+          {item.cover ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={item.cover}
+              alt=""
+              className="h-full w-full object-cover object-top"
+            />
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  // Build apps/projects: full-bleed live preview.
+  if (item.cover) {
+    return (
+      <div className={cn(frameClass, "bg-muted")}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={item.cover}
+          alt=""
+          className="h-full w-full object-cover object-top"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={frameClass}>
       <DefaultChatPreviewWash />

@@ -91,10 +91,12 @@ export function HomeDashboard() {
         ) : null
       }
     >
-      <HomePromoBanner
-        promo={promo}
-        onCta={() => openSettings("plans")}
-      />
+      {promo ? (
+        <HomePromoBanner
+          promo={promo}
+          onCta={() => openSettings("plans")}
+        />
+      ) : null}
 
       <div className="mt-6 grid grid-cols-1 gap-3 @min-[720px]:grid-cols-3">
         {usageCards.map((card) => (
@@ -218,7 +220,7 @@ function HomePromoBanner({
   onCta,
   className,
 }: {
-  promo: ReturnType<typeof homePromoForPlan>;
+  promo: NonNullable<ReturnType<typeof homePromoForPlan>>;
   onCta: () => void;
   className?: string;
 }) {

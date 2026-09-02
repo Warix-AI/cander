@@ -137,7 +137,7 @@ import {
   DEFAULT_PANEL_RATIO,
   PANEL_RATIO_OPEN_FLOOR,
 } from "@/lib/right-panel";
-import { writeHomeDockChatOpen } from "@/lib/home-chat-preference";
+import { writeHomeDockChatOpen, readHomeDockChatOpen } from "@/lib/home-chat-preference";
 import { isChatSpace, chatSpaceId, isDockChatSpace, PRIMARY_NAV_SPACES, spaceAllowed, isDashboardOnlySpace, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
 import type {
   AccountPresetId,
@@ -183,7 +183,8 @@ import {
 } from "@/lib/space-layout-preference";
 import {
   adoptThreadAsUniversalDefault,
-  continuousChatId,
+  isDetachedSessionChat,
+  isSpaceAttachedChat,
   openSpaceDefaultChat,
   projectChatId,
   startContinuousChat,
@@ -1144,7 +1145,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const { threads: next, id } = startContinuousChat(
         current,
         workspaceId,
-        "work",
+        null,
       );
       tid = id;
       return next;
@@ -1214,13 +1215,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (space && isChatSpace(space)) {
+        // New chat stays detached from spaces until Default chat; keep the
+        // current space lens/panel so the user can still promote it.
         let tid = "";
         let hasMessages = false;
         setThreads((current) => {
           const { threads: next, id } = startContinuousChat(
             current,
             workspaceId,
-            space,
+            null,
           );
           tid = id;
           hasMessages = threadHasTurns(next.find((item) => item.id === id));
@@ -2165,7 +2168,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           space === "connectors");
       const usePersistent = useProjectPersistent || useContinuousPersistent;
       let activeId = threadId ?? nextId("t");
-      const detachedDraft = view === "chat" && !spaceId && !opts?.space;
+      // Detached New Chat sessions stay unattached until Default chat —
+      // even if the UI still shows a space lens.
+      const detachedDraft =
+        isDetachedSessionChat(thread, workspaceId) ||
+        (view === "chat" && !spaceId && !opts?.space && !projectId);
 
       setThreads((current) => {
         let list = current;
@@ -2203,7 +2210,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     title: item.messages.length ? item.title : displayText.slice(0, 48),
                     snippet: displayText,
                     updatedAt: new Date().toISOString(),
-                    spaceId: chatSpace ?? item.spaceId ?? undefined,
+                    // Detached drafts must not inherit the current space lens.
+                    spaceId: detachedDraft
+                      ? item.spaceId
+                      : (chatSpace ?? item.spaceId ?? undefined),
                     projectId: useProjectPersistent
                       ? projectId ?? item.projectId
                       : (intent.projectId ?? item.projectId),
@@ -2221,9 +2231,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 title: displayText.slice(0, 52),
                 workspaceId: matched?.workspaceId ?? workspaceId,
                 projectId: useProjectPersistent ? projectId ?? undefined : intent.projectId,
-                spaceId:
-                  chatSpace ??
-                  (useContinuousPersistent ? "work" : undefined),
+                spaceId: detachedDraft
+                  ? undefined
+                  : (chatSpace ?? undefined),
                 updatedAt: new Date().toISOString(),
                 snippet: displayText,
                 messages: [userMsg, assistantMsg],
@@ -2233,21 +2243,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               } satisfies Thread,
               ...list,
             ];
-
-        if (
-          onUnscopedChat &&
-          !projectId &&
-          detachedDraft &&
-          !next.some((item) => item.id === continuousChatId(workspaceId))
-        ) {
-          const promoted = adoptThreadAsUniversalDefault(
-            next,
-            workspaceId,
-            activeId,
-          );
-          next = promoted.threads;
-          activeId = promoted.id;
-        }
 
         return next;
       });
@@ -3219,6 +3214,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const goToSpace = (dest: NavDestinationId) => {
       if (isDashboardOnlySpace(dest)) {
+        // Restore Home dock chat when the user left it open.
+        if (dest === "home" && readHomeDockChatOpen(workspaceId)) {
+          openSpaceChat("home", { landOnPanel: false });
+          return;
+        }
         if (mobile) {
           skipMobilePagerTransitionOnce();
           skipMobileSpaceEnterOnce();
@@ -3716,23 +3716,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         persistWorkspace(found.workspaceId);
       }
       setThreadId(found.id);
-      setSpaceId(found.spaceId ?? null);
-      setProjectId(found.projectId ?? null);
       setDrafting(false);
-      setPanelIntent("execute");
+      setConnectorId(null);
+      setJobId(null);
+      setSkillId(null);
       setView("chat");
-      if (found.spaceId === "build") setBuildTool("preview");
-      if (found.spaceId === "research") setResearchTool("overview");
-      if (found.spaceId === "build") setBuildTool("preview");
-      setPanelMode("split");
       setMobileSurface("chat");
+
+      const attached = isSpaceAttachedChat(found, found.workspaceId);
+      if (found.projectId || attached) {
+        const lens = found.spaceId ?? null;
+        setSpaceId(lens);
+        setProjectId(found.projectId ?? null);
+        setPanelIntent("execute");
+        setPanelMode("split");
+        if (lens === "build") setBuildTool("preview");
+        if (lens === "research") setResearchTool("overview");
+        pushTarget({
+          view: "chat",
+          spaceId: lens,
+          threadId: found.id,
+          projectId: found.projectId ?? null,
+          panelMode: "split",
+          panelIntent: "execute",
+          connectorId: null,
+          jobId: null,
+          skillId: null,
+        });
+        return;
+      }
+
+      // Detached New Chat: never associate with Work / open the space panel.
+      setSpaceId(null);
+      setProjectId(null);
+      setPanelIntent("browse");
+      setPanelMode("collapsed");
       pushTarget({
         view: "chat",
-        spaceId: found.spaceId ?? null,
+        spaceId: null,
         threadId: found.id,
-        projectId: found.projectId ?? null,
-        panelMode: "split",
-        panelIntent: "execute",
+        projectId: null,
+        panelMode: "collapsed",
+        panelIntent: "browse",
         connectorId: null,
         jobId: null,
         skillId: null,
@@ -3816,7 +3841,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         if (target.kind === "settings") {
           openSettings(
-            (target.tab as SettingsTab | undefined) ?? "hosting",
+            (target.tab as SettingsTab | undefined) ?? "general",
           );
           return { ok: true, detail: "Opened Settings." };
         }

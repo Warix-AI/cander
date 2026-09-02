@@ -267,25 +267,27 @@ export function ConnectorDetailModal({
               className={cn(CONNECTOR_ICON_CLASS, "shrink-0")}
             />
             <div className="min-w-0 flex-1">
-              <h2
-                id={`connector-detail-${item.id}`}
-                className="text-[22.5px] font-semibold leading-none tracking-[-0.03em]"
-              >
-                {item.name}
-              </h2>
+              <div className="flex min-w-0 items-center gap-2">
+                <h2
+                  id={`connector-detail-${item.id}`}
+                  className="truncate text-[22.5px] font-semibold leading-none tracking-[-0.03em]"
+                >
+                  {item.name}
+                </h2>
+                <span
+                  className={cn(
+                    "inline-flex h-5 shrink-0 items-center border px-1.5 text-[9px] font-medium tracking-[-0.01em]",
+                    SHELL_G3_RADIUS,
+                    statusTone,
+                  )}
+                >
+                  {statusLabel}
+                </span>
+              </div>
               <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-muted-foreground">
                 {item.description}
               </p>
             </div>
-            <span
-              className={cn(
-                "inline-flex h-5 shrink-0 items-center border px-1.5 text-[9px] font-medium tracking-[-0.01em]",
-                SHELL_G3_RADIUS,
-                statusTone,
-              )}
-            >
-              {statusLabel}
-            </span>
           </div>
         </div>
 

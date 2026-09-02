@@ -55,7 +55,7 @@ export type HomeRecommended = {
   space: "work" | "build" | "research" | "new_chat";
 };
 
-export function homePromoForPlan(plan: BillingPlan): HomePromo {
+export function homePromoForPlan(plan: BillingPlan): HomePromo | null {
   if (plan === "free") {
     return {
       eyebrow: "Pro",
@@ -72,21 +72,10 @@ export function homePromoForPlan(plan: BillingPlan): HomePromo {
       cta: "Compare plans",
     };
   }
-  return {
-    eyebrow: "Studio",
-    title: "Creative production is on the way",
-    body: "Images, video, audio, and presentations — a dedicated Studio space, tied to chat.",
-    cta: "Learn more",
-  };
+  return null;
 }
 
 export const HOME_UPDATES: HomeUpdate[] = [
-  {
-    id: "studio-soon",
-    when: "Coming soon",
-    title: "Studio space",
-    body: "A dedicated space for images, video, and audio — with chat and a right panel like Build.",
-  },
   {
     id: "home-dash",
     when: "Today",
@@ -97,7 +86,7 @@ export const HOME_UPDATES: HomeUpdate[] = [
     id: "explore",
     when: "This week",
     title: "Explore is back",
-    body: "Research, browse, and sources live under Explore — separate from Studio.",
+    body: "Research, browse, and sources live under Explore.",
   },
   {
     id: "usage-v2",

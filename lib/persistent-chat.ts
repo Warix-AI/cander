@@ -68,17 +68,46 @@ export function upsertPersistentSpaceThread(
   return { threads: [created, ...threads], id: created.id };
 }
 
-/** Load (or create) the default sidebar chat for a space. */
+/** True when this thread is the shared default across Work / Build / Explore. */
+export function isUniversalDefaultChat(
+  thread: Thread | null | undefined,
+  workspaceId: string,
+) {
+  return Boolean(
+    thread &&
+      thread.workspaceId === workspaceId &&
+      !thread.projectId &&
+      thread.id === continuousChatId(workspaceId),
+  );
+}
+
+/**
+ * True when opening from Recents should restore a space/project panel.
+ * Detached "New chat" sessions are not attached.
+ */
+export function isSpaceAttachedChat(
+  thread: Thread | null | undefined,
+  workspaceId: string,
+) {
+  if (!thread || thread.workspaceId !== workspaceId) return false;
+  if (thread.projectId) return true;
+  if (isUniversalDefaultChat(thread, workspaceId)) return true;
+  if (thread.id.startsWith(`t-space-${workspaceId}-`)) return true;
+  return false;
+}
+
+/**
+ * Load (or create) the shared default chat for dock spaces.
+ * All spaces resume the same `t-session-{workspaceId}` thread.
+ */
 export function openSpaceDefaultChat(
   threads: Thread[],
   workspaceId: string,
   spaceId: SpaceId,
 ): { threads: Thread[]; id: string } {
+  const defaultId = continuousChatId(workspaceId);
   const universal = threads.find(
-    (item) =>
-      item.id === continuousChatId(workspaceId) &&
-      item.persistent &&
-      !item.projectId,
+    (item) => item.id === defaultId && !item.projectId,
   );
   if (universal) {
     const updated = withSpaceSwitch(universal, spaceId);
@@ -92,7 +121,8 @@ export function openSpaceDefaultChat(
       id: universal.id,
     };
   }
-  return upsertPersistentSpaceThread(threads, workspaceId, spaceId);
+  const created = emptyContinuousChat(workspaceId, spaceId, defaultId);
+  return { threads: [created, ...threads], id: defaultId };
 }
 
 /**
@@ -217,8 +247,21 @@ function isContinuousThread(thread: Thread, workspaceId: string) {
     Boolean(thread.persistent) &&
     thread.workspaceId === workspaceId &&
     !thread.projectId &&
-    (thread.id === continuousChatId(workspaceId) ||
-      thread.id.startsWith(`t-session-${workspaceId}`))
+    thread.id === continuousChatId(workspaceId)
+  );
+}
+
+/** Detached New Chat session — not the shared spaces default. */
+export function isDetachedSessionChat(
+  thread: Thread | null | undefined,
+  workspaceId: string,
+) {
+  return Boolean(
+    thread &&
+      thread.workspaceId === workspaceId &&
+      !thread.projectId &&
+      thread.id.startsWith(`t-session-${workspaceId}-`) &&
+      thread.id !== continuousChatId(workspaceId),
   );
 }
 
@@ -228,12 +271,14 @@ export function findContinuousChat(
   preferredId?: string | null,
 ) {
   if (preferredId) {
-    // Keep whatever non-project chat is active (New Chat or Recents) across spaces.
+    // Keep the shared default or an explicit preferred non-project chat.
+    // Never treat a detached New Chat draft as the universal slot.
     const preferred = threads.find(
       (item) =>
         item.id === preferredId &&
         item.workspaceId === workspaceId &&
-        !item.projectId,
+        !item.projectId &&
+        !isDetachedSessionChat(item, workspaceId),
     );
     if (preferred) return preferred;
   }
@@ -246,14 +291,14 @@ export function findContinuousChat(
 
 export function emptyContinuousChat(
   workspaceId: string,
-  spaceId: SpaceId,
+  spaceId?: SpaceId | null,
   id = continuousChatId(workspaceId),
 ): Thread {
   return {
     id,
     title: "Chat",
     workspaceId,
-    spaceId,
+    ...(spaceId ? { spaceId } : {}),
     updatedAt: new Date().toISOString(),
     snippet: "",
     messages: [],
@@ -289,18 +334,14 @@ export function ensureContinuousChat(
   return { threads: [created, ...threads], id: created.id };
 }
 
-/** Start a brand-new continuous session (New Chat). */
+/** Start a brand-new continuous session (New Chat). Unattached until Default chat. */
 export function startContinuousChat(
   threads: Thread[],
   workspaceId: string,
   spaceId: SpaceId | null,
 ): { threads: Thread[]; id: string } {
   const id = `t-session-${workspaceId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  const created = emptyContinuousChat(
-    workspaceId,
-    spaceId ?? "work",
-    id,
-  );
+  const created = emptyContinuousChat(workspaceId, spaceId, id);
   return { threads: [created, ...threads], id };
 }
 

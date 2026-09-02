@@ -23,6 +23,10 @@ export type WorkCollectionItem = {
   connectorId?: string;
   /** When set, the pinned tab loads the built project's preview. */
   linkedProjectId?: string;
+  /** Live preview / first-site cover for aggregated cards. */
+  cover?: string;
+  /** Explore-style paper frame vs Build full-bleed preview. */
+  previewKind?: "paper" | "product";
 };
 
 export const WORK_FOCUS_NOW: WorkTodayItem[] = [
@@ -81,6 +85,8 @@ export const WORK_COLLECTION_ITEMS: WorkCollectionItem[] = [
     source: "Build",
     category: "apps",
     addedAt: "2026-08-28T14:00:00Z",
+    cover: "/previews/portal.png",
+    previewKind: "product",
   },
   {
     id: "col-app-2",
@@ -89,6 +95,8 @@ export const WORK_COLLECTION_ITEMS: WorkCollectionItem[] = [
     source: "Build",
     category: "apps",
     addedAt: "2026-08-20T09:30:00Z",
+    cover: "/previews/crm.png",
+    previewKind: "product",
   },
   {
     id: "col-proj-1",
@@ -97,6 +105,8 @@ export const WORK_COLLECTION_ITEMS: WorkCollectionItem[] = [
     source: "Build",
     category: "projects",
     addedAt: "2026-08-25T16:45:00Z",
+    cover: "/previews/console.png",
+    previewKind: "product",
   },
   {
     id: "col-proj-2",
@@ -105,6 +115,8 @@ export const WORK_COLLECTION_ITEMS: WorkCollectionItem[] = [
     source: "Explore",
     category: "projects",
     addedAt: "2026-08-22T11:15:00Z",
+    cover: "/previews/docs.png",
+    previewKind: "paper",
   },
   {
     id: "col-asset-1",

@@ -1,19 +1,18 @@
 import type { BillingPlan, NavDestinationId, SpaceId } from "./types";
 
-/** Product spaces — Home, Work, Build, Explore (research), Studio. */
+/** Product spaces — Home, Work, Build, Explore (research). */
 export const PRIMARY_NAV_SPACES: SpaceId[] = [
   "home",
   "work",
   "build",
   "research",
-  "studio",
 ];
 
-/** Re-enabled in sidebar — Work, Build, Explore. */
-export const SHOW_STUDIO_NAV = true;
+/** Studio is hidden until the space ships. */
+export const SHOW_STUDIO_NAV = false;
 
 /** Nav-only for now — shown disabled with “Coming soon”. */
-export const COMING_SOON_NAV_SPACES: SpaceId[] = ["studio"];
+export const COMING_SOON_NAV_SPACES: SpaceId[] = [];
 
 export const NAV_SPACES: SpaceId[] = [...PRIMARY_NAV_SPACES];
 export const ALL_SPACE_IDS: SpaceId[] = [...PRIMARY_NAV_SPACES];
@@ -73,7 +72,7 @@ export function isExtraNavId(id: string): id is ExtraNavId {
 }
 
 export function isNavVisible(id: SidebarNavId): boolean {
-  if (id === "research" && !SHOW_STUDIO_NAV) return false;
+  if (id === "studio") return SHOW_STUDIO_NAV;
   return true;
 }
 
@@ -84,7 +83,7 @@ export function isSidebarNavId(id: string): id is SidebarNavId {
 /** Connectors nav visible for all plans — installs ship later. */
 export const SHOW_CONNECTORS_NAV = true;
 
-/** Default sidebar — Home, Work, Build, Explore, Studio, Connectors, Recents. */
+/** Default sidebar — Home, Work, Build, Explore, Connectors, Recents. */
 export const DEFAULT_SIDEBAR_MAIN: SidebarNavId[] = [
   ...PRIMARY_NAV_SPACES,
   ...(SHOW_CONNECTORS_NAV ? (["connectors"] as const) : []),

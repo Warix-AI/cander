@@ -10,7 +10,6 @@ import {
   LayoutGrid,
   MessageSquare,
   Palette,
-  Server,
   SquarePen,
   UserRound,
 } from "lucide-react";
@@ -51,7 +50,6 @@ const settingsIcons: Record<SettingsTab, typeof Building2> = {
   plans: CreditCard,
   general: UserRound,
   appearance: Palette,
-  hosting: Server,
 };
 
 export function Sidebar() {

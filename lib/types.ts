@@ -107,8 +107,7 @@ export type SettingsTab =
   | "workspaces"
   | "plans"
   | "general"
-  | "appearance"
-  | "hosting";
+  | "appearance";
 
 export type Role = "Owner" | "Admin" | "Member";
 export type SeatStatus = "active" | "pending";

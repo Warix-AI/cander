@@ -22,7 +22,7 @@ export const EXPLORE_CREATE_OPTIONS: ExploreStart[] = [
   {
     id: "search",
     label: "New project",
-    summary: "A saved group of browser tabs for exploring the web",
+    summary: "Create",
     kind: "research",
     title: "Search",
   },
@@ -32,7 +32,7 @@ const EXPLORE_MENU_OPTIONS = [
   {
     id: "quick-search" as const,
     label: "Quick search",
-    summary: "Browse without saving — closes when you leave",
+    summary: "Browse",
   },
   ...EXPLORE_CREATE_OPTIONS.map((item) => ({
     id: item.id,

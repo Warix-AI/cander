@@ -46,12 +46,10 @@ import { setComposerPendingInput } from "@/lib/composer-seed";
 
 const SECTION_ORDER = [
   "Featured",
+  "Communication",
   "Productivity",
   "Engineering",
-  "Data",
-  "Communication",
   "Commerce",
-  "Internal",
 ] as const;
 
 const PREVIEW_ROWS = 6;
@@ -577,9 +575,26 @@ function DirectoryItem({
           className="!h-[2.3rem] !w-[2.3rem] shrink-0"
         />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-medium tracking-[-0.02em]">
-            {item.name}
-          </p>
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-[13px] font-medium tracking-[-0.02em]">
+              {item.name}
+            </p>
+            {statusLabel ? (
+              <span
+                className={cn(
+                  "inline-flex h-5 shrink-0 items-center px-1.5 text-[10px] font-medium tracking-[-0.01em]",
+                  SHELL_G3_RADIUS,
+                  isConnected
+                    ? "border border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                    : item.pending
+                      ? "border border-chart-3/30 bg-chart-3/10 text-chart-3"
+                      : "border border-border bg-muted text-muted-foreground",
+                )}
+              >
+                {statusLabel}
+              </span>
+            ) : null}
+          </div>
           <p className="mt-0.5 truncate text-[12px] leading-snug text-muted-foreground">
             {item.pending
               ? "Authorization in progress — finish connecting to activate."
@@ -588,21 +603,7 @@ function DirectoryItem({
         </div>
       </button>
       <div className="flex shrink-0 items-center self-center">
-        {isConnected || statusLabel === "Installed" || item.pending ? (
-          <span
-            className={cn(
-              "inline-flex h-7 items-center px-2.5 text-[11px] font-medium tracking-[-0.01em]",
-              SHELL_G3_RADIUS,
-              isConnected
-                ? "border border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                : item.pending
-                  ? "border border-chart-3/30 bg-chart-3/10 text-chart-3"
-                  : "border border-border bg-muted text-muted-foreground",
-            )}
-          >
-            {statusLabel}
-          </span>
-        ) : (
+        {isConnected || statusLabel === "Installed" || item.pending ? null : (
           <button
             type="button"
             aria-label={item.id === "gmail" ? `Connect ${item.name}` : `Install ${item.name}`}

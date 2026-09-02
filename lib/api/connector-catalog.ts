@@ -10,12 +10,20 @@ export type ConnectorInfo = {
  */
 export const CONNECTOR_CATALOG: ConnectorInfo[] = [
   { id: "gmail", name: "Gmail" },
-  { id: "slack", name: "Slack" },
   { id: "gcal", name: "Google Calendar" },
-  { id: "github", name: "GitHub" },
+  { id: "gdrive", name: "Google Drive" },
+  { id: "outlook", name: "Outlook" },
+  { id: "slack", name: "Slack" },
+  { id: "gsheets", name: "Google Sheets" },
   { id: "notion", name: "Notion" },
+  { id: "hubspot", name: "HubSpot" },
+  { id: "github", name: "GitHub" },
+  { id: "teams", name: "Microsoft Teams" },
   { id: "stripe", name: "Stripe" },
-  { id: "vercel", name: "Vercel" },
+  { id: "shopify", name: "Shopify" },
+  { id: "salesforce", name: "Salesforce" },
+  { id: "linear", name: "Linear" },
+  { id: "jira", name: "Jira" },
 ];
 
 export function connectorName(id: string) {

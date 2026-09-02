@@ -161,28 +161,7 @@ function PreviewFace({
   kind: PreviewKind;
   compact?: boolean;
 }) {
-  if (item.image) {
-    return (
-      <div
-        className={cn(
-          "relative overflow-hidden rounded-[10px] bg-muted",
-          compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
-        )}
-      >
-        <img
-          src={item.image}
-          alt=""
-          className="h-full w-full object-cover object-top"
-        />
-        {!compact && item.badge ? (
-          <span className="absolute bottom-3 left-3 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium tracking-[-0.01em] text-foreground">
-            {item.badge}
-          </span>
-        ) : null}
-      </div>
-    );
-  }
-
+  // Explore cards: peach wash + wide paper; paper shows first-site cover when present.
   if (kind === "paper") {
     const preview = item.paperPreview;
     return (
@@ -195,13 +174,19 @@ function PreviewFace({
         <DefaultChatPreviewWash />
         <div
           className={cn(
-            "absolute bg-white text-left shadow-sm",
+            "absolute overflow-hidden bg-white text-left shadow-sm",
             compact
-              ? "inset-x-[18%] bottom-0 top-[28%] rounded-t-[3px]"
-              : "inset-x-[20%] bottom-0 top-[25%] rounded-t-[8px]",
+              ? "inset-x-[10%] bottom-0 top-[28%] rounded-t-[3px]"
+              : "inset-x-[10%] bottom-0 top-[18%] rounded-t-[8px]",
           )}
         >
-          {preview ? (
+          {item.image ? (
+            <img
+              src={item.image}
+              alt=""
+              className="h-full w-full object-cover object-top"
+            />
+          ) : preview ? (
             <>
               <p
                 className={cn(
@@ -226,6 +211,29 @@ function PreviewFace({
             </>
           ) : null}
         </div>
+      </div>
+    );
+  }
+
+  // Build / product: full-bleed live preview cover (no paper frame).
+  if (item.image) {
+    return (
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-[10px] bg-muted",
+          compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
+        )}
+      >
+        <img
+          src={item.image}
+          alt=""
+          className="h-full w-full object-cover object-top"
+        />
+        {!compact && item.badge ? (
+          <span className="absolute bottom-3 left-3 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium tracking-[-0.01em] text-foreground">
+            {item.badge}
+          </span>
+        ) : null}
       </div>
     );
   }
