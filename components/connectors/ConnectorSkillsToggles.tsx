@@ -72,7 +72,7 @@ export function ConnectorSkillsToggles({
         className={cn(
           "flex items-center justify-center px-4 py-8 text-center text-[13px] text-muted-foreground",
           SHELL_G3_RADIUS,
-          "border border-border/70",
+          "border border-border/70 dark:border-white/15",
           className,
         )}
       >
@@ -93,7 +93,7 @@ export function ConnectorSkillsToggles({
       ) : null}
       <div
         className={cn(
-          "divide-y divide-border/70 border border-border/70",
+          "divide-y divide-border/70 border border-border/70 dark:divide-white/15 dark:border-white/15",
           SHELL_G3_RADIUS,
         )}
       >

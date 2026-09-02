@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 
@@ -28,6 +28,13 @@ function tileClass(size: MarkSize) {
   if (size === "xs") return cn("h-6 w-6 bg-muted", SHELL_G3_RADIUS);
   if (size === "sm") return cn("h-8 w-8 bg-muted", SHELL_G3_RADIUS);
   return cn("h-10 w-10 bg-muted", SHELL_G3_RADIUS);
+}
+
+function brandImageSize(size: MarkSize) {
+  if (size === "nav") return "h-3.5 w-3.5";
+  if (size === "xs") return "h-6 w-6";
+  if (size === "sm") return "h-8 w-8";
+  return "h-10 w-10";
 }
 
 function glyphClass(size: MarkSize) {
@@ -82,73 +89,25 @@ function Svg({
   );
 }
 
-function GmailMark({ className, size = "md" }: { className?: string; size?: MarkSize }) {
-  const uid = useId().replace(/:/g, "");
-  const gradA = `gmail-a-${uid}`;
-  const gradB = `gmail-b-${uid}`;
+const GMAIL_ICON_SRC = "/connectors/gmail.png";
 
+function GmailMark({ className, size = "md" }: { className?: string; size?: MarkSize }) {
   return (
-    <Tile
-      size={size}
-      className={cn("overflow-hidden bg-white p-[3px]", className)}
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center bg-transparent p-0",
+        brandImageSize(size),
+        className,
+      )}
     >
-      <svg
-        viewBox="80 0 640 636.36322"
-        className="h-full w-full"
-        preserveAspectRatio="xMidYMid meet"
-        aria-label="Gmail"
-        role="img"
-      >
-        <defs>
-          <linearGradient
-            id={gradA}
-            x1="165"
-            x2="165"
-            y1="44"
-            y2="166"
-            gradientUnits="userSpaceOnUse"
-            gradientTransform="matrix(4.5454426,0,0,4.5454426,-36.362684,-118.18025)"
-          >
-            <stop stopColor="#60d673" />
-            <stop offset=".17" stopColor="#42c868" />
-            <stop offset=".39" stopColor="#0ebc5f" />
-            <stop offset=".62" stopColor="#00a9bb" />
-            <stop offset=".86" stopColor="#3c90ff" />
-            <stop offset="1" stopColor="#3186ff" />
-          </linearGradient>
-          <linearGradient
-            id={gradB}
-            x1="8"
-            x2="184"
-            y1="46.13"
-            y2="46.13"
-            gradientUnits="userSpaceOnUse"
-            gradientTransform="matrix(4.5454426,0,0,4.5454426,-36.362684,-118.18025)"
-          >
-            <stop offset=".08" stopColor="#ff63a0" />
-            <stop offset=".3" stopColor="#fc413d" />
-            <stop offset=".5" stopColor="#fc413d" />
-            <stop offset=".65" stopColor="#fc413d" />
-            <stop offset=".72" stopColor="#fc5c30" />
-            <stop offset=".86" stopColor="#feb10c" />
-            <stop offset=".91" stopColor="#fec700" />
-            <stop offset=".96" stopColor="#ffdb0f" />
-          </linearGradient>
-        </defs>
-        <path
-          fill={`url(#${gradA})`}
-          d="M627.272 81.819H800V581.818c0 30.123-24.423 54.545-54.545 54.545h-90.909a27.273 27.273 0 0 1-27.273-27.273z"
-        />
-        <path
-          fill="#fc413d"
-          d="M172.728 81.819H0V581.818c0 30.123 24.423 54.545 54.545 54.545h90.909a27.273 27.273 0 0 0 27.273-27.273z"
-        />
-        <path
-          fill={`url(#${gradB})`}
-          d="M141.937 20.256C105.423-10.435 50.946-5.717 20.255 30.797-10.435 67.306-5.717 121.783 30.796 152.478l345.808 290.677a36.364 36.364 0 0 0 46.795 0L769.208 152.474C805.717 121.783 810.435 67.306 779.744 30.792 749.053-5.717 694.576-10.435 658.067 20.256 399.999 237.182z"
-        />
-      </svg>
-    </Tile>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={GMAIL_ICON_SRC}
+        alt="Gmail"
+        className="h-full w-full object-contain"
+        draggable={false}
+      />
+    </span>
   );
 }
 

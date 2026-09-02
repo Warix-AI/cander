@@ -38,6 +38,22 @@ export const CONNECTOR_TOOL_CATALOG: ConnectorToolDefinition[] = [
     access: "write",
     defaultEnabled: false,
   },
+  {
+    id: "gmail.draft",
+    connectorId: "gmail",
+    label: "Draft mail",
+    description: "Create email drafts for you to review before sending",
+    access: "write",
+    defaultEnabled: false,
+  },
+  {
+    id: "gmail.reply",
+    connectorId: "gmail",
+    label: "Reply in thread",
+    description: "Reply to an existing email thread on your behalf",
+    access: "write",
+    defaultEnabled: false,
+  },
 ];
 
 export function toolsForConnector(connectorId: string): ConnectorToolDefinition[] {

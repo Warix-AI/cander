@@ -42,6 +42,18 @@ export function replaceConnectorConnectionsForWorkspace(
   emit();
 }
 
+export function patchConnectorConnectionForWorkspace(
+  workspaceId: string,
+  connection: ConnectorConnection,
+) {
+  const list = byWorkspace[workspaceId] ?? [];
+  const next = list.some((row) => row.id === connection.id)
+    ? list.map((row) => (row.id === connection.id ? connection : row))
+    : [...list, connection];
+  byWorkspace = { ...byWorkspace, [workspaceId]: next };
+  emit();
+}
+
 export function clearConnectorConnectionsCache() {
   byWorkspace = {};
   emit();

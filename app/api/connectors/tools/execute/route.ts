@@ -11,7 +11,9 @@ function isGmailTool(tool: string): tool is GmailConnectorToolName {
   return (
     tool === "gmail.search" ||
     tool === "gmail.read" ||
-    tool === "gmail.send"
+    tool === "gmail.send" ||
+    tool === "gmail.draft" ||
+    tool === "gmail.reply"
   );
 }
 

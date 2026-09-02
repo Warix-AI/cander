@@ -54,7 +54,7 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "browser.current.get_metadata",
   ],
   scheduling: [],
-  comms: ["gmail.search", "gmail.read", "gmail.send"],
+  comms: ["gmail.search", "gmail.read", "gmail.send", "gmail.draft", "gmail.reply"],
   cloud_work: [
     "create_work_task",
     "check_work_task",
@@ -212,7 +212,13 @@ function domainsForResumeTool(resumeTool?: string): ToolDomain[] {
   if (resumeTool === "knowledge.search") return ["knowledge", "clarification"];
   if (resumeTool === "web.search") return ["web", "clarification"];
   if (resumeTool === "create_work_task") return ["cloud_work", "clarification"];
-  if (resumeTool === "gmail.search" || resumeTool === "gmail.read" || resumeTool === "gmail.send") {
+  if (
+    resumeTool === "gmail.search" ||
+    resumeTool === "gmail.read" ||
+    resumeTool === "gmail.send" ||
+    resumeTool === "gmail.draft" ||
+    resumeTool === "gmail.reply"
+  ) {
     return ["comms", "clarification"];
   }
   return ["clarification"];

@@ -9,6 +9,7 @@ import {
   patchAccessTier,
   sanitizeToolPermissionsPatch,
   updateConnectionToolPermissions,
+  extractConnectorErrorMessage,
 } from "@/lib/connectors/tool-permissions";
 import type { ConnectorToolAccess } from "@/lib/connectors/tool-catalog";
 
@@ -119,8 +120,7 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true, connection: result.connection });
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Could not update tool permissions.";
+    const message = extractConnectorErrorMessage(err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

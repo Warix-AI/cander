@@ -5,12 +5,16 @@
 export type GmailConnectorToolName =
   | "gmail.search"
   | "gmail.read"
-  | "gmail.send";
+  | "gmail.send"
+  | "gmail.draft"
+  | "gmail.reply";
 
 export const GMAIL_COMPOSIO_SLUGS: Record<GmailConnectorToolName, string> = {
   "gmail.search": "GMAIL_FETCH_EMAILS",
   "gmail.read": "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID",
   "gmail.send": "GMAIL_SEND_EMAIL",
+  "gmail.draft": "GMAIL_CREATE_EMAIL_DRAFT",
+  "gmail.reply": "GMAIL_REPLY_TO_THREAD",
 };
 
 const SECRET_KEYS = new Set([
@@ -41,6 +45,58 @@ export function mapGmailToolArguments(
     const messageId = args.messageId ?? args.message_id;
     if (!messageId) throw new Error("Missing required argument: messageId");
     return { message_id: String(messageId) };
+  }
+
+  if (tool === "gmail.reply") {
+    const threadId = args.threadId ?? args.thread_id;
+    if (!threadId) throw new Error("Missing required argument: threadId");
+    const messageBody =
+      args.body != null
+        ? String(args.body)
+        : args.message_body != null
+          ? String(args.message_body)
+          : args.messageBody != null
+            ? String(args.messageBody)
+            : "";
+    if (!messageBody.trim()) {
+      throw new Error("Missing required argument: body");
+    }
+    const out: Record<string, unknown> = {
+      thread_id: String(threadId),
+      message_body: messageBody,
+    };
+    const recipient =
+      args.to ?? args.recipient_email ?? args.recipientEmail ?? args.recipient;
+    if (recipient) out.recipient_email = String(recipient).trim();
+    if (args.cc) out.cc = args.cc;
+    if (args.bcc) out.bcc = args.bcc;
+    if (args.isHtml === true || args.is_html === true) out.is_html = true;
+    return out;
+  }
+
+  if (tool === "gmail.draft") {
+    const out: Record<string, unknown> = {};
+    const to =
+      args.to ??
+      args.recipientEmail ??
+      args.recipient_email ??
+      args.recipient;
+    if (to) out.recipient_email = String(to).trim();
+    if (args.subject != null) out.subject = String(args.subject);
+    if (args.body != null) {
+      out.body = String(args.body);
+    } else if (args.message != null) {
+      out.body = String(args.message);
+    }
+    const threadId = args.threadId ?? args.thread_id;
+    if (threadId) out.thread_id = String(threadId);
+    if (args.cc) out.cc = args.cc;
+    if (args.bcc) out.bcc = args.bcc;
+    if (args.isHtml === true || args.is_html === true) out.is_html = true;
+    if (!out.recipient_email && !out.subject && !out.body && !out.thread_id) {
+      throw new Error("Provide at least a recipient, subject, body, or thread.");
+    }
+    return out;
   }
 
   const to =
@@ -222,6 +278,20 @@ export function formatGmailToolOutput(
       sent: {
         id: pickString(sent.id, sent.messageId, sent.message_id),
         threadId: pickString(sent.threadId, sent.thread_id),
+      },
+    });
+  }
+
+  if (tool === "gmail.draft" || tool === "gmail.reply") {
+    const payload =
+      data && typeof data === "object"
+        ? (data as Record<string, unknown>)
+        : { result: data };
+    return JSON.stringify({
+      outcome: "ok",
+      [tool === "gmail.draft" ? "draft" : "reply"]: {
+        id: pickString(payload.id, payload.draftId, payload.draft_id, payload.messageId, payload.message_id),
+        threadId: pickString(payload.threadId, payload.thread_id),
       },
     });
   }

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   mergeToolPermissions,
   sanitizeToolPermissionsPatch,
+  enabledToolIds,
 } from "../lib/connectors/tool-catalog.ts";
 
 test("sanitizeToolPermissionsPatch keeps known gmail tools only", () => {
@@ -23,4 +24,15 @@ test("mergeToolPermissions applies patch over defaults", () => {
   assert.equal(merged["gmail.send"], true);
   assert.equal(merged["gmail.search"], true);
   assert.equal(merged["gmail.read"], true);
+});
+
+test("enabledToolIds excludes disabled skills", () => {
+  const enabled = enabledToolIds("gmail", {
+    "gmail.search": false,
+    "gmail.read": true,
+    "gmail.send": false,
+    "gmail.draft": false,
+    "gmail.reply": false,
+  });
+  assert.deepEqual(enabled, ["gmail.read"]);
 });

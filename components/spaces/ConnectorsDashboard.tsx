@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Search, X } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import { DashFrame, ScopeToggle } from "@/components/spaces/ItemSet";
-import { FLOAT_ICON_BUTTON } from "@/lib/shell-chrome";
+import { FLOAT_ICON_BUTTON, SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 import {
   getInstalledConnectorsServerSnapshot,
@@ -32,6 +32,7 @@ import {
   getConnectorConnectionsSnapshot,
   pendingConnectorIdsLive,
   replaceConnectorConnectionsForWorkspace,
+  patchConnectorConnectionForWorkspace,
   subscribeConnectorConnections,
 } from "@/lib/connector-connections-store";
 import {
@@ -41,6 +42,7 @@ import {
 } from "@/lib/api/connector-client";
 import { ConnectorDetailModal } from "@/components/connectors/ConnectorDetailModal";
 import type { ConnectorConnection } from "@/lib/connectors/types";
+import { setComposerPendingInput } from "@/lib/composer-seed";
 
 const SECTION_ORDER = [
   "Featured",
@@ -446,7 +448,7 @@ export function ConnectorsDashboard() {
                 ) : null}
                 <div
                   className={cn(
-                    "grid grid-cols-1 gap-x-8 gap-y-3 @min-[440px]:grid-cols-2",
+                    "grid grid-cols-1 gap-x-6 gap-y-0.5 @min-[440px]:grid-cols-2",
                     catalogView === "connectors" ? "mt-4" : "mt-0",
                   )}
                 >
@@ -455,8 +457,11 @@ export function ConnectorsDashboard() {
                       key={item.id}
                       item={item}
                       active={connectorId === item.id}
+                      blocked={blockedIds.includes(item.id)}
+                      connecting={connectingId === item.id}
                       disconnecting={disconnectingId === item.id}
                       onOpen={() => selectConnector(item.id)}
+                      onConnect={() => void connectConnector(item.id)}
                     />
                   ))}
                 </div>
@@ -503,8 +508,15 @@ export function ConnectorsDashboard() {
         onConnectionsRefresh={() => {
           void refreshConnections();
         }}
+        onSkillPermissionsUpdated={(updated) => {
+          patchConnectorConnectionForWorkspace(workspaceId, updated);
+        }}
         onSetPin={() => setPin("connector", detailItem.id, "primary")}
         onClearPin={() => clearPin("connector", detailItem.id)}
+        onPromptSelect={(text) => {
+          setComposerPendingInput({ text, source: "quick-ask" });
+          newChat();
+        }}
       />
     ) : null}
     </>
@@ -514,8 +526,11 @@ export function ConnectorsDashboard() {
 function DirectoryItem({
   item,
   active,
+  blocked,
+  connecting,
   disconnecting,
   onOpen,
+  onConnect,
 }: {
   item: Connector & {
     pending?: boolean;
@@ -523,8 +538,11 @@ function DirectoryItem({
     installed?: boolean;
   };
   active: boolean;
+  blocked?: boolean;
+  connecting?: boolean;
   disconnecting?: boolean;
   onOpen: () => void;
+  onConnect: () => void;
 }) {
   const hasServerConnection = Boolean(item.liveConnections?.length);
   const isConnected = item.liveConnections?.some((row) => row.status === "active");
@@ -538,48 +556,71 @@ function DirectoryItem({
         : null;
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      disabled={disconnecting}
+    <div
       className={cn(
-        "canvas-hover flex w-full items-start gap-2.5 rounded-[10px] py-2 text-left transition-colors",
-        disconnecting && "opacity-50",
+        "flex w-full items-center gap-3 px-2 py-2 transition-colors duration-200",
+        SHELL_G3_RADIUS,
+        "hover:bg-muted/70",
+        (disconnecting || connecting) && "opacity-60",
+        active && "bg-muted/50",
       )}
-      data-active={active ? "true" : undefined}
     >
-      <span className="mt-0.5 shrink-0">
-        <ConnectorMark id={item.icon} size="sm" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-1.5">
-          <span className="min-w-0 truncate text-[13px] font-medium tracking-[-0.02em]">
+      <button
+        type="button"
+        onClick={onOpen}
+        disabled={disconnecting}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
+        <ConnectorMark
+          id={item.icon}
+          size="sm"
+          className="!h-[2.3rem] !w-[2.3rem] shrink-0"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-medium tracking-[-0.02em]">
             {item.name}
-          </span>
-          {statusLabel ? (
-            <span
-              className={cn(
-                "inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-[11.5px] font-medium tracking-[-0.01em]",
-                isConnected
-                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                  : "bg-muted text-muted-foreground",
-              )}
-            >
-              {statusLabel}
-            </span>
-          ) : (
-            <span className="inline-flex h-7 shrink-0 items-center rounded-full border border-foreground/15 px-2.5 text-[11.5px] font-medium tracking-[-0.01em] text-muted-foreground">
-              Open
-            </span>
-          )}
+          </p>
+          <p className="mt-0.5 truncate text-[12px] leading-snug text-muted-foreground">
+            {item.pending
+              ? "Authorization in progress — finish connecting to activate."
+              : item.description}
+          </p>
         </div>
-        <p className="mt-0.5 truncate text-[12px] leading-snug text-muted-foreground">
-          {item.pending
-            ? "Authorization in progress — finish connecting to activate."
-            : item.description}
-        </p>
+      </button>
+      <div className="flex shrink-0 items-center self-center">
+        {isConnected || statusLabel === "Installed" || item.pending ? (
+          <span
+            className={cn(
+              "inline-flex h-7 items-center px-2.5 text-[11px] font-medium tracking-[-0.01em]",
+              SHELL_G3_RADIUS,
+              isConnected
+                ? "border border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                : item.pending
+                  ? "border border-chart-3/30 bg-chart-3/10 text-chart-3"
+                  : "border border-border bg-muted text-muted-foreground",
+            )}
+          >
+            {statusLabel}
+          </span>
+        ) : (
+          <button
+            type="button"
+            aria-label={item.id === "gmail" ? `Connect ${item.name}` : `Install ${item.name}`}
+            disabled={blocked || connecting || disconnecting}
+            onClick={(event) => {
+              event.stopPropagation();
+              onConnect();
+            }}
+            className={cn(
+              "inline-flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+              SHELL_G3_RADIUS,
+            )}
+          >
+            <Plus className="h-4 w-4" strokeWidth={1.8} />
+          </button>
+        )}
       </div>
-    </button>
+    </div>
   );
 }
 

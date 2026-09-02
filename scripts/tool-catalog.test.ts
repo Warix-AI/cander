@@ -12,6 +12,8 @@ test("default Gmail permissions enable read and disable write", () => {
   assert.equal(defaults["gmail.search"], true);
   assert.equal(defaults["gmail.read"], true);
   assert.equal(defaults["gmail.send"], false);
+  assert.equal(defaults["gmail.draft"], false);
+  assert.equal(defaults["gmail.reply"], false);
 });
 
 test("setAccessTier toggles all tools in a tier", () => {

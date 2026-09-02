@@ -30,7 +30,9 @@ function isGmailConnectorTool(tool: string): tool is GmailConnectorToolName {
   return (
     tool === "gmail.search" ||
     tool === "gmail.read" ||
-    tool === "gmail.send"
+    tool === "gmail.send" ||
+    tool === "gmail.draft" ||
+    tool === "gmail.reply"
   );
 }
 
@@ -126,7 +128,9 @@ export async function executeConnectorTool(
   if (!authz.ok) {
     if (authz.reason === "not_allowed") {
       const message =
-        input.tool === "gmail.send"
+        input.tool === "gmail.send" ||
+        input.tool === "gmail.draft" ||
+        input.tool === "gmail.reply"
           ? "Sending email is disabled. Enable write access for Gmail in Connectors."
           : "This Gmail action is not allowed.";
       return { ok: false, status: 403, error: message };

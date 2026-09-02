@@ -27,7 +27,7 @@ import {
 } from "@/lib/ai/connectors/connector-response";
 
 const GMAIL_READ_TOOLS = ["gmail.search", "gmail.read"] as const;
-const GMAIL_WRITE_TOOLS = ["gmail.send"] as const;
+const GMAIL_WRITE_TOOLS = ["gmail.send", "gmail.draft", "gmail.reply"] as const;
 const MAX_ROUNDS = 4;
 
 function buildGmailTurnInstructions(enabledTools: string[]): string {
@@ -44,8 +44,12 @@ function buildGmailTurnInstructions(enabledTools: string[]): string {
   }
   if (writeEnabled) {
     capabilityLines.push(
-      "- Send email with gmail.send when the user explicitly asks you to send or reply.",
+      "- Send email with gmail.send when the user explicitly asks you to send a new message.",
       '- Example: {"tool":"gmail.send","arguments":{"to":"alice@example.com","subject":"Hello","body":"..."}}',
+      "- Create drafts with gmail.draft when the user wants a draft to review before sending.",
+      '- Example: {"tool":"gmail.draft","arguments":{"to":"alice@example.com","subject":"Hello","body":"..."}}',
+      "- Reply in an existing thread with gmail.reply when the user asks you to reply.",
+      '- Example: {"tool":"gmail.reply","arguments":{"threadId":"<thread id>","body":"Thanks for the update."}}',
       "- Confirm recipient, subject, and body before sending. Never send without a clear user request.",
     );
   }
@@ -251,7 +255,11 @@ export async function runCommsConnectorTurn(
           ? "Reading email…"
           : toolCall.name === "gmail.send"
             ? "Sending email…"
-            : "Searching Gmail…",
+            : toolCall.name === "gmail.draft"
+              ? "Creating draft…"
+              : toolCall.name === "gmail.reply"
+                ? "Replying in thread…"
+                : "Searching Gmail…",
       toolName: toolCall.name,
       contentStreaming: true,
     });
@@ -312,15 +320,19 @@ export async function runCommsConnectorTurn(
     if (
       toolCall.name === "gmail.search" ||
       toolCall.name === "gmail.read" ||
-      toolCall.name === "gmail.send"
+      toolCall.name === "gmail.send" ||
+      toolCall.name === "gmail.draft" ||
+      toolCall.name === "gmail.reply"
     ) {
       working = {
         ...working,
         content: [
           request.content,
           "",
-          toolCall.name === "gmail.send"
-            ? `Confirm what was sent for the user. ${CONNECTOR_USER_VOICE_RULES}`
+          toolCall.name === "gmail.send" ||
+          toolCall.name === "gmail.draft" ||
+          toolCall.name === "gmail.reply"
+            ? `Confirm what was sent or drafted for the user. ${CONNECTOR_USER_VOICE_RULES}`
             : `Summarize the Gmail data above for the user. ${CONNECTOR_USER_VOICE_RULES}`,
         ].join("\n"),
       };

@@ -36,6 +36,30 @@ test("mapGmailToolArguments maps search, read, and send args", () => {
       body: "Hello",
     },
   );
+  assert.deepEqual(
+    mapGmailToolArguments("gmail.draft", {
+      to: "alice@example.com",
+      subject: "Draft",
+      body: "Later",
+    }),
+    {
+      recipient_email: "alice@example.com",
+      subject: "Draft",
+      body: "Later",
+    },
+  );
+  assert.deepEqual(
+    mapGmailToolArguments("gmail.reply", {
+      threadId: "thr_1",
+      body: "Thanks!",
+      to: "alice@example.com",
+    }),
+    {
+      thread_id: "thr_1",
+      message_body: "Thanks!",
+      recipient_email: "alice@example.com",
+    },
+  );
 });
 
 test("redactComposioPayload strips secrets and truncates long strings", () => {

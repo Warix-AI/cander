@@ -41,6 +41,56 @@ describe("connector API security contract", () => {
     assert.equal(allowed.ok, true);
   });
 
+  it("gmail.search is denied when search permission is disabled", () => {
+    const denied = authorizeConnectorToolAction({
+      workspaceId: "ws-a",
+      profileId: "user-a",
+      connectorId: "gmail",
+      toolName: "gmail.search",
+      toolPermissions: {
+        "gmail.search": false,
+        "gmail.read": true,
+        "gmail.send": false,
+      },
+      connectionId: "conn-1",
+    });
+    assert.equal(denied.ok, false);
+    if (!denied.ok) assert.equal(denied.reason, "not_allowed");
+
+    const allowed = authorizeConnectorToolAction({
+      workspaceId: "ws-a",
+      profileId: "user-a",
+      connectorId: "gmail",
+      toolName: "gmail.search",
+      toolPermissions: { "gmail.search": true },
+      connectionId: "conn-1",
+    });
+    assert.equal(allowed.ok, true);
+  });
+
+  it("gmail.draft and gmail.reply require explicit write permissions", () => {
+    for (const toolName of ["gmail.draft", "gmail.reply"] as const) {
+      const denied = authorizeConnectorToolAction({
+        workspaceId: "ws-a",
+        profileId: "user-a",
+        connectorId: "gmail",
+        toolName,
+        connectionId: "conn-1",
+      });
+      assert.equal(denied.ok, false, toolName);
+
+      const allowed = authorizeConnectorToolAction({
+        workspaceId: "ws-a",
+        profileId: "user-a",
+        connectorId: "gmail",
+        toolName,
+        toolPermissions: { [toolName]: true },
+        connectionId: "conn-1",
+      });
+      assert.equal(allowed.ok, true, toolName);
+    }
+  });
+
   it("non-gmail connector is disabled at authz layer", () => {
     const result = authorizeConnectorToolAction({
       workspaceId: "ws-a",

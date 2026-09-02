@@ -917,6 +917,49 @@ function registerGmailTools() {
       },
     },
   });
+  registerAiTool({
+    name: "gmail.draft",
+    description:
+      "Create a Gmail draft for the user to review. Requires draft mail enabled in Connectors.",
+    permission: { requireWorkspaceMember: true },
+    domain: "comms",
+    enabled: true,
+    parameters: {
+      type: "object",
+      properties: {
+        to: { type: "string", description: "Primary recipient email address." },
+        subject: { type: "string", description: "Email subject line." },
+        body: { type: "string", description: "Plain-text or HTML email body." },
+        threadId: {
+          type: "string",
+          description: "Optional thread ID when drafting a reply.",
+        },
+      },
+    },
+  });
+  registerAiTool({
+    name: "gmail.reply",
+    description:
+      "Reply within an existing Gmail thread. Requires reply in thread enabled in Connectors.",
+    permission: { requireWorkspaceMember: true },
+    domain: "comms",
+    enabled: true,
+    parameters: {
+      type: "object",
+      required: ["threadId", "body"],
+      properties: {
+        threadId: {
+          type: "string",
+          description: "Gmail thread ID from search results.",
+        },
+        body: { type: "string", description: "Reply body text." },
+        to: {
+          type: "string",
+          description: "Optional primary recipient if not inferred from the thread.",
+        },
+      },
+    },
+  });
 }
 
 registerGmailTools();

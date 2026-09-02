@@ -16,7 +16,9 @@ export async function executeConnectorGmailTool(
   if (
     call.name !== "gmail.search" &&
     call.name !== "gmail.read" &&
-    call.name !== "gmail.send"
+    call.name !== "gmail.send" &&
+    call.name !== "gmail.draft" &&
+    call.name !== "gmail.reply"
   ) {
     return null;
   }
