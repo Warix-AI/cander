@@ -28,7 +28,7 @@ export async function GET(request: Request, ctx: Ctx) {
     if (!asset) {
       return NextResponse.json({ error: "Attachment not found." }, { status: 404 });
     }
-    return new Response(asset.bytes, {
+    return new Response(new Uint8Array(asset.bytes), {
       status: 200,
       headers: {
         "Content-Type": asset.mimeType,
