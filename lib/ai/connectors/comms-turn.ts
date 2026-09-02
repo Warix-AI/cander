@@ -18,6 +18,12 @@ import {
   sanitizeAssistantVisibleText,
 } from "@/lib/ai/tool-protocol";
 import { fetchConnectorConnections } from "@/lib/api/connector-client";
+import {
+  CONNECTOR_USER_VOICE_RULES,
+  finalizeConnectorReply,
+  gmailEmptyResultMessage,
+  isEmptyGmailSearchResult,
+} from "@/lib/ai/connectors/connector-response";
 
 const COMMS_TOOLS = ["gmail.search", "gmail.read"] as const;
 const MAX_ROUNDS = 4;
@@ -31,6 +37,7 @@ or {"tool":"gmail.read","arguments":{"messageId":"<id from search>"}}
 Rules:
 - Do NOT stop at "I will search" or "Let me check" — either emit the tool JSON or wait for results and summarize.
 - After tool results appear below, answer in plain language with what you found (or that nothing matched).
+- ${CONNECTOR_USER_VOICE_RULES}
 - Use Gmail query syntax in gmail.search (e.g. is:unread, from:alice, subject:BYU, newer_than:30d).
 - Never invent message IDs — use gmail.read only with IDs from gmail.search results.`;
 
@@ -171,14 +178,19 @@ export async function runCommsConnectorTurn(
     }
 
     if (!toolCall) {
-      const content =
-        sanitizeAssistantVisibleText(text || generated.content).trim() ||
-        (toolResults.length
-          ? toolResults.map((t) => t.output).join("\n\n")
-          : "I couldn't find anything in Gmail for that request.");
+      const content = finalizeConnectorReply({
+        text: text || generated.content,
+        connectorId: "gmail",
+        userMessage: request.content,
+        toolResults,
+      });
       return {
         ...generated,
-        content,
+        content:
+          content ||
+          (toolResults.length
+            ? toolResults.map((t) => t.output).join("\n\n")
+            : gmailEmptyResultMessage(request.content)),
         toolResults: toolResults.length ? toolResults : undefined,
       };
     }
@@ -205,6 +217,17 @@ export async function runCommsConnectorTurn(
       };
     }
     toolResults.push(result);
+
+    if (isEmptyGmailSearchResult(result)) {
+      return {
+        content: gmailEmptyResultMessage(request.content),
+        runtime: "cloud",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+        toolResults,
+      };
+    }
 
     const toolFailure = !result.ok
       ? connectorToolFailureMessage(result.output)
@@ -240,7 +263,7 @@ export async function runCommsConnectorTurn(
         content: [
           request.content,
           "",
-          "Summarize the Gmail tool results above for the user. If nothing matched, say clearly that no matching emails were found.",
+          `Summarize the Gmail data above for the user. ${CONNECTOR_USER_VOICE_RULES}`,
         ].join("\n"),
       };
     }
@@ -254,7 +277,7 @@ export async function runCommsConnectorTurn(
       content: [
         request.content,
         "",
-        "Summarize the Gmail tool results above for the user in plain language.",
+        `Summarize the Gmail data above for the user in plain language. ${CONNECTOR_USER_VOICE_RULES}`,
       ].join("\n"),
     },
     { ...opts, suppressContentDelta: true },
@@ -262,10 +285,12 @@ export async function runCommsConnectorTurn(
 
   return {
     ...summary,
-    content:
-      sanitizeAssistantVisibleText(summary.content).trim() ||
-      toolResults.map((t) => t.output).join("\n\n") ||
-      "No matching emails were found in Gmail.",
+    content: finalizeConnectorReply({
+      text: summary.content,
+      connectorId: "gmail",
+      userMessage: request.content,
+      toolResults,
+    }),
     toolResults,
   };
 }
