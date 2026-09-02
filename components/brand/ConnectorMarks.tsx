@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 
 /** `nav` matches lucide sidebar icons (3.5×3.5, no tile). */
 type MarkSize = "nav" | "xs" | "sm" | "md";
@@ -24,9 +25,9 @@ export function ConnectorMark({ id, className, size = "md" }: MarkProps) {
 
 function tileClass(size: MarkSize) {
   if (size === "nav") return "h-3.5 w-3.5 bg-transparent";
-  if (size === "xs") return "h-6 w-6 rounded-[10px] bg-muted";
-  if (size === "sm") return "h-8 w-8 rounded-[10px] bg-muted";
-  return "h-10 w-10 rounded-[10px] bg-muted";
+  if (size === "xs") return cn("h-6 w-6 bg-muted", SHELL_G3_RADIUS);
+  if (size === "sm") return cn("h-8 w-8 bg-muted", SHELL_G3_RADIUS);
+  return cn("h-10 w-10 bg-muted", SHELL_G3_RADIUS);
 }
 
 function glyphClass(size: MarkSize) {
@@ -81,15 +82,72 @@ function Svg({
   );
 }
 
-function GmailMark({ className, size }: { className?: string; size?: MarkSize }) {
+function GmailMark({ className, size = "md" }: { className?: string; size?: MarkSize }) {
+  const uid = useId().replace(/:/g, "");
+  const gradA = `gmail-a-${uid}`;
+  const gradB = `gmail-b-${uid}`;
+
   return (
-    <Tile size={size} className={cn("bg-[#EA4335]/12", className)}>
-      <Svg label="Gmail" size={size}>
-        <path fill="#EA4335" d="M1.5 6.75v10.5A2.25 2.25 0 0 0 3.75 19.5h2.25V9.6L12 14.04 18 9.6v9.9h2.25a2.25 2.25 0 0 0 2.25-2.25V6.75L12 13.05Z" />
-        <path fill="#4285F4" d="M20.25 4.5H18L12 9.15 6 4.5H3.75A2.25 2.25 0 0 0 1.5 6.75L12 13.05 22.5 6.75A2.25 2.25 0 0 0 20.25 4.5Z" />
-        <path fill="#34A853" d="M1.5 6.75 6 9.6v9.9H3.75A2.25 2.25 0 0 1 1.5 17.25Z" />
-        <path fill="#FBBC05" d="M18 19.5V9.6l4.5-2.85v10.5A2.25 2.25 0 0 1 20.25 19.5Z" />
-      </Svg>
+    <Tile
+      size={size}
+      className={cn("overflow-hidden bg-white p-[3px]", className)}
+    >
+      <svg
+        viewBox="80 0 640 636.36322"
+        className="h-full w-full"
+        preserveAspectRatio="xMidYMid meet"
+        aria-label="Gmail"
+        role="img"
+      >
+        <defs>
+          <linearGradient
+            id={gradA}
+            x1="165"
+            x2="165"
+            y1="44"
+            y2="166"
+            gradientUnits="userSpaceOnUse"
+            gradientTransform="matrix(4.5454426,0,0,4.5454426,-36.362684,-118.18025)"
+          >
+            <stop stopColor="#60d673" />
+            <stop offset=".17" stopColor="#42c868" />
+            <stop offset=".39" stopColor="#0ebc5f" />
+            <stop offset=".62" stopColor="#00a9bb" />
+            <stop offset=".86" stopColor="#3c90ff" />
+            <stop offset="1" stopColor="#3186ff" />
+          </linearGradient>
+          <linearGradient
+            id={gradB}
+            x1="8"
+            x2="184"
+            y1="46.13"
+            y2="46.13"
+            gradientUnits="userSpaceOnUse"
+            gradientTransform="matrix(4.5454426,0,0,4.5454426,-36.362684,-118.18025)"
+          >
+            <stop offset=".08" stopColor="#ff63a0" />
+            <stop offset=".3" stopColor="#fc413d" />
+            <stop offset=".5" stopColor="#fc413d" />
+            <stop offset=".65" stopColor="#fc413d" />
+            <stop offset=".72" stopColor="#fc5c30" />
+            <stop offset=".86" stopColor="#feb10c" />
+            <stop offset=".91" stopColor="#fec700" />
+            <stop offset=".96" stopColor="#ffdb0f" />
+          </linearGradient>
+        </defs>
+        <path
+          fill={`url(#${gradA})`}
+          d="M627.272 81.819H800V581.818c0 30.123-24.423 54.545-54.545 54.545h-90.909a27.273 27.273 0 0 1-27.273-27.273z"
+        />
+        <path
+          fill="#fc413d"
+          d="M172.728 81.819H0V581.818c0 30.123 24.423 54.545 54.545 54.545h90.909a27.273 27.273 0 0 0 27.273-27.273z"
+        />
+        <path
+          fill={`url(#${gradB})`}
+          d="M141.937 20.256C105.423-10.435 50.946-5.717 20.255 30.797-10.435 67.306-5.717 121.783 30.796 152.478l345.808 290.677a36.364 36.364 0 0 0 46.795 0L769.208 152.474C805.717 121.783 810.435 67.306 779.744 30.792 749.053-5.717 694.576-10.435 658.067 20.256 399.999 237.182z"
+        />
+      </svg>
     </Tile>
   );
 }

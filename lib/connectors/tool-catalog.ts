@@ -105,3 +105,34 @@ export function setAccessTier(
   }
   return next;
 }
+
+export function sanitizeToolPermissionsPatch(
+  connectorId: string,
+  patch: Record<string, unknown>,
+): Record<string, boolean> {
+  const allowed = new Set(toolsForConnector(connectorId).map((tool) => tool.id));
+  const out: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (!allowed.has(key) || typeof value !== "boolean") continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+export function mergeToolPermissions(
+  connectorId: string,
+  current: Record<string, boolean> | null | undefined,
+  patch: Record<string, boolean>,
+): Record<string, boolean> {
+  const base = resolveToolPermissions(connectorId, current);
+  return { ...base, ...patch };
+}
+
+export function patchAccessTier(
+  connectorId: string,
+  access: ConnectorToolAccess,
+  enabled: boolean,
+  current: Record<string, boolean> | null | undefined,
+): Record<string, boolean> {
+  return setAccessTier(connectorId, access, enabled, current);
+}

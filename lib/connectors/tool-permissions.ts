@@ -3,45 +3,28 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  resolveToolPermissions,
-  toolsForConnector,
-  type ConnectorToolAccess,
-  setAccessTier,
-} from "./tool-catalog.ts";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { mergeToolPermissions } from "./tool-catalog.ts";
 import { connectionNotFoundError } from "./authz.ts";
 import type { ConnectorConnection } from "./types.ts";
 import { connectionRowToPublic, type ConnectorConnectionRow } from "./mapper.ts";
 
-export function sanitizeToolPermissionsPatch(
-  connectorId: string,
-  patch: Record<string, unknown>,
-): Record<string, boolean> {
-  const allowed = new Set(toolsForConnector(connectorId).map((tool) => tool.id));
-  const out: Record<string, boolean> = {};
-  for (const [key, value] of Object.entries(patch)) {
-    if (!allowed.has(key) || typeof value !== "boolean") continue;
-    out[key] = value;
+export {
+  mergeToolPermissions,
+  patchAccessTier,
+  sanitizeToolPermissionsPatch,
+} from "./tool-catalog.ts";
+
+function permissionsPersistenceError(err: unknown): { status: number; error: string } {
+  const message = err instanceof Error ? err.message : "Could not update tool permissions.";
+  if (/tool_permissions|column.*does not exist|PGRST204/i.test(message)) {
+    return {
+      status: 503,
+      error:
+        "Tool permissions are not available on this database yet. Apply migration 042_connector_tool_permissions.sql.",
+    };
   }
-  return out;
-}
-
-export function mergeToolPermissions(
-  connectorId: string,
-  current: Record<string, boolean> | null | undefined,
-  patch: Record<string, boolean>,
-): Record<string, boolean> {
-  const base = resolveToolPermissions(connectorId, current);
-  return { ...base, ...patch };
-}
-
-export function patchAccessTier(
-  connectorId: string,
-  access: ConnectorToolAccess,
-  enabled: boolean,
-  current: Record<string, boolean> | null | undefined,
-): Record<string, boolean> {
-  return setAccessTier(connectorId, access, enabled, current);
+  return { status: 500, error: message };
 }
 
 export async function updateConnectionToolPermissions(input: {
@@ -56,13 +39,16 @@ export async function updateConnectionToolPermissions(input: {
 > {
   const { data, error } = await input.client
     .from("connector_connections")
-    .select("*")
+    .select("id, connector_id, owner_id, workspace_id, tool_permissions")
     .eq("id", input.connectionId)
     .eq("owner_id", input.ownerId)
     .eq("workspace_id", input.workspaceId)
     .is("deleted_at", null)
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    const mapped = permissionsPersistenceError(error);
+    return { ok: false, ...mapped };
+  }
   if (!data) {
     return { ok: false, ...connectionNotFoundError() };
   }
@@ -76,27 +62,38 @@ export async function updateConnectionToolPermissions(input: {
     input.permissions,
   );
 
-  const { data: updated, error: updateError } = await input.client
-    .from("connector_connections")
-    .update({
-      tool_permissions: merged,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", input.connectionId)
-    .eq("owner_id", input.ownerId)
-    .select("*")
-    .maybeSingle();
-  if (updateError) throw updateError;
-  if (!updated) {
-    return { ok: false, ...connectionNotFoundError() };
-  }
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data: updated, error: updateError } = await admin
+      .from("connector_connections")
+      .update({
+        tool_permissions: merged,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.connectionId)
+      .eq("owner_id", input.ownerId)
+      .eq("workspace_id", input.workspaceId)
+      .is("deleted_at", null)
+      .select("*")
+      .maybeSingle();
+    if (updateError) {
+      const mapped = permissionsPersistenceError(updateError);
+      return { ok: false, ...mapped };
+    }
+    if (!updated) {
+      return { ok: false, ...connectionNotFoundError() };
+    }
 
-  const publicRow = connectionRowToPublic(updated as ConnectorConnectionRow);
-  return {
-    ok: true,
-    connection: {
-      ...publicRow,
-      toolPermissions: merged,
-    },
-  };
+    const publicRow = connectionRowToPublic(updated as ConnectorConnectionRow);
+    return {
+      ok: true,
+      connection: {
+        ...publicRow,
+        toolPermissions: merged,
+      },
+    };
+  } catch (err) {
+    const mapped = permissionsPersistenceError(err);
+    return { ok: false, ...mapped };
+  }
 }

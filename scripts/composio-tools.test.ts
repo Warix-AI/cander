@@ -88,6 +88,21 @@ test("isCommsConnectorIntent unlocks gmail email asks", () => {
   assert.equal(isCommsConnectorIntent("Are there any sports going on"), false);
 });
 
+test("formatGmailToolOutput summarizes send results", () => {
+  const output = formatGmailToolOutput("gmail.send", {
+    data: { id: "msg_sent_1", threadId: "thr_1" },
+    connected_account_id: "secret",
+  });
+  const parsed = JSON.parse(output) as {
+    outcome: string;
+    sent: { id?: string; threadId?: string };
+  };
+  assert.equal(parsed.outcome, "ok");
+  assert.equal(parsed.sent.id, "msg_sent_1");
+  assert.equal(parsed.sent.threadId, "thr_1");
+  assert.equal("connected_account_id" in parsed, false);
+});
+
 test("connector tool seam allows gmail.read and blocks send by default", () => {
   const allowed = authorizeConnectorToolAction({
     workspaceId: "ws",
