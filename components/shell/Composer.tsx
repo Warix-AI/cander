@@ -20,11 +20,6 @@ import {
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { ReferenceChip } from "@/components/shell/ReferenceChip";
-import { ComposerUsageBar } from "@/components/shell/ComposerUsageBar";
-import {
-  USAGE_BAR_THRESHOLD,
-  useUsageStatusPercent,
-} from "@/lib/use-usage-status";
 import {
   ComposerRecordingView,
   ComposerTrailingActions,
@@ -163,7 +158,6 @@ export function Composer({
   const floating = useShellStyle() === "floating";
   const mobile = useMobileShell();
   const { centered } = useChatCanvasCentered();
-  const { percent: usagePercent, label: usageLabel } = useUsageStatusPercent();
   const [blocks, setBlocks] = useState<ComposerBlock[]>(() =>
     emptyComposerBlocks(),
   );
@@ -755,12 +749,11 @@ export function Composer({
         ? `Change the ${labelFor(selectedId)}…`
         : APP_MESSAGE_PLACEHOLDER);
 
-  const showUsageBar = !compact && usagePercent >= USAGE_BAR_THRESHOLD;
   /** Split view / mobile: composer grows upward; controls stay on the bottom row. */
   const growUpward = mobile || panelMode !== "collapsed";
 
   return (
-    <div className={cn(showUsageBar && "composer-dock-stack")}>
+    <>
     <form
       className={
         compact || inDock
@@ -772,15 +765,11 @@ export function Composer({
                   centered
                     ? "px-4 sm:px-6"
                     : "pr-2.5 pl-1.5 sm:pr-3 sm:pl-2",
-                  showUsageBar
-                    ? "pb-0"
-                    : "composer-keyboard-pad pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.7rem))] sm:pb-4",
+                  "composer-keyboard-pad pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.7rem))] sm:pb-4",
                 )
               : cn(
                   "px-4 sm:px-6",
-                  showUsageBar
-                    ? "pb-0"
-                    : "composer-keyboard-pad pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.7rem))] sm:pb-4",
+                  "composer-keyboard-pad pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.7rem))] sm:pb-4",
                 )
       }
       onSubmit={(event) => {
@@ -1056,7 +1045,6 @@ export function Composer({
             className={cn(
               "composer-shell px-2.5",
               mobile ? "py-1.5" : "py-2",
-              showUsageBar && "mb-2.5",
             )}
           >
             {files.length || images.length ? (
@@ -1267,7 +1255,8 @@ export function Composer({
                     !blocks.slice(index + 1).some((b) => b.type === "text");
                   const showPlaceholder =
                     blocks.length === 1 && block.value.length === 0;
-                  const widthCh = Math.max(block.value.length + (isLastText ? 1 : 0), 1);
+                  const collapsed = !block.value && !isLastText;
+                  const widthCh = Math.max(block.value.length + 1, 1);
 
                   return (
                     <input
@@ -1281,6 +1270,7 @@ export function Composer({
                         }
                       }}
                       value={block.value}
+                      size={1}
                       placeholder={showPlaceholder ? hint : undefined}
                       autoFocus={autoFocus && isLastText && index === 0}
                       enterKeyHint="send"
@@ -1366,10 +1356,14 @@ export function Composer({
                       }}
                       className={cn(
                         "bg-transparent text-[16px] leading-5 outline-none placeholder:text-muted-foreground sm:text-[14px]",
-                        isLastText ? "min-w-[3ch] flex-1" : "shrink-0",
+                        isLastText
+                          ? "min-w-0 flex-1 basis-[3ch]"
+                          : collapsed
+                            ? "w-0 max-w-0 overflow-hidden p-0"
+                            : "shrink-0",
                       )}
                       style={
-                        isLastText
+                        isLastText || collapsed
                           ? undefined
                           : {
                               width: `${widthCh}ch`,
@@ -1404,9 +1398,6 @@ export function Composer({
           </div>
         )}
 
-        {showUsageBar ? (
-          <ComposerUsageBar floating={floating} percent={usagePercent} label={usageLabel} />
-        ) : null}
       </div>
     </form>
     {/* Outside <form> so iOS doesn’t show the prev/next accessory bar above the keyboard. */}
@@ -1509,7 +1500,7 @@ export function Composer({
         event.target.value = "";
       }}
     />
-    </div>
+    </>
   );
 }
 
