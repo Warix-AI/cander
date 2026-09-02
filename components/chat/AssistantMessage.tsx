@@ -42,8 +42,15 @@ export function AssistantMessage({ message }: { message: Message }) {
     visibleContent !== "Thinking...";
 
   const inFlight = pending || streaming;
+  const hasGeneratingImage = Boolean(
+    message.blocks?.some(
+      (block) =>
+        block.type === "image_generation" && block.status === "generating",
+    ),
+  );
   const showActivityRow =
     inFlight &&
+    !hasGeneratingImage &&
     Boolean(message.activity?.phase || message.activity?.startedAt);
 
   return (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, LayoutTemplate, MonitorPlay } from "lucide-react";
+import { Image, ImagePlus, LayoutTemplate, MonitorPlay } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { BANNER_PRESETS, type BannerPresetId } from "@/lib/space-banners";
 import {
@@ -53,6 +53,27 @@ const COVER_OPTIONS: {
   },
 ];
 
+const STUDIO_COVER_OPTIONS: typeof COVER_OPTIONS = [
+  {
+    id: "generated-first",
+    label: "First generated image",
+    hint: "Uses the first image you generate",
+    Icon: Image,
+  },
+  {
+    id: "upload",
+    label: "Choose photo",
+    hint: "Pick a cover image yourself",
+    Icon: ImagePlus,
+  },
+  {
+    id: "gradient",
+    label: "Gradient",
+    hint: "Pick a background wash",
+    Icon: LayoutTemplate,
+  },
+];
+
 export function CreateProjectModal({
   open,
   draft,
@@ -76,7 +97,7 @@ export function CreateProjectModal({
   useEffect(() => {
     if (!open || !draft) return;
     setTitle(draft.defaultTitle);
-    setCoverMode("first-tab");
+    setCoverMode(draft.space === "studio" ? "generated-first" : "first-tab");
     setGradient("promo");
     setUploadDataUrl(null);
     setError(null);
@@ -146,10 +167,11 @@ export function CreateProjectModal({
         </label>
 
         <p className="mt-4 text-[12px] font-medium text-muted-foreground">
-          Live preview
+          {draft.space === "studio" ? "Card preview" : "Live preview"}
         </p>
         <div className="mt-2 grid gap-1.5">
-          {COVER_OPTIONS.map((option) => {
+          {(draft.space === "studio" ? STUDIO_COVER_OPTIONS : COVER_OPTIONS).map(
+            (option) => {
             const Icon = option.Icon;
             const active = coverMode === option.id;
             return (

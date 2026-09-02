@@ -29,6 +29,38 @@ function getCapPhotos(): CapPhotosPlugin | null {
   return cap?.Plugins?.CanderPhotos ?? null;
 }
 
+function isHttpOrRelativeUrl(url: string) {
+  return (
+    url.startsWith("http://") ||
+    url.startsWith("https://") ||
+    url.startsWith("/") ||
+    url.startsWith("blob:")
+  );
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("Could not read image"));
+    };
+    reader.onerror = () => reject(new Error("Could not read image"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Resolve a canvas / attachment URL into a data URL the save paths understand. */
+async function resolveImageToDataUrl(url: string): Promise<string> {
+  if (url.startsWith("data:")) return url;
+  const absolute = url.startsWith("/")
+    ? new URL(url, window.location.origin).toString()
+    : url;
+  const res = await fetch(absolute, { credentials: "include" });
+  if (!res.ok) throw new Error("Could not load image.");
+  return blobToDataUrl(await res.blob());
+}
+
 async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   if (dataUrl.startsWith("data:")) {
     const response = await fetch(dataUrl);
@@ -93,26 +125,42 @@ export async function saveGeneratedImage(opts: {
     "_",
   );
   const url = opts.url;
-  if (!url?.startsWith("data:image/") && !url?.startsWith("http")) {
+  if (
+    !url?.startsWith("data:image/") &&
+    !url?.startsWith("data:video/") &&
+    !isHttpOrRelativeUrl(url || "")
+  ) {
     return { ok: false, error: "Unsupported image URL" };
+  }
+
+  let resolved = url;
+  if (!resolved.startsWith("data:")) {
+    try {
+      resolved = await resolveImageToDataUrl(resolved);
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "Could not load image.",
+      };
+    }
   }
 
   // Capacitor iOS — prefer Photos
   if (isMobileShell()) {
     const photos = getCapPhotos();
-    if (photos && url.startsWith("data:")) {
+    if (photos && resolved.startsWith("data:")) {
       try {
-        await photos.saveImage({ dataUrl: url, filename });
+        await photos.saveImage({ dataUrl: resolved, filename });
         return { ok: true, method: "photos" };
       } catch {
         // Fall through to share / download
       }
     }
-    if (url.startsWith("data:") && (await shareImageFile(url, filename))) {
+    if (resolved.startsWith("data:") && (await shareImageFile(resolved, filename))) {
       return { ok: true, method: "share" };
     }
     try {
-      triggerBrowserDownload(url, filename);
+      triggerBrowserDownload(resolved, filename);
       return { ok: true, method: "download" };
     } catch (e) {
       return {
@@ -123,9 +171,9 @@ export async function saveGeneratedImage(opts: {
   }
 
   // Electron save dialog when we have bytes
-  if (isDesktopShell() && url.startsWith("data:")) {
+  if (isDesktopShell() && resolved.startsWith("data:")) {
     try {
-      const blob = await dataUrlToBlob(url);
+      const blob = await dataUrlToBlob(resolved);
       const buf = await blob.arrayBuffer();
       const saved = await createNativeFiles().showSaveDialog?.({
         defaultPath: filename,
@@ -139,10 +187,10 @@ export async function saveGeneratedImage(opts: {
   }
 
   try {
-    if (url.startsWith("data:") && (await shareImageFile(url, filename))) {
+    if (resolved.startsWith("data:") && (await shareImageFile(resolved, filename))) {
       return { ok: true, method: "share" };
     }
-    triggerBrowserDownload(url, filename);
+    triggerBrowserDownload(resolved, filename);
     return { ok: true, method: "download" };
   } catch (e) {
     return {

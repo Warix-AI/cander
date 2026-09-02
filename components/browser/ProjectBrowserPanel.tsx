@@ -5,6 +5,7 @@ import {
   AppWindow,
   ChevronLeft,
   ChevronRight,
+  Download,
   Ellipsis,
   ExternalLink,
   FileText,
@@ -17,7 +18,9 @@ import {
   MousePointer2,
   Pencil,
   Plus,
+  LoaderCircle,
   RotateCw,
+  Trash2,
   Upload,
   Video,
   Workflow,
@@ -55,7 +58,18 @@ import { isCapacitorNative } from "@/lib/composer-attach";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { Dropdown } from "@/components/ui/Controls";
-import { useSpaceMutation } from "@/lib/hooks/use-space-query";
+import { MeshDriftShader } from "@/components/ui/MeshDriftShader";
+import { StudioImageToolbar } from "@/components/studio/StudioImageToolbar";
+import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
+import {
+  editStudioProjectImage,
+  studioAspectParts,
+  studioPresetById,
+  uploadStudioProjectAsset,
+  type StudioResizePresetId,
+} from "@/lib/studio-assets-client";
+import { studioCoverAcceptsFirstGenerated } from "@/lib/project-cover";
+import { saveGeneratedImage } from "@/lib/native/save-image";
 import { normalizeProjectTitle } from "@/lib/project-name";
 import {
   getSpaceEntityStoreServerSnapshot,
@@ -879,6 +893,8 @@ export function ProjectBrowserPanel({
           userId={actor.id}
           browserKey={key}
           surfaceActive={surfaceActive}
+          workspaceId={workspaceId}
+          projectId={projectId}
           />
         </div>
         {mobile && mobileNavOpen ? (
@@ -947,11 +963,6 @@ export function ProjectBrowserPanel({
             {(
               [
                 { kind: "studio-image" as const, label: "Image", Icon: Image },
-                {
-                  kind: "studio-document" as const,
-                  label: "Document",
-                  Icon: FileText,
-                },
               ] as const
             ).map((item) => {
               const Icon = item.Icon;
@@ -1059,6 +1070,8 @@ function ProjectBrowserBody({
   userId,
   browserKey,
   surfaceActive,
+  workspaceId,
+  projectId,
 }: {
   tab: ProjectBrowserTab;
   projects: SpaceProject[];
@@ -1068,6 +1081,8 @@ function ProjectBrowserBody({
   userId: string;
   browserKey: ProjectBrowserKey;
   surfaceActive: boolean;
+  workspaceId: string;
+  projectId: string | null;
 }) {
   const computerSession = useSyncExternalStore(
     subscribeActiveComputerSession,
@@ -1205,6 +1220,8 @@ function ProjectBrowserBody({
       <StudioMediaSurface
         kind={tab.kind}
         src={tab.url}
+        workspaceId={workspaceId}
+        projectId={projectId}
         onSrcChange={(nextUrl) =>
           syncSurfaceMeta({ url: nextUrl, title: tab.title })
         }
@@ -1707,11 +1724,6 @@ function AddTabMenu({
               {(
                 [
                   { kind: "studio-image" as const, label: "Image", Icon: Image },
-                  {
-                    kind: "studio-document" as const,
-                    label: "Document",
-                    Icon: FileText,
-                  },
                 ] as const
               ).map((item) => {
                 const Icon = item.Icon;
@@ -1776,16 +1788,43 @@ function AddTabMenu({
   );
 }
 
+type StudioCanvasActivity =
+  | { type: "upload" }
+  | { type: "edit"; ratio: string };
+
+function studioArtboardStyle(ratioW: number, ratioH: number): {
+  width: string;
+  height: string;
+} {
+  return {
+    width: `min(100cqw, 31.2rem, calc(100cqh * ${ratioW} / ${ratioH}))`,
+    height: `min(100cqh, calc(31.2rem * ${ratioH} / ${ratioW}), calc(100cqw * ${ratioH} / ${ratioW}))`,
+  };
+}
+
 function StudioMediaSurface({
   kind,
   src,
+  workspaceId,
+  projectId,
   onSrcChange,
 }: {
   kind: "studio-image" | "studio-video" | "studio-document";
   src: string;
+  workspaceId: string;
+  projectId: string | null;
   onSrcChange: (next: string) => void;
 }) {
+  const { ctx } = useSpaceData();
+  const { updateProject } = useSpaceMutation();
+  const { project } = useSpaceProject(projectId);
+  const { thread } = useApp();
   const fileRef = useRef<HTMLInputElement>(null);
+  const appliedGenerationRef = useRef<string | null>(null);
+  const [activity, setActivity] = useState<StudioCanvasActivity | null>(null);
+  const [naturalRatio, setNaturalRatio] = useState({ w: 1, h: 1 });
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const accept =
     kind === "studio-image"
       ? "image/*"
@@ -1801,9 +1840,173 @@ function StudioMediaSurface({
   const Icon =
     kind === "studio-image" ? Image : kind === "studio-video" ? Video : FileText;
   const hasMedia = Boolean(src && src !== "about:blank");
+  const isUploading = activity?.type === "upload";
+  const isEditing = activity?.type === "edit";
+
+  const imageJob = useMemo(() => {
+    if (kind !== "studio-image" || !thread) return null;
+    for (let i = thread.messages.length - 1; i >= 0; i--) {
+      const message = thread.messages[i]!;
+      const blocks = message.blocks;
+      if (!blocks) continue;
+      for (let j = blocks.length - 1; j >= 0; j--) {
+        const block = blocks[j]!;
+        if (block.type !== "image_generation") continue;
+        return block;
+      }
+    }
+    return null;
+  }, [kind, thread]);
+
+  const isGenerating =
+    kind === "studio-image" && imageJob?.status === "generating";
+  const showMesh = isGenerating || isEditing;
+  const frameRatio =
+    activity?.type === "edit"
+      ? studioAspectParts(activity.ratio)
+      : isGenerating
+        ? { w: 1, h: 1 }
+        : naturalRatio;
+
+  const persistCanvasImage = async (
+    dataUrl: string,
+    source: "upload" | "generate" | "remove-bg" | "resize",
+    aspectRatio?: string | null,
+  ) => {
+    if (!projectId) {
+      onSrcChange(dataUrl);
+      return;
+    }
+    const stored = await uploadStudioProjectAsset({
+      workspaceId,
+      projectId,
+      dataUrl,
+      source,
+      aspectRatio,
+    });
+    onSrcChange(stored.url);
+    if (
+      source === "generate" &&
+      project &&
+      studioCoverAcceptsFirstGenerated(project.cover)
+    ) {
+      void updateProject(ctx, projectId, { cover: stored.url }).catch(() => {});
+    }
+  };
+
+  useEffect(() => {
+    if (!hasMedia) setNaturalRatio({ w: 1, h: 1 });
+  }, [hasMedia]);
+
+  useEffect(() => {
+    if (kind !== "studio-image") return;
+    if (!imageJob || imageJob.status !== "completed") return;
+    const url = imageJob.imageUrl?.trim();
+    if (!url) return;
+    if (appliedGenerationRef.current === imageJob.generationId) return;
+    appliedGenerationRef.current = imageJob.generationId;
+    if (url === src || (!url.startsWith("data:") && url === src)) return;
+
+    let cancelled = false;
+    if (url !== src) onSrcChange(url);
+    if (!url.startsWith("data:")) return;
+
+    void persistCanvasImage(url, "generate").catch((err) => {
+      if (cancelled) return;
+      setError(
+        err instanceof Error ? err.message : "Could not save generated image.",
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- persist when job completes
+  }, [kind, imageJob?.generationId, imageJob?.status, imageJob?.imageUrl]);
+
+  const runEdit = async (
+    action: "remove-bg" | "resize",
+    resizePreset?: StudioResizePresetId,
+  ) => {
+    if (!projectId || !src || activity) return;
+    const ratio =
+      action === "resize" && resizePreset
+        ? studioPresetById(resizePreset).ratio
+        : `${naturalRatio.w}:${naturalRatio.h}`;
+    setActivity({ type: "edit", ratio });
+    setError(null);
+    try {
+      const result = await editStudioProjectImage({
+        workspaceId,
+        projectId,
+        imageUrl: src,
+        action,
+        resizePreset,
+      });
+      onSrcChange(result.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Edit failed.");
+    } finally {
+      setActivity(null);
+    }
+  };
+
+  const startUpload = (file: File) => {
+    setActivity({ type: "upload" });
+    setError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        setActivity(null);
+        return;
+      }
+      void (async () => {
+        try {
+          if (kind === "studio-image") {
+            await persistCanvasImage(result, "upload");
+          } else {
+            onSrcChange(result);
+          }
+        } catch (err) {
+          setError(
+            err instanceof Error ? err.message : "Could not upload image.",
+          );
+        } finally {
+          setActivity(null);
+        }
+      })();
+    };
+    reader.onerror = () => {
+      setActivity(null);
+      setError("Could not read that file.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const downloadCurrent = () => {
+    if (!src || saving) return;
+    setSaving(true);
+    setError(null);
+    const name =
+      kind === "studio-video" ? "studio-video.mp4" : "studio-image.png";
+    void saveGeneratedImage({ url: src, name })
+      .then((res) => {
+        if (!res.ok) {
+          setError(res.error || "Could not download.");
+        }
+      })
+      .finally(() => setSaving(false));
+  };
+
+  const canvasBusy = Boolean(activity) || isGenerating;
+  const showImageArtboard =
+    kind === "studio-image" && (hasMedia || isGenerating || isEditing);
+  const showEmpty =
+    !hasMedia && !isGenerating && !isEditing && !isUploading;
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col items-center justify-center bg-neutral-50 dark:bg-neutral-950">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-neutral-50 dark:bg-neutral-950">
       <input
         ref={fileRef}
         type="file"
@@ -1813,34 +2016,90 @@ function StudioMediaSurface({
           const file = event.target.files?.[0];
           event.target.value = "";
           if (!file) return;
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result;
-            if (typeof result === "string") onSrcChange(result);
-          };
-          reader.readAsDataURL(file);
+          startUpload(file);
         }}
       />
-      {hasMedia && kind === "studio-image" ? (
-        <img
-          src={src}
-          alt=""
-          className="max-h-full max-w-full object-contain"
+      {kind === "studio-image" && hasMedia && !showMesh ? (
+        <StudioImageToolbar
+          busy={canvasBusy}
+          onRemoveBackground={() => void runEdit("remove-bg")}
+          onResize={(preset) => void runEdit("resize", preset)}
         />
+      ) : null}
+
+      {isUploading && !hasMedia ? (
+        <div
+          className="flex h-full items-center justify-center"
+          role="status"
+          aria-label="Uploading image"
+        >
+          <LoaderCircle
+            className="h-7 w-7 animate-spin text-muted-foreground"
+            strokeWidth={1.75}
+          />
+        </div>
+      ) : showImageArtboard ? (
+        <div className="@container flex min-h-0 flex-1 items-center justify-center px-8 pt-[4.75rem] pb-[4.25rem]">
+          <div
+            className="relative overflow-hidden rounded-[18px] bg-neutral-200/80 shadow-[0_10px_32px_rgba(0,0,0,0.08)] dark:bg-neutral-900"
+            style={studioArtboardStyle(frameRatio.w, frameRatio.h)}
+          >
+            {hasMedia && !showMesh ? (
+              <img
+                src={src}
+                alt=""
+                className={cn(
+                  "h-full w-full object-contain transition-opacity duration-200",
+                  isUploading && "opacity-40",
+                )}
+                onLoad={(event) => {
+                  const img = event.currentTarget;
+                  if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                    setNaturalRatio({
+                      w: img.naturalWidth,
+                      h: img.naturalHeight,
+                    });
+                  }
+                }}
+              />
+            ) : null}
+            {showMesh ? (
+              <div
+                className="absolute inset-0 overflow-hidden"
+                role="status"
+                aria-label={isEditing ? "Editing image" : "Generating image"}
+              >
+                <MeshDriftShader active />
+              </div>
+            ) : null}
+            {isUploading && hasMedia ? (
+              <div
+                className="absolute inset-0 z-10 flex items-center justify-center"
+                role="status"
+                aria-label="Uploading image"
+              >
+                <LoaderCircle
+                  className="h-7 w-7 animate-spin text-foreground"
+                  strokeWidth={1.75}
+                />
+              </div>
+            ) : null}
+          </div>
+        </div>
       ) : hasMedia && kind === "studio-video" ? (
-        <video
-          src={src}
-          controls
-          className="max-h-full max-w-full"
-        />
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-7 py-12">
+          <video
+            src={src}
+            controls
+            className="max-h-full max-w-full"
+          />
+        </div>
       ) : hasMedia && kind === "studio-document" && src.startsWith("data:application/pdf") ? (
         <iframe title="Document" src={src} className="h-full w-full border-0" />
       ) : hasMedia ? (
-        <div className="flex flex-col items-center gap-3 px-6 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
           <Icon className="h-8 w-8 text-muted-foreground" strokeWidth={1.4} />
-          <p className="text-[13px] text-muted-foreground">
-            {label} ready
-          </p>
+          <p className="text-[13px] text-muted-foreground">{label} ready</p>
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -1850,8 +2109,8 @@ function StudioMediaSurface({
             Replace
           </button>
         </div>
-      ) : (
-        <div className="flex flex-col items-center gap-3 px-6 text-center">
+      ) : showEmpty ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
           <span className="inline-flex h-12 w-12 items-center justify-center rounded-[14px] bg-muted">
             <Icon className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
           </span>
@@ -1860,7 +2119,7 @@ function StudioMediaSurface({
               Add {label}
             </p>
             <p className="mt-1 text-[12.5px] text-muted-foreground">
-              Upload a file to start this canvas.
+              Upload a file or generate one in chat.
             </p>
           </div>
           <button
@@ -1872,16 +2131,47 @@ function StudioMediaSurface({
             Upload {label}
           </button>
         </div>
-      )}
-      {hasMedia && (kind === "studio-image" || kind === "studio-video") ? (
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          className="absolute right-3 bottom-3 inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border bg-background/90 px-2.5 text-[12px] font-medium backdrop-blur hover:bg-muted"
-        >
-          <Upload className="h-3 w-3" strokeWidth={1.6} />
-          Replace
-        </button>
+      ) : null}
+
+      {hasMedia && !showMesh && (kind === "studio-image" || kind === "studio-video") ? (
+        <div className="absolute right-3 bottom-3 z-20 flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={saving || canvasBusy}
+            onClick={downloadCurrent}
+            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border bg-background/90 px-2.5 text-[12px] font-medium backdrop-blur hover:bg-muted disabled:opacity-50"
+          >
+            <Download className="h-3 w-3" strokeWidth={1.6} />
+            Download
+          </button>
+          <button
+            type="button"
+            disabled={canvasBusy}
+            onClick={() => fileRef.current?.click()}
+            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border bg-background/90 px-2.5 text-[12px] font-medium backdrop-blur hover:bg-muted disabled:opacity-50"
+          >
+            <Upload className="h-3 w-3" strokeWidth={1.6} />
+            Replace
+          </button>
+          <button
+            type="button"
+            disabled={canvasBusy}
+            onClick={() => {
+              setError(null);
+              setNaturalRatio({ w: 1, h: 1 });
+              onSrcChange("");
+            }}
+            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border bg-background/90 px-2.5 text-[12px] font-medium backdrop-blur hover:bg-muted disabled:opacity-50"
+          >
+            <Trash2 className="h-3 w-3" strokeWidth={1.6} />
+            Remove
+          </button>
+        </div>
+      ) : null}
+      {error ? (
+        <p className="absolute bottom-3 left-3 z-20 max-w-[min(20rem,calc(100%-11rem))] rounded-[10px] border border-border bg-background/95 px-2.5 py-1.5 text-[12px] text-destructive shadow-sm">
+          {error}
+        </p>
       ) : null}
     </div>
   );

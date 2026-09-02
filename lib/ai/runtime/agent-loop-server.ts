@@ -335,6 +335,7 @@ export async function runAgentServerLoop(
       model,
       input: conversation as OpenAI.Responses.ResponseInput,
       ...(tools.length ? { tools } : {}),
+      ...(imageIntent ? { tool_choice: { type: "image_generation" as const } } : {}),
     });
 
     const calls = extractFunctionCalls(response.output);

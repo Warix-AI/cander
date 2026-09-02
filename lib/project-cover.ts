@@ -4,9 +4,14 @@ import {
   type BannerPresetId,
 } from "@/lib/space-banners";
 
-export type ProjectCoverMode = "first-tab" | "gradient" | "upload";
+export type ProjectCoverMode =
+  | "first-tab"
+  | "gradient"
+  | "upload"
+  | "generated-first";
 
 const GRADIENT_PREFIX = "gradient:";
+export const GENERATED_FIRST_COVER = "generated-first";
 
 export function isBannerPresetId(value: string): value is BannerPresetId {
   return BANNER_PRESETS.some((item) => item.id === value);
@@ -22,6 +27,7 @@ export function parseProjectCover(cover: string | undefined | null): {
   imageUrl?: string;
 } {
   if (!cover) return { mode: "first-tab" };
+  if (cover === GENERATED_FIRST_COVER) return { mode: "generated-first" };
   if (cover.startsWith(GRADIENT_PREFIX)) {
     const id = cover.slice(GRADIENT_PREFIX.length);
     if (isBannerPresetId(id)) return { mode: "gradient", gradient: id };
@@ -51,6 +57,7 @@ export function coverValueForCreate(input: {
   gradient?: BannerPresetId;
   uploadDataUrl?: string | null;
 }): string | undefined {
+  if (input.mode === "generated-first") return GENERATED_FIRST_COVER;
   if (input.mode === "gradient" && input.gradient) {
     return encodeGradientCover(input.gradient);
   }
@@ -58,4 +65,13 @@ export function coverValueForCreate(input: {
     return input.uploadDataUrl;
   }
   return undefined;
+}
+
+/** Studio cards waiting for the first generated image (or still on default live-tab). */
+export function studioCoverAcceptsFirstGenerated(
+  cover: string | undefined | null,
+): boolean {
+  const parsed = parseProjectCover(cover);
+  if (parsed.mode === "gradient" || parsed.mode === "upload") return false;
+  return true;
 }

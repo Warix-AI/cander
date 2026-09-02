@@ -39,6 +39,7 @@ export function UsageModal({
       open={open}
       onClose={onClose}
       labelledBy="usage-modal-title"
+      backdropClassName="bg-black/25"
       className="flex w-[min(22rem,calc(100vw-2rem))] flex-col"
     >
       <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-3">

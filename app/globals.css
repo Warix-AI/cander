@@ -1192,12 +1192,6 @@ html:not(.dark) .shell-panel :is(.bg-sidebar, .bg-background) {
   }
 }
 
-@keyframes image-gen-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .image-gen-card {
   position: relative;
   width: 100%;
@@ -1215,18 +1209,9 @@ html.dark .image-gen-card {
   animation: image-gen-card-enter 200ms ease-out both;
 }
 
-.image-gen-spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid color-mix(in oklch, var(--foreground) 14%, transparent);
-  border-top-color: color-mix(in oklch, var(--foreground) 58%, transparent);
-  border-radius: 9999px;
-  animation: image-gen-spin 1s linear infinite;
-}
-
 .image-gen-photo {
   opacity: 0;
-  transition: opacity 180ms ease-out;
+  transition: opacity 220ms ease-out;
 }
 
 .image-gen-photo-visible {
@@ -1235,9 +1220,6 @@ html.dark .image-gen-card {
 
 @media (prefers-reduced-motion: reduce) {
   .image-gen-card-enter {
-    animation: none;
-  }
-  .image-gen-spinner {
     animation: none;
   }
   .image-gen-photo {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, RotateCcw } from "lucide-react";
+import { MeshDriftShader } from "@/components/ui/MeshDriftShader";
 import { saveGeneratedImage } from "@/lib/native/save-image";
 import { cn } from "@/lib/utils";
 
@@ -198,7 +199,7 @@ export function ImageGenerationCard({
             draggable={false}
             decoding="async"
             className={cn(
-              "image-gen-photo pointer-events-none absolute inset-0 h-full w-full object-cover select-none",
+              "image-gen-photo pointer-events-none absolute inset-0 z-[1] h-full w-full object-cover select-none",
               imageVisible && "image-gen-photo-visible",
             )}
             style={{ WebkitTouchCallout: "none", touchAction: "none" }}
@@ -206,8 +207,8 @@ export function ImageGenerationCard({
           />
         ) : null}
         {showSpinner ? (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="image-gen-spinner" aria-hidden />
+          <div className="absolute inset-0 overflow-hidden" aria-hidden>
+            <MeshDriftShader active className="rounded-[18px]" />
           </div>
         ) : null}
       </div>

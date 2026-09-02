@@ -44,6 +44,7 @@ export function StudioDashboard() {
         meta: editedMeta(item.updatedAt),
         image: projectCoverImageSrc(item.cover) ?? item.cover,
         cover: item.cover,
+        space: "studio" as const,
       })),
     [spaceProjects],
   );
@@ -52,7 +53,7 @@ export function StudioDashboard() {
     <DashFrame
       banner={false}
       title="Studio"
-      subtitle="Images, video, audio, and presentations."
+      subtitle="Generate and edit images."
     >
       <DashToolbar
         active={hoistFilters}

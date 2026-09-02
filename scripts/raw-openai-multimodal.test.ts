@@ -311,6 +311,18 @@ describe("Raw multimodal isolation", () => {
       true,
     );
     assert.equal(
+      detectImageGenerationIntent(
+        "Go ahead and generate me a baseball field with the Wasatch Mountains in the back.",
+      ),
+      true,
+    );
+    assert.equal(
+      detectImageGenerationIntent("make a poster for the concert", {
+        space: "studio",
+      }),
+      true,
+    );
+    assert.equal(
       detectImageGenerationIntent("What model do you use to generate images?"),
       false,
     );
@@ -350,7 +362,7 @@ describe("Raw multimodal isolation", () => {
     assert.ok(ui.includes("ImageGenerationCard"));
     assert.ok(ui.includes("ImageGenerationJobBlock"));
     assert.ok(ui.includes("image_generation"));
-    assert.ok(card.includes("image-gen-spinner"));
+    assert.ok(card.includes("MeshDriftShader"));
     assert.ok(card.includes("object-cover"));
     assert.equal(ui.includes("CanderActivityMark"), false);
     assert.ok(card.includes("saveGeneratedImage"));

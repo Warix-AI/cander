@@ -24,6 +24,7 @@ import {
   subscribeInstalledConnectors,
 } from "@/lib/connector-install";
 import { editedMeta } from "@/lib/format-relative-time";
+import { projectCoverImageSrc } from "@/lib/project-cover";
 import { projectsForWorkspace } from "@/lib/project-resolver";
 import type { NavDestinationId, SpaceId } from "@/lib/types";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
@@ -113,13 +114,23 @@ export function ProjectsBrowser({
       const list = projects.filter(
         (item) => item.space === "studio" && item.workspaceId === workspaceId,
       );
-      const items = list.map((item) =>
-        entry(item.id, item.name, item.id, editedMeta(item.updatedAt), "paper"),
-      );
+      const items = list.map((item) => ({
+        ...entry(
+          item.id,
+          item.name,
+          item.id,
+          editedMeta(item.updatedAt),
+          "paper",
+          undefined,
+          projectCoverImageSrc(item.cover) ?? item.cover,
+        ),
+        cover: item.cover,
+        space: "studio" as const,
+      }));
       return pack(
         "paper",
         "Projects",
-        "No Studio projects yet. Create one to open a browser.",
+        "No Studio projects yet. Create one to start generating.",
         openProject,
         items,
         items.map((item) => ({

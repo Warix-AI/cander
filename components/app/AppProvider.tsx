@@ -2065,7 +2065,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const imageGenIntent =
         useLiveAi &&
         isRawOpenAIModeEnabled() &&
-        detectImageGenerationIntent(trimmed) &&
+        detectImageGenerationIntent(trimmed, {
+          space: chatSpaceId(space) ?? space ?? spaceId,
+        }) &&
         attachments.length === 0 &&
         fileAttachments.length === 0;
       let imageGenerationId: string | null = null;

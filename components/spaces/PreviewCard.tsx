@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import {
   Briefcase,
   CalendarClock,
@@ -9,6 +9,8 @@ import {
   Folder,
   FolderOpen,
   Hammer,
+  Image,
+  ImagePlus,
   Link2,
   Pencil,
   Pin,
@@ -30,12 +32,17 @@ import {
 import { useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
 import { normalizeProjectTitle } from "@/lib/project-name";
 import {
+  GENERATED_FIRST_COVER,
   projectCoverGradientClass,
   projectCoverImageSrc,
 } from "@/lib/project-cover";
+import {
+  fetchFirstStudioGeneratedAsset,
+  uploadStudioProjectAsset,
+} from "@/lib/studio-assets-client";
 import type { SpaceAttachment } from "@/lib/space-entities";
 import type { BannerKey } from "@/lib/space-banners";
-import type { SpaceLayout } from "@/lib/types";
+import type { SpaceId, SpaceLayout } from "@/lib/types";
 import type { IndexEntryKind } from "@/lib/space-index";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -65,6 +72,7 @@ export type PreviewEntry = {
   threadId?: string;
   /** When set, this chat cannot be deleted independently of the project. */
   linkedProjectId?: string;
+  space?: SpaceId;
 };
 
 export function PreviewGrid({
@@ -168,7 +176,7 @@ function PreviewFace({
   compact?: boolean;
 }) {
   // Explore cards: peach wash + wide paper; paper shows first-site cover when present.
-  if (kind === "paper") {
+  if (kind === "paper" && item.space !== "studio") {
     const preview = item.paperPreview;
     const coverImage =
       projectCoverImageSrc(item.cover) ??
@@ -497,6 +505,8 @@ function PreviewActions({
   const [renameValue, setRenameValue] = useState(item.name);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameBusy, setRenameBusy] = useState(false);
+  const coverFileRef = useRef<HTMLInputElement>(null);
+  const isStudio = item.space === "studio";
 
   useEffect(() => {
     if (!renameOpen) return;
@@ -531,6 +541,51 @@ function PreviewActions({
     } finally {
       setRenameBusy(false);
     }
+  };
+
+  const applyCover = async (cover: string) => {
+    await updateProject(ctx, item.projectId, { cover });
+  };
+
+  const choosePreviewPhoto = () => {
+    coverFileRef.current?.click();
+  };
+
+  const onCoverFile = (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") return;
+      void (async () => {
+        try {
+          const stored = await uploadStudioProjectAsset({
+            workspaceId,
+            projectId: item.projectId,
+            dataUrl: result,
+            source: "upload",
+          });
+          await applyCover(stored.url);
+        } catch {
+          await applyCover(result);
+        }
+      })();
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const useFirstGeneratedPreview = () => {
+    void (async () => {
+      try {
+        const first = await fetchFirstStudioGeneratedAsset({
+          workspaceId,
+          projectId: item.projectId,
+        });
+        await applyCover(first?.url ?? GENERATED_FIRST_COVER);
+      } catch {
+        await applyCover(GENERATED_FIRST_COVER);
+      }
+    })();
   };
 
   const runAndClose = (fn: () => void) => {
@@ -659,6 +714,28 @@ function PreviewActions({
             label="Copy link"
             onClick={() => runAndClose(copyLink)}
           />
+          {isStudio ? (
+            <>
+              <SheetAction
+                icon={ImagePlus}
+                label="Choose preview photo"
+                onClick={() =>
+                  runAndClose(() => {
+                    choosePreviewPhoto();
+                  })
+                }
+              />
+              <SheetAction
+                icon={Image}
+                label="Use first generated image"
+                onClick={() =>
+                  runAndClose(() => {
+                    useFirstGeneratedPreview();
+                  })
+                }
+              />
+            </>
+          ) : null}
           {kind === "product" ? (
             <SheetAction
               icon={Briefcase}
@@ -756,6 +833,19 @@ function PreviewActions({
 
   return (
     <span className="flex shrink-0 items-center">
+      {isStudio ? (
+        <input
+          ref={coverFileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            onCoverFile(file);
+          }}
+        />
+      ) : null}
       {mobile ? (
         <>
           <button
@@ -860,6 +950,32 @@ function PreviewActions({
                   >
                     Copy link
                   </button>
+                  {isStudio ? (
+                    <>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          choosePreviewPhoto();
+                          close();
+                        }}
+                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                      >
+                        Choose preview photo
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          useFirstGeneratedPreview();
+                          close();
+                        }}
+                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                      >
+                        Use first generated image
+                      </button>
+                    </>
+                  ) : null}
                   {kind === "product" ? (
                     <button
                       type="button"

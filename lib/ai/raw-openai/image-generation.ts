@@ -34,31 +34,29 @@ export function openAIImageGenerationTool(): OpenAI.Responses.Tool.ImageGenerati
  * Deterministic intent: user wants an image produced now.
  * Excludes meta questions ("how does image generation work?", "what model…").
  */
-export function detectImageGenerationIntent(text: string): boolean {
+export function detectImageGenerationIntent(
+  text: string,
+  opts?: { space?: string | null },
+): boolean {
   const raw = text.trim();
   if (!raw) return false;
   const t = raw.toLowerCase();
+  const studio = opts?.space === "studio";
 
-  // Meta / informational — stay in normal chat
-  if (
-    /\b(how|what|why|when|where|which|does|do you|can you|are you|explain|tell me about|describe how)\b/.test(
+  const isMeta =
+    (/\b(how|what|why|when|where|which|does|do you|can you|are you|explain|tell me about|describe how)\b/.test(
       t,
     ) &&
-    /\b(image generation|generate images|generating images|dall-?e|gpt.?image|image model|create images)\b/.test(
-      t,
-    ) &&
-    !/\b(generate|create|make|draw|render|paint|design|show)\b.{0,40}\b(me |an |a |the )?(image|picture|photo|illustration|artwork|drawing)\b/.test(
-      t,
-    )
-  ) {
-    return false;
-  }
-  if (
-    /\b(what model|which model|how (do|does)|explain|tell me about)\b/.test(t) &&
-    /\b(image|images|picture|photo)\b/.test(t)
-  ) {
-    return false;
-  }
+      /\b(image generation|generate images|generating images|dall-?e|gpt.?image|image model|create images)\b/.test(
+        t,
+      ) &&
+      !/\b(generate|create|make|draw|render|paint|design|show)\b.{0,40}\b(me |an |a |the )?(image|picture|photo|illustration|artwork|drawing)\b/.test(
+        t,
+      )) ||
+    (/\b(what model|which model|how (do|does)|explain|tell me about)\b/.test(t) &&
+      /\b(image|images|picture|photo)\b/.test(t));
+
+  if (isMeta) return false;
 
   // Explicit generation commands
   if (
@@ -88,6 +86,24 @@ export function detectImageGenerationIntent(text: string): boolean {
   if (/^(draw|paint|illustrate|render)\b/.test(t)) return true;
   if (/\b(show me|give me)\b[\s\S]{0,40}\b(an? |a )?(image|picture|photo|illustration)\b/.test(t)) {
     return true;
+  }
+  // "generate me a baseball field" — visual subject without saying "image"
+  if (
+    /\b(generate|draw|paint|illustrate|render|sketch)\b[\s\S]{0,24}\b(me |us )?(an? |a |the )/.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+
+  if (studio) {
+    if (
+      /\b(generate|create|make|draw|render|paint|design|sketch|illustrate|imagine)\b/.test(
+        t,
+      )
+    ) {
+      return true;
+    }
   }
 
   return false;
