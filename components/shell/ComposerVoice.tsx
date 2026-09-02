@@ -112,7 +112,7 @@ export function ComposerSendButton({
 }) {
   return (
     <button
-      type="submit"
+      type={onClick ? "button" : "submit"}
       aria-label="Send"
       disabled={disabled}
       onPointerDown={(event) => {

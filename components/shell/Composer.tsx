@@ -52,8 +52,6 @@ import {
   isCapacitorNative,
   toSendAttachments,
 } from "@/lib/composer-attach";
-import { isDesktopShell } from "@/lib/desktop-shell";
-import { isMobileShell } from "@/lib/mobile-shell";
 import { composerAttachActions } from "@/lib/ai/raw-openai/limits";
 import {
   applyComposerTextareaSize,
@@ -162,6 +160,10 @@ export function Composer({
   const dictationRef = useRef<VoiceDictationSession | null>(null);
   /** After stop: insert into composer; after send-while-recording: send immediately. */
   const afterTranscriptionRef = useRef<"insert" | "send">("insert");
+  /** OpenAI dictation still starting (getUserMedia in flight). */
+  const dictationStartingRef = useRef(false);
+  /** Stop/send tapped before MediaRecorder session is ready. */
+  const pendingStopIntentRef = useRef<"insert" | "send" | null>(null);
   const valueBaseRef = useRef("");
   /** Keep the + menu visible while the native file sheet is open (iOS). */
   const awaitingFilePickRef = useRef(false);
@@ -381,6 +383,8 @@ export function Composer({
     dictationRef.current = null;
     speechRef.current?.stop();
     speechRef.current = null;
+    dictationStartingRef.current = false;
+    pendingStopIntentRef.current = null;
     afterTranscriptionRef.current = "insert";
     setDictationMeter(null);
     setDictating(false);
@@ -452,32 +456,52 @@ export function Composer({
   };
 
   const stopDictationAndTranscribe = (intent: "insert" | "send" = "insert") => {
+    afterTranscriptionRef.current = intent;
+
     const session = dictationRef.current;
-    if (!session) {
-      cancelDictation();
+    if (session) {
+      setDictating(false);
+      setTranscribing(true);
+      setDictationMeter(null);
+      void session
+        .stopAndTranscribe()
+        .then((text) => {
+          finishTranscription(text);
+        })
+        .catch((e) => {
+          afterTranscriptionRef.current = "insert";
+          setDictateError(
+            e instanceof Error ? e.message : "Transcription failed.",
+          );
+        })
+        .finally(() => {
+          dictationRef.current = null;
+          setTranscribing(false);
+          setDictating(false);
+          setDictationMeter(null);
+        });
       return;
     }
-    afterTranscriptionRef.current = intent;
-    setDictating(false);
-    setTranscribing(true);
-    setDictationMeter(null);
-    void session
-      .stopAndTranscribe()
-      .then((text) => {
-        finishTranscription(text);
-      })
-      .catch((e) => {
-        afterTranscriptionRef.current = "insert";
-        setDictateError(
-          e instanceof Error ? e.message : "Transcription failed.",
-        );
-      })
-      .finally(() => {
-        dictationRef.current = null;
-        setTranscribing(false);
-        setDictating(false);
-        setDictationMeter(null);
-      });
+
+    if (speechRef.current) {
+      speechRef.current.stop();
+      speechRef.current = null;
+      setDictating(false);
+      setTranscribing(false);
+      if (intent === "send") {
+        window.setTimeout(() => submit(), 0);
+      }
+      return;
+    }
+
+    if (dictationStartingRef.current) {
+      pendingStopIntentRef.current = intent;
+      setDictating(false);
+      setTranscribing(true);
+      return;
+    }
+
+    cancelDictation();
   };
 
   const submit = () => {
@@ -544,19 +568,16 @@ export function Composer({
     setTranscribing(false);
     afterTranscriptionRef.current = "insert";
 
-    const useOpenAI =
-      !isDesktopShell() && !isMobileShell() && isOpenAIDictationSupported();
+    const useOpenAI = isOpenAIDictationSupported();
     if (useOpenAI) {
-      if (!isOpenAIDictationSupported()) {
-        setDictateError("Microphone recording isn’t available here.");
-        return;
-      }
       const t0 = performance.now();
       logDictationTiming("mic_button_clicked", t0);
       valueBaseRef.current = value.trim() ? `${value.trim()} ` : "";
       // Show recording UI immediately — do not wait for getUserMedia
       setDictating(true);
       setDictationMeter(null);
+      dictationStartingRef.current = true;
+      pendingStopIntentRef.current = null;
       // Keep textarea focused so the soft keyboard stays open under the overlay.
       keepComposerKeyboard();
       logDictationTiming("recording_ui_visible", t0);
@@ -564,25 +585,38 @@ export function Composer({
       void startVoiceDictation({
         t0,
         onError: (message) => {
+          dictationStartingRef.current = false;
+          pendingStopIntentRef.current = null;
           setDictateError(message);
           setDictating(false);
+          setTranscribing(false);
           setDictationMeter(null);
           dictationRef.current = null;
         },
       })
         .then((session) => {
+          dictationStartingRef.current = false;
           dictationRef.current = session;
           setDictationMeter(session.getMeter());
+          const pending = pendingStopIntentRef.current;
+          pendingStopIntentRef.current = null;
+          if (pending) {
+            stopDictationAndTranscribe(pending);
+            return;
+          }
           // Mic permission / getUserMedia often steals focus — reclaim it.
           keepComposerKeyboard();
           window.setTimeout(keepComposerKeyboard, 50);
           window.setTimeout(keepComposerKeyboard, 250);
         })
         .catch((e) => {
+          dictationStartingRef.current = false;
+          pendingStopIntentRef.current = null;
           setDictateError(
             e instanceof Error ? e.message : "Couldn’t start recording.",
           );
           setDictating(false);
+          setTranscribing(false);
           setDictationMeter(null);
         });
       return;

@@ -8,10 +8,10 @@ import type {
 } from "@/lib/ai/runtime/agent-turn";
 import { runRawOpenAITurn } from "@/lib/ai/raw-openai/run-turn";
 import {
-  executeAuthorizedTool,
   formatToolsForPrompt,
   type AiToolCallResult,
 } from "@/lib/ai/runtime/tools";
+import { executeConnectorGmailTool } from "@/lib/ai/connectors/tool-executors";
 import type { AiGenerateRequest } from "@/lib/ai/runtime/types";
 import {
   parseToolCallFromContent,
@@ -51,6 +51,21 @@ function looksLikeSearchPromise(text: string): boolean {
   return /\b(i'll|i will|let me|going to)\b[\s\S]{0,40}\b(search|check|look|read)\b/i.test(
     text,
   );
+}
+
+function connectorToolFailureMessage(output: string): string | null {
+  const text = (output || "").trim();
+  if (!text) return null;
+  if (/not configured on this server/i.test(text)) {
+    return "Gmail is connected in your workspace, but this server can’t call Composio yet. Add `COMPOSIO_API_KEY` and `COMPOSIO_GMAIL_AUTH_CONFIG_ID` to `.env.local` (see `.env.example`), restart the dev server, then ask again.";
+  }
+  if (/not enabled for this workspace/i.test(text)) {
+    return "Gmail isn’t enabled for this workspace. Open **Connectors** and enable Gmail.";
+  }
+  if (/connect gmail in connectors/i.test(text)) {
+    return "Gmail isn’t connected yet. Open **Connectors**, connect Gmail, then ask again.";
+  }
+  return null;
 }
 
 async function ensureGmailConnected(
@@ -108,7 +123,10 @@ export async function runCommsConnectorTurn(
       report({ phase: "follow_up", label: "Thinking", detail: "Using Gmail…" });
     }
 
-    const generated = await runRawOpenAITurn(working, opts);
+    const generated = await runRawOpenAITurn(working, {
+      ...opts,
+      suppressContentDelta: true,
+    });
     const { text, call } = parseToolCallFromContent(generated.content);
 
     let toolCall = call;
@@ -154,8 +172,34 @@ export async function runCommsConnectorTurn(
         toolCall.name === "gmail.read" ? "Reading email…" : "Searching Gmail…",
       toolName: toolCall.name,
     });
-    const result = await executeAuthorizedTool(toolCall);
+    const result = await executeConnectorGmailTool(
+      { name: toolCall.name, args: toolCall.arguments },
+      request.workspaceId,
+    );
+    if (!result) {
+      return {
+        content: "Gmail tool isn’t available right now.",
+        runtime: "cloud",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+      };
+    }
     toolResults.push(result);
+
+    const toolFailure = !result.ok
+      ? connectorToolFailureMessage(result.output)
+      : null;
+    if (toolFailure) {
+      return {
+        content: toolFailure,
+        runtime: "cloud",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+        toolResults,
+      };
+    }
 
     const toolNote = `Tool ${toolCall.name} (${result.ok ? "ok" : "failed"}):\n${result.output}`;
     working = {

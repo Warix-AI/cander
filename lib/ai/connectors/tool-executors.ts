@@ -6,15 +6,19 @@ import { executeConnectorToolRequest } from "@/lib/api/connector-client";
 import { getTurnWorkspaceId } from "@/lib/ai/runtime/turn-context";
 import type { AiToolCallResult } from "@/lib/ai/runtime/tools";
 
-export async function executeConnectorGmailTool(call: {
-  name: string;
-  args: Record<string, unknown>;
-}): Promise<AiToolCallResult | null> {
+export async function executeConnectorGmailTool(
+  call: {
+    name: string;
+    args: Record<string, unknown>;
+  },
+  workspaceIdOverride?: string | null,
+): Promise<AiToolCallResult | null> {
   if (call.name !== "gmail.search" && call.name !== "gmail.read") {
     return null;
   }
 
-  const workspaceId = getTurnWorkspaceId();
+  const workspaceId =
+    workspaceIdOverride?.trim() || getTurnWorkspaceId()?.trim() || null;
   if (!workspaceId) {
     return {
       name: call.name,

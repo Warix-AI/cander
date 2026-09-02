@@ -187,19 +187,21 @@ export async function runRawOpenAITurn(
     success: true,
   });
 
-  report({
-    phase: "generating",
-    label: "Thinking",
-    detail: imageGenerationUsed
-      ? `${model} · image generation`
-      : webSearchUsed
-        ? `${model} · web search`
-        : webSearchEnabled
-          ? `${model} · web search available`
-          : model,
-    contentDelta: content,
-    contentStreaming: false,
-  });
+  if (!opts?.suppressContentDelta) {
+    report({
+      phase: "generating",
+      label: "Thinking",
+      detail: imageGenerationUsed
+        ? `${model} · image generation`
+        : webSearchUsed
+          ? `${model} · web search`
+          : webSearchEnabled
+            ? `${model} · web search available`
+            : model,
+      contentDelta: content,
+      contentStreaming: false,
+    });
+  }
 
   return {
     content:

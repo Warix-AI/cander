@@ -32,6 +32,8 @@ export type AgentTurnProgress = {
 export type AgentTurnOptions = {
   onProgress?: (progress: AgentTurnProgress) => void;
   signal?: AbortSignal;
+  /** Skip interim assistant text in onProgress (multi-step connector turns). */
+  suppressContentDelta?: boolean;
 };
 
 export async function runAssistantTurn(
