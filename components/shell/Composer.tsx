@@ -1003,7 +1003,9 @@ export function Composer({
                 aria-hidden={dictatingActive || undefined}
               >
                 <textarea
-                  ref={textRef}
+                  ref={(el) => {
+                    textRef.current = el;
+                  }}
                   value={value}
                   rows={1}
                   placeholder={hint}
