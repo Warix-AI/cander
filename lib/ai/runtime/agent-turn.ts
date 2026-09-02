@@ -49,8 +49,8 @@ export async function runAssistantTurn(
   try {
     opts?.onProgress?.({ phase: "thinking", label: "Thinking" });
 
-    const { isCommsConnectorIntent } = await import("@/lib/ai/tools/domains");
-    if (isCommsConnectorIntent(request.content)) {
+    const { isCommsConnectorTurn } = await import("@/lib/ai/connectors/comms-intent");
+    if (isCommsConnectorTurn(request.content, request.messages)) {
       const { runCommsConnectorTurn } = await import(
         "@/lib/ai/connectors/comms-turn"
       );

@@ -2,11 +2,19 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   formatGmailToolOutput,
+  GMAIL_COMPOSIO_SLUGS,
   mapGmailToolArguments,
   redactComposioPayload,
 } from "../lib/connectors/composio-tools.ts";
 import { authorizeConnectorToolAction } from "../lib/connectors/tool-authz.ts";
 import { isCommsConnectorIntent } from "../lib/ai/tools/domains.ts";
+import {
+  inferSendMailFromThread,
+  isCommsConnectorTurn,
+  looksLikeSendFollowUp,
+} from "../lib/ai/connectors/comms-intent.ts";
+import { enabledToolIds } from "../lib/connectors/tool-catalog.ts";
+import { getAiTool } from "../lib/ai/tools/registry.ts";
 
 test("mapGmailToolArguments maps search, read, and send args", () => {
   assert.deepEqual(mapGmailToolArguments("gmail.search", { query: "is:unread" }), {
@@ -110,6 +118,71 @@ test("formatGmailToolOutput summarizes search results without secrets", () => {
 test("isCommsConnectorIntent unlocks gmail email asks", () => {
   assert.equal(isCommsConnectorIntent("check my gmail inbox"), true);
   assert.equal(isCommsConnectorIntent("Are there any sports going on"), false);
+});
+
+test("isCommsConnectorTurn routes send-it follow-ups with email context", () => {
+  const thread = [
+    {
+      role: "user",
+      content: "Draft an email to matt@warix.co about Cander",
+    },
+    {
+      role: "assistant",
+      content: `To: matt@warix.co
+Subject: Check out my new app, Cander
+
+Hey Matt,
+
+I'd love for you to check out this new app that I've been building.
+
+Best, Alex`,
+    },
+  ];
+  assert.equal(isCommsConnectorTurn("send it", thread), true);
+  assert.equal(isCommsConnectorTurn("Are there any sports going on", thread), false);
+});
+
+test("looksLikeSendFollowUp matches common confirmations", () => {
+  assert.equal(looksLikeSendFollowUp("send it"), true);
+  assert.equal(looksLikeSendFollowUp("go ahead and send"), true);
+  assert.equal(looksLikeSendFollowUp("check my inbox"), false);
+});
+
+test("gmail.send is discoverable by AI and mapped to Composio when write access is enabled", () => {
+  const enabled = enabledToolIds("gmail", {
+    "gmail.search": true,
+    "gmail.read": true,
+    "gmail.send": true,
+  });
+  assert.ok(enabled.includes("gmail.send"));
+  const tool = getAiTool("gmail.send");
+  assert.ok(tool?.enabled);
+  assert.match(tool!.description, /Send an email via the user's connected Gmail/);
+  assert.deepEqual(tool!.parameters.required, ["to", "subject", "body"]);
+  assert.equal(GMAIL_COMPOSIO_SLUGS["gmail.send"], "GMAIL_SEND_EMAIL");
+});
+
+test("inferSendMailFromThread extracts draft from assistant message", () => {
+  const draft = inferSendMailFromThread([
+    {
+      role: "assistant",
+      content: `I can't send emails from here, but the approved message is ready to copy into your email client:
+
+To: matt@warix.co
+Subject: Check out my new app, Cander
+
+Hey Matt,
+
+Here's the link: https://cander.app
+
+Best, Alex`,
+    },
+  ]);
+  assert.ok(draft);
+  assert.equal(draft?.to, "matt@warix.co");
+  assert.equal(draft?.subject, "Check out my new app, Cander");
+  assert.match(draft?.body ?? "", /Hey Matt/);
+  assert.match(draft?.body ?? "", /cander\.app/);
 });
 
 test("formatGmailToolOutput summarizes send results", () => {

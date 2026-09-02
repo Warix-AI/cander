@@ -25,6 +25,10 @@ import {
   gmailEmptyResultMessage,
   isEmptyGmailSearchResult,
 } from "@/lib/ai/connectors/connector-response";
+import {
+  inferSendMailFromThread,
+  looksLikeSendFollowUp,
+} from "@/lib/ai/connectors/comms-intent";
 
 const GMAIL_READ_TOOLS = ["gmail.search", "gmail.read"] as const;
 const GMAIL_WRITE_TOOLS = ["gmail.send", "gmail.draft", "gmail.reply"] as const;
@@ -44,7 +48,8 @@ function buildGmailTurnInstructions(enabledTools: string[]): string {
   }
   if (writeEnabled) {
     capabilityLines.push(
-      "- Send email with gmail.send when the user explicitly asks you to send a new message.",
+      "- You CAN send email with gmail.send — never say you cannot send from here.",
+      "- Send email with gmail.send when the user explicitly asks you to send a new message or confirms a draft (e.g. \"send it\").",
       '- Example: {"tool":"gmail.send","arguments":{"to":"alice@example.com","subject":"Hello","body":"..."}}',
       "- Create drafts with gmail.draft when the user wants a draft to review before sending.",
       '- Example: {"tool":"gmail.draft","arguments":{"to":"alice@example.com","subject":"Hello","body":"..."}}',
@@ -218,7 +223,8 @@ export async function runCommsConnectorTurn(
       !toolCall &&
       !toolResults.length &&
       allowedTools.includes("gmail.search") &&
-      (looksLikeSearchPromise(text || generated.content) || round === 0)
+      (looksLikeSearchPromise(text || generated.content) || round === 0) &&
+      !looksLikeSendFollowUp(request.content)
     ) {
       toolCall = {
         name: "gmail.search",
@@ -227,6 +233,32 @@ export async function runCommsConnectorTurn(
           maxResults: 10,
         },
       };
+    }
+
+    // User confirmed send — execute gmail.send from thread draft when model skips the tool.
+    if (
+      !toolCall &&
+      !toolResults.length &&
+      allowedTools.includes("gmail.send") &&
+      (looksLikeSendFollowUp(request.content) ||
+        looksLikeSendFollowUp(text || generated.content))
+    ) {
+      const draft = inferSendMailFromThread([
+        ...(request.messages ?? []),
+        ...(text || generated.content
+          ? [{ role: "assistant" as const, content: text || generated.content }]
+          : []),
+      ]);
+      if (draft) {
+        toolCall = {
+          name: "gmail.send",
+          arguments: {
+            to: draft.to,
+            subject: draft.subject,
+            body: draft.body,
+          },
+        };
+      }
     }
 
     if (!toolCall) {
