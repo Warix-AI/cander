@@ -74,7 +74,9 @@ export async function runRawOpenAITurn(
       },
       body: JSON.stringify({
         messages: history,
-        system: SYSTEM_INSTRUCTIONS,
+        system: request.toolContext?.trim()
+          ? `${SYSTEM_INSTRUCTIONS}\n\n${request.toolContext.trim()}`
+          : SYSTEM_INSTRUCTIONS,
         // Prefer uploaded file_ids; keep data-URL images only as fallback
         images: attachmentIds.length ? undefined : request.images?.slice(0, 4),
         attachmentIds: attachmentIds.length ? attachmentIds : undefined,
@@ -187,7 +189,7 @@ export async function runRawOpenAITurn(
 
   report({
     phase: "generating",
-    label: "RAW OPENAI",
+    label: "Thinking",
     detail: imageGenerationUsed
       ? `${model} · image generation`
       : webSearchUsed

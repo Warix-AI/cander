@@ -4,16 +4,18 @@ import type { AiRuntimeMode } from "@/lib/ai/runtime/types";
 
 const KEY = "cander-ai-runtime-mode";
 
+/** OpenAI-only — persisted local/auto modes are ignored. */
 export function getAiRuntimeMode(): AiRuntimeMode {
-  if (typeof window === "undefined") return "auto";
-  const raw = window.localStorage.getItem(KEY);
-  if (raw === "local" || raw === "cloud" || raw === "auto") return raw;
-  return "auto";
+  return "cloud";
 }
 
 export function setAiRuntimeMode(mode: AiRuntimeMode) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(KEY, mode);
+  // Only cloud is supported; normalize writes so UI stays consistent.
+  window.localStorage.setItem(KEY, "cloud");
+  if (mode !== "cloud") {
+    window.localStorage.setItem("cander-ai-runtime-mode-legacy", mode);
+  }
   window.dispatchEvent(new Event("cander-ai-runtime-mode"));
 }
 

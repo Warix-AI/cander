@@ -1,112 +1,61 @@
 "use client";
 
-import { createAndroidLocalProvider } from "@/lib/ai/runtime/providers/android-local";
-import { createAppleLocalProvider } from "@/lib/ai/runtime/providers/apple-local";
-import { createCloudProvider } from "@/lib/ai/runtime/providers/cloud";
-import { getAiRuntimeMode } from "@/lib/ai/runtime/mode-store";
-import { getPccAvailability } from "@/lib/ai/intelligence/pcc";
-import {
-  AiRuntimeError,
-  type AiGenerateRequest,
-  type AiGenerateResult,
-  type AiRuntimeCapabilities,
-  type AiRuntimeMode,
-  type AiRuntimeProvider,
+import type {
+  AiGenerateRequest,
+  AiGenerateResult,
+  AiRuntimeCapabilities,
+  AiRuntimeMode,
+  AiRuntimeProvider,
 } from "@/lib/ai/runtime/types";
 
-let cloud: AiRuntimeProvider | null = null;
-let apple: AiRuntimeProvider | null = null;
-let android: AiRuntimeProvider | null = null;
+let openai: AiRuntimeProvider | null = null;
 
-function cloudProvider() {
-  return (cloud ??= createCloudProvider());
+function openaiProvider(): AiRuntimeProvider {
+  return (openai ??= {
+    id: "cloud",
+
+    async getCapabilities(): Promise<AiRuntimeCapabilities> {
+      return {
+        available: true,
+        runtime: "cloud",
+        local: false,
+        private: false,
+        offline: false,
+        streaming: false,
+        tools: true,
+        structuredOutput: false,
+        vision: true,
+      };
+    },
+
+    async isAvailable() {
+      return true;
+    },
+
+    async generate(request: AiGenerateRequest): Promise<AiGenerateResult> {
+      const { runRawOpenAITurn } = await import("@/lib/ai/raw-openai/run-turn");
+      return runRawOpenAITurn(request);
+    },
+  });
 }
 
-function appleProvider() {
-  return (apple ??= createAppleLocalProvider());
-}
-
-function androidProvider() {
-  return (android ??= createAndroidLocalProvider());
-}
-
-async function pickLocalProvider(): Promise<AiRuntimeProvider | null> {
-  const appleP = appleProvider();
-  if (await appleP.isAvailable()) return appleP;
-  const androidP = androidProvider();
-  if (await androidP.isAvailable()) return androidP;
-  return null;
-}
-
-/**
- * Resolve which provider handles a request.
- * Route-driven when preferredRoute is set; user mode remains a privacy override.
- * LOCAL never silently falls back to cloud (privacy).
- */
+/** OpenAI is the only inference provider. */
 export async function resolveProvider(
-  mode: AiRuntimeMode = getAiRuntimeMode(),
-  preferredRoute?: AiGenerateRequest["preferredRoute"],
+  _mode?: AiRuntimeMode,
+  _preferredRoute?: AiGenerateRequest["preferredRoute"],
 ): Promise<AiRuntimeProvider> {
-  if (mode === "local") {
-    const local = await pickLocalProvider();
-    if (!local) {
-      throw new AiRuntimeError(
-        "local_unavailable",
-        "On-device AI is not available. Switch to Auto or Cloud — LOCAL will not send this request to the cloud.",
-      );
-    }
-    return local;
-  }
-
-  if (mode === "cloud") return cloudProvider();
-
-  // AUTO + classifier route
-  if (preferredRoute === "cander_cloud") {
-    return cloudProvider();
-  }
-  if (preferredRoute === "pcc") {
-    const pcc = await getPccAvailability();
-    if (pcc.available) {
-      // PCC shares the Apple native bridge until a dedicated PCC session exists.
-      const local = await pickLocalProvider();
-      if (local) return local;
-    }
-    return cloudProvider();
-  }
-
-  // on_device or unset: prefer local when available
-  const local = await pickLocalProvider();
-  if (local) return local;
-  return cloudProvider();
+  return openaiProvider();
 }
 
 export async function getAiRuntimeCapabilities(
-  mode: AiRuntimeMode = getAiRuntimeMode(),
+  _mode?: AiRuntimeMode,
 ): Promise<AiRuntimeCapabilities> {
-  try {
-    const provider = await resolveProvider(mode);
-    return provider.getCapabilities();
-  } catch (err) {
-    if (err instanceof AiRuntimeError && err.code === "local_unavailable") {
-      return {
-        available: false,
-        runtime: "unavailable",
-        local: true,
-        private: true,
-        offline: true,
-        streaming: false,
-        tools: false,
-        structuredOutput: false,
-      };
-    }
-    throw err;
-  }
+  return openaiProvider().getCapabilities();
 }
 
 export async function generateWithAiRuntime(
   request: AiGenerateRequest,
-  mode: AiRuntimeMode = getAiRuntimeMode(),
+  _mode?: AiRuntimeMode,
 ): Promise<AiGenerateResult> {
-  const provider = await resolveProvider(mode, request.preferredRoute);
-  return provider.generate(request);
+  return openaiProvider().generate(request);
 }

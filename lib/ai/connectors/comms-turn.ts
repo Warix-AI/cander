@@ -6,7 +6,7 @@ import type {
   AgentTurnOptions,
   AgentTurnResult,
 } from "@/lib/ai/runtime/agent-turn";
-import { generateWithAiRuntime } from "@/lib/ai/runtime/runtime";
+import { runRawOpenAITurn } from "@/lib/ai/raw-openai/run-turn";
 import {
   executeAuthorizedTool,
   formatToolsForPrompt,
@@ -46,7 +46,7 @@ export async function runCommsConnectorTurn(
     if (round > 0) {
       report({ phase: "follow_up", label: "Thinking", detail: "Using Gmail…" });
     }
-    const generated = await generateWithAiRuntime(working);
+    const generated = await runRawOpenAITurn(working, opts);
     const { text, call } = parseToolCallFromContent(generated.content);
 
     if (
@@ -86,16 +86,19 @@ export async function runCommsConnectorTurn(
     };
   }
 
-  const summary = await generateWithAiRuntime({
-    ...working,
-    allowTools: false,
-    allowedToolNames: [],
-    content: [
-      request.content,
-      "",
-      "Use the Gmail tool results above. Answer in plain language.",
-    ].join("\n"),
-  });
+  const summary = await runRawOpenAITurn(
+    {
+      ...working,
+      allowTools: false,
+      allowedToolNames: [],
+      content: [
+        request.content,
+        "",
+        "Use the Gmail tool results above. Answer in plain language.",
+      ].join("\n"),
+    },
+    opts,
+  );
 
   return {
     ...summary,
