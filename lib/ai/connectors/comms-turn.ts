@@ -173,7 +173,7 @@ export async function runCommsConnectorTurn(
       toolName: toolCall.name,
     });
     const result = await executeConnectorGmailTool(
-      { name: toolCall.name, args: toolCall.arguments },
+      { name: toolCall.name, args: toolCall.arguments ?? {} },
       request.workspaceId,
     );
     if (!result) {
