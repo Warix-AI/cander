@@ -25,7 +25,7 @@ export function requireBearerUser(request: Request): Promise<RawOpenAIAuth> {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  return userClient.auth.getUser().then(({ data: { user } }) => {
+  return userClient.auth.getUser(token).then(({ data: { user } }) => {
     if (!user) {
       return { ok: false, status: 401, error: "Unauthorized." } as const;
     }

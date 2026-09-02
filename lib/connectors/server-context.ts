@@ -45,7 +45,7 @@ export async function resolveConnectorRequest(input: {
 
   const {
     data: { user },
-  } = await client.auth.getUser();
+  } = await client.auth.getUser(token);
   if (!user) {
     return { ok: false, ...unauthorizedError() };
   }
