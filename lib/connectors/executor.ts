@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCanderTool, connectorIdFromToolId } from "../ai/tools/cander-registry.ts";
 import type { ToolExecutionResult } from "../ai/tools/types.ts";
 import { composioUserId } from "./composio-identity.ts";
-import { executeComposioTool, isComposioConfigured } from "./composio-http.ts";
+import { executeComposioTool, isComposioConfigured, composioConfigurationStatus } from "./composio-http.ts";
 import { getConnectorAdapter } from "./adapters/index.ts";
 import {
   authorizeToolExecution,
@@ -76,10 +76,14 @@ export async function executeConnectorTool(
     `call_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
 
   if (!isComposioConfigured()) {
+    const status = composioConfigurationStatus();
     return {
       ok: false,
       status: 503,
-      error: `${connectorId} connector is not configured on this server.`,
+      error:
+        `${connectorId} is connected in your workspace, but this server can’t call Composio yet. ` +
+        `Missing: ${status.missing.join(", ") || "COMPOSIO_*"}. ` +
+        `Add them to .env.local (see .env.example), restart the server, then ask again.`,
     };
   }
 

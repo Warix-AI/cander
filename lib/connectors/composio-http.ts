@@ -27,11 +27,10 @@ export function composioConfigurationStatus(): {
     .filter((key) => key.startsWith("COMPOSIO_"))
     .sort();
   const missing: string[] = [];
+  // API key alone enables the provider; per-connector auth configs are
+  // validated when that connector starts OAuth / execute.
   if (!readComposioApiKey()) {
     missing.push("COMPOSIO_API_KEY");
-  }
-  if (!process.env.COMPOSIO_GMAIL_AUTH_CONFIG_ID?.trim()) {
-    missing.push("COMPOSIO_GMAIL_AUTH_CONFIG_ID");
   }
   return { ok: missing.length === 0, missing, present };
 }

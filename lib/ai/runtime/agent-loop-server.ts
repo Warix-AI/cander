@@ -13,7 +13,7 @@ import {
   discoverRelevantTools,
   resolveToolsForExposure,
 } from "@/lib/ai/tools/discovery";
-import { canderToolsToOpenAIFunctions } from "@/lib/ai/tools/schemas";
+import { canderToolsToOpenAIFunctions, fromOpenAIToolName } from "@/lib/ai/tools/schemas";
 import { getCanderTool } from "@/lib/ai/tools/cander-registry";
 import type { CapabilitySnapshot, ToolExecutionResult } from "@/lib/ai/tools/types";
 import { executeConnectorToolDetailed } from "@/lib/connectors/tool-execute";
@@ -226,6 +226,12 @@ export async function runAgentServerLoop(
   type InputItem =
     | { role: "system" | "user" | "assistant"; content: string }
     | {
+        type: "function_call";
+        call_id: string;
+        name: string;
+        arguments: string;
+      }
+    | {
         type: "function_call_output";
         call_id: string;
         output: string;
@@ -278,7 +284,9 @@ export async function runAgentServerLoop(
       ...(imageGenEnabled ? [openAIImageGenerationTool()] : []),
     ];
 
-    const response = await openai.responses.create({
+
+    let response: OpenAI.Responses.Response;
+    response = await openai.responses.create({
       model,
       input: conversation as OpenAI.Responses.ResponseInput,
       ...(tools.length ? { tools } : {}),
@@ -287,7 +295,6 @@ export async function runAgentServerLoop(
     const calls = extractFunctionCalls(response.output);
     const text = extractOutputText(response);
 
-    // Append model output items that are function calls into conversation via outputs
     if (!calls.length) {
       return {
         content: text || "Done.",
@@ -298,15 +305,31 @@ export async function runAgentServerLoop(
       };
     }
 
+    // Responses API requires the function_call items in input before any
+    // function_call_output that references their call_id.
     for (const call of calls) {
-      const toolId = call.name!;
-      const callId = call.call_id || call.id || `call_${crypto.randomUUID()}`;
+      const callId = call.call_id || call.id;
+      if (!callId || !call.name) continue;
+      conversation.push({
+        type: "function_call",
+        call_id: callId,
+        name: call.name,
+        arguments: call.arguments || "{}",
+      });
+    }
+
+
+    for (const call of calls) {
+      const toolId = fromOpenAIToolName(call.name!);
+      const callId = call.call_id || call.id;
+      if (!callId) continue;
       let args: Record<string, unknown> = {};
       try {
         args = JSON.parse(call.arguments || "{}") as Record<string, unknown>;
       } catch {
         args = {};
       }
+
 
       const tool = getCanderTool(toolId);
       if (!tool?.connectorId) {

@@ -104,7 +104,9 @@ function enabledToolIdsForFamily(
  * Layer 1: deterministic from prior structured references.
  * Layer 2: prior tool events' families.
  * Layer 3: lightweight family hints from message (not connector regex routers).
- * Layer 4: load schemas for selected families only.
+ * Layer 4: if still empty, all connected families (capped) so phrasing misses
+ *          do not leave the model with zero tools.
+ * Layer 5: load schemas for selected families only.
  */
 export function discoverRelevantTools(input: DiscoveryInput): DiscoveryResult {
   const max = input.maxTools ?? maxDiscoveredTools();
@@ -159,10 +161,19 @@ export function discoverRelevantTools(input: DiscoveryInput): DiscoveryResult {
   }
 
   if (!selectedFamilies.size && connected.size) {
+    // Fallback: expose enabled tools across connected families so the model
+    // can still act when phrasing misses FAMILY_HINTS (capped by maxTools).
+    for (const family of connected) {
+      selectedFamilies.add(family);
+    }
+    reasons.push("all_connected_families");
+  }
+
+  if (!selectedFamilies.size) {
     return {
       toolIds: [],
       families: [],
-      reason: "capability_index_only",
+      reason: "no_connected_families",
     };
   }
 

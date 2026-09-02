@@ -2,6 +2,7 @@
  * Convert CanderTool definitions to OpenAI Responses API function tools.
  */
 
+import { listCanderTools } from "./cander-registry.ts";
 import type { CanderTool } from "./types.ts";
 
 export type OpenAIFunctionTool = {
@@ -17,6 +18,21 @@ export type OpenAIFunctionTool = {
   strict: boolean | null;
 };
 
+/** OpenAI function names must match ^[a-zA-Z0-9_-]+$ — no dots. */
+export function toOpenAIToolName(toolId: string): string {
+  return toolId.replace(/\./g, "_");
+}
+
+export function fromOpenAIToolName(openaiName: string): string {
+  for (const tool of listCanderTools()) {
+    if (toOpenAIToolName(tool.id) === openaiName) return tool.id;
+  }
+  // Fallback for unknown names: first underscore → connector.action
+  const first = openaiName.indexOf("_");
+  if (first <= 0) return openaiName;
+  return `${openaiName.slice(0, first)}.${openaiName.slice(first + 1)}`;
+}
+
 export function canderToolToOpenAIFunction(tool: CanderTool): OpenAIFunctionTool {
   const properties: Record<string, unknown> = {};
   for (const [key, prop] of Object.entries(tool.inputSchema.properties)) {
@@ -29,7 +45,7 @@ export function canderToolToOpenAIFunction(tool: CanderTool): OpenAIFunctionTool
   }
   return {
     type: "function",
-    name: tool.id,
+    name: toOpenAIToolName(tool.id),
     description: tool.description,
     parameters: {
       type: "object",

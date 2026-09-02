@@ -10,7 +10,11 @@ import {
   listCanderToolsForFamily,
 } from "../lib/ai/tools/cander-registry.ts";
 import { discoverRelevantTools } from "../lib/ai/tools/discovery.ts";
-import { canderToolToOpenAIFunction } from "../lib/ai/tools/schemas.ts";
+import {
+  canderToolToOpenAIFunction,
+  fromOpenAIToolName,
+  toOpenAIToolName,
+} from "../lib/ai/tools/schemas.ts";
 import {
   resolveOrdinalReference,
   suggestToolsForReference,
@@ -35,8 +39,15 @@ test("openai function schema conversion", () => {
   const tool = getCanderTool("gmail.send")!;
   const fn = canderToolToOpenAIFunction(tool);
   assert.equal(fn.type, "function");
-  assert.equal(fn.name, "gmail.send");
+  assert.equal(fn.name, "gmail_send");
+  assert.match(fn.name, /^[a-zA-Z0-9_-]+$/);
   assert.ok(fn.parameters.properties.to);
+});
+
+test("openai tool name mapping round-trips connector ids", () => {
+  assert.equal(toOpenAIToolName("gmail.search"), "gmail_search");
+  assert.equal(fromOpenAIToolName("gmail_search"), "gmail.search");
+  assert.equal(fromOpenAIToolName("slack_send"), "slack.send");
 });
 
 test("discovery selects email family from snapshot + message", () => {
@@ -78,6 +89,58 @@ test("discovery selects email family from snapshot + message", () => {
   assert.ok(result.toolIds.includes("gmail.search"));
   assert.ok(result.families.includes("email"));
   assert.ok(!result.toolIds.includes("gmail.draft"));
+});
+
+test("discovery falls back to connected families when phrasing misses hints", () => {
+  const snapshot: CapabilitySnapshot = {
+    connectors: [
+      {
+        connectorId: "gmail",
+        label: "Gmail",
+        capabilityFamily: "email",
+        accounts: [
+          {
+            connectionId: "c1",
+            label: "Gmail",
+            status: "active",
+            capabilities: { search: true, read: true, send: false, draft: false, reply: false },
+          },
+        ],
+      },
+      {
+        connectorId: "slack",
+        label: "Slack",
+        capabilityFamily: "messaging",
+        accounts: [
+          {
+            connectionId: "c2",
+            label: "Slack",
+            status: "active",
+            capabilities: { search: true, read: true, send: false },
+          },
+        ],
+      },
+    ],
+    families: {
+      email: {
+        connected: true,
+        connectorIds: ["gmail"],
+        accounts: [],
+      },
+      messaging: {
+        connected: true,
+        connectorIds: ["slack"],
+        accounts: [],
+      },
+    },
+  };
+  const result = discoverRelevantTools({
+    userMessage: "what did alex say yesterday?",
+    snapshot,
+  });
+  assert.ok(result.toolIds.includes("gmail.search"));
+  assert.ok(result.toolIds.includes("slack.search") || result.toolIds.some((id) => id.startsWith("slack.")));
+  assert.match(result.reason, /all_connected_families/);
 });
 
 test("reference resolution picks ordinal and suggests tools", () => {
