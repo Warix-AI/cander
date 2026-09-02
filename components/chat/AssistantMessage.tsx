@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Check, Circle, Copy } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
@@ -41,34 +41,25 @@ export function AssistantMessage({ message }: { message: Message }) {
     visibleContent !== "Thinking…" &&
     visibleContent !== "Thinking...";
 
-  const [holdActivity, setHoldActivity] = useState(!hasReply);
-
-  useEffect(() => {
-    if (!hasReply) {
-      setHoldActivity(true);
-      return;
-    }
-    const id = window.setTimeout(() => setHoldActivity(false), 120);
-    return () => window.clearTimeout(id);
-  }, [hasReply]);
-
   const inFlight = pending || streaming;
-  const showActivityRow = inFlight && (!hasReply || holdActivity);
+  const showActivityRow =
+    inFlight &&
+    Boolean(message.activity?.phase || message.activity?.startedAt);
 
   return (
     <div className="w-full space-y-2">
-      {showActivityRow ? (
-        <ThinkingIndicator
-          active={!hasReply}
-          phase={message.activity?.phase}
-          startedAt={message.activity?.startedAt}
-          label={message.activity?.label}
-        />
-      ) : null}
       {hasReply ? (
         <div>
           <MarkdownRenderer content={visibleContent} />
         </div>
+      ) : null}
+      {showActivityRow ? (
+        <ThinkingIndicator
+          active
+          phase={message.activity?.phase}
+          startedAt={message.activity?.startedAt}
+          label={message.activity?.label}
+        />
       ) : null}
       {message.blocks
         ?.filter((b) => b.type !== "tool")

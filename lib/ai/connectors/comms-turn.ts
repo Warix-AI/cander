@@ -120,7 +120,12 @@ export async function runCommsConnectorTurn(
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
     if (round > 0) {
-      report({ phase: "follow_up", label: "Thinking", detail: "Using Gmail…" });
+      report({
+        phase: "follow_up",
+        label: "Thinking",
+        detail: "Using Gmail…",
+        contentStreaming: true,
+      });
     }
 
     const generated = await runRawOpenAITurn(working, {
@@ -128,6 +133,19 @@ export async function runCommsConnectorTurn(
       suppressContentDelta: true,
     });
     const { text, call } = parseToolCallFromContent(generated.content);
+
+    if (round === 0) {
+      const ack =
+        sanitizeAssistantVisibleText(text || generated.content).trim() ||
+        "Checking your Gmail — one moment.";
+      report({
+        phase: "generating",
+        label: "Thinking",
+        detail: "Checking Gmail…",
+        contentDelta: ack,
+        contentStreaming: true,
+      });
+    }
 
     let toolCall = call;
     if (
@@ -171,6 +189,7 @@ export async function runCommsConnectorTurn(
       detail:
         toolCall.name === "gmail.read" ? "Reading email…" : "Searching Gmail…",
       toolName: toolCall.name,
+      contentStreaming: true,
     });
     const result = await executeConnectorGmailTool(
       { name: toolCall.name, args: toolCall.arguments ?? {} },
@@ -238,7 +257,7 @@ export async function runCommsConnectorTurn(
         "Summarize the Gmail tool results above for the user in plain language.",
       ].join("\n"),
     },
-    opts,
+    { ...opts, suppressContentDelta: true },
   );
 
   return {

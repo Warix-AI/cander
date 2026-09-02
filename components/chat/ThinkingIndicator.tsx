@@ -27,13 +27,35 @@ function useCyclingStatus(active: boolean, intervalMs = STATUS_CYCLE_MS) {
   return STATUS_CYCLE[index]!;
 }
 
+function useElapsedSeconds(startedAt: number | undefined, active: boolean) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!active || !startedAt) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const tick = () => {
+      setElapsedSeconds(
+        Math.max(0, Math.floor((Date.now() - startedAt) / 1000)),
+      );
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [active, startedAt]);
+
+  return elapsedSeconds;
+}
+
 /**
- * In-flight turn indicator — spinning Cander mark with cycling status text.
+ * In-flight turn indicator — spinning Cander mark with live phase + elapsed time.
  * Fades out when `active` becomes false.
  */
 export function ThinkingIndicator({
   className,
   phase,
+  startedAt,
   label,
   active = true,
 }: {
@@ -44,13 +66,14 @@ export function ThinkingIndicator({
   label?: string;
   active?: boolean;
 }) {
-  const cyclingLabel = useCyclingStatus(active);
-  const visibleLabel = cyclingLabel;
+  const cyclingLabel = useCyclingStatus(active && !phase);
+  const elapsedSeconds = useElapsedSeconds(startedAt, active);
+  const phaseLabel = phase ? labelForPhase(phase) : null;
+  const visibleLabel = phaseLabel
+    ? `${phaseLabel} · ${elapsedSeconds}s`
+    : (label && !/^Thinking\b/i.test(label) ? label : cyclingLabel);
 
-  const accessible =
-    (phase ? labelForPhase(phase) : null) ||
-    (label && !/^Thinking\b/i.test(label) ? label : null) ||
-    cyclingLabel;
+  const accessible = phaseLabel || visibleLabel;
 
   const [exiting, setExiting] = useState(false);
   const [mounted, setMounted] = useState(active);
