@@ -7,7 +7,10 @@ export type BrowserContextTabKind =
   | "build-preview"
   | "project-preview"
   | "web"
-  | "agent-browser";
+  | "agent-browser"
+  | "studio-image"
+  | "studio-video"
+  | "studio-document";
 
 export type ActiveBrowserTab = {
   tabId: string;

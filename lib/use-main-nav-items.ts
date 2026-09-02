@@ -14,7 +14,7 @@ import { extraNavLabels, navIcon } from "@/lib/space-icons";
 import type { SpaceId } from "@/lib/types";
 
 const PRIMARY_NAV_LABELS: Partial<Record<SidebarNavId, string>> = {
-  research: "Explore",
+  research: "Home",
 };
 
 export function navLabel(id: SidebarNavId) {

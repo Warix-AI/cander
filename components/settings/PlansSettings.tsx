@@ -13,7 +13,6 @@ import { isSupabaseConfigured } from "@/lib/data-backend";
 import { isPaidPlan, webAppPlansSettingsUrl } from "@/lib/plans";
 import { isMobileShell, openExternalUrl } from "@/lib/mobile-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { UsageStatusPanel } from "@/components/settings/UsageStatusPanel";
 
 type BillingStatus = {
   plan: string;
@@ -235,7 +234,6 @@ export function PlansSettings() {
       <SettingsSection title="Current plan" className="mt-8">
         <SettingsGroup>{billingBody}</SettingsGroup>
       </SettingsSection>
-      <UsageStatusPanel />
     </SettingsPage>
   );
 }

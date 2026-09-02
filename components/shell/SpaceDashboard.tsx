@@ -2,8 +2,8 @@
 
 import { BuildDashboard } from "@/components/spaces/BuildDashboard";
 import { ConnectorsDashboard } from "@/components/spaces/ConnectorsDashboard";
-import { HomeDashboard } from "@/components/spaces/HomeDashboard";
 import { ResearchDashboard } from "@/components/spaces/ResearchDashboard";
+import { StudioDashboard } from "@/components/spaces/StudioDashboard";
 import { WorkDashboard } from "@/components/spaces/WorkDashboard";
 import { useApp } from "@/components/app/AppProvider";
 import { useMobileShell } from "@/lib/use-media-query";
@@ -20,15 +20,16 @@ export function SpaceDashboard({
 }) {
   const { spaceId } = useApp();
   const mobile = useMobileShell();
+  // Legacy `home` redirects elsewhere; treat as Home (research) if it slips through.
   const body =
-    spaceId === "home" ? (
-      <HomeDashboard />
+    spaceId === "home" || spaceId === "research" ? (
+      <ResearchDashboard />
     ) : spaceId === "work" ? (
       <WorkDashboard />
     ) : spaceId === "build" ? (
       <BuildDashboard />
-    ) : spaceId === "research" ? (
-      <ResearchDashboard />
+    ) : spaceId === "studio" ? (
+      <StudioDashboard />
     ) : spaceId === "connectors" ? (
       <ConnectorsDashboard />
     ) : null;

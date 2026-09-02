@@ -73,7 +73,7 @@ export function BrowserEngine({
         <p className="mt-3 text-[13.5px] leading-relaxed text-muted-foreground">
           {projectTitle
             ? `Browsing for ${projectTitle}. Save pages as sources, then reference them in chat or Build.`
-            : "Browse the web and save sources into your Explore library."}
+            : "Browse the web and save sources into your Home library."}
         </p>
       </div>
     </div>

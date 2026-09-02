@@ -29,6 +29,10 @@ import {
 } from "@/lib/hooks/use-space-query";
 import { useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
 import { normalizeProjectTitle } from "@/lib/project-name";
+import {
+  projectCoverGradientClass,
+  projectCoverImageSrc,
+} from "@/lib/project-cover";
 import type { SpaceAttachment } from "@/lib/space-entities";
 import type { BannerKey } from "@/lib/space-banners";
 import type { SpaceLayout } from "@/lib/types";
@@ -50,6 +54,8 @@ export type PreviewEntry = {
   kind?: PreviewKind;
   detail?: string;
   image?: string;
+  /** Raw project cover (may be gradient:… or image URL). */
+  cover?: string;
   paperPreview?: { title: string; lines: string[] };
   /** When set, empty preview faces use this space’s banner wash. */
   bannerKey?: BannerKey;
@@ -164,6 +170,12 @@ function PreviewFace({
   // Explore cards: peach wash + wide paper; paper shows first-site cover when present.
   if (kind === "paper") {
     const preview = item.paperPreview;
+    const coverImage =
+      projectCoverImageSrc(item.cover) ??
+      (item.image && !item.image.startsWith("gradient:")
+        ? item.image
+        : undefined);
+    const coverGradient = projectCoverGradientClass(item.cover ?? item.image);
     return (
       <div
         className={cn(
@@ -171,7 +183,11 @@ function PreviewFace({
           compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
         )}
       >
-        <DefaultChatPreviewWash />
+        {coverGradient ? (
+          <div className={cn("absolute inset-0", coverGradient)} />
+        ) : (
+          <DefaultChatPreviewWash />
+        )}
         <div
           className={cn(
             "absolute overflow-hidden bg-white text-left shadow-sm",
@@ -180,9 +196,9 @@ function PreviewFace({
               : "inset-x-[10%] bottom-0 top-[18%] rounded-t-[8px]",
           )}
         >
-          {item.image ? (
+          {coverImage ? (
             <img
-              src={item.image}
+              src={coverImage}
               alt=""
               className="h-full w-full object-cover object-top"
             />
@@ -216,7 +232,30 @@ function PreviewFace({
   }
 
   // Build / product: full-bleed live preview cover (no paper frame).
-  if (item.image) {
+  const coverImage =
+    projectCoverImageSrc(item.cover) ??
+    (item.image && !item.image.startsWith("gradient:") ? item.image : undefined);
+  const coverGradient = projectCoverGradientClass(item.cover ?? item.image);
+
+  if (coverGradient && !coverImage) {
+    return (
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-[10px]",
+          compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
+        )}
+      >
+        <div className={cn("absolute inset-0", coverGradient)} />
+        {!compact && item.badge ? (
+          <span className="absolute bottom-3 left-3 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium tracking-[-0.01em] text-foreground">
+            {item.badge}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (coverImage) {
     return (
       <div
         className={cn(
@@ -225,7 +264,7 @@ function PreviewFace({
         )}
       >
         <img
-          src={item.image}
+          src={coverImage}
           alt=""
           className="h-full w-full object-cover object-top"
         />

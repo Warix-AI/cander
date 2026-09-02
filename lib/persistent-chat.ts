@@ -68,7 +68,7 @@ export function upsertPersistentSpaceThread(
   return { threads: [created, ...threads], id: created.id };
 }
 
-/** True when this thread is the shared default across Work / Build / Explore. */
+/** True when this thread is the shared default across Work / Build / Home. */
 export function isUniversalDefaultChat(
   thread: Thread | null | undefined,
   workspaceId: string,
@@ -126,29 +126,38 @@ export function openSpaceDefaultChat(
 }
 
 /**
- * Promote a draft chat to the shared default used across Work, Build, Explore.
- * Replaces any prior universal / per-space dock slot for this workspace.
+ * Promote a draft chat to the shared default used across Work, Build, Home.
+ * Hard-replaces the prior universal transcript — does not append to it.
  */
 export function adoptThreadAsUniversalDefault(
   threads: Thread[],
   workspaceId: string,
   sourceThreadId: string,
-): { threads: Thread[]; id: string; removedIds: string[] } {
+): { threads: Thread[]; id: string; removedIds: string[]; promoted: Thread | null } {
   const source = threads.find((item) => item.id === sourceThreadId);
   const defaultId = continuousChatId(workspaceId);
   if (!source || source.workspaceId !== workspaceId) {
     const ensured = ensureContinuousChat(threads, workspaceId, "work");
-    return { ...ensured, removedIds: [] };
+    return { ...ensured, removedIds: [], promoted: null };
   }
-  // Project-tied chats can still become the shared default; clear the link.
+
+  // Swap in only this chat's turns — never concatenate with the prior default.
   const promoted: Thread = {
     ...source,
     id: defaultId,
-    spaceId: source.spaceId && source.spaceId !== "home" ? source.spaceId : "work",
+    title: source.title || "Chat",
+    snippet: source.snippet || "",
+    messages: source.messages.map((message) => ({ ...message })),
+    spaceId:
+      source.spaceId === "home"
+        ? "research"
+        : (source.spaceId ?? "work"),
     persistent: true,
     projectId: undefined,
+    sessionSummary: null,
     updatedAt: new Date().toISOString(),
   };
+
   const removeIds = new Set<string>([
     sourceThreadId,
     defaultId,
@@ -157,12 +166,27 @@ export function adoptThreadAsUniversalDefault(
     spaceChatId(workspaceId, "research"),
     spaceChatId(workspaceId, "home"),
   ]);
+
+  // Retire old docks / the draft. Keep defaultId in the store as `promoted`.
   const removedIds = threads
-    .filter((item) => removeIds.has(item.id) && item.id !== sourceThreadId)
+    .filter(
+      (item) =>
+        removeIds.has(item.id) &&
+        item.id !== sourceThreadId &&
+        item.id !== defaultId,
+    )
     .map((item) => item.id);
   if (sourceThreadId !== defaultId) removedIds.push(sourceThreadId);
+
   const rest = threads.filter((item) => !removeIds.has(item.id));
-  return { threads: [promoted, ...rest], id: defaultId, removedIds };
+  return {
+    threads: [promoted, ...rest],
+    id: defaultId,
+    // Unique retire list for remote cleanup (draft + old docks). defaultId is
+    // replaced in place via message wipe + upsert, not thread delete.
+    removedIds: [...new Set(removedIds)],
+    promoted,
+  };
 }
 
 /**

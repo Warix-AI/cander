@@ -8,8 +8,7 @@ import { panelChoiceSuggestions } from "@/lib/panel-suggestions";
 import { useMobileShell } from "@/lib/use-media-query";
 
 export function PanelChoiceState() {
-  const { startDraftProject, setDraftAsDefaultChat, openStandaloneBrowser } =
-    useApp();
+  const { setDraftAsDefaultChat, openStandaloneBrowser } = useApp();
   const mobile = useMobileShell();
   const items = panelChoiceSuggestions();
   const [busy, setBusy] = useState<string | null>(null);
@@ -34,7 +33,7 @@ export function PanelChoiceState() {
           <PanelToggle />
         </div>
       ) : null}
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-10">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-10">
         <p className="text-center text-[15px] font-medium tracking-[-0.02em]">
           What would you like to do?
         </p>
@@ -42,13 +41,21 @@ export function PanelChoiceState() {
         <div className="mt-8 flex w-full max-w-[16rem] flex-col gap-2">
           {items.map((item) => {
             const Icon = item.icon;
+            const dest =
+              item.space === "research"
+                ? "research"
+                : item.space === "studio"
+                  ? "studio"
+                  : item.space === "build"
+                    ? "build"
+                    : "work";
             return (
               <button
                 key={item.id}
                 type="button"
                 disabled={Boolean(busy)}
                 onClick={() =>
-                  void run(item.id, () => startDraftProject(item.space))
+                  void run(item.id, () => setDraftAsDefaultChat(dest))
                 }
                 className={choiceButtonClass}
               >
@@ -86,7 +93,7 @@ export function PanelChoiceState() {
                 {busy === "default-all" ? "Saving…" : "Default chat"}
               </span>
               <span className="block truncate text-[11.5px] text-muted-foreground">
-                Add as default chat to spaces
+                Replace spaces default chat
               </span>
             </span>
           </button>

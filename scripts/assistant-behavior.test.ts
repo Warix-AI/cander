@@ -164,7 +164,7 @@ describe("clarification cards", () => {
           required: true,
           choices: [
             { id: "build", label: "Build" },
-            { id: "research", label: "Explore" },
+            { id: "research", label: "Home" },
           ],
         },
       ],
@@ -184,10 +184,10 @@ describe("clarification cards", () => {
     assert.equal(normalized.title, "Hey Dude");
 
     const rows = formatClarificationAnswersForDisplay({
-      undefined: "Explore",
+      undefined: "Home",
     });
     assert.equal(rows[0]?.label, "Space");
-    assert.equal(rows[0]?.value, "Explore");
+    assert.equal(rows[0]?.value, "Home");
 
     const sanitized = sanitizeClarificationQuestions([
       {

@@ -67,7 +67,7 @@ export function UserMessage({
         </div>
       ) : null}
       {content ? (
-        <div className="rounded-2xl bg-muted px-3.5 py-2.5">
+        <div className="light-surface rounded-2xl px-3.5 py-2.5">
           <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed tracking-[-0.01em]">
             {content}
           </p>

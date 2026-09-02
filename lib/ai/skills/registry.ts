@@ -27,7 +27,7 @@ export function listAiSkills(): AiSkillDefinition[] {
 
 registerAiSkill({
   id: "project-focus",
-  description: "Attach a focused Build/Explore project summary to the chat request.",
+  description: "Attach a focused Build/Home project summary to the chat request.",
   contextKinds: ["project", "research"],
   enabled: true,
 });

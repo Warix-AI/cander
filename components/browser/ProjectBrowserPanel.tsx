@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from "react";
 import {
   AppWindow,
   ChevronLeft,
   ChevronRight,
   Ellipsis,
   ExternalLink,
+  FileText,
   Globe,
+  Image,
   LayoutTemplate,
   Maximize2,
   MessageSquare,
@@ -17,6 +19,7 @@ import {
   Plus,
   RotateCw,
   Upload,
+  Video,
   Workflow,
   X,
   Zap,
@@ -65,7 +68,9 @@ import {
   getProjectBrowserSession,
   getProjectBrowserSessionRevision,
   isPreviewTabKind,
+  isStudioMediaTabKind,
   makeProjectPreviewTab,
+  makeStudioMediaTab,
   makeWebTab,
   navigateProjectBrowserTab,
   setProjectBrowserSession,
@@ -267,7 +272,9 @@ export function ProjectBrowserPanel({
   const closeTab = (id: string) => {
     const tab = session.tabs.find((item) => item.id === id);
     if (!tab || tab.pinned) return;
+    if (session.tabs.length <= 1) return;
     const tabs = session.tabs.filter((item) => item.id !== id);
+    if (!tabs.length) return;
     const activeTabId =
       session.activeTabId === id
         ? (tabs[0]?.id ?? session.activeTabId)
@@ -283,6 +290,16 @@ export function ProjectBrowserPanel({
     write({
       tabs: [...session.tabs, next],
       activeTabId: next.id,
+    });
+  };
+
+  const addStudioMediaTab = (
+    kind: "studio-image" | "studio-document",
+  ) => {
+    const tab = makeStudioMediaTab(kind);
+    write({
+      tabs: [...session.tabs, tab],
+      activeTabId: tab.id,
     });
   };
 
@@ -389,12 +406,14 @@ export function ProjectBrowserPanel({
   const canRename =
     !standalone &&
     !isWorkItemBrowserProjectId(projectId) &&
-    (spaceId === "build" || spaceId === "research");
+    (spaceId === "build" || spaceId === "research" || spaceId === "studio");
   /** Work space items hide URL/nav chrome until the user adds a browser tab. */
   const isWorkItemBrowser =
     !standalone && spaceId === "work" && isWorkItemBrowserProjectId(projectId);
-  const showBrowserNavChrome =
-    !isWorkItemBrowser || session.tabs.some((tab) => tab.kind === "web");
+  const isStudioProject = !standalone && spaceId === "studio";
+  const showBrowserNavChrome = isStudioProject
+    ? active?.kind === "web"
+    : !isWorkItemBrowser || session.tabs.some((tab) => tab.kind === "web");
 
   // Selected tab only — chat browser-context tools read this pointer.
   // Keep it while chat is open (mobile) so the user can ask about the page
@@ -683,7 +702,9 @@ export function ProjectBrowserPanel({
             onClose={closeTab}
             onAddUrl={() => addUrlTab()}
             onAddProject={addProjectTab}
+            onAddStudioMedia={addStudioMediaTab}
             extraProjects={extraProjects}
+            studioMode={isStudioProject}
           />
           {readingPage ? (
             <span
@@ -918,19 +939,54 @@ export function ProjectBrowserPanel({
         onClose={() => setMobileSheet(null)}
         mode="add"
       >
-        <ProjectAddSheetHeader
-          query={addQuery}
-          onQueryChange={setAddQuery}
-          onSubmit={submitAddQuery}
-        />
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] pt-1">
-          {!standalone ? (
-            <>
-              <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-                Projects
-              </p>
-              {filteredExtra.length ? (
-                filteredExtra.map((item) => (
+        {isStudioProject ? (
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] pt-3">
+            <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
+              Add to project
+            </p>
+            {(
+              [
+                { kind: "studio-image" as const, label: "Image", Icon: Image },
+                {
+                  kind: "studio-document" as const,
+                  label: "Document",
+                  Icon: FileText,
+                },
+              ] as const
+            ).map((item) => {
+              const Icon = item.Icon;
+              return (
+                <button
+                  key={item.kind}
+                  type="button"
+                  onClick={() => {
+                    addStudioMediaTab(item.kind);
+                    setMobileSheet(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left text-[15px] hover:bg-muted/70"
+                >
+                  <Icon className="h-4 w-4 shrink-0" strokeWidth={1.6} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => {
+                addUrlTab();
+                setMobileSheet(null);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left text-[15px] hover:bg-muted/70"
+            >
+              <Globe className="h-4 w-4 shrink-0" strokeWidth={1.6} />
+              <span>Browser tab</span>
+            </button>
+            {extraProjects.length ? (
+              <>
+                <p className="mt-3 px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
+                  Other projects
+                </p>
+                {extraProjects.map((item) => (
                   <button
                     key={item.id}
                     type="button"
@@ -943,19 +999,52 @@ export function ProjectBrowserPanel({
                     <KindGlyph kind={item.kind} />
                     <span className="truncate">{item.title}</span>
                   </button>
-                ))
+                ))}
+              </>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <ProjectAddSheetHeader
+              query={addQuery}
+              onQueryChange={setAddQuery}
+              onSubmit={submitAddQuery}
+            />
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] pt-1">
+              {!standalone ? (
+                <>
+                  <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
+                    Projects
+                  </p>
+                  {filteredExtra.length ? (
+                    filteredExtra.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          addProjectTab(item);
+                          setMobileSheet(null);
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left text-[15px] hover:bg-muted/70"
+                      >
+                        <KindGlyph kind={item.kind} />
+                        <span className="truncate">{item.title}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="px-2 py-3 text-[13px] text-muted-foreground">
+                      No other projects to add. Enter a URL above to open a tab.
+                    </p>
+                  )}
+                </>
               ) : (
                 <p className="px-2 py-3 text-[13px] text-muted-foreground">
-                  No other projects to add. Enter a URL above to open a tab.
+                  Enter a URL above to open a tab.
                 </p>
               )}
-            </>
-          ) : (
-            <p className="px-2 py-3 text-[13px] text-muted-foreground">
-              Enter a URL above to open a tab.
-            </p>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </MobileBottomSheet>
     </div>
   );
@@ -1111,6 +1200,18 @@ function ProjectBrowserBody({
     );
   }
 
+  if (isStudioMediaTabKind(tab.kind)) {
+    return (
+      <StudioMediaSurface
+        kind={tab.kind}
+        src={tab.url}
+        onSrcChange={(nextUrl) =>
+          syncSurfaceMeta({ url: nextUrl, title: tab.title })
+        }
+      />
+    );
+  }
+
   if (isHttpUrl(tab.url) && tab.url !== "https://" && tab.url !== "http://") {
     return (
       <div className="relative h-full min-h-0">
@@ -1145,6 +1246,8 @@ function ProjectTabStrip({
   onClose,
   onAddUrl,
   onAddProject,
+  onAddStudioMedia,
+  studioMode = false,
   webOnly = false,
 }: {
   tabs: ProjectBrowserTab[];
@@ -1155,6 +1258,10 @@ function ProjectTabStrip({
   onClose: (id: string) => void;
   onAddUrl: () => void;
   onAddProject: (project: SpaceProject) => void;
+  onAddStudioMedia?: (
+    kind: "studio-image" | "studio-document",
+  ) => void;
+  studioMode?: boolean;
   webOnly?: boolean;
 }) {
   return (
@@ -1167,6 +1274,7 @@ function ProjectTabStrip({
           project={projects.find((item) => item.id === tab.projectId)}
           onSelect={() => onSelect(tab.id)}
           onClose={() => onClose(tab.id)}
+          canClose={tabs.length > 1 && !tab.pinned}
         />
       ))}
       {webOnly ? (
@@ -1185,6 +1293,8 @@ function ProjectTabStrip({
           extraProjects={extraProjects}
           onAddUrl={onAddUrl}
           onAddProject={onAddProject}
+          onAddStudioMedia={onAddStudioMedia}
+          studioMode={studioMode}
         />
       )}
     </div>
@@ -1220,6 +1330,7 @@ function ProjectMobileTabBar({
       {tabs.map((tab) => {
         const active = tab.id === activeId;
         const label = labelFor(tab);
+        const canClose = tabs.length > 1 && !tab.pinned;
         return (
           <button
             key={tab.id}
@@ -1236,7 +1347,7 @@ function ProjectMobileTabBar({
           >
             <TabGlyph tab={tab} className="h-3.5 w-3.5" />
             <span className="truncate">{label}</span>
-            {tab.pinned ? null : (
+            {canClose ? (
               <span
                 role="button"
                 tabIndex={0}
@@ -1256,7 +1367,7 @@ function ProjectMobileTabBar({
               >
                 <X className="h-2.5 w-2.5" strokeWidth={2} />
               </span>
-            )}
+            ) : null}
           </button>
         );
       })}
@@ -1496,12 +1607,14 @@ function ProjectTabButton({
   project,
   onSelect,
   onClose,
+  canClose = true,
 }: {
   tab: ProjectBrowserTab;
   active: boolean;
   project?: SpaceProject;
   onSelect: () => void;
   onClose: () => void;
+  canClose?: boolean;
 }) {
   return (
     <button
@@ -1524,7 +1637,7 @@ function ProjectTabButton({
         {tab.title ||
           (tab.url !== "about:blank" ? tab.url : "")}
       </span>
-      {tab.pinned ? null : (
+      {canClose ? (
         <span
           role="button"
           tabIndex={0}
@@ -1544,7 +1657,7 @@ function ProjectTabButton({
         >
           <X className="h-2.5 w-2.5" strokeWidth={2} />
         </span>
-      )}
+      ) : null}
     </button>
   );
 }
@@ -1553,11 +1666,17 @@ function AddTabMenu({
   extraProjects,
   onAddUrl,
   onAddProject,
+  onAddStudioMedia,
+  studioMode = false,
   compact = false,
 }: {
   extraProjects: SpaceProject[];
   onAddUrl: () => void;
   onAddProject: (project: SpaceProject) => void;
+  onAddStudioMedia?: (
+    kind: "studio-image" | "studio-document",
+  ) => void;
+  studioMode?: boolean;
   compact?: boolean;
 }) {
   return (
@@ -1583,6 +1702,40 @@ function AddTabMenu({
     >
       {(close) => (
         <>
+          {studioMode && onAddStudioMedia ? (
+            <>
+              {(
+                [
+                  { kind: "studio-image" as const, label: "Image", Icon: Image },
+                  {
+                    kind: "studio-document" as const,
+                    label: "Document",
+                    Icon: FileText,
+                  },
+                ] as const
+              ).map((item) => {
+                const Icon = item.Icon;
+                return (
+                  <button
+                    key={item.kind}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onAddStudioMedia(item.kind);
+                      close();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] hover:bg-muted"
+                  >
+                    <Icon
+                      className="h-3.5 w-3.5 text-muted-foreground"
+                      strokeWidth={1.6}
+                    />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </>
+          ) : null}
           <button
             type="button"
             role="menuitem"
@@ -1593,7 +1746,7 @@ function AddTabMenu({
             className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] hover:bg-muted"
           >
             <Globe className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.6} />
-            New browser tab
+            {studioMode ? "Browser tab" : "New browser tab"}
           </button>
           {extraProjects.length ? (
             <>
@@ -1623,6 +1776,117 @@ function AddTabMenu({
   );
 }
 
+function StudioMediaSurface({
+  kind,
+  src,
+  onSrcChange,
+}: {
+  kind: "studio-image" | "studio-video" | "studio-document";
+  src: string;
+  onSrcChange: (next: string) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const accept =
+    kind === "studio-image"
+      ? "image/*"
+      : kind === "studio-video"
+        ? "video/*"
+        : ".pdf,.doc,.docx,.txt,.md,application/pdf,text/*";
+  const label =
+    kind === "studio-image"
+      ? "image"
+      : kind === "studio-video"
+        ? "video"
+        : "document";
+  const Icon =
+    kind === "studio-image" ? Image : kind === "studio-video" ? Video : FileText;
+  const hasMedia = Boolean(src && src !== "about:blank");
+
+  return (
+    <div className="relative flex h-full min-h-0 flex-col items-center justify-center bg-neutral-50 dark:bg-neutral-950">
+      <input
+        ref={fileRef}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result;
+            if (typeof result === "string") onSrcChange(result);
+          };
+          reader.readAsDataURL(file);
+        }}
+      />
+      {hasMedia && kind === "studio-image" ? (
+        <img
+          src={src}
+          alt=""
+          className="max-h-full max-w-full object-contain"
+        />
+      ) : hasMedia && kind === "studio-video" ? (
+        <video
+          src={src}
+          controls
+          className="max-h-full max-w-full"
+        />
+      ) : hasMedia && kind === "studio-document" && src.startsWith("data:application/pdf") ? (
+        <iframe title="Document" src={src} className="h-full w-full border-0" />
+      ) : hasMedia ? (
+        <div className="flex flex-col items-center gap-3 px-6 text-center">
+          <Icon className="h-8 w-8 text-muted-foreground" strokeWidth={1.4} />
+          <p className="text-[13px] text-muted-foreground">
+            {label} ready
+          </p>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-border bg-background px-3 text-[13px] font-medium hover:bg-muted"
+          >
+            <Upload className="h-3.5 w-3.5" strokeWidth={1.6} />
+            Replace
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-3 px-6 text-center">
+          <span className="inline-flex h-12 w-12 items-center justify-center rounded-[14px] bg-muted">
+            <Icon className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
+          </span>
+          <div>
+            <p className="text-[14px] font-medium tracking-[-0.02em]">
+              Add {label}
+            </p>
+            <p className="mt-1 text-[12.5px] text-muted-foreground">
+              Upload a file to start this canvas.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-primary px-3.5 text-[13px] font-medium text-primary-foreground hover:bg-foreground"
+          >
+            <Upload className="h-3.5 w-3.5" strokeWidth={1.6} />
+            Upload {label}
+          </button>
+        </div>
+      )}
+      {hasMedia && (kind === "studio-image" || kind === "studio-video") ? (
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="absolute right-3 bottom-3 inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border bg-background/90 px-2.5 text-[12px] font-medium backdrop-blur hover:bg-muted"
+        >
+          <Upload className="h-3 w-3" strokeWidth={1.6} />
+          Replace
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function TabGlyph({
   tab,
   kind,
@@ -1634,6 +1898,15 @@ function TabGlyph({
 }) {
   if (tab.kind === "agent-browser") {
     return <MousePointer2 className={cn("h-3.5 w-3.5 shrink-0", className)} strokeWidth={1.6} />;
+  }
+  if (tab.kind === "studio-image") {
+    return <Image className={cn("h-3.5 w-3.5 shrink-0", className)} strokeWidth={1.6} />;
+  }
+  if (tab.kind === "studio-video") {
+    return <Video className={cn("h-3.5 w-3.5 shrink-0", className)} strokeWidth={1.6} />;
+  }
+  if (tab.kind === "studio-document") {
+    return <FileText className={cn("h-3.5 w-3.5 shrink-0", className)} strokeWidth={1.6} />;
   }
   if (tab.kind === "web" || isHttpUrl(tab.url)) {
     return (

@@ -103,10 +103,30 @@ export function ProjectsBrowser({
       const items = list.map((item) =>
         entry(item.id, item.name, item.id, editedMeta(item.updatedAt), "paper"),
       );
-      return pack("paper", "Projects", "No Explore projects yet. Create one to start searching.", openProject, items, items.map((item) => ({
+      return pack("paper", "Projects", "No Home projects yet. Create one to start searching.", openProject, items, items.map((item) => ({
         name: item.name,
         items: [item],
       })));
+    }
+
+    if (space === "studio") {
+      const list = projects.filter(
+        (item) => item.space === "studio" && item.workspaceId === workspaceId,
+      );
+      const items = list.map((item) =>
+        entry(item.id, item.name, item.id, editedMeta(item.updatedAt), "paper"),
+      );
+      return pack(
+        "paper",
+        "Projects",
+        "No Studio projects yet. Create one to open a browser.",
+        openProject,
+        items,
+        items.map((item) => ({
+          name: item.name,
+          items: [item],
+        })),
+      );
     }
 
     if (space === "work") {

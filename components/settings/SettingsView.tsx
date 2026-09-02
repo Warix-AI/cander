@@ -19,6 +19,7 @@ import {
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { PlansSettings } from "@/components/settings/PlansSettings";
 import { AccountSecuritySettings } from "@/components/settings/AccountSecuritySettings";
+import { UsageStatusPanel } from "@/components/settings/UsageStatusPanel";
 import {
   SettingsField,
   SettingsFootnote,
@@ -905,6 +906,8 @@ function GeneralSettings({
             {profileFields}
           </SettingsGroup>
         )}
+
+        <UsageStatusPanel />
 
         <AccountSecuritySettings onAfterSignOut={onAfterSignOut} />
       </div>

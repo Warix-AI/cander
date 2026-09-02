@@ -137,8 +137,7 @@ import {
   DEFAULT_PANEL_RATIO,
   PANEL_RATIO_OPEN_FLOOR,
 } from "@/lib/right-panel";
-import { writeHomeDockChatOpen, readHomeDockChatOpen } from "@/lib/home-chat-preference";
-import { isChatSpace, chatSpaceId, isDockChatSpace, PRIMARY_NAV_SPACES, spaceAllowed, isDashboardOnlySpace, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
+import { isChatSpace, chatSpaceId, isDockChatSpace, PRIMARY_NAV_SPACES, resolveProductSpaceId, spaceAllowed, isDashboardOnlySpace, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
 import type {
   AccountPresetId,
   BuildTool,
@@ -206,7 +205,7 @@ import {
   modelContentFromMessage,
 } from "@/lib/ai/attachment-context";
 import { deleteAiChat } from "@/lib/api/ai-chat-api";
-import { deleteThreadsFromSupabase } from "@/lib/api/chat-api.supabase";
+import { deleteThreadsFromSupabase, replaceUniversalDefaultOnSupabase } from "@/lib/api/chat-api.supabase";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
 import { isRawOpenAIModeEnabled } from "@/lib/ai/raw-openai/flags";
 import { detectImageGenerationIntent } from "@/lib/ai/raw-openai/image-generation";
@@ -363,7 +362,7 @@ type AppContextValue = {
   /** Create a Build / Explore project from the active draft chat. */
   startDraftProject: (space: SpaceId) => Promise<void>;
   /** Promote the draft chat to the default across Work, Build, Explore, and Connectors. */
-  setDraftAsDefaultChat: (destSpace?: "work" | "build" | "research") => void;
+  setDraftAsDefaultChat: (destSpace?: "work" | "build" | "research" | "studio") => void;
   collapseDraft: () => void;
   /** Close space chat and restore the full workspace dashboard. */
   closeSpaceChat: () => void;
@@ -739,18 +738,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const applySnapshot = useCallback((snap: Snapshot) => {
+    const spaceId = resolveProductSpaceId(snap.spaceId) ?? snap.spaceId;
     const normalized =
-      snap.spaceId === "home" && !snap.threadId
-        ? {
-            ...snap,
-            threadId: null,
-            projectId: null,
-            panelMode: "collapsed" as const,
-            panelIntent: "browse" as const,
-          }
-        : snap.spaceId === "home"
-          ? { ...snap, projectId: null }
-          : snap;
+      spaceId !== snap.spaceId ? { ...snap, spaceId } : snap;
     setView(normalized.view);
     setSpaceId(normalized.spaceId);
     setThreadId(normalized.threadId);
@@ -1100,7 +1090,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const openSpaceChat = useCallback(
     (space: SpaceId, opts?: { keepProject?: boolean; landOnPanel?: boolean }) => {
-      if (!isDockChatSpace(space)) return;
+      const dest = resolveProductSpaceId(space) ?? space;
+      if (!isDockChatSpace(dest)) return;
       const keepProject = Boolean(opts?.keepProject && projectId);
       let tid = "";
       let hasMessages = false;
@@ -1111,12 +1102,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 current,
                 workspaceId,
                 projectId,
-                space,
+                dest,
               )
             : openSpaceDefaultChat(
                 current,
                 workspaceId,
-                space,
+                dest,
               );
         tid = result.id;
         hasMessages = threadHasTurns(
@@ -1125,7 +1116,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return result.threads;
       });
       setThreadId(tid);
-      setSpaceId(space);
+      setSpaceId(dest);
       if (!keepProject) setProjectId(null);
       setConnectorId(null);
       setJobId(null);
@@ -1133,21 +1124,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setView("space");
       setPanelIntent("execute");
       setPanelMode("split");
-      const leavingHomeDashboard =
-        mobile && spaceId === "home" && !threadId && !drafting;
       if (mobile) {
         skipMobilePagerTransitionOnce();
-        if (leavingHomeDashboard) skipMobileSpaceEnterOnce();
       }
       const landOnPanel = opts?.landOnPanel ?? true;
       setMobileSurface(mobile ? (landOnPanel ? "panel" : "chat") : "chat");
       setDrafting(!hasMessages);
-      if (space === "build") setBuildTool("preview");
-      if (space === "research") setResearchTool("overview");
-      if (space === "home") writeHomeDockChatOpen(workspaceId, true);
+      if (dest === "build") setBuildTool("preview");
+      if (dest === "research") setResearchTool("overview");
+      if (dest === "studio") setStudioTool("canvas");
       pushTarget({
         view: "space",
-        spaceId: space,
+        spaceId: dest,
         threadId: tid,
         projectId: keepProject ? projectId : null,
         panelMode: "split",
@@ -1157,7 +1145,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: null,
       });
     },
-    [workspaceId, pushTarget, projectId, threadId, mobile, spaceId, drafting],
+    [workspaceId, pushTarget, projectId, mobile],
   );
 
   const applyHomeNewChat = useCallback(() => {
@@ -1383,6 +1371,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (sourceThreadId: string) => {
       let tid = sourceThreadId;
       let removedIds: string[] = [];
+      let promoted: Thread | null = null;
       setThreads((current) => {
         const result = adoptThreadAsUniversalDefault(
           current,
@@ -1391,9 +1380,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
         tid = result.id;
         removedIds = result.removedIds;
+        promoted = result.promoted;
         return result.threads;
       });
-      if (removedIds.length && isSupabaseConfigured()) {
+      if (promoted && isSupabaseConfigured()) {
+        // Hard replace on the server so hydrate cannot re-merge the old transcript.
+        void replaceUniversalDefaultOnSupabase(
+          { workspaceId, actorId: actor.id },
+          promoted,
+          removedIds,
+        ).catch((err) => {
+          console.warn("[cander] replace universal default failed", err);
+          if (removedIds.length) {
+            void deleteThreadsFromSupabase(
+              { workspaceId, actorId: actor.id },
+              removedIds,
+            ).catch(() => {
+              /* best-effort fallback */
+            });
+          }
+        });
+      } else if (removedIds.length && isSupabaseConfigured()) {
         void deleteThreadsFromSupabase(
           { workspaceId, actorId: actor.id },
           removedIds,
@@ -1407,7 +1414,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const setDraftAsDefaultChat = useCallback(
-    (destSpace: "work" | "build" | "research" = "work") => {
+    (destSpace: "work" | "build" | "research" | "studio" = "work") => {
       if (!threadId) return;
       const tid = promoteThreadToUniversalDefault(threadId);
       setThreadId(tid);
@@ -1424,6 +1431,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMobileSurface("chat");
       if (destSpace === "build") setBuildTool("preview");
       if (destSpace === "research") setResearchTool("overview");
+      if (destSpace === "studio") setStudioTool("canvas");
       if (mobile) {
         skipMobilePagerTransitionOnce();
       }
@@ -1457,7 +1465,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const closeSpaceChat = useCallback(() => {
     summarizeThreadById(threadId);
-    if (spaceId === "home") writeHomeDockChatOpen(workspaceId, false);
     setDrafting(false);
     setThreadId(null);
     const keepProject = Boolean(projectId);
@@ -1496,7 +1503,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     connectorId,
     jobId,
     skillId,
-    workspaceId,
   ]);
 
   const clearSessionSummary = useCallback(
@@ -3210,12 +3216,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const openSpace = useCallback((id: NavDestinationId) => {
     const allowed = memberSpaces(workspaceId, actor.id, workspacePolicies);
     const planOpts = { billingPlan };
-    let target: NavDestinationId | null = id;
+    let target: NavDestinationId | null =
+      resolveProductSpaceId(id) ?? id;
     if (target && !spaceAllowed(target, allowed, planOpts)) {
       target = null;
     }
     if (!target) {
-      const fallback = (["home", "build", "research", "work"] as const).find(
+      const fallback = (["research", "work", "build", "studio"] as const).find(
         (space) => spaceAllowed(space, allowed, planOpts),
       );
       if (!fallback) {
@@ -3286,41 +3293,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const goToSpace = (dest: NavDestinationId) => {
-      if (isDashboardOnlySpace(dest)) {
-        // Restore Home dock chat when the user left it open.
-        if (dest === "home" && readHomeDockChatOpen(workspaceId)) {
-          openSpaceChat("home", { landOnPanel: false });
-          return;
-        }
-        if (mobile) {
-          skipMobilePagerTransitionOnce();
-          skipMobileSpaceEnterOnce();
-        }
-        setView("space");
-        setSpaceId(dest);
-        setProjectId(null);
-        setConnectorId(null);
-        setJobId(null);
-        setSkillId(null);
-        setThreadId(null);
-        setDrafting(false);
-        setPanelIntent("browse");
-        setPanelMode("collapsed");
-        setMobileSurface("panel");
-        pushTarget({
-          view: "space",
-          spaceId: dest,
-          threadId: null,
-          projectId: null,
-          panelMode: "collapsed",
-          panelIntent: "browse",
-          connectorId: null,
-          jobId: null,
-          skillId: null,
-        });
-        return;
-      }
-
       setView("space");
       setSpaceId(dest);
       setProjectId(null);
@@ -3332,12 +3304,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           openSpaceChat(dest);
           return;
         }
-        setView("space");
-        setSpaceId(dest);
-        setProjectId(null);
-        setConnectorId(null);
-        setJobId(null);
-        setSkillId(null);
         setDrafting(Boolean(threadId) && drafting);
         setPanelIntent("execute");
         setPanelMode("split");
@@ -3354,6 +3320,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           skillId: null,
         });
         return;
+      }
+      if (mobile) {
+        skipMobilePagerTransitionOnce();
+        skipMobileSpaceEnterOnce();
       }
       setDrafting(false);
       setPanelIntent("browse");
@@ -3612,6 +3582,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPanelIntent("execute");
     if (space === "build") setBuildTool("preview");
     if (space === "research") setResearchTool("overview");
+    if (space === "studio") setStudioTool("canvas");
     setPanelMode("split");
     if (opts?.landOnPanel) {
       setMobileSurface("panel");
@@ -3939,7 +3910,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!space || !["build", "research", "work"].includes(space)) {
           return {
             ok: false,
-            detail: "Pick a space (Build or Explore) before creating a project.",
+            detail: "Pick a space (Build or Home) before creating a project.",
           };
         }
         const kind =
@@ -3981,7 +3952,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return {
             ok: true,
-            detail: `Created “${project.title}” in ${space === "research" ? "Explore" : space === "build" ? "Build" : "Work"}.`,
+            detail: `Created “${project.title}” in ${space === "research" ? "Home" : space === "build" ? "Build" : "Work"}.`,
             projectId: project.id,
           };
         } catch (err) {
@@ -4534,7 +4505,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (ref.type === "source") {
         const project = localSpaceEntityStore.createProject(ctx, {
           space: "build",
-          title: ref.label ?? "From Explore",
+          title: ref.label ?? "From Home",
           kind: "app",
           summary: ref.snapshot ?? "",
         });

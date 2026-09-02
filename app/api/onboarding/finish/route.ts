@@ -7,7 +7,7 @@ import { normalizePlan, isTeamPlan } from "@/lib/plans";
 import { isStripeConfigured } from "@/lib/stripe/config";
 import type { BillingPlan, WorkspaceKind } from "@/lib/types";
 
-const NAV_SPACES = ["work", "build", "research"] as const;
+const NAV_SPACES = ["work", "build", "research", "studio"] as const;
 
 /**
  * Completes onboarding writes with the service role so missing client GRANTs

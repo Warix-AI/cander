@@ -198,14 +198,20 @@ export function formatClarificationAnswersForModel(
   return lines.join("\n");
 }
 
-/** Space ids used by project.create (Explore UI label → research). */
+/** Space ids used by project.create (Home UI label → research). */
 export function normalizeSpaceAnswer(
   value: unknown,
 ): "build" | "research" | "work" | null {
   if (typeof value !== "string") return null;
   const s = value.trim().toLowerCase();
   if (s === "build") return "build";
-  if (s === "research" || s === "explore" || s === "explorer" || s === "studio")
+  if (
+    s === "research" ||
+    s === "explore" ||
+    s === "explorer" ||
+    s === "home" ||
+    s === "studio"
+  )
     return "research";
   if (s === "work") return "work";
   return null;
@@ -218,7 +224,7 @@ function pickString(value: unknown): string | null {
 }
 
 function spaceDisplayLabel(space: "build" | "research" | "work"): string {
-  if (space === "research") return "Explore";
+  if (space === "research") return "Home";
   if (space === "build") return "Build";
   return "Work";
 }
@@ -341,7 +347,7 @@ export function sanitizeClarificationQuestions(
       else if (!choiceId) choiceId = `opt${j}`;
       const display =
         choiceId === "research"
-          ? "Explore"
+          ? "Home"
           : choiceId === "build"
             ? "Build"
             : choiceId === "work"
@@ -366,7 +372,7 @@ export function sanitizeClarificationQuestions(
         required: true,
         choices: [
           { id: "build", label: "Build" },
-          { id: "research", label: "Explore" },
+          { id: "research", label: "Home" },
         ],
       };
     }
@@ -416,7 +422,7 @@ export const CREATE_PROJECT_SPACE_QUESTIONS: ClarificationQuestion[] = [
     required: true,
     choices: [
       { id: "build", label: "Build" },
-      { id: "research", label: "Explore" },
+      { id: "research", label: "Home" },
     ],
   },
   {

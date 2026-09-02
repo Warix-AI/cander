@@ -1,22 +1,21 @@
 import {
   Blocks,
   Briefcase,
+  Clapperboard,
   Globe,
   Hammer,
   History,
   Home,
-  Search,
-  Sparkles,
 } from "lucide-react";
 import { isExtraNavId, type SidebarNavId } from "./spaces";
 import type { SpaceId } from "./types";
 
 export const spaceIcons: Record<SpaceId, typeof Hammer> = {
-  home: Home,
+  home: Home, // legacy alias — same glyph as research Home
   work: Briefcase,
   build: Hammer,
-  research: Search,
-  studio: Sparkles,
+  research: Home,
+  studio: Clapperboard,
 };
 
 export const extraNavIcons: Record<

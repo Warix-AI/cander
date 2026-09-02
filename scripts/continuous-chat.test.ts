@@ -20,21 +20,23 @@ import {
 } from "../lib/persistent-chat.ts";
 
 describe("shared space default chats", () => {
-  it("work/build/research resume the same universal default chat", () => {
+  it("work/build/research/studio resume the same universal default chat", () => {
     const work = openSpaceDefaultChat([], "ws1", "work");
     const build = openSpaceDefaultChat(work.threads, "ws1", "build");
     const research = openSpaceDefaultChat(build.threads, "ws1", "research");
+    const studio = openSpaceDefaultChat(research.threads, "ws1", "studio");
     const defaultId = continuousChatId("ws1");
     assert.equal(work.id, defaultId);
     assert.equal(build.id, defaultId);
     assert.equal(research.id, defaultId);
+    assert.equal(studio.id, defaultId);
     assert.equal(
-      research.threads.filter((t) => t.id === defaultId).length,
+      studio.threads.filter((t) => t.id === defaultId).length,
       1,
     );
     assert.equal(
-      research.threads.find((t) => t.id === defaultId)?.spaceId,
-      "research",
+      studio.threads.find((t) => t.id === defaultId)?.spaceId,
+      "studio",
     );
   });
 
@@ -116,6 +118,21 @@ describe("shared space default chats", () => {
       build.threads.find((t) => t.id === build.id)?.snippet,
       "plan a trip",
     );
+    const messages =
+      build.threads.find((t) => t.id === build.id)?.messages ?? [];
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0]?.content, "plan a trip");
+    assert.equal(
+      messages.some((m) => m.content === "old chat"),
+      false,
+    );
+    // Universal slot is replaced in place — not listed for thread delete.
+    assert.equal(
+      promoted.removedIds.includes(continuousChatId("ws1")),
+      false,
+    );
+    assert.ok(promoted.promoted);
+    assert.equal(promoted.promoted?.messages.length, 1);
   });
 
   it("legacy adoptThreadAsSpaceDefault still replaces a space dock id", () => {

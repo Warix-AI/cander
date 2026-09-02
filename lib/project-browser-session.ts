@@ -17,7 +17,10 @@ export type ProjectBrowserTabKind =
   | "build-preview"
   | "project-preview"
   | "web"
-  | "agent-browser";
+  | "agent-browser"
+  | "studio-image"
+  | "studio-video"
+  | "studio-document";
 
 export type ProjectBrowserTab = {
   id: string;
@@ -77,7 +80,7 @@ export function parseProjectBrowserStorageKey(
   if (parts.length !== 4) return null;
   const [profileId, workspaceId, spaceId, projectId] = parts;
   if (!profileId || !workspaceId || !spaceId || !projectId) return null;
-  if (spaceId !== "work" && spaceId !== "build" && spaceId !== "research") {
+  if (spaceId !== "work" && spaceId !== "build" && spaceId !== "research" && spaceId !== "studio") {
     return null;
   }
   return { profileId, workspaceId, spaceId, projectId };
@@ -108,7 +111,10 @@ export function normalizeTabKind(
     raw === "build-preview" ||
     raw === "project-preview" ||
     raw === "web" ||
-    raw === "agent-browser"
+    raw === "agent-browser" ||
+    raw === "studio-image" ||
+    raw === "studio-video" ||
+    raw === "studio-document"
   ) {
     return raw;
   }
@@ -145,6 +151,24 @@ export function makePinnedProjectTab(input: {
   url: string;
 }): ProjectBrowserTab {
   return makePinnedBuildPreviewTab(input);
+}
+
+export function makeStudioMediaTab(
+  kind: "studio-image" | "studio-video" | "studio-document",
+  title?: string,
+): ProjectBrowserTab {
+  const labels = {
+    "studio-image": "Image",
+    "studio-video": "Video",
+    "studio-document": "Document",
+  } as const;
+  return {
+    id: newBrowserTabId(),
+    kind,
+    title: title ?? labels[kind],
+    url: "",
+    ...withHistory(""),
+  };
 }
 
 export function makeWebTab(url = "about:blank"): ProjectBrowserTab {
@@ -218,6 +242,11 @@ export function defaultProjectBrowserSession(input: {
   if (spaceId === "research") {
     const web = makeWebTab();
     return { tabs: [web], activeTabId: web.id };
+  }
+
+  if (spaceId === "studio") {
+    const canvas = makeStudioMediaTab("studio-image", "Canvas");
+    return { tabs: [canvas], activeTabId: canvas.id };
   }
 
   if (spaceId === "build") {
@@ -590,6 +619,14 @@ export function updateProjectBrowserTab(
 
 export function isPreviewTabKind(kind: ProjectBrowserTabKind) {
   return kind === "build-preview" || kind === "project-preview";
+}
+
+export function isStudioMediaTabKind(kind: ProjectBrowserTabKind) {
+  return (
+    kind === "studio-image" ||
+    kind === "studio-video" ||
+    kind === "studio-document"
+  );
 }
 
 export function navigateProjectBrowserTab(

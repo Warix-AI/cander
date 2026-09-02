@@ -9,14 +9,15 @@ import {
   type RefObject,
 } from "react";
 import {
+  Clapperboard,
   FileText,
   Hammer,
+  Home,
   Link2,
   MessageSquare,
   Paperclip,
   Pin,
   Plus,
-  Search,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { ReferenceChip } from "@/components/shell/ReferenceChip";
@@ -897,6 +898,15 @@ export function Composer({
             <div>
               <MenuSection title="Start" />
               <MenuRow
+                icon={<Home className="h-full w-full" strokeWidth={1.75} />}
+                label="Home"
+                description="Open Home with this chat"
+                onClick={() => {
+                  setMenu(null);
+                  setDraftAsDefaultChat("research");
+                }}
+              />
+              <MenuRow
                 icon={<Hammer className="h-full w-full" strokeWidth={1.75} />}
                 label="Build"
                 description="Start a build with this chat"
@@ -906,12 +916,14 @@ export function Composer({
                 }}
               />
               <MenuRow
-                icon={<Search className="h-full w-full" strokeWidth={1.75} />}
-                label="Explore"
-                description="Start a search with this chat"
+                icon={
+                  <Clapperboard className="h-full w-full" strokeWidth={1.75} />
+                }
+                label="Studio"
+                description="Open Studio with this chat"
                 onClick={() => {
                   setMenu(null);
-                  setDraftAsDefaultChat("research");
+                  setDraftAsDefaultChat("studio");
                 }}
               />
               <MenuRow
@@ -919,7 +931,7 @@ export function Composer({
                   <MessageSquare className="h-full w-full" strokeWidth={1.75} />
                 }
                 label="Default chat"
-                description="Add as default chat to spaces"
+                description="Replace spaces default chat"
                 onClick={() => {
                   setMenu(null);
                   setDraftAsDefaultChat("work");
@@ -1519,13 +1531,13 @@ function ComposerMenu({
     <div
       role="menu"
       className={cn(
-        "absolute z-50 flex flex-col gap-1 overflow-y-auto px-1.5 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.28)]",
+        "absolute z-50 flex flex-col gap-1 overflow-y-auto overscroll-contain px-1.5 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.28)]",
         openAbove
           ? "inset-x-0 bottom-[calc(100%+8px)]"
           : "inset-x-0 top-[calc(100%+8px)]",
         mobile
-          ? "max-h-[min(20rem,42vh)] rounded-[18px] border border-white/10 bg-popover/92 backdrop-blur-xl dark:bg-zinc-900/90"
-          : "max-h-[min(22rem,48vh)] light-surface shell-g3-radius bg-popover dark:bg-zinc-900",
+          ? "max-h-[min(28rem,60vh)] rounded-[18px] border border-white/10 bg-popover/92 backdrop-blur-xl dark:bg-zinc-900/90"
+          : "max-h-[min(30rem,62vh)] light-surface shell-g3-radius bg-popover dark:bg-zinc-900",
       )}
     >
       {children}

@@ -39,7 +39,7 @@ export const WORK_FOCUS_NOW: WorkTodayItem[] = [
   {
     id: "focus-2",
     title: "Review Q3 roadmap draft",
-    source: "Explore",
+    source: "Home",
     action: "Review",
   },
   {
@@ -72,7 +72,7 @@ export const WORK_ON_DECK: WorkTodayItem[] = [
   {
     id: "deck-3",
     title: "Summarize competitor research notes",
-    source: "Explore",
+    source: "Home",
     action: "Open",
   },
 ];
@@ -112,7 +112,7 @@ export const WORK_COLLECTION_ITEMS: WorkCollectionItem[] = [
     id: "col-proj-2",
     title: "Market research — AI tools",
     summary: "Competitive landscape and pricing",
-    source: "Explore",
+    source: "Home",
     category: "projects",
     addedAt: "2026-08-22T11:15:00Z",
     cover: "/previews/docs.png",
@@ -130,7 +130,7 @@ export const WORK_COLLECTION_ITEMS: WorkCollectionItem[] = [
     id: "col-asset-2",
     title: "Q3 planning doc",
     summary: "Goals, milestones, and owners",
-    source: "Explore",
+    source: "Home",
     category: "assets",
     addedAt: "2026-08-15T13:20:00Z",
   },

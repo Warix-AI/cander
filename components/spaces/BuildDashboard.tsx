@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { useApp } from "@/components/app/AppProvider";
-import { useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
 import {
   DashBtn,
   DashFrame,
@@ -14,9 +13,11 @@ import {
   BUILD_CREATE_OPTIONS,
   NewBuildMenu,
 } from "@/components/spaces/NewBuildMenu";
+import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flow";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import { editedMeta } from "@/lib/format-relative-time";
-import { useSpaceMutation, useSpaceProjects } from "@/lib/hooks/use-space-query";
+import { projectCoverImageSrc } from "@/lib/project-cover";
+import { useSpaceProjects } from "@/lib/hooks/use-space-query";
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
@@ -38,8 +39,7 @@ export function BuildDashboard() {
     mobileSurface,
     view,
   } = useApp();
-  const ctx = useWorkspaceCtx();
-  const { createProject } = useSpaceMutation();
+  const { openCreate, modal } = useCreateProjectFlow(openProject);
   const mobile = useMobileShell();
   const chatClosed = useSpaceChatClosed();
   const hoistFilters =
@@ -66,59 +66,62 @@ export function BuildDashboard() {
           item.updatedAt,
           showCreator ? creatorLabel(item.createdBy, actor.id) : null,
         ),
-        image: item.cover,
+        image: projectCoverImageSrc(item.cover) ?? item.cover,
+        cover: item.cover,
         badge: item.status === "published" ? "Published" : undefined,
       })),
     [spaceProjects, showCreator, actor.id],
   );
 
   return (
-    <DashFrame
-      banner={false}
-      title="Build"
-      subtitle="Ship apps, websites, automations, and your recurring tasks."
-    >
-      <DashToolbar
-        active={hoistFilters}
-        onNewChat={chatClosed ? () => openSpaceChat("build") : undefined}
-        newChatLabel="Ask"
-        layout={{ value: spaceLayout, onChange: setSpaceLayout }}
-        extras={BUILD_CREATE_OPTIONS.map((item) => ({
-          id: item.kind,
-          label: item.label,
-          onClick: () => {
-            void createProject(ctx, {
-              space: "build",
-              title: `New ${item.label}`,
-              kind: item.kind,
-              summary: item.summary,
-            }).then((project) => openProject(project.id));
-          },
-        }))}
-        actions={
-          <>
-            {chatClosed ? (
-              <DashBtn onClick={() => openSpaceChat("build")}>Ask</DashBtn>
-            ) : null}
-            <NewBuildMenu icon onCreated={openProject} />
-          </>
-        }
+    <>
+      <DashFrame
+        banner={false}
+        title="Build"
+        subtitle="Ship apps, websites, automations, and your recurring tasks."
       >
-        <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
-      </DashToolbar>
+        <DashToolbar
+          active={hoistFilters}
+          onNewChat={chatClosed ? () => openSpaceChat("build") : undefined}
+          newChatLabel="Ask"
+          layout={{ value: spaceLayout, onChange: setSpaceLayout }}
+          extras={BUILD_CREATE_OPTIONS.map((item) => ({
+            id: item.kind,
+            label: item.label,
+            onClick: () =>
+              openCreate({
+                space: "build",
+                kind: item.kind,
+                defaultTitle: `New ${item.label}`,
+                summary: item.summary,
+              }),
+          }))}
+          actions={
+            <>
+              {chatClosed ? (
+                <DashBtn onClick={() => openSpaceChat("build")}>Ask</DashBtn>
+              ) : null}
+              <NewBuildMenu icon onCreated={openProject} />
+            </>
+          }
+        >
+          <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
+        </DashToolbar>
 
-      <div className="mt-5">
-        {projectsLoading && !projectItems.length ? (
-          <QuerySkeleton rows={2} />
-        ) : (
-          <PreviewGrid
-            layout={spaceLayout}
-            items={projectItems}
-            onOpen={openProject}
-            empty="No projects yet. Create one to start building."
-          />
-        )}
-      </div>
-    </DashFrame>
+        <div className="mt-5">
+          {projectsLoading && !projectItems.length ? (
+            <QuerySkeleton rows={2} />
+          ) : (
+            <PreviewGrid
+              layout={spaceLayout}
+              items={projectItems}
+              onOpen={openProject}
+              empty="No projects yet. Create one to start building."
+            />
+          )}
+        </div>
+      </DashFrame>
+      {modal}
+    </>
   );
 }

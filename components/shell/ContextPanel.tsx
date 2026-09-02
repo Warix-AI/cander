@@ -9,6 +9,7 @@ import { PanelChoiceState } from "@/components/panels/PanelChoiceState";
 import { PanelEmptyState } from "@/components/panels/PanelEmptyState";
 import { StandaloneBrowserPanel } from "@/components/browser/StandaloneBrowserPanel";
 import { ResearchPanel } from "@/components/panels/ResearchPanel";
+import { StudioPanel } from "@/components/panels/StudioPanel";
 import { WorkPanel } from "@/components/panels/WorkPanel";
 import { ScheduledPanel } from "@/components/panels/ScheduledPanel";
 import { SkillsPanel } from "@/components/panels/SkillsPanel";
@@ -87,6 +88,8 @@ export function ContextPanel() {
           <PanelChoiceState />
         ) : spaceId === "research" ? (
           <ResearchPanel />
+        ) : spaceId === "studio" ? (
+          <StudioPanel />
         ) : spaceId === "build" && skillId ? (
           <SkillsPanel />
         ) : spaceId === "build" && jobId ? (

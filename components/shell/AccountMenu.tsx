@@ -1,7 +1,9 @@
 "use client";
 
-import { Blocks, CircleUser, History, Settings } from "lucide-react";
+import { useState } from "react";
+import { Blocks, CircleUser, Gauge, History, Settings } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { UsageModal } from "@/components/overlays/UsageModal";
 import { ColorModeToggle } from "@/components/shell/ColorModeToggle";
 import { Dropdown } from "@/components/ui/Controls";
 import { signOutAccount } from "@/lib/auth/sign-out";
@@ -18,87 +20,105 @@ const flyoutRowClass =
 
 export function AccountMenu() {
   const { view, openSettings, openRecents, openSpace } = useApp();
+  const [usageOpen, setUsageOpen] = useState(false);
 
   return (
-    <Dropdown
-      className="w-full"
-      placement="top"
-      align="start"
-      matchTrigger
-      menuClassName="!p-1"
-      trigger={({ open, toggle }) => (
-        <button
-          type="button"
-          onClick={toggle}
-          className={cn(
-            SIDEBAR_FOOTER_ROW,
-            "w-full text-[13.5px]",
-            (open || view === "settings") && "bg-sidebar-accent font-medium",
-          )}
-          aria-label="General"
-          aria-expanded={open}
-        >
-          <CircleUser
-            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-            strokeWidth={2}
-          />
-          General
-        </button>
-      )}
-    >
-      {(close) => (
-        <div className="flex flex-col gap-px">
-          <div className="border-b border-border/50 px-2 py-2">
-            <ColorModeToggle compact />
-          </div>
+    <>
+      <Dropdown
+        className="w-full"
+        placement="top"
+        align="start"
+        matchTrigger
+        menuClassName="!p-1"
+        trigger={({ open, toggle }) => (
           <button
             type="button"
-            className={flyoutRowClass}
-            onClick={() => {
-              openSpace("connectors");
-              close();
-            }}
-          >
-            <Blocks
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-              strokeWidth={2}
-            />
-            Connectors
-          </button>
-          <button
-            type="button"
-            className={flyoutRowClass}
-            onClick={() => {
-              openRecents();
-              close();
-            }}
-          >
-            <History
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-              strokeWidth={2}
-            />
-            Recents
-          </button>
-          <button
-            type="button"
+            onClick={toggle}
             className={cn(
-              flyoutRowClass,
-              "border-t border-border/50",
-              view === "settings" && "bg-sidebar-accent font-medium",
+              SIDEBAR_FOOTER_ROW,
+              "w-full text-[13.5px]",
+              (open || view === "settings") && "bg-sidebar-accent font-medium",
             )}
-            onClick={() => {
-              openSettings();
-              close();
-            }}
+            aria-label="General"
+            aria-expanded={open}
           >
-            <Settings
+            <CircleUser
               className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
               strokeWidth={2}
             />
-            Settings
+            General
           </button>
-        </div>
-      )}
-    </Dropdown>
+        )}
+      >
+        {(close) => (
+          <div className="flex flex-col gap-px">
+            <div className="border-b border-border/50 px-2 py-2">
+              <ColorModeToggle compact />
+            </div>
+            <button
+              type="button"
+              className={flyoutRowClass}
+              onClick={() => {
+                openSpace("connectors");
+                close();
+              }}
+            >
+              <Blocks
+                className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                strokeWidth={2}
+              />
+              Connectors
+            </button>
+            <button
+              type="button"
+              className={flyoutRowClass}
+              onClick={() => {
+                close();
+                setUsageOpen(true);
+              }}
+            >
+              <Gauge
+                className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                strokeWidth={2}
+              />
+              Usage
+            </button>
+            <button
+              type="button"
+              className={flyoutRowClass}
+              onClick={() => {
+                openRecents();
+                close();
+              }}
+            >
+              <History
+                className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                strokeWidth={2}
+              />
+              Recents
+            </button>
+            <button
+              type="button"
+              className={cn(
+                flyoutRowClass,
+                "border-t border-border/50",
+                view === "settings" && "bg-sidebar-accent font-medium",
+              )}
+              onClick={() => {
+                openSettings();
+                close();
+              }}
+            >
+              <Settings
+                className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                strokeWidth={2}
+              />
+              Settings
+            </button>
+          </div>
+        )}
+      </Dropdown>
+      <UsageModal open={usageOpen} onClose={() => setUsageOpen(false)} />
+    </>
   );
 }

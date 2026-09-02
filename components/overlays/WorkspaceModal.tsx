@@ -213,7 +213,7 @@ export function WorkspaceModal() {
         </label>
 
         <p className="text-[12.5px] text-muted-foreground">
-          Includes Work, Build, and Explore.
+          Includes Home, Work, Build, and Studio.
         </p>
 
         {error ? (

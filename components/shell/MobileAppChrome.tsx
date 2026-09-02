@@ -17,8 +17,11 @@ import {
 import { BUILD_CREATE_OPTIONS } from "@/components/spaces/NewBuildMenu";
 import {
   EXPLORE_CREATE_OPTIONS,
-  type ExploreStart,
 } from "@/components/spaces/NewExploreMenu";
+import {
+  STUDIO_CREATE_OPTIONS,
+} from "@/components/spaces/NewStudioMenu";
+import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flow";
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import { normalizeProjectTitle } from "@/lib/project-name";
 import { navLabel } from "@/lib/use-main-nav-items";
@@ -30,7 +33,6 @@ import {
   isDockChatSpace,
   PRIMARY_NAV_SPACES,
 } from "@/lib/spaces";
-import type { ProjectKind } from "@/lib/space-entities";
 import { previewUrlForProject } from "@/lib/preview-url";
 import {
   findWorkCollectionItem,
@@ -88,6 +90,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     refreshPreview,
     openOverlay,
     openProject,
+    openQuickSearchBrowser,
     selectMode,
     setSelectMode,
     backToSpaceHome,
@@ -104,10 +107,14 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameBusy, setRenameBusy] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
-  const [newProjectBusy, setNewProjectBusy] = useState(false);
-  const { updateProject, createProject } = useSpaceMutation();
+  const { updateProject } = useSpaceMutation();
   const { ctx } = useSpaceData();
   const { project: entityProject } = useSpaceProject(projectId);
+  const {
+    openCreate,
+    busy: newProjectBusy,
+    modal: createProjectModal,
+  } = useCreateProjectFlow(openProject);
 
   const inSettings = view === "settings";
   const inMenuSub =
@@ -143,7 +150,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     !onMenuMain &&
     !showProjectTools &&
     (showWorkItemToggle ||
-      ((!isDashboardOnlySpace(spaceId) || spaceId === "home") &&
+      (!isDashboardOnlySpace(spaceId) &&
         (((inPrimarySpace || inConnector) &&
           (view === "space" || (view === "chat" && Boolean(spaceId)))) ||
           showHomeChatPanelToggle)));
@@ -170,11 +177,9 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const spaceLabel = spaceId ? navLabel(spaceId as SpaceId) ?? "Space" : "Space";
   const panelTabLabel = showHomeChatPanelToggle
     ? "Panel"
-    : spaceId === "home"
-      ? "Home"
-      : inConnector
-        ? "Connector"
-        : spaceLabel;
+    : inConnector
+      ? "Connector"
+      : spaceLabel;
   const headerBg =
     view === "space" && mobileSurface === "panel"
       ? SPACE_CANVAS_BG
@@ -236,47 +241,21 @@ export function MobileAppChrome({ className }: { className?: string }) {
   };
 
   const handlePanelCompose = () => {
+    if (spaceId === "studio") {
+      const item = STUDIO_CREATE_OPTIONS[0]!;
+      openCreate({
+        space: "studio",
+        kind: item.kind,
+        defaultTitle: item.title,
+        summary: item.summary,
+      });
+      return;
+    }
     if (spaceId === "build" || spaceId === "research") {
       setNewProjectOpen(true);
       return;
     }
     startPanelNewChat();
-  };
-
-  const createBuildProject = async (kind: ProjectKind, label: string) => {
-    if (newProjectBusy) return;
-    setNewProjectBusy(true);
-    setNewProjectOpen(false);
-    try {
-      const created = await createProject(ctx, {
-        space: "build",
-        title: `New ${label}`,
-        kind,
-        summary:
-          BUILD_CREATE_OPTIONS.find((item) => item.kind === kind)?.summary ??
-          "",
-      });
-      openProject(created.id);
-    } finally {
-      setNewProjectBusy(false);
-    }
-  };
-
-  const createExploreProject = async (item: ExploreStart) => {
-    if (newProjectBusy) return;
-    setNewProjectBusy(true);
-    setNewProjectOpen(false);
-    try {
-      const created = await createProject(ctx, {
-        space: "research",
-        title: item.title,
-        kind: item.kind,
-        summary: item.summary,
-      });
-      openProject(created.id);
-    } finally {
-      setNewProjectBusy(false);
-    }
   };
 
   const preview = previewAddress(project?.name);
@@ -285,7 +264,8 @@ export function MobileAppChrome({ className }: { className?: string }) {
     entityProject?.publishedUrl ||
       (liveUrl && !liveUrl.includes("localhost")),
   );
-  const canRename = spaceId === "build" || spaceId === "research";
+  const canRename =
+    spaceId === "build" || spaceId === "research" || spaceId === "studio";
   const projectTitle =
     findWorkCollectionItem(projectId)?.title ?? project?.name ?? "Project";
 
@@ -437,7 +417,13 @@ export function MobileAppChrome({ className }: { className?: string }) {
     ) : null;
 
   const projectPanelLabel =
-    spaceId === "research" ? "Explore" : spaceId === "work" ? "Work" : "Build";
+    spaceId === "research"
+      ? "Home"
+      : spaceId === "studio"
+        ? "Studio"
+        : spaceId === "work"
+          ? "Work"
+          : "Build";
 
   return (
     <>
@@ -606,29 +592,38 @@ export function MobileAppChrome({ className }: { className?: string }) {
               : "Choose what to create in this space."}
           </p>
           <div className="mt-4 space-y-0.5">
-            {spaceId === "research"
-              ? EXPLORE_CREATE_OPTIONS.map((item) => (
+            {spaceId === "research" ? (
+              <>
+                <button
+                  type="button"
+                  disabled={newProjectBusy}
+                  onClick={() => {
+                    setNewProjectOpen(false);
+                    openQuickSearchBrowser();
+                  }}
+                  className="flex w-full flex-col rounded-[12px] px-3 py-3 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
+                >
+                  <span className="text-[15px] font-medium tracking-[-0.01em]">
+                    Quick search
+                  </span>
+                  <span className="text-[13px] text-muted-foreground">
+                    Browse
+                  </span>
+                </button>
+                {EXPLORE_CREATE_OPTIONS.map((item) => (
                   <button
                     key={item.id}
                     type="button"
                     disabled={newProjectBusy}
-                    onClick={() => void createExploreProject(item)}
-                    className="flex w-full flex-col rounded-[12px] px-3 py-3 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
-                  >
-                    <span className="text-[15px] font-medium tracking-[-0.01em]">
-                      {item.label}
-                    </span>
-                    <span className="text-[13px] text-muted-foreground">
-                      {item.summary}
-                    </span>
-                  </button>
-                ))
-              : BUILD_CREATE_OPTIONS.map((item) => (
-                  <button
-                    key={item.kind}
-                    type="button"
-                    disabled={newProjectBusy}
-                    onClick={() => void createBuildProject(item.kind, item.label)}
+                    onClick={() => {
+                      setNewProjectOpen(false);
+                      openCreate({
+                        space: "research",
+                        kind: item.kind,
+                        defaultTitle: item.title,
+                        summary: item.summary,
+                      });
+                    }}
                     className="flex w-full flex-col rounded-[12px] px-3 py-3 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
                   >
                     <span className="text-[15px] font-medium tracking-[-0.01em]">
@@ -639,9 +634,38 @@ export function MobileAppChrome({ className }: { className?: string }) {
                     </span>
                   </button>
                 ))}
+              </>
+            ) : (
+              BUILD_CREATE_OPTIONS.map((item) => (
+                <button
+                  key={item.kind}
+                  type="button"
+                  disabled={newProjectBusy}
+                  onClick={() => {
+                    setNewProjectOpen(false);
+                    openCreate({
+                      space: "build",
+                      kind: item.kind,
+                      defaultTitle: `New ${item.label}`,
+                      summary: item.summary,
+                    });
+                  }}
+                  className="flex w-full flex-col rounded-[12px] px-3 py-3 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
+                >
+                  <span className="text-[15px] font-medium tracking-[-0.01em]">
+                    {item.label}
+                  </span>
+                  <span className="text-[13px] text-muted-foreground">
+                    {item.summary}
+                  </span>
+                </button>
+              ))
+            )}
           </div>
         </div>
       </MobileBottomSheet>
+
+      {createProjectModal}
     </>
   );
 }

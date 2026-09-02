@@ -81,10 +81,10 @@ export function buildCanderOnDeviceInstructions(opts?: {
       ? [
           "",
           `${APP_NAME} tool navigation:`,
-          "- nav.open targets: new_chat, work, build, research (Explore), recents, connectors, settings.",
+          "- nav.open targets: new_chat, work, build, research (Home), recents, connectors, settings.",
           "- panel.open / panel.close for the side panel.",
-          "- project.create / project.open for Build and Explore projects.",
-          "Say Explore to users, never research. Confirm before deleting.",
+          "- project.create / project.open for Build and Home projects.",
+          "Say Home to users, never research (Explore still maps to Home). Confirm before deleting.",
         ].join("\n")
       : null,
     includeProductGuide ? `\n${CANDER_PRODUCT_GUIDE}` : null,

@@ -1,15 +1,27 @@
 import type { BillingPlan, NavDestinationId, SpaceId } from "./types";
 
-/** Product spaces — Home, Work, Build, Explore (research). */
+/**
+ * Product spaces — Home is Explore (`research`) under a Home label.
+ * Legacy `home` remains on SpaceId for redirects only.
+ */
 export const PRIMARY_NAV_SPACES: SpaceId[] = [
-  "home",
+  "research",
   "work",
   "build",
-  "research",
+  "studio",
 ];
 
-/** Studio is hidden until the space ships. */
-export const SHOW_STUDIO_NAV = false;
+/** Studio is back in the primary menu. */
+export const SHOW_STUDIO_NAV = true;
+
+/** Map legacy dashboard Home → today's Home (research / Explore). */
+export function resolveProductSpaceId(
+  id: SpaceId | NavDestinationId | null | undefined,
+): SpaceId | null {
+  if (!id || id === "connectors") return null;
+  if (id === "home") return "research";
+  return id as SpaceId;
+}
 
 /** Nav-only for now — shown disabled with “Coming soon”. */
 export const COMING_SOON_NAV_SPACES: SpaceId[] = [];
@@ -23,7 +35,7 @@ export const EXTRA_NAV_IDS = ["browser", "recents", "connectors"] as const;
 export type ExtraNavId = (typeof EXTRA_NAV_IDS)[number];
 export type SidebarNavId = SpaceId | ExtraNavId;
 
-export const CHAT_SPACES = ["work", "build", "research"] as const;
+export const CHAT_SPACES = ["work", "build", "research", "studio"] as const;
 
 export type ChatSpaceId = (typeof CHAT_SPACES)[number];
 
@@ -45,26 +57,26 @@ export function isChatSpace(
   );
 }
 
-/** Work / Build / Explore / Home — Home chat opens on demand via Ask. */
+/** Work / Build / Home (research) — shared dock chat spaces. */
 export function isDockChatSpace(
   id: SpaceId | NavDestinationId | null | undefined,
-): id is ChatSpaceId | "home" {
-  return id === "home" || isChatSpace(id);
+): id is ChatSpaceId {
+  return isChatSpace(resolveProductSpaceId(id) ?? id);
 }
 
-/** Dashboard-only destinations — chat closed until Ask. */
+/** Formerly Home dashboard — no product space is dashboard-only now. */
 export function isDashboardOnlySpace(
-  id: SpaceId | NavDestinationId | null | undefined,
+  _id: SpaceId | NavDestinationId | null | undefined,
 ): boolean {
-  return id === "home";
+  return false;
 }
 
 /** Product space for chat persistence — excludes Connectors nav. */
 export function chatSpaceId(
   id: NavDestinationId | null | undefined,
 ): SpaceId | null {
-  if (!id || id === "connectors" || id === "studio") return null;
-  return id as SpaceId;
+  if (!id || id === "connectors") return null;
+  return resolveProductSpaceId(id);
 }
 
 export function isExtraNavId(id: string): id is ExtraNavId {
@@ -83,7 +95,7 @@ export function isSidebarNavId(id: string): id is SidebarNavId {
 /** Connectors nav visible for all plans — installs ship later. */
 export const SHOW_CONNECTORS_NAV = true;
 
-/** Default sidebar — Home, Work, Build, Explore, Connectors, Recents. */
+/** Default sidebar — Home, Work, Build, Studio, Connectors, Recents. */
 export const DEFAULT_SIDEBAR_MAIN: SidebarNavId[] = [
   ...PRIMARY_NAV_SPACES,
   ...(SHOW_CONNECTORS_NAV ? (["connectors"] as const) : []),
@@ -125,7 +137,9 @@ export function spaceAllowed(
   if (id === "browser") return false;
   if (id === "connectors") return SHOW_CONNECTORS_NAV;
   if (id === "recents") return true;
-  if (id === "home" || id === "studio") return true;
+  if (id === "studio") return true;
+  // Legacy dashboard home is not a nav destination.
+  if (id === "home") return false;
   return allowed.includes(id as SpaceId);
 }
 
@@ -152,6 +166,8 @@ export function migrateSidebarId(id: string): SidebarNavId | null {
   ) {
     return null;
   }
+  // Old Home dashboard slot → new Home (research).
+  if (id === "home") return "research";
   if (isSidebarNavId(id)) return id;
   return null;
 }

@@ -20,6 +20,7 @@ import type {
 } from "@/lib/space-entities";
 import type { Message, Thread } from "@/lib/types";
 import { imageCoverFromBlocks, imageCoverFromMessages } from "@/lib/chat-image-cover";
+import { getChatStoreSnapshot } from "@/lib/api/chat-store";
 
 const MESSAGE_COLUMNS_LIGHT =
   "id, thread_id, workspace_id, role, content, at_label, space_switch, citations, sort_order, created_at";
@@ -271,7 +272,17 @@ export async function syncThreadsToSupabase(
   ctx: WorkspaceCtx,
   threads: Thread[],
 ) {
-  const scoped = threads.filter((item) => item.workspaceId === ctx.workspaceId);
+  // Re-read from the live store so an in-flight sync can't re-write a
+  // Hard-replaced universal default (or upsert a draft we already retired).
+  const liveById = new Map(
+    getChatStoreSnapshot().threads.map((thread) => [thread.id, thread]),
+  );
+  const scoped = threads
+    .map((thread) => liveById.get(thread.id))
+    .filter(
+      (thread): thread is Thread =>
+        thread != null && thread.workspaceId === ctx.workspaceId,
+    );
   await upsertThreadsToSupabase(ctx, scoped);
 }
 
@@ -362,6 +373,45 @@ export async function deleteThreadsFromSupabase(
     .delete()
     .in("id", ids)
     .eq("workspace_id", ctx.workspaceId);
+}
+
+/**
+ * Hard-swap the shared spaces default: wipe prior transcript on the universal
+ * slot, retire the draft / old docks, then upsert only the promoted chat.
+ */
+export async function replaceUniversalDefaultOnSupabase(
+  ctx: WorkspaceCtx,
+  promoted: Thread,
+  retireThreadIds: string[],
+) {
+  const supabase = createSupabaseBrowserClient();
+  const retire = [
+    ...new Set(retireThreadIds.filter((id) => id && id !== promoted.id)),
+  ];
+
+  // 1) Wipe every prior turn on the universal slot.
+  {
+    const { error } = await supabase
+      .from("messages")
+      .delete()
+      .eq("thread_id", promoted.id);
+    if (error) {
+      console.warn("[cander] wipe universal default messages failed", error);
+    }
+  }
+
+  // 2) Retire the draft and any legacy per-space docks.
+  if (retire.length) {
+    await supabase.from("messages").delete().in("thread_id", retire);
+    await supabase
+      .from("threads")
+      .delete()
+      .in("id", retire)
+      .eq("workspace_id", ctx.workspaceId);
+  }
+
+  // 3) Write only the promoted chat into the universal slot.
+  await upsertThreadsToSupabase(ctx, [promoted]);
 }
 
 export function chatRealtimeChannelName(workspaceId: string) {

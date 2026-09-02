@@ -24,7 +24,7 @@ import {
   PINNED_CHAT_WIDTH,
   showStandaloneBrowserPanel,
 } from "@/lib/right-panel";
-import { isDashboardOnlySpace, isDockChatSpace } from "@/lib/spaces";
+import { isDockChatSpace } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import type { MobileSurface } from "@/lib/types";
 
@@ -51,11 +51,7 @@ export function SpaceChatLayout() {
   } = useApp();
   const mobile = useMobileShell();
   const chatActive = drafting || Boolean(thread);
-  const chatArmed = mobile
-    ? spaceId === "home"
-      ? isDockChatSpace(spaceId) && chatActive
-      : !isDashboardOnlySpace(spaceId) && chatActive
-    : isDockChatSpace(spaceId) && chatActive;
+  const chatArmed = isDockChatSpace(spaceId) && chatActive;
   const showStandaloneBrowser = showStandaloneBrowserPanel({
     standaloneBrowserOpen,
     standaloneBrowserEphemeral,
@@ -136,10 +132,8 @@ export function SpaceChatLayout() {
   }, [spaceOpen, immersive, targetSpacePct, mobile, skipLayoutAnimation]);
 
   if (mobile) {
-    const active: MobileSurface =
-      isDashboardOnlySpace(spaceId) && !chatArmed
-        ? "panel"
-        : mobileContentSurface;
+    const active: MobileSurface = mobileContentSurface;
+
 
     return (
       <MobileContentPager

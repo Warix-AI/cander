@@ -103,6 +103,7 @@ function projectKindFromSpace(space: SpaceId): SpaceProject["kind"] {
   if (space === "build") return "app";
   if (space === "research") return "research";
   if (space === "work") return "general";
+  if (space === "studio") return "general";
   return "general";
 }
 

@@ -47,6 +47,7 @@ import type { SpaceId } from "@/lib/types";
 function projectKindFromSpace(space: SpaceId): SpaceProject["kind"] {
   if (space === "build") return "app";
   if (space === "research") return "research";
+  if (space === "studio") return "general";
   return "general";
 }
 

@@ -124,7 +124,15 @@ export function mergeHydratedThread(
   }
   const localAt = Date.parse(local.updatedAt || "") || 0;
   const remoteAt = Date.parse(remote.updatedAt || "") || 0;
-  if (localAt > remoteAt && threadHasTurns(local)) return local;
+  // Prefer a fresher local transcript entirely (Default chat hard-replace).
+  if (localAt >= remoteAt && threadHasTurns(local)) return local;
+
+  const localIds = new Set(local.messages.map((message) => message.id));
+  const remoteHasExtras = remote.messages.some(
+    (message) => !localIds.has(message.id),
+  );
+  // If remote still has prior turns the local replace dropped, keep local.
+  if (threadHasTurns(local) && remoteHasExtras) return local;
 
   const messages = remote.messages.map((remoteMsg) => {
     const localMsg = local.messages.find((m) => m.id === remoteMsg.id);

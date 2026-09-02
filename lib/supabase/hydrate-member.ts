@@ -27,7 +27,7 @@ function asRole(value: unknown): Role {
 }
 
 function asSpaces(value: unknown): SpaceId[] {
-  const valid = new Set<string>(["work", "build", "research"]);
+  const valid = new Set<string>(["work", "build", "research", "studio"]);
   if (!Array.isArray(value) || !value.length) return [...NAV_SPACES];
   const set = new Set<SpaceId>();
   for (const id of value.map(String)) {

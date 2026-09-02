@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Hammer, Search } from "lucide-react";
+import { Clapperboard, Hammer, Home } from "lucide-react";
 import type { SpaceId } from "./types";
 
 export type PanelChoice = {
@@ -14,6 +14,13 @@ export type PanelChoice = {
 export function panelChoiceSuggestions(): PanelChoice[] {
   return [
     {
+      id: "home",
+      label: "Home",
+      hint: "Open Home with this chat",
+      space: "research",
+      icon: Home,
+    },
+    {
       id: "build",
       label: "Build",
       hint: "Start a build with this chat",
@@ -21,11 +28,11 @@ export function panelChoiceSuggestions(): PanelChoice[] {
       icon: Hammer,
     },
     {
-      id: "explore",
-      label: "Explore",
-      hint: "Start a search with this chat",
-      space: "research",
-      icon: Search,
+      id: "studio",
+      label: "Studio",
+      hint: "Open Studio with this chat",
+      space: "studio",
+      icon: Clapperboard,
     },
   ];
 }

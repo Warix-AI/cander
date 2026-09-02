@@ -216,10 +216,10 @@ export const workspaceResources: WorkspaceResource[] = [
 ];
 
 export const spaces: { id: SpaceId; label: string }[] = [
-  { id: "home", label: "Home" },
+  { id: "research", label: "Home" },
   { id: "work", label: "Work" },
   { id: "build", label: "Build" },
-  { id: "research", label: "Explore" },
+  { id: "studio", label: "Studio" },
 ];
 
 export const workspaces: Workspace[] = [
@@ -227,7 +227,7 @@ export const workspaces: Workspace[] = [
     id: "marketing",
     name: "Marketing",
     kind: "business",
-    spaces: ["work", "build", "research"],
+    spaces: ["work", "build", "research", "studio"],
     members: 12,
     budget: "$4,200",
     spend: "$2,640",
@@ -236,7 +236,7 @@ export const workspaces: Workspace[] = [
     id: "engineering",
     name: "Engineering",
     kind: "business",
-    spaces: ["work", "build", "research"],
+    spaces: ["work", "build", "research", "studio"],
     members: 18,
     budget: "$6,800",
     spend: "$4,110",
@@ -255,7 +255,7 @@ export const workspaces: Workspace[] = [
     name: "Personal",
     kind: "personal",
     personal: true,
-    spaces: ["work", "build", "research"],
+    spaces: ["work", "build", "research", "studio"],
     members: 1,
     budget: "$0",
     spend: "$0",
@@ -265,7 +265,7 @@ export const workspaces: Workspace[] = [
     name: "Personal",
     kind: "personal",
     personal: true,
-    spaces: ["work", "build", "research"],
+    spaces: ["work", "build", "research", "studio"],
     members: 1,
     budget: "$0",
     spend: "$0",
@@ -275,7 +275,7 @@ export const workspaces: Workspace[] = [
     name: "Personal",
     kind: "personal",
     personal: true,
-    spaces: ["work", "build", "research"],
+    spaces: ["work", "build", "research", "studio"],
     members: 1,
     budget: "$0",
     spend: "$0",

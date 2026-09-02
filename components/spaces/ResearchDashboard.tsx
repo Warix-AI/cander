@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { useApp } from "@/components/app/AppProvider";
-import { useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
 import {
   DashFrame,
   DashBtn,
@@ -14,9 +13,11 @@ import {
   EXPLORE_CREATE_OPTIONS,
   NewExploreMenu,
 } from "@/components/spaces/NewExploreMenu";
+import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flow";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import { editedMeta } from "@/lib/format-relative-time";
-import { useSpaceMutation, useSpaceProjects } from "@/lib/hooks/use-space-query";
+import { projectCoverImageSrc } from "@/lib/project-cover";
+import { useSpaceProjects } from "@/lib/hooks/use-space-query";
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
 import { useMobileShell } from "@/lib/use-media-query";
 
@@ -30,8 +31,7 @@ export function ResearchDashboard() {
     mobileSurface,
     view,
   } = useApp();
-  const ctx = useWorkspaceCtx();
-  const { createProject } = useSpaceMutation();
+  const { openCreate, modal } = useCreateProjectFlow(openProject);
   const mobile = useMobileShell();
   const chatClosed = useSpaceChatClosed();
   const hoistFilters =
@@ -48,69 +48,71 @@ export function ResearchDashboard() {
         projectId: item.id,
         indexKind: "project" as const,
         meta: editedMeta(item.updatedAt),
-        image: item.cover,
+        image: projectCoverImageSrc(item.cover) ?? item.cover,
+        cover: item.cover,
       })),
     [spaceProjects],
   );
 
-  const createExploreProject = () => {
-    const item = EXPLORE_CREATE_OPTIONS[0]!;
-    void createProject(ctx, {
-      space: "research",
-      title: item.title,
-      kind: item.kind,
-      summary: item.summary,
-    }).then((project) => openProject(project.id));
-  };
-
   return (
-    <DashFrame
-      banner={false}
-      title="Explore"
-      subtitle="Research, browse, analyze, and discover."
-    >
-      <DashToolbar
-        active={hoistFilters}
-        onNewChat={chatClosed ? () => openSpaceChat("research") : undefined}
-        newChatLabel="Ask"
-        layout={{ value: spaceLayout, onChange: setSpaceLayout }}
-        extras={[
-          {
-            id: "quick-search",
-            label: "Quick search",
-            onClick: () => openQuickSearchBrowser(),
-          },
-          {
-            id: "new-project",
-            label: "New project",
-            onClick: createExploreProject,
-          },
-        ]}
-        actions={
-          <>
-            {chatClosed ? (
-              <DashBtn onClick={() => openSpaceChat("research")}>Ask</DashBtn>
-            ) : null}
-            <NewExploreMenu onCreated={openProject} />
-          </>
-        }
+    <>
+      <DashFrame
+        banner={false}
+        title="Home"
+        subtitle="Research, browse, analyze, and discover."
       >
-        <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
-      </DashToolbar>
+        <DashToolbar
+          active={hoistFilters}
+          onNewChat={chatClosed ? () => openSpaceChat("research") : undefined}
+          newChatLabel="Ask"
+          layout={{ value: spaceLayout, onChange: setSpaceLayout }}
+          extras={[
+            {
+              id: "quick-search",
+              label: "Quick search",
+              onClick: () => openQuickSearchBrowser(),
+            },
+            {
+              id: "new-project",
+              label: "New project",
+              onClick: () => {
+                const item = EXPLORE_CREATE_OPTIONS[0]!;
+                openCreate({
+                  space: "research",
+                  kind: item.kind,
+                  defaultTitle: item.title,
+                  summary: item.summary,
+                });
+              },
+            },
+          ]}
+          actions={
+            <>
+              {chatClosed ? (
+                <DashBtn onClick={() => openSpaceChat("research")}>Ask</DashBtn>
+              ) : null}
+              <NewExploreMenu onCreated={openProject} />
+            </>
+          }
+        >
+          <LayoutToggle layout={spaceLayout} onChange={setSpaceLayout} />
+        </DashToolbar>
 
-      <div className="mt-5">
-        {projectsLoading && !projectItems.length ? (
-          <QuerySkeleton rows={2} />
-        ) : (
-          <PreviewGrid
-            layout={spaceLayout}
-            kind="paper"
-            items={projectItems}
-            onOpen={openProject}
-            empty="No searches yet. Start a new search to open a tab group."
-          />
-        )}
-      </div>
-    </DashFrame>
+        <div className="mt-5">
+          {projectsLoading && !projectItems.length ? (
+            <QuerySkeleton rows={2} />
+          ) : (
+            <PreviewGrid
+              layout={spaceLayout}
+              kind="paper"
+              items={projectItems}
+              onOpen={openProject}
+              empty="No searches yet. Start a new search to open a tab group."
+            />
+          )}
+        </div>
+      </DashFrame>
+      {modal}
+    </>
   );
 }

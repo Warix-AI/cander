@@ -119,7 +119,8 @@ export function normalizeToolArguments(
   if (toolName === "nav.open" && typeof input.target === "string") {
     const t = input.target.toLowerCase();
     if (t === "explore") input.target = "research";
-    if (t === "home") input.target = "new_chat";
+    // Legacy dashboard Home → product Home (research).
+    if (t === "home") input.target = "research";
   }
 
   if (toolName === "gmail.read") {
