@@ -9,15 +9,6 @@ export function isOpenAIWebSearchEnabled(): boolean {
   return v === "1" || v === "true" || v === "on";
 }
 
-/** Attach web_search only when the user likely wants live web info. */
-export function looksLikeWebSearchIntent(text: string): boolean {
-  const t = (text || "").trim();
-  if (!t) return false;
-  return /\b(search( the)? web|google|look up|latest|news|current|today|what happened|who is|wikipedia|according to|find online|browse)\b/i.test(
-    t,
-  );
-}
-
 export function resolveOpenAIModel(): string {
   return (
     process.env.OPENAI_MODEL?.trim() ||

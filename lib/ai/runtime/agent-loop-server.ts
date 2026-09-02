@@ -25,7 +25,6 @@ import {
 import { formatReferencesForPrompt } from "@/lib/ai/state/references";
 import {
   isOpenAIWebSearchEnabled,
-  looksLikeWebSearchIntent,
   resolveOpenAIModel,
 } from "@/lib/ai/raw-openai/web-search";
 import {
@@ -324,10 +323,10 @@ export async function runAgentServerLoop(
     const functionTools = canderToolsToOpenAIFunctions(canderTools);
     const tools: OpenAI.Responses.Tool[] = [
       ...(functionTools as OpenAI.Responses.Tool[]),
-      ...(webSearchEnabled && !imageIntent && looksLikeWebSearchIntent(userMessage)
+      ...(webSearchEnabled && !imageIntent
         ? [{ type: "web_search" as const }]
         : []),
-      ...(imageGenEnabled && imageIntent ? [openAIImageGenerationTool()] : []),
+      ...(imageGenEnabled ? [openAIImageGenerationTool()] : []),
     ];
 
 
