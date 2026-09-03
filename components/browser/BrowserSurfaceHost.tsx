@@ -14,7 +14,6 @@ import {
 } from "@/lib/desktop-shell";
 import { isGoogleUrl } from "@/lib/preview-url";
 import { NewTabPage } from "@/components/browser/NewTabPage";
-import { ExternalLink } from "lucide-react";
 
 type BrowserSurfaceHostProps = {
   tabId: string;
@@ -31,6 +30,8 @@ type BrowserSurfaceHostProps = {
   onUrlChange?: (url: string) => void;
   onTitleChange?: (title: string) => void;
   onFaviconChange?: (faviconUrl: string | null) => void;
+  /** Open popup / target=_blank navigations as another in-app browser tab. */
+  onOpenNewTab?: (url: string) => void;
 };
 
 /**
@@ -51,6 +52,7 @@ export function BrowserSurfaceHost({
   onUrlChange,
   onTitleChange,
   onFaviconChange,
+  onOpenNewTab,
 }: BrowserSurfaceHostProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [embedBlocked, setEmbedBlocked] = useState(false);
@@ -62,9 +64,11 @@ export function BrowserSurfaceHost({
   const onUrlChangeRef = useRef(onUrlChange);
   const onTitleChangeRef = useRef(onTitleChange);
   const onFaviconChangeRef = useRef(onFaviconChange);
+  const onOpenNewTabRef = useRef(onOpenNewTab);
   onUrlChangeRef.current = onUrlChange;
   onTitleChangeRef.current = onTitleChange;
   onFaviconChangeRef.current = onFaviconChange;
+  onOpenNewTabRef.current = onOpenNewTab;
 
   const suppressed = useSyncExternalStore(
     subscribeNativeBrowserSurfaceSuppress,
@@ -142,6 +146,9 @@ export function BrowserSurfaceHost({
         onFaviconChangeRef.current?.(
           event.faviconUrl ? String(event.faviconUrl) : null,
         );
+      }
+      if (event.type === "openInNewTab" && "url" in event) {
+        onOpenNewTabRef.current?.(String(event.url));
       }
       if (event.type === "processGone") {
         setRecoverToken((n) => n + 1);
@@ -264,15 +271,6 @@ export function BrowserSurfaceHost({
           term in the address bar above, or use the macOS / iOS app for full
           in-panel browsing.
         </p>
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-medium text-background"
-        >
-          <ExternalLink className="size-3.5" />
-          Open Google
-        </a>
       </div>
     );
   }
@@ -289,15 +287,6 @@ export function BrowserSurfaceHost({
           <code className="text-xs">Cander-*.dmg</code> (0.1.3+), or run{" "}
           <code className="text-xs">npm run desktop</code> from the repo.
         </p>
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-medium text-background"
-        >
-          <ExternalLink className="size-3.5" />
-          Open in browser
-        </a>
       </div>
     );
   }
@@ -309,18 +298,10 @@ export function BrowserSurfaceHost({
         className="flex h-full flex-col items-center justify-center gap-3 bg-muted/20 px-6 text-center"
       >
         <p className="max-w-sm text-sm text-muted-foreground">
-          This site can&apos;t be embedded in the web app. Open it in your
-          system browser, or use the macOS / iOS app for in-panel browsing.
+          This site can&apos;t be embedded in the web app. Keep browsing in
+          this tab from the address bar, or use the macOS / iOS app for
+          in-panel browsing.
         </p>
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-medium text-background"
-        >
-          <ExternalLink className="size-3.5" />
-          Open in browser
-        </a>
       </div>
     );
   }

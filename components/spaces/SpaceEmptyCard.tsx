@@ -1,6 +1,6 @@
 "use client";
 
-import { Briefcase, Image, LayoutTemplate, Search } from "lucide-react";
+import { Box, Briefcase, Image, LayoutTemplate, Search } from "lucide-react";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
@@ -41,9 +41,16 @@ const SPACE_VISUAL: Record<
   },
 };
 
+const CODE_SAMPLE = `const project = await cander.create({
+  name: "untitled",
+  space: "ready",
+});
+
+await project.open();`;
+
 /**
- * Compact right-panel empty state — centered, ~390px, G3 curves.
- * Color + icon shift per space; single primary action (New project).
+ * Full-width empty-state banner under the space toolbar.
+ * Horizontal layout: copy + CTA on the left, color wash + mark on the right.
  */
 export function SpaceEmptyCard({
   space,
@@ -60,53 +67,51 @@ export function SpaceEmptyCard({
   return (
     <div
       className={cn(
-        "flex w-full max-w-[390px] flex-col gap-4 border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
+        "relative flex w-full overflow-hidden border border-border bg-zinc-950 text-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:bg-zinc-950",
         SHELL_G3_RADIUS,
         className,
       )}
     >
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col justify-center gap-3 px-5 py-5 sm:px-6 sm:py-6">
+        <div className="space-y-1.5">
+          <p className="text-[17px] font-semibold tracking-[-0.03em] text-white sm:text-[18px]">
+            {title}
+          </p>
+          <p className="max-w-xl text-[13.5px] leading-relaxed text-white/65">
+            {description}
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onAction}
+          className="inline-flex h-8 w-fit items-center justify-center rounded-[8px] bg-white px-3.5 text-[13px] font-medium tracking-[-0.01em] text-zinc-950 transition-opacity duration-200 hover:opacity-90 disabled:opacity-60"
+        >
+          {actionLabel}
+        </button>
+      </div>
+
       <div
         className={cn(
-          "relative h-[94px] w-full overflow-hidden",
-          SHELL_G3_RADIUS,
+          "relative hidden w-[min(42%,22rem)] shrink-0 overflow-hidden sm:block",
           visual.wash,
         )}
         aria-hidden
       >
-        {/* Slightly darken washes so white icons stay readable */}
-        <div className="absolute inset-0 bg-black/45" />
-        <div className="panel-grain opacity-40" />
-        <div className="space-empty-shimmer" />
-        <div className="absolute inset-0 flex items-end p-3.5">
-          <span
-            className={cn(
-              "inline-flex h-10 w-10 items-center justify-center bg-black/25 ring-1 ring-white/25 backdrop-blur-[2px]",
-              SHELL_G3_RADIUS,
-            )}
-          >
-            <Icon className="h-5 w-5 text-white" strokeWidth={1.7} />
+        <div className="absolute inset-0 bg-black/35" />
+        <div className="panel-grain opacity-35" />
+        <pre className="pointer-events-none absolute inset-0 overflow-hidden p-4 font-mono text-[9px] leading-relaxed text-white/25 select-none">
+          {CODE_SAMPLE}
+        </pre>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-white text-zinc-950 shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
+            <Icon className="h-6 w-6" strokeWidth={1.7} />
           </span>
         </div>
+        <span className="absolute bottom-3 right-3 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/25 text-white/80 ring-1 ring-white/20 backdrop-blur-[2px]">
+          <Box className="h-3.5 w-3.5" strokeWidth={1.7} />
+        </span>
       </div>
-
-      <div className="space-y-1.5">
-        <p className="text-[16px] font-semibold tracking-[-0.03em]">{title}</p>
-        <p className="text-[14px] leading-relaxed text-muted-foreground">
-          {description}
-        </p>
-      </div>
-
-      <button
-        type="button"
-        disabled={busy}
-        onClick={onAction}
-        className={cn(
-          "inline-flex h-10 w-full items-center justify-center bg-primary px-4 text-[13.5px] font-medium tracking-[-0.01em] text-primary-foreground transition-colors duration-200 hover:bg-foreground disabled:opacity-60",
-          SHELL_G3_RADIUS,
-        )}
-      >
-        {actionLabel}
-      </button>
     </div>
   );
 }

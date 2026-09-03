@@ -239,7 +239,7 @@ export function ProjectActionsSheetBody({
             />
             <SheetAction
               icon={ExternalLink}
-              label="Open externally"
+              label="Open in new tab"
               onClick={onOpenExternal}
             />
             <SheetAction

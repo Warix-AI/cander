@@ -32,6 +32,8 @@ export type BrowserSurfaceEventMap = {
   };
   processGone: { tabId: string; reason: string };
   embedBlocked: { tabId: string; url: string };
+  /** Popup / target=_blank from the page — open as another in-app tab. */
+  openInNewTab: { tabId: string; url: string };
 };
 
 export type BrowserSurfaceEvent =

@@ -77,6 +77,7 @@ export function PreviewChrome({
     liveUrl,
     refreshPreview,
     openOverlay,
+    openInAppBrowser,
   } = useApp();
   const mobile = useMobileShell();
   const previewing = tool === "preview";
@@ -189,6 +190,7 @@ export function PreviewChrome({
             onTool={onTool}
             address={address}
             previewing={previewing}
+            onOpenAddress={() => openInAppBrowser(address)}
           />
         </span>
       </div>
@@ -203,11 +205,13 @@ function AdvancedMenu({
   onTool,
   address,
   previewing,
+  onOpenAddress,
 }: {
   tool: BuildTool;
   onTool: (id: BuildTool) => void;
   address: string;
   previewing: boolean;
+  onOpenAddress: () => void;
 }) {
   const { advancedMode, setAdvancedMode } = useApp();
   return (
@@ -237,11 +241,11 @@ function AdvancedMenu({
           <MenuItem
             icon={ExternalLink}
             onClick={() => {
-              window.open(address, "_blank");
+              onOpenAddress();
               close();
             }}
           >
-            Open externally
+            Open in browser
           </MenuItem>
           <div className="my-1.5 mx-2 h-px bg-border" />
           <p className="px-3 py-1 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">

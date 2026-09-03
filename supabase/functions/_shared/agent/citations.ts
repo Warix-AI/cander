@@ -70,6 +70,7 @@ export function stripInlineCitationMarkers(text: string): string {
   out = out.replace(/\[(?:src_|ev_|source_)[\w-]+\]/gi, "");
   out = out.replace(/【\d+†[^】]*】/g, "");
   out = out.replace(/cite[^]*/g, "");
+  out = out.replace(/\(\s*\[[^\]]+\](?:\([^)]*\))?\s*\)/g, "");
   out = out.replace(
     /\[[^\]]*(?:cloudfront\.net|amazonaws\.com|googleusercontent\.com)[^\]]*\]\([^)]+\)/gi,
     "",

@@ -1,4 +1,4 @@
-const { WebContentsView, session, shell } = require("electron");
+const { WebContentsView, session } = require("electron");
 const { partitionFor, isAllowedUrl } = require("./browser-security");
 const { PAGE_EXTRACT_SCRIPT, SELECTION_SCRIPT } = require("./page-extract");
 
@@ -58,7 +58,11 @@ function attachViewListeners(tabId, view) {
 
   wc.setWindowOpenHandler(({ url }) => {
     if (isAllowedUrl(url)) {
-      void shell.openExternal(url);
+      emitToRenderer("cander:browser-event", {
+        type: "openInNewTab",
+        tabId,
+        url,
+      });
     }
     return { action: "deny" };
   });

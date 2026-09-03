@@ -120,6 +120,7 @@ import {
 } from "@/lib/entitlements";
 import {
   beginQuickSearchBrowserSession,
+  clearStandaloneBrowserSession,
   endQuickSearchBrowserSession,
   isStandaloneBrowserEphemeral,
   primeStandaloneBrowserSession,
@@ -140,6 +141,7 @@ import {
 import type { WorkCollectionItem } from "@/lib/work-screen-data";
 import {
   DEFAULT_PANEL_RATIO,
+  NEW_CHAT_CHOICE_PANEL_RATIO,
   PANEL_RATIO_OPEN_FLOOR,
 } from "@/lib/right-panel";
 import { isChatSpace, chatSpaceId, isDockChatSpace, PRIMARY_NAV_SPACES, resolveProductSpaceId, spaceAllowed, isDashboardOnlySpace, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
@@ -1165,7 +1167,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const applyHomeNewChat = useCallback(() => {
     let tid = "";
-    const pinned = readStandaloneBrowserPinned(actor.id, workspaceId);
+    const key = standaloneBrowserKey(actor.id, workspaceId);
+    if (isStandaloneBrowserEphemeral()) {
+      endQuickSearchBrowserSession(key);
+      setStandaloneBrowserEphemeral(false);
+    } else {
+      clearStandaloneBrowserSession(key);
+      writeStandaloneBrowserPinned(actor.id, workspaceId, false);
+    }
     setThreads((current) => {
       const { threads: next, id } = startContinuousChat(
         current,
@@ -1184,20 +1193,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setView("chat");
     setDrafting(true);
     setPanelIntent("browse");
-    setStandaloneBrowserOpen(pinned);
-    setPanelMode(pinned ? "split" : "collapsed");
-    setMobileSurface(pinned ? "panel" : "chat");
+    setStandaloneBrowserOpen(false);
+    setBrowserSearch(null);
+    setPageReference(null);
+    setEntityReference(null);
+    // Stay collapsed until the first message is sent (schedulePanelReveal).
+    setPanelMode("collapsed");
+    setPanelRatioState(NEW_CHAT_CHOICE_PANEL_RATIO);
+    setMobileSurface("chat");
     pushTarget({
       view: "chat",
       spaceId: null,
       threadId: tid,
       projectId: null,
-      panelMode: pinned ? "split" : "collapsed",
+      panelMode: "collapsed",
       panelIntent: "browse",
       connectorId: null,
       jobId: null,
       skillId: null,
-      standaloneBrowserOpen: pinned || undefined,
+      standaloneBrowserOpen: false,
     });
   }, [pushTarget, workspaceId, actor.id]);
 
@@ -1206,6 +1220,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (space && isChatSpace(space) && projectId && spaceId === space) {
         let tid = "";
         let hasMessages = false;
+        const key = standaloneBrowserKey(actor.id, workspaceId);
+        if (isStandaloneBrowserEphemeral()) {
+          endQuickSearchBrowserSession(key);
+          setStandaloneBrowserEphemeral(false);
+        } else if (standaloneBrowserOpen) {
+          clearStandaloneBrowserSession(key);
+          writeStandaloneBrowserPinned(actor.id, workspaceId, false);
+        }
+        setStandaloneBrowserOpen(false);
+        setBrowserSearch(null);
+        setPageReference(null);
+        setEntityReference(null);
         setThreads((current) => {
           const { threads: next, id } = upsertPersistentProjectThread(
             current,
@@ -1235,6 +1261,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           connectorId: null,
           jobId: null,
           skillId: null,
+          standaloneBrowserOpen: false,
         });
         return;
       }
@@ -1244,6 +1271,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // current space lens/panel so the user can still promote it.
         let tid = "";
         let hasMessages = false;
+        const key = standaloneBrowserKey(actor.id, workspaceId);
+        if (isStandaloneBrowserEphemeral()) {
+          endQuickSearchBrowserSession(key);
+          setStandaloneBrowserEphemeral(false);
+        } else if (standaloneBrowserOpen) {
+          clearStandaloneBrowserSession(key);
+          writeStandaloneBrowserPinned(actor.id, workspaceId, false);
+        }
+        setStandaloneBrowserOpen(false);
+        setBrowserSearch(null);
+        setPageReference(null);
+        setEntityReference(null);
         setThreads((current) => {
           const { threads: next, id } = startContinuousChat(
             current,
@@ -1277,6 +1316,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           connectorId: null,
           jobId: null,
           skillId: null,
+          standaloneBrowserOpen: false,
         });
         return;
       }
@@ -1312,6 +1352,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       workspaceId,
       projectId,
       spaceId,
+      actor.id,
+      standaloneBrowserOpen,
     ],
   );
 
@@ -4413,8 +4455,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setStandaloneBrowserOpen(true);
       setPanelMode("split");
       setPanelRatioState((ratio) =>
-      ratio < PANEL_RATIO_OPEN_FLOOR ? PANEL_RATIO_OPEN_FLOOR : ratio,
-    );
+        ratio < PANEL_RATIO_OPEN_FLOOR ? PANEL_RATIO_OPEN_FLOOR : Math.max(ratio, DEFAULT_PANEL_RATIO),
+      );
       setMobileSurface("panel");
       pushTarget({
         view,

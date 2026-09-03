@@ -48,4 +48,15 @@ describe("citation prose normalization", () => {
     assert.match(cleaned, /Mountain Time/);
     assert.match(cleaned, /TBA/);
   });
+
+  it("strips parenthetical markdown domain citations", async () => {
+    const { stripInlineCitationMarkers } = await import(
+      "../lib/ai/orchestrator/citations.ts"
+    );
+    const raw =
+      "The Big 12 Championship Game is scheduled for Friday, Dec. 4. ([byucougars.com])";
+    const cleaned = stripInlineCitationMarkers(raw);
+    assert.equal(/byucougars/i.test(cleaned), false);
+    assert.match(cleaned, /Big 12 Championship Game/);
+  });
 });

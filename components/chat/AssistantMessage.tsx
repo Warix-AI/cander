@@ -35,7 +35,7 @@ function blockKey(block: ChatBlock, index: number): string {
 }
 
 export function AssistantMessage({ message }: { message: Message }) {
-  const { thread } = useApp();
+  const { thread, openInAppBrowser } = useApp();
   const pending = message.status === "pending";
   const streaming = message.status === "streaming";
   const visibleContent = message.content
@@ -69,8 +69,11 @@ export function AssistantMessage({ message }: { message: Message }) {
         />
       ) : null}
       {hasReply ? (
-        <div>
-          <MarkdownRenderer content={visibleContent} />
+        <div className="pb-0">
+          <MarkdownRenderer
+            content={visibleContent}
+            onLinkClick={(href) => openInAppBrowser(href)}
+          />
         </div>
       ) : null}
       {message.blocks
@@ -103,7 +106,7 @@ function MessageFooter({
   if (!hasCopy && !hasSources) return null;
 
   return (
-    <div className="pt-1.5">
+    <div className="pt-0.5">
       <ActionSourcesRow
         message={message}
         citations={citations}
@@ -224,7 +227,7 @@ function ActionSourcesRow({
   return (
     <div>
       {primary ? (
-        <div className="relative mb-1 w-fit max-w-full" ref={moreRef}>
+        <div className="relative mb-0.5 w-fit max-w-full" ref={moreRef}>
           <div
             className={cn(
               "inline-flex w-fit max-w-full items-center gap-1 py-[3px] pl-1.5 pr-1",
@@ -691,7 +694,7 @@ function DeployBlock({
 }: {
   block: Extract<ChatBlock, { type: "deploy" }>;
 }) {
-  const { openOverlay, setBuildTool } = useApp();
+  const { openOverlay, setBuildTool, openInAppBrowser } = useApp();
   return (
     <div>
       <p className="text-[14.5px] font-medium tracking-[-0.02em]">
@@ -701,7 +704,7 @@ function DeployBlock({
         {block.url}
       </p>
       <div className="mt-3 flex flex-nowrap gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <Chip onClick={() => window.open(block.url, "_blank")}>Open site</Chip>
+        <Chip onClick={() => openInAppBrowser(block.url)}>Open site</Chip>
         <Chip onClick={() => void navigator.clipboard.writeText(block.url)}>
           Copy URL
         </Chip>

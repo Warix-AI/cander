@@ -56,7 +56,7 @@ export function WorkSpaceView({
   // Fresh Work space — show the same inviting empty card as other spaces.
   if (starting) {
     return (
-      <div className="flex w-full justify-center px-2 pt-6 pb-20">
+      <div className="w-full pt-2 pb-8">
         {emptyCard}
       </div>
     );

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -11,10 +12,13 @@ import {
 } from "react";
 import {
   FileText,
+  Globe,
   Link2,
+  MessageSquare,
   Paperclip,
   Pin,
   Plus,
+  X,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { ReferenceChip } from "@/components/shell/ReferenceChip";
@@ -31,6 +35,13 @@ import {
   type SpaceLibraryId,
 } from "@/lib/space-library";
 import { isChatSpace } from "@/lib/spaces";
+import { panelChoiceSuggestions } from "@/lib/panel-suggestions";
+import {
+  detectConnectorMentions,
+  dismissedMentionsStillPresent,
+  syncDetectedConnectorBlocks,
+  type ConnectorMention,
+} from "@/lib/composer-connector-detect";
 import { labelFor } from "@/lib/build-loop";
 import { useChatCanvasCentered } from "@/lib/chat-layout";
 import {
@@ -164,6 +175,8 @@ export function Composer({
     turnActive,
     stopTurn,
     panelMode,
+    setDraftAsDefaultChat,
+    openStandaloneBrowser,
   } = useApp();
   const floating = useShellStyle() === "floating";
   const mobile = useMobileShell();
@@ -173,6 +186,14 @@ export function Composer({
   );
   const value = textFromBlocks(blocks);
   const connectorScopes = connectorsFromBlocks(blocks);
+  /** Connector ids the user removed (X) while the trigger word is still present. */
+  const [dismissedConnectorIds, setDismissedConnectorIds] = useState(
+    () => new Set<string>(),
+  );
+  /** Connector ids added via the + menu — keep even if the word is removed. */
+  const [manualConnectorIds, setManualConnectorIds] = useState(
+    () => new Set<string>(),
+  );
   const [dictating, setDictating] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [dictationMeter, setDictationMeter] = useState<AudioMeter | null>(null);
@@ -211,12 +232,63 @@ export function Composer({
   const activeConnections = (connectionsByWorkspace[workspaceId] ?? []).filter(
     (row) => isUiConnectedStatus(row.status),
   );
+  const detectCandidates = activeConnections.map((row) => {
+    const catalog = connectors.find((c) => c.id === row.connectorId);
+    return {
+      connectionId: row.id,
+      connectorId: row.connectorId,
+      label: catalog?.name ?? row.connectorId,
+    };
+  });
+  const detectedMentions = detectConnectorMentions(value, detectCandidates);
+  const restoreMentions = dismissedMentionsStillPresent(
+    detectedMentions,
+    dismissedConnectorIds,
+  );
+
   useEffect(() => {
     setBlocks(emptyComposerBlocks());
     setMenu(null);
+    setDismissedConnectorIds(new Set());
+    setManualConnectorIds(new Set());
     focusedTextKeyRef.current = null;
     textCursorRef.current = 0;
   }, [threadId]);
+
+  // Auto-attach connected apps when their name / alias appears in the draft.
+  useEffect(() => {
+    if (dictating || transcribing) return;
+    setDismissedConnectorIds((prev) => {
+      if (!prev.size) return prev;
+      const still = new Set(
+        [...prev].filter((id) =>
+          detectedMentions.some((m) => m.connectorId === id),
+        ),
+      );
+      if (still.size === prev.size && [...still].every((id) => prev.has(id))) {
+        return prev;
+      }
+      return still;
+    });
+    setBlocks((current) =>
+      syncDetectedConnectorBlocks(current, detectedMentions, {
+        dismissedConnectorIds,
+        manualConnectorIds,
+      }),
+    );
+    // detectedMentions is derived from value + connections; include those deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional fingerprint
+  }, [
+    value,
+    dictating,
+    transcribing,
+    workspaceId,
+    activeConnections
+      .map((row) => `${row.id}:${row.connectorId}`)
+      .join("|"),
+    [...dismissedConnectorIds].sort().join("|"),
+    [...manualConnectorIds].sort().join("|"),
+  ]);
 
   const focusTextKey = (key: string, cursor?: number) => {
     focusedTextKeyRef.current = key;
@@ -236,6 +308,21 @@ export function Composer({
   };
 
   const toggleConnectorScope = (next: ComposerConnectorScope) => {
+    const removing = connectorScopes.some(
+      (c) => c.connectionId === next.connectionId,
+    );
+    setManualConnectorIds((prev) => {
+      const copy = new Set(prev);
+      if (removing) copy.delete(next.connectorId);
+      else copy.add(next.connectorId);
+      return copy;
+    });
+    setDismissedConnectorIds((prev) => {
+      if (!prev.has(next.connectorId)) return prev;
+      const copy = new Set(prev);
+      copy.delete(next.connectorId);
+      return copy;
+    });
     setBlocks((current) => {
       const result = toggleConnectorInBlocks(
         current,
@@ -248,6 +335,48 @@ export function Composer({
       }
       return result.blocks;
     });
+  };
+
+  const dismissConnectorChip = (scope: ComposerConnectorScope) => {
+    setManualConnectorIds((prev) => {
+      if (!prev.has(scope.connectorId)) return prev;
+      const copy = new Set(prev);
+      copy.delete(scope.connectorId);
+      return copy;
+    });
+    setDismissedConnectorIds((prev) => {
+      const copy = new Set(prev);
+      copy.add(scope.connectorId);
+      return copy;
+    });
+    setBlocks((current) => removeConnectorBlock(current, scope.connectionId));
+  };
+
+  const restoreConnectorMention = (mention: ConnectorMention) => {
+    setDismissedConnectorIds((prev) => {
+      if (!prev.has(mention.connectorId)) return prev;
+      const copy = new Set(prev);
+      copy.delete(mention.connectorId);
+      return copy;
+    });
+    setBlocks((current) =>
+      syncDetectedConnectorBlocks(
+        current,
+        detectedMentions.filter(
+          (m) =>
+            m.connectorId !== mention.connectorId ||
+            m.connectionId === mention.connectionId,
+        ),
+        {
+          dismissedConnectorIds: new Set(
+            [...dismissedConnectorIds].filter(
+              (id) => id !== mention.connectorId,
+            ),
+          ),
+          manualConnectorIds,
+        },
+      ),
+    );
   };
 
   const connectorScopePayload =
@@ -263,6 +392,12 @@ export function Composer({
   const [images, setImages] = useState<ChatImageAttachment[]>([]);
   const [dictateError, setDictateError] = useState(null as string | null);
   const [attachError, setAttachError] = useState(null as string | null);
+
+  useEffect(() => {
+    if (!dictateError) return;
+    const timer = window.setTimeout(() => setDictateError(null), 4200);
+    return () => window.clearTimeout(timer);
+  }, [dictateError]);
 
   const speculationRef = useRef<ReturnType<
     typeof createComposerSpeculationController
@@ -554,9 +689,26 @@ export function Composer({
       const sendAttachments = toSendAttachments(usableImages, files);
       if (!body && !usableImages.length && !files.length) {
         setValue(next);
-        setDictateError("No speech detected.");
+        // Empty send-from-dictate shouldn't sticky-error the composer.
+        setDictateError(null);
         return;
       }
+      // Detect connectors from the final transcript before chips have synced.
+      const liveMentions = detectConnectorMentions(next, detectCandidates).filter(
+        (m) => !dismissedConnectorIds.has(m.connectorId),
+      );
+      const liveScopes =
+        liveMentions.length > 0
+          ? liveMentions
+          : connectorScopes;
+      const liveConnectorPayload =
+        liveScopes.length > 0
+          ? {
+              selectedConnectionIds: liveScopes.map((c) => c.connectionId),
+              selectedConnectionId: liveScopes[0]!.connectionId,
+              scopedConnectorId: liveScopes[0]!.connectorId,
+            }
+          : {};
       suppressAutoFocusRef.current = true;
       try {
         getNativeCapabilities().keyboard.dismiss();
@@ -569,12 +721,14 @@ export function Composer({
         ...(usableImages.length ? { attachments: usableImages } : {}),
         ...(files.length ? { files } : {}),
         ...(sendAttachments.length ? { sendAttachments } : {}),
-        ...connectorScopePayload,
+        ...liveConnectorPayload,
       });
       setValue("");
       setFiles([]);
       setImages([]);
       setMenu(null);
+      setDismissedConnectorIds(new Set());
+      setManualConnectorIds(new Set());
       setDictateError(null);
       setAttachError(null);
       clearPageReference();
@@ -611,9 +765,17 @@ export function Composer({
         })
         .catch((e) => {
           afterTranscriptionRef.current = "insert";
-          setDictateError(
-            e instanceof Error ? e.message : "Transcription failed.",
-          );
+          const message =
+            e instanceof Error ? e.message : "Transcription failed.";
+          // Brief empty stop (or silent clip) — don't leave a sticky banner.
+          if (
+            /no speech detected|couldn'?t hear that/i.test(message) &&
+            intent !== "send"
+          ) {
+            setDictateError(null);
+            return;
+          }
+          setDictateError(message);
         })
         .finally(() => {
           dictationRef.current = null;
@@ -714,6 +876,8 @@ export function Composer({
     setFiles([]);
     setImages([]);
     setMenu(null);
+    setDismissedConnectorIds(new Set());
+    setManualConnectorIds(new Set());
     setDictating(false);
     setTranscribing(false);
     setDictateError(null);
@@ -928,6 +1092,53 @@ export function Composer({
       >
         {menu === "plus" && !compact ? (
           <ComposerMenu mobile={mobile} openAbove={!landing}>
+            <div>
+              <MenuSection title="Start" />
+              {panelChoiceSuggestions().map((item) => {
+                const Icon = item.icon;
+                const dest =
+                  item.space === "research"
+                    ? "research"
+                    : item.space === "studio"
+                      ? "studio"
+                      : item.space === "build"
+                        ? "build"
+                        : "work";
+                return (
+                  <MenuRow
+                    key={item.id}
+                    icon={<Icon className="h-full w-full" strokeWidth={1.75} />}
+                    label={item.label}
+                    description={item.hint}
+                    onClick={() => {
+                      void setDraftAsDefaultChat(dest);
+                      setMenu(null);
+                    }}
+                  />
+                );
+              })}
+              <MenuRow
+                icon={
+                  <MessageSquare className="h-full w-full" strokeWidth={1.75} />
+                }
+                label="Default chat"
+                description="Replace spaces default chat"
+                onClick={() => {
+                  void setDraftAsDefaultChat();
+                  setMenu(null);
+                }}
+              />
+              <MenuRow
+                icon={<Globe className="h-full w-full" strokeWidth={1.75} />}
+                label="Browser"
+                description="Browse the web beside chat"
+                onClick={() => {
+                  openStandaloneBrowser();
+                  setMenu(null);
+                }}
+              />
+            </div>
+
             <div>
               <MenuSection title="Add" />
               <MenuRow
@@ -1302,38 +1513,104 @@ export function Composer({
                     const iconId =
                       connectors.find((c) => c.id === block.scope.connectorId)
                         ?.icon ?? block.scope.connectorId;
+                    const isLastConnector = !blocks
+                      .slice(index + 1)
+                      .some((b) => b.type === "connector");
                     return (
-                      <button
-                        key={block.key}
-                        type="button"
-                        aria-label={`Remove ${block.scope.label}`}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() =>
-                          setBlocks((current) =>
-                            removeConnectorBlock(
-                              current,
-                              block.scope.connectionId,
-                            ),
-                          )
-                        }
-                        className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-md px-0.5 text-[14px] text-sky-500/95 dark:text-sky-400/95"
-                      >
-                        <ConnectorMark
-                          id={iconId}
-                          size="nav"
-                          className="!h-[0.9em] !w-[0.9em]"
-                        />
-                        <span className="truncate font-medium leading-none">
-                          {block.scope.label}
+                      <Fragment key={block.key}>
+                        <span className="group/conn relative inline-flex max-w-full shrink-0 items-center gap-1 rounded-md py-0.5 pl-0.5 pr-1 text-[14px] text-sky-500/95 dark:text-sky-400/95">
+                          <ConnectorMark
+                            id={iconId}
+                            size="nav"
+                            className="!h-[0.9em] !w-[0.9em]"
+                          />
+                          <span className="truncate font-medium leading-none">
+                            {block.scope.label}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`Remove ${block.scope.label}`}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => dismissConnectorChip(block.scope)}
+                            className="ml-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-sky-500/80 opacity-0 transition-opacity duration-150 hover:bg-sky-500/15 hover:text-sky-600 group-hover/conn:opacity-100 dark:text-sky-400/80 dark:hover:text-sky-300"
+                          >
+                            <X className="h-2.5 w-2.5" strokeWidth={2.25} />
+                          </button>
                         </span>
-                      </button>
+                        {isLastConnector
+                          ? restoreMentions.map((mention) => {
+                              const restoreIcon =
+                                connectors.find(
+                                  (c) => c.id === mention.connectorId,
+                                )?.icon ?? mention.connectorId;
+                              return (
+                                <button
+                                  key={`restore_${mention.connectorId}`}
+                                  type="button"
+                                  title={`Add ${mention.label} back`}
+                                  aria-label={`Add ${mention.label} back`}
+                                  onMouseDown={(event) =>
+                                    event.preventDefault()
+                                  }
+                                  onClick={() =>
+                                    restoreConnectorMention(mention)
+                                  }
+                                  className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border border-dashed border-sky-500/35 px-1 py-0.5 text-[14px] text-sky-500/70 underline decoration-sky-500/40 underline-offset-2 transition-colors duration-150 hover:border-sky-500/60 hover:bg-sky-500/10 hover:text-sky-600 dark:text-sky-400/70 dark:hover:text-sky-300"
+                                >
+                                  <ConnectorMark
+                                    id={restoreIcon}
+                                    size="nav"
+                                    className="!h-[0.9em] !w-[0.9em] opacity-80"
+                                  />
+                                  <span className="truncate font-medium leading-none">
+                                    {mention.matched}
+                                  </span>
+                                </button>
+                              );
+                            })
+                          : null}
+                      </Fragment>
                     );
                   }
+
+                  const showRestoreBeforeText =
+                    restoreMentions.length > 0 &&
+                    !blocks.some((b) => b.type === "connector") &&
+                    index === blocks.findIndex((b) => b.type === "text");
+                  const restoreBeforeText = showRestoreBeforeText
+                    ? restoreMentions.map((mention) => {
+                        const restoreIcon =
+                          connectors.find((c) => c.id === mention.connectorId)
+                            ?.icon ?? mention.connectorId;
+                        return (
+                          <button
+                            key={`restore_${mention.connectorId}`}
+                            type="button"
+                            title={`Add ${mention.label} back`}
+                            aria-label={`Add ${mention.label} back`}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => restoreConnectorMention(mention)}
+                            className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border border-dashed border-sky-500/35 px-1 py-0.5 text-[14px] text-sky-500/70 underline decoration-sky-500/40 underline-offset-2 transition-colors duration-150 hover:border-sky-500/60 hover:bg-sky-500/10 hover:text-sky-600 dark:text-sky-400/70 dark:hover:text-sky-300"
+                          >
+                            <ConnectorMark
+                              id={restoreIcon}
+                              size="nav"
+                              className="!h-[0.9em] !w-[0.9em] opacity-80"
+                            />
+                            <span className="truncate font-medium leading-none">
+                              {mention.matched}
+                            </span>
+                          </button>
+                        );
+                      })
+                    : null;
 
                   const isLastText =
                     !blocks.slice(index + 1).some((b) => b.type === "text");
                   const showPlaceholder =
-                    blocks.length === 1 && block.value.length === 0;
+                    blocks.length === 1 &&
+                    block.value.length === 0 &&
+                    restoreMentions.length === 0;
                   const collapsed = !block.value && !isLastText;
                   const widthCh = Math.max(block.value.length + 1, 1);
                   const fieldClassName = cn(
@@ -1354,8 +1631,9 @@ export function Composer({
 
                   if (isLastText) {
                     return (
-                      <textarea
-                        key={block.key}
+                      <Fragment key={block.key}>
+                        {restoreBeforeText}
+                        <textarea
                         ref={(el) => {
                           if (el) {
                             textInputRefs.current.set(block.key, el);
@@ -1396,6 +1674,7 @@ export function Composer({
                           const next = event.target.value;
                           textCursorRef.current =
                             event.target.selectionStart ?? next.length;
+                          if (dictateError) setDictateError(null);
                           setBlocks((current) =>
                             updateTextBlock(current, block.key, next),
                           );
@@ -1458,6 +1737,7 @@ export function Composer({
                         }}
                         className={fieldClassName}
                       />
+                      </Fragment>
                     );
                   }
 

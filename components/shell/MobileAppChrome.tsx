@@ -94,6 +94,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     selectMode,
     setSelectMode,
     backToSpaceHome,
+    openInAppBrowser,
   } = useApp();
 
   const catalog = useSyncExternalStore(
@@ -550,7 +551,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
             setRenameOpen(true);
           }}
           onOpenExternal={() => {
-            window.open(address, "_blank");
+            openInAppBrowser(address);
             setActionsOpen(false);
           }}
           onSelectElement={() => {

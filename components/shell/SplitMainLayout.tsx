@@ -32,6 +32,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
     jobId,
     skillId,
     mobileSurface,
+    standaloneBrowserOpen,
   } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
@@ -40,7 +41,12 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
   const immersive = panelMode === "immersive";
   const wide = panelMode === "wide";
   // Compact only for home new-chat choice (“What would you like to do?”).
-  const choicePanel = view === "chat" && !spaceId && !projectId;
+  // Browser / space work uses the normal adjustable panel width.
+  const choicePanel =
+    view === "chat" &&
+    !spaceId &&
+    !projectId &&
+    !standaloneBrowserOpen;
   const panelPct = immersive
     ? 100
     : choicePanel

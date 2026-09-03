@@ -1222,8 +1222,8 @@ export function ProjectBrowserPanel({
             ) : standalone ? (
               <>
                 <RailBtn
-                  label="Open in new window"
-                  onClick={() => window.open(address, "_blank")}
+                  label="Open in new tab"
+                  onClick={() => addUrlTab(address)}
                 >
                   <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.6} />
                 </RailBtn>
@@ -1238,7 +1238,7 @@ export function ProjectBrowserPanel({
                 }}
                 onPublish={() => openOverlay("publish")}
                 onDomain={() => openOverlay("domains")}
-                onOpenExternal={() => window.open(address, "_blank")}
+                onOpenExternal={() => addUrlTab(address)}
                 onSelectElement={() => setSelectMode(!selectMode)}
                 onRefresh={() => {
                   refreshPreview();
@@ -1551,6 +1551,37 @@ function ProjectBrowserBody({
     surfaceActive,
   });
 
+  const openNewInAppTab = (raw: string) => {
+    const url = normalizeBrowserUrl(raw);
+    if (!url || url === "about:blank") return;
+    const sessionFallback =
+      browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID
+        ? defaultStandaloneBrowserSession()
+        : (() => {
+            const item = findWorkCollectionItem(browserKey.projectId);
+            if (item) return defaultWorkItemBrowserSession(item);
+            return defaultProjectBrowserSession({
+              projectId: browserKey.projectId,
+              title: fallbackName,
+              spaceId: browserKey.spaceId,
+            });
+          })();
+    const current =
+      browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID
+        ? getStandaloneBrowserSession(browserKey, sessionFallback)
+        : getProjectBrowserSession(browserKey, sessionFallback);
+    const nextTab = navigateProjectBrowserTab(makeWebTab(), url);
+    const next = {
+      tabs: [...current.tabs, nextTab],
+      activeTabId: nextTab.id,
+    };
+    if (browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID) {
+      setStandaloneBrowserSession(browserKey, next);
+    } else {
+      setProjectBrowserSession(browserKey, next);
+    }
+  };
+
   const syncSurfaceMeta = (patch: {
     url?: string;
     title?: string;
@@ -1659,6 +1690,7 @@ function ProjectBrowserBody({
           onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
           onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
           onFaviconChange={(faviconUrl) => syncSurfaceMeta({ faviconUrl })}
+          onOpenNewTab={openNewInAppTab}
         />
       </div>
     );
@@ -1687,6 +1719,7 @@ function ProjectBrowserBody({
             onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
             onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
             onFaviconChange={(faviconUrl) => syncSurfaceMeta({ faviconUrl })}
+            onOpenNewTab={openNewInAppTab}
           />
         </div>
       );
@@ -1700,37 +1733,6 @@ function ProjectBrowserBody({
   }
 
   if (isStudioMediaTabKind(tab.kind)) {
-    const openUrlInBrowserTab = (raw: string) => {
-      const url = normalizeBrowserUrl(raw);
-      if (!url || url === "about:blank") return;
-      const sessionFallback =
-        browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID
-          ? defaultStandaloneBrowserSession()
-          : (() => {
-              const item = findWorkCollectionItem(browserKey.projectId);
-              if (item) return defaultWorkItemBrowserSession(item);
-              return defaultProjectBrowserSession({
-                projectId: browserKey.projectId,
-                title: fallbackName,
-                spaceId: browserKey.spaceId,
-              });
-            })();
-      const current =
-        browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID
-          ? getStandaloneBrowserSession(browserKey, sessionFallback)
-          : getProjectBrowserSession(browserKey, sessionFallback);
-      const nextTab = navigateProjectBrowserTab(makeWebTab(), url);
-      const next = {
-        tabs: [...current.tabs, nextTab],
-        activeTabId: nextTab.id,
-      };
-      if (browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID) {
-        setStandaloneBrowserSession(browserKey, next);
-      } else {
-        setProjectBrowserSession(browserKey, next);
-      }
-    };
-
     return (
       <StudioMediaSurface
         kind={tab.kind}
@@ -1739,7 +1741,7 @@ function ProjectBrowserBody({
         projectId={projectId}
         boundGenerationId={tab.boundGenerationId}
         lockedAspectRatio={tab.aspectRatio}
-        onOpenUrl={openUrlInBrowserTab}
+        onOpenUrl={openNewInAppTab}
         onSrcChange={(nextUrl) =>
           syncSurfaceMeta(
             nextUrl === "about:blank"
@@ -1772,6 +1774,7 @@ function ProjectBrowserBody({
           onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
           onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
           onFaviconChange={(faviconUrl) => syncSurfaceMeta({ faviconUrl })}
+          onOpenNewTab={openNewInAppTab}
         />
       </div>
     );
@@ -2022,7 +2025,7 @@ function DesktopProjectToolsMenu({
               close();
             }}
           >
-            Open externally
+            Open in new tab
           </DesktopMenuItem>
           <DesktopMenuItem
             icon={MousePointer2}

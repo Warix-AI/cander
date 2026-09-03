@@ -234,7 +234,7 @@ export function WorkCollectionGrid({
   if (!items.length) {
     if (empty) {
       return (
-        <div className="flex w-full justify-center px-2 pt-6 pb-20">
+        <div className="w-full pt-2 pb-8">
           {empty}
         </div>
       );

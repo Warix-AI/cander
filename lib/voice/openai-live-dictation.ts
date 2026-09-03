@@ -242,11 +242,17 @@ async function startRealtimeVoiceDictation(
   };
 
   // Start PCM capture immediately (queues until WS is ready).
+  // Keep ScriptProcessor alive by connecting through a muted gain to the
+  // destination — some browsers stop firing onaudioprocess otherwise.
   source = audioCtx.createMediaStreamSource(stream);
   processor = audioCtx.createScriptProcessor(4096, 1, 1);
   dest = audioCtx.createMediaStreamDestination();
+  const silentGain = audioCtx.createGain();
+  silentGain.gain.value = 0;
   source.connect(processor);
   processor.connect(dest);
+  processor.connect(silentGain);
+  silentGain.connect(audioCtx.destination);
 
   processor.onaudioprocess = (ev) => {
     if (closed) return;
@@ -500,9 +506,11 @@ async function startRealtimeVoiceDictation(
             /* ignore */
           }
           try {
-            liveText = (await waitForFinal(2200)).trim();
+            // Allow more time after a slow token/WS connect for the final
+            // transcript event (batch fallback still runs if this is empty).
+            liveText = (await waitForFinal(4500)).trim();
           } catch {
-            liveText = "";
+            liveText = (completedTranscript || deltaTranscript).trim();
           }
         }
       } else if (connectError) {
@@ -521,11 +529,21 @@ async function startRealtimeVoiceDictation(
       if (liveText) return liveText;
 
       if (!batchBlob || batchBlob.size < 64) {
-        throw new Error("No speech detected.");
+        throw new Error(
+          appendedMs >= 400
+            ? "Couldn't hear that — try again."
+            : "No speech detected.",
+        );
       }
       const filename = `dictation.${batchMime.extension || "webm"}`;
       const text = await transcribeRawOpenAIAudio(batchBlob, filename);
-      if (!text.trim()) throw new Error("No speech detected.");
+      if (!text.trim()) {
+        throw new Error(
+          appendedMs >= 400
+            ? "Couldn't hear that — try again."
+            : "No speech detected.",
+        );
+      }
       return text.trim();
     },
   };
