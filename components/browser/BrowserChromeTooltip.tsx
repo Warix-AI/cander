@@ -57,10 +57,14 @@ export function BrowserChromeTooltip({
       <span
         ref={anchorRef}
         className="inline-flex"
-        onMouseEnter={show}
-        onMouseLeave={hide}
-        onFocus={show}
-        onBlur={hide}
+        onPointerEnter={(event) => {
+          if (event.pointerType !== "mouse" && event.pointerType !== "pen") {
+            return;
+          }
+          show();
+        }}
+        onPointerLeave={hide}
+        onPointerCancel={hide}
         aria-describedby={open ? id : undefined}
       >
         {children}

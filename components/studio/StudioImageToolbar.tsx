@@ -176,13 +176,13 @@ export function StudioImageToolbar({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3",
+        "pointer-events-none absolute inset-x-0 top-8 z-20 flex justify-center px-3",
         className,
       )}
     >
       <div className="pointer-events-auto relative">
         {editMode ? (
-          <div className="inline-flex w-[min(28rem,calc(100vw-2rem))] items-center gap-1 rounded-full border border-border/70 bg-background/90 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.12)] backdrop-blur-md dark:bg-neutral-900/90">
+          <div className="inline-flex w-[min(28rem,calc(100vw-2rem))] items-center gap-1 rounded-[10px] border border-border/70 bg-background/90 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.12)] backdrop-blur-md dark:bg-neutral-900/90">
             <input
               ref={inputRef}
               type="text"
@@ -225,7 +225,7 @@ export function StudioImageToolbar({
                 setEditMode(false);
                 setDraft("");
               }}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
             >
               <X className="h-3.5 w-3.5" strokeWidth={1.8} />
             </button>
@@ -236,7 +236,7 @@ export function StudioImageToolbar({
                 aria-label={dictating ? "Stop dictation" : "Start dictation"}
                 onClick={toggleDictation}
                 className={cn(
-                  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-50",
+                  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] transition-colors disabled:opacity-50",
                   dictating
                     ? "bg-muted text-foreground"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -253,13 +253,13 @@ export function StudioImageToolbar({
               type="button"
               disabled={busy || dictating || transcribing || !draft.trim()}
               onClick={submitEdit}
-              className="inline-flex h-8 shrink-0 items-center rounded-full bg-primary px-3 text-[12.5px] font-medium text-primary-foreground transition-colors hover:bg-foreground disabled:opacity-50"
+              className="inline-flex h-8 shrink-0 items-center rounded-[8px] bg-primary px-3 text-[12.5px] font-medium text-primary-foreground transition-colors hover:bg-foreground disabled:opacity-50"
             >
               Apply
             </button>
           </div>
         ) : (
-          <div className="inline-flex items-center gap-0.5 rounded-full border border-border/70 bg-background/90 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.12)] backdrop-blur-md dark:bg-neutral-900/90">
+          <div className="inline-flex items-center gap-0.5 rounded-[10px] border border-border/70 bg-background/90 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.12)] backdrop-blur-md dark:bg-neutral-900/90">
             <button
               type="button"
               disabled={busy}
@@ -267,7 +267,7 @@ export function StudioImageToolbar({
                 setResizeOpen(false);
                 setEditMode(true);
               }}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium tracking-[-0.01em] text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+              className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-3 text-[12.5px] font-medium tracking-[-0.01em] text-foreground transition-colors hover:bg-muted disabled:opacity-50"
             >
               <Pencil className="h-3.5 w-3.5" strokeWidth={1.7} />
               Suggest Edit
@@ -276,7 +276,7 @@ export function StudioImageToolbar({
               type="button"
               disabled={busy}
               onClick={onRemoveBackground}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium tracking-[-0.01em] text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+              className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-3 text-[12.5px] font-medium tracking-[-0.01em] text-foreground transition-colors hover:bg-muted disabled:opacity-50"
             >
               <RemoveBgIcon className="h-3.5 w-3.5" />
               Remove BG
@@ -286,7 +286,7 @@ export function StudioImageToolbar({
               disabled={busy}
               onClick={() => setResizeOpen((open) => !open)}
               className={cn(
-                "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium tracking-[-0.01em] text-foreground transition-colors hover:bg-muted disabled:opacity-50",
+                "inline-flex h-8 items-center gap-1.5 rounded-[8px] px-3 text-[12.5px] font-medium tracking-[-0.01em] text-foreground transition-colors hover:bg-muted disabled:opacity-50",
                 resizeOpen && "bg-muted",
               )}
             >

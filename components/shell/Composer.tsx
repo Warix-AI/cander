@@ -1589,8 +1589,8 @@ function MenuRow({
     >
       <span
         className={cn(
-          "inline-flex shrink-0 items-center justify-center overflow-hidden text-foreground",
-          compact ? "h-[12px] w-[12px] text-[12.5px]" : "h-[13px] w-[13px] text-[13.5px]",
+          "inline-flex shrink-0 items-center justify-center overflow-hidden text-foreground/80",
+          compact ? "h-[11.4px] w-[11.4px] text-[11.9px]" : "h-[12.35px] w-[12.35px] text-[12.8px]",
         )}
       >
         {icon}
@@ -1601,7 +1601,7 @@ function MenuRow({
           compact ? "gap-[1ch] text-[12.5px]" : "gap-[1ch] text-[13.5px]",
         )}
       >
-        <span className="text-foreground">{label}</span>
+        <span className="text-foreground/80">{label}</span>
         {description ? (
           <span className="text-muted-foreground/65">{description}</span>
         ) : null}

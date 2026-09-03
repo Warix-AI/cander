@@ -1,11 +1,27 @@
 "use client";
 
+import { useState, type PointerEvent } from "react";
 import { PanelRight } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { canUseRightPanel } from "@/lib/right-panel";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
+
+/** Hover fill only while a fine pointer is over the control — avoids Electron sticky :hover. */
+function useChromeHover() {
+  const [hovered, setHovered] = useState(false);
+  return {
+    hovered,
+    onPointerEnter: (event: PointerEvent<HTMLButtonElement>) => {
+      if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
+      setHovered(true);
+    },
+    onPointerLeave: () => setHovered(false),
+    onPointerCancel: () => setHovered(false),
+    onBlur: () => setHovered(false),
+  };
+}
 
 export function PanelToggle({
   className,
@@ -17,22 +33,24 @@ export function PanelToggle({
 }) {
   const { panelMode, toggleRightPanel } = useApp();
   const open = panelMode !== "collapsed";
+  const hover = useChromeHover();
 
   return (
     <button
       type="button"
       aria-label={open ? "Close right panel" : "Open right panel"}
-      aria-pressed={open}
       onClick={() => toggleRightPanel()}
-      onPointerLeave={(event) => {
-        // Electron can leave :hover stuck after the cursor leaves chrome.
-        event.currentTarget.blur();
-      }}
+      onPointerEnter={hover.onPointerEnter}
+      onPointerLeave={hover.onPointerLeave}
+      onPointerCancel={hover.onPointerCancel}
+      onBlur={hover.onBlur}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
-        docked
-          ? "h-8 w-8 bg-background text-muted-foreground [@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted [@media(hover:hover)_and_(pointer:fine)]:hover:text-foreground"
-          : "h-7 w-7 text-muted-foreground [@media(hover:hover)_and_(pointer:fine)]:hover:bg-black/[0.06] [@media(hover:hover)_and_(pointer:fine)]:hover:text-foreground dark:[@media(hover:hover)_and_(pointer:fine)]:hover:bg-white/[0.1]",
+        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150",
+        docked && "h-8 w-8 bg-background",
+        hover.hovered &&
+          (docked
+            ? "bg-muted text-foreground"
+            : "bg-black/[0.06] text-foreground dark:bg-white/[0.1]"),
         className,
       )}
     >

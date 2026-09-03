@@ -453,6 +453,7 @@ export function ProjectBrowserPanel({
 
   // Route each chat image generation onto its own Studio canvas tab so a second
   // generate does not overwrite an existing image.
+  // Do NOT re-steal focus while generating — users must be able to view other tabs.
   useEffect(() => {
     if (!isStudioProject || !key || !latestStudioImageJob) return;
     const genId = latestStudioImageJob.generationId?.trim();
@@ -467,37 +468,40 @@ export function ProjectBrowserPanel({
       !tab.boundGenerationId &&
       (!tab.url || tab.url === "" || tab.url === "about:blank");
 
-    const already = session.tabs.find(
+    const current = getProjectBrowserSession(key, session);
+    const already = current.tabs.find(
       (tab) =>
         tab.kind === "studio-image" && tab.boundGenerationId === genId,
     );
-    let nextTabs = session.tabs;
-    let activeTabId = session.activeTabId;
+    let nextTabs = current.tabs;
+    let activeTabId = current.activeTabId;
     let targetId = already?.id ?? null;
+    let focusNew = false;
 
     if (!targetId) {
-      const activeTab = session.tabs.find((tab) => tab.id === session.activeTabId);
+      const activeTab = current.tabs.find((tab) => tab.id === current.activeTabId);
       const reuse =
         (activeTab && isEmptyStudioTab(activeTab) ? activeTab : null) ||
-        session.tabs.find(isEmptyStudioTab) ||
+        current.tabs.find(isEmptyStudioTab) ||
         null;
       if (reuse) {
         targetId = reuse.id;
-        nextTabs = session.tabs.map((tab) =>
+        nextTabs = current.tabs.map((tab) =>
           tab.id === reuse.id ? { ...tab, boundGenerationId: genId } : tab,
         );
+        // Only jump when binding an empty tab that was already active / first empty.
+        focusNew = true;
         activeTabId = reuse.id;
       } else {
         const tab: ProjectBrowserTab = {
           ...makeStudioMediaTab("studio-image"),
           boundGenerationId: genId,
         };
-        nextTabs = [...session.tabs, tab];
+        nextTabs = [...current.tabs, tab];
         targetId = tab.id;
+        focusNew = true;
         activeTabId = tab.id;
       }
-    } else if (status === "generating" && session.activeTabId !== targetId) {
-      activeTabId = targetId;
     }
 
     const imageUrl = latestStudioImageJob.imageUrl?.trim();
@@ -515,10 +519,23 @@ export function ProjectBrowserPanel({
       });
     }
 
+    if (!focusNew) {
+      // Preserve the user's selected tab while another canvas generates.
+      activeTabId = current.activeTabId;
+    }
+
     const tabsChanged =
-      nextTabs.length !== session.tabs.length ||
-      nextTabs.some((tab, index) => tab !== session.tabs[index]);
-    if (!tabsChanged && activeTabId === session.activeTabId) return;
+      nextTabs.length !== current.tabs.length ||
+      nextTabs.some((tab, index) => {
+        const prev = current.tabs[index];
+        if (!prev || tab === prev) return tab !== prev;
+        return (
+          tab.id !== prev.id ||
+          tab.url !== prev.url ||
+          tab.boundGenerationId !== prev.boundGenerationId
+        );
+      });
+    if (!tabsChanged && activeTabId === current.activeTabId) return;
     write({ tabs: nextTabs, activeTabId });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- route on job identity/status only
   }, [
@@ -527,7 +544,6 @@ export function ProjectBrowserPanel({
     latestStudioImageJob?.generationId,
     latestStudioImageJob?.status,
     latestStudioImageJob?.imageUrl,
-    sessionRevision,
   ]);
 
   // Selected tab only — chat browser-context tools read this pointer.
@@ -843,54 +859,49 @@ export function ProjectBrowserPanel({
               Reading page
             </span>
           ) : null}
-          <span className="ml-auto flex shrink-0 items-center gap-0.5">
+          <span className="ml-auto flex shrink-0 items-center gap-1">
             {panelMode === "collapsed" ? null : standalone ? (
               <BrowserChromeTooltip label="Close browser">
-                <button
-                  type="button"
+                <BrowserChromeIconButton
                   aria-label="Close browser"
                   onClick={() => closeStandaloneBrowser()}
-                  onPointerLeave={(event) => event.currentTarget.blur()}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.1]"
                 >
                   <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-                </button>
+                </BrowserChromeIconButton>
               </BrowserChromeTooltip>
             ) : (
               <BrowserChromeTooltip label="Leave project">
-                <button
-                  type="button"
+                <BrowserChromeIconButton
                   aria-label="Leave project"
                   onClick={() => backToSpaceHome()}
-                  onPointerLeave={(event) => event.currentTarget.blur()}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.1]"
                 >
                   <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-                </button>
+                </BrowserChromeIconButton>
               </BrowserChromeTooltip>
             )}
             {chatArmed ? (
               <BrowserChromeTooltip
                 label={expandedLayout ? "Restore layout" : "Expand"}
               >
-                <button
-                  type="button"
+                <BrowserChromeIconButton
                   aria-label={expandedLayout ? "Restore layout" : "Expand"}
                   onClick={() => toggleExpandedLayout()}
-                  onPointerLeave={(event) => event.currentTarget.blur()}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.1]"
                 >
                   {expandedLayout ? (
                     <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
                   ) : (
                     <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
                   )}
-                </button>
+                </BrowserChromeIconButton>
               </BrowserChromeTooltip>
             ) : null}
             {chatArmed ? (
               <BrowserChromeTooltip
-                label={panelMode === "collapsed" ? "Open right panel" : "Close right panel"}
+                label={
+                  panelMode === "collapsed"
+                    ? "Open right panel"
+                    : "Close right panel"
+                }
               >
                 <PanelToggle />
               </BrowserChromeTooltip>
@@ -1014,9 +1025,10 @@ export function ProjectBrowserPanel({
       <div className="relative min-h-0 flex-1 overflow-hidden bg-white dark:bg-neutral-950">
         <div className="absolute inset-0 min-h-0">
           <ProjectBrowserBody
-          tab={active}
-          projects={allProjects}
-          fallbackName={previewFallbackName}
+            key={active.id}
+            tab={active}
+            projects={allProjects}
+            fallbackName={previewFallbackName}
           fallbackSummary={previewFallbackSummary}
           reloadKey={reloadKey}
           userId={actor.id}
@@ -2041,7 +2053,10 @@ function StudioMediaSurface({
   }, [kind, thread, boundGenerationId]);
 
   const isGenerating =
-    kind === "studio-image" && imageJob?.status === "generating";
+    kind === "studio-image" &&
+    Boolean(boundGenerationId) &&
+    imageJob?.generationId === boundGenerationId &&
+    imageJob?.status === "generating";
   const showMesh = isGenerating || isEditing;
   const lockedParts = lockedAspectRatio
     ? studioAspectParts(lockedAspectRatio)
@@ -2497,6 +2512,38 @@ function KindGlyph({ kind, className }: { kind?: ProjectKind; className?: string
   if (kind === "automation") return <Zap className={cls} strokeWidth={1.6} />;
   if (kind === "research") return <Workflow className={cls} strokeWidth={1.6} />;
   return <AppWindow className={cls} strokeWidth={1.6} />;
+}
+
+function BrowserChromeIconButton({
+  "aria-label": ariaLabel,
+  onClick,
+  children,
+}: {
+  "aria-label": string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      onClick={onClick}
+      onPointerEnter={(event) => {
+        if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
+        setHovered(true);
+      }}
+      onPointerLeave={() => setHovered(false)}
+      onPointerCancel={() => setHovered(false)}
+      onBlur={() => setHovered(false)}
+      className={cn(
+        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150",
+        hovered && "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
+      )}
+    >
+      {children}
+    </button>
+  );
 }
 
 function RailBtn({
