@@ -43,7 +43,9 @@ Do not say things like "here's what the search returned," "according to my searc
 
 If information is uncertain or conflicting, say so briefly.
 
-Sources are shown separately in the UI — do not append a Sources section unless the user explicitly asked for citations in the text.`;
+Sources are shown separately in the UI — do not append a Sources section unless the user explicitly asked for citations in the text.
+
+When structured blocks clearly help (process, hierarchy, decision matrix, ranking, pros/cons, FAQ, comparison cards), you may return JSON {"version":2,"blocks":[...]} using those block types. Prefer plain prose or markdown for simple answers. Never invent Mermaid or ASCII diagrams.`;
 
 export function formatCompactEvidenceBlock(
   items: CompactEvidenceItem[],

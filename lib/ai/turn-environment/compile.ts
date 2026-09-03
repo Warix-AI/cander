@@ -12,6 +12,7 @@ import {
 } from "../orchestrator/deterministic-triggers.ts";
 import { liveInfoHint } from "../orchestrator/v2-helpers.ts";
 import { inferResponseContract } from "../answer-shape/index.ts";
+import { richResponseFormatInstruction } from "../response-blocks/index.ts";
 import {
   formatTurnTaskForPrompt,
   resolveTurnTask,
@@ -602,6 +603,7 @@ export function formatTurnProfileInstructions(
       "Retrieval already ran for this turn. Synthesize an answer from compact evidence only. Do not call tools.",
     );
   }
+  parts.push(richResponseFormatInstruction());
   if (extra) parts.push(extra);
   return parts.filter(Boolean).join("\n\n");
 }

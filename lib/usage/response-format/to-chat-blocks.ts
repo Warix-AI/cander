@@ -3,6 +3,7 @@
  */
 import type { ChatBlock } from "../../types.ts";
 import type { RichResponseBlockV2, RichResponseV2 } from "./schema-v2.ts";
+import { richBlockToMarkdown } from "../../ai/response-blocks/parse.ts";
 
 export function richBlocksToChatBlocks(response: RichResponseV2): ChatBlock[] {
   const blocks: ChatBlock[] = [];
@@ -46,17 +47,10 @@ export function richBlocksToChatBlocks(response: RichResponseV2): ChatBlock[] {
         break;
       case "comparison_card":
         blocks.push({
-          type: "text",
-          text: [
-            block.title ? `**${block.title}**` : "",
-            `| | ${block.columns.join(" | ")} |`,
-            `| --- | ${block.columns.map(() => "---").join(" | ")} |`,
-            ...block.rows.map(
-              (row) => `| ${row.label} | ${row.values.join(" | ")} |`,
-            ),
-          ]
-            .filter(Boolean)
-            .join("\n"),
+          type: "comparison_card",
+          title: block.title,
+          columns: block.columns,
+          rows: block.rows,
         });
         break;
       case "metric":
@@ -131,6 +125,16 @@ export function richBlocksToChatBlocks(response: RichResponseV2): ChatBlock[] {
           mime: "image/png",
         });
         break;
+      case "image_gallery":
+        for (const image of block.images) {
+          blocks.push({
+            type: "image",
+            url: image.url,
+            name: image.alt ?? image.caption ?? "Generated image",
+            mime: "image/png",
+          });
+        }
+        break;
       case "job_progress":
         blocks.push({
           type: "tool",
@@ -165,9 +169,84 @@ export function richBlocksToChatBlocks(response: RichResponseV2): ChatBlock[] {
           status: block.status === "ready" ? "ready" : "live",
         });
         break;
-      default:
-        blocks.push({ type: "text", text: JSON.stringify(block) });
+      case "file_changes":
+        blocks.push({
+          type: "text",
+          text: [
+            block.title ? `**${block.title}**` : "**File changes**",
+            ...block.files.map((file) => `- \`${file.path}\` — ${file.summary}`),
+          ].join("\n"),
+        });
         break;
+      case "process":
+        blocks.push({
+          type: "process",
+          title: block.title,
+          steps: block.steps,
+        });
+        break;
+      case "hierarchy":
+        blocks.push({
+          type: "hierarchy",
+          title: block.title,
+          nodes: block.nodes,
+        });
+        break;
+      case "decision_matrix":
+        blocks.push({
+          type: "decision_matrix",
+          title: block.title,
+          options: block.options,
+          criteria: block.criteria,
+          scores: block.scores,
+          recommendation: block.recommendation,
+        });
+        break;
+      case "pros_cons":
+        blocks.push({
+          type: "pros_cons",
+          title: block.title,
+          pros: block.pros,
+          cons: block.cons,
+          conclusion: block.conclusion,
+        });
+        break;
+      case "ranking":
+        blocks.push({
+          type: "ranking",
+          title: block.title,
+          items: block.items,
+        });
+        break;
+      case "status":
+        blocks.push({
+          type: "status",
+          title: block.title,
+          items: block.items,
+        });
+        break;
+      case "before_after":
+        blocks.push({
+          type: "before_after",
+          title: block.title,
+          before: block.before,
+          after: block.after,
+        });
+        break;
+      case "faq":
+        blocks.push({
+          type: "faq",
+          title: block.title,
+          items: block.items,
+        });
+        break;
+      default: {
+        const markdown = richBlockToMarkdown(block as RichResponseBlockV2);
+        if (markdown.trim()) {
+          blocks.push({ type: "text", text: markdown });
+        }
+        break;
+      }
     }
   }
   return blocks;

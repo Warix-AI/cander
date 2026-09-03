@@ -8,6 +8,7 @@ import {
   ImageGenerationCard,
   phaseForImageGenerationBlock,
 } from "@/components/chat/ImageGenerationCard";
+import { StructuredResponseBlock } from "@/components/chat/StructuredResponseBlock";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
 import { formatClarificationAnswersForDisplay } from "@/lib/ai/clarification/schema";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
@@ -346,6 +347,16 @@ function BlockView({
       );
     case "file":
       return null;
+    case "process":
+    case "hierarchy":
+    case "decision_matrix":
+    case "pros_cons":
+    case "ranking":
+    case "status":
+    case "before_after":
+    case "faq":
+    case "comparison_card":
+      return <StructuredResponseBlock block={block} />;
   }
 }
 

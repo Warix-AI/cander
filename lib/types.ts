@@ -262,6 +262,86 @@ export type ChatBlock =
       name: string;
       /** Extracted text for model continuity — not shown in the bubble. */
       text?: string;
+    }
+  /** Structured answer-shape blocks (rich response format). */
+  | {
+      type: "process";
+      title?: string;
+      steps: Array<{
+        id: string;
+        label: string;
+        description?: string;
+        status?: string;
+        next?: string[];
+      }>;
+    }
+  | {
+      type: "hierarchy";
+      title?: string;
+      nodes: Array<{
+        id: string;
+        label: string;
+        description?: string;
+        parentId?: string;
+      }>;
+    }
+  | {
+      type: "decision_matrix";
+      title?: string;
+      options: string[];
+      criteria: Array<{ name: string; weight?: number }>;
+      scores: Array<{
+        option: string;
+        criterion: string;
+        score: number;
+        explanation?: string;
+      }>;
+      recommendation?: string;
+    }
+  | {
+      type: "pros_cons";
+      title?: string;
+      pros: string[];
+      cons: string[];
+      conclusion?: string;
+    }
+  | {
+      type: "ranking";
+      title?: string;
+      items: Array<{
+        rank: number;
+        label: string;
+        score?: number;
+        reason?: string;
+      }>;
+    }
+  | {
+      type: "status";
+      title?: string;
+      items: Array<{
+        label: string;
+        status: "pending" | "in_progress" | "complete" | "blocked";
+        detail?: string;
+        blocker?: string;
+        nextAction?: string;
+      }>;
+    }
+  | {
+      type: "before_after";
+      title?: string;
+      before: { title?: string; items: string[] };
+      after: { title?: string; items: string[] };
+    }
+  | {
+      type: "faq";
+      title?: string;
+      items: Array<{ question: string; answer: string }>;
+    }
+  | {
+      type: "comparison_card";
+      title?: string;
+      columns: string[];
+      rows: Array<{ label: string; values: string[] }>;
     };
 
 export type ChatImageAttachment = {

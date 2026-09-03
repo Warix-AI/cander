@@ -37,8 +37,12 @@ export type AnswerPresentation =
   | "numbered_steps"
   | "key_value"
   | "comparison"
+  | "comparison_cards"
   | "table"
-  | "list";
+  | "list"
+  | "checklist"
+  | "timeline"
+  | "hierarchy";
 
 export type TurnTaskResolution = {
   subject: string | null;
@@ -227,9 +231,23 @@ export function resolveTurnTask(opts: {
 
   if (COMPARE_RE.test(content)) {
     operation = "compare";
-    presentation = "comparison";
+    presentation = /\b(cards?|side[- ]by[- ]side)\b/i.test(content)
+      ? "comparison_cards"
+      : "comparison";
     intent = "compare";
     retrievalNeeded = true;
+  } else if (/\b(org\s+chart|hierarchy|tree\s+structure|parent[- ]child)\b/i.test(content)) {
+    operation = "detail";
+    presentation = "hierarchy";
+    intent = "hierarchy";
+  } else if (/\b(timeline|roadmap|chronolog)\b/i.test(content)) {
+    operation = "list";
+    presentation = "timeline";
+    intent = "timeline";
+  } else if (/\b(checklist|to[- ]?do)\b/i.test(content)) {
+    operation = "list";
+    presentation = "checklist";
+    intent = "checklist";
   } else if (CALC_RE.test(content) && !COUNT_RE.test(content)) {
     operation = "calculate";
     presentation = "short_answer";
@@ -364,7 +382,11 @@ export function presentationToSynthesisKind(
   | "comparison"
   | "explanation"
   | "recommendation"
-  | "research" {
+  | "research"
+  | "decision"
+  | "process"
+  | "timeline"
+  | "ranking" {
   switch (presentation) {
     case "short_answer":
     case "key_value":
@@ -372,13 +394,19 @@ export function presentationToSynthesisKind(
     case "prose":
       return "explanation";
     case "bullet_list":
-    case "numbered_steps":
     case "list":
+    case "checklist":
       return "list";
+    case "numbered_steps":
+      return "process";
     case "comparison":
-      return "comparison";
+    case "comparison_cards":
     case "table":
       return "comparison";
+    case "timeline":
+      return "timeline";
+    case "hierarchy":
+      return "explanation";
     default:
       return "fact";
   }

@@ -21,7 +21,10 @@ export function parseAssistantRichContent(raw: string): ParsedAssistantContent {
     }
     const blocks = richBlocksToChatBlocks(coerced);
     const textBlock = coerced.blocks.find(
-      (block) => block.type === "markdown" || block.type === "text" || block.type === "summary",
+      (block) =>
+        block.type === "markdown" ||
+        block.type === "text" ||
+        block.type === "summary",
     );
     const content =
       textBlock && "markdown" in textBlock
@@ -33,7 +36,7 @@ export function parseAssistantRichContent(raw: string): ParsedAssistantContent {
             : blocks.length
               ? ""
               : raw;
-    return { content, blocks };
+    return { content, blocks: blocks.length ? blocks : undefined };
   } catch {
     return { content: raw };
   }

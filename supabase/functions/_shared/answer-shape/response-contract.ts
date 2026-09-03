@@ -17,8 +17,12 @@ export type AnswerPresentation =
   | "numbered_steps"
   | "key_value"
   | "comparison"
+  | "comparison_cards"
   | "table"
-  | "list";
+  | "list"
+  | "checklist"
+  | "timeline"
+  | "hierarchy";
 
 export type ResponseContract = {
   shape: AnswerShapeKind;
@@ -72,11 +76,25 @@ export function inferResponseDepth(question: string): ResponseDepth {
 
 function presentationFromQuestion(question: string): AnswerPresentation {
   const q = question.toLowerCase();
+  if (/\b(org\s+chart|hierarchy|tree\s+structure|parent[- ]child|nested\s+structure)\b/.test(q)) {
+    return "hierarchy";
+  }
+  if (/\b(timeline|chronolog|roadmap|over\s+time)\b/.test(q)) {
+    return "timeline";
+  }
+  if (/\b(checklist|to[- ]?do\s+list|check\s+off)\b/.test(q)) {
+    return "checklist";
+  }
+  if (
+    /\b(comparison\s+cards?|side[- ]by[- ]side\s+cards?|option\s+cards?)\b/.test(q)
+  ) {
+    return "comparison_cards";
+  }
   if (/\b(compare|versus|\bvs\.?\b|difference between)\b/.test(q)) {
     return "comparison";
   }
   if (/\b(table|tabular|columns?)\b/.test(q)) return "table";
-  if (/\b(numbered|step[- ]by[- ]step|steps\b)\b/.test(q)) {
+  if (/\b(numbered|step[- ]by[- ]step|steps\b|workflow|pipeline|process)\b/.test(q)) {
     return "numbered_steps";
   }
   if (
@@ -101,6 +119,7 @@ function shapeFromPresentation(
 ): AnswerShapeKind {
   switch (presentation) {
     case "comparison":
+    case "comparison_cards":
     case "table":
       return "comparison";
     case "prose":
@@ -108,7 +127,15 @@ function shapeFromPresentation(
     case "bullet_list":
     case "numbered_steps":
     case "list":
-      return "list";
+    case "checklist":
+      return presentation === "numbered_steps" &&
+        fallback.kind === "process"
+        ? "process"
+        : "list";
+    case "timeline":
+      return "timeline";
+    case "hierarchy":
+      return fallback.kind === "process" ? "process" : "explanation";
     case "key_value":
     case "short_answer":
       return fallback.kind === "calculation" ? "calculation" : "fact";
@@ -194,8 +221,16 @@ function formatHintFor(
       return `Use compact key–value lines or short labeled facts.${fieldBit}`;
     case "comparison":
       return `Use a compact comparison (bullets or a small markdown table).${fieldBit}`;
+    case "comparison_cards":
+      return `Use compact comparison cards for each option (label + key differences). Prefer a comparison_card block.${fieldBit}`;
     case "table":
       return `Use a markdown table with a header row when listing structured items.${fieldBit}`;
+    case "checklist":
+      return `Use a checklist with clear actionable items.${fieldBit}`;
+    case "timeline":
+      return `Present items in chronological order as a timeline or ordered stages.${fieldBit}`;
+    case "hierarchy":
+      return `Show parent/child structure as a hierarchy (indented tree). Prefer a hierarchy block.${fieldBit}`;
     case "list":
       return `Provide a complete list of matching items — do not stop at a count or summary.${fieldBit}`;
     default:

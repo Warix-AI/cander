@@ -50,6 +50,25 @@ describe("inferAnswerShape", () => {
       "list",
     );
   });
+
+  it("maps decisions, processes, timelines, and rankings", () => {
+    assert.equal(
+      inferAnswerShape("Help me decide between Postgres and MySQL with a decision matrix").kind,
+      "decision",
+    );
+    assert.equal(
+      inferAnswerShape("Explain the CI/CD pipeline workflow end to end").kind,
+      "process",
+    );
+    assert.equal(
+      inferAnswerShape("Give me a timeline of the product roadmap").kind,
+      "timeline",
+    );
+    assert.equal(
+      inferAnswerShape("Rank these options from best to worst for a startup").kind,
+      "ranking",
+    );
+  });
 });
 
 describe("compressEvidenceForSynthesis", () => {

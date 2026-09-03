@@ -84,6 +84,50 @@ function shapeFor(
       formatHint:
         "Use a structured response with short sections only if needed. Still lead with the bottom line.",
     },
+    decision: {
+      kind: "decision",
+      maxSentences: 10,
+      preferBullets: true,
+      preferTable: true,
+      allowHeadings: false,
+      maxEvidenceItems: 6,
+      maxEvidenceChars: 3000,
+      formatHint:
+        "Frame a clear choice. Use criteria when useful (decision matrix or weighted comparison). End with a recommendation.",
+    },
+    process: {
+      kind: "process",
+      maxSentences: 12,
+      preferBullets: false,
+      preferTable: false,
+      allowHeadings: false,
+      maxEvidenceItems: 6,
+      maxEvidenceChars: 2800,
+      formatHint:
+        "Explain the workflow as ordered stages. Prefer a process block with labeled steps over ASCII diagrams.",
+    },
+    timeline: {
+      kind: "timeline",
+      maxSentences: 12,
+      preferBullets: true,
+      preferTable: false,
+      allowHeadings: false,
+      maxEvidenceItems: 6,
+      maxEvidenceChars: 2800,
+      formatHint:
+        "Present events in chronological order. Prefer a timeline presentation or numbered stages.",
+    },
+    ranking: {
+      kind: "ranking",
+      maxSentences: 10,
+      preferBullets: true,
+      preferTable: false,
+      allowHeadings: false,
+      maxEvidenceItems: 6,
+      maxEvidenceChars: 2600,
+      formatHint:
+        "Rank options clearly (1, 2, 3…). Give a short reason per item. Prefer a ranking block when listing ordered recommendations.",
+    },
   };
   return { ...defaults[kind], ...overrides, kind };
 }
@@ -102,6 +146,38 @@ export function inferAnswerShape(userQuestion: string): AnswerShape {
     )
   ) {
     return shapeFor("research");
+  }
+
+  if (
+    /\b(decision\s+matrix|weighted\s+score|evaluate\s+(against|by)\s+criteria|multi[- ]criteria|which\s+should\s+i\s+(pick|choose)|help\s+me\s+decide)\b/i.test(
+      lower,
+    )
+  ) {
+    return shapeFor("decision");
+  }
+
+  if (
+    /\b(workflow|pipeline|lifecycle|architecture\s+flow|process\s+flow|how\s+(does|do)\s+.+\s+work\s+end[- ]to[- ]end|stages?\s+of)\b/i.test(
+      lower,
+    )
+  ) {
+    return shapeFor("process");
+  }
+
+  if (
+    /\b(timeline|chronolog|roadmap|history\s+of\s+events|sequence\s+of\s+events|over\s+time)\b/i.test(
+      lower,
+    )
+  ) {
+    return shapeFor("timeline");
+  }
+
+  if (
+    /\b(rank(ing|ed)?\b|best\s+to\s+worst|from\s+best\s+to\s+worst|order\s+(these|them)|prioritiz(e|ing|ation))\b/i.test(
+      lower,
+    )
+  ) {
+    return shapeFor("ranking");
   }
 
   if (

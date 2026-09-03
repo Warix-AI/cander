@@ -343,6 +343,42 @@ describe("response format v2", () => {
     const markdown = richResponseToMarkdown(validated.response);
     assert.match(markdown, /Hello/);
   });
+
+  it("maps answer-shape structured blocks", () => {
+    const validated = validateRichResponse({
+      version: 2,
+      blocks: [
+        {
+          type: "process",
+          title: "Ship",
+          steps: [
+            { id: "s1", label: "Build", description: "Compile" },
+            { id: "s2", label: "Deploy" },
+          ],
+        },
+        {
+          type: "ranking",
+          items: [
+            { rank: 1, label: "A", reason: "Fast" },
+            { rank: 2, label: "B" },
+          ],
+        },
+        {
+          type: "faq",
+          items: [{ question: "Why?", answer: "Because." }],
+        },
+      ],
+    });
+    assert.equal(validated.ok, true);
+    if (!validated.ok) return;
+    const chatBlocks = richBlocksToChatBlocks(validated.response);
+    assert.ok(chatBlocks.some((block) => block.type === "process"));
+    assert.ok(chatBlocks.some((block) => block.type === "ranking"));
+    assert.ok(chatBlocks.some((block) => block.type === "faq"));
+    const markdown = richResponseToMarkdown(validated.response);
+    assert.match(markdown, /Build/);
+    assert.match(markdown, /Why\?/);
+  });
 });
 
 describe("usage status snapshot", () => {

@@ -10,7 +10,11 @@ export type AnswerShapeKind =
   | "comparison"
   | "explanation"
   | "recommendation"
-  | "research";
+  | "research"
+  | "decision"
+  | "process"
+  | "timeline"
+  | "ranking";
 
 export type AnswerShape = {
   kind: AnswerShapeKind;
