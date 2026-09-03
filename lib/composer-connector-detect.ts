@@ -163,16 +163,21 @@ function newKey(prefix: string) {
 /**
  * Replace a mention span inside concatenated text blocks with an inline chip.
  * Processes a single mention; caller should apply from end → start when many.
+ * Focus lands in the text segment after the chip so typing can continue.
  */
 export function replaceMentionInline(
   blocks: ComposerBlock[],
   mention: ConnectorMention,
-): ComposerBlock[] {
+): {
+  blocks: ComposerBlock[];
+  focusKey: string | null;
+  cursor: number;
+} {
   const already = blocks.some(
     (b) =>
       b.type === "connector" && b.scope.connectorId === mention.connectorId,
   );
-  if (already) return blocks;
+  if (already) return { blocks, focusKey: null, cursor: 0 };
 
   let offset = 0;
   for (let i = 0; i < blocks.length; i++) {
@@ -187,11 +192,12 @@ export function replaceMentionInline(
     const localEnd = localStart + mention.matched.length;
     if (localEnd > block.value.length) {
       // Match spans a chip boundary — skip; rare for product names.
-      return blocks;
+      return { blocks, focusKey: null, cursor: 0 };
     }
     // Keep surrounding spaces in the text segments so spacing matches a normal word.
     const left = block.value.slice(0, localStart);
     const right = block.value.slice(localEnd);
+    const focusKey = newKey("t");
     const chip: ComposerConnectorBlock = {
       key: `c_auto_${mention.connectionId}`,
       type: "connector",
@@ -206,12 +212,23 @@ export function replaceMentionInline(
       ...blocks.slice(0, i),
       { key: block.key, type: "text", value: left } satisfies ComposerTextBlock,
       chip,
-      { key: newKey("t"), type: "text", value: right },
+      { key: focusKey, type: "text", value: right },
       ...blocks.slice(i + 1),
     ];
-    return normalizeComposerBlocks(next);
+    const normalized = normalizeComposerBlocks(next);
+    const chipIdx = normalized.findIndex(
+      (b) =>
+        b.type === "connector" &&
+        b.scope.connectionId === mention.connectionId,
+    );
+    const after = chipIdx >= 0 ? normalized[chipIdx + 1] : null;
+    return {
+      blocks: normalized,
+      focusKey: after?.type === "text" ? after.key : focusKey,
+      cursor: 0,
+    };
   }
-  return blocks;
+  return { blocks, focusKey: null, cursor: 0 };
 }
 
 /**
@@ -226,7 +243,11 @@ export function syncDetectedConnectorBlocks(
     dismissedConnectorIds: ReadonlySet<string>;
     manualConnectorIds: ReadonlySet<string>;
   },
-): ComposerBlock[] {
+): {
+  blocks: ComposerBlock[];
+  focusKey: string | null;
+  cursor: number;
+} {
   const presentIds = new Set(
     connectorsFromBlocks(blocks).map((c) => c.connectorId),
   );
@@ -241,13 +262,21 @@ export function syncDetectedConnectorBlocks(
     // Replace from the end so earlier indices stay valid.
     .sort((a, b) => b.index - a.index);
 
-  if (!toAdd.length) return blocks;
+  if (!toAdd.length) return { blocks, focusKey: null, cursor: 0 };
 
   let next = blocks;
+  let focusKey: string | null = null;
+  let cursor = 0;
   for (const mention of toAdd) {
-    next = replaceMentionInline(next, mention);
+    const result = replaceMentionInline(next, mention);
+    next = result.blocks;
+    // First processed is the rightmost mention (where the user was typing).
+    if (result.focusKey && focusKey == null) {
+      focusKey = result.focusKey;
+      cursor = result.cursor;
+    }
   }
-  return next;
+  return { blocks: next, focusKey, cursor };
 }
 
 /** Mentions that are still in text but currently dismissed (click to restore). */

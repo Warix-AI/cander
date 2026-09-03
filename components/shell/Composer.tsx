@@ -296,6 +296,32 @@ export function Composer({
     textCursorRef.current = 0;
   }, [threadId]);
 
+  const focusTextKey = (key: string, cursor?: number) => {
+    focusedTextKeyRef.current = key;
+    const apply = () => {
+      const el = textInputRefs.current.get(key);
+      if (!el) return false;
+      el.focus({ preventScroll: true });
+      const pos =
+        cursor == null ? el.value.length : Math.min(cursor, el.value.length);
+      try {
+        el.setSelectionRange(pos, pos);
+      } catch {
+        /* ignore */
+      }
+      textCursorRef.current = pos;
+      textRef.current = el;
+      return true;
+    };
+    // New text segment after a chip may mount one frame later.
+    window.requestAnimationFrame(() => {
+      if (apply()) return;
+      window.requestAnimationFrame(() => {
+        apply();
+      });
+    });
+  };
+
   // Auto-attach connected apps when their name / alias appears in the draft.
   useEffect(() => {
     if (dictating || transcribing) return;
@@ -311,12 +337,18 @@ export function Composer({
       }
       return still;
     });
-    setBlocks((current) =>
-      syncDetectedConnectorBlocks(current, detectedMentions, {
+    setBlocks((current) => {
+      const result = syncDetectedConnectorBlocks(current, detectedMentions, {
         dismissedConnectorIds,
         manualConnectorIds,
-      }),
-    );
+      });
+      if (result.focusKey) {
+        const key = result.focusKey;
+        const cursor = result.cursor;
+        queueMicrotask(() => focusTextKey(key, cursor));
+      }
+      return result.blocks;
+    });
     // detectedMentions is derived from value + connections; include those deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional fingerprint
   }, [
@@ -330,23 +362,6 @@ export function Composer({
     [...dismissedConnectorIds].sort().join("|"),
     [...manualConnectorIds].sort().join("|"),
   ]);
-
-  const focusTextKey = (key: string, cursor?: number) => {
-    focusedTextKeyRef.current = key;
-    window.requestAnimationFrame(() => {
-      const el = textInputRefs.current.get(key);
-      if (!el) return;
-      el.focus();
-      const pos =
-        cursor == null ? el.value.length : Math.min(cursor, el.value.length);
-      try {
-        el.setSelectionRange(pos, pos);
-      } catch {
-        /* ignore */
-      }
-      textCursorRef.current = pos;
-    });
-  };
 
   const toggleConnectorScope = (next: ComposerConnectorScope) => {
     const removing = connectorScopes.some(
@@ -402,8 +417,8 @@ export function Composer({
       copy.delete(mention.connectorId);
       return copy;
     });
-    setBlocks((current) =>
-      syncDetectedConnectorBlocks(
+    setBlocks((current) => {
+      const result = syncDetectedConnectorBlocks(
         current,
         detectedMentions.filter(
           (m) =>
@@ -418,8 +433,12 @@ export function Composer({
           ),
           manualConnectorIds,
         },
-      ),
-    );
+      );
+      if (result.focusKey) {
+        focusTextKey(result.focusKey, result.cursor);
+      }
+      return result.blocks;
+    });
   };
 
   const connectorScopePayload =

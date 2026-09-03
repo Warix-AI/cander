@@ -91,7 +91,7 @@ describe("composer connector detect", () => {
     blocks = syncDetectedConnectorBlocks(blocks, mentions, {
       dismissedConnectorIds: new Set(),
       manualConnectorIds: new Set(),
-    });
+    }).blocks;
     assert.equal(connectorsFromBlocks(blocks).length, 1);
     assert.equal(textFromBlocks(blocks).includes("email"), false);
     assert.match(textFromBlocks(blocks), /send an\s+to braydon/i);
@@ -103,6 +103,24 @@ describe("composer connector detect", () => {
     assert.equal(chip?.type === "connector" && chip.replacedText?.toLowerCase(), "email");
   });
 
+  it("returns focus on the text segment after the inserted chip", () => {
+    const blocks = blocksFromText("Check my Gmail please");
+    const mentions = detectConnectorMentions(textFromBlocks(blocks), [gmail]);
+    const result = syncDetectedConnectorBlocks(blocks, mentions, {
+      dismissedConnectorIds: new Set(),
+      manualConnectorIds: new Set(),
+    });
+    assert.ok(result.focusKey);
+    const afterChip = result.blocks.findIndex(
+      (b) => b.type === "connector" && b.scope.connectorId === "gmail",
+    );
+    assert.ok(afterChip >= 0);
+    const focusBlock = result.blocks[afterChip + 1];
+    assert.equal(focusBlock?.type, "text");
+    assert.equal(focusBlock?.type === "text" && focusBlock.key, result.focusKey);
+    assert.equal(result.cursor, 0);
+  });
+
   it("keeps the inline chip after the trigger word is gone from text", () => {
     let blocks: ComposerBlock[] = blocksFromText("Check my Gmail please");
     blocks = syncDetectedConnectorBlocks(
@@ -112,13 +130,13 @@ describe("composer connector detect", () => {
         dismissedConnectorIds: new Set(),
         manualConnectorIds: new Set(),
       },
-    );
+    ).blocks;
     assert.equal(connectorsFromBlocks(blocks).length, 1);
     // Sync again with no mention in remaining text — chip stays.
     blocks = syncDetectedConnectorBlocks(blocks, [], {
       dismissedConnectorIds: new Set(),
       manualConnectorIds: new Set(),
-    });
+    }).blocks;
     assert.equal(connectorsFromBlocks(blocks).length, 1);
   });
 
@@ -131,7 +149,7 @@ describe("composer connector detect", () => {
         dismissedConnectorIds: new Set(),
         manualConnectorIds: new Set(),
       },
-    );
+    ).blocks;
     const connectionId = connectorsFromBlocks(blocks)[0]!.connectionId;
     blocks = removeConnectorBlockRestoringText(blocks, connectionId);
     assert.equal(connectorsFromBlocks(blocks).length, 0);
@@ -144,7 +162,7 @@ describe("composer connector detect", () => {
     let blocks = syncDetectedConnectorBlocks(emptyComposerBlocks(), mentions, {
       dismissedConnectorIds: new Set(["gmail"]),
       manualConnectorIds: new Set(),
-    });
+    }).blocks;
     assert.equal(connectorsFromBlocks(blocks).length, 0);
     assert.equal(
       dismissedMentionsStillPresent(mentions, new Set(["gmail"])).length,
@@ -154,7 +172,7 @@ describe("composer connector detect", () => {
     blocks = syncDetectedConnectorBlocks(blocksFromText(text), mentions, {
       dismissedConnectorIds: new Set(),
       manualConnectorIds: new Set(),
-    });
+    }).blocks;
     assert.equal(connectorsFromBlocks(blocks)[0]?.connectorId, "gmail");
   });
 
@@ -171,7 +189,7 @@ describe("composer connector detect", () => {
     const next = syncDetectedConnectorBlocks(blocks, [], {
       dismissedConnectorIds: new Set(),
       manualConnectorIds: new Set(["gmail"]),
-    });
+    }).blocks;
     assert.equal(connectorsFromBlocks(next)[0]?.connectorId, "gmail");
   });
 });
