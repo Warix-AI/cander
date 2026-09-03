@@ -24,6 +24,11 @@ import { Dropdown } from "@/components/ui/Controls";
 import { useMobileShell } from "@/lib/use-media-query";
 import { displayHostFromUrl } from "@/lib/preview-url";
 import type { BuildTool, ViewportId } from "@/lib/types";
+import {
+  BROWSER_CHROME_BG,
+  BROWSER_CHROME_CHIP,
+  BROWSER_CHROME_CHIP_HOVER,
+} from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 const ADVANCED_TOOLS: { id: BuildTool; label: string }[] = [
@@ -80,7 +85,7 @@ export function PreviewChrome({
   const addressLabel = displayHostFromUrl(address) || address;
 
   return (
-    <div className="min-w-0 shrink-0 overflow-hidden">
+    <div className={cn("min-w-0 shrink-0 overflow-hidden", BROWSER_CHROME_BG)}>
       {mobile ? (
         <div className="flex h-10 min-w-0 items-center gap-2 px-3">
           <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.6} />
@@ -111,8 +116,12 @@ export function PreviewChrome({
           className={cn(
             "inline-flex h-7 max-w-[14rem] items-center gap-1.5 rounded-lg px-2 text-[12px] tracking-[-0.01em]",
             previewing
-              ? "bg-sidebar-accent text-foreground"
-              : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+              ? cn(BROWSER_CHROME_CHIP, "text-foreground")
+              : cn(
+                  "text-muted-foreground",
+                  BROWSER_CHROME_CHIP_HOVER,
+                  "hover:text-foreground",
+                ),
           )}
         >
           <Globe className="h-3.5 w-3.5 shrink-0" strokeWidth={1.6} />
@@ -315,8 +324,10 @@ function RailBtn({
       aria-label={label}
       onClick={onClick}
       className={cn(
-        "inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-lg px-1.5 text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground",
-        active && "bg-sidebar-accent text-foreground",
+        "inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-lg px-1.5 text-muted-foreground transition-colors duration-200",
+        BROWSER_CHROME_CHIP_HOVER,
+        "hover:text-foreground",
+        active && cn(BROWSER_CHROME_CHIP, "text-foreground"),
       )}
     >
       {children}

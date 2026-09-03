@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
+  Mic,
   Pencil,
   Ratio,
   RectangleHorizontal,
@@ -10,10 +11,16 @@ import {
   Square,
   X,
 } from "lucide-react";
+import { useApp } from "@/components/app/AppProvider";
 import {
   STUDIO_RESIZE_PRESETS,
   type StudioResizePresetId,
 } from "@/lib/studio-assets-client";
+import {
+  isOpenAIDictationSupported,
+  startVoiceDictation,
+  type VoiceDictationSession,
+} from "@/lib/voice/openai-dictation";
 import { cn } from "@/lib/utils";
 
 function RatioGlyph({
@@ -74,10 +81,17 @@ export function StudioImageToolbar({
   onSuggestEdit: (prompt: string) => void;
   className?: string;
 }) {
+  const { entitlements } = useApp();
   const [resizeOpen, setResizeOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [draft, setDraft] = useState("");
+  const [dictating, setDictating] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dictationRef = useRef<VoiceDictationSession | null>(null);
+  const draftBaseRef = useRef("");
+  const voiceOk =
+    entitlements.hasVoice && isOpenAIDictationSupported();
 
   useEffect(() => {
     if (!editMode) return;
@@ -86,18 +100,77 @@ export function StudioImageToolbar({
 
   useEffect(() => {
     if (busy) {
+      dictationRef.current?.cancel();
+      dictationRef.current = null;
+      setDictating(false);
+      setTranscribing(false);
       setEditMode(false);
       setResizeOpen(false);
       setDraft("");
     }
   }, [busy]);
 
+  useEffect(() => {
+    return () => {
+      dictationRef.current?.cancel();
+      dictationRef.current = null;
+    };
+  }, []);
+
   const submitEdit = () => {
     const prompt = draft.trim();
-    if (!prompt || busy) return;
+    if (!prompt || busy || dictating || transcribing) return;
     setEditMode(false);
     setDraft("");
     onSuggestEdit(prompt);
+  };
+
+  const stopDictation = () => {
+    const session = dictationRef.current;
+    if (!session) {
+      setDictating(false);
+      return;
+    }
+    setDictating(false);
+    setTranscribing(true);
+    void session
+      .stopAndTranscribe()
+      .then((text) => {
+        const next = `${draftBaseRef.current}${text}`.trimStart();
+        setDraft(next);
+      })
+      .catch(() => {})
+      .finally(() => {
+        dictationRef.current = null;
+        setTranscribing(false);
+        inputRef.current?.focus();
+      });
+  };
+
+  const toggleDictation = () => {
+    if (!voiceOk || busy) return;
+    if (dictating) {
+      stopDictation();
+      return;
+    }
+    if (transcribing) return;
+    draftBaseRef.current = draft.trim() ? `${draft.trim()} ` : "";
+    setDictating(true);
+    dictationRef.current?.cancel();
+    void startVoiceDictation({
+      onError: () => {
+        dictationRef.current = null;
+        setDictating(false);
+        setTranscribing(false);
+      },
+    })
+      .then((session) => {
+        dictationRef.current = session;
+      })
+      .catch(() => {
+        dictationRef.current = null;
+        setDictating(false);
+      });
   };
 
   return (
@@ -114,8 +187,14 @@ export function StudioImageToolbar({
               ref={inputRef}
               type="text"
               value={draft}
-              disabled={busy}
-              placeholder="Suggest an edit…"
+              disabled={busy || dictating || transcribing}
+              placeholder={
+                dictating
+                  ? "Listening…"
+                  : transcribing
+                    ? "Transcribing…"
+                    : "Suggest an edit…"
+              }
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -124,6 +203,10 @@ export function StudioImageToolbar({
                 }
                 if (event.key === "Escape") {
                   event.preventDefault();
+                  dictationRef.current?.cancel();
+                  dictationRef.current = null;
+                  setDictating(false);
+                  setTranscribing(false);
                   setEditMode(false);
                   setDraft("");
                 }
@@ -135,6 +218,10 @@ export function StudioImageToolbar({
               disabled={busy}
               aria-label="Cancel edit"
               onClick={() => {
+                dictationRef.current?.cancel();
+                dictationRef.current = null;
+                setDictating(false);
+                setTranscribing(false);
                 setEditMode(false);
                 setDraft("");
               }}
@@ -142,9 +229,29 @@ export function StudioImageToolbar({
             >
               <X className="h-3.5 w-3.5" strokeWidth={1.8} />
             </button>
+            {voiceOk ? (
+              <button
+                type="button"
+                disabled={busy || transcribing}
+                aria-label={dictating ? "Stop dictation" : "Start dictation"}
+                onClick={toggleDictation}
+                className={cn(
+                  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-50",
+                  dictating
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {dictating ? (
+                  <Square className="h-3 w-3" strokeWidth={2} fill="currentColor" />
+                ) : (
+                  <Mic className="h-3.5 w-3.5" strokeWidth={1.75} />
+                )}
+              </button>
+            ) : null}
             <button
               type="button"
-              disabled={busy || !draft.trim()}
+              disabled={busy || dictating || transcribing || !draft.trim()}
               onClick={submitEdit}
               className="inline-flex h-8 shrink-0 items-center rounded-full bg-primary px-3 text-[12.5px] font-medium text-primary-foreground transition-colors hover:bg-foreground disabled:opacity-50"
             >

@@ -5,6 +5,10 @@ import { Maximize2, Minimize2 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { useMobileShell } from "@/lib/use-media-query";
+import {
+  BROWSER_CHROME_BG,
+  BROWSER_CHROME_CHIP_HOVER,
+} from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 export function PanelChrome({
@@ -29,6 +33,7 @@ export function PanelChrome({
       className={cn(
         "flex min-w-0 shrink-0 items-center gap-1",
         "h-11 px-3",
+        BROWSER_CHROME_BG,
         mobile && "pr-3",
       )}
     >
@@ -83,7 +88,9 @@ function ChromeBtn({
       aria-label={label}
       onClick={onClick}
       className={cn(
-        "inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground",
+        "inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground",
+        BROWSER_CHROME_CHIP_HOVER,
+        "hover:text-foreground",
       )}
     >
       {children}

@@ -24,6 +24,7 @@ import {
   PINNED_CHAT_WIDTH,
   showStandaloneBrowserPanel,
 } from "@/lib/right-panel";
+import { BROWSER_CHROME_BG } from "@/lib/shell-chrome";
 import { isDockChatSpace } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import type { MobileSurface } from "@/lib/types";
@@ -231,7 +232,10 @@ export function SpaceChatLayout() {
 
       <div
         className={cn(
-          "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-space-canvas dark:bg-background @container",
+          "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden @container",
+          projectId || showStandaloneBrowser
+            ? BROWSER_CHROME_BG
+            : "bg-space-canvas dark:bg-background",
           chatOpen && liveChatPct > 0 && "border-l border-border/40",
           !spaceOpen && !pinChat && "invisible pointer-events-none",
         )}

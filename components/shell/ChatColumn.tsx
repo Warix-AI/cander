@@ -104,6 +104,8 @@ export function ChatColumn() {
   const endRef = useRef<HTMLDivElement>(null);
   const latestUserRef = useRef<HTMLDivElement>(null);
   const prevThreadId = useRef<string | null>(null);
+  const prevProjectId = useRef<string | null | undefined>(undefined);
+  const prevSpaceId = useRef<string | null | undefined>(undefined);
   const userPinnedScroll = useRef(false);
   const scrollParentRef = useRef<HTMLDivElement | null>(null);
   const scrollUnsubRef = useRef<(() => void) | null>(null);
@@ -113,6 +115,19 @@ export function ChatColumn() {
     .find((m) => m.role === "user")?.id;
   const floating = useShellStyle() === "floating";
   const { centered } = useChatCanvasCentered();
+
+  const snapTranscriptToBottom = (behavior: ScrollBehavior = "auto") => {
+    const parent = scrollParentRef.current;
+    if (parent) {
+      if (behavior === "smooth") {
+        parent.scrollTo({ top: parent.scrollHeight, behavior: "smooth" });
+      } else {
+        parent.scrollTop = parent.scrollHeight;
+      }
+      return;
+    }
+    endRef.current?.scrollIntoView({ block: "end", behavior });
+  };
 
   const bindScrollParent = (node: HTMLDivElement | null) => {
     scrollUnsubRef.current?.();
@@ -149,15 +164,43 @@ export function ChatColumn() {
   useLayoutEffect(() => {
     const threadId = thread?.id ?? null;
     const threadSwitched = prevThreadId.current !== threadId;
+    const projectChanged = prevProjectId.current !== projectId;
+    const spaceChanged = prevSpaceId.current !== spaceId;
+    const navigated =
+      threadSwitched ||
+      projectChanged ||
+      spaceChanged ||
+      prevProjectId.current === undefined ||
+      prevSpaceId.current === undefined;
     prevThreadId.current = threadId;
-    if (threadSwitched) {
+    prevProjectId.current = projectId;
+    prevSpaceId.current = spaceId;
+
+    if (navigated) {
       userPinnedScroll.current = false;
     }
 
-    // Mobile project/thread switches: jump to the latest turn instantly.
-    // Smooth scroll looks like a second "slide" after the surface push.
+    if (!hasChatTurns) return;
+
+    // Returning from a project / switching spaces: land at the bottom with the
+    // spacer gap so the transcript is ready for the next prompt — not mid-page.
+    if (navigated) {
+      snapTranscriptToBottom("auto");
+      const parent = scrollParentRef.current;
+      // Width/visibility animations can leave scroll mid-transcript; re-snap.
+      const t1 = window.requestAnimationFrame(() => snapTranscriptToBottom("auto"));
+      const t2 = window.setTimeout(() => snapTranscriptToBottom("auto"), 120);
+      const t3 = window.setTimeout(() => snapTranscriptToBottom("auto"), 560);
+      return () => {
+        window.cancelAnimationFrame(t1);
+        window.clearTimeout(t2);
+        window.clearTimeout(t3);
+        void parent;
+      };
+    }
+
+    // Same-thread new turn: pin the latest user message near the top.
     if (mobile) {
-      if (!hasChatTurns) return;
       const el = latestUserRef.current ?? endRef.current;
       if (!el) return;
       el.scrollIntoView({ block: "start", behavior: "auto" });
@@ -169,9 +212,9 @@ export function ChatColumn() {
     if (!el) return;
     el.scrollIntoView({
       block: "start",
-      behavior: threadSwitched ? "auto" : "smooth",
+      behavior: "smooth",
     });
-  }, [lastUserId, last?.id, thread?.id, mobile, hasChatTurns, projectId]);
+  }, [lastUserId, last?.id, thread?.id, mobile, hasChatTurns, projectId, spaceId]);
 
   useEffect(() => {
     // While the assistant is typing, follow the reply only if the user hasn't

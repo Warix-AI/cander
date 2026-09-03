@@ -32,6 +32,10 @@ export type ProjectBrowserTab = {
   projectId?: string;
   /** Durable computer_sessions id for agent-browser or build sandbox metadata. */
   computerSessionId?: string;
+  /** Studio image tab bound to a chat image_generation job. */
+  boundGenerationId?: string;
+  /** Locked canvas aspect (e.g. "3:4") after resize — survives remounts. */
+  aspectRatio?: string | null;
   history: string[];
   historyIndex: number;
 };
@@ -302,6 +306,15 @@ function parseTab(
     computerSessionId: data.computerSessionId
       ? String(data.computerSessionId)
       : undefined,
+    boundGenerationId: data.boundGenerationId
+      ? String(data.boundGenerationId)
+      : undefined,
+    aspectRatio:
+      typeof data.aspectRatio === "string" && data.aspectRatio.trim()
+        ? data.aspectRatio.trim()
+        : data.aspectRatio === null
+          ? null
+          : undefined,
     history: history.length ? history : [url],
     historyIndex,
   };

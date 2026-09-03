@@ -22,16 +22,21 @@ export function PanelToggle({
     <button
       type="button"
       aria-label={open ? "Close right panel" : "Open right panel"}
+      aria-pressed={open}
       onClick={() => toggleRightPanel()}
+      onPointerLeave={(event) => {
+        // Electron can leave :hover stuck after the cursor leaves chrome.
+        event.currentTarget.blur();
+      }}
       className={cn(
-        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
+        "inline-flex shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
         docked
-          ? "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
-          : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-foreground",
+          ? "h-8 w-8 bg-background text-muted-foreground [@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted [@media(hover:hover)_and_(pointer:fine)]:hover:text-foreground"
+          : "h-7 w-7 text-muted-foreground [@media(hover:hover)_and_(pointer:fine)]:hover:bg-black/[0.06] [@media(hover:hover)_and_(pointer:fine)]:hover:text-foreground dark:[@media(hover:hover)_and_(pointer:fine)]:hover:bg-white/[0.1]",
         className,
       )}
     >
-      <PanelRight className="h-4 w-4" strokeWidth={1.6} />
+      <PanelRight className="h-3.5 w-3.5" strokeWidth={1.6} />
     </button>
   );
 }

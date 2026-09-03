@@ -20,6 +20,17 @@ export const SHELL_PANEL_BODY = "flex h-full min-h-0 flex-col";
 /** Scrollable panel body — transparent so the white shell shows through. */
 export const SHELL_PANEL_SCROLL = "min-h-0 flex-1 overflow-y-auto";
 
+/**
+ * Project / browser chrome + canvas fill — matches Studio artboard black so
+ * tab bars and content don’t read as two-tone charcoal-on-black.
+ */
+export const BROWSER_CHROME_BG = "bg-neutral-50 dark:bg-neutral-950";
+/** Active / hover chips on browser chrome. */
+export const BROWSER_CHROME_CHIP =
+  "bg-black/[0.04] dark:bg-white/[0.08]";
+export const BROWSER_CHROME_CHIP_HOVER =
+  "hover:bg-black/[0.06] dark:hover:bg-white/[0.1]";
+
 /** White floating control shell — toggles, icon buttons (light mode). */
 export const FLOAT_CONTROL_SHELL =
   "border-[0.75px] border-[oklch(0.91_0.003_265)] bg-white dark:border-border dark:bg-muted/20";
