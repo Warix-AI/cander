@@ -1663,15 +1663,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             workspaceId: opts.workspaceId ?? workspaceId,
           });
           if (!started.ok) {
-            patchImageGenerationBlock(
-              opts.threadId,
-              opts.messageId,
-              opts.generationId,
-              { status: "failed", error: started.error },
-            );
-            return;
-          }
-          if (started.status === "completed" && started.dataUrl) {
+            const transient =
+              /network_error|failed to fetch|abort|load failed|timeout/i.test(
+                started.error,
+              );
+            if (!transient) {
+              patchImageGenerationBlock(
+                opts.threadId,
+                opts.messageId,
+                opts.generationId,
+                { status: "failed", error: started.error },
+              );
+              return;
+            }
+            // Keep generating + poll — leave/reload often aborts the start POST.
+          } else if (started.status === "completed" && started.dataUrl) {
             patchImageGenerationBlock(
               opts.threadId,
               opts.messageId,
@@ -1693,8 +1699,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               });
             }
             return;
-          }
-          if (started.status === "failed") {
+          } else if (started.status === "failed") {
             patchImageGenerationBlock(
               opts.threadId,
               opts.messageId,

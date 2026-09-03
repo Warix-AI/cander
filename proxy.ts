@@ -24,6 +24,21 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Shared markdown docs: https://{m…}.cander.app → /d/{id}
+  const hostname = request.nextUrl.hostname.toLowerCase();
+  if (
+    hostname.endsWith(".cander.app") &&
+    hostname !== "cander.app" &&
+    hostname !== "www.cander.app"
+  ) {
+    const sub = hostname.slice(0, -".cander.app".length);
+    if (/^m[a-z0-9]{24}$/.test(sub)) {
+      const url = request.nextUrl.clone();
+      url.pathname = `/d/${sub}`;
+      return NextResponse.rewrite(url);
+    }
+  }
+
   return updateSupabaseSession(request);
 }
 

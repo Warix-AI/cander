@@ -18,9 +18,11 @@ import {
 import {
   assertProjectInWorkspace,
   assertWorkspaceMember,
+  deleteStudioAsset,
   parseDataUrl,
   resolveImageInputToDataUrl,
   storeStudioAsset,
+  studioAssetIdFromUrl,
 } from "@/lib/studio-assets-server";
 import { enforceUsageForRequest, finalizeUsageReservation } from "@/lib/usage/server/guard-route";
 
@@ -181,6 +183,7 @@ export async function POST(request: Request) {
       throw new Error("Image edit returned no image data.");
     }
     const dataUrl = `data:image/png;base64,${b64}`;
+    const previousAssetId = studioAssetIdFromUrl(imageUrl);
     const stored = await storeStudioAsset({
       userId: auth.user.id,
       workspaceId,
@@ -193,6 +196,11 @@ export async function POST(request: Request) {
           ? body.aspectRatio.trim()
           : null),
     });
+
+    // Keep only the latest canvas version — drop the prior studio asset.
+    if (previousAssetId && previousAssetId !== stored.assetId) {
+      await deleteStudioAsset(previousAssetId, auth.user.id).catch(() => false);
+    }
 
     await finalizeUsageReservation({
       reservationId: usage.reservationId,

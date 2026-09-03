@@ -20,6 +20,7 @@ import {
   Plus,
   LoaderCircle,
   RotateCw,
+  Share,
   Trash2,
   Upload,
   Video,
@@ -71,6 +72,15 @@ import {
   BROWSER_CHROME_CHIP_HOVER,
 } from "@/lib/shell-chrome";
 import { decodeTextDataUrl } from "@/lib/chat-document-attach";
+import { updateChatThreads } from "@/lib/api/chat-store";
+import {
+  publishMarkdownShare,
+  renameMarkdownShare,
+} from "@/lib/shared-markdown-client";
+import {
+  markdownShareUrl,
+  newMarkdownShareId,
+} from "@/lib/shared-markdown";
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import {
   editStudioProjectImage,
@@ -174,6 +184,10 @@ export function ProjectBrowserPanel({
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameBusy, setRenameBusy] = useState(false);
   const [desktopRenameOpen, setDesktopRenameOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<"project" | "document">(
+    "project",
+  );
+  const [shareCopied, setShareCopied] = useState(false);
   const { updateProject } = useSpaceMutation();
   const { ctx } = useSpaceData();
   const peeking = useSyncExternalStore(
@@ -260,6 +274,13 @@ export function ProjectBrowserPanel({
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
+    if (active?.kind === "studio-document" && decodeTextDataUrl(active.url ?? "")) {
+      const shareUrl = active.shareId
+        ? markdownShareUrl(active.shareId)
+        : "";
+      setUrlDraft(shareUrl);
+      return;
+    }
     const next =
       active?.kind === "agent-browser"
         ? (computerSession?.currentUrl ?? active.url)
@@ -269,6 +290,7 @@ export function ProjectBrowserPanel({
     active?.id,
     active?.url,
     active?.kind,
+    active?.shareId,
     computerSession?.currentUrl,
     sessionRevision,
   ]);
@@ -352,6 +374,16 @@ export function ProjectBrowserPanel({
   };
 
   const commitUrl = () => {
+    if (
+      active.kind === "studio-document" &&
+      decodeTextDataUrl(active.url) != null
+    ) {
+      // Markdown tabs keep a public share URL in the address bar — do not navigate.
+      setUrlDraft(
+        active.shareId ? markdownShareUrl(active.shareId) : urlDraft,
+      );
+      return;
+    }
     const url = normalizeBrowserUrl(urlDraft);
     write({
       ...session,
@@ -412,13 +444,20 @@ export function ProjectBrowserPanel({
     panelMode !== "collapsed" &&
     (!mobile || (mobileSurface === "panel" && panelRevealReady));
   const address =
-    active.kind === "agent-browser"
-      ? (computerSession?.currentUrl ?? active.url)
-      : standalone
-        ? (liveUrl ?? active.url)
-        : (liveUrl ??
-          active.url ??
-          previewUrlForProject(projectId ?? "project", entity?.publishedUrl));
+    active.kind === "studio-document" &&
+    decodeTextDataUrl(active.url) != null &&
+    active.shareId
+      ? markdownShareUrl(active.shareId)
+      : active.kind === "agent-browser"
+        ? (computerSession?.currentUrl ?? active.url)
+        : standalone
+          ? (liveUrl ?? active.url)
+          : (liveUrl ??
+            active.url ??
+            previewUrlForProject(projectId ?? "project", entity?.publishedUrl));
+  const isMarkdownDocTab =
+    active.kind === "studio-document" &&
+    decodeTextDataUrl(active.url) != null;
   const workItem = findWorkCollectionItem(projectId);
   const projectTitle =
     standalone
@@ -438,9 +477,11 @@ export function ProjectBrowserPanel({
   const isWorkItemBrowser =
     !standalone && spaceId === "work" && isWorkItemBrowserProjectId(projectId);
   const isStudioProject = !standalone && spaceId === "studio";
-  const showBrowserNavChrome = isStudioProject
-    ? active?.kind === "web"
-    : !isWorkItemBrowser || session.tabs.some((tab) => tab.kind === "web");
+  const showBrowserNavChrome = isMarkdownDocTab
+    ? true
+    : isStudioProject
+      ? active?.kind === "web"
+      : !isWorkItemBrowser || session.tabs.some((tab) => tab.kind === "web");
 
   const latestStudioImageJob = useMemo(() => {
     if (!isStudioProject || !thread) return null;
@@ -514,7 +555,18 @@ export function ProjectBrowserPanel({
     if (status === "completed" && imageUrl && targetId) {
       nextTabs = nextTabs.map((tab) => {
         if (tab.id !== targetId) return tab;
-        if (tab.url === imageUrl && tab.boundGenerationId === genId) return tab;
+        const existingUrl = tab.url?.trim() ?? "";
+        const hasCanvas =
+          existingUrl.length > 0 && existingUrl !== "about:blank";
+        // Never clobber an edited / restored canvas with the original chat URL.
+        if (hasCanvas && existingUrl !== imageUrl) {
+          return tab.boundGenerationId === genId
+            ? tab
+            : { ...tab, boundGenerationId: genId };
+        }
+        if (existingUrl === imageUrl && tab.boundGenerationId === genId) {
+          return tab;
+        }
         return {
           ...tab,
           boundGenerationId: genId,
@@ -605,9 +657,69 @@ export function ProjectBrowserPanel({
   );
 
   useEffect(() => {
-    setRenameValue(projectTitle);
+    if (renameTarget === "document" && isMarkdownDocTab) {
+      setRenameValue(active.title || "Document");
+    } else {
+      setRenameValue(projectTitle);
+    }
     setRenameError(null);
-  }, [projectTitle, projectId, mobileSheet, desktopRenameOpen]);
+  }, [
+    projectTitle,
+    projectId,
+    mobileSheet,
+    desktopRenameOpen,
+    renameTarget,
+    active.title,
+    isMarkdownDocTab,
+  ]);
+
+  // Ensure markdown document tabs have a public share id + published body.
+  useEffect(() => {
+    if (!isMarkdownDocTab || !key || !projectId || standalone) return;
+    const markdown = decodeTextDataUrl(active.url);
+    if (!markdown?.trim()) return;
+    let cancelled = false;
+    const ensure = async () => {
+      const shareId = active.shareId?.trim() || newMarkdownShareId();
+      if (!active.shareId) {
+        const current = getProjectBrowserSession(key, fallback);
+        setProjectBrowserSession(key, {
+          ...current,
+          tabs: current.tabs.map((tab) =>
+            tab.id === active.id ? { ...tab, shareId } : tab,
+          ),
+        });
+      }
+      try {
+        const published = await publishMarkdownShare({
+          workspaceId,
+          projectId,
+          title: active.title || "Document",
+          markdown,
+          shareId,
+        });
+        if (cancelled) return;
+        if (published.id !== shareId || !active.shareId) {
+          const current = getProjectBrowserSession(key, fallback);
+          setProjectBrowserSession(key, {
+            ...current,
+            tabs: current.tabs.map((tab) =>
+              tab.id === active.id
+                ? { ...tab, shareId: published.id }
+                : tab,
+            ),
+          });
+        }
+      } catch {
+        // Offline / unsigned — local share URL still works for copy.
+      }
+    };
+    void ensure();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- publish once per tab/content
+  }, [isMarkdownDocTab, active.id, active.url, key?.projectId, projectId]);
 
   // Keep browser tab labels in sync with the saved project name.
   useEffect(() => {
@@ -689,6 +801,7 @@ export function ProjectBrowserPanel({
       setRenameError(null);
       setDesktopRenameOpen(false);
       setMobileSheet(null);
+      setRenameTarget("project");
       return;
     }
     setRenameBusy(true);
@@ -708,12 +821,105 @@ export function ProjectBrowserPanel({
       }
       setDesktopRenameOpen(false);
       setMobileSheet(null);
+      setRenameTarget("project");
     } catch (err) {
       setRenameError(
         err instanceof Error ? err.message : "Could not rename project.",
       );
     } finally {
       setRenameBusy(false);
+    }
+  };
+
+  const saveDocumentName = async () => {
+    if (!key || !isMarkdownDocTab) return;
+    const next = renameValue.trim();
+    if (!next) {
+      setRenameError("Document name is required.");
+      return;
+    }
+    if (next === active.title) {
+      setRenameError(null);
+      setDesktopRenameOpen(false);
+      setMobileSheet(null);
+      setRenameTarget("project");
+      return;
+    }
+    setRenameBusy(true);
+    setRenameError(null);
+    try {
+      const current = getProjectBrowserSession(key, fallback);
+      setProjectBrowserSession(key, {
+        ...current,
+        tabs: current.tabs.map((tab) =>
+          tab.id === active.id ? { ...tab, title: next } : tab,
+        ),
+      });
+      if (active.shareId) {
+        await renameMarkdownShare({ shareId: active.shareId, title: next });
+      }
+      setDesktopRenameOpen(false);
+      setMobileSheet(null);
+      setRenameTarget("project");
+    } catch (err) {
+      setRenameError(
+        err instanceof Error ? err.message : "Could not rename document.",
+      );
+    } finally {
+      setRenameBusy(false);
+    }
+  };
+
+  const openDocumentRename = () => {
+    setRenameTarget("document");
+    setRenameValue(active.title || "Document");
+    setRenameError(null);
+    if (mobile) setMobileSheet("rename");
+    else setDesktopRenameOpen(true);
+  };
+
+  const copyMarkdownShareLink = async () => {
+    if (!isMarkdownDocTab) return;
+    const markdown = decodeTextDataUrl(active.url);
+    if (!markdown?.trim() || !projectId) return;
+    let shareId = active.shareId?.trim() || newMarkdownShareId();
+    if (!active.shareId && key) {
+      const current = getProjectBrowserSession(key, fallback);
+      setProjectBrowserSession(key, {
+        ...current,
+        tabs: current.tabs.map((tab) =>
+          tab.id === active.id ? { ...tab, shareId } : tab,
+        ),
+      });
+    }
+    try {
+      const published = await publishMarkdownShare({
+        workspaceId,
+        projectId,
+        title: active.title || "Document",
+        markdown,
+        shareId,
+      });
+      shareId = published.id;
+      if (key) {
+        const current = getProjectBrowserSession(key, fallback);
+        setProjectBrowserSession(key, {
+          ...current,
+          tabs: current.tabs.map((tab) =>
+            tab.id === active.id ? { ...tab, shareId } : tab,
+          ),
+        });
+      }
+    } catch {
+      // Still copy the local share URL.
+    }
+    const url = markdownShareUrl(shareId);
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 1600);
+    } catch {
+      window.prompt("Copy share link", url);
     }
   };
 
@@ -869,52 +1075,77 @@ export function ProjectBrowserPanel({
             className="ml-auto flex shrink-0 items-center gap-1"
             onPointerLeave={clearBrowserChromeHovers}
           >
-            {panelMode === "collapsed" ? null : standalone ? (
-              <BrowserChromeTooltip label="Close browser">
-                <BrowserChromeIconButton
-                  aria-label="Close browser"
-                  onClick={() => closeStandaloneBrowser()}
+            {isMarkdownDocTab ? (
+              <>
+                <BrowserChromeTooltip
+                  label={shareCopied ? "Link copied" : "Share"}
                 >
-                  <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-                </BrowserChromeIconButton>
-              </BrowserChromeTooltip>
+                  <BrowserChromeIconButton
+                    aria-label={shareCopied ? "Link copied" : "Share"}
+                    onClick={() => void copyMarkdownShareLink()}
+                  >
+                    <Share className="h-3.5 w-3.5" strokeWidth={1.7} />
+                  </BrowserChromeIconButton>
+                </BrowserChromeTooltip>
+                <BrowserChromeTooltip label="Rename">
+                  <BrowserChromeIconButton
+                    aria-label="Rename"
+                    onClick={openDocumentRename}
+                  >
+                    <Pencil className="h-3.5 w-3.5" strokeWidth={1.7} />
+                  </BrowserChromeIconButton>
+                </BrowserChromeTooltip>
+              </>
             ) : (
-              <BrowserChromeTooltip label="Leave project">
-                <BrowserChromeIconButton
-                  aria-label="Leave project"
-                  onClick={() => backToSpaceHome()}
-                >
-                  <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-                </BrowserChromeIconButton>
-              </BrowserChromeTooltip>
+              <>
+                {panelMode === "collapsed" ? null : standalone ? (
+                  <BrowserChromeTooltip label="Close browser">
+                    <BrowserChromeIconButton
+                      aria-label="Close browser"
+                      onClick={() => closeStandaloneBrowser()}
+                    >
+                      <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                    </BrowserChromeIconButton>
+                  </BrowserChromeTooltip>
+                ) : (
+                  <BrowserChromeTooltip label="Leave project">
+                    <BrowserChromeIconButton
+                      aria-label="Leave project"
+                      onClick={() => backToSpaceHome()}
+                    >
+                      <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                    </BrowserChromeIconButton>
+                  </BrowserChromeTooltip>
+                )}
+                {chatArmed ? (
+                  <BrowserChromeTooltip
+                    label={expandedLayout ? "Restore layout" : "Expand"}
+                  >
+                    <BrowserChromeIconButton
+                      aria-label={expandedLayout ? "Restore layout" : "Expand"}
+                      onClick={() => toggleExpandedLayout()}
+                    >
+                      {expandedLayout ? (
+                        <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+                      ) : (
+                        <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+                      )}
+                    </BrowserChromeIconButton>
+                  </BrowserChromeTooltip>
+                ) : null}
+                {chatArmed ? (
+                  <BrowserChromeTooltip
+                    label={
+                      panelMode === "collapsed"
+                        ? "Open right panel"
+                        : "Close right panel"
+                    }
+                  >
+                    <PanelToggle />
+                  </BrowserChromeTooltip>
+                ) : null}
+              </>
             )}
-            {chatArmed ? (
-              <BrowserChromeTooltip
-                label={expandedLayout ? "Restore layout" : "Expand"}
-              >
-                <BrowserChromeIconButton
-                  aria-label={expandedLayout ? "Restore layout" : "Expand"}
-                  onClick={() => toggleExpandedLayout()}
-                >
-                  {expandedLayout ? (
-                    <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  ) : (
-                    <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  )}
-                </BrowserChromeIconButton>
-              </BrowserChromeTooltip>
-            ) : null}
-            {chatArmed ? (
-              <BrowserChromeTooltip
-                label={
-                  panelMode === "collapsed"
-                    ? "Open right panel"
-                    : "Close right panel"
-                }
-              >
-                <PanelToggle />
-              </BrowserChromeTooltip>
-            ) : null}
           </span>
         </div>
       )}
@@ -926,38 +1157,60 @@ export function ProjectBrowserPanel({
             BROWSER_CHROME_BG,
           )}
         >
-          <div className="flex shrink-0 items-center gap-0.5">
-            <RailBtn
-              label="Back"
-              disabled={!canBack}
-              onClick={() => runBrowserNav("back")}
-            >
-              <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
-            </RailBtn>
-            <RailBtn
-              label="Forward"
-              disabled={!canForward}
-              onClick={() => runBrowserNav("forward")}
-            >
-              <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
-            </RailBtn>
-            <RailBtn label="Reload" onClick={() => runBrowserNav("reload")}>
-              <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
-            </RailBtn>
-          </div>
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-[7.5rem]">
-            <BrowserAddressField
-              className="pointer-events-auto w-full"
-              url={address}
-              faviconUrl={active.faviconUrl}
-              draft={urlDraft}
-              onDraftChange={setUrlDraft}
-              onCommit={commitUrl}
-              showFavicon={false}
-            />
+          {isMarkdownDocTab ? null : (
+            <div className="flex shrink-0 items-center gap-0.5">
+              <RailBtn
+                label="Back"
+                disabled={!canBack}
+                onClick={() => runBrowserNav("back")}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </RailBtn>
+              <RailBtn
+                label="Forward"
+                disabled={!canForward}
+                onClick={() => runBrowserNav("forward")}
+              >
+                <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </RailBtn>
+              <RailBtn label="Reload" onClick={() => runBrowserNav("reload")}>
+                <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </RailBtn>
+            </div>
+          )}
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-0 flex items-center justify-center",
+              isMarkdownDocTab ? "px-12" : "px-[7.5rem]",
+            )}
+          >
+            {isMarkdownDocTab ? (
+              <button
+                type="button"
+                onClick={() => void copyMarkdownShareLink()}
+                aria-label={shareCopied ? "Link copied" : "Copy share link"}
+                className="pointer-events-auto mx-auto flex h-8 min-w-0 max-w-[min(100%,22rem)] flex-1 items-center justify-center rounded-full px-3 transition-colors duration-200 hover:bg-muted/50"
+              >
+                <span className="truncate text-[13px] font-normal tracking-[-0.01em] text-foreground">
+                  {shareCopied
+                    ? "Link copied"
+                    : displayHostFromUrl(address) || "Generating share link…"}
+                </span>
+              </button>
+            ) : (
+              <BrowserAddressField
+                className="pointer-events-auto w-full"
+                url={address}
+                faviconUrl={active.faviconUrl}
+                draft={urlDraft}
+                onDraftChange={setUrlDraft}
+                onCommit={commitUrl}
+                showFavicon={false}
+              />
+            )}
           </div>
           <div className="ml-auto flex shrink-0 items-center">
-            {standalone ? (
+            {isMarkdownDocTab ? null : standalone ? (
               <>
                 <RailBtn
                   label="Open in new window"
@@ -970,7 +1223,10 @@ export function ProjectBrowserPanel({
               <DesktopProjectToolsMenu
                 selectMode={selectMode}
                 canRename={canRename}
-                onRename={() => setDesktopRenameOpen(true)}
+                onRename={() => {
+                  setRenameTarget("project");
+                  setDesktopRenameOpen(true);
+                }}
                 onPublish={() => openOverlay("publish")}
                 onDomain={() => openOverlay("domains")}
                 onOpenExternal={() => window.open(address, "_blank")}
@@ -988,7 +1244,9 @@ export function ProjectBrowserPanel({
       {desktopRenameOpen ? (
         <div className="absolute inset-0 z-40 flex items-start justify-center bg-black/20 pt-24">
           <div className="w-full max-w-sm rounded-[16px] border border-border bg-background p-4 shadow-lg">
-            <p className="text-[14px] font-medium tracking-[-0.01em]">Rename project</p>
+            <p className="text-[14px] font-medium tracking-[-0.01em]">
+              {renameTarget === "document" ? "Rename document" : "Rename project"}
+            </p>
             <input
               autoFocus
               value={renameValue}
@@ -996,9 +1254,14 @@ export function ProjectBrowserPanel({
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
-                  void saveProjectName();
+                  void (renameTarget === "document"
+                    ? saveDocumentName()
+                    : saveProjectName());
                 }
-                if (event.key === "Escape") setDesktopRenameOpen(false);
+                if (event.key === "Escape") {
+                  setDesktopRenameOpen(false);
+                  setRenameTarget("project");
+                }
               }}
               spellCheck={false}
               className="mt-3 h-10 w-full rounded-[12px] border border-border bg-muted/40 px-3 text-[14px] outline-none"
@@ -1007,13 +1270,18 @@ export function ProjectBrowserPanel({
               <p className="mt-2 text-[12px] text-destructive">{renameError}</p>
             ) : (
               <p className="mt-2 text-[12px] text-muted-foreground">
-                Must be unique across this workspace.
+                {renameTarget === "document"
+                  ? "Shown on the tab and share page."
+                  : "Must be unique across this workspace."}
               </p>
             )}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setDesktopRenameOpen(false)}
+                onClick={() => {
+                  setDesktopRenameOpen(false);
+                  setRenameTarget("project");
+                }}
                 className="h-9 rounded-[10px] px-3 text-[13px] text-muted-foreground hover:bg-muted"
               >
                 Cancel
@@ -1021,7 +1289,11 @@ export function ProjectBrowserPanel({
               <button
                 type="button"
                 disabled={renameBusy}
-                onClick={() => void saveProjectName()}
+                onClick={() =>
+                  void (renameTarget === "document"
+                    ? saveDocumentName()
+                    : saveProjectName())
+                }
                 className="h-9 rounded-[10px] bg-foreground px-3.5 text-[13px] font-medium text-background disabled:opacity-60"
               >
                 {renameBusy ? "Saving…" : "Save"}
@@ -1064,15 +1336,28 @@ export function ProjectBrowserPanel({
       {mobile && showBrowserNavChrome ? (
         <button
           type="button"
-          aria-label="Edit address"
-          onClick={() => setMobileNavOpen(true)}
+          aria-label={
+            isMarkdownDocTab
+              ? shareCopied
+                ? "Link copied"
+                : "Copy share link"
+              : "Edit address"
+          }
+          onClick={() => {
+            if (isMarkdownDocTab) void copyMarkdownShareLink();
+            else setMobileNavOpen(true);
+          }}
           className={cn(
             "relative z-10 flex shrink-0 items-center border-t border-black/5 px-3 py-2.5 dark:border-white/5",
             BROWSER_CHROME_BG,
           )}
         >
           <span className="min-w-0 flex-1 truncate text-center font-mono text-[13px] text-muted-foreground">
-            {displayHostFromUrl(address) || "Enter URL"}
+            {isMarkdownDocTab
+              ? shareCopied
+                ? "Link copied"
+                : displayHostFromUrl(address) || "Generating share link…"
+              : displayHostFromUrl(address) || "Enter URL"}
           </span>
         </button>
       ) : null}
@@ -1098,8 +1383,15 @@ export function ProjectBrowserPanel({
           error={renameError}
           busy={renameBusy}
           onChange={setRenameValue}
-          onCancel={() => setMobileSheet(null)}
-          onSave={() => void saveProjectName()}
+          onCancel={() => {
+            setMobileSheet(null);
+            setRenameTarget("project");
+          }}
+          onSave={() =>
+            void (renameTarget === "document"
+              ? saveDocumentName()
+              : saveProjectName())
+          }
         />
       </MobileBottomSheet>
 
@@ -1282,6 +1574,15 @@ function ProjectBrowserBody({
             historyIndex: 0,
             ...(patch.title ? { title: patch.title } : {}),
           };
+        } else if (item.kind === "studio-image") {
+          // Studio canvas keeps only the latest version — no back-stack of edits.
+          next = {
+            ...next,
+            url: patch.url,
+            history: [patch.url],
+            historyIndex: 0,
+            ...(patch.title ? { title: patch.title } : {}),
+          };
         } else {
           next = navigateProjectBrowserTab(next, patch.url, patch.title);
         }
@@ -1390,6 +1691,37 @@ function ProjectBrowserBody({
   }
 
   if (isStudioMediaTabKind(tab.kind)) {
+    const openUrlInBrowserTab = (raw: string) => {
+      const url = normalizeBrowserUrl(raw);
+      if (!url || url === "about:blank") return;
+      const sessionFallback =
+        browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID
+          ? defaultStandaloneBrowserSession()
+          : (() => {
+              const item = findWorkCollectionItem(browserKey.projectId);
+              if (item) return defaultWorkItemBrowserSession(item);
+              return defaultProjectBrowserSession({
+                projectId: browserKey.projectId,
+                title: fallbackName,
+                spaceId: browserKey.spaceId,
+              });
+            })();
+      const current =
+        browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID
+          ? getStandaloneBrowserSession(browserKey, sessionFallback)
+          : getProjectBrowserSession(browserKey, sessionFallback);
+      const nextTab = navigateProjectBrowserTab(makeWebTab(), url);
+      const next = {
+        tabs: [...current.tabs, nextTab],
+        activeTabId: nextTab.id,
+      };
+      if (browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID) {
+        setStandaloneBrowserSession(browserKey, next);
+      } else {
+        setProjectBrowserSession(browserKey, next);
+      }
+    };
+
     return (
       <StudioMediaSurface
         kind={tab.kind}
@@ -1398,6 +1730,7 @@ function ProjectBrowserBody({
         projectId={projectId}
         boundGenerationId={tab.boundGenerationId}
         lockedAspectRatio={tab.aspectRatio}
+        onOpenUrl={openUrlInBrowserTab}
         onSrcChange={(nextUrl) =>
           syncSurfaceMeta(
             nextUrl === "about:blank"
@@ -2005,6 +2338,7 @@ function StudioMediaSurface({
   lockedAspectRatio,
   onSrcChange,
   onAspectRatioChange,
+  onOpenUrl,
 }: {
   kind: "studio-image" | "studio-video" | "studio-document";
   src: string;
@@ -2014,6 +2348,7 @@ function StudioMediaSurface({
   lockedAspectRatio?: string | null;
   onSrcChange: (next: string) => void;
   onAspectRatioChange: (ratio: string | null) => void;
+  onOpenUrl?: (url: string) => void;
 }) {
   const { ctx } = useSpaceData();
   const { updateProject } = useSpaceMutation();
@@ -2122,12 +2457,12 @@ function StudioMediaSurface({
 
   // Restore canvas from durable Studio assets when this client has an empty tab.
   // Skip intentional clears (`about:blank`) so Remove stays removed across reloads.
-  // Skip tabs already bound to an in-flight / claimed generation.
+  // Bound tabs that lost their URL (e.g. after a bad remount) can still restore.
   useEffect(() => {
     if (kind !== "studio-image" || !projectId) return;
     if (hasMedia || src === "about:blank") return;
-    if (boundGenerationId) return;
     if (isGenerating || activity) return;
+    if (boundGenerationId && imageJob?.status === "generating") return;
     let cancelled = false;
     void fetchLatestStudioProjectAsset({ workspaceId, projectId })
       .then((asset) => {
@@ -2149,6 +2484,7 @@ function StudioMediaSurface({
     isGenerating,
     activity?.type,
     boundGenerationId,
+    imageJob?.status,
   ]);
 
   useEffect(() => {
@@ -2157,6 +2493,13 @@ function StudioMediaSurface({
     const url = imageJob.imageUrl?.trim();
     if (!url) return;
     if (appliedGenerationRef.current === imageJob.generationId) return;
+
+    // Durable canvas already exists (including edits) — do not re-seed from chat.
+    if (isStudioAssetUrl(src)) {
+      appliedGenerationRef.current = imageJob.generationId;
+      return;
+    }
+
     appliedGenerationRef.current = imageJob.generationId;
 
     let cancelled = false;
@@ -2206,7 +2549,7 @@ function StudioMediaSurface({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- persist when job completes
-  }, [kind, imageJob?.generationId, imageJob?.status, imageJob?.imageUrl]);
+  }, [kind, imageJob?.generationId, imageJob?.status, imageJob?.imageUrl, src]);
 
   const runEdit = async (
     action: "remove-bg" | "resize" | "suggest-edit",
@@ -2236,6 +2579,29 @@ function StudioMediaSurface({
       onSrcChange(result.url);
       if (result.aspectRatio) lockAspect(result.aspectRatio);
       else lockAspect(ratio);
+      // Chat card + bind effect should track the edited image as canonical.
+      if (boundGenerationId) {
+        updateChatThreads((current) =>
+          current.map((item) => ({
+            ...item,
+            messages: item.messages.map((message) => ({
+              ...message,
+              blocks: (message.blocks || []).map((block) =>
+                block.type === "image_generation" &&
+                block.generationId === boundGenerationId
+                  ? {
+                      ...block,
+                      status: "completed" as const,
+                      imageUrl: result.url,
+                    }
+                  : block,
+              ),
+            })),
+          })),
+        );
+      }
+      // Cover follows the latest canvas version.
+      void updateProject(ctx, projectId, { cover: result.url }).catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Edit failed.");
     } finally {
@@ -2403,7 +2769,10 @@ function StudioMediaSurface({
       ) : hasMedia && kind === "studio-document" && decodeTextDataUrl(src) != null ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10">
           <div className="mx-auto max-w-3xl">
-            <MarkdownRenderer content={decodeTextDataUrl(src) || ""} />
+            <MarkdownRenderer
+              content={decodeTextDataUrl(src) || ""}
+              onLinkClick={onOpenUrl}
+            />
           </div>
         </div>
       ) : hasMedia ? (

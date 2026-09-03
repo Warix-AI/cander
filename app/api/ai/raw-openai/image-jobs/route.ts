@@ -1,9 +1,10 @@
 /**
  * POST /api/ai/raw-openai/image-jobs — start GPT Image generation.
- * Runs OpenAI work in-request (reliable on Vercel; after() was leaving jobs stuck).
+ * Creates the job, returns 202 immediately, and finishes OpenAI work in `after()`
+ * so leave/navigation does not cancel generation.
  */
 
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import {
   isOpenAIImageGenerationEnabled,
@@ -134,23 +135,29 @@ export async function POST(request: Request) {
     });
   }
 
-  const final = await runImageGenerationJob({
-    jobId: generationId,
-    userId: auth.user.id,
-    prompt: existing.prompt || prompt,
-    apiKey,
-    reservationId: usage.reservationId,
-  });
-  if (!final) {
-    return NextResponse.json({ error: "Job not found." }, { status: 404 });
-  }
+  const jobId = existing.id;
+  const jobPrompt = existing.prompt || prompt;
+  const userId = auth.user.id;
+  const reservationId = usage.reservationId;
 
-  return NextResponse.json(jobResponse(final), {
-    status:
-      final.status === "failed"
-        ? 500
-        : final.status === "generating"
-          ? 202
-          : 200,
-  });
+  // Detach OpenAI work from the client connection so leave/navigation cannot
+  // abort generation. Client resumes via poll.
+  after(() =>
+    runImageGenerationJob({
+      jobId,
+      userId,
+      prompt: jobPrompt,
+      apiKey,
+      reservationId,
+    }).catch((error) => {
+      console.log("[IMAGE_JOB]", {
+        event: "after_failure",
+        id: jobId,
+        error: error instanceof Error ? error.message.slice(0, 300) : "fail",
+      });
+    }),
+  );
+
+  const latest = await getImageGenerationJob(jobId, userId);
+  return NextResponse.json(jobResponse(latest ?? existing), { status: 202 });
 }

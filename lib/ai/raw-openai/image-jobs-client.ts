@@ -188,7 +188,7 @@ export async function waitForImageGenerationJob(
     } else {
       consecutiveMisses += 1;
       // Job not in memory/DB yet or lost after reload without persistence.
-      if (consecutiveMisses >= 8) {
+      if (consecutiveMisses >= 20) {
         return {
           generationId,
           status: "failed",

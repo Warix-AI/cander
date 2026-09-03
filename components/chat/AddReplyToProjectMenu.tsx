@@ -11,6 +11,7 @@ import {
   localSpaceEntityStore,
   subscribeSpaceEntityStore,
 } from "@/lib/api/space-entity-store";
+import { summarizeMarkdownTitle } from "@/lib/shared-markdown";
 import { PRIMARY_NAV_SPACES } from "@/lib/spaces";
 import { navLabel } from "@/lib/use-main-nav-items";
 import type { Message, SpaceId } from "@/lib/types";
@@ -69,17 +70,6 @@ function messageMarkdown(message: Message, visibleContent: string): string {
   return parts.join("\n\n").trim();
 }
 
-function titleFromMarkdown(markdown: string): string {
-  const heading = markdown.match(/^#\s+(.+)$/m)?.[1]?.trim();
-  if (heading) return heading.slice(0, 72);
-  const firstLine = markdown
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line.length > 0);
-  if (!firstLine) return "Analysis";
-  return firstLine.replace(/^[*#\-\d.]+\s*/, "").slice(0, 72) || "Analysis";
-}
-
 /** Copy-adjacent menu: save this assistant reply into a project as a markdown tab. */
 export function AddReplyToProjectMenu({
   message,
@@ -121,8 +111,8 @@ export function AddReplyToProjectMenu({
     title: string;
     space: SpaceId;
   }) => {
-    const title = titleFromMarkdown(markdown);
-    openProjectMarkdownDocumentTab({
+    const title = summarizeMarkdownTitle(markdown);
+    void openProjectMarkdownDocumentTab({
       profileId: actor.id,
       workspaceId,
       spaceId: project.space,

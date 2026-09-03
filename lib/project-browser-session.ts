@@ -36,6 +36,8 @@ export type ProjectBrowserTab = {
   boundGenerationId?: string;
   /** Locked canvas aspect (e.g. "3:4") after resize — survives remounts. */
   aspectRatio?: string | null;
+  /** Public share id for markdown document tabs → {id}.cander.app */
+  shareId?: string;
   history: string[];
   historyIndex: number;
 };
@@ -315,6 +317,10 @@ function parseTab(
         : data.aspectRatio === null
           ? null
           : undefined,
+    shareId:
+      typeof data.shareId === "string" && data.shareId.trim()
+        ? data.shareId.trim()
+        : undefined,
     history: history.length ? history : [url],
     historyIndex,
   };

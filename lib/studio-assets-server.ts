@@ -196,6 +196,38 @@ export async function readStudioAssetBytes(
   };
 }
 
+/** Remove a prior canvas version so only the latest survives. */
+export async function deleteStudioAsset(
+  assetId: string,
+  userId: string,
+): Promise<boolean> {
+  const admin = createSupabaseAdminClient();
+  const { data: row } = await admin
+    .from("studio_project_assets")
+    .select("id, storage_path, workspace_id")
+    .eq("id", assetId)
+    .maybeSingle();
+  if (!row) return false;
+  const ok = await assertWorkspaceMember(String(row.workspace_id), userId);
+  if (!ok) return false;
+
+  const storagePath = String(row.storage_path || "");
+  const { error } = await admin
+    .from("studio_project_assets")
+    .delete()
+    .eq("id", assetId);
+  if (error) return false;
+  if (storagePath) {
+    await admin.storage.from(STUDIO_ASSETS_BUCKET).remove([storagePath]);
+  }
+  return true;
+}
+
+export function studioAssetIdFromUrl(imageUrl: string): string | null {
+  const match = /\/api\/studio\/assets\/([^/]+)\/image/.exec(imageUrl.trim());
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
 export async function resolveImageInputToDataUrl(
   imageUrl: string,
   userId: string,

@@ -29,12 +29,9 @@ function messageHasPendingAi(message: Thread["messages"][number]) {
   ) {
     return true;
   }
-  return Boolean(
-    message.blocks?.some(
-      (block) =>
-        block.type === "image_generation" && block.status === "generating",
-    ),
-  );
+  // Image jobs keep generating in the background — still sync so leave/return
+  // can resume from Supabase + local storage.
+  return false;
 }
 
 function hasPendingAiThinking(threads: ReturnType<typeof getChatStoreSnapshot>["threads"]) {

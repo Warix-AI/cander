@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, type MouseEvent, type ReactNode } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -8,7 +9,7 @@ import { QuoteBlock } from "@/components/chat/QuoteBlock";
 import { TableBlock } from "@/components/chat/TableBlock";
 import { cn } from "@/lib/utils";
 
-const components: Components = {
+const baseComponents: Components = {
   p: ({ children }) => (
     <p className="my-1.5 text-[14.5px] leading-relaxed tracking-[-0.01em] first:mt-0 last:mb-0">
       {children}
@@ -57,16 +58,6 @@ const components: Components = {
     </ol>
   ),
   li: ({ children }) => <li className="leading-relaxed pl-0.5">{children}</li>,
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground"
-    >
-      {children}
-    </a>
-  ),
   blockquote: ({ children }) => <QuoteBlock>{children}</QuoteBlock>,
   hr: () => <hr className="my-3 border-border" />,
   code: ({ className, children, ...props }) => {
@@ -100,13 +91,77 @@ const components: Components = {
   ),
 };
 
+function MarkdownLink({
+  href,
+  children,
+  onLinkClick,
+}: {
+  href?: string;
+  children?: ReactNode;
+  onLinkClick?: (href: string) => void;
+}) {
+  const className =
+    "text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground";
+
+  if (!onLinkClick) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={className}
+      >
+        {children}
+      </a>
+    );
+  }
+
+  return (
+    <a
+      href={href}
+      className={className}
+      onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+        if (!href) return;
+        // In-doc anchors + special schemes keep native behavior.
+        if (
+          href.startsWith("#") ||
+          href.startsWith("mailto:") ||
+          href.startsWith("tel:")
+        ) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        onLinkClick(href);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
 export function MarkdownRenderer({
   content,
   className,
+  onLinkClick,
 }: {
   content: string;
   className?: string;
+  /** Open http(s) links in-app instead of leaving to an external browser. */
+  onLinkClick?: (href: string) => void;
 }) {
+  const components = useMemo<Components>(
+    () => ({
+      ...baseComponents,
+      a: ({ href, children }) => (
+        <MarkdownLink href={href} onLinkClick={onLinkClick}>
+          {children}
+        </MarkdownLink>
+      ),
+    }),
+    [onLinkClick],
+  );
+
   if (!content.trim()) return null;
   return (
     <div className={cn("min-w-0 max-w-full break-words", className)}>

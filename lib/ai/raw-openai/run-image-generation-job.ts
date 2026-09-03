@@ -1,6 +1,6 @@
 /**
  * Execute an OpenAI Images API job and persist the result.
- * Server-only — must run to completion in the same request (no after()).
+ * Intended to run via Next `after()` so client disconnect does not cancel work.
  */
 
 import {
@@ -47,6 +47,13 @@ export async function runImageGenerationJob(opts: {
     id: opts.jobId,
     model: resolveOpenAIImageModel(),
   });
+
+  // Heartbeat so leave/return + stale checks don't treat an active job as dead.
+  const heartbeat = setInterval(() => {
+    void updateImageGenerationJob(opts.jobId, opts.userId, {
+      status: "generating",
+    }).catch(() => {});
+  }, 20_000);
 
   try {
     const client = createOpenAIMediaClient(opts.apiKey);
@@ -134,5 +141,7 @@ export async function runImageGenerationJob(opts: {
       status: "failed",
     });
     return failed;
+  } finally {
+    clearInterval(heartbeat);
   }
 }
