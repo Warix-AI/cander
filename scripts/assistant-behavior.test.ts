@@ -489,8 +489,8 @@ describe("chat layout smoke", () => {
       src,
       /if \(mobile\)[\s\S]{0,800}?max-w-none/,
     );
-    // Composer dock drops 38rem when mobile
-    assert.match(src, /mobile \? "max-w-none" : "max-w-\[38rem\]"/);
+    // Composer dock uses shared chat max-width (wider when panel collapsed)
+    assert.match(src, /chatMaxWidthClass/);
   });
 });
 

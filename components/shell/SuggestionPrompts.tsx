@@ -104,14 +104,15 @@ export function SuggestionPrompts({
 }) {
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
-  const { centered } = useChatCanvasCentered();
+  const { centered, chatMaxWidthClass } = useChatCanvasCentered();
   const visible = mobile ? items.slice(0, 2) : items;
   if (!visible.length) return null;
 
   return (
     <div
       className={cn(
-        "w-full min-w-0 max-w-[38rem] pb-1",
+        "w-full min-w-0 pb-1",
+        chatMaxWidthClass,
         floating
           ? centered
             ? "mx-auto px-4 sm:px-6"

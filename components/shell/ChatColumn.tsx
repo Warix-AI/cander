@@ -46,7 +46,7 @@ function ComposerDock({
   const { thread, continueAfterClarification } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
-  const { centered } = useChatCanvasCentered();
+  const { centered, chatMaxWidthClass } = useChatCanvasCentered();
 
   return (
     <div
@@ -63,7 +63,7 @@ function ComposerDock({
       <div
         className={cn(
           "w-full",
-          mobile ? "max-w-none" : "max-w-[38rem]",
+          chatMaxWidthClass,
           (!floating || centered || mobile) && "mx-auto",
         )}
       >
@@ -114,7 +114,7 @@ export function ChatColumn() {
     .reverse()
     .find((m) => m.role === "user")?.id;
   const floating = useShellStyle() === "floating";
-  const { centered } = useChatCanvasCentered();
+  const { centered, chatMaxWidthClass } = useChatCanvasCentered();
 
   const snapTranscriptToBottom = (behavior: ScrollBehavior = "auto") => {
     const parent = scrollParentRef.current;
@@ -288,7 +288,7 @@ export function ChatColumn() {
           className="chat-scroll flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
           {thread ? (
-            <div className="mx-auto flex w-full max-w-[38rem] flex-col gap-5">
+            <div className={cn("mx-auto flex w-full flex-col gap-5", chatMaxWidthClass)}>
               {renderTranscript(thread.messages)}
             </div>
           ) : (
@@ -351,7 +351,8 @@ export function ChatColumn() {
         >
           <div
             className={cn(
-              "flex w-full max-w-[38rem] flex-col gap-5",
+              "flex w-full flex-col gap-5",
+              chatMaxWidthClass,
               (!floating || centered) && "mx-auto",
             )}
           >

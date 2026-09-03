@@ -14,8 +14,11 @@ export const PANEL_RATIO_WIDE_FLOOR = DEFAULT_PANEL_RATIO;
 export const PINNED_CHAT_WIDTH =
   "w-[32%] min-w-[16rem] max-w-[26rem] shrink-0";
 
-/** Home / split chat column cap when the right panel is open. */
-export const SPLIT_CHAT_MAX_WIDTH = "max-w-[32rem]";
+/** Chat / composer cap when the right panel is open beside chat. */
+export const SPLIT_CHAT_MAX_WIDTH = "max-w-[38rem]";
+
+/** Slightly wider reading column when the right panel is closed. */
+export const FULL_CHAT_MAX_WIDTH = "max-w-[46rem]";
 
 /** Empty home chat — no space, thread, or draft armed. */
 export function isNewChatScreen(opts: {

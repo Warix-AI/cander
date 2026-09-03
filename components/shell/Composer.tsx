@@ -211,7 +211,7 @@ export function Composer({
   } = useApp();
   const floating = useShellStyle() === "floating";
   const mobile = useMobileShell();
-  const { centered } = useChatCanvasCentered();
+  const { centered, chatMaxWidthClass } = useChatCanvasCentered();
   const [blocks, setBlocks] = useState<ComposerBlock[]>(() =>
     emptyComposerBlocks(),
   );
@@ -1103,7 +1103,7 @@ export function Composer({
         ref={wrapRef}
         className={cn(
           "relative w-full",
-          landing || compact || inDock ? "max-w-none" : "max-w-[38rem]",
+          landing || compact || inDock ? "max-w-none" : chatMaxWidthClass,
           !landing && !compact && !inDock && (!floating || centered) && "mx-auto",
           !stayInPlace && "composer-dock",
         )}
