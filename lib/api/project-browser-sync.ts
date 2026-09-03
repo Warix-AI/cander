@@ -57,7 +57,8 @@ export async function hydrateProjectBrowserFromRemote(ctx: WorkspaceCtx) {
       if (
         row.space_id !== "work" &&
         row.space_id !== "build" &&
-        row.space_id !== "research"
+        row.space_id !== "research" &&
+        row.space_id !== "studio"
       ) {
         return null;
       }

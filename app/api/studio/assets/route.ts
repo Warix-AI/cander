@@ -112,6 +112,7 @@ export async function GET(request: Request) {
       : undefined;
   const limit = Number(url.searchParams.get("limit") || "1");
   const oldestFirst = url.searchParams.get("order") === "asc";
+  // Default newest-first so canvas restore can take the latest asset.
 
   const assets = await listStudioProjectAssets({
     workspaceId,

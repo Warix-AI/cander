@@ -63,6 +63,8 @@ import { StudioImageToolbar } from "@/components/studio/StudioImageToolbar";
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import {
   editStudioProjectImage,
+  fetchLatestStudioProjectAsset,
+  isStudioAssetUrl,
   studioAspectParts,
   studioPresetById,
   uploadStudioProjectAsset,
@@ -1118,8 +1120,18 @@ function ProjectBrowserBody({
     const nextTabs = current.tabs.map((item) => {
       if (item.id !== tab.id) return item;
       let next = item;
-      if (patch.url && patch.url !== item.url) {
-        next = navigateProjectBrowserTab(next, patch.url, patch.title);
+      if (patch.url !== undefined && patch.url !== item.url) {
+        if (!patch.url) {
+          next = {
+            ...next,
+            url: patch.url,
+            history: [patch.url],
+            historyIndex: 0,
+            ...(patch.title ? { title: patch.title } : {}),
+          };
+        } else {
+          next = navigateProjectBrowserTab(next, patch.url, patch.title);
+        }
       } else if (patch.title && patch.title !== item.title) {
         next = { ...next, title: patch.title };
       }
@@ -1898,6 +1910,25 @@ function StudioMediaSurface({
     if (!hasMedia) setNaturalRatio({ w: 1, h: 1 });
   }, [hasMedia]);
 
+  // Restore canvas from durable Studio assets when this client has an empty tab.
+  // Skip intentional clears (`about:blank`) so Remove stays removed across reloads.
+  useEffect(() => {
+    if (kind !== "studio-image" || !projectId) return;
+    if (hasMedia || src === "about:blank") return;
+    if (isGenerating || activity) return;
+    let cancelled = false;
+    void fetchLatestStudioProjectAsset({ workspaceId, projectId })
+      .then((asset) => {
+        if (cancelled || !asset?.url) return;
+        onSrcChange(asset.url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once when empty
+  }, [kind, projectId, workspaceId, hasMedia, src, isGenerating, activity?.type]);
+
   useEffect(() => {
     if (kind !== "studio-image") return;
     if (!imageJob || imageJob.status !== "completed") return;
@@ -1909,14 +1940,43 @@ function StudioMediaSurface({
 
     let cancelled = false;
     if (url !== src) onSrcChange(url);
-    if (!url.startsWith("data:")) return;
 
-    void persistCanvasImage(url, "generate").catch((err) => {
-      if (cancelled) return;
-      setError(
-        err instanceof Error ? err.message : "Could not save generated image.",
-      );
-    });
+    // Persist into studio_project_assets even when chat already rewrote the URL
+    // to a durable attachment path (so other clients can restore the canvas).
+    const shouldPersist =
+      Boolean(projectId) &&
+      (url.startsWith("data:") ||
+        url.includes("/api/ai/raw-openai/attachments/") ||
+        (!isStudioAssetUrl(url) && url.startsWith("http")));
+
+    if (!shouldPersist) return;
+
+    void (async () => {
+      try {
+        let dataUrl = url;
+        if (!dataUrl.startsWith("data:")) {
+          const res = await fetch(dataUrl, { credentials: "include" });
+          if (!res.ok) throw new Error("Could not load generated image.");
+          const blob = await res.blob();
+          dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () =>
+              typeof reader.result === "string"
+                ? resolve(reader.result)
+                : reject(new Error("Could not read image."));
+            reader.onerror = () => reject(new Error("Could not read image."));
+            reader.readAsDataURL(blob);
+          });
+        }
+        if (cancelled) return;
+        await persistCanvasImage(dataUrl, "generate");
+      } catch (err) {
+        if (cancelled) return;
+        setError(
+          err instanceof Error ? err.message : "Could not save generated image.",
+        );
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -2159,7 +2219,7 @@ function StudioMediaSurface({
             onClick={() => {
               setError(null);
               setNaturalRatio({ w: 1, h: 1 });
-              onSrcChange("");
+              onSrcChange("about:blank");
             }}
             className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border bg-background/90 px-2.5 text-[12px] font-medium backdrop-blur hover:bg-muted disabled:opacity-50"
           >

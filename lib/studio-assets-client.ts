@@ -121,6 +121,31 @@ export async function fetchFirstStudioGeneratedAsset(opts: {
   return data.assets?.[0] ?? null;
 }
 
+/** Newest canvas image for a project (any source) — used to restore empty canvases. */
+export async function fetchLatestStudioProjectAsset(opts: {
+  workspaceId: string;
+  projectId: string;
+}): Promise<StudioAssetResult | null> {
+  const headers = await authHeaders();
+  const params = new URLSearchParams({
+    workspaceId: opts.workspaceId,
+    projectId: opts.projectId,
+    order: "desc",
+    limit: "1",
+  });
+  const res = await fetch(`/api/studio/assets?${params.toString()}`, {
+    headers: { ...headers },
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    assets?: StudioAssetResult[];
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || "Could not load Studio images.");
+  }
+  return data.assets?.[0] ?? null;
+}
+
 export async function editStudioProjectImage(opts: {
   workspaceId: string;
   projectId: string;
