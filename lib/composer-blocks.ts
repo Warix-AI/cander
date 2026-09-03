@@ -1,5 +1,5 @@
 /**
- * Ordered composer blocks: text ↔ connector chips (ChatGPT-style inline string).
+ * Ordered composer blocks: text ↔ connector chips ↔ dismissed trigger words.
  */
 
 export type ComposerConnectorScope = {
@@ -22,7 +22,19 @@ export type ComposerConnectorBlock = {
   replacedText?: string;
 };
 
-export type ComposerBlock = ComposerTextBlock | ComposerConnectorBlock;
+/** Dismissed connector — clickable plain word that can re-add this or related apps. */
+export type ComposerTriggerBlock = {
+  key: string;
+  type: "trigger";
+  matched: string;
+  preferredConnectorId: string;
+  preferredConnectionId?: string;
+};
+
+export type ComposerBlock =
+  | ComposerTextBlock
+  | ComposerConnectorBlock
+  | ComposerTriggerBlock;
 
 function newKey(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
@@ -36,17 +48,24 @@ export function blocksFromText(text: string): ComposerBlock[] {
   return [{ key: newKey("t"), type: "text", value: text }];
 }
 
+function blockPlainText(block: ComposerBlock): string {
+  if (block.type === "text") return block.value;
+  if (block.type === "trigger") return block.matched;
+  return "";
+}
+
 export function textFromBlocks(blocks: ComposerBlock[]): string {
-  return blocks
-    .filter((b): b is ComposerTextBlock => b.type === "text")
-    .map((b) => b.value)
-    .join("");
+  return blocks.map(blockPlainText).join("");
 }
 
 /** Plain send/display string with connector labels in chip positions. */
 export function serializeComposerBlocks(blocks: ComposerBlock[]): string {
   return blocks
-    .map((b) => (b.type === "text" ? b.value : b.scope.label))
+    .map((b) => {
+      if (b.type === "text") return b.value;
+      if (b.type === "trigger") return b.matched;
+      return b.scope.label;
+    })
     .join("");
 }
 
@@ -65,7 +84,13 @@ export function connectorsFromBlocks(
     .map((b) => b.scope);
 }
 
-/** Ensure text · connector · text · … · text with no adjacent text merged. */
+export function triggersFromBlocks(
+  blocks: ComposerBlock[],
+): ComposerTriggerBlock[] {
+  return blocks.filter((b): b is ComposerTriggerBlock => b.type === "trigger");
+}
+
+/** Ensure text · atomic · text · … · text with no adjacent text merged. */
 export function normalizeComposerBlocks(blocks: ComposerBlock[]): ComposerBlock[] {
   const out: ComposerBlock[] = [];
   for (const block of blocks) {
@@ -76,14 +101,20 @@ export function normalizeComposerBlocks(blocks: ComposerBlock[]): ComposerBlock[
       } else {
         out.push(block);
       }
-    } else {
-      if (out.length === 0 || out[out.length - 1]!.type !== "text") {
-        out.push({ key: newKey("t"), type: "text", value: "" });
-      }
-      // One account per connector id — drop earlier same connector.
+      continue;
+    }
+
+    if (out.length === 0 || out[out.length - 1]!.type !== "text") {
+      out.push({ key: newKey("t"), type: "text", value: "" });
+    }
+
+    if (block.type === "connector") {
       const filtered = out.filter(
         (b) =>
-          !(b.type === "connector" && b.scope.connectorId === block.scope.connectorId),
+          !(
+            b.type === "connector" &&
+            b.scope.connectorId === block.scope.connectorId
+          ),
       );
       out.length = 0;
       out.push(...filtered);
@@ -91,7 +122,23 @@ export function normalizeComposerBlocks(blocks: ComposerBlock[]): ComposerBlock[
         out.push({ key: newKey("t"), type: "text", value: "" });
       }
       out.push(block);
+      continue;
     }
+
+    // trigger — one per preferred connector id
+    const filtered = out.filter(
+      (b) =>
+        !(
+          b.type === "trigger" &&
+          b.preferredConnectorId === block.preferredConnectorId
+        ),
+    );
+    out.length = 0;
+    out.push(...filtered);
+    if (out.length === 0 || out[out.length - 1]!.type !== "text") {
+      out.push({ key: newKey("t"), type: "text", value: "" });
+    }
+    out.push(block);
   }
   if (out.length === 0 || out[out.length - 1]!.type !== "text") {
     out.push({ key: newKey("t"), type: "text", value: "" });
@@ -181,9 +228,9 @@ export function removeConnectorBlock(
 }
 
 /**
- * Remove a connector chip and put its replaced trigger word back inline.
+ * Turn a connector chip into a clickable trigger word (dismiss without ghost pill).
  */
-export function removeConnectorBlockRestoringText(
+export function dismissConnectorToTrigger(
   blocks: ComposerBlock[],
   connectionId: string,
 ): ComposerBlock[] {
@@ -192,13 +239,99 @@ export function removeConnectorBlockRestoringText(
   );
   if (idx < 0) return blocks;
   const chip = blocks[idx] as ComposerConnectorBlock;
-  const restored = chip.replacedText ?? chip.scope.label;
+  const matched = chip.replacedText ?? chip.scope.label;
   const next: ComposerBlock[] = [
     ...blocks.slice(0, idx),
-    { key: newKey("t"), type: "text", value: restored },
+    {
+      key: newKey("tr"),
+      type: "trigger",
+      matched,
+      preferredConnectorId: chip.scope.connectorId,
+      preferredConnectionId: chip.scope.connectionId,
+    } satisfies ComposerTriggerBlock,
     ...blocks.slice(idx + 1),
   ];
   return normalizeComposerBlocks(next);
+}
+
+/**
+ * Remove a connector chip and put its replaced trigger word back as plain text.
+ * Prefer dismissConnectorToTrigger for clickable restore.
+ */
+export function removeConnectorBlockRestoringText(
+  blocks: ComposerBlock[],
+  connectionId: string,
+): ComposerBlock[] {
+  return dismissConnectorToTrigger(blocks, connectionId);
+}
+
+/** Promote a dismissed trigger word into a connector chip. */
+export function promoteTriggerToConnector(
+  blocks: ComposerBlock[],
+  triggerKey: string,
+  scope: ComposerConnectorScope,
+): { blocks: ComposerBlock[]; focusKey: string | null } {
+  const idx = blocks.findIndex(
+    (b) => b.type === "trigger" && b.key === triggerKey,
+  );
+  if (idx < 0) return { blocks, focusKey: null };
+  const trigger = blocks[idx] as ComposerTriggerBlock;
+  const focusKey = newKey("t");
+  const next: ComposerBlock[] = [
+    ...blocks.slice(0, idx),
+    {
+      key: newKey("c"),
+      type: "connector",
+      scope,
+      replacedText: trigger.matched,
+    },
+    { key: focusKey, type: "text", value: "" },
+    ...blocks.slice(idx + 1),
+  ];
+  return {
+    blocks: normalizeComposerBlocks(next),
+    focusKey,
+  };
+}
+
+/** Merge a trigger word back into editable plain text (e.g. backspace). */
+export function dissolveTriggerToText(
+  blocks: ComposerBlock[],
+  triggerKey: string,
+): { blocks: ComposerBlock[]; focusKey: string | null; cursor: number } {
+  const idx = blocks.findIndex(
+    (b) => b.type === "trigger" && b.key === triggerKey,
+  );
+  if (idx < 0) return { blocks, focusKey: null, cursor: 0 };
+  const trigger = blocks[idx] as ComposerTriggerBlock;
+  const next: ComposerBlock[] = [
+    ...blocks.slice(0, idx),
+    { key: newKey("t"), type: "text", value: trigger.matched },
+    ...blocks.slice(idx + 1),
+  ];
+  const normalized = normalizeComposerBlocks(next);
+  let offset = 0;
+  let focusKey: string | null = null;
+  let cursor = 0;
+  for (const block of normalized) {
+    if (block.type !== "text") {
+      offset += blockPlainText(block).length;
+      continue;
+    }
+    const wordAt = block.value.indexOf(trigger.matched);
+    if (wordAt >= 0) {
+      focusKey = block.key;
+      cursor = wordAt + trigger.matched.length;
+      break;
+    }
+    offset += block.value.length;
+  }
+  const lastText = [...normalized].reverse().find((b) => b.type === "text");
+  return {
+    blocks: normalized,
+    focusKey: focusKey ?? lastText?.key ?? null,
+    cursor,
+  };
 }
 
 export function updateTextBlock(
@@ -220,12 +353,24 @@ export function backspaceRemoveConnector(
   const text = blocks[idx] as ComposerTextBlock;
   if (text.value.length > 0) return null;
   const prev = blocks[idx - 1];
-  if (prev?.type !== "connector") return null;
-  const next = blocks.filter((b) => b.key !== prev.key && b.key !== text.key);
-  // Merge surrounding text into the previous text block if present.
-  const normalized = normalizeComposerBlocks(next);
-  const focus =
-    normalized.find((b) => b.type === "text" && b.key === blocks[idx - 2]?.key) ??
-    [...normalized].reverse().find((b) => b.type === "text");
-  return { blocks: normalized, focusKey: focus?.key ?? null };
+  if (prev?.type === "connector") {
+    const next = blocks.filter((b) => b.key !== prev.key && b.key !== text.key);
+    const normalized = normalizeComposerBlocks(next);
+    const focus =
+      normalized.find(
+        (b) => b.type === "text" && b.key === blocks[idx - 2]?.key,
+      ) ?? [...normalized].reverse().find((b) => b.type === "text");
+    return { blocks: normalized, focusKey: focus?.key ?? null };
+  }
+  if (prev?.type === "trigger") {
+    const dissolved = dissolveTriggerToText(
+      blocks.filter((b) => b.key !== text.key),
+      prev.key,
+    );
+    return {
+      blocks: dissolved.blocks,
+      focusKey: dissolved.focusKey,
+    };
+  }
+  return null;
 }

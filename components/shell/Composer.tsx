@@ -38,9 +38,8 @@ import { isChatSpace } from "@/lib/spaces";
 import { panelChoiceSuggestions } from "@/lib/panel-suggestions";
 import {
   detectConnectorMentions,
-  dismissedMentionsStillPresent,
+  relatedCandidatesForTrigger,
   syncDetectedConnectorBlocks,
-  type ConnectorMention,
 } from "@/lib/composer-connector-detect";
 import { labelFor } from "@/lib/build-loop";
 import { useChatCanvasCentered } from "@/lib/chat-layout";
@@ -92,6 +91,7 @@ import {
   connectorsFromBlocks,
   emptyComposerBlocks,
   normalizeComposerBlocks,
+  promoteTriggerToConnector,
   removeConnectorBlockRestoringText,
   serializeComposerBlocks,
   textFromBlocks,
@@ -99,6 +99,7 @@ import {
   updateTextBlock,
   type ComposerBlock,
   type ComposerConnectorScope,
+  type ComposerTriggerBlock,
 } from "@/lib/composer-blocks";
 import { createComposerSpeculationController } from "@/lib/ai/composer-speculation/controller";
 import { isComposerSpeculationEnabled } from "@/lib/ai/composer-speculation/flags";
@@ -143,6 +144,12 @@ function syncComposerSegmentWidth(el: HTMLInputElement) {
 export type { ComposerConnectorScope };
 
 type MenuId = "plus" | null;
+
+type TriggerPickerState = {
+  triggerKey: string;
+  /** Anchor for the floating choice list. */
+  rect: { left: number; top: number; width: number; height: number };
+};
 
 export function Composer({
   onSend,
@@ -219,6 +226,9 @@ export function Composer({
   const serializedValue = serializeComposerBlocks(blocks);
   const connectorScopes = connectorsFromBlocks(blocks);
   const inlineChips = connectorScopes.length > 0;
+  const hasInlineAtoms = blocks.some(
+    (b) => b.type === "connector" || b.type === "trigger",
+  );
 
   // Keep mid-sentence inputs hugging their text after auto-detect splits.
   useLayoutEffect(() => {
@@ -240,6 +250,9 @@ export function Composer({
   const [liveSpeechMode, setLiveSpeechMode] = useState(false);
   const [transcriptReveal, setTranscriptReveal] = useState(false);
   const [menu, setMenu] = useState<MenuId>(null);
+  const [triggerPicker, setTriggerPicker] = useState<TriggerPickerState | null>(
+    null,
+  );
   const focusedTextKeyRef = useRef<string | null>(null);
   const textCursorRef = useRef(0);
   const textInputRefs = useRef<
@@ -282,14 +295,11 @@ export function Composer({
     };
   });
   const detectedMentions = detectConnectorMentions(value, detectCandidates);
-  const restoreMentions = dismissedMentionsStillPresent(
-    detectedMentions,
-    dismissedConnectorIds,
-  );
 
   useEffect(() => {
     setBlocks(emptyComposerBlocks());
     setMenu(null);
+    setTriggerPicker(null);
     setDismissedConnectorIds(new Set());
     setManualConnectorIds(new Set());
     focusedTextKeyRef.current = null;
@@ -405,41 +415,93 @@ export function Composer({
       copy.add(scope.connectorId);
       return copy;
     });
+    setTriggerPicker(null);
     setBlocks((current) =>
       removeConnectorBlockRestoringText(current, scope.connectionId),
     );
   };
 
-  const restoreConnectorMention = (mention: ConnectorMention) => {
+  const applyTriggerConnector = (
+    trigger: ComposerTriggerBlock,
+    scope: ComposerConnectorScope,
+  ) => {
+    setTriggerPicker(null);
     setDismissedConnectorIds((prev) => {
-      if (!prev.has(mention.connectorId)) return prev;
+      if (!prev.size) return prev;
       const copy = new Set(prev);
-      copy.delete(mention.connectorId);
+      copy.delete(trigger.preferredConnectorId);
+      copy.delete(scope.connectorId);
+      return copy;
+    });
+    setManualConnectorIds((prev) => {
+      const copy = new Set(prev);
+      copy.add(scope.connectorId);
       return copy;
     });
     setBlocks((current) => {
-      const result = syncDetectedConnectorBlocks(
-        current,
-        detectedMentions.filter(
-          (m) =>
-            m.connectorId !== mention.connectorId ||
-            m.connectionId === mention.connectionId,
-        ),
-        {
-          dismissedConnectorIds: new Set(
-            [...dismissedConnectorIds].filter(
-              (id) => id !== mention.connectorId,
-            ),
-          ),
-          manualConnectorIds,
-        },
-      );
+      const result = promoteTriggerToConnector(current, trigger.key, scope);
       if (result.focusKey) {
-        focusTextKey(result.focusKey, result.cursor);
+        queueMicrotask(() => focusTextKey(result.focusKey!));
       }
       return result.blocks;
     });
   };
+
+  const onTriggerWordClick = (
+    trigger: ComposerTriggerBlock,
+    anchor: HTMLElement,
+  ) => {
+    if (triggerPicker?.triggerKey === trigger.key) {
+      setTriggerPicker(null);
+      return;
+    }
+    const related = relatedCandidatesForTrigger(trigger, detectCandidates);
+    if (!related.length) return;
+    if (related.length === 1) {
+      applyTriggerConnector(trigger, related[0]!);
+      return;
+    }
+    const rect = anchor.getBoundingClientRect();
+    setMenu(null);
+    setTriggerPicker({
+      triggerKey: trigger.key,
+      rect: {
+        left: rect.left,
+        top: rect.bottom + 4,
+        width: rect.width,
+        height: rect.height,
+      },
+    });
+  };
+
+  useEffect(() => {
+    if (!triggerPicker) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (
+        target &&
+        (target as Element).closest?.("[data-composer-trigger-picker]")
+      ) {
+        return;
+      }
+      if (
+        target &&
+        (target as Element).closest?.("[data-composer-trigger-word]")
+      ) {
+        return;
+      }
+      setTriggerPicker(null);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTriggerPicker(null);
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [triggerPicker]);
 
   const connectorScopePayload =
     connectorScopes.length > 0
@@ -1329,6 +1391,57 @@ export function Composer({
           </ComposerMenu>
         ) : null}
 
+        {triggerPicker
+          ? (() => {
+              const trigger = blocks.find(
+                (b): b is ComposerTriggerBlock =>
+                  b.type === "trigger" && b.key === triggerPicker.triggerKey,
+              );
+              if (!trigger) return null;
+              const related = relatedCandidatesForTrigger(
+                trigger,
+                detectCandidates,
+              );
+              if (related.length < 2) return null;
+              return (
+                <div
+                  data-composer-trigger-picker
+                  role="listbox"
+                  aria-label="Choose connector"
+                  className="fixed z-[80] min-w-[11rem] overflow-hidden rounded-xl border border-border/80 bg-popover p-1 shadow-lg"
+                  style={{
+                    left: Math.min(
+                      triggerPicker.rect.left,
+                      typeof window !== "undefined"
+                        ? window.innerWidth - 188
+                        : triggerPicker.rect.left,
+                    ),
+                    top: triggerPicker.rect.top,
+                  }}
+                >
+                  {related.map((row) => {
+                    const iconId =
+                      connectors.find((c) => c.id === row.connectorId)?.icon ??
+                      row.connectorId;
+                    return (
+                      <button
+                        key={row.connectionId}
+                        type="button"
+                        role="option"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => applyTriggerConnector(trigger, row)}
+                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-foreground transition-colors hover:bg-muted"
+                      >
+                        <ConnectorMark id={iconId} size="nav" className="!h-4 !w-4" />
+                        <span>{row.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()
+          : null}
+
         {dictateError || attachError ? (
           <p className="mb-1 px-1 text-[12px] text-muted-foreground">
             {dictateError || attachError}
@@ -1553,7 +1666,7 @@ export function Composer({
                 "flex min-h-8 gap-1",
                 // With inline connector chips, keep a single vertically-centered row.
                 // Multi-line drafts still dock controls to the bottom while growing up.
-                inlineChips || !growUpward || !hasText
+                inlineChips || hasInlineAtoms || !growUpward || !hasText
                   ? "items-center"
                   : "items-end",
                 dictatingActive && "invisible pointer-events-none",
@@ -1571,7 +1684,7 @@ export function Composer({
               <div
                 className={cn(
                   "flex min-h-8 min-w-0 flex-1 flex-wrap items-center gap-y-0.5",
-                  !hasText && !inlineChips && "content-center py-[6px]",
+                  !hasText && !inlineChips && !hasInlineAtoms && "content-center py-[6px]",
                   transcriptReveal && "opacity-100 transition-opacity duration-200",
                 )}
                 onMouseDown={(event) => {
@@ -1589,9 +1702,6 @@ export function Composer({
                     const iconId =
                       connectors.find((c) => c.id === block.scope.connectorId)
                         ?.icon ?? block.scope.connectorId;
-                    const isLastConnector = !blocks
-                      .slice(index + 1)
-                      .some((b) => b.type === "connector");
                     return (
                       <Fragment key={block.key}>
                         <span className="group/conn relative inline max-w-full shrink-0 text-[14px] leading-5 text-sky-500/95 sm:text-[14px] dark:text-sky-400/95">
@@ -1611,80 +1721,40 @@ export function Composer({
                             <X className="h-2.5 w-2.5" strokeWidth={2.25} />
                           </button>
                         </span>
-                        {isLastConnector
-                          ? restoreMentions.map((mention) => {
-                              const restoreIcon =
-                                connectors.find(
-                                  (c) => c.id === mention.connectorId,
-                                )?.icon ?? mention.connectorId;
-                              return (
-                                <button
-                                  key={`restore_${mention.connectorId}`}
-                                  type="button"
-                                  title={`Add ${mention.label} back`}
-                                  aria-label={`Add ${mention.label} back`}
-                                  onMouseDown={(event) =>
-                                    event.preventDefault()
-                                  }
-                                  onClick={() =>
-                                    restoreConnectorMention(mention)
-                                  }
-                                  className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border border-dashed border-sky-500/35 px-1 py-0.5 text-[14px] text-sky-500/70 underline decoration-sky-500/40 underline-offset-2 transition-colors duration-150 hover:border-sky-500/60 hover:bg-sky-500/10 hover:text-sky-600 dark:text-sky-400/70 dark:hover:text-sky-300"
-                                >
-                                  <ConnectorMark
-                                    id={restoreIcon}
-                                    size="nav"
-                                    className="!h-[0.9em] !w-[0.9em] opacity-80"
-                                  />
-                                  <span className="truncate font-medium leading-none">
-                                    {mention.matched}
-                                  </span>
-                                </button>
-                              );
-                            })
-                          : null}
                       </Fragment>
                     );
                   }
 
-                  const showRestoreBeforeText =
-                    restoreMentions.length > 0 &&
-                    !blocks.some((b) => b.type === "connector") &&
-                    index === blocks.findIndex((b) => b.type === "text");
-                  const restoreBeforeText = showRestoreBeforeText
-                    ? restoreMentions.map((mention) => {
-                        const restoreIcon =
-                          connectors.find((c) => c.id === mention.connectorId)
-                            ?.icon ?? mention.connectorId;
-                        return (
-                          <button
-                            key={`restore_${mention.connectorId}`}
-                            type="button"
-                            title={`Add ${mention.label} back`}
-                            aria-label={`Add ${mention.label} back`}
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => restoreConnectorMention(mention)}
-                            className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border border-dashed border-sky-500/35 px-1 py-0.5 text-[14px] text-sky-500/70 underline decoration-sky-500/40 underline-offset-2 transition-colors duration-150 hover:border-sky-500/60 hover:bg-sky-500/10 hover:text-sky-600 dark:text-sky-400/70 dark:hover:text-sky-300"
-                          >
-                            <ConnectorMark
-                              id={restoreIcon}
-                              size="nav"
-                              className="!h-[0.9em] !w-[0.9em] opacity-80"
-                            />
-                            <span className="truncate font-medium leading-none">
-                              {mention.matched}
-                            </span>
-                          </button>
-                        );
-                      })
-                    : null;
+                  if (block.type === "trigger") {
+                    const open =
+                      triggerPicker?.triggerKey === block.key;
+                    return (
+                      <Fragment key={block.key}>
+                        <button
+                          type="button"
+                          data-composer-trigger-word={block.key}
+                          aria-label={`Add connector for ${block.matched}`}
+                          aria-expanded={open}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={(event) =>
+                            onTriggerWordClick(block, event.currentTarget)
+                          }
+                          className={cn(
+                            "inline shrink-0 rounded-sm text-[14px] leading-5 font-medium text-sky-600/90 underline decoration-sky-500/50 decoration-dotted underline-offset-[3px] transition-colors sm:text-[14px]",
+                            "hover:text-sky-500 hover:decoration-sky-500 dark:text-sky-400/90 dark:hover:text-sky-300",
+                            open && "bg-sky-500/10 text-sky-500",
+                          )}
+                        >
+                          {block.matched}
+                        </button>
+                      </Fragment>
+                    );
+                  }
 
                   const isLastText =
                     !blocks.slice(index + 1).some((b) => b.type === "text");
                   const showPlaceholder =
-                    blocks.length === 1 &&
-                    block.value.length === 0 &&
-                    restoreMentions.length === 0;
+                    blocks.length === 1 && block.value.length === 0;
                   const collapsed = !block.value && !isLastText;
                   const fieldClassName = cn(
                     "bg-transparent text-[16px] leading-5 outline-none placeholder:text-muted-foreground sm:text-[14px]",
@@ -1692,7 +1762,7 @@ export function Composer({
                       ? cn(
                           "min-h-5 min-w-[1ch] flex-1 resize-none overflow-y-auto",
                           // Full-row only when there are no inline chips yet.
-                          !inlineChips && "w-full basis-full",
+                          !inlineChips && !hasInlineAtoms && "w-full basis-full",
                         )
                       : collapsed
                         ? "w-0 max-w-0 min-w-0 overflow-hidden p-0 border-0"
@@ -1702,7 +1772,6 @@ export function Composer({
                   if (isLastText) {
                     return (
                       <Fragment key={block.key}>
-                        {restoreBeforeText}
                         <textarea
                         ref={(el) => {
                           if (el) {

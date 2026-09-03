@@ -8,9 +8,11 @@ import {
   connectorsFromBlocks,
   normalizeComposerBlocks,
   textFromBlocks,
+  triggersFromBlocks,
   type ComposerBlock,
   type ComposerConnectorBlock,
   type ComposerTextBlock,
+  type ComposerTriggerBlock,
 } from "./composer-blocks.ts";
 
 export type ConnectorDetectCandidate = {
@@ -182,7 +184,12 @@ export function replaceMentionInline(
   let offset = 0;
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i]!;
-    if (block.type !== "text") continue;
+    if (block.type !== "text") {
+      // Keep offset aligned with textFromBlocks (triggers contribute matched text).
+      offset +=
+        block.type === "trigger" ? block.matched.length : 0;
+      continue;
+    }
     const end = offset + block.value.length;
     if (mention.index < offset || mention.index >= end) {
       offset = end;
@@ -251,13 +258,17 @@ export function syncDetectedConnectorBlocks(
   const presentIds = new Set(
     connectorsFromBlocks(blocks).map((c) => c.connectorId),
   );
+  const triggerIds = new Set(
+    triggersFromBlocks(blocks).map((t) => t.preferredConnectorId),
+  );
 
   const toAdd = mentions
     .filter(
       (m) =>
         !opts.dismissedConnectorIds.has(m.connectorId) &&
         !opts.manualConnectorIds.has(m.connectorId) &&
-        !presentIds.has(m.connectorId),
+        !presentIds.has(m.connectorId) &&
+        !triggerIds.has(m.connectorId),
     )
     // Replace from the end so earlier indices stay valid.
     .sort((a, b) => b.index - a.index);
@@ -285,6 +296,44 @@ export function dismissedMentionsStillPresent(
   dismissedConnectorIds: ReadonlySet<string>,
 ): ConnectorMention[] {
   return mentions.filter((m) => dismissedConnectorIds.has(m.connectorId));
+}
+
+/**
+ * Connected apps the user can attach from a dismissed trigger word.
+ * Mail triggers (product name or generic "email") offer every connected mail app.
+ */
+export function relatedCandidatesForTrigger(
+  trigger: Pick<
+    ComposerTriggerBlock,
+    "matched" | "preferredConnectorId"
+  >,
+  candidates: ConnectorDetectCandidate[],
+): ConnectorDetectCandidate[] {
+  const matchedNorm = normalizeTrigger(trigger.matched);
+  const isGenericMail = GENERIC_MAIL_ALIASES.includes(matchedNorm);
+  const isMailFamily =
+    isGenericMail || MAIL_CONNECTOR_IDS.has(trigger.preferredConnectorId);
+
+  if (isMailFamily) {
+    const mail = candidates.filter((c) =>
+      MAIL_CONNECTOR_IDS.has(c.connectorId),
+    );
+    if (mail.length) {
+      return [
+        ...mail.filter(
+          (c) => c.connectorId === trigger.preferredConnectorId,
+        ),
+        ...mail.filter(
+          (c) => c.connectorId !== trigger.preferredConnectorId,
+        ),
+      ];
+    }
+  }
+
+  const preferred = candidates.find(
+    (c) => c.connectorId === trigger.preferredConnectorId,
+  );
+  return preferred ? [preferred] : [];
 }
 
 /** @internal test helper */

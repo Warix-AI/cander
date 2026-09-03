@@ -7,7 +7,6 @@ import { useSpaceApi, useWorkspaceCtx } from "@/components/app/SpaceDataProvider
 import { upsertChatThread, getChatStoreSnapshot } from "@/lib/api/chat-store";
 import { mergeHydratedThread } from "@/lib/api/chat-sync";
 import { isSupabaseConfigured } from "@/lib/data-backend";
-import { CanderMark } from "@/components/brand/CanderMark";
 import { ClarificationCardSlot } from "@/components/chat/ClarificationCard";
 import { ChatMessage } from "@/components/chat/MessageBlocks";
 import { Composer } from "@/components/shell/Composer";
@@ -447,7 +446,6 @@ function EmptyChat({
         className="flex w-full max-w-[44rem] flex-col items-center max-md:!mt-0"
         style={{ marginTop: padTop }}
       >
-        <CanderMark className="landing-mark mb-4 !h-[35.64px] !w-[37.2px] -translate-y-[2px]" />
         {copy ? (
           <>
             <h1 className="landing-headline heading-display text-center text-[1.85rem] md:text-[2.15rem]">
@@ -462,7 +460,7 @@ function EmptyChat({
             {APP_TAGLINE}
           </h1>
         )}
-        <div className="mt-8 w-full">
+        <div className="mt-[17px] w-full">
           <Composer onSend={onPrompt} landing autoFocus={autoFocusComposer} />
         </div>
       </div>

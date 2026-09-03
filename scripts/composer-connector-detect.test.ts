@@ -8,14 +8,17 @@ import {
   blocksFromText,
   connectorsFromBlocks,
   emptyComposerBlocks,
+  promoteTriggerToConnector,
   removeConnectorBlockRestoringText,
   serializeComposerBlocks,
   textFromBlocks,
+  triggersFromBlocks,
   type ComposerBlock,
 } from "../lib/composer-blocks.ts";
 import {
   detectConnectorMentions,
   dismissedMentionsStillPresent,
+  relatedCandidatesForTrigger,
   syncDetectedConnectorBlocks,
   triggersForConnector,
 } from "../lib/composer-connector-detect.ts";
@@ -100,7 +103,10 @@ describe("composer connector detect", () => {
       /send an Gmail to braydon/i,
     );
     const chip = blocks.find((b) => b.type === "connector");
-    assert.equal(chip?.type === "connector" && chip.replacedText?.toLowerCase(), "email");
+    assert.equal(
+      chip?.type === "connector" && chip.replacedText?.toLowerCase(),
+      "email",
+    );
   });
 
   it("returns focus on the text segment after the inserted chip", () => {
@@ -117,7 +123,10 @@ describe("composer connector detect", () => {
     assert.ok(afterChip >= 0);
     const focusBlock = result.blocks[afterChip + 1];
     assert.equal(focusBlock?.type, "text");
-    assert.equal(focusBlock?.type === "text" && focusBlock.key, result.focusKey);
+    assert.equal(
+      focusBlock?.type === "text" && focusBlock.key,
+      result.focusKey,
+    );
     assert.equal(result.cursor, 0);
   });
 
@@ -140,7 +149,7 @@ describe("composer connector detect", () => {
     assert.equal(connectorsFromBlocks(blocks).length, 1);
   });
 
-  it("restores the trigger word when the chip is dismissed", () => {
+  it("turns a dismissed chip into a clickable trigger word", () => {
     let blocks: ComposerBlock[] = blocksFromText("send an email to them");
     blocks = syncDetectedConnectorBlocks(
       blocks,
@@ -153,10 +162,74 @@ describe("composer connector detect", () => {
     const connectionId = connectorsFromBlocks(blocks)[0]!.connectionId;
     blocks = removeConnectorBlockRestoringText(blocks, connectionId);
     assert.equal(connectorsFromBlocks(blocks).length, 0);
+    const triggers = triggersFromBlocks(blocks);
+    assert.equal(triggers.length, 1);
+    assert.equal(triggers[0]?.matched.toLowerCase(), "email");
+    assert.equal(triggers[0]?.preferredConnectorId, "gmail");
     assert.match(textFromBlocks(blocks), /send an email to them/i);
   });
 
-  it("keeps dismissed chips out until restored", () => {
+  it("promotes a trigger word back to a connector chip on click", () => {
+    let blocks: ComposerBlock[] = blocksFromText("Check Gmail please");
+    blocks = syncDetectedConnectorBlocks(
+      blocks,
+      detectConnectorMentions(textFromBlocks(blocks), [gmail]),
+      {
+        dismissedConnectorIds: new Set(),
+        manualConnectorIds: new Set(),
+      },
+    ).blocks;
+    blocks = removeConnectorBlockRestoringText(
+      blocks,
+      connectorsFromBlocks(blocks)[0]!.connectionId,
+    );
+    const trigger = triggersFromBlocks(blocks)[0]!;
+    const result = promoteTriggerToConnector(blocks, trigger.key, gmail);
+    assert.equal(connectorsFromBlocks(result.blocks).length, 1);
+    assert.equal(triggersFromBlocks(result.blocks).length, 0);
+    assert.equal(
+      connectorsFromBlocks(result.blocks)[0]?.connectorId,
+      "gmail",
+    );
+    assert.ok(result.focusKey);
+  });
+
+  it("offers related mail connectors for a dismissed email trigger", () => {
+    const related = relatedCandidatesForTrigger(
+      { matched: "email", preferredConnectorId: "gmail" },
+      [gmail, outlook, slack],
+    );
+    assert.deepEqual(
+      related.map((r) => r.connectorId),
+      ["gmail", "outlook"],
+    );
+  });
+
+  it("does not auto-rechip while a trigger block is present", () => {
+    let blocks: ComposerBlock[] = blocksFromText("Check Gmail please");
+    blocks = syncDetectedConnectorBlocks(
+      blocks,
+      detectConnectorMentions(textFromBlocks(blocks), [gmail]),
+      {
+        dismissedConnectorIds: new Set(),
+        manualConnectorIds: new Set(),
+      },
+    ).blocks;
+    blocks = removeConnectorBlockRestoringText(
+      blocks,
+      connectorsFromBlocks(blocks)[0]!.connectionId,
+    );
+    const mentions = detectConnectorMentions(textFromBlocks(blocks), [gmail]);
+    assert.ok(mentions.some((m) => m.connectorId === "gmail"));
+    blocks = syncDetectedConnectorBlocks(blocks, mentions, {
+      dismissedConnectorIds: new Set(["gmail"]),
+      manualConnectorIds: new Set(),
+    }).blocks;
+    assert.equal(connectorsFromBlocks(blocks).length, 0);
+    assert.equal(triggersFromBlocks(blocks).length, 1);
+  });
+
+  it("keeps dismissed chips out until the trigger leaves the text", () => {
     const text = "Check Gmail please";
     const mentions = detectConnectorMentions(text, [gmail]);
     let blocks = syncDetectedConnectorBlocks(emptyComposerBlocks(), mentions, {
@@ -169,6 +242,7 @@ describe("composer connector detect", () => {
       1,
     );
 
+    // Trigger gone → dismiss clears on next sync; typing it again re-adds.
     blocks = syncDetectedConnectorBlocks(blocksFromText(text), mentions, {
       dismissedConnectorIds: new Set(),
       manualConnectorIds: new Set(),
