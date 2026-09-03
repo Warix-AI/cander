@@ -1075,77 +1075,52 @@ export function ProjectBrowserPanel({
             className="ml-auto flex shrink-0 items-center gap-1"
             onPointerLeave={clearBrowserChromeHovers}
           >
-            {isMarkdownDocTab ? (
-              <>
-                <BrowserChromeTooltip
-                  label={shareCopied ? "Link copied" : "Share"}
+            {panelMode === "collapsed" ? null : standalone ? (
+              <BrowserChromeTooltip label="Close browser">
+                <BrowserChromeIconButton
+                  aria-label="Close browser"
+                  onClick={() => closeStandaloneBrowser()}
                 >
-                  <BrowserChromeIconButton
-                    aria-label={shareCopied ? "Link copied" : "Share"}
-                    onClick={() => void copyMarkdownShareLink()}
-                  >
-                    <Share className="h-3.5 w-3.5" strokeWidth={1.7} />
-                  </BrowserChromeIconButton>
-                </BrowserChromeTooltip>
-                <BrowserChromeTooltip label="Rename">
-                  <BrowserChromeIconButton
-                    aria-label="Rename"
-                    onClick={openDocumentRename}
-                  >
-                    <Pencil className="h-3.5 w-3.5" strokeWidth={1.7} />
-                  </BrowserChromeIconButton>
-                </BrowserChromeTooltip>
-              </>
+                  <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                </BrowserChromeIconButton>
+              </BrowserChromeTooltip>
             ) : (
-              <>
-                {panelMode === "collapsed" ? null : standalone ? (
-                  <BrowserChromeTooltip label="Close browser">
-                    <BrowserChromeIconButton
-                      aria-label="Close browser"
-                      onClick={() => closeStandaloneBrowser()}
-                    >
-                      <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-                    </BrowserChromeIconButton>
-                  </BrowserChromeTooltip>
-                ) : (
-                  <BrowserChromeTooltip label="Leave project">
-                    <BrowserChromeIconButton
-                      aria-label="Leave project"
-                      onClick={() => backToSpaceHome()}
-                    >
-                      <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-                    </BrowserChromeIconButton>
-                  </BrowserChromeTooltip>
-                )}
-                {chatArmed ? (
-                  <BrowserChromeTooltip
-                    label={expandedLayout ? "Restore layout" : "Expand"}
-                  >
-                    <BrowserChromeIconButton
-                      aria-label={expandedLayout ? "Restore layout" : "Expand"}
-                      onClick={() => toggleExpandedLayout()}
-                    >
-                      {expandedLayout ? (
-                        <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-                      ) : (
-                        <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-                      )}
-                    </BrowserChromeIconButton>
-                  </BrowserChromeTooltip>
-                ) : null}
-                {chatArmed ? (
-                  <BrowserChromeTooltip
-                    label={
-                      panelMode === "collapsed"
-                        ? "Open right panel"
-                        : "Close right panel"
-                    }
-                  >
-                    <PanelToggle />
-                  </BrowserChromeTooltip>
-                ) : null}
-              </>
+              <BrowserChromeTooltip label="Leave project">
+                <BrowserChromeIconButton
+                  aria-label="Leave project"
+                  onClick={() => backToSpaceHome()}
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                </BrowserChromeIconButton>
+              </BrowserChromeTooltip>
             )}
+            {chatArmed ? (
+              <BrowserChromeTooltip
+                label={expandedLayout ? "Restore layout" : "Expand"}
+              >
+                <BrowserChromeIconButton
+                  aria-label={expandedLayout ? "Restore layout" : "Expand"}
+                  onClick={() => toggleExpandedLayout()}
+                >
+                  {expandedLayout ? (
+                    <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  ) : (
+                    <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  )}
+                </BrowserChromeIconButton>
+              </BrowserChromeTooltip>
+            ) : null}
+            {chatArmed ? (
+              <BrowserChromeTooltip
+                label={
+                  panelMode === "collapsed"
+                    ? "Open right panel"
+                    : "Close right panel"
+                }
+              >
+                <PanelToggle />
+              </BrowserChromeTooltip>
+            ) : null}
           </span>
         </div>
       )}
@@ -1181,7 +1156,7 @@ export function ProjectBrowserPanel({
           <div
             className={cn(
               "pointer-events-none absolute inset-0 flex items-center justify-center",
-              isMarkdownDocTab ? "px-12" : "px-[7.5rem]",
+              isMarkdownDocTab ? "px-20" : "px-[7.5rem]",
             )}
           >
             {isMarkdownDocTab ? (
@@ -1209,8 +1184,20 @@ export function ProjectBrowserPanel({
               />
             )}
           </div>
-          <div className="ml-auto flex shrink-0 items-center">
-            {isMarkdownDocTab ? null : standalone ? (
+          <div className="ml-auto flex shrink-0 items-center gap-0.5">
+            {isMarkdownDocTab ? (
+              <>
+                <RailBtn
+                  label={shareCopied ? "Copied" : "Share"}
+                  onClick={() => void copyMarkdownShareLink()}
+                >
+                  <Share className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </RailBtn>
+                <RailBtn label="Rename" onClick={openDocumentRename}>
+                  <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </RailBtn>
+              </>
+            ) : standalone ? (
               <>
                 <RailBtn
                   label="Open in new window"
