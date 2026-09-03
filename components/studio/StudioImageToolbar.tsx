@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
+  LoaderCircle,
   Mic,
   Pencil,
   Ratio,
@@ -251,11 +252,14 @@ export function StudioImageToolbar({
             ) : null}
             <button
               type="button"
-              disabled={busy || dictating || transcribing || !draft.trim()}
+              disabled={busy || dictating || transcribing || (!draft.trim() && !transcribing)}
               onClick={submitEdit}
-              className="inline-flex h-8 shrink-0 items-center rounded-[8px] bg-primary px-3 text-[12.5px] font-medium text-primary-foreground transition-colors hover:bg-foreground disabled:opacity-50"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] bg-primary px-3 text-[12.5px] font-medium text-primary-foreground transition-colors hover:bg-foreground disabled:opacity-50"
             >
-              Apply
+              {transcribing ? (
+                <LoaderCircle className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+              ) : null}
+              {transcribing ? "Transcribing…" : "Apply"}
             </button>
           </div>
         ) : (

@@ -56,8 +56,12 @@ import {
 import { hasDesktopBrowserBridge, isDesktopShell } from "@/lib/desktop-shell";
 import { isCapacitorNative } from "@/lib/composer-attach";
 import { NavToggle } from "@/components/shell/NavToggle";
-import { PanelToggle } from "@/components/shell/PanelToggle";
+import {
+  BrowserChromeIconButton,
+  PanelToggle,
+} from "@/components/shell/PanelToggle";
 import { Dropdown } from "@/components/ui/Controls";
+import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 import { MeshDriftShader } from "@/components/ui/MeshDriftShader";
 import { StudioImageToolbar } from "@/components/studio/StudioImageToolbar";
 import {
@@ -65,6 +69,7 @@ import {
   BROWSER_CHROME_CHIP,
   BROWSER_CHROME_CHIP_HOVER,
 } from "@/lib/shell-chrome";
+import { decodeTextDataUrl } from "@/lib/chat-document-attach";
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import {
   editStudioProjectImage,
@@ -2391,6 +2396,12 @@ function StudioMediaSurface({
         </div>
       ) : hasMedia && kind === "studio-document" && src.startsWith("data:application/pdf") ? (
         <iframe title="Document" src={src} className="h-full w-full border-0" />
+      ) : hasMedia && kind === "studio-document" && decodeTextDataUrl(src) != null ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10">
+          <div className="mx-auto max-w-3xl">
+            <MarkdownRenderer content={decodeTextDataUrl(src) || ""} />
+          </div>
+        </div>
       ) : hasMedia ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
           <Icon className="h-8 w-8 text-muted-foreground" strokeWidth={1.4} />
@@ -2512,38 +2523,6 @@ function KindGlyph({ kind, className }: { kind?: ProjectKind; className?: string
   if (kind === "automation") return <Zap className={cls} strokeWidth={1.6} />;
   if (kind === "research") return <Workflow className={cls} strokeWidth={1.6} />;
   return <AppWindow className={cls} strokeWidth={1.6} />;
-}
-
-function BrowserChromeIconButton({
-  "aria-label": ariaLabel,
-  onClick,
-  children,
-}: {
-  "aria-label": string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      onClick={onClick}
-      onPointerEnter={(event) => {
-        if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
-        setHovered(true);
-      }}
-      onPointerLeave={() => setHovered(false)}
-      onPointerCancel={() => setHovered(false)}
-      onBlur={() => setHovered(false)}
-      className={cn(
-        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150",
-        hovered && "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
-      )}
-    >
-      {children}
-    </button>
-  );
 }
 
 function RailBtn({

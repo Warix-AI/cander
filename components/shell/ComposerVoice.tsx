@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ArrowUp, Mic, Square, X } from "lucide-react";
+import { ArrowUp, LoaderCircle, Mic, Square, X } from "lucide-react";
 import { VoiceDictationWaveform } from "@/components/shell/VoiceDictationWaveform";
 import type { AudioMeter } from "@/lib/voice/audio-meter";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,7 @@ const REC_BTN = 28;
 
 /**
  * Recording composer row — same height as the idle composer line:
- * [ X ]  [ rolling waveform / Transcribing… ]  [ ■ ] [ ↑ ]
+ * [ X ]  [ rolling waveform / Transcribing… ]  [ ■ ] [ ↑ / spinner ]
  */
 export function ComposerRecordingView({
   onCancel,
@@ -92,7 +92,7 @@ export function ComposerRecordingView({
         compact={compact}
         onClick={onSend}
         disabled={isTranscribing}
-        className={isTranscribing ? "opacity-50" : undefined}
+        loading={isTranscribing}
       />
     </div>
   );
@@ -103,37 +103,52 @@ export function ComposerSendButton({
   className,
   onClick,
   disabled,
+  loading = false,
 }: {
   compact?: boolean;
   className?: string;
   /** Prefer explicit click on iOS — form submit alone is unreliable with keyboard lift. */
   onClick?: () => void;
   disabled?: boolean;
+  /** Show a spinner (transcription in flight). */
+  loading?: boolean;
 }) {
   return (
     <button
       type={onClick ? "button" : "submit"}
-      aria-label="Send"
+      aria-label={loading ? "Transcribing" : "Send"}
+      aria-busy={loading || undefined}
       disabled={disabled}
       onPointerDown={(event) => {
         // Avoid stealing focus from the composer textarea (keeps keyboard open).
         event.preventDefault();
       }}
       onClick={(event) => {
-        if (!onClick) return;
+        if (!onClick || loading) return;
         event.preventDefault();
         onClick();
       }}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors duration-200 hover:bg-foreground disabled:pointer-events-none disabled:opacity-40",
+        "inline-flex shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors duration-200 hover:bg-foreground disabled:pointer-events-none",
         compact ? "h-7 w-7" : "h-8 w-8",
+        loading ? "opacity-100" : "disabled:opacity-40",
         className,
       )}
     >
-      <ArrowUp
-        className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5"}
-        strokeWidth={2.25}
-      />
+      {loading ? (
+        <LoaderCircle
+          className={cn(
+            "animate-spin",
+            compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5",
+          )}
+          strokeWidth={2.25}
+        />
+      ) : (
+        <ArrowUp
+          className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5"}
+          strokeWidth={2.25}
+        />
+      )}
     </button>
   );
 }

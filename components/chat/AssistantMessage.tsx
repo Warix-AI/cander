@@ -9,6 +9,7 @@ import {
   phaseForImageGenerationBlock,
 } from "@/components/chat/ImageGenerationCard";
 import { StructuredResponseBlock } from "@/components/chat/StructuredResponseBlock";
+import { AddReplyToProjectMenu } from "@/components/chat/AddReplyToProjectMenu";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
 import { formatClarificationAnswersForDisplay } from "@/lib/ai/clarification/schema";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
@@ -56,11 +57,6 @@ export function AssistantMessage({ message }: { message: Message }) {
 
   return (
     <div className="w-full space-y-2">
-      {hasReply ? (
-        <div>
-          <MarkdownRenderer content={visibleContent} />
-        </div>
-      ) : null}
       {showActivityRow ? (
         <ThinkingIndicator
           active
@@ -68,6 +64,11 @@ export function AssistantMessage({ message }: { message: Message }) {
           startedAt={message.activity?.startedAt}
           label={message.activity?.label}
         />
+      ) : null}
+      {hasReply ? (
+        <div>
+          <MarkdownRenderer content={visibleContent} />
+        </div>
       ) : null}
       {message.blocks
         ?.filter((b) => b.type !== "tool")
@@ -100,7 +101,12 @@ function MessageFooter({
 
   return (
     <div className="pt-1.5">
-      <ActionSourcesRow message={message} citations={citations} showCopy={hasCopy} />
+      <ActionSourcesRow
+        message={message}
+        citations={citations}
+        showCopy={hasCopy}
+        visibleContent={visibleContent}
+      />
     </div>
   );
 }
@@ -109,10 +115,12 @@ function ActionSourcesRow({
   message,
   citations,
   showCopy,
+  visibleContent,
 }: {
   message: Message;
   citations?: Message["citations"];
   showCopy: boolean;
+  visibleContent: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -185,6 +193,13 @@ function ActionSourcesRow({
               <Copy className="h-3.5 w-3.5" strokeWidth={1.6} />
             )}
           </button>
+        ) : null}
+
+        {showCopy ? (
+          <AddReplyToProjectMenu
+            message={message}
+            visibleContent={visibleContent}
+          />
         ) : null}
 
         {unique.length ? (

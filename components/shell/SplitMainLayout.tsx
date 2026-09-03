@@ -56,17 +56,47 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
   const [slideWidth, setSlideWidth] = useState(0);
   const [panelMounted, setPanelMounted] = useState(false);
   const wasOpen = useRef(false);
+  const openAnimRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (mobile) {
       queueMicrotask(() => setPanelMounted(canPanel && panelOn));
       return;
     }
+
+    if (openAnimRef.current != null) {
+      window.cancelAnimationFrame(openAnimRef.current);
+      openAnimRef.current = null;
+    }
+
     queueMicrotask(() => {
-      setSlideWidth(panelOn ? panelPct : 0);
-      setPanelMounted(panelOn && canPanel);
+      if (panelOn && canPanel) {
+        // Mount at 0, then expand next frame so width actually animates open.
+        if (!wasOpen.current) {
+          setPanelMounted(true);
+          setSlideWidth(0);
+          openAnimRef.current = window.requestAnimationFrame(() => {
+            openAnimRef.current = window.requestAnimationFrame(() => {
+              setSlideWidth(panelPct);
+              openAnimRef.current = null;
+            });
+          });
+        } else {
+          setPanelMounted(true);
+          setSlideWidth(panelPct);
+        }
+      } else {
+        setSlideWidth(0);
+      }
+      wasOpen.current = panelOn;
     });
-    wasOpen.current = panelOn;
+
+    return () => {
+      if (openAnimRef.current != null) {
+        window.cancelAnimationFrame(openAnimRef.current);
+        openAnimRef.current = null;
+      }
+    };
   }, [panelOn, immersive, panelPct, mobile, canPanel]);
 
   if (mobile) {
@@ -117,7 +147,7 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
           !immersive &&
             showPanelColumn &&
             animateLayout &&
-            "transition-[flex-basis] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "transition-[flex-basis] duration-[550ms] ease-[cubic-bezier(0.32,0.72,0,1)]",
         )}
       >
         {hideTopRail ? null : <TopRail />}
@@ -129,11 +159,11 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
           <div
             onTransitionEnd={onPanelWidthTransitionEnd}
             className={cn(
-              "flex min-h-0 min-w-0 flex-col overflow-hidden",
+              "flex min-h-0 min-w-0 flex-col overflow-hidden will-change-[width]",
               immersive ? "flex-1" : "shrink-0",
               !immersive &&
                 animateLayout &&
-                "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                "transition-[width] duration-[550ms] ease-[cubic-bezier(0.32,0.72,0,1)]",
               livePanelWidth > 0 && !floating && "border-l border-border/40 bg-sidebar",
               livePanelWidth === 0 && !panelOn && "pointer-events-none",
             )}

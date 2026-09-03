@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { PanelRight } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { canUseRightPanel } from "@/lib/right-panel";
@@ -8,10 +8,44 @@ import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
-/** Hover fill only while a fine pointer is over the control — avoids Electron sticky :hover. */
+/**
+ * Electron sticky-hover fix: never rely on CSS :hover for chrome icons.
+ * Clear hover whenever the pointer is outside the control (native WebViews
+ * often skip pointerleave when the cursor crosses into them).
+ */
 function useChromeHover() {
+  const ref = useRef<HTMLButtonElement | null>(null);
   const [hovered, setHovered] = useState(false);
+
+  useEffect(() => {
+    if (!hovered) return;
+    const clearIfOutside = (event: globalThis.PointerEvent) => {
+      const el = ref.current;
+      if (!el) {
+        setHovered(false);
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      const inside =
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom;
+      if (!inside) setHovered(false);
+    };
+    const clear = () => setHovered(false);
+    window.addEventListener("pointermove", clearIfOutside, true);
+    window.addEventListener("blur", clear);
+    document.addEventListener("visibilitychange", clear);
+    return () => {
+      window.removeEventListener("pointermove", clearIfOutside, true);
+      window.removeEventListener("blur", clear);
+      document.removeEventListener("visibilitychange", clear);
+    };
+  }, [hovered]);
+
   return {
+    ref,
     hovered,
     onPointerEnter: (event: PointerEvent<HTMLButtonElement>) => {
       if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
@@ -37,6 +71,7 @@ export function PanelToggle({
 
   return (
     <button
+      ref={hover.ref}
       type="button"
       aria-label={open ? "Close right panel" : "Open right panel"}
       onClick={() => toggleRightPanel()}
@@ -107,5 +142,35 @@ export function RightPanelToggleDock() {
     >
       <PanelToggle docked className="pointer-events-auto bg-background" />
     </div>
+  );
+}
+
+export function BrowserChromeIconButton({
+  "aria-label": ariaLabel,
+  onClick,
+  children,
+}: {
+  "aria-label": string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const hover = useChromeHover();
+  return (
+    <button
+      ref={hover.ref}
+      type="button"
+      aria-label={ariaLabel}
+      onClick={onClick}
+      onPointerEnter={hover.onPointerEnter}
+      onPointerLeave={hover.onPointerLeave}
+      onPointerCancel={hover.onPointerCancel}
+      onBlur={hover.onBlur}
+      className={cn(
+        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150",
+        hover.hovered && "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
+      )}
+    >
+      {children}
+    </button>
   );
 }
