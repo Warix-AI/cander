@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import { PanelRight } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { canUseRightPanel } from "@/lib/right-panel";
@@ -8,52 +15,67 @@ import { useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
+type ClearFn = () => void;
+const chromeHoverClears = new Set<ClearFn>();
+
+/** Call from a chrome row's onPointerLeave so fills can't stick after leaving the bar. */
+export function clearBrowserChromeHovers() {
+  for (const clear of chromeHoverClears) clear();
+}
+
 /**
- * Electron sticky-hover fix: never rely on CSS :hover for chrome icons.
- * Clear hover whenever the pointer is outside the control (native WebViews
- * often skip pointerleave when the cursor crosses into them).
+ * Hover for browser chrome icons.
+ *
+ * Never use CSS :hover fills here — Electron keeps :hover stuck after the
+ * cursor enters a native BrowserView. JS hover is cleared on leave, on any
+ * pointerover of another DOM node, on click, and when the chrome row fires
+ * clearBrowserChromeHovers().
  */
 function useChromeHover() {
   const ref = useRef<HTMLButtonElement | null>(null);
   const [hovered, setHovered] = useState(false);
 
+  const clear = useCallback(() => setHovered(false), []);
+
+  useEffect(() => {
+    chromeHoverClears.add(clear);
+    return () => {
+      chromeHoverClears.delete(clear);
+    };
+  }, [clear]);
+
   useEffect(() => {
     if (!hovered) return;
-    const clearIfOutside = (event: globalThis.PointerEvent) => {
+    const onOver = (event: Event) => {
       const el = ref.current;
-      if (!el) {
-        setHovered(false);
+      const target = event.target;
+      if (!(el && target instanceof Node)) {
+        clear();
         return;
       }
-      const rect = el.getBoundingClientRect();
-      const inside =
-        event.clientX >= rect.left &&
-        event.clientX <= rect.right &&
-        event.clientY >= rect.top &&
-        event.clientY <= rect.bottom;
-      if (!inside) setHovered(false);
+      if (el === target || el.contains(target)) return;
+      clear();
     };
-    const clear = () => setHovered(false);
-    window.addEventListener("pointermove", clearIfOutside, true);
+    // Capture: see moves onto other DOM nodes even if stopPropagation is used.
+    document.addEventListener("pointerover", onOver, true);
     window.addEventListener("blur", clear);
-    document.addEventListener("visibilitychange", clear);
     return () => {
-      window.removeEventListener("pointermove", clearIfOutside, true);
+      document.removeEventListener("pointerover", onOver, true);
       window.removeEventListener("blur", clear);
-      document.removeEventListener("visibilitychange", clear);
     };
-  }, [hovered]);
+  }, [hovered, clear]);
 
   return {
     ref,
     hovered,
+    clear,
     onPointerEnter: (event: PointerEvent<HTMLButtonElement>) => {
       if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
       setHovered(true);
     },
-    onPointerLeave: () => setHovered(false),
-    onPointerCancel: () => setHovered(false),
-    onBlur: () => setHovered(false),
+    onPointerLeave: clear,
+    onPointerCancel: clear,
+    onBlur: clear,
   };
 }
 
@@ -69,18 +91,26 @@ export function PanelToggle({
   const open = panelMode !== "collapsed";
   const hover = useChromeHover();
 
+  useEffect(() => {
+    hover.clear();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when open flips
+  }, [open]);
+
   return (
     <button
       ref={hover.ref}
       type="button"
       aria-label={open ? "Close right panel" : "Open right panel"}
-      onClick={() => toggleRightPanel()}
+      onClick={() => {
+        hover.clear();
+        toggleRightPanel();
+      }}
       onPointerEnter={hover.onPointerEnter}
       onPointerLeave={hover.onPointerLeave}
       onPointerCancel={hover.onPointerCancel}
       onBlur={hover.onBlur}
       className={cn(
-        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150",
+        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors duration-100",
         docked && "h-8 w-8 bg-background",
         hover.hovered &&
           (docked
@@ -100,7 +130,10 @@ export function PanelWindowChrome() {
   if (mobile) return null;
 
   return (
-    <div className="flex h-11 shrink-0 items-center justify-end gap-1 px-3">
+    <div
+      className="flex h-11 shrink-0 items-center justify-end gap-1 px-3"
+      onPointerLeave={clearBrowserChromeHovers}
+    >
       <PanelToggle />
     </div>
   );
@@ -117,6 +150,7 @@ export function RightPanelToggleDock() {
     projectId,
     jobId,
     skillId,
+    panelMode,
   } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
@@ -131,7 +165,10 @@ export function RightPanelToggleDock() {
     skillId,
   });
 
-  if (mobile || !canPanel) return null;
+  // Only when collapsed — open layouts already host PanelToggle in chrome.
+  // Leaving this mounted painted a permanent bg-background chip over the
+  // header control and looked like a stuck hover.
+  if (mobile || !canPanel || panelMode !== "collapsed") return null;
 
   return (
     <div
@@ -139,6 +176,7 @@ export function RightPanelToggleDock() {
         "pointer-events-none absolute top-0 right-0 z-50 hidden h-11 items-center gap-1 px-3 lg:flex",
         floating ? "pt-3 pr-3" : "pt-0 pr-3",
       )}
+      onPointerLeave={clearBrowserChromeHovers}
     >
       <PanelToggle docked className="pointer-events-auto bg-background" />
     </div>
@@ -160,14 +198,18 @@ export function BrowserChromeIconButton({
       ref={hover.ref}
       type="button"
       aria-label={ariaLabel}
-      onClick={onClick}
+      onClick={() => {
+        hover.clear();
+        onClick();
+      }}
       onPointerEnter={hover.onPointerEnter}
       onPointerLeave={hover.onPointerLeave}
       onPointerCancel={hover.onPointerCancel}
       onBlur={hover.onBlur}
       className={cn(
-        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150",
-        hover.hovered && "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
+        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors duration-100",
+        hover.hovered &&
+          "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
       )}
     >
       {children}

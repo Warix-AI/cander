@@ -59,6 +59,7 @@ import { NavToggle } from "@/components/shell/NavToggle";
 import {
   BrowserChromeIconButton,
   PanelToggle,
+  clearBrowserChromeHovers,
 } from "@/components/shell/PanelToggle";
 import { Dropdown } from "@/components/ui/Controls";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
@@ -864,7 +865,10 @@ export function ProjectBrowserPanel({
               Reading page
             </span>
           ) : null}
-          <span className="ml-auto flex shrink-0 items-center gap-1">
+          <span
+            className="ml-auto flex shrink-0 items-center gap-1"
+            onPointerLeave={clearBrowserChromeHovers}
+          >
             {panelMode === "collapsed" ? null : standalone ? (
               <BrowserChromeTooltip label="Close browser">
                 <BrowserChromeIconButton
