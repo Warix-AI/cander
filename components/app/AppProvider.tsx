@@ -128,6 +128,11 @@ import {
   writeStandaloneBrowserPinned,
 } from "@/lib/standalone-browser-session";
 import {
+  isSafeInAppBrowserUrl,
+  openUrlInProjectBrowser,
+  openUrlInStandaloneBrowser,
+} from "@/lib/open-in-app-browser";
+import {
   primeWorkItemBrowserSession,
   workItemBrowserKey,
   workItemBrowserProjectId,
@@ -207,6 +212,14 @@ import {
 import { deleteAiChat } from "@/lib/api/ai-chat-api";
 import { deleteThreadsFromSupabase, replaceUniversalDefaultOnSupabase } from "@/lib/api/chat-api.supabase";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
+import {
+  provisionalCohortFromInput,
+  startLiveTurnLatency,
+  type LiveTurnLatencySession,
+} from "@/lib/ai/live-turn-latency";
+import { speculationFingerprint } from "@/lib/ai/composer-speculation/fingerprint";
+import { isComposerSpeculationEnabled } from "@/lib/ai/composer-speculation/flags";
+import { takeComposerSpeculationForSend } from "@/lib/ai/composer-speculation/session-store";
 import { isRawOpenAIModeEnabled } from "@/lib/ai/raw-openai/flags";
 import { detectImageGenerationIntent } from "@/lib/ai/raw-openai/image-generation";
 import {
@@ -377,6 +390,8 @@ type AppContextValue = {
   openSpace: (id: NavDestinationId) => void;
   openRecents: () => void;
   openBrowser: (opts?: { chat?: boolean; query?: string }) => void;
+  /** Open an http(s) citation in the in-app browser (not a new OS tab). */
+  openInAppBrowser: (url: string, opts?: { title?: string }) => void;
   standaloneBrowserOpen: boolean;
   standaloneBrowserEphemeral: boolean;
   openStandaloneBrowser: (opts?: { query?: string }) => void;
@@ -2520,6 +2535,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           });
         }
 
+        const latency: LiveTurnLatencySession = startLiveTurnLatency({
+          threadId: activeId,
+          workspaceId: matched?.workspaceId ?? workspaceId,
+          assistantMessageId: assistantId,
+          provisionalCohort: provisionalCohortFromInput({
+            text: aiUserContent || trimmed,
+            selectedConnectionCount: selectedConnectionIds.length,
+            attachmentCount:
+              sendAttachments.length ||
+              attachments.length ||
+              fileAttachments.length,
+          }),
+          historyMessageCount: historyMessages.length,
+          attachmentCount:
+            sendAttachments.length ||
+            attachments.length ||
+            fileAttachments.length,
+          selectedConnectionCount: selectedConnectionIds.length,
+        });
+        latency.mark("context_ready");
+
         const runReply = async () => {
           turnAbortRef.current?.abort();
           const ac = new AbortController();
@@ -2612,9 +2648,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 messageId: userMsg.id,
                 threadId: activeId,
               });
+              latency.mark("attachments_done");
             } catch (e) {
               const msg =
                 e instanceof Error ? e.message : "Attachment upload failed.";
+              latency.finalize({
+                outcome: "error",
+                errorCode: "attachment_upload",
+              });
               setThreads((current) =>
                 current.map((item) => ({
                   ...item,
@@ -2634,16 +2675,64 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
+          const sendContent = aiUserContent || trimmed || "(attachment)";
+          if (isComposerSpeculationEnabled()) {
+            const specFp = speculationFingerprint(trimmed, {
+              workspaceId: matched?.workspaceId ?? workspaceId,
+              connectionIds: selectedConnectionIds,
+              attachmentCount:
+                attachmentIds.length ||
+                attachments.length ||
+                fileAttachments.length,
+            });
+            const reused = await takeComposerSpeculationForSend({
+              text: trimmed,
+              fingerprint: specFp,
+              waitMs: 12_000,
+            });
+            if (
+              reused?.draftText &&
+              !attachmentIds.length &&
+              !imageUrls.length &&
+              !fileAttachments.length &&
+              sendContent === trimmed
+            ) {
+              console.debug("[SPECULATION_REUSE]", {
+                tier: reused.tier,
+                warmHandle: reused.warmHandle,
+                chars: reused.draftText.length,
+              });
+              latency.setTransport("raw");
+              latency.setSignals({
+                presentationStreamed: false,
+                contentStreaming: false,
+              });
+              latency.mark("dispatch_start");
+              latency.mark("response_received");
+              latency.markFirstContentReceived();
+              latency.mark("reply_resolved");
+              return {
+                aiChatId: priorAiChatId ?? "",
+                content: reused.draftText,
+                offline: false,
+                condensationOccurred: false,
+                runtime: "speculation-draft",
+                presentationStreamed: false,
+              };
+            }
+          }
+
           return fetchPrivateAiReply({
             aiChatId: priorAiChatId,
             threadId: activeId,
             title: displayText.slice(0, 52) || attachments[0]?.name || "Chat",
-            content: aiUserContent || trimmed || "(attachment)",
+            content: sendContent,
             workspaceId: matched?.workspaceId ?? workspaceId,
             projectId: replyProjectId,
             projectSpace: replyProjectSpace,
             messages: historyMessages,
             signal: ac.signal,
+            latency,
             selectedConnectionId:
               selectedConnectionIds[0] ?? selectedConnectionId,
             selectedConnectionIds:
@@ -2659,6 +2748,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 : {}),
             onProgress: (progress) => {
               if (ac.signal.aborted) return;
+              if (progress.contentDelta) {
+                latency.markFirstContentReceived({
+                  streaming: Boolean(progress.contentStreaming),
+                });
+                latency.markFirstContentVisible();
+              }
+              if (progress.phase === "tool") {
+                latency.markToolPhase();
+              }
               setThreads((current) =>
                 current.map((item) => ({
                   ...item,
@@ -2668,7 +2766,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                       (message.role === "assistant" &&
                         (message.status === "pending" ||
                           message.status === "streaming") &&
-                        !message.content);
+                        (message.content === "Thinking…" ||
+                          message.content === "Thinking..." ||
+                          message.id === assistantId));
                     if (!isTarget) return message;
                     return patchMessageWithProgress(message, progress);
                   }),
@@ -2680,7 +2780,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         void runReply()
           .then((result) => {
-            if (!result || result.cancelled) return;
+            if (!result || result.cancelled) {
+              latency.finalize({ outcome: "cancelled" });
+              return;
+            }
+            latency.mark("reply_resolved");
+            const replyFailed = result.runtime === "error";
+            latency.setSignals({
+              toolResultCount: result.toolResults?.length ?? 0,
+              presentationStreamed: Boolean(result.presentationStreamed),
+            });
+            const finishLatency = (outcome: "ok" | "paused" | "error") => {
+              latency.finalize({
+                outcome: replyFailed ? "error" : outcome,
+                ...(replyFailed ? { errorCode: "reply_error" } : {}),
+              });
+            };
             const isPendingAssistant = (message: Message) =>
               message.id === assistantId ||
               (message.role === "assistant" &&
@@ -2696,6 +2811,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               citations?: Message["citations"],
               blocks?: Message["blocks"],
             ) => {
+              if (content) {
+                latency.markFirstContentVisible();
+              }
+              if (status === "complete") {
+                latency.mark("complete");
+                latency.mark("commit");
+              }
               setThreads((current) => {
                 const apply = (item: Thread): Thread => {
                   let nextMessages = item.messages.map((message) =>
@@ -2769,6 +2891,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 result.citations,
                 result.blocks,
               );
+              finishLatency(result.pausedForUser ? "paused" : "ok");
               if (
                 result.generatedAttachmentIds?.length &&
                 isRawOpenAIModeEnabled()
@@ -2793,6 +2916,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 done ? result.blocks : undefined,
               );
               if (done) {
+                finishLatency(result.pausedForUser ? "paused" : "ok");
                 if (
                   result.generatedAttachmentIds?.length &&
                   isRawOpenAIModeEnabled()
@@ -2810,6 +2934,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             });
           })
           .catch((err: unknown) => {
+            const cancelled =
+              (err instanceof Error && err.message === "Turn cancelled.") ||
+              (err instanceof DOMException && err.name === "AbortError");
+            latency.finalize({
+              outcome: cancelled ? "cancelled" : "error",
+              errorCode: cancelled
+                ? "cancelled"
+                : err instanceof Error
+                  ? err.name.slice(0, 40)
+                  : "error",
+            });
             const detail =
               err instanceof Error && err.message.trim()
                 ? err.message.trim().slice(0, 280)
@@ -4410,6 +4545,67 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [openStandaloneBrowser],
   );
 
+  const openInAppBrowser = useCallback(
+    (url: string, opts?: { title?: string }) => {
+      if (!isSafeInAppBrowserUrl(url)) return;
+      const title = opts?.title?.trim() || undefined;
+
+      if (projectId && isChatSpace(spaceId)) {
+        openUrlInProjectBrowser({
+          profileId: actor.id,
+          workspaceId,
+          spaceId,
+          projectId,
+          projectTitle: project?.name ?? "Project",
+          url,
+          title,
+        });
+        setPanelMode("split");
+        setPanelRatioState((ratio) =>
+          ratio < PANEL_RATIO_OPEN_FLOOR ? PANEL_RATIO_OPEN_FLOOR : ratio,
+        );
+        setMobileSurface("panel");
+        return;
+      }
+
+      if (view === "space" && isChatSpace(spaceId) && !projectId) {
+        const key = standaloneBrowserKey(actor.id, workspaceId);
+        beginQuickSearchBrowserSession(key);
+        setStandaloneBrowserEphemeral(true);
+        setStandaloneBrowserOpen(true);
+        openUrlInStandaloneBrowser({
+          profileId: actor.id,
+          workspaceId,
+          url,
+          title,
+        });
+        setPanelMode("split");
+        setPanelRatioState((ratio) =>
+          ratio < PANEL_RATIO_OPEN_FLOOR ? PANEL_RATIO_OPEN_FLOOR : ratio,
+        );
+        setMobileSurface("panel");
+        return;
+      }
+
+      openStandaloneBrowser();
+      openUrlInStandaloneBrowser({
+        profileId: actor.id,
+        workspaceId,
+        url,
+        title,
+      });
+    },
+    [
+      actor.id,
+      workspaceId,
+      projectId,
+      spaceId,
+      project?.name,
+      view,
+      openStandaloneBrowser,
+    ],
+  );
+
   const clearPageReference = useCallback(() => setPageReference(null), []);
   const clearEntityReference = useCallback(() => setEntityReference(null), []);
 
@@ -4772,6 +4968,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSpace,
       openRecents,
       openBrowser,
+      openInAppBrowser,
       standaloneBrowserOpen,
       standaloneBrowserEphemeral,
       openStandaloneBrowser,
@@ -4931,6 +5128,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSpace,
       openRecents,
       openBrowser,
+      openInAppBrowser,
       standaloneBrowserOpen,
       standaloneBrowserEphemeral,
       openStandaloneBrowser,

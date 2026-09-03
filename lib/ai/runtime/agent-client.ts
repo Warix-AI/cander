@@ -74,8 +74,10 @@ export async function runAgentClientTransport(
     (opts?.selectedConnectionId ? [opts.selectedConnectionId] : []);
 
   let res: Response;
+  const latency = opts?.latency;
   try {
     const authHeaders = await getRawOpenAIAuthHeaders();
+    latency?.mark("dispatch_start");
     res = await fetch("/api/ai/agent", {
       method: "POST",
       headers: {
@@ -95,6 +97,7 @@ export async function runAgentClientTransport(
       }),
       signal: opts?.signal,
     });
+    latency?.mark("response_received");
   } catch (e) {
     if (
       opts?.signal?.aborted ||
@@ -115,7 +118,12 @@ export async function runAgentClientTransport(
     turnId?: string;
     toolResults?: ToolExecutionResult[];
     model?: string;
+    latencyMs?: number;
   };
+
+  if (typeof data.latencyMs === "number") {
+    latency?.setServerDurationMs(data.latencyMs);
+  }
 
   if (!res.ok) {
     const err = new AiRuntimeError(
@@ -126,6 +134,21 @@ export async function runAgentClientTransport(
   }
 
   const content = (data.content || "").trim();
+  const toolResultCount = Array.isArray(data.toolResults)
+    ? data.toolResults.length
+    : 0;
+  latency?.setSignals({
+    historyMessageCount: history.length,
+    toolResultCount,
+    selectedConnectionCount: selectedConnectionIds.length,
+  });
+  if (content || data.pause) {
+    latency?.markFirstContentReceived({ streaming: true });
+  }
+  if (data.pause || toolResultCount > 0) {
+    latency?.markToolPhase();
+  }
+
   report({
     phase: "generating",
     label: "Thinking",

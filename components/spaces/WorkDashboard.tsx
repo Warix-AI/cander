@@ -72,7 +72,11 @@ export function WorkDashboard() {
       </DashToolbar>
 
       <div className="mt-5">
-        <WorkSpaceView layout={spaceLayout} category={category} />
+        <WorkSpaceView
+          layout={spaceLayout}
+          category={category}
+          onCategoryChange={setCategory}
+        />
       </div>
     </DashFrame>
   );

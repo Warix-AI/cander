@@ -36,4 +36,16 @@ describe("citation prose normalization", () => {
     const text = "Step [1] install the package first.";
     assert.equal(stripInlineCitationMarkers(text), text);
   });
+
+  it("strips CloudFront host leftovers from web-search annotations", async () => {
+    const { stripInlineCitationMarkers } = await import(
+      "../lib/ai/orchestrator/citations.ts"
+    );
+    const raw =
+      "Here’s the **2026 Utah Utes football schedule**. Times are **Mountain Time**; games without listed times are **TBA**. (d2um8593lh23fa.cloudfront.net)\n\nIf Utah qualifies: Big 12 Championship Game. (d2um8593lh23fa.cloudfront.net)";
+    const cleaned = stripInlineCitationMarkers(raw);
+    assert.equal(/cloudfront/i.test(cleaned), false);
+    assert.match(cleaned, /Mountain Time/);
+    assert.match(cleaned, /TBA/);
+  });
 });

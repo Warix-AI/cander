@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Circle, Copy } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
@@ -15,6 +15,9 @@ import { formatClarificationAnswersForDisplay } from "@/lib/ai/clarification/sch
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
 import type { ChatBlock, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { faviconUrlForSite } from "@/lib/preview-url";
+import { isCdnCitationHost } from "@/lib/ai/orchestrator/citations";
+import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 
 function blockKey(block: ChatBlock, index: number): string {
   switch (block.type) {
@@ -122,8 +125,10 @@ function ActionSourcesRow({
   showCopy: boolean;
   visibleContent: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const { openInAppBrowser } = useApp();
+  const [moreOpen, setMoreOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
 
   const safe = (citations ?? []).filter((c) => {
     try {
@@ -134,12 +139,18 @@ function ActionSourcesRow({
     }
   });
   const seen = new Set<string>();
-  const unique = safe.filter((c) => {
-    const key = (c.canonicalUrl || c.url).replace(/\/$/, "").toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const unique = safe
+    .filter((c) => {
+      const key = (c.canonicalUrl || c.url).replace(/\/$/, "").toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => {
+      const aCdn = isCdnCitationHost(a.url) ? 1 : 0;
+      const bCdn = isCdnCitationHost(b.url) ? 1 : 0;
+      return aCdn - bCdn;
+    });
 
   const labelFor = (c: NonNullable<Message["citations"]>[number]) => {
     if (c.domain) return c.domain;
@@ -150,18 +161,47 @@ function ActionSourcesRow({
     }
   };
 
-  const faviconFor = (url: string) => {
-    try {
-      const host = new URL(url).hostname;
-      return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`;
-    } catch {
-      return null;
+  const titleFor = (c: NonNullable<Message["citations"]>[number]) => {
+    const title = (c.title || "").trim();
+    if (
+      title &&
+      !/^https?:\/\//i.test(title) &&
+      title !== c.url &&
+      !isCdnCitationHost(title)
+    ) {
+      return title;
     }
+    const host = labelFor(c);
+    if (host && !isCdnCitationHost(host) && !isCdnCitationHost(c.url)) {
+      return host;
+    }
+    return "Source";
   };
+
+  const primary = unique[0];
+  const extra = unique.slice(1);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!moreRef.current?.contains(event.target as Node)) {
+        setMoreOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMoreOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointer);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onPointer);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [moreOpen]);
 
   const copy = async () => {
     const parts = [
-      message.content,
+      visibleContent,
       ...(message.blocks ?? []).flatMap((block) => {
         if (block.type === "text") return [block.text];
         if (block.type === "plan") return [block.title, ...block.steps];
@@ -176,8 +216,101 @@ function ActionSourcesRow({
     window.setTimeout(() => setCopied(false), 1400);
   };
 
+  const openSource = (c: NonNullable<Message["citations"]>[number]) => {
+    setMoreOpen(false);
+    openInAppBrowser(c.url, { title: titleFor(c) });
+  };
+
   return (
     <div>
+      {primary ? (
+        <div className="relative mb-1 w-fit max-w-full" ref={moreRef}>
+          <div
+            className={cn(
+              "inline-flex w-fit max-w-full items-center gap-1 py-[3px] pl-1.5 pr-1",
+              SHELL_G3_RADIUS,
+              "text-muted-foreground transition-colors duration-150",
+              "hover:bg-muted hover:text-foreground",
+              moreOpen && "bg-muted text-foreground",
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => openSource(primary)}
+              title={primary.url}
+              className="inline-flex min-w-0 max-w-[9.5rem] items-center gap-1 text-[10px] font-medium leading-none tracking-[-0.01em]"
+            >
+              {(() => {
+                const favicon = faviconUrlForSite(primary.url, 32);
+                return favicon ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={favicon}
+                    alt=""
+                    width={12}
+                    height={12}
+                    className="h-3 w-3 shrink-0 rounded-full"
+                  />
+                ) : (
+                  <span className="h-3 w-3 shrink-0 rounded-full bg-muted-foreground/30" />
+                );
+              })()}
+              <span className="truncate">{titleFor(primary)}</span>
+            </button>
+
+            {extra.length ? (
+              <button
+                type="button"
+                onClick={() => setMoreOpen((open) => !open)}
+                aria-expanded={moreOpen}
+                aria-label={`${extra.length} more sources`}
+                className="inline-flex h-3.5 shrink-0 items-center rounded-full bg-black/[0.06] px-1 text-[9px] font-medium leading-none tabular-nums text-muted-foreground dark:bg-white/12"
+              >
+                +{extra.length}
+              </button>
+            ) : null}
+          </div>
+
+          {moreOpen && extra.length ? (
+            <ul className="absolute left-0 top-[calc(100%+4px)] z-30 min-w-[12rem] max-w-[18rem] overflow-hidden rounded-[10px] border border-border/70 bg-card py-0.5 shadow-lg">
+              {extra.map((c) => {
+                const favicon = faviconUrlForSite(c.url, 32);
+                return (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => openSource(c)}
+                      className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/60"
+                    >
+                      {favicon ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={favicon}
+                          alt=""
+                          width={12}
+                          height={12}
+                          className="h-3 w-3 shrink-0 rounded-full"
+                        />
+                      ) : (
+                        <span className="h-3 w-3 shrink-0 rounded-full bg-muted" />
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[11px] font-medium text-foreground">
+                          {titleFor(c)}
+                        </span>
+                        <span className="block truncate text-[10px] text-muted-foreground">
+                          {isCdnCitationHost(c.url) ? "Source" : labelFor(c)}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex items-center gap-1.5">
         {showCopy ? (
           <button
@@ -201,90 +334,7 @@ function ActionSourcesRow({
             visibleContent={visibleContent}
           />
         ) : null}
-
-        {unique.length ? (
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="inline-flex h-7 items-center gap-2 rounded-lg px-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-expanded={expanded}
-            aria-label={`Sources, ${unique.length}`}
-          >
-            <span className="flex items-center pl-0.5">
-              {unique.slice(0, 4).map((c, i) => {
-                const favicon = faviconFor(c.url);
-                return (
-                  <span
-                    key={c.id}
-                    className="relative inline-flex h-5 w-5 items-center justify-center overflow-hidden rounded-full border border-background bg-muted ring-1 ring-border/60"
-                    style={{ marginLeft: i === 0 ? 0 : -6, zIndex: 4 - i }}
-                  >
-                    {favicon ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={favicon}
-                        alt=""
-                        width={14}
-                        height={14}
-                        className="h-3.5 w-3.5"
-                      />
-                    ) : (
-                      <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />
-                    )}
-                  </span>
-                );
-              })}
-            </span>
-            <span className="text-[12px] font-medium tracking-[-0.01em]">
-              Sources
-            </span>
-          </button>
-        ) : null}
       </div>
-
-      {expanded && unique.length ? (
-        <ul className="mt-2 space-y-1.5 rounded-[10px] border border-border/70 bg-muted/20 px-2.5 py-2">
-          {unique.map((c) => {
-            const favicon = faviconFor(c.url);
-            return (
-              <li key={c.id}>
-                <a
-                  href={c.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-start gap-2 rounded-lg px-1.5 py-1.5 hover:bg-muted/50"
-                >
-                  {favicon ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={favicon}
-                      alt=""
-                      width={16}
-                      height={16}
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded-[3px]"
-                    />
-                  ) : (
-                    <span className="mt-0.5 h-4 w-4 shrink-0 rounded-[3px] bg-muted" />
-                  )}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium tracking-[-0.01em] text-foreground">
-                      {c.title || labelFor(c)}
-                    </span>
-                    <span className="block truncate text-[12px] text-muted-foreground">
-                      {labelFor(c)}
-                    </span>
-                    {c.excerpt ? (
-                      <span className="mt-0.5 line-clamp-2 block text-[12px] leading-snug text-muted-foreground/90">
-                        {c.excerpt}
-                      </span>
-                    ) : null}
-                  </span>
-                </a>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
     </div>
   );
 }

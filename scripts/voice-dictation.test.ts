@@ -65,15 +65,15 @@ describe("Dictation isolation", () => {
     assert.equal(src.includes("Math.random"), false);
   });
 
-  it("recording row is X | waveform | stop | send without Listening label", () => {
+  it("recording row keeps waveform while speaking (no live caption fill)", () => {
     const src = fs.readFileSync("components/shell/ComposerVoice.tsx", "utf8");
     assert.ok(src.includes("ComposerRecordingView"));
+    assert.ok(src.includes("liveText"));
     assert.ok(src.includes("onSend"));
     assert.equal(/Listening[.…]/.test(src), false);
     assert.ok(src.includes("Transcribing…"));
     assert.equal(src.includes("VoiceWaveButton"), false);
     assert.match(src, /REC_BTN\s*=\s*28/);
-    assert.ok(src.includes("justify-center"));
     assert.ok(src.includes('status === "transcribing"'));
   });
 
@@ -102,10 +102,26 @@ describe("Dictation isolation", () => {
     assert.equal(src.includes("toggleVoice"), false);
   });
 
-  it("composer uses OpenAI dictation on web without raw chat mode flag", () => {
+  it("composer prefers OpenAI live dictation with speech as fallback", () => {
     const src = fs.readFileSync("components/shell/Composer.tsx", "utf8");
     assert.equal(src.includes("isRawOpenAIModeEnabled"), false);
+    assert.ok(src.includes("isSpeechToTextSupported"));
+    assert.ok(src.includes("startSpeechToText"));
     assert.ok(src.includes("isOpenAIDictationSupported"));
-    assert.ok(src.includes("isDesktopShell"));
+    assert.ok(src.includes("openai-live-dictation"));
+    assert.ok(src.includes("startVoiceDictation"));
+    // OpenAI realtime must be attempted before speech-to-text fallback.
+    const openaiIdx = src.indexOf("if (isOpenAIDictationSupported())");
+    const speechIdx = src.indexOf("if (!isSpeechToTextSupported())");
+    assert.ok(openaiIdx >= 0 && speechIdx > openaiIdx);
+  });
+
+  it("live dictation streams PCM to OpenAI realtime", () => {
+    const src = fs.readFileSync("lib/voice/openai-live-dictation.ts", "utf8");
+    assert.ok(src.includes("gpt-live-transcribe"));
+    assert.ok(src.includes("input_audio_buffer.append"));
+    assert.ok(src.includes("input_audio_buffer.commit"));
+    assert.ok(src.includes("realtime-token"));
+    assert.ok(src.includes("startBatchVoiceDictation"));
   });
 });

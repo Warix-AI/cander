@@ -483,126 +483,148 @@ export function ProjectBrowserPanel({
       ? active?.kind === "web"
       : !isWorkItemBrowser || session.tabs.some((tab) => tab.kind === "web");
 
-  const latestStudioImageJob = useMemo(() => {
-    if (!isStudioProject || !thread) return null;
-    for (let i = thread.messages.length - 1; i >= 0; i--) {
-      const message = thread.messages[i]!;
-      const blocks = message.blocks;
-      if (!blocks) continue;
-      for (let j = blocks.length - 1; j >= 0; j--) {
-        const block = blocks[j]!;
+  const studioImageJobs = useMemo(() => {
+    if (!isStudioProject || !thread) return [];
+    const jobs: Extract<
+      NonNullable<typeof thread.messages[number]["blocks"]>[number],
+      { type: "image_generation" }
+    >[] = [];
+    for (const message of thread.messages) {
+      for (const block of message.blocks ?? []) {
         if (block.type !== "image_generation") continue;
-        return block;
+        if (block.status !== "generating" && block.status !== "completed") {
+          continue;
+        }
+        if (!block.generationId?.trim()) continue;
+        jobs.push(block);
       }
     }
-    return null;
+    return jobs;
   }, [isStudioProject, thread]);
 
-  // Route each chat image generation onto its own Studio canvas tab so a second
-  // generate does not overwrite an existing image.
-  // Do NOT re-steal focus while generating — users must be able to view other tabs.
-  useEffect(() => {
-    if (!isStudioProject || !key || !latestStudioImageJob) return;
-    const genId = latestStudioImageJob.generationId?.trim();
-    if (!genId) return;
-    const status = latestStudioImageJob.status;
-    if (status !== "generating" && status !== "completed") {
-      return;
-    }
+  const studioImageJobsSig = studioImageJobs
+    .map(
+      (job) =>
+        `${job.generationId}:${job.status}:${job.imageUrl?.trim() ?? ""}`,
+    )
+    .join("|");
 
-    const isEmptyStudioTab = (tab: ProjectBrowserTab) =>
+  // Every chat image generation gets its own Studio canvas tab.
+  // Do NOT re-steal focus while another canvas generates.
+  useEffect(() => {
+    if (!isStudioProject || !key || !studioImageJobs.length) return;
+
+    const isEmptyUnboundStudioTab = (tab: ProjectBrowserTab) =>
       tab.kind === "studio-image" &&
       !tab.boundGenerationId &&
       (!tab.url || tab.url === "" || tab.url === "about:blank");
 
     const current = getProjectBrowserSession(key, session);
-    const already = current.tabs.find(
-      (tab) =>
-        tab.kind === "studio-image" && tab.boundGenerationId === genId,
-    );
-    let nextTabs = current.tabs;
-    let activeTabId = current.activeTabId;
-    let targetId = already?.id ?? null;
-    let focusNew = false;
+    let nextTabs = current.tabs.slice();
+    let changed = false;
+    let focusTabId: string | null = null;
 
-    if (!targetId) {
-      const activeTab = current.tabs.find((tab) => tab.id === current.activeTabId);
-      const reuse =
-        (activeTab && isEmptyStudioTab(activeTab) ? activeTab : null) ||
-        current.tabs.find(isEmptyStudioTab) ||
-        null;
-      if (reuse) {
-        targetId = reuse.id;
-        nextTabs = current.tabs.map((tab) =>
-          tab.id === reuse.id ? { ...tab, boundGenerationId: genId } : tab,
-        );
-        // Only jump when binding an empty tab that was already active / first empty.
-        focusNew = true;
-        activeTabId = reuse.id;
-      } else {
-        const tab: ProjectBrowserTab = {
-          ...makeStudioMediaTab("studio-image"),
-          boundGenerationId: genId,
-        };
-        nextTabs = [...current.tabs, tab];
-        targetId = tab.id;
-        focusNew = true;
-        activeTabId = tab.id;
+    studioImageJobs.forEach((job, index) => {
+      const genId = job.generationId.trim();
+      const label = index === 0 ? "Image" : `Image ${index + 1}`;
+      let targetIndex = nextTabs.findIndex(
+        (tab) =>
+          tab.kind === "studio-image" && tab.boundGenerationId === genId,
+      );
+
+      if (targetIndex < 0) {
+        const imageUrl = job.imageUrl?.trim() ?? "";
+        const matchByUrl =
+          imageUrl.length > 0
+            ? nextTabs.findIndex(
+                (tab) =>
+                  tab.kind === "studio-image" &&
+                  !tab.boundGenerationId &&
+                  tab.url?.trim() === imageUrl,
+              )
+            : -1;
+        if (matchByUrl >= 0) {
+          const matched = nextTabs[matchByUrl]!;
+          nextTabs[matchByUrl] = {
+            ...matched,
+            boundGenerationId: genId,
+            title:
+              matched.title === "Canvas" || matched.title === "Image"
+                ? label
+                : matched.title,
+          };
+          targetIndex = matchByUrl;
+          changed = true;
+        } else {
+          const emptyIndex = nextTabs.findIndex(isEmptyUnboundStudioTab);
+          if (emptyIndex >= 0) {
+            const empty = nextTabs[emptyIndex]!;
+            nextTabs[emptyIndex] = {
+              ...empty,
+              boundGenerationId: genId,
+              title:
+                empty.title === "Canvas" || empty.title === "Image"
+                  ? label
+                  : empty.title,
+            };
+            targetIndex = emptyIndex;
+            changed = true;
+            if (index === studioImageJobs.length - 1) {
+              focusTabId = empty.id;
+            }
+          } else {
+            const tab: ProjectBrowserTab = {
+              ...makeStudioMediaTab("studio-image", label),
+              boundGenerationId: genId,
+            };
+            nextTabs = [...nextTabs, tab];
+            targetIndex = nextTabs.length - 1;
+            changed = true;
+            if (index === studioImageJobs.length - 1) {
+              focusTabId = tab.id;
+            }
+          }
+        }
       }
-    }
 
-    const imageUrl = latestStudioImageJob.imageUrl?.trim();
-    if (status === "completed" && imageUrl && targetId) {
-      nextTabs = nextTabs.map((tab) => {
-        if (tab.id !== targetId) return tab;
-        const existingUrl = tab.url?.trim() ?? "";
+      const target = nextTabs[targetIndex];
+      if (!target) return;
+
+      const imageUrl = job.imageUrl?.trim();
+      if (job.status === "completed" && imageUrl) {
+        const existingUrl = target.url?.trim() ?? "";
         const hasCanvas =
           existingUrl.length > 0 && existingUrl !== "about:blank";
-        // Never clobber an edited / restored canvas with the original chat URL.
-        if (hasCanvas && existingUrl !== imageUrl) {
-          return tab.boundGenerationId === genId
-            ? tab
-            : { ...tab, boundGenerationId: genId };
+        // Seed once from chat; never clobber an edited / restored canvas.
+        if (!hasCanvas) {
+          nextTabs[targetIndex] = {
+            ...target,
+            boundGenerationId: genId,
+            url: imageUrl,
+            history: [imageUrl],
+            historyIndex: 0,
+            title:
+              target.title === "Canvas" || target.title === "Document"
+                ? label
+                : target.title,
+          };
+          changed = true;
+        } else if (target.boundGenerationId !== genId) {
+          nextTabs[targetIndex] = { ...target, boundGenerationId: genId };
+          changed = true;
         }
-        if (existingUrl === imageUrl && tab.boundGenerationId === genId) {
-          return tab;
-        }
-        return {
-          ...tab,
-          boundGenerationId: genId,
-          url: imageUrl,
-          history: [imageUrl],
-          historyIndex: 0,
-        };
-      });
-    }
+      } else if (target.boundGenerationId !== genId) {
+        nextTabs[targetIndex] = { ...target, boundGenerationId: genId };
+        changed = true;
+      }
+    });
 
-    if (!focusNew) {
-      // Preserve the user's selected tab while another canvas generates.
-      activeTabId = current.activeTabId;
-    }
-
-    const tabsChanged =
-      nextTabs.length !== current.tabs.length ||
-      nextTabs.some((tab, index) => {
-        const prev = current.tabs[index];
-        if (!prev || tab === prev) return tab !== prev;
-        return (
-          tab.id !== prev.id ||
-          tab.url !== prev.url ||
-          tab.boundGenerationId !== prev.boundGenerationId
-        );
-      });
-    if (!tabsChanged && activeTabId === current.activeTabId) return;
+    // Only jump focus when creating/binding the newest job onto a fresh tab.
+    const activeTabId = focusTabId ?? current.activeTabId;
+    if (!changed && activeTabId === current.activeTabId) return;
     write({ tabs: nextTabs, activeTabId });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- route on job identity/status only
-  }, [
-    isStudioProject,
-    key?.projectId,
-    latestStudioImageJob?.generationId,
-    latestStudioImageJob?.status,
-    latestStudioImageJob?.imageUrl,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync on job set signature
+  }, [isStudioProject, key?.projectId, studioImageJobsSig]);
 
   // Selected tab only — chat browser-context tools read this pointer.
   // Keep it while chat is open (mobile) so the user can ask about the page
@@ -2442,14 +2464,22 @@ function StudioMediaSurface({
     setNaturalRatio(studioAspectParts(lockedAspectRatio));
   }, [lockedAspectRatio]);
 
-  // Restore canvas from durable Studio assets when this client has an empty tab.
-  // Skip intentional clears (`about:blank`) so Remove stays removed across reloads.
-  // Bound tabs that lost their URL (e.g. after a bad remount) can still restore.
+  // Restore empty canvases. Bound tabs use their chat generation URL — never
+  // steal the project's newest asset onto the wrong tab.
   useEffect(() => {
     if (kind !== "studio-image" || !projectId) return;
     if (hasMedia || src === "about:blank") return;
     if (isGenerating || activity) return;
-    if (boundGenerationId && imageJob?.status === "generating") return;
+
+    if (boundGenerationId) {
+      const fromJob = imageJob?.imageUrl?.trim();
+      if (fromJob) {
+        onSrcChange(fromJob);
+        return;
+      }
+      if (imageJob?.status === "generating") return;
+    }
+
     let cancelled = false;
     void fetchLatestStudioProjectAsset({ workspaceId, projectId })
       .then((asset) => {
@@ -2472,6 +2502,7 @@ function StudioMediaSurface({
     activity?.type,
     boundGenerationId,
     imageJob?.status,
+    imageJob?.imageUrl,
   ]);
 
   useEffect(() => {

@@ -10,6 +10,7 @@ import {
 } from "@/lib/ai/runtime/agent-turn";
 import type { AiToolCallResult } from "@/lib/ai/runtime/tools";
 import { AiRuntimeError, type AiGenerateResult } from "@/lib/ai/runtime/types";
+import type { LiveTurnLatencySession } from "@/lib/ai/live-turn-latency";
 import type { SpaceId } from "@/lib/types";
 
 export function buildAiContextRefs(opts: {
@@ -57,6 +58,8 @@ export async function fetchPrivateAiReply(opts: {
   selectedConnectionIds?: string[] | null;
   onProgress?: (progress: AgentTurnProgress) => void;
   signal?: AbortSignal;
+  /** Phase 0 latency — optional; ignored when absent. */
+  latency?: LiveTurnLatencySession;
 }): Promise<{
   aiChatId: string;
   content: string;
@@ -90,6 +93,7 @@ export async function fetchPrivateAiReply(opts: {
         signal: opts.signal,
         selectedConnectionId: opts.selectedConnectionId ?? null,
         selectedConnectionIds: opts.selectedConnectionIds ?? null,
+        latency: opts.latency,
       },
     );
     return {

@@ -193,14 +193,21 @@ describe("structured multi-item response shape", () => {
   });
 });
 
-describe("collapsed Sources row contract", () => {
-  it("documents collapsed-by-default sources UI (no always-visible chips)", () => {
+describe("citation chips", () => {
+  it("shows a compact source chip above copy actions", () => {
     const src = readRepo("../components/chat/AssistantMessage.tsx");
     assert.match(src, /ActionSourcesRow/);
-    assert.match(src, /useState\(false\)/);
-    assert.match(src, /Sources/);
-    assert.match(src, /favicon/);
-    assert.doesNotMatch(src, /Sources · \{unique\.length\}/);
+    assert.match(src, /openInAppBrowser/);
+    assert.match(src, /faviconUrlForSite/);
+    assert.match(src, /\+\{extra\.length\}/);
+    assert.match(src, /text-\[10px\]/);
+    assert.match(src, /SHELL_G3_RADIUS/);
+    assert.match(src, /hover:bg-muted/);
+    assert.match(src, /w-fit/);
+    assert.doesNotMatch(src, /target="_blank"/);
+    const chip = src.indexOf("titleFor(primary)");
+    const copy = src.indexOf('aria-label={copied ? "Copied" : "Copy"}');
+    assert.ok(chip > 0 && copy > chip);
   });
 });
 

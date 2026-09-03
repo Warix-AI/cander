@@ -59,7 +59,7 @@ export type StartVoiceDictationHandlers = {
   t0?: number;
 };
 
-export async function startVoiceDictation(
+export async function startBatchVoiceDictation(
   handlers?: StartVoiceDictationHandlers,
 ): Promise<VoiceDictationSession> {
   let stream: MediaStream | null = null;
@@ -173,5 +173,6 @@ export async function startVoiceDictation(
   };
 }
 
-/** @deprecated Prefer startVoiceDictation — kept for older callers */
-export { startVoiceDictation as startOpenAIDictation };
+/** @deprecated Prefer startBatchVoiceDictation / live dictation entry */
+export { startBatchVoiceDictation as startVoiceDictation };
+export { startBatchVoiceDictation as startOpenAIDictation };

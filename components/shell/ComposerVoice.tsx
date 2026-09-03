@@ -14,7 +14,7 @@ const REC_BTN = 28;
 
 /**
  * Recording composer row — same height as the idle composer line:
- * [ X ]  [ rolling waveform / Transcribing… ]  [ ■ ] [ ↑ / spinner ]
+ * [ X ]  [ live transcript | waveform / Transcribing… ]  [ ■ ] [ ↑ / spinner ]
  */
 export function ComposerRecordingView({
   onCancel,
@@ -23,6 +23,7 @@ export function ComposerRecordingView({
   compact = false,
   status = "recording",
   meter = null,
+  liveText = null,
 }: {
   onCancel: () => void;
   onStop: () => void;
@@ -31,10 +32,13 @@ export function ComposerRecordingView({
   compact?: boolean;
   status?: "recording" | "transcribing";
   meter?: AudioMeter | null;
+  /** Live speech transcript — shown as the user speaks. */
+  liveText?: string | null;
 }) {
   // Match textarea line height (h-8 / compact h-7), not a taller control row.
   const waveH = compact ? 22 : 24;
   const isTranscribing = status === "transcribing";
+  const spoken = liveText?.trim() ?? "";
 
   return (
     <div
@@ -44,7 +48,13 @@ export function ComposerRecordingView({
       )}
       role="status"
       aria-live="polite"
-      aria-label={isTranscribing ? "Transcribing" : "Recording"}
+      aria-label={
+        isTranscribing
+          ? "Transcribing"
+          : spoken
+            ? "Live dictation"
+            : "Recording"
+      }
     >
       <CircleIconBtn
         label="Cancel recording"
@@ -57,15 +67,7 @@ export function ComposerRecordingView({
       </CircleIconBtn>
 
       <div className="relative min-w-0 flex-1 self-stretch">
-        {!isTranscribing ? (
-          <div className="flex h-full items-center">
-            <VoiceDictationWaveform
-              meter={meter}
-              active
-              height={waveH}
-            />
-          </div>
-        ) : (
+        {isTranscribing ? (
           <p
             className={cn(
               "absolute inset-0 flex items-center justify-center select-none text-muted-foreground",
@@ -74,6 +76,23 @@ export function ComposerRecordingView({
           >
             Transcribing…
           </p>
+        ) : spoken ? (
+          <p
+            className={cn(
+              "absolute inset-0 flex items-center truncate px-1 text-foreground",
+              compact ? "text-[13px]" : "text-[14px]",
+            )}
+          >
+            {spoken}
+          </p>
+        ) : (
+          <div className="flex h-full items-center">
+            <VoiceDictationWaveform
+              meter={meter}
+              active
+              height={waveH}
+            />
+          </div>
         )}
       </div>
 

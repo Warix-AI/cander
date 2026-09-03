@@ -49,25 +49,22 @@ export function UsageSettings() {
         description="Estimates for chat, images, and build activity in this workspace."
       >
         <SettingsGroup>
-          <div className="flex flex-col gap-3 px-4 py-3">
+          <div className="flex flex-col gap-5 px-4 py-3">
             {meters.map((meter) => {
               const tone = USAGE_METER_TONES[meter.id];
               return (
-                <div
-                  key={meter.id}
-                  className="rounded-[12px] bg-muted/50 px-3.5 py-3"
-                >
+                <div key={meter.id}>
                   <div className="flex items-baseline justify-between gap-3">
-                    <p className="text-[13px] font-medium tracking-[-0.01em]">
+                    <p className="text-[13.5px] font-medium tracking-[-0.01em]">
                       {meter.title}
                     </p>
-                    <p className="text-[12px] text-muted-foreground">
+                    <p className="tabular-nums text-[12.5px] text-foreground/50 dark:text-zinc-400">
                       {meter.enabled ? `${meter.percent}%` : "—"}
                     </p>
                   </div>
                   <div
                     className={cn(
-                      "mt-2 h-1.5 overflow-hidden rounded-full",
+                      "mt-2.5 h-2 overflow-hidden rounded-full",
                       tone.track,
                     )}
                     role="meter"
@@ -86,7 +83,7 @@ export function UsageSettings() {
                       }}
                     />
                   </div>
-                  <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+                  <p className="mt-2 text-[12px] text-foreground/45 dark:text-zinc-500">
                     {meter.detail}
                   </p>
                 </div>

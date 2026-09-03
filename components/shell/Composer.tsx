@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -9,12 +10,8 @@ import {
   type RefObject,
 } from "react";
 import {
-  Clapperboard,
   FileText,
-  Hammer,
-  Home,
   Link2,
-  MessageSquare,
   Paperclip,
   Pin,
   Plus,
@@ -61,7 +58,7 @@ import {
   isOpenAIDictationSupported,
   startVoiceDictation,
   type VoiceDictationSession,
-} from "@/lib/voice/openai-dictation";
+} from "@/lib/voice/openai-live-dictation";
 import type { AudioMeter } from "@/lib/voice/audio-meter";
 import { logDictationTiming } from "@/lib/voice/audio-meter";
 import { useShellStyle } from "@/lib/shell-chrome";
@@ -91,6 +88,20 @@ import {
   type ComposerBlock,
   type ComposerConnectorScope,
 } from "@/lib/composer-blocks";
+import { createComposerSpeculationController } from "@/lib/ai/composer-speculation/controller";
+import { isComposerSpeculationEnabled } from "@/lib/ai/composer-speculation/flags";
+
+/** Grow composer text to N lines, then scroll. */
+function syncComposerFieldHeight(el: HTMLTextAreaElement, maxLines: number) {
+  const styles = getComputedStyle(el);
+  const lineHeight = Number.parseFloat(styles.lineHeight) || 20;
+  el.style.height = "0px";
+  const next = Math.min(
+    lineHeight * maxLines,
+    Math.max(lineHeight, el.scrollHeight),
+  );
+  el.style.height = `${next}px`;
+}
 
 export type { ComposerConnectorScope };
 
@@ -133,7 +144,6 @@ export function Composer({
     view,
     projectId,
     threadId,
-    setDraftAsDefaultChat,
     armChatInterface,
     collapseDraft,
     thread,
@@ -166,6 +176,7 @@ export function Composer({
   const [dictating, setDictating] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [dictationMeter, setDictationMeter] = useState<AudioMeter | null>(null);
+  const [liveSpeechMode, setLiveSpeechMode] = useState(false);
   const [transcriptReveal, setTranscriptReveal] = useState(false);
   const [menu, setMenu] = useState<MenuId>(null);
   const focusedTextKeyRef = useRef<string | null>(null);
@@ -252,6 +263,62 @@ export function Composer({
   const [images, setImages] = useState<ChatImageAttachment[]>([]);
   const [dictateError, setDictateError] = useState(null as string | null);
   const [attachError, setAttachError] = useState(null as string | null);
+
+  const speculationRef = useRef<ReturnType<
+    typeof createComposerSpeculationController
+  > | null>(null);
+  const blocksLiveRef = useRef(blocks);
+  const filesLiveRef = useRef(files);
+  const imagesLiveRef = useRef(images);
+  const dictatingLiveRef = useRef(dictating);
+  const transcribingLiveRef = useRef(transcribing);
+  const turnActiveLiveRef = useRef(turnActive);
+  blocksLiveRef.current = blocks;
+  filesLiveRef.current = files;
+  imagesLiveRef.current = images;
+  dictatingLiveRef.current = dictating;
+  transcribingLiveRef.current = transcribing;
+  turnActiveLiveRef.current = turnActive;
+
+  useEffect(() => {
+    if (!isComposerSpeculationEnabled()) return;
+    const controller = createComposerSpeculationController({
+      getMeta: () => ({
+        threadId,
+        workspaceId,
+        connectionIds: connectorsFromBlocks(blocksLiveRef.current).map(
+          (c) => c.connectionId,
+        ),
+        attachmentCount:
+          filesLiveRef.current.length + imagesLiveRef.current.length,
+      }),
+      shouldSkip: () =>
+        Boolean(
+          dictatingLiveRef.current ||
+            transcribingLiveRef.current ||
+            turnActiveLiveRef.current ||
+            filesLiveRef.current.length > 0 ||
+            imagesLiveRef.current.length > 0 ||
+            connectorsFromBlocks(blocksLiveRef.current).length > 0,
+        ),
+    });
+    speculationRef.current = controller;
+    return () => {
+      controller.dispose();
+      speculationRef.current = null;
+    };
+  }, [threadId, workspaceId]);
+
+  useEffect(() => {
+    speculationRef.current?.onTextChange(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (dictating || transcribing) {
+      speculationRef.current?.reset();
+    }
+  }, [dictating, transcribing]);
+
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -457,6 +524,7 @@ export function Composer({
     pendingStopIntentRef.current = null;
     afterTranscriptionRef.current = "insert";
     setDictationMeter(null);
+    setLiveSpeechMode(false);
     setDictating(false);
     setTranscribing(false);
     setDictateError(null);
@@ -496,6 +564,7 @@ export function Composer({
       } catch {
         /* never block send */
       }
+      speculationRef.current?.prepareSend();
       onSend(body || "", {
         ...(usableImages.length ? { attachments: usableImages } : {}),
         ...(files.length ? { files } : {}),
@@ -516,6 +585,7 @@ export function Composer({
     setTranscriptReveal(true);
     setValue(next ? `${next} ` : "");
     window.setTimeout(() => {
+      speculationRef.current?.onStabilizedText(next);
       setTranscriptReveal(false);
       const el = textRef.current;
       if (el) {
@@ -557,10 +627,26 @@ export function Composer({
     if (speechRef.current) {
       speechRef.current.stop();
       speechRef.current = null;
+      setLiveSpeechMode(false);
       setDictating(false);
       setTranscribing(false);
+      setDictationMeter(null);
+      if (valueBaseRef.current.trim()) {
+        setValue(valueBaseRef.current);
+      }
       if (intent === "send") {
         window.setTimeout(() => submit(), 0);
+      } else {
+        setTranscriptReveal(true);
+        window.setTimeout(() => {
+          setTranscriptReveal(false);
+          const el = textRef.current;
+          if (el) {
+            el.focus();
+            const end = el.value.length;
+            el.setSelectionRange(end, end);
+          }
+        }, 180);
       }
       return;
     }
@@ -616,6 +702,8 @@ export function Composer({
     } catch {
       /* never block send */
     }
+    // Keep in-flight draft alive until Send consumes it.
+    speculationRef.current?.prepareSend();
     onSend(body || "", {
       ...(usableImages.length ? { attachments: usableImages } : {}),
       ...(files.length ? { files } : {}),
@@ -639,18 +727,18 @@ export function Composer({
     setDictateError(null);
     setTranscribing(false);
     afterTranscriptionRef.current = "insert";
+    valueBaseRef.current = value.trim() ? `${value.trim()} ` : "";
 
-    const useOpenAI = isOpenAIDictationSupported();
-    if (useOpenAI) {
+    // OpenAI realtime streaming (silent accumulate → instant paste on stop).
+    // Speech-to-text is last resort when MediaRecorder isn't available.
+    if (isOpenAIDictationSupported()) {
       const t0 = performance.now();
       logDictationTiming("mic_button_clicked", t0);
-      valueBaseRef.current = value.trim() ? `${value.trim()} ` : "";
-      // Show recording UI immediately — do not wait for getUserMedia
+      setLiveSpeechMode(false);
       setDictating(true);
       setDictationMeter(null);
       dictationStartingRef.current = true;
       pendingStopIntentRef.current = null;
-      // Keep textarea focused so the soft keyboard stays open under the overlay.
       keepComposerKeyboard();
       logDictationTiming("recording_ui_visible", t0);
       dictationRef.current?.cancel();
@@ -676,7 +764,6 @@ export function Composer({
             stopDictationAndTranscribe(pending);
             return;
           }
-          // Mic permission / getUserMedia often steals focus — reclaim it.
           keepComposerKeyboard();
           window.setTimeout(keepComposerKeyboard, 50);
           window.setTimeout(keepComposerKeyboard, 250);
@@ -698,21 +785,22 @@ export function Composer({
       setDictateError("Speech recognition isn’t available here.");
       return;
     }
-    valueBaseRef.current = value.trim() ? `${value.trim()} ` : "";
+
+    setLiveSpeechMode(false);
     setDictating(true);
+    setDictationMeter(null);
     keepComposerKeyboard();
     speechRef.current?.stop();
     speechRef.current = startSpeechToText(
       {
-        onPartial: (text) => {
-          setValue(`${valueBaseRef.current}${text}`);
+        onPartial: () => {
+          // Keep speech fallback silent in the UI — paste only on stop.
         },
         onFinal: (text) => {
           valueBaseRef.current = `${valueBaseRef.current}${text} `.replace(
             /\s+/g,
             " ",
           );
-          setValue(valueBaseRef.current);
         },
         onError: (message) => {
           setDictateError(message);
@@ -720,6 +808,9 @@ export function Composer({
         onEnd: () => {
           setDictating(false);
           speechRef.current = null;
+          if (valueBaseRef.current.trim()) {
+            setValue(valueBaseRef.current);
+          }
         },
       },
       { continuous: true },
@@ -751,6 +842,14 @@ export function Composer({
 
   /** Split view / mobile: composer grows upward; controls stay on the bottom row. */
   const growUpward = mobile || panelMode !== "collapsed";
+  /** Mobile / dock: 6 lines; desktop new-chat & shell: 8 lines. */
+  const composerMaxLines = mobile || compact ? 6 : 8;
+
+  useLayoutEffect(() => {
+    const el = textRef.current;
+    if (!(el instanceof HTMLTextAreaElement) || dictatingActive) return;
+    syncComposerFieldHeight(el, composerMaxLines);
+  }, [value, composerMaxLines, dictatingActive, blocks]);
 
   return (
     <>
@@ -896,50 +995,6 @@ export function Composer({
             </div>
 
             <div>
-              <MenuSection title="Start" />
-              <MenuRow
-                icon={<Home className="h-full w-full" strokeWidth={1.75} />}
-                label="Home"
-                description="Open Home with this chat"
-                onClick={() => {
-                  setMenu(null);
-                  setDraftAsDefaultChat("research");
-                }}
-              />
-              <MenuRow
-                icon={<Hammer className="h-full w-full" strokeWidth={1.75} />}
-                label="Build"
-                description="Start a build with this chat"
-                onClick={() => {
-                  setMenu(null);
-                  setDraftAsDefaultChat("build");
-                }}
-              />
-              <MenuRow
-                icon={
-                  <Clapperboard className="h-full w-full" strokeWidth={1.75} />
-                }
-                label="Studio"
-                description="Open Studio with this chat"
-                onClick={() => {
-                  setMenu(null);
-                  setDraftAsDefaultChat("studio");
-                }}
-              />
-              <MenuRow
-                icon={
-                  <MessageSquare className="h-full w-full" strokeWidth={1.75} />
-                }
-                label="Default chat"
-                description="Replace spaces default chat"
-                onClick={() => {
-                  setMenu(null);
-                  setDraftAsDefaultChat("work");
-                }}
-              />
-            </div>
-
-            <div>
               <MenuSection title="Connectors" />
               {activeConnections.length === 0 ? (
                 <p className="px-3 py-1 text-[11.5px] text-muted-foreground">
@@ -1000,6 +1055,7 @@ export function Composer({
                     compact
                     status={transcribing ? "transcribing" : "recording"}
                     meter={dictationMeter}
+                    liveText={liveSpeechMode ? value : null}
                     onCancel={cancelDictation}
                     onStop={() => stopDictationAndTranscribe("insert")}
                     onSend={() => stopDictationAndTranscribe("send")}
@@ -1008,7 +1064,8 @@ export function Composer({
               ) : null}
               <div
                 className={cn(
-                  "flex h-9 items-center gap-0.5",
+                  "flex min-h-9 items-end gap-0.5",
+                  !hasText && "items-center",
                   dictatingActive && "invisible pointer-events-none",
                 )}
                 aria-hidden={dictatingActive || undefined}
@@ -1016,6 +1073,9 @@ export function Composer({
                 <textarea
                   ref={(el) => {
                     textRef.current = el;
+                    if (el && !dictatingActive) {
+                      syncComposerFieldHeight(el, composerMaxLines);
+                    }
                   }}
                   value={value}
                   rows={1}
@@ -1025,7 +1085,13 @@ export function Composer({
                     suppressAutoFocusRef.current = false;
                     onFocus?.();
                   }}
-                  onChange={(event) => setValue(event.target.value)}
+                  onChange={(event) => {
+                    setValue(event.target.value);
+                    syncComposerFieldHeight(
+                      event.currentTarget,
+                      composerMaxLines,
+                    );
+                  }}
                   onKeyDown={(event) => {
                     if (dictatingActive) {
                       event.preventDefault();
@@ -1036,10 +1102,7 @@ export function Composer({
                       submit();
                     }
                   }}
-                  className={cn(
-                    "min-w-0 flex-1 resize-none bg-transparent text-[16px] outline-none placeholder:text-muted-foreground sm:text-[14px]",
-                    hasText ? "h-7 py-1 leading-5" : "h-7 py-0 leading-7",
-                  )}
+                  className="min-h-5 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-1 text-[16px] leading-5 outline-none placeholder:text-muted-foreground sm:text-[14px]"
                 />
                 <ComposerTrailingActions
                   compact
@@ -1189,6 +1252,7 @@ export function Composer({
                   <ComposerRecordingView
                     status={transcribing ? "transcribing" : "recording"}
                     meter={dictationMeter}
+                    liveText={liveSpeechMode ? value : null}
                     onCancel={cancelDictation}
                     onStop={() => stopDictationAndTranscribe("insert")}
                     onSend={() => stopDictationAndTranscribe("send")}
@@ -1217,8 +1281,10 @@ export function Composer({
               </ToolBtn>
               <div
                 className={cn(
-                  "flex min-h-8 min-w-0 flex-1 flex-wrap content-center items-center gap-x-1 gap-y-0.5",
-                  hasText || connectorScopes.length ? "py-1" : "py-[6px]",
+                  "flex min-h-8 min-w-0 flex-1 flex-wrap gap-x-1 gap-y-0.5",
+                  hasText || connectorScopes.length
+                    ? "content-start items-start py-1"
+                    : "content-center items-center py-[6px]",
                   transcriptReveal && "opacity-100 transition-opacity duration-200",
                 )}
                 onMouseDown={(event) => {
@@ -1270,6 +1336,130 @@ export function Composer({
                     blocks.length === 1 && block.value.length === 0;
                   const collapsed = !block.value && !isLastText;
                   const widthCh = Math.max(block.value.length + 1, 1);
+                  const fieldClassName = cn(
+                    "bg-transparent text-[16px] leading-5 outline-none placeholder:text-muted-foreground sm:text-[14px]",
+                    isLastText
+                      ? "min-h-5 min-w-0 w-full flex-1 basis-full resize-none overflow-y-auto"
+                      : collapsed
+                        ? "w-0 max-w-0 overflow-hidden p-0"
+                        : "shrink-0",
+                  );
+                  const fieldStyle =
+                    isLastText || collapsed
+                      ? undefined
+                      : {
+                          width: `${widthCh}ch`,
+                          maxWidth: "100%",
+                        };
+
+                  if (isLastText) {
+                    return (
+                      <textarea
+                        key={block.key}
+                        ref={(el) => {
+                          if (el) {
+                            textInputRefs.current.set(block.key, el);
+                            textRef.current = el;
+                            if (!dictatingActive) {
+                              syncComposerFieldHeight(el, composerMaxLines);
+                            }
+                          } else {
+                            textInputRefs.current.delete(block.key);
+                          }
+                        }}
+                        value={block.value}
+                        rows={1}
+                        placeholder={showPlaceholder ? hint : undefined}
+                        autoFocus={autoFocus && index === 0}
+                        enterKeyHint="send"
+                        autoComplete="off"
+                        onFocus={(event) => {
+                          focusedTextKeyRef.current = block.key;
+                          textCursorRef.current =
+                            event.target.selectionStart ?? 0;
+                          suppressAutoFocusRef.current = false;
+                          onFocus?.();
+                          window.setTimeout(() => {
+                            event.target.scrollIntoView({
+                              block: "nearest",
+                              inline: "nearest",
+                            });
+                            window.scrollTo(0, 0);
+                          }, 50);
+                        }}
+                        onSelect={(event) => {
+                          textCursorRef.current =
+                            event.currentTarget.selectionStart ?? 0;
+                        }}
+                        onChange={(event) => {
+                          if (dictatingActive) return;
+                          const next = event.target.value;
+                          textCursorRef.current =
+                            event.target.selectionStart ?? next.length;
+                          setBlocks((current) =>
+                            updateTextBlock(current, block.key, next),
+                          );
+                          syncComposerFieldHeight(
+                            event.currentTarget,
+                            composerMaxLines,
+                          );
+                          if (landing || stayInPlace) return;
+                          if (projectId) return;
+                          if (next.trim() && isChatSpace(spaceId)) {
+                            armChatInterface(spaceId);
+                          } else if (
+                            !next.trim() &&
+                            !thread &&
+                            connectorsFromBlocks(blocks).length === 0
+                          ) {
+                            collapseDraft();
+                          }
+                        }}
+                        onKeyDown={(event) => {
+                          if (dictatingActive) {
+                            event.preventDefault();
+                            return;
+                          }
+                          textCursorRef.current =
+                            event.currentTarget.selectionStart ?? 0;
+                          if (
+                            event.key === "Backspace" &&
+                            event.currentTarget.selectionStart === 0 &&
+                            event.currentTarget.selectionEnd === 0 &&
+                            block.value.length === 0
+                          ) {
+                            const removed = backspaceRemoveConnector(
+                              blocks,
+                              block.key,
+                            );
+                            if (removed) {
+                              event.preventDefault();
+                              setBlocks(removed.blocks);
+                              if (removed.focusKey) {
+                                focusTextKey(removed.focusKey);
+                              }
+                              return;
+                            }
+                          }
+                          if (
+                            event.key === "/" &&
+                            value === "" &&
+                            !event.metaKey &&
+                            !event.ctrlKey
+                          ) {
+                            event.preventDefault();
+                            toggleMenu("plus");
+                            return;
+                          }
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            submit();
+                          }
+                        }}
+                        className={fieldClassName}
+                      />
+                    );
+                  }
 
                   return (
                     <input
@@ -1277,30 +1467,19 @@ export function Composer({
                       ref={(el) => {
                         if (el) {
                           textInputRefs.current.set(block.key, el);
-                          if (isLastText) textRef.current = el;
                         } else {
                           textInputRefs.current.delete(block.key);
                         }
                       }}
                       value={block.value}
                       size={1}
-                      placeholder={showPlaceholder ? hint : undefined}
-                      autoFocus={autoFocus && isLastText && index === 0}
-                      enterKeyHint="send"
+                      placeholder={undefined}
                       autoComplete="off"
                       onFocus={(event) => {
                         focusedTextKeyRef.current = block.key;
                         textCursorRef.current = event.target.selectionStart ?? 0;
                         suppressAutoFocusRef.current = false;
                         onFocus?.();
-                        if (!isLastText) return;
-                        window.setTimeout(() => {
-                          event.target.scrollIntoView({
-                            block: "nearest",
-                            inline: "nearest",
-                          });
-                          window.scrollTo(0, 0);
-                        }, 50);
                       }}
                       onSelect={(event) => {
                         textCursorRef.current =
@@ -1314,17 +1493,6 @@ export function Composer({
                         setBlocks((current) =>
                           updateTextBlock(current, block.key, next),
                         );
-                        if (landing || stayInPlace) return;
-                        if (projectId) return;
-                        if (next.trim() && isChatSpace(spaceId)) {
-                          armChatInterface(spaceId);
-                        } else if (
-                          !next.trim() &&
-                          !thread &&
-                          connectorsFromBlocks(blocks).length === 0
-                        ) {
-                          collapseDraft();
-                        }
                       }}
                       onKeyDown={(event) => {
                         if (dictatingActive) {
@@ -1352,37 +1520,13 @@ export function Composer({
                             return;
                           }
                         }
-                        if (
-                          event.key === "/" &&
-                          value === "" &&
-                          !event.metaKey &&
-                          !event.ctrlKey
-                        ) {
-                          event.preventDefault();
-                          toggleMenu("plus");
-                          return;
-                        }
                         if (event.key === "Enter" && !event.shiftKey) {
                           event.preventDefault();
                           submit();
                         }
                       }}
-                      className={cn(
-                        "bg-transparent text-[16px] leading-5 outline-none placeholder:text-muted-foreground sm:text-[14px]",
-                        isLastText
-                          ? "min-w-0 flex-1 basis-[3ch]"
-                          : collapsed
-                            ? "w-0 max-w-0 overflow-hidden p-0"
-                            : "shrink-0",
-                      )}
-                      style={
-                        isLastText || collapsed
-                          ? undefined
-                          : {
-                              width: `${widthCh}ch`,
-                              maxWidth: "100%",
-                            }
-                      }
+                      className={fieldClassName}
+                      style={fieldStyle}
                     />
                   );
                 })}

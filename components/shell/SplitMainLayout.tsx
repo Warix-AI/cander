@@ -8,6 +8,7 @@ import { MobileContentPager } from "@/components/shell/MobileContentPager";
 import { useApp } from "@/components/app/AppProvider";
 import {
   canUseRightPanel,
+  NEW_CHAT_CHOICE_PANEL_RATIO,
   PANEL_RATIO_WIDE_FLOOR,
   PINNED_CHAT_WIDTH,
 } from "@/lib/right-panel";
@@ -38,11 +39,15 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
   const panelOn = panelMode !== "collapsed";
   const immersive = panelMode === "immersive";
   const wide = panelMode === "wide";
+  // Compact only for home new-chat choice (“What would you like to do?”).
+  const choicePanel = view === "chat" && !spaceId && !projectId;
   const panelPct = immersive
     ? 100
-    : wide
-      ? Math.max(panelRatio, PANEL_RATIO_WIDE_FLOOR) * 100
-      : panelRatio * 100;
+    : choicePanel
+      ? NEW_CHAT_CHOICE_PANEL_RATIO * 100
+      : wide
+        ? Math.max(panelRatio, PANEL_RATIO_WIDE_FLOOR) * 100
+        : panelRatio * 100;
   const canPanel = canUseRightPanel({
     view,
     thread,

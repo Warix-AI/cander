@@ -8,6 +8,7 @@ import type {
   AiGenerateResult,
 } from "@/lib/ai/runtime/types";
 import type { AiToolCallResult } from "@/lib/ai/runtime/tools";
+import type { LiveTurnLatencySession } from "../live-turn-latency.ts";
 
 export type AgentTurnResult = AiGenerateResult & {
   toolResults?: AiToolCallResult[];
@@ -37,6 +38,8 @@ export type AgentTurnOptions = {
   confirmedToolCallId?: string | null;
   selectedConnectionId?: string | null;
   selectedConnectionIds?: string[] | null;
+  /** Phase 0 latency session — optional; never required for correctness. */
+  latency?: LiveTurnLatencySession;
 };
 
 let agentV2EnabledCache: boolean | null = null;
@@ -76,7 +79,26 @@ export async function runAssistantTurn(
   try {
     opts?.onProgress?.({ phase: "thinking", label: "Thinking" });
 
-    if (await probeAgentRuntimeV2()) {
+    const latency = opts?.latency;
+    latency?.mark("agent_probe_start");
+
+    const { isRawOpenAIModeEnabled } = await import(
+      "@/lib/ai/raw-openai/flags"
+    );
+    const connectorScoped = Boolean(
+      opts?.selectedConnectionId ||
+        (opts?.selectedConnectionIds && opts.selectedConnectionIds.length > 0),
+    );
+    // Default chat uses streamed raw OpenAI (ChatGPT-style tokens).
+    // Connector-scoped turns still use the agent loop.
+    const preferRawChat = isRawOpenAIModeEnabled() && !connectorScoped;
+
+    const agentV2 = preferRawChat ? false : await probeAgentRuntimeV2();
+    latency?.mark("agent_probe_end");
+    latency?.setSignals({ agentV2 });
+
+    if (agentV2) {
+      latency?.setTransport("agent");
       const { runAgentClientTransport } = await import(
         "@/lib/ai/runtime/agent-client"
       );
@@ -88,12 +110,14 @@ export async function runAssistantTurn(
       "@/lib/ai/connectors/comms-intent"
     );
     if (isCommsConnectorTurn(request.content, request.messages)) {
+      latency?.setTransport("comms");
       const { runCommsConnectorTurn } = await import(
         "@/lib/ai/connectors/comms-turn"
       );
       return runCommsConnectorTurn(request, opts);
     }
 
+    latency?.setTransport("raw");
     const { runRawOpenAITurn } = await import("@/lib/ai/raw-openai/run-turn");
     return runRawOpenAITurn(request, opts);
   } finally {

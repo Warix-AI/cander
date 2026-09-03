@@ -15,6 +15,10 @@ import {
 } from "@/components/spaces/NewExploreMenu";
 import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flow";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
+import {
+  SPACE_EMPTY_COPY,
+  SpaceEmptyCard,
+} from "@/components/spaces/SpaceEmptyCard";
 import { editedMeta } from "@/lib/format-relative-time";
 import { projectCoverImageSrc } from "@/lib/project-cover";
 import { useSpaceProjects } from "@/lib/hooks/use-space-query";
@@ -31,7 +35,7 @@ export function ResearchDashboard() {
     mobileSurface,
     view,
   } = useApp();
-  const { openCreate, modal } = useCreateProjectFlow(openProject);
+  const { openCreate, busy, modal } = useCreateProjectFlow(openProject);
   const mobile = useMobileShell();
   const chatClosed = useSpaceChatClosed();
   const hoistFilters =
@@ -53,6 +57,19 @@ export function ResearchDashboard() {
       })),
     [spaceProjects],
   );
+
+  const copy = SPACE_EMPTY_COPY.research;
+  const explore = EXPLORE_CREATE_OPTIONS[0]!;
+
+  const startExploreProject = (title: string) => {
+    if (busy) return;
+    openCreate({
+      space: "research",
+      kind: explore.kind,
+      defaultTitle: title,
+      summary: explore.summary,
+    });
+  };
 
   return (
     <>
@@ -76,13 +93,7 @@ export function ResearchDashboard() {
               id: "new-project",
               label: "New project",
               onClick: () => {
-                const item = EXPLORE_CREATE_OPTIONS[0]!;
-                openCreate({
-                  space: "research",
-                  kind: item.kind,
-                  defaultTitle: item.title,
-                  summary: item.summary,
-                });
+                startExploreProject(explore.title);
               },
             },
           ]}
@@ -107,7 +118,16 @@ export function ResearchDashboard() {
               kind="paper"
               items={projectItems}
               onOpen={openProject}
-              empty="No searches yet. Start a new search to open a tab group."
+              empty={
+                <SpaceEmptyCard
+                  space="research"
+                  title={copy.title}
+                  description={copy.description}
+                  actionLabel={copy.actionLabel}
+                  busy={busy}
+                  onAction={() => startExploreProject(explore.title)}
+                />
+              }
             />
           )}
         </div>

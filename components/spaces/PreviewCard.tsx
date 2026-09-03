@@ -1,17 +1,21 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState } from "react";
 import {
-  Briefcase,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
   CalendarClock,
   Ellipsis,
   FileText,
   Folder,
   FolderOpen,
-  Hammer,
   Image,
   ImagePlus,
   Link2,
+  MonitorPlay,
   Pencil,
   Pin,
   Sparkles,
@@ -25,13 +29,16 @@ import {
 } from "@/components/browser/ProjectMobileSheets";
 import { DefaultChatPreviewWash } from "@/components/spaces/BannerWash";
 import { Dropdown } from "@/components/ui/Controls";
-import {
-  useSpaceAttachments,
-  useSpaceMutation,
-} from "@/lib/hooks/use-space-query";
+import { useSpaceMutation } from "@/lib/hooks/use-space-query";
 import { useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
 import { normalizeProjectTitle } from "@/lib/project-name";
 import {
+  BANNER_PRESETS,
+  type BannerKey,
+  type BannerPresetId,
+} from "@/lib/space-banners";
+import {
+  encodeGradientCover,
   GENERATED_FIRST_COVER,
   projectCoverGradientClass,
   projectCoverImageSrc,
@@ -40,14 +47,10 @@ import {
   fetchFirstStudioGeneratedAsset,
   uploadStudioProjectAsset,
 } from "@/lib/studio-assets-client";
-import type { SpaceAttachment } from "@/lib/space-entities";
-import type { BannerKey } from "@/lib/space-banners";
 import type { SpaceId, SpaceLayout } from "@/lib/types";
 import type { IndexEntryKind } from "@/lib/space-index";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
-
-const PreviewAttachmentsContext = createContext<SpaceAttachment[] | null>(null);
 
 export type PreviewKind = "product" | "paper" | "skill" | "schedule" | "file";
 
@@ -86,20 +89,23 @@ export function PreviewGrid({
   layout: SpaceLayout;
   items: PreviewEntry[];
   onOpen: (projectId: string) => void;
-  empty: string;
+  empty: ReactNode;
   kind?: PreviewKind;
   dense?: boolean;
 }) {
-  const { data: attachments } = useSpaceAttachments();
-
   if (!items.length) {
+    if (typeof empty === "string") {
+      return (
+        <p className="mt-3 py-4 text-[13px] text-muted-foreground">{empty}</p>
+      );
+    }
     return (
-      <p className="mt-3 py-4 text-[13px] text-muted-foreground">{empty}</p>
+      <div className="flex w-full justify-center px-2 pt-6 pb-20">{empty}</div>
     );
   }
 
-  const body =
-    layout === "list" ? (
+  if (layout === "list") {
+    return (
       <div>
         {items.map((item, index) => (
           <PreviewListRow
@@ -111,31 +117,28 @@ export function PreviewGrid({
           />
         ))}
       </div>
-    ) : (
-      <div
-        className={cn(
-          "grid gap-x-3 gap-y-6",
-          dense
-            ? "grid-cols-1 @min-[480px]:grid-cols-2"
-            : "grid-cols-1 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3",
-        )}
-      >
-        {items.map((item, index) => (
-          <PreviewCard
-            key={item.id}
-            item={item}
-            index={index}
-            kind={item.kind ?? kind}
-            onOpen={onOpen}
-          />
-        ))}
-      </div>
     );
+  }
 
   return (
-    <PreviewAttachmentsContext.Provider value={attachments}>
-      {body}
-    </PreviewAttachmentsContext.Provider>
+    <div
+      className={cn(
+        "grid gap-x-3 gap-y-6",
+        dense
+          ? "grid-cols-1 @min-[480px]:grid-cols-2"
+          : "grid-cols-1 @min-[440px]:grid-cols-2 @min-[720px]:grid-cols-3",
+      )}
+    >
+      {items.map((item, index) => (
+        <PreviewCard
+          key={item.id}
+          item={item}
+          index={index}
+          kind={item.kind ?? kind}
+          onOpen={onOpen}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -411,7 +414,7 @@ function PreviewListRow({
   onOpen: (projectId: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-[10px] py-2 transition-colors duration-200 hover:bg-muted/40 dark:hover:bg-muted/30">
+    <div className="flex items-center gap-3 rounded-[10px] px-3 py-2 transition-colors duration-200 hover:bg-muted/40 dark:hover:bg-muted/30">
       <button
         type="button"
         onClick={() => onOpen(item.projectId)}
@@ -480,24 +483,21 @@ function PreviewActions({
     setPin,
     clearPin,
     workspaceId,
-    promoteToWork,
-    promoteToBuild,
     deleteChat,
     deleteProjectCompletely,
   } = useApp();
   const mobile = useMobileShell();
   const ctx = useWorkspaceCtx();
-  const { attachToWork, detachFromWork, updateProject } = useSpaceMutation();
-  const attachments = useContext(PreviewAttachmentsContext) ?? [];
+  const { updateProject } = useSpaceMutation();
   const tier = pinTier("project", item.projectId);
   const pinned = Boolean(tier);
-  const inWork = attachments.some((row) => row.targetId === item.projectId);
   const isChat = item.indexKind === "thread";
   const isProject =
     item.indexKind === "project" ||
     (!item.indexKind && (kind === "product" || kind === "paper"));
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -543,12 +543,21 @@ function PreviewActions({
     }
   };
 
-  const applyCover = async (cover: string) => {
-    await updateProject(ctx, item.projectId, { cover });
+  const applyCover = async (cover: string | null) => {
+    await updateProject(ctx, item.projectId, { cover: cover ?? "" });
+  };
+
+  const useLivePreview = () => {
+    void applyCover("");
   };
 
   const choosePreviewPhoto = () => {
     coverFileRef.current?.click();
+  };
+
+  const pickGradient = (preset: BannerPresetId) => {
+    void applyCover(encodeGradientCover(preset));
+    setPreviewOpen(false);
   };
 
   const onCoverFile = (file: File | undefined) => {
@@ -558,17 +567,21 @@ function PreviewActions({
       const result = reader.result;
       if (typeof result !== "string") return;
       void (async () => {
-        try {
-          const stored = await uploadStudioProjectAsset({
-            workspaceId,
-            projectId: item.projectId,
-            dataUrl: result,
-            source: "upload",
-          });
-          await applyCover(stored.url);
-        } catch {
-          await applyCover(result);
+        if (isStudio) {
+          try {
+            const stored = await uploadStudioProjectAsset({
+              workspaceId,
+              projectId: item.projectId,
+              dataUrl: result,
+              source: "upload",
+            });
+            await applyCover(stored.url);
+            return;
+          } catch {
+            // Fall through to inline data URL.
+          }
         }
+        await applyCover(result);
       })();
     };
     reader.readAsDataURL(file);
@@ -679,26 +692,8 @@ function PreviewActions({
 
   const menuBody = (
     <>
-      <SheetAction
-        icon={FolderOpen}
-        label="Open"
-        onClick={() =>
-          runAndClose(() => {
-            onOpen(item.projectId);
-          })
-        }
-      />
       {kind === "product" || kind === "paper" ? (
         <>
-          <SheetAction
-            icon={Pencil}
-            label="Rename project"
-            onClick={() =>
-              runAndClose(() => {
-                setRenameOpen(true);
-              })
-            }
-          />
           <SheetAction
             icon={Pin}
             label={pinned ? "Unpin" : "Pin"}
@@ -710,142 +705,66 @@ function PreviewActions({
             }
           />
           <SheetAction
+            icon={FolderOpen}
+            label="Open"
+            onClick={() =>
+              runAndClose(() => {
+                onOpen(item.projectId);
+              })
+            }
+          />
+          <SheetAction
+            icon={Pencil}
+            label="Rename project"
+            onClick={() =>
+              runAndClose(() => {
+                setRenameOpen(true);
+              })
+            }
+          />
+          <SheetAction
             icon={Link2}
             label="Copy link"
             onClick={() => runAndClose(copyLink)}
           />
-          {isStudio ? (
-            <>
-              <SheetAction
-                icon={ImagePlus}
-                label="Choose preview photo"
-                onClick={() =>
-                  runAndClose(() => {
-                    choosePreviewPhoto();
-                  })
-                }
-              />
-              <SheetAction
-                icon={Image}
-                label="Use first generated image"
-                onClick={() =>
-                  runAndClose(() => {
-                    useFirstGeneratedPreview();
-                  })
-                }
-              />
-            </>
-          ) : null}
-          {kind === "product" ? (
-            <SheetAction
-              icon={Briefcase}
-              label={inWork ? "Remove from Work" : "Add to Work"}
-              onClick={() =>
-                runAndClose(() => {
-                  if (inWork) {
-                    void detachFromWork(`attach-${item.projectId}`);
-                  } else {
-                    void attachToWork(ctx, {
-                      type: "project",
-                      id: item.projectId,
-                      space: "build",
-                      workspaceId,
-                      label: item.name,
-                    });
-                  }
-                })
-              }
-            />
-          ) : (
-            <>
-              <SheetAction
-                icon={Hammer}
-                label="Use in Build"
-                onClick={() =>
-                  runAndClose(() => {
-                    promoteToBuild({
-                      type: "source",
-                      id: item.projectId,
-                      space: "research",
-                      workspaceId,
-                      label: item.name,
-                      snapshot: item.meta,
-                    });
-                  })
-                }
-              />
-              <SheetAction
-                icon={Briefcase}
-                label="Add to Work"
-                onClick={() =>
-                  runAndClose(() => {
-                    promoteToWork({
-                      type: "source",
-                      id: item.projectId,
-                      space: "research",
-                      workspaceId,
-                      label: item.name,
-                    });
-                  })
-                }
-              />
-            </>
-          )}
-        </>
-      ) : kind === "file" ? (
-        <>
           <SheetAction
-            icon={Hammer}
-            label="Use in Build"
+            icon={MonitorPlay}
+            label="Live preview"
             onClick={() =>
               runAndClose(() => {
-                promoteToBuild({
-                  type: "source",
-                  id: item.projectId,
-                  space: "research",
-                  workspaceId,
-                  label: item.name,
-                  snapshot: item.meta,
-                });
-              })
-            }
-          />
-          <SheetAction
-            icon={Briefcase}
-            label="Add to Work"
-            onClick={() =>
-              runAndClose(() => {
-                promoteToWork({
-                  type: "source",
-                  id: item.projectId,
-                  space: "research",
-                  workspaceId,
-                  label: item.name,
-                });
+                setPreviewOpen(true);
               })
             }
           />
         </>
-      ) : null}
+      ) : (
+        <SheetAction
+          icon={FolderOpen}
+          label="Open"
+          onClick={() =>
+            runAndClose(() => {
+              onOpen(item.projectId);
+            })
+          }
+        />
+      )}
       {deleteMenuItems}
     </>
   );
 
   return (
     <span className="flex shrink-0 items-center">
-      {isStudio ? (
-        <input
-          ref={coverFileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            onCoverFile(file);
-          }}
-        />
-      ) : null}
+      <input
+        ref={coverFileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          onCoverFile(file);
+        }}
+      />
       {mobile ? (
         <>
           <button
@@ -890,30 +809,8 @@ function PreviewActions({
         >
           {(close) => (
             <>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  onOpen(item.projectId);
-                  close();
-                }}
-                className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-              >
-                Open
-              </button>
               {kind === "product" || kind === "paper" ? (
                 <>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setRenameOpen(true);
-                      close();
-                    }}
-                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                  >
-                    Rename project
-                  </button>
                   {!pinned ? (
                     <button
                       type="button"
@@ -943,6 +840,28 @@ function PreviewActions({
                     type="button"
                     role="menuitem"
                     onClick={() => {
+                      onOpen(item.projectId);
+                      close();
+                    }}
+                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                  >
+                    Open
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setRenameOpen(true);
+                      close();
+                    }}
+                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                  >
+                    Rename project
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
                       copyLink();
                       close();
                     }}
@@ -950,133 +869,31 @@ function PreviewActions({
                   >
                     Copy link
                   </button>
-                  {isStudio ? (
-                    <>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          choosePreviewPhoto();
-                          close();
-                        }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                      >
-                        Choose preview photo
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          useFirstGeneratedPreview();
-                          close();
-                        }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                      >
-                        Use first generated image
-                      </button>
-                    </>
-                  ) : null}
-                  {kind === "product" ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        if (inWork) {
-                          void detachFromWork(`attach-${item.projectId}`);
-                        } else {
-                          void attachToWork(ctx, {
-                            type: "project",
-                            id: item.projectId,
-                            space: "build",
-                            workspaceId,
-                            label: item.name,
-                          });
-                        }
-                        close();
-                      }}
-                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                    >
-                      {inWork ? "Remove from Work" : "Add to Work"}
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          promoteToBuild({
-                            type: "source",
-                            id: item.projectId,
-                            space: "research",
-                            workspaceId,
-                            label: item.name,
-                            snapshot: item.meta,
-                          });
-                          close();
-                        }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                      >
-                        Use in Build
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          promoteToWork({
-                            type: "source",
-                            id: item.projectId,
-                            space: "research",
-                            workspaceId,
-                            label: item.name,
-                          });
-                          close();
-                        }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                      >
-                        Add to Work
-                      </button>
-                    </>
-                  )}
-                </>
-              ) : kind === "file" ? (
-                <>
                   <button
                     type="button"
                     role="menuitem"
                     onClick={() => {
-                      promoteToBuild({
-                        type: "source",
-                        id: item.projectId,
-                        space: "research",
-                        workspaceId,
-                        label: item.name,
-                        snapshot: item.meta,
-                      });
+                      setPreviewOpen(true);
                       close();
                     }}
                     className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
                   >
-                    Use in Build
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      promoteToWork({
-                        type: "source",
-                        id: item.projectId,
-                        space: "research",
-                        workspaceId,
-                        label: item.name,
-                      });
-                      close();
-                    }}
-                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
-                  >
-                    Add to Work
+                    Live preview
                   </button>
                 </>
-              ) : null}
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    onOpen(item.projectId);
+                    close();
+                  }}
+                  className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                >
+                  Open
+                </button>
+              )}
               {deleteDesktopItems(close)}
             </>
           )}
@@ -1179,6 +996,201 @@ function PreviewActions({
               >
                 OK
               </button>
+            </div>
+          </div>
+        )
+      ) : null}
+      {previewOpen ? (
+        mobile ? (
+          <MobileBottomSheet
+            open={previewOpen}
+            onClose={() => setPreviewOpen(false)}
+            mode="space"
+          >
+            <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-2">
+              <p className="text-[1.25rem] font-semibold tracking-[-0.02em]">
+                Live preview
+              </p>
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                Choose how this project card looks.
+              </p>
+              <div className="mt-4 space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    useLivePreview();
+                    setPreviewOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-[12px] border border-border px-3 py-2.5 text-left hover:bg-muted/50"
+                >
+                  <MonitorPlay className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.6} />
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium">Live preview</span>
+                    <span className="block text-[12px] text-muted-foreground">
+                      First tab in the project
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    choosePreviewPhoto();
+                    setPreviewOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-[12px] border border-border px-3 py-2.5 text-left hover:bg-muted/50"
+                >
+                  <ImagePlus className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.6} />
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium">Upload image</span>
+                    <span className="block text-[12px] text-muted-foreground">
+                      Custom cover photo
+                    </span>
+                  </span>
+                </button>
+                {isStudio ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      useFirstGeneratedPreview();
+                      setPreviewOpen(false);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-[12px] border border-border px-3 py-2.5 text-left hover:bg-muted/50"
+                  >
+                    <Image className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.6} />
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">
+                        First generated image
+                      </span>
+                      <span className="block text-[12px] text-muted-foreground">
+                        Uses the first image you generate
+                      </span>
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+              <p className="mt-4 text-[12px] font-medium text-muted-foreground">
+                Gradient
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2.5">
+                {BANNER_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    aria-label={preset.label}
+                    onClick={() => pickGradient(preset.id)}
+                    className="h-12 w-16 overflow-hidden rounded-[12px] border border-border"
+                  >
+                    <span
+                      className={cn("relative block h-full w-full", preset.className)}
+                    >
+                      <span className="absolute inset-0 bg-black/30" />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </MobileBottomSheet>
+        ) : (
+          <div
+            className="fixed inset-0 z-[60] flex items-start justify-center bg-black/20 pt-24"
+            onClick={(event) => {
+              event.stopPropagation();
+              if (event.target === event.currentTarget) setPreviewOpen(false);
+            }}
+          >
+            <div
+              className="w-full max-w-sm rounded-[16px] border border-border bg-background p-4 shadow-lg"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="text-[14px] font-medium tracking-[-0.01em]">
+                Live preview
+              </p>
+              <p className="mt-1 text-[12.5px] text-muted-foreground">
+                Choose how this project card looks.
+              </p>
+              <div className="mt-3 space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    useLivePreview();
+                    setPreviewOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-[12px] border border-border px-3 py-2.5 text-left hover:bg-muted/50"
+                >
+                  <MonitorPlay className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.6} />
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium">Live preview</span>
+                    <span className="block text-[12px] text-muted-foreground">
+                      First tab in the project
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    choosePreviewPhoto();
+                    setPreviewOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-[12px] border border-border px-3 py-2.5 text-left hover:bg-muted/50"
+                >
+                  <ImagePlus className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.6} />
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium">Upload image</span>
+                    <span className="block text-[12px] text-muted-foreground">
+                      Custom cover photo
+                    </span>
+                  </span>
+                </button>
+                {isStudio ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      useFirstGeneratedPreview();
+                      setPreviewOpen(false);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-[12px] border border-border px-3 py-2.5 text-left hover:bg-muted/50"
+                  >
+                    <Image className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.6} />
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">
+                        First generated image
+                      </span>
+                      <span className="block text-[12px] text-muted-foreground">
+                        Uses the first image you generate
+                      </span>
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+              <p className="mt-3 text-[12px] font-medium text-muted-foreground">
+                Gradient
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {BANNER_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    aria-label={preset.label}
+                    onClick={() => pickGradient(preset.id)}
+                    className="h-10 w-14 overflow-hidden rounded-[10px] border border-border"
+                  >
+                    <span
+                      className={cn("relative block h-full w-full", preset.className)}
+                    >
+                      <span className="absolute inset-0 bg-black/30" />
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setPreviewOpen(false)}
+                  className="h-9 rounded-[10px] px-3 text-[13px] text-muted-foreground hover:bg-muted"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )

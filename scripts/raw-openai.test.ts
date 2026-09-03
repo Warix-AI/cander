@@ -14,6 +14,12 @@ import {
   buildRawOpenAIHistory,
   runRawOpenAITurn,
 } from "../lib/ai/raw-openai/run-turn.ts";
+import { extractOpenAICitations } from "../lib/ai/raw-openai/citations.ts";
+import {
+  encodeRawOpenAIStreamEvent,
+  parseRawOpenAIStreamLine,
+  textDeltaFromOpenAIStreamEvent,
+} from "../lib/ai/raw-openai/stream-events.ts";
 import {
   didOpenAIUseWebSearch,
   isOpenAIWebSearchEnabled,
@@ -116,6 +122,58 @@ describe("OpenAI web search flag", () => {
   });
 });
 
+describe("Raw OpenAI stream events", () => {
+  it("round-trips NDJSON lines", () => {
+    const line = encodeRawOpenAIStreamEvent({ type: "delta", text: "Hi" });
+    const parsed = parseRawOpenAIStreamLine(line);
+    assert.equal(parsed?.type, "delta");
+    if (parsed?.type === "delta") assert.equal(parsed.text, "Hi");
+  });
+
+  it("reads OpenAI output_text.delta events", () => {
+    assert.equal(
+      textDeltaFromOpenAIStreamEvent({
+        type: "response.output_text.delta",
+        delta: "token",
+      }),
+      "token",
+    );
+    assert.equal(
+      textDeltaFromOpenAIStreamEvent({ type: "response.completed" }),
+      "",
+    );
+  });
+
+  it("extracts http url_citation annotations only", () => {
+    const cites = extractOpenAICitations([
+      {
+        type: "message",
+        content: [
+          {
+            type: "output_text",
+            text: "BYU plays Saturday.",
+            annotations: [
+              {
+                type: "url_citation",
+                title: "BYU Athletics",
+                url: "https://byucougars.com/schedule",
+              },
+              {
+                type: "url_citation",
+                title: "bad",
+                url: "javascript:alert(1)",
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    assert.equal(cites.length, 1);
+    assert.equal(cites[0]?.url, "https://byucougars.com/schedule");
+    assert.equal(cites[0]?.title, "BYU Athletics");
+  });
+});
+
 describe("Chat runtime path", () => {
   it("always uses OpenAI", () => {
     assert.equal(resolveAssistantRuntimePath(), "openai");
@@ -188,6 +246,57 @@ describe("Raw OpenAI client turn", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("paints NDJSON deltas as they arrive", async () => {
+    const originalFetch = globalThis.fetch;
+    const deltas: string[] = [];
+    globalThis.fetch = (async () => {
+      const body = [
+        JSON.stringify({ type: "delta", text: "Hel" }),
+        JSON.stringify({ type: "delta", text: "lo" }),
+        JSON.stringify({
+          type: "done",
+          content: "Hello",
+          model: "gpt-5.6-luna",
+          latencyMs: 8,
+          citations: [
+            {
+              id: "s1",
+              title: "BYU Athletics",
+              url: "https://byucougars.com/schedule",
+            },
+          ],
+        }),
+        "",
+      ].join("\n");
+      return new Response(body, {
+        status: 200,
+        headers: { "Content-Type": "application/x-ndjson; charset=utf-8" },
+      });
+    }) as typeof fetch;
+
+    try {
+      const result = await runRawOpenAITurn(
+        {
+          content: "hi there friend",
+          title: "t",
+          workspaceId: "ws",
+          messages: [{ role: "user", content: "hi there friend" }],
+        },
+        {
+          onProgress: (p) => {
+            if (p.contentDelta) deltas.push(p.contentDelta);
+          },
+        },
+      );
+      assert.equal(result.content, "Hello");
+      assert.equal(result.presentationStreamed, true);
+      assert.equal(result.citations?.[0]?.url, "https://byucougars.com/schedule");
+      assert.deepEqual(deltas, ["Hel", "Hello"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe("No client OpenAI secret / no Exa on raw path", () => {
@@ -197,6 +306,8 @@ describe("No client OpenAI secret / no Exa on raw path", () => {
       "lib/ai/raw-openai/flags.ts",
       "lib/ai/raw-openai/path.ts",
       "lib/ai/raw-openai/web-search.ts",
+      "lib/ai/raw-openai/citations.ts",
+      "lib/open-in-app-browser.ts",
       "lib/native/save-image.ts",
       "components/chat/AssistantMessage.tsx",
     ]) {
@@ -213,6 +324,8 @@ describe("No client OpenAI secret / no Exa on raw path", () => {
     assert.equal(src.includes("NEXT_PUBLIC_OPENAI_API_KEY"), false);
     assert.ok(src.includes('type: "web_search"'));
     assert.ok(src.includes("isOpenAIWebSearchEnabled"));
+    assert.ok(src.includes("stream: true"));
+    assert.ok(src.includes("extractOpenAICitations"));
     assert.equal(/\bexa\b/i.test(src), false);
     assert.equal(/\btool_choice\b/.test(src) && !/image_generation/.test(src), false);
   });

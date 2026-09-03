@@ -3,6 +3,8 @@
  * Visible assistant text must never include tools, JSON, or internal payloads.
  */
 
+import { stripInlineCitationMarkers } from "./orchestrator/citations.ts";
+
 export type ParsedToolCall = {
   name: string;
   arguments?: Record<string, unknown>;
@@ -104,7 +106,7 @@ export function sanitizeAssistantVisibleText(content: string): string {
     "",
   );
 
-  return text.trim();
+  return stripInlineCitationMarkers(text).trim();
 }
 
 /** @deprecated Prefer sanitizeAssistantVisibleText */

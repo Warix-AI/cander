@@ -3,6 +3,8 @@ import type { CourierView, NavDestinationId, SpaceId } from "@/lib/types";
 
 /** Default right-panel share when chat + panel are split (higher = narrower chat). */
 export const DEFAULT_PANEL_RATIO = 0.68;
+/** Compact share for new-chat “What would you like to do?” choice panel only. */
+export const NEW_CHAT_CHOICE_PANEL_RATIO = 0.48;
 /** Minimum panel share applied when opening the panel from a collapsed state. */
 export const PANEL_RATIO_OPEN_FLOOR = DEFAULT_PANEL_RATIO;
 /** Wide panel mode never gives the right column less than this share. */
@@ -54,7 +56,7 @@ export function showStandaloneBrowserPanel(opts: {
   if (!opts.standaloneBrowserOpen || opts.projectId) return false;
 
   if (opts.standaloneBrowserEphemeral) {
-    return opts.view === "space" && opts.spaceId === "research";
+    return opts.view === "space" && Boolean(opts.spaceId) && !opts.projectId;
   }
 
   return (

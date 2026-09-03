@@ -68,6 +68,22 @@ export function validateCitations(opts: {
   return { text, strippedUrls };
 }
 
+const CDN_HOST_RE =
+  /(?:^|\.)(?:cloudfront\.net|amazonaws\.com|googleusercontent\.com|fbcdn\.net|akamaized\.net|fastly\.net|cloudflare\.net)$/i;
+
+export function isCdnCitationHost(hostOrUrl: string): boolean {
+  const raw = hostOrUrl.trim();
+  if (!raw) return false;
+  try {
+    const host = raw.includes("://")
+      ? new URL(raw).hostname
+      : raw.replace(/^www\./, "");
+    return CDN_HOST_RE.test(host.replace(/^www\./, "").toLowerCase());
+  } catch {
+    return /cloudfront\.net/i.test(raw);
+  }
+}
+
 /** Remove provider inline citation markers from assistant-visible prose. */
 export function stripInlineCitationMarkers(text: string): string {
   if (!text?.trim()) return text ?? "";
@@ -76,8 +92,25 @@ export function stripInlineCitationMarkers(text: string): string {
   out = out.replace(/\[\d+\](?=[.,;:!?](?:\s|$))/g, "");
   out = out.replace(/\[\d+\]\s*$/g, "");
   out = out.replace(/\[(?:src_|ev_|source_)[\w-]+\]/gi, "");
+  out = out.replace(/【\d+†[^】]*】/g, "");
+  out = out.replace(/cite[^]*/g, "");
+  out = out.replace(
+    /\[[^\]]*(?:cloudfront\.net|amazonaws\.com|googleusercontent\.com)[^\]]*\]\([^)]+\)/gi,
+    "",
+  );
+  out = out.replace(
+    /\(\s*(?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:\/[^\s)]*)?\s*\)/gi,
+    "",
+  );
+  out = out.replace(
+    /\b(?:https?:\/\/)?[a-z0-9.-]+\.cloudfront\.net(?:\/[^\s)\]>"']*)?/gi,
+    "",
+  );
+  out = out.replace(/\*\*\s*\*\*/g, "");
   out = out.replace(/\s+([.,;:!?])/g, "$1");
   out = out.replace(/  +/g, " ");
+  out = out.replace(/[ \t]+\n/g, "\n");
+  out = out.replace(/\n{3,}/g, "\n\n");
   return out.trim();
 }
 

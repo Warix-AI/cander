@@ -15,6 +15,10 @@ import {
 } from "@/components/spaces/NewBuildMenu";
 import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flow";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
+import {
+  SPACE_EMPTY_COPY,
+  SpaceEmptyCard,
+} from "@/components/spaces/SpaceEmptyCard";
 import { editedMeta } from "@/lib/format-relative-time";
 import { projectCoverImageSrc } from "@/lib/project-cover";
 import { useSpaceProjects } from "@/lib/hooks/use-space-query";
@@ -27,6 +31,7 @@ import {
 import { getWorkspaceCatalogSnapshot } from "@/lib/workspace-catalog";
 import { workspaceKindOf } from "@/lib/workspace-kind";
 import { policyFor } from "@/lib/workspace-policy";
+import type { ProjectKind } from "@/lib/space-entities";
 
 export function BuildDashboard() {
   const {
@@ -39,7 +44,7 @@ export function BuildDashboard() {
     mobileSurface,
     view,
   } = useApp();
-  const { openCreate, modal } = useCreateProjectFlow(openProject);
+  const { openCreate, busy, modal } = useCreateProjectFlow(openProject);
   const mobile = useMobileShell();
   const chatClosed = useSpaceChatClosed();
   const hoistFilters =
@@ -72,6 +77,21 @@ export function BuildDashboard() {
       })),
     [spaceProjects, showCreator, actor.id],
   );
+
+  const copy = SPACE_EMPTY_COPY.build;
+
+  const startBuild = (kind: ProjectKind, label: string) => {
+    if (busy) return;
+    const option =
+      BUILD_CREATE_OPTIONS.find((item) => item.kind === kind) ??
+      BUILD_CREATE_OPTIONS[0]!;
+    openCreate({
+      space: "build",
+      kind: option.kind,
+      defaultTitle: `New ${label}`,
+      summary: option.summary,
+    });
+  };
 
   return (
     <>
@@ -116,7 +136,16 @@ export function BuildDashboard() {
               layout={spaceLayout}
               items={projectItems}
               onOpen={openProject}
-              empty="No projects yet. Create one to start building."
+              empty={
+                <SpaceEmptyCard
+                  space="build"
+                  title={copy.title}
+                  description={copy.description}
+                  actionLabel={copy.actionLabel}
+                  busy={busy}
+                  onAction={() => startBuild("app", "App")}
+                />
+              }
             />
           )}
         </div>

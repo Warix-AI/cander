@@ -1,6 +1,7 @@
 import { coerceRichResponse } from "./schema-v2.ts";
 import { richBlocksToChatBlocks } from "./to-chat-blocks.ts";
 import type { ChatBlock } from "../../types.ts";
+import { stripInlineCitationMarkers } from "../../ai/orchestrator/citations.ts";
 
 export type ParsedAssistantContent = {
   content: string;
@@ -11,13 +12,13 @@ export type ParsedAssistantContent = {
 export function parseAssistantRichContent(raw: string): ParsedAssistantContent {
   const trimmed = raw.trim();
   if (!trimmed.startsWith("{")) {
-    return { content: raw };
+    return { content: stripInlineCitationMarkers(raw) };
   }
   try {
     const parsed = JSON.parse(trimmed) as unknown;
     const coerced = coerceRichResponse(parsed, trimmed);
     if (typeof coerced === "string") {
-      return { content: coerced };
+      return { content: stripInlineCitationMarkers(coerced) };
     }
     const blocks = richBlocksToChatBlocks(coerced);
     const textBlock = coerced.blocks.find(
@@ -36,8 +37,11 @@ export function parseAssistantRichContent(raw: string): ParsedAssistantContent {
             : blocks.length
               ? ""
               : raw;
-    return { content, blocks: blocks.length ? blocks : undefined };
+    return {
+      content: stripInlineCitationMarkers(content),
+      blocks: blocks.length ? blocks : undefined,
+    };
   } catch {
-    return { content: raw };
+    return { content: stripInlineCitationMarkers(raw) };
   }
 }

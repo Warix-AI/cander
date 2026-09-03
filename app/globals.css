@@ -1157,6 +1157,41 @@ html:not(.dark) .shell-panel :is(.bg-sidebar, .bg-background) {
   }
 }
 
+/* Compact space empty-card thumbnail — soft ambient wash drift. */
+@keyframes space-empty-shimmer {
+  0% {
+    transform: translateX(-40%);
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: translateX(110%);
+    opacity: 0;
+  }
+}
+
+.space-empty-shimmer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 32%,
+    oklch(1 0 0 / 0.22) 50%,
+    transparent 68%
+  );
+  animation: space-empty-shimmer 6.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .space-empty-shimmer {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 /* Cander mark pinwheel — spin, ease into rest at top, brief pause, repeat. */
 @keyframes cander-pinwheel {
   0% {

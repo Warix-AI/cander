@@ -10,16 +10,19 @@ export type UsageMeterTone = {
 
 export const USAGE_METER_TONES: Record<UsageMeterId, UsageMeterTone> = {
   chat: {
-    bar: "bg-[oklch(0.58_0.18_255)]",
-    track: "bg-[oklch(0.58_0.18_255/0.14)]",
+    bar: "bg-[oklch(0.62_0.17_255)] dark:bg-[oklch(0.72_0.14_255)]",
+    track:
+      "bg-[oklch(0.58_0.18_255/0.16)] dark:bg-[oklch(0.78_0.08_255/0.22)]",
   },
   images: {
-    bar: "bg-[oklch(0.58_0.18_310)]",
-    track: "bg-[oklch(0.58_0.18_310/0.14)]",
+    bar: "bg-[oklch(0.62_0.17_310)] dark:bg-[oklch(0.74_0.14_310)]",
+    track:
+      "bg-[oklch(0.58_0.18_310/0.16)] dark:bg-[oklch(0.78_0.08_310/0.22)]",
   },
   build: {
-    bar: "bg-[oklch(0.58_0.16_155)]",
-    track: "bg-[oklch(0.58_0.16_155/0.14)]",
+    bar: "bg-[oklch(0.62_0.15_155)] dark:bg-[oklch(0.74_0.13_155)]",
+    track:
+      "bg-[oklch(0.58_0.16_155/0.16)] dark:bg-[oklch(0.78_0.07_155/0.22)]",
   },
 };
 

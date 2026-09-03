@@ -30,6 +30,7 @@ import {
   persistGeneratedImageFile,
   type GeneratedImageResult,
 } from "@/lib/ai/raw-openai/media-provider";
+import { extractOpenAICitations } from "@/lib/ai/raw-openai/citations";
 import {
   didOpenAIUseWebSearch,
   isOpenAIWebSearchEnabled,
@@ -42,6 +43,12 @@ import {
   finalizeUsageReservation,
 } from "@/lib/usage/server/guard-route";
 import { parseAssistantRichContent } from "@/lib/usage/response-format/from-assistant-content";
+import {
+  completedResponseFromOpenAIStreamEvent,
+  encodeRawOpenAIStreamEvent,
+  isOpenAIWebSearchStreamEvent,
+  textDeltaFromOpenAIStreamEvent,
+} from "@/lib/ai/raw-openai/stream-events";
 
 export const runtime = "nodejs";
 
@@ -281,7 +288,7 @@ export async function POST(request: Request) {
   if (imageGenEnabled) tools.push(openAIImageGenerationTool());
 
   const client = createOpenAIMediaClient(apiKey);
-  const createParams: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
+  const createParams = {
     model,
     input: input as OpenAI.Responses.ResponseInput,
     ...(tools.length ? { tools } : {}),
@@ -301,6 +308,137 @@ export async function POST(request: Request) {
   });
 
   try {
+    // Conversational turns: stream tokens as OpenAI produces them.
+    // Image generation keeps the existing JSON path (tools + Images API fallback).
+    if (!(imageIntent && imageGenEnabled)) {
+      const encoder = new TextEncoder();
+      const readable = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const write = (event: Parameters<typeof encodeRawOpenAIStreamEvent>[0]) => {
+            controller.enqueue(encoder.encode(encodeRawOpenAIStreamEvent(event)));
+          };
+          try {
+            const openaiStream = await client.responses.create(
+              { ...createParams, stream: true },
+              { signal: request.signal },
+            );
+            let content = "";
+            let webSearchUsed = false;
+            let usage: OpenAI.Responses.Response["usage"] | undefined;
+            let output: OpenAI.Responses.Response["output"] | undefined;
+            for await (const event of openaiStream) {
+              if (isOpenAIWebSearchStreamEvent(event)) {
+                webSearchUsed = true;
+                write({ type: "status", detail: "Searching" });
+              }
+              const delta = textDeltaFromOpenAIStreamEvent(event);
+              if (delta) {
+                content += delta;
+                write({ type: "delta", text: delta });
+              }
+              const completed = completedResponseFromOpenAIStreamEvent(event);
+              if (completed) {
+                usage = completed.usage as OpenAI.Responses.Response["usage"];
+                output = completed.output as OpenAI.Responses.Response["output"];
+              }
+            }
+
+            const generated = extractGeneratedImages(output);
+            const citations = extractOpenAICitations(output);
+            if (didOpenAIUseWebSearch(output)) webSearchUsed = true;
+            const images = await persistGeneratedImages({
+              generated,
+              userId,
+              threadId: body.threadId,
+              client,
+            });
+            if (images.length) {
+              content = content
+                .replace(
+                  /I can[’']t generate images[\s\S]*?(?=\n\n|$)/gi,
+                  "",
+                )
+                .trim();
+            }
+            const rich = parseAssistantRichContent(content);
+            const latencyMs = Date.now() - started;
+            console.log("[RAW_OPENAI_TRACE]", {
+              provider: "openai",
+              mode: "raw_stream",
+              model,
+              webSearchEnabled,
+              webSearchUsed,
+              imageGenerationEnabled: imageGenEnabled,
+              imageIntent,
+              imageGenerationUsed: images.length > 0,
+              attachmentCount: attachmentRefs.filter((a) => a.forCurrentTurn)
+                .length,
+              threadMessageCount: messages.length,
+              inputTokens: usage?.input_tokens,
+              outputTokens: usage?.output_tokens,
+              latencyMs,
+              success: true,
+              threadId: body.threadId ?? undefined,
+            });
+            await finalizeUsageReservation({
+              reservationId: usageReservationId,
+              status: "confirmed",
+              actualUnits: 1,
+            });
+            write({
+              type: "done",
+              content: rich.content,
+              blocks: rich.blocks as Array<Record<string, unknown>> | undefined,
+              images: images.length ? images : undefined,
+              model,
+              webSearchEnabled,
+              webSearchUsed,
+              imageGenerationEnabled: imageGenEnabled,
+              imageGenerationUsed: images.length > 0,
+              citations: citations.length ? citations : undefined,
+              inputTokens: usage?.input_tokens,
+              outputTokens: usage?.output_tokens,
+              latencyMs,
+            });
+          } catch (e) {
+            await finalizeUsageReservation({
+              reservationId: usageReservationId,
+              status: "failed",
+            });
+            const message = e instanceof Error ? e.message : "openai_error";
+            const latencyMs = Date.now() - started;
+            console.log("[RAW_OPENAI_TRACE]", {
+              provider: "openai",
+              mode: "raw_stream",
+              model,
+              webSearchEnabled,
+              webSearchUsed: false,
+              threadMessageCount: messages.length,
+              latencyMs,
+              success: false,
+              error: message.slice(0, 500),
+            });
+            write({
+              type: "error",
+              error: message.slice(0, 500),
+              latencyMs,
+            });
+          } finally {
+            controller.close();
+          }
+        },
+      });
+      return new Response(readable, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/x-ndjson; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        },
+      });
+    }
+
     let response: OpenAI.Responses.Response | null = null;
     let generated: GeneratedImageResult[] = [];
     let content = "";
@@ -368,92 +506,14 @@ export async function POST(request: Request) {
           }
         }
       }
-    } else {
-      response = await client.responses.create(createParams);
-      content =
-        (typeof response.output_text === "string" && response.output_text) ||
-        extractText(response) ||
-        "";
-      generated = extractGeneratedImages(response.output);
-      usage = response.usage;
-      if (generated.length) imagePath = "responses_tool";
     }
 
-    const images: Array<{
-      dataUrl: string;
-      mimeType: string;
-      name: string;
-      attachmentId?: string;
-      openaiFileId?: string;
-    }> = [];
-
-    if (generated.length && userId) {
-      const admin = createSupabaseAdminClient();
-      let threadIdForRow: string | null = null;
-      if (body.threadId) {
-        const { data } = await admin
-          .from("threads")
-          .select("id")
-          .eq("id", body.threadId)
-          .maybeSingle();
-        threadIdForRow = data?.id ?? null;
-      }
-      for (let i = 0; i < generated.length; i++) {
-        const g = generated[i]!;
-        const name = `generated-${i + 1}.png`;
-        try {
-          const persisted = await persistGeneratedImageFile(
-            client,
-            g.dataUrl,
-            name,
-          );
-          const id = newAttachmentId();
-          const { error } = await admin.from("chat_attachments").insert({
-            id,
-            user_id: userId,
-            thread_id: threadIdForRow,
-            message_id: null,
-            filename: name,
-            mime_type: persisted.mimeType,
-            size: persisted.size,
-            attachment_type: "image",
-            openai_file_id: persisted.openaiFileId,
-            status: "pending",
-          });
-          images.push({
-            dataUrl: g.dataUrl,
-            mimeType: g.mimeType,
-            name,
-            ...(error
-              ? {}
-              : {
-                  attachmentId: id,
-                  openaiFileId: persisted.openaiFileId,
-                }),
-          });
-        } catch (e) {
-          console.log("[RAW_OPENAI_TRACE]", {
-            mode: "image_gen_persist",
-            success: false,
-            error: e instanceof Error ? e.message.slice(0, 200) : "fail",
-          });
-          images.push({
-            dataUrl: g.dataUrl,
-            mimeType: g.mimeType,
-            name,
-          });
-        }
-      }
-    } else {
-      for (let i = 0; i < generated.length; i++) {
-        const g = generated[i]!;
-        images.push({
-          dataUrl: g.dataUrl,
-          mimeType: g.mimeType,
-          name: `generated-${i + 1}.png`,
-        });
-      }
-    }
+    const images = await persistGeneratedImages({
+      generated,
+      userId,
+      threadId: body.threadId,
+      client,
+    });
 
     // Never leave the model’s “I can’t generate images” text when we actually
     // produced an image (or when intent failed with a real error above).
@@ -498,6 +558,7 @@ export async function POST(request: Request) {
     });
 
     const rich = parseAssistantRichContent(content);
+    const citations = extractOpenAICitations(response?.output);
 
     return NextResponse.json({
       content: rich.content,
@@ -510,6 +571,7 @@ export async function POST(request: Request) {
       imageGenerationUsed,
       imageIntent,
       imagePath,
+      citations: citations.length ? citations : undefined,
       inputTokens: usage?.input_tokens,
       outputTokens: usage?.output_tokens,
       latencyMs,
@@ -560,4 +622,95 @@ function extractText(response: OpenAI.Responses.Response): string {
     }
   }
   return parts.join("\n").trim();
+}
+
+async function persistGeneratedImages(opts: {
+  generated: GeneratedImageResult[];
+  userId: string | null;
+  threadId?: string | null;
+  client: OpenAI;
+}): Promise<
+  Array<{
+    dataUrl: string;
+    mimeType: string;
+    name: string;
+    attachmentId?: string;
+    openaiFileId?: string;
+  }>
+> {
+  const images: Array<{
+    dataUrl: string;
+    mimeType: string;
+    name: string;
+    attachmentId?: string;
+    openaiFileId?: string;
+  }> = [];
+  const { generated, userId, threadId, client } = opts;
+  if (!generated.length) return images;
+
+  if (!userId) {
+    for (let i = 0; i < generated.length; i++) {
+      const g = generated[i]!;
+      images.push({
+        dataUrl: g.dataUrl,
+        mimeType: g.mimeType,
+        name: `generated-${i + 1}.png`,
+      });
+    }
+    return images;
+  }
+
+  const admin = createSupabaseAdminClient();
+  let threadIdForRow: string | null = null;
+  if (threadId) {
+    const { data } = await admin
+      .from("threads")
+      .select("id")
+      .eq("id", threadId)
+      .maybeSingle();
+    threadIdForRow = data?.id ?? null;
+  }
+  for (let i = 0; i < generated.length; i++) {
+    const g = generated[i]!;
+    const name = `generated-${i + 1}.png`;
+    try {
+      const persisted = await persistGeneratedImageFile(client, g.dataUrl, name);
+      const id = newAttachmentId();
+      const { error } = await admin.from("chat_attachments").insert({
+        id,
+        user_id: userId,
+        thread_id: threadIdForRow,
+        message_id: null,
+        filename: name,
+        mime_type: persisted.mimeType,
+        size: persisted.size,
+        attachment_type: "image",
+        openai_file_id: persisted.openaiFileId,
+        status: "pending",
+      });
+      images.push({
+        dataUrl: g.dataUrl,
+        mimeType: g.mimeType,
+        name,
+        ...(error
+          ? {}
+          : {
+              attachmentId: id,
+              openaiFileId: persisted.openaiFileId,
+            }),
+      });
+    } catch (e) {
+      console.log("[RAW_OPENAI_TRACE]", {
+        mode: "image_gen_persist",
+        success: false,
+        error: e instanceof Error ? e.message.slice(0, 200) : "fail",
+      });
+      images.push({
+        dataUrl: g.dataUrl,
+        mimeType: g.mimeType,
+        name,
+      });
+    }
+  }
+  return images;
 }

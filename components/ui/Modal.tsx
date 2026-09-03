@@ -69,7 +69,7 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={labelledBy}
         className={cn(
-          "relative z-10 overflow-hidden light-surface bg-popover shadow-[0_16px_48px_rgba(0,0,0,0.12)] dark:border dark:border-border dark:bg-transparent dark:shadow-[0_16px_48px_rgba(0,0,0,0.18)]",
+          "relative z-10 overflow-hidden light-surface bg-popover text-popover-foreground shadow-[0_16px_48px_rgba(0,0,0,0.12)] dark:border dark:border-border dark:bg-zinc-900 dark:shadow-[0_20px_56px_rgba(0,0,0,0.45)]",
           edgeToEdge
             ? "h-full max-h-none w-full rounded-none"
             : cn(

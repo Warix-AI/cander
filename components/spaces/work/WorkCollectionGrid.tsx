@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Blocks, Ellipsis, FileText, Pin } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { DefaultChatPreviewWash } from "@/components/spaces/BannerWash";
@@ -155,7 +156,7 @@ function WorkCollectionListRow({
 }) {
   const meta = editedMeta(item.addedAt);
   return (
-    <div className="flex items-center gap-3 rounded-[10px] py-2.5 transition-colors duration-200">
+    <div className="flex items-center gap-3 rounded-[10px] px-3 py-2.5 transition-colors duration-200 hover:bg-muted/40 dark:hover:bg-muted/30">
       <button
         type="button"
         onClick={() => onOpen?.(item)}
@@ -223,12 +224,21 @@ export function WorkCollectionGrid({
   layout,
   items,
   onOpen,
+  empty,
 }: {
   layout: SpaceLayout;
   items: WorkCollectionItem[];
   onOpen?: (item: WorkCollectionItem) => void;
+  empty?: ReactNode;
 }) {
   if (!items.length) {
+    if (empty) {
+      return (
+        <div className="flex w-full justify-center px-2 pt-6 pb-20">
+          {empty}
+        </div>
+      );
+    }
     return (
       <p className="py-4 text-[13px] text-muted-foreground">
         Nothing in this category yet.
