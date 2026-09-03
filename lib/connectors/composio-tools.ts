@@ -7,7 +7,10 @@ export type GmailConnectorToolName =
   | "gmail.read"
   | "gmail.send"
   | "gmail.draft"
-  | "gmail.reply";
+  | "gmail.reply"
+  | "gmail.archive"
+  | "gmail.markRead"
+  | "gmail.markUnread";
 
 export const GMAIL_COMPOSIO_SLUGS: Record<GmailConnectorToolName, string> = {
   "gmail.search": "GMAIL_FETCH_EMAILS",
@@ -15,6 +18,10 @@ export const GMAIL_COMPOSIO_SLUGS: Record<GmailConnectorToolName, string> = {
   "gmail.send": "GMAIL_SEND_EMAIL",
   "gmail.draft": "GMAIL_CREATE_EMAIL_DRAFT",
   "gmail.reply": "GMAIL_REPLY_TO_THREAD",
+  // Label mutations — used by ConnectorOperations (UI), not agent-required.
+  "gmail.archive": "GMAIL_REMOVE_LABEL",
+  "gmail.markRead": "GMAIL_REMOVE_LABEL",
+  "gmail.markUnread": "GMAIL_ADD_LABEL_TO_EMAIL",
 };
 
 const SECRET_KEYS = new Set([
@@ -45,6 +52,33 @@ export function mapGmailToolArguments(
     const messageId = args.messageId ?? args.message_id;
     if (!messageId) throw new Error("Missing required argument: messageId");
     return { message_id: String(messageId) };
+  }
+
+  if (tool === "gmail.archive") {
+    const messageId = args.messageId ?? args.message_id;
+    if (!messageId) throw new Error("Missing required argument: messageId");
+    return {
+      message_id: String(messageId),
+      label_name: "INBOX",
+    };
+  }
+
+  if (tool === "gmail.markRead") {
+    const messageId = args.messageId ?? args.message_id;
+    if (!messageId) throw new Error("Missing required argument: messageId");
+    return {
+      message_id: String(messageId),
+      label_name: "UNREAD",
+    };
+  }
+
+  if (tool === "gmail.markUnread") {
+    const messageId = args.messageId ?? args.message_id;
+    if (!messageId) throw new Error("Missing required argument: messageId");
+    return {
+      message_id: String(messageId),
+      label_ids: ["UNREAD"],
+    };
   }
 
   if (tool === "gmail.reply") {

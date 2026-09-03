@@ -39,6 +39,7 @@ export function usePinnedItems() {
             kind: "connector",
             id: connector.id,
             title: connector.name,
+            icon: connector.id,
           });
         }
         continue;

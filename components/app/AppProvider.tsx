@@ -32,6 +32,7 @@ import {
 import { registerAppActionHandlers } from "@/lib/ai/runtime/app-actions";
 import { executeAuthorizedTool } from "@/lib/ai/runtime/tools";
 import { createApiBundle } from "@/lib/api";
+import { CONNECTOR_CATALOG } from "@/lib/api/connector-catalog";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
 import { resolveChatImageUrl } from "@/lib/chat-attachment-image-url";
 import {
@@ -197,6 +198,7 @@ import {
   summarizeSession,
   threadHasTurns,
   upsertPersistentProjectThread,
+  upsertPersistentConnectorThread,
 } from "@/lib/persistent-chat";
 import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import { dismissNativeKeyboard } from "@/lib/mobile-shell";
@@ -4831,26 +4833,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [spaceId, spaceLibraryOpen]);
 
   const openConnector = useCallback((id: string) => {
-    const chatActive = Boolean(threadId) || drafting;
-    const keepChat = chatActive && spaceId === "connectors" && connectorId === id;
+    const catalog = CONNECTOR_CATALOG.find((item) => item.id === id);
+    const title = catalog?.name ? `${catalog.name}` : "Connector";
+    const snapshot = getChatStoreSnapshot().threads;
+    const { threads: next, id: nextId } = upsertPersistentConnectorThread(
+      snapshot,
+      workspaceId,
+      id,
+      title,
+    );
+    const connectorThread = next.find((item) => item.id === nextId);
+    const hasMessages = threadHasTurns(connectorThread);
 
+    flushSync(() => {
+      threadIdRef.current = nextId;
+      setThreadId(nextId);
+    });
+    setThreads(() => next);
     setView("chat");
     setSpaceId("connectors");
     setConnectorId(id);
     setProjectId(null);
     setJobId(null);
     setSkillId(null);
-    if (!keepChat) {
-      setThreadId(null);
-      setDrafting(true);
-    }
+    setDrafting(!hasMessages);
     setPanelIntent("execute");
     setPanelMode("split");
     setMobileSurface("panel");
     pushTarget({
       view: "chat",
       spaceId: "connectors",
-      threadId: keepChat ? threadId : null,
+      threadId: nextId,
       projectId: null,
       panelMode: "split",
       panelIntent: "execute",
@@ -4858,7 +4871,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       jobId: null,
       skillId: null,
     });
-  }, [pushTarget, threadId, drafting, spaceId, connectorId]);
+  }, [pushTarget, workspaceId, setThreads]);
 
   const openJob = useCallback((id: string) => {
     const chatActive = Boolean(threadId) || drafting;

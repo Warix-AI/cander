@@ -414,6 +414,8 @@ export type Thread = {
   workspaceId: string;
   /** Cross-space link back to a project, when this chat belongs to one. */
   projectId?: string;
+  /** Catalog connector id when this chat belongs to a connector view (e.g. gmail). */
+  connectorId?: string;
   spaceId?: SpaceId;
   updatedAt: string;
   snippet: string;

@@ -8,6 +8,7 @@ import { ResizeHandle } from "@/components/shell/ContextPanel";
 import { SpaceDashboard } from "@/components/shell/SpaceDashboard";
 import { ProjectBrowserPanel } from "@/components/browser/ProjectBrowserPanel";
 import { StandaloneBrowserPanel } from "@/components/browser/StandaloneBrowserPanel";
+import { ConnectorViewHost } from "@/components/connectors/views/ConnectorViewHost";
 import { MobileContentPager } from "@/components/shell/MobileContentPager";
 import { RightPanelToggleDock } from "@/components/shell/PanelToggle";
 import { SpaceRenderModeProvider } from "@/components/spaces/SpaceRenderMode";
@@ -47,12 +48,14 @@ export function SpaceChatLayout() {
     mobileSurface,
     mobileContentSurface,
     projectId,
+    connectorId,
     expandedLayout,
     expandedPinned,
   } = useApp();
   const mobile = useMobileShell();
   const chatActive = drafting || Boolean(thread);
-  const chatArmed = isDockChatSpace(spaceId) && chatActive;
+  const chatArmed =
+    (isDockChatSpace(spaceId) || Boolean(connectorId)) && chatActive;
   const showStandaloneBrowser = showStandaloneBrowserPanel({
     standaloneBrowserOpen,
     standaloneBrowserEphemeral,
@@ -164,6 +167,13 @@ export function SpaceChatLayout() {
               >
                 <ProjectBrowserPanel />
               </div>
+            ) : connectorId ? (
+              <div
+                key={connectorId}
+                className="flex h-full min-h-0 flex-col"
+              >
+                <ConnectorViewHost connectorId={connectorId} />
+              </div>
             ) : showStandaloneBrowser ? (
               <StandaloneBrowserPanel />
             ) : (
@@ -233,7 +243,7 @@ export function SpaceChatLayout() {
       <div
         className={cn(
           "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden @container",
-          projectId || showStandaloneBrowser
+          projectId || connectorId || showStandaloneBrowser
             ? BROWSER_CHROME_BG
             : "bg-space-canvas dark:bg-background",
           chatOpen && liveChatPct > 0 && "border-l border-border/40",
@@ -245,7 +255,9 @@ export function SpaceChatLayout() {
           <div
             className={cn(
               "flex min-h-0 flex-1 flex-col",
-              projectId || showStandaloneBrowser ? "overflow-hidden" : "overflow-y-auto",
+              projectId || connectorId || showStandaloneBrowser
+                ? "overflow-hidden"
+                : "overflow-y-auto",
             )}
           >
             {projectId ? (
@@ -254,6 +266,13 @@ export function SpaceChatLayout() {
                 className="flex min-h-0 flex-1 flex-col"
               >
                 <ProjectBrowserPanel />
+              </div>
+            ) : connectorId ? (
+              <div
+                key={connectorId}
+                className="flex min-h-0 flex-1 flex-col"
+              >
+                <ConnectorViewHost connectorId={connectorId} />
               </div>
             ) : showStandaloneBrowser ? (
               <StandaloneBrowserPanel />

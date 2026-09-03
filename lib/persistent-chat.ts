@@ -8,6 +8,10 @@ export function projectChatId(workspaceId: string, projectId: string) {
   return `t-project-${workspaceId}-${projectId}`;
 }
 
+export function connectorChatId(workspaceId: string, connectorId: string) {
+  return `t-conn-${workspaceId}-${connectorId}`;
+}
+
 /** Active continuous session for a workspace (not per-space). */
 export function continuousChatId(workspaceId: string) {
   return `t-session-${workspaceId}`;
@@ -91,8 +95,10 @@ export function isSpaceAttachedChat(
 ) {
   if (!thread || thread.workspaceId !== workspaceId) return false;
   if (thread.projectId) return true;
+  if (thread.connectorId) return true;
   if (isUniversalDefaultChat(thread, workspaceId)) return true;
   if (thread.id.startsWith(`t-space-${workspaceId}-`)) return true;
+  if (thread.id.startsWith(`t-conn-${workspaceId}-`)) return true;
   return false;
 }
 
@@ -271,6 +277,66 @@ export function upsertPersistentProjectThread(
     };
   }
   const created = emptyPersistentProjectThread(workspaceId, projectId, spaceId);
+  return { threads: [created, ...threads], id: created.id };
+}
+
+export function findPersistentConnectorThread(
+  threads: Thread[],
+  workspaceId: string,
+  connectorId: string,
+) {
+  const id = connectorChatId(workspaceId, connectorId);
+  return (
+    threads.find((item) => item.id === id) ??
+    threads.find(
+      (item) =>
+        item.persistent &&
+        item.workspaceId === workspaceId &&
+        item.connectorId === connectorId,
+    ) ??
+    null
+  );
+}
+
+export function emptyPersistentConnectorThread(
+  workspaceId: string,
+  connectorId: string,
+  title = "Chat",
+): Thread {
+  return {
+    id: connectorChatId(workspaceId, connectorId),
+    title,
+    workspaceId,
+    connectorId,
+    updatedAt: new Date().toISOString(),
+    snippet: "",
+    messages: [],
+    persistent: true,
+    sessionSummary: null,
+  };
+}
+
+export function upsertPersistentConnectorThread(
+  threads: Thread[],
+  workspaceId: string,
+  connectorId: string,
+  title?: string,
+): { threads: Thread[]; id: string } {
+  const found = findPersistentConnectorThread(threads, workspaceId, connectorId);
+  if (found) {
+    if (!title || found.title === title) return { threads, id: found.id };
+    return {
+      threads: threads.map((item) =>
+        item.id === found.id ? { ...item, title } : item,
+      ),
+      id: found.id,
+    };
+  }
+  const created = emptyPersistentConnectorThread(
+    workspaceId,
+    connectorId,
+    title ?? "Chat",
+  );
   return { threads: [created, ...threads], id: created.id };
 }
 

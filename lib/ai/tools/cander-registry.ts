@@ -177,6 +177,66 @@ registerCanderTool({
   },
 });
 
+registerCanderTool({
+  id: "gmail.archive",
+  connectorId: "gmail",
+  capabilityFamily: "email",
+  category: "comms",
+  label: "Archive mail",
+  description: "Remove a Gmail message from the inbox (archive).",
+  risk: "write",
+  confirmationPolicy: "never",
+  defaultEnabled: true,
+  providerTool: "GMAIL_REMOVE_LABEL",
+  inputSchema: {
+    type: "object",
+    required: ["messageId"],
+    properties: {
+      messageId: { type: "string", description: "Gmail message ID." },
+    },
+  },
+});
+
+registerCanderTool({
+  id: "gmail.markRead",
+  connectorId: "gmail",
+  capabilityFamily: "email",
+  category: "comms",
+  label: "Mark read",
+  description: "Mark a Gmail message as read.",
+  risk: "write",
+  confirmationPolicy: "never",
+  defaultEnabled: true,
+  providerTool: "GMAIL_REMOVE_LABEL",
+  inputSchema: {
+    type: "object",
+    required: ["messageId"],
+    properties: {
+      messageId: { type: "string", description: "Gmail message ID." },
+    },
+  },
+});
+
+registerCanderTool({
+  id: "gmail.markUnread",
+  connectorId: "gmail",
+  capabilityFamily: "email",
+  category: "comms",
+  label: "Mark unread",
+  description: "Mark a Gmail message as unread.",
+  risk: "write",
+  confirmationPolicy: "never",
+  defaultEnabled: true,
+  providerTool: "GMAIL_ADD_LABEL_TO_EMAIL",
+  inputSchema: {
+    type: "object",
+    required: ["messageId"],
+    properties: {
+      messageId: { type: "string", description: "Gmail message ID." },
+    },
+  },
+});
+
 // Slack — Phase 4 seed (adapter + lifecycle enable separately)
 registerCanderTool({
   id: "slack.search",

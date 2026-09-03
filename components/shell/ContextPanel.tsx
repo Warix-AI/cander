@@ -3,7 +3,7 @@
 import { BuildPanel } from "@/components/panels/BuildPanel";
 import { ConnectorsPanel } from "@/components/panels/ConnectorsPanel";
 import { AppleHealthConnectorPanel } from "@/components/panels/AppleHealthConnectorPanel";
-import { GmailPanel } from "@/components/panels/gmail/GmailPanel";
+import { GmailConnectorView } from "@/components/connectors/views/GmailConnectorView";
 import { HandshakePanel } from "@/components/panels/handshake/HandshakePanel";
 import { PanelChoiceState } from "@/components/panels/PanelChoiceState";
 import { PanelEmptyState } from "@/components/panels/PanelEmptyState";
@@ -97,7 +97,7 @@ export function ContextPanel() {
         ) : spaceId === "connectors" && connectorId === "handshake" ? (
           <HandshakePanel />
         ) : spaceId === "connectors" && connectorId === "gmail" ? (
-          <GmailPanel />
+          <GmailConnectorView />
         ) : spaceId === "connectors" && connectorId === "apple-health" ? (
           <AppleHealthConnectorPanel />
         ) : spaceId === "connectors" ? (

@@ -6,6 +6,7 @@ export type ThreadRow = {
   workspace_id: string;
   space_id: string | null;
   project_id: string | null;
+  connector_id?: string | null;
   title: string;
   snippet: string;
   shared: boolean;
@@ -47,11 +48,15 @@ export function threadRowToThread(
   row: ThreadRow,
   messages: Message[],
 ): Thread {
+  const connectorFromId = row.id.startsWith(`t-conn-${row.workspace_id}-`)
+    ? row.id.slice(`t-conn-${row.workspace_id}-`.length)
+    : undefined;
   return {
     id: row.id,
     title: row.title,
     workspaceId: row.workspace_id,
     projectId: row.project_id ?? undefined,
+    connectorId: row.connector_id ?? connectorFromId ?? undefined,
     spaceId: (row.space_id as SpaceId | null) ?? undefined,
     updatedAt: row.updated_at,
     snippet: row.snippet,
@@ -78,6 +83,7 @@ export function threadToRow(
     workspace_id: thread.workspaceId,
     space_id: thread.spaceId ?? null,
     project_id: thread.projectId ?? null,
+    connector_id: thread.connectorId ?? null,
     title: thread.title,
     snippet: thread.snippet,
     shared: Boolean(thread.shared),
