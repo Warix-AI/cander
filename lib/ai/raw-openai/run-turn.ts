@@ -52,7 +52,7 @@ type RawDonePayload = {
   webSearchUsed?: boolean;
   imageGenerationEnabled?: boolean;
   imageGenerationUsed?: boolean;
-  citations?: AgentTurnResult["citations"];
+  citations?: unknown;
   inputTokens?: number;
   outputTokens?: number;
   error?: string;

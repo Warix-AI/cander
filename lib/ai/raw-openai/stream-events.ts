@@ -17,13 +17,19 @@ export type RawOpenAIStreamDone = {
   type: "done";
   content: string;
   blocks?: Array<Record<string, unknown>>;
-  images?: Array<Record<string, unknown>>;
+  images?: Array<{
+    dataUrl: string;
+    mimeType?: string;
+    name?: string;
+    attachmentId?: string;
+    openaiFileId?: string;
+  }>;
   model?: string;
   webSearchEnabled?: boolean;
   webSearchUsed?: boolean;
   imageGenerationEnabled?: boolean;
   imageGenerationUsed?: boolean;
-  citations?: Array<Record<string, unknown>>;
+  citations?: unknown;
   inputTokens?: number;
   outputTokens?: number;
   latencyMs?: number;

@@ -84,7 +84,7 @@ export function openUrlInProjectBrowser(opts: {
   url: string;
   title?: string;
 }): boolean {
-  if (!opts.projectId || opts.spaceId === "connectors") return false;
+  if (!opts.projectId) return false;
   const key: ProjectBrowserKey = {
     profileId: opts.profileId,
     workspaceId: opts.workspaceId,
