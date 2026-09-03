@@ -20,7 +20,7 @@ type Body = {
   workspaceId?: string;
   projectId?: string;
   dataUrl?: string;
-  source?: "upload" | "generate" | "remove-bg" | "resize";
+  source?: "upload" | "generate" | "remove-bg" | "resize" | "suggest-edit";
   aspectRatio?: string | null;
 };
 
@@ -87,6 +87,7 @@ const ASSET_SOURCES = new Set<StudioAssetSource>([
   "generate",
   "remove-bg",
   "resize",
+  "suggest-edit",
 ]);
 
 export async function GET(request: Request) {

@@ -106,6 +106,7 @@ export type SettingsTab =
   | "organization"
   | "workspaces"
   | "plans"
+  | "usage"
   | "general"
   | "appearance";
 

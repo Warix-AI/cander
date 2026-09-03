@@ -116,7 +116,7 @@ export function ImageGenerationCard({
     !instant
   ) {
     return (
-      <div className="my-1 flex w-full max-w-[512px] items-center gap-3 rounded-[18px] border border-border bg-muted/20 px-3 py-3">
+      <div className="my-1 flex w-full max-w-[410px] items-center gap-3 rounded-[18px] border border-border bg-muted/20 px-3 py-3">
         <div className="min-w-0 flex-1">
           <p className="text-[13.5px] font-medium">Image unavailable</p>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
@@ -141,7 +141,7 @@ export function ImageGenerationCard({
 
   if (phase === "cancelled") {
     return (
-      <div className="image-gen-card-shell my-1 w-full max-w-[512px] rounded-[18px] border border-border bg-muted/20 px-3 py-3 text-[13px] text-muted-foreground">
+      <div className="image-gen-card-shell my-1 w-full max-w-[410px] rounded-[18px] border border-border bg-muted/20 px-3 py-3 text-[13px] text-muted-foreground">
         Image generation cancelled.
       </div>
     );
@@ -149,7 +149,7 @@ export function ImageGenerationCard({
 
   if (phase === "failed") {
     return (
-      <div className="my-1 flex w-full max-w-[512px] items-center gap-3 rounded-[18px] border border-border bg-muted/20 px-3 py-3">
+      <div className="my-1 flex w-full max-w-[410px] items-center gap-3 rounded-[18px] border border-border bg-muted/20 px-3 py-3">
         <div className="min-w-0 flex-1">
           <p className="text-[13.5px] font-medium">Image generation failed</p>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
@@ -173,7 +173,7 @@ export function ImageGenerationCard({
   }
 
   return (
-    <div className="my-1 flex w-full max-w-[512px] flex-col gap-1">
+    <div className="my-1 flex w-full max-w-[410px] flex-col gap-1">
       <div className="flex items-start gap-2">
       <div
         className="image-gen-card image-gen-card-enter min-w-0 flex-1"

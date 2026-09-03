@@ -1,5 +1,5 @@
 /**
- * POST /api/studio/image-edit — remove background or resize Studio canvas image.
+ * POST /api/studio/image-edit — remove background, resize, or suggest-edit Studio canvas image.
  */
 
 import { NextResponse } from "next/server";
@@ -31,12 +31,27 @@ type Body = {
   workspaceId?: string;
   projectId?: string;
   imageUrl?: string;
-  action?: "remove-bg" | "resize";
+  action?: "remove-bg" | "resize" | "suggest-edit";
   resizePreset?: StudioResizePresetId;
+  prompt?: string;
+  /** Current canvas ratio (e.g. "3:4") — used to pick output size for non-resize edits. */
+  aspectRatio?: string | null;
 };
 
 function presetFor(id: StudioResizePresetId | undefined) {
   return STUDIO_RESIZE_PRESETS.find((item) => item.id === id) ?? null;
+}
+
+function sizeFromAspect(ratio: string | null | undefined): "1024x1024" | "1024x1536" | "1536x1024" {
+  const raw = (ratio || "1:1").trim().replace("/", ":");
+  const [aw, ah] = raw.split(":").map((part) => Number(part.trim()));
+  if (!Number.isFinite(aw) || !Number.isFinite(ah) || aw <= 0 || ah <= 0) {
+    return "1024x1024";
+  }
+  const r = aw / ah;
+  if (r >= 1.2) return "1536x1024";
+  if (r <= 0.85) return "1024x1536";
+  return "1024x1024";
 }
 
 export async function POST(request: Request) {
@@ -71,14 +86,25 @@ export async function POST(request: Request) {
   const projectId = body.projectId?.trim();
   const imageUrl = body.imageUrl?.trim();
   const action = body.action;
+  const suggestPrompt = body.prompt?.trim() ?? "";
   if (!workspaceId || !projectId || !imageUrl || !action) {
     return NextResponse.json(
       { error: "workspaceId, projectId, imageUrl, and action are required." },
       { status: 400 },
     );
   }
-  if (action !== "remove-bg" && action !== "resize") {
+  if (
+    action !== "remove-bg" &&
+    action !== "resize" &&
+    action !== "suggest-edit"
+  ) {
     return NextResponse.json({ error: "Invalid action." }, { status: 400 });
+  }
+  if (action === "suggest-edit" && !suggestPrompt) {
+    return NextResponse.json(
+      { error: "prompt is required for suggest-edit." },
+      { status: 400 },
+    );
   }
 
   const member = await assertWorkspaceMember(workspaceId, auth.user.id);
@@ -128,7 +154,12 @@ export async function POST(request: Request) {
     const prompt =
       action === "remove-bg"
         ? "Remove the background completely. Keep the subject sharp with a fully transparent background. Do not crop the subject."
-        : `Reframe this image to a ${preset!.ratio} ${preset!.label.toLowerCase()} composition. Preserve the subject and important details. Fill the new canvas naturally.`;
+        : action === "suggest-edit"
+          ? `Apply this edit to the image while preserving overall quality and coherence: ${suggestPrompt}`
+          : `Reframe this image to a ${preset!.ratio} ${preset!.label.toLowerCase()} composition. Preserve the subject and important details. Fill the new canvas naturally.`;
+
+    const outputSize =
+      preset?.size ?? sizeFromAspect(body.aspectRatio);
 
     const result = await client.images.edit({
       model: resolveOpenAIImageModel(),
@@ -136,7 +167,7 @@ export async function POST(request: Request) {
         type: mimeType,
       }),
       prompt,
-      size: preset?.size ?? "1024x1024",
+      size: outputSize,
       quality,
       background: action === "remove-bg" ? "transparent" : "opaque",
       output_format: "png",
@@ -156,7 +187,11 @@ export async function POST(request: Request) {
       projectId,
       dataUrl,
       source: action,
-      aspectRatio: preset?.ratio ?? null,
+      aspectRatio:
+        preset?.ratio ??
+        (typeof body.aspectRatio === "string" && body.aspectRatio.trim()
+          ? body.aspectRatio.trim()
+          : null),
     });
 
     await finalizeUsageReservation({

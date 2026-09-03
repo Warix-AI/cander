@@ -1808,9 +1808,10 @@ function studioArtboardStyle(ratioW: number, ratioH: number): {
   width: string;
   height: string;
 } {
+  // ~20% larger than chat gen cards so canvas reads as the primary surface.
   return {
-    width: `min(100cqw, 31.2rem, calc(100cqh * ${ratioW} / ${ratioH}))`,
-    height: `min(100cqh, calc(31.2rem * ${ratioH} / ${ratioW}), calc(100cqw * ${ratioH} / ${ratioW}))`,
+    width: `min(100cqw, 37.44rem, calc(100cqh * ${ratioW} / ${ratioH}))`,
+    height: `min(100cqh, calc(37.44rem * ${ratioH} / ${ratioW}), calc(100cqw * ${ratioH} / ${ratioW}))`,
   };
 }
 
@@ -1882,7 +1883,7 @@ function StudioMediaSurface({
 
   const persistCanvasImage = async (
     dataUrl: string,
-    source: "upload" | "generate" | "remove-bg" | "resize",
+    source: "upload" | "generate" | "remove-bg" | "resize" | "suggest-edit",
     aspectRatio?: string | null,
   ) => {
     if (!projectId) {
@@ -1985,14 +1986,17 @@ function StudioMediaSurface({
   }, [kind, imageJob?.generationId, imageJob?.status, imageJob?.imageUrl]);
 
   const runEdit = async (
-    action: "remove-bg" | "resize",
-    resizePreset?: StudioResizePresetId,
+    action: "remove-bg" | "resize" | "suggest-edit",
+    opts?: { resizePreset?: StudioResizePresetId; prompt?: string },
   ) => {
     if (!projectId || !src || activity) return;
+    const resizePreset = opts?.resizePreset;
     const ratio =
       action === "resize" && resizePreset
         ? studioPresetById(resizePreset).ratio
         : `${naturalRatio.w}:${naturalRatio.h}`;
+    // Switch artboard immediately so the mesh matches the destination frame.
+    setNaturalRatio(studioAspectParts(ratio));
     setActivity({ type: "edit", ratio });
     setError(null);
     try {
@@ -2002,6 +2006,8 @@ function StudioMediaSurface({
         imageUrl: src,
         action,
         resizePreset,
+        prompt: opts?.prompt,
+        aspectRatio: ratio,
       });
       onSrcChange(result.url);
     } catch (err) {
@@ -2079,11 +2085,14 @@ function StudioMediaSurface({
           startUpload(file);
         }}
       />
-      {kind === "studio-image" && hasMedia && !showMesh ? (
+      {kind === "studio-image" && (hasMedia || isGenerating || isEditing) ? (
         <StudioImageToolbar
           busy={canvasBusy}
           onRemoveBackground={() => void runEdit("remove-bg")}
-          onResize={(preset) => void runEdit("resize", preset)}
+          onResize={(preset) => void runEdit("resize", { resizePreset: preset })}
+          onSuggestEdit={(prompt) =>
+            void runEdit("suggest-edit", { prompt })
+          }
         />
       ) : null}
 
@@ -2101,7 +2110,7 @@ function StudioMediaSurface({
       ) : showImageArtboard ? (
         <div className="@container flex min-h-0 flex-1 items-center justify-center px-8 pt-[4.75rem] pb-[4.25rem]">
           <div
-            className="relative overflow-hidden rounded-[18px] bg-neutral-200/80 shadow-[0_10px_32px_rgba(0,0,0,0.08)] dark:bg-neutral-900"
+            className="relative overflow-hidden rounded-[18px] bg-neutral-200/80 shadow-[0_10px_32px_rgba(0,0,0,0.08)] transition-[width,height] duration-300 ease-out dark:bg-neutral-900"
             style={studioArtboardStyle(frameRatio.w, frameRatio.h)}
           >
             {hasMedia && !showMesh ? (
@@ -2193,7 +2202,7 @@ function StudioMediaSurface({
         </div>
       ) : null}
 
-      {hasMedia && !showMesh && (kind === "studio-image" || kind === "studio-video") ? (
+      {hasMedia && (kind === "studio-image" || kind === "studio-video") ? (
         <div className="absolute right-3 bottom-3 z-20 flex items-center gap-1.5">
           <button
             type="button"

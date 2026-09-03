@@ -64,7 +64,7 @@ export async function uploadStudioProjectAsset(opts: {
   workspaceId: string;
   projectId: string;
   dataUrl: string;
-  source?: "upload" | "generate" | "remove-bg" | "resize";
+  source?: "upload" | "generate" | "remove-bg" | "resize" | "suggest-edit";
   aspectRatio?: string | null;
 }): Promise<StudioAssetResult> {
   const headers = await authHeaders();
@@ -150,8 +150,10 @@ export async function editStudioProjectImage(opts: {
   workspaceId: string;
   projectId: string;
   imageUrl: string;
-  action: "remove-bg" | "resize";
+  action: "remove-bg" | "resize" | "suggest-edit";
   resizePreset?: StudioResizePresetId;
+  prompt?: string;
+  aspectRatio?: string | null;
 }): Promise<StudioAssetResult> {
   const headers = await authHeaders();
   const res = await fetch("/api/studio/image-edit", {

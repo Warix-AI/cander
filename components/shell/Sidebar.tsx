@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Re
 import {
   ArrowLeft,
   Building2,
+  ChartNoAxesColumn,
   CreditCard,
   FolderKanban,
   GripVertical,
@@ -48,6 +49,7 @@ const settingsIcons: Record<SettingsTab, typeof Building2> = {
   organization: Building2,
   workspaces: LayoutGrid,
   plans: CreditCard,
+  usage: ChartNoAxesColumn,
   general: UserRound,
   appearance: Palette,
 };

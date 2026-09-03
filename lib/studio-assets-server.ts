@@ -64,7 +64,7 @@ export async function storeStudioAsset(opts: {
   workspaceId: string;
   projectId: string;
   dataUrl: string;
-  source: "upload" | "generate" | "remove-bg" | "resize";
+  source: "upload" | "generate" | "remove-bg" | "resize" | "suggest-edit";
   aspectRatio?: string | null;
 }): Promise<{
   assetId: string;
@@ -115,7 +115,12 @@ export async function storeStudioAsset(opts: {
   };
 }
 
-export type StudioAssetSource = "upload" | "generate" | "remove-bg" | "resize";
+export type StudioAssetSource =
+  | "upload"
+  | "generate"
+  | "remove-bg"
+  | "resize"
+  | "suggest-edit";
 
 export async function listStudioProjectAssets(opts: {
   workspaceId: string;

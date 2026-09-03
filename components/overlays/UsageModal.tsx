@@ -105,7 +105,7 @@ export function UsageModal({
           className="mt-1 text-left text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground"
           onClick={() => {
             onClose();
-            openSettings("general");
+            openSettings("usage");
           }}
         >
           Open in Settings

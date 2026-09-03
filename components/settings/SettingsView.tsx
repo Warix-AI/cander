@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Building2,
+  ChartNoAxesColumn,
   ChevronRight,
   CreditCard,
   ImagePlus,
@@ -19,7 +20,7 @@ import {
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { PlansSettings } from "@/components/settings/PlansSettings";
 import { AccountSecuritySettings } from "@/components/settings/AccountSecuritySettings";
-import { UsageStatusPanel } from "@/components/settings/UsageStatusPanel";
+import { UsageSettings } from "@/components/settings/UsageSettings";
 import {
   SettingsField,
   SettingsFootnote,
@@ -77,6 +78,7 @@ const settingsIcons: Record<SettingsTab, typeof Building2> = {
   organization: Building2,
   workspaces: LayoutGrid,
   plans: CreditCard,
+  usage: ChartNoAxesColumn,
   general: UserRound,
   appearance: Palette,
 };
@@ -192,6 +194,8 @@ export function SettingsView() {
 
       {settingsTab === "plans" ? <PlansSettings /> : null}
 
+      {settingsTab === "usage" ? <UsageSettings /> : null}
+
       {settingsTab === "general" ? (
         <GeneralSettings
           onAfterSignOut={() => leave()}
@@ -237,6 +241,8 @@ export function SettingsView() {
           ) : null}
 
           {settingsTab === "plans" ? <PlansSettings /> : null}
+
+          {settingsTab === "usage" ? <UsageSettings /> : null}
 
           {settingsTab === "general" ? (
             <GeneralSettings onAfterSignOut={() => leave()} />
@@ -906,8 +912,6 @@ function GeneralSettings({
             {profileFields}
           </SettingsGroup>
         )}
-
-        <UsageStatusPanel />
 
         <AccountSecuritySettings onAfterSignOut={onAfterSignOut} />
       </div>
