@@ -18,6 +18,8 @@ export type ComposerConnectorBlock = {
   key: string;
   type: "connector";
   scope: ComposerConnectorScope;
+  /** Trigger token this chip replaced inline (restored when the chip is dismissed). */
+  replacedText?: string;
 };
 
 export type ComposerBlock = ComposerTextBlock | ComposerConnectorBlock;
@@ -39,6 +41,20 @@ export function textFromBlocks(blocks: ComposerBlock[]): string {
     .filter((b): b is ComposerTextBlock => b.type === "text")
     .map((b) => b.value)
     .join("");
+}
+
+/** Plain send/display string with connector labels in chip positions. */
+export function serializeComposerBlocks(blocks: ComposerBlock[]): string {
+  return blocks
+    .map((b) => (b.type === "text" ? b.value : b.scope.label))
+    .join("");
+}
+
+/** Snapshot of inline connectors for the sent user bubble + AI scope. */
+export function composerConnectorsForSend(
+  blocks: ComposerBlock[],
+): ComposerConnectorScope[] {
+  return connectorsFromBlocks(blocks);
 }
 
 export function connectorsFromBlocks(
@@ -162,6 +178,27 @@ export function removeConnectorBlock(
       (b) => !(b.type === "connector" && b.scope.connectionId === connectionId),
     ),
   );
+}
+
+/**
+ * Remove a connector chip and put its replaced trigger word back inline.
+ */
+export function removeConnectorBlockRestoringText(
+  blocks: ComposerBlock[],
+  connectionId: string,
+): ComposerBlock[] {
+  const idx = blocks.findIndex(
+    (b) => b.type === "connector" && b.scope.connectionId === connectionId,
+  );
+  if (idx < 0) return blocks;
+  const chip = blocks[idx] as ComposerConnectorBlock;
+  const restored = chip.replacedText ?? chip.scope.label;
+  const next: ComposerBlock[] = [
+    ...blocks.slice(0, idx),
+    { key: newKey("t"), type: "text", value: restored },
+    ...blocks.slice(idx + 1),
+  ];
+  return normalizeComposerBlocks(next);
 }
 
 export function updateTextBlock(

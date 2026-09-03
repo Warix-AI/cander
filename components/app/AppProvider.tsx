@@ -278,6 +278,12 @@ type SendOpts = {
   selectedConnectionId?: string | null;
   selectedConnectionIds?: string[] | null;
   scopedConnectorId?: string | null;
+  /** Inline composer connectors for the user bubble (and AI scope labels). */
+  composerConnectors?: Array<{
+    connectionId: string;
+    connectorId: string;
+    label: string;
+  }> | null;
 };
 
 type AppContextValue = {
@@ -1948,6 +1954,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const selectedConnectionIds =
         opts?.selectedConnectionIds?.filter(Boolean) ??
         (selectedConnectionId ? [selectedConnectionId] : []);
+      const composerConnectors = (opts?.composerConnectors ?? []).filter(
+        (c) => c.connectionId && c.connectorId && c.label,
+      );
       const attachmentsFromSend = sendAttachments
         .filter((a) => a.type === "image" && a.dataUrl)
         .map((a) => ({
@@ -2078,8 +2087,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         name: item.name,
         ...(item.text ? { text: item.text } : {}),
       }));
-      const displayBlocks = [...imageBlocks, ...fileBlocks];
-      // Bubble shows typed text only — never "[User attached file…]" markers.
+      const connectorBlocks = composerConnectors.map((item) => ({
+        type: "user_connector" as const,
+        connectionId: item.connectionId,
+        connectorId: item.connectorId,
+        label: item.label,
+      }));
+      const displayBlocks = [
+        ...imageBlocks,
+        ...fileBlocks,
+        ...connectorBlocks,
+      ];
+      // Bubble shows typed text with connector labels in chip slots.
       const displayText = trimmed;
       const userMsg: Message = {
         id: nextId("u"),
@@ -2328,7 +2347,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           activeId = upserted.id;
         } else if (useContinuousPersistent) {
           if (detachedDraft) {
-            activeId = threadId ?? nextId("t");
+            // Always land on a real session id — never mint orphan `t-xxxxx`
+            // threads when React threadId was cleared mid-chat.
+            if (
+              threadId &&
+              list.some(
+                (item) =>
+                  item.id === threadId && item.workspaceId === workspaceId,
+              )
+            ) {
+              activeId = threadId;
+            } else {
+              const started = startContinuousChat(list, workspaceId, null);
+              list = started.threads;
+              activeId = started.id;
+            }
           } else {
             const lens =
               chatSpace ??

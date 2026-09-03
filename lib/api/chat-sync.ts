@@ -10,9 +10,12 @@ import {
   subscribeChatRealtime,
   syncThreadsToSupabase,
 } from "@/lib/api/chat-api.supabase";
+import { mergeHydratedThread } from "@/lib/chat-hydrate-merge";
 import { threadHasTurns } from "@/lib/persistent-chat";
-import type { ChatBlock, Thread } from "@/lib/types";
+import type { Thread } from "@/lib/types";
 import type { WorkspaceCtx } from "@/lib/space-entities";
+
+export { mergeHydratedThread } from "@/lib/chat-hydrate-merge";
 
 const SYNC_DEBOUNCE_MS = 600;
 const IMPORT_FLAG_KEY = "courier-chat-imported-v1";
@@ -38,108 +41,6 @@ function hasPendingAiThinking(threads: ReturnType<typeof getChatStoreSnapshot>["
   return threads.some((thread) =>
     thread.messages.some((message) => messageHasPendingAi(message)),
   );
-}
-
-function hasPendingAiInThread(thread: Thread) {
-  return thread.messages.some((message) => messageHasPendingAi(message));
-}
-
-function mergeMessageBlocks(
-  localBlocks: ChatBlock[] | undefined,
-  remoteBlocks: ChatBlock[] | undefined,
-): ChatBlock[] | undefined {
-  if (!remoteBlocks?.length) return localBlocks;
-  if (!localBlocks?.length) return remoteBlocks;
-
-  const merged = remoteBlocks.map((remoteBlock, index) => {
-    const localBlock =
-      localBlocks[index]?.type === remoteBlock.type
-        ? localBlocks[index]
-        : localBlocks.find((candidate) => blocksMatch(candidate, remoteBlock));
-    if (!localBlock || localBlock.type !== remoteBlock.type) return remoteBlock;
-    if (remoteBlock.type === "image" && localBlock.type === "image") {
-      if (!remoteBlock.url?.trim() && localBlock.url?.trim()) {
-        return { ...remoteBlock, url: localBlock.url };
-      }
-    }
-    if (
-      remoteBlock.type === "image_generation" &&
-      localBlock.type === "image_generation"
-    ) {
-      if (localBlock.status === "generating") return localBlock;
-      if (
-        localBlock.status === "completed" &&
-        localBlock.imageUrl?.trim() &&
-        (!remoteBlock.imageUrl?.trim() ||
-          remoteBlock.status !== "completed")
-      ) {
-        return localBlock;
-      }
-    }
-    return remoteBlock;
-  });
-
-  for (const localBlock of localBlocks) {
-    if (
-      localBlock.type === "image_generation" &&
-      (localBlock.status === "generating" ||
-        (localBlock.status === "completed" && localBlock.imageUrl?.trim())) &&
-      !merged.some((block) => blocksMatch(block, localBlock))
-    ) {
-      merged.push(localBlock);
-    }
-  }
-  return merged;
-}
-
-function blocksMatch(a: ChatBlock, b: ChatBlock): boolean {
-  if (a.type !== b.type) return false;
-  if (a.type === "image_generation" && b.type === "image_generation") {
-    return a.generationId === b.generationId;
-  }
-  if (a.type === "image" && b.type === "image") {
-    return (
-      Boolean(a.attachmentId && a.attachmentId === b.attachmentId) ||
-      Boolean(a.url && a.url === b.url)
-    );
-  }
-  return false;
-}
-
-/** Merge a remote thread hydrate with the in-memory copy to avoid image flicker. */
-export function mergeHydratedThread(
-  local: Thread | undefined,
-  remote: Thread,
-): Thread {
-  if (!local || local.id !== remote.id) return remote;
-  if (hasPendingAiInThread(local)) return local;
-  if (
-    threadHasTurns(local) &&
-    local.messages.length > remote.messages.length
-  ) {
-    return local;
-  }
-  const localAt = Date.parse(local.updatedAt || "") || 0;
-  const remoteAt = Date.parse(remote.updatedAt || "") || 0;
-  // Prefer a fresher local transcript entirely (Default chat hard-replace).
-  if (localAt >= remoteAt && threadHasTurns(local)) return local;
-
-  const localIds = new Set(local.messages.map((message) => message.id));
-  const remoteHasExtras = remote.messages.some(
-    (message) => !localIds.has(message.id),
-  );
-  // If remote still has prior turns the local replace dropped, keep local.
-  if (threadHasTurns(local) && remoteHasExtras) return local;
-
-  const messages = remote.messages.map((remoteMsg) => {
-    const localMsg = local.messages.find((m) => m.id === remoteMsg.id);
-    if (!localMsg) return remoteMsg;
-    const blocks = mergeMessageBlocks(localMsg.blocks, remoteMsg.blocks);
-    if (blocks === remoteMsg.blocks) return remoteMsg;
-    return { ...remoteMsg, blocks };
-  });
-
-  return { ...remote, messages };
 }
 
 /** Pull remote threads for the active workspace; keep other workspaces in store. */

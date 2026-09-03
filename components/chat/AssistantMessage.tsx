@@ -415,6 +415,9 @@ function BlockView({
       );
     case "file":
       return null;
+    case "user_connector":
+      // User-bubble only — never render in assistant transcript chrome.
+      return null;
     case "process":
     case "hierarchy":
     case "decision_matrix":

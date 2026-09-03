@@ -1,13 +1,16 @@
 /**
  * Detect workspace connector mentions in composer text / dictation.
- * Matches product names + common aliases against connected apps only.
+ * Matches product names + common aliases against connected apps only,
+ * then replaces the trigger word inline with a connector chip.
  */
 
 import {
   connectorsFromBlocks,
   normalizeComposerBlocks,
+  textFromBlocks,
   type ComposerBlock,
-  type ComposerConnectorScope,
+  type ComposerConnectorBlock,
+  type ComposerTextBlock,
 } from "./composer-blocks.ts";
 
 export type ConnectorDetectCandidate = {
@@ -22,6 +25,8 @@ export type ConnectorMention = {
   label: string;
   /** Matched surface form as it appeared in text (for UI affordances). */
   matched: string;
+  /** Start index within `textFromBlocks` concatenation. */
+  index: number;
 };
 
 /** Extra aliases beyond catalog `name` / `id`. Prefer product-specific terms. */
@@ -78,11 +83,18 @@ function wordBoundaryPattern(trigger: string): RegExp {
   );
 }
 
-function firstMatchInText(text: string, trigger: string): string | null {
+function firstMatchInText(
+  text: string,
+  trigger: string,
+): { matched: string; index: number } | null {
   if (!text || !trigger) return null;
   const re = wordBoundaryPattern(trigger);
   const hit = re.exec(text);
-  return hit?.[1] ?? null;
+  if (!hit?.[1]) return null;
+  const matched = hit[1];
+  // Group 1 may sit after a boundary char at hit.index.
+  const index = hit.index + hit[0].indexOf(matched);
+  return { matched, index };
 }
 
 /**
@@ -106,13 +118,14 @@ export function detectConnectorMentions(
   for (const row of byConnector.values()) {
     const triggers = triggersForConnector(row.connectorId, row.label);
     for (const trigger of triggers) {
-      const matched = firstMatchInText(text, trigger);
-      if (!matched) continue;
+      const hit = firstMatchInText(text, trigger);
+      if (!hit) continue;
       found.push({
         connectionId: row.connectionId,
         connectorId: row.connectorId,
         label: row.label,
-        matched,
+        matched: hit.matched,
+        index: hit.index,
       });
       claimed.add(row.connectorId);
       break;
@@ -126,13 +139,14 @@ export function detectConnectorMentions(
     const only = mailConnected[0]!;
     if (!claimed.has(only.connectorId)) {
       for (const trigger of GENERIC_MAIL_ALIASES) {
-        const matched = firstMatchInText(text, trigger);
-        if (!matched) continue;
+        const hit = firstMatchInText(text, trigger);
+        if (!hit) continue;
         found.push({
           connectionId: only.connectionId,
           connectorId: only.connectorId,
           label: only.label,
-          matched,
+          matched: hit.matched,
+          index: hit.index,
         });
         break;
       }
@@ -142,13 +156,68 @@ export function detectConnectorMentions(
   return found;
 }
 
-function scopeKey(scope: ComposerConnectorScope) {
-  return `${scope.connectorId}:${scope.connectionId}`;
+function newKey(prefix: string) {
+  return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * Replace a mention span inside concatenated text blocks with an inline chip.
+ * Processes a single mention; caller should apply from end → start when many.
+ */
+export function replaceMentionInline(
+  blocks: ComposerBlock[],
+  mention: ConnectorMention,
+): ComposerBlock[] {
+  const already = blocks.some(
+    (b) =>
+      b.type === "connector" && b.scope.connectorId === mention.connectorId,
+  );
+  if (already) return blocks;
+
+  let offset = 0;
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i]!;
+    if (block.type !== "text") continue;
+    const end = offset + block.value.length;
+    if (mention.index < offset || mention.index >= end) {
+      offset = end;
+      continue;
+    }
+    const localStart = mention.index - offset;
+    const localEnd = localStart + mention.matched.length;
+    if (localEnd > block.value.length) {
+      // Match spans a chip boundary — skip; rare for product names.
+      return blocks;
+    }
+    // Keep surrounding spaces in the text segments so spacing matches a normal word.
+    const left = block.value.slice(0, localStart);
+    const right = block.value.slice(localEnd);
+    const chip: ComposerConnectorBlock = {
+      key: `c_auto_${mention.connectionId}`,
+      type: "connector",
+      scope: {
+        connectionId: mention.connectionId,
+        connectorId: mention.connectorId,
+        label: mention.label,
+      },
+      replacedText: mention.matched,
+    };
+    const next: ComposerBlock[] = [
+      ...blocks.slice(0, i),
+      { key: block.key, type: "text", value: left } satisfies ComposerTextBlock,
+      chip,
+      { key: newKey("t"), type: "text", value: right },
+      ...blocks.slice(i + 1),
+    ];
+    return normalizeComposerBlocks(next);
+  }
+  return blocks;
 }
 
 /**
  * Sync auto-detected connector chips with composer blocks.
- * Manual chips (menu) are preserved; dismissed ids stay out until restored.
+ * New mentions replace the trigger word inline. Existing auto chips stay
+ * (the trigger was removed from text). Manual chips are preserved.
  */
 export function syncDetectedConnectorBlocks(
   blocks: ComposerBlock[],
@@ -158,49 +227,27 @@ export function syncDetectedConnectorBlocks(
     manualConnectorIds: ReadonlySet<string>;
   },
 ): ComposerBlock[] {
-  const desiredAuto = mentions.filter(
-    (m) =>
-      !opts.dismissedConnectorIds.has(m.connectorId) &&
-      !opts.manualConnectorIds.has(m.connectorId),
-  );
-  const desiredAutoIds = new Set(desiredAuto.map((m) => m.connectorId));
-  const current = connectorsFromBlocks(blocks);
-
-  const withoutStaleAuto = blocks.filter((block) => {
-    if (block.type !== "connector") return true;
-    const id = block.scope.connectorId;
-    if (opts.manualConnectorIds.has(id)) return true;
-    return desiredAutoIds.has(id);
-  });
-
   const presentIds = new Set(
-    connectorsFromBlocks(withoutStaleAuto).map((c) => c.connectorId),
+    connectorsFromBlocks(blocks).map((c) => c.connectorId),
   );
-  const toAdd = desiredAuto.filter((m) => !presentIds.has(m.connectorId));
 
-  if (!toAdd.length) {
-    const nextScopes = connectorsFromBlocks(withoutStaleAuto);
-    const same =
-      nextScopes.length === current.length &&
-      nextScopes.every(
-        (s, i) =>
-          scopeKey(s) === scopeKey(current[i]!),
-      );
-    if (same) return blocks;
-    return normalizeComposerBlocks(withoutStaleAuto);
+  const toAdd = mentions
+    .filter(
+      (m) =>
+        !opts.dismissedConnectorIds.has(m.connectorId) &&
+        !opts.manualConnectorIds.has(m.connectorId) &&
+        !presentIds.has(m.connectorId),
+    )
+    // Replace from the end so earlier indices stay valid.
+    .sort((a, b) => b.index - a.index);
+
+  if (!toAdd.length) return blocks;
+
+  let next = blocks;
+  for (const mention of toAdd) {
+    next = replaceMentionInline(next, mention);
   }
-
-  const chips: ComposerBlock[] = toAdd.map((m) => ({
-    key: `c_auto_${m.connectionId}`,
-    type: "connector",
-    scope: {
-      connectionId: m.connectionId,
-      connectorId: m.connectorId,
-      label: m.label,
-    },
-  }));
-
-  return normalizeComposerBlocks([...chips, ...withoutStaleAuto]);
+  return next;
 }
 
 /** Mentions that are still in text but currently dismissed (click to restore). */
@@ -209,4 +256,9 @@ export function dismissedMentionsStillPresent(
   dismissedConnectorIds: ReadonlySet<string>,
 ): ConnectorMention[] {
   return mentions.filter((m) => dismissedConnectorIds.has(m.connectorId));
+}
+
+/** @internal test helper */
+export function __textFromBlocks(blocks: ComposerBlock[]) {
+  return textFromBlocks(blocks);
 }

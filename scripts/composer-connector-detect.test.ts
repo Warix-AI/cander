@@ -8,7 +8,9 @@ import {
   blocksFromText,
   connectorsFromBlocks,
   emptyComposerBlocks,
-  normalizeComposerBlocks,
+  removeConnectorBlockRestoringText,
+  serializeComposerBlocks,
+  textFromBlocks,
   type ComposerBlock,
 } from "../lib/composer-blocks.ts";
 import {
@@ -43,6 +45,7 @@ describe("composer connector detect", () => {
     assert.equal(hits.length, 1);
     assert.equal(hits[0]?.connectorId, "gmail");
     assert.match(hits[0]!.matched, /gmail/i);
+    assert.ok(typeof hits[0]?.index === "number");
   });
 
   it("matches multiple connectors in one sentence", () => {
@@ -79,32 +82,60 @@ describe("composer connector detect", () => {
     assert.ok(triggers.includes("gcal"));
   });
 
-  it("syncs auto chips in and out of blocks", () => {
+  it("replaces the trigger word inline with the connector chip", () => {
     let blocks: ComposerBlock[] = blocksFromText(
-      "Go check my Gmail for the latest",
+      "All right, go ahead and send an email to braydon@example.com",
     );
-    const mentions = detectConnectorMentions(textOf(blocks), [gmail]);
+    const mentions = detectConnectorMentions(textFromBlocks(blocks), [gmail]);
+    assert.equal(mentions[0]?.matched.toLowerCase(), "email");
     blocks = syncDetectedConnectorBlocks(blocks, mentions, {
       dismissedConnectorIds: new Set(),
       manualConnectorIds: new Set(),
     });
     assert.equal(connectorsFromBlocks(blocks).length, 1);
-    assert.equal(connectorsFromBlocks(blocks)[0]?.connectorId, "gmail");
+    assert.equal(textFromBlocks(blocks).includes("email"), false);
+    assert.match(textFromBlocks(blocks), /send an\s+to braydon/i);
+    assert.match(
+      serializeComposerBlocks(blocks),
+      /send an Gmail to braydon/i,
+    );
+    const chip = blocks.find((b) => b.type === "connector");
+    assert.equal(chip?.type === "connector" && chip.replacedText?.toLowerCase(), "email");
+  });
 
-    blocks = normalizeComposerBlocks([
-      ...connectorsFromBlocks(blocks).map((scope) => ({
-        key: `c_${scope.connectionId}`,
-        type: "connector" as const,
-        scope,
-      })),
-      { key: "t1", type: "text", value: "never mind about that" },
-    ]);
-    const gone = detectConnectorMentions(textOf(blocks), [gmail]);
-    blocks = syncDetectedConnectorBlocks(blocks, gone, {
+  it("keeps the inline chip after the trigger word is gone from text", () => {
+    let blocks: ComposerBlock[] = blocksFromText("Check my Gmail please");
+    blocks = syncDetectedConnectorBlocks(
+      blocks,
+      detectConnectorMentions(textFromBlocks(blocks), [gmail]),
+      {
+        dismissedConnectorIds: new Set(),
+        manualConnectorIds: new Set(),
+      },
+    );
+    assert.equal(connectorsFromBlocks(blocks).length, 1);
+    // Sync again with no mention in remaining text — chip stays.
+    blocks = syncDetectedConnectorBlocks(blocks, [], {
       dismissedConnectorIds: new Set(),
       manualConnectorIds: new Set(),
     });
+    assert.equal(connectorsFromBlocks(blocks).length, 1);
+  });
+
+  it("restores the trigger word when the chip is dismissed", () => {
+    let blocks: ComposerBlock[] = blocksFromText("send an email to them");
+    blocks = syncDetectedConnectorBlocks(
+      blocks,
+      detectConnectorMentions(textFromBlocks(blocks), [gmail]),
+      {
+        dismissedConnectorIds: new Set(),
+        manualConnectorIds: new Set(),
+      },
+    );
+    const connectionId = connectorsFromBlocks(blocks)[0]!.connectionId;
+    blocks = removeConnectorBlockRestoringText(blocks, connectionId);
     assert.equal(connectorsFromBlocks(blocks).length, 0);
+    assert.match(textFromBlocks(blocks), /send an email to them/i);
   });
 
   it("keeps dismissed chips out until restored", () => {
@@ -128,14 +159,15 @@ describe("composer connector detect", () => {
   });
 
   it("preserves manual chips even when the word is gone", () => {
-    const blocks: ComposerBlock[] = normalizeComposerBlocks([
+    const blocks: ComposerBlock[] = [
+      { key: "t0", type: "text", value: "" },
       {
         key: "c1",
         type: "connector",
         scope: gmail,
       },
       { key: "t1", type: "text", value: "summarize today's plan" },
-    ]);
+    ];
     const next = syncDetectedConnectorBlocks(blocks, [], {
       dismissedConnectorIds: new Set(),
       manualConnectorIds: new Set(["gmail"]),
@@ -143,10 +175,3 @@ describe("composer connector detect", () => {
     assert.equal(connectorsFromBlocks(next)[0]?.connectorId, "gmail");
   });
 });
-
-function textOf(blocks: ComposerBlock[]) {
-  return blocks
-    .filter((b) => b.type === "text")
-    .map((b) => b.value)
-    .join("");
-}

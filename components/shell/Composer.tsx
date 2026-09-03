@@ -92,7 +92,8 @@ import {
   connectorsFromBlocks,
   emptyComposerBlocks,
   normalizeComposerBlocks,
-  removeConnectorBlock,
+  removeConnectorBlockRestoringText,
+  serializeComposerBlocks,
   textFromBlocks,
   toggleConnectorInBlocks,
   updateTextBlock,
@@ -112,6 +113,31 @@ function syncComposerFieldHeight(el: HTMLTextAreaElement, maxLines: number) {
     Math.max(lineHeight, el.scrollHeight),
   );
   el.style.height = `${next}px`;
+}
+
+/** Size inline (non-last) text segments to the rendered content width. */
+function syncComposerSegmentWidth(el: HTMLInputElement) {
+  el.style.minWidth = "0px";
+  el.style.width = "0px";
+  // Measure with a mirror so we don't inherit the input's default size=20 min box.
+  const cs = getComputedStyle(el);
+  const mirror = document.createElement("span");
+  mirror.setAttribute("aria-hidden", "true");
+  mirror.style.cssText = [
+    "position:absolute",
+    "left:-9999px",
+    "top:0",
+    "visibility:hidden",
+    "white-space:pre",
+    `font:${cs.font}`,
+    `letter-spacing:${cs.letterSpacing}`,
+    `text-transform:${cs.textTransform}`,
+  ].join(";");
+  mirror.textContent = el.value || "";
+  document.body.appendChild(mirror);
+  const width = Math.ceil(mirror.getBoundingClientRect().width);
+  mirror.remove();
+  el.style.width = `${Math.max(width, el.value ? 1 : 0)}px`;
 }
 
 export type { ComposerConnectorScope };
@@ -138,6 +164,11 @@ export function Composer({
       selectedConnectionId?: string | null;
       selectedConnectionIds?: string[] | null;
       scopedConnectorId?: string | null;
+      composerConnectors?: Array<{
+        connectionId: string;
+        connectorId: string;
+        label: string;
+      }> | null;
     },
   ) => void;
   landing?: boolean;
@@ -185,7 +216,16 @@ export function Composer({
     emptyComposerBlocks(),
   );
   const value = textFromBlocks(blocks);
+  const serializedValue = serializeComposerBlocks(blocks);
   const connectorScopes = connectorsFromBlocks(blocks);
+  const inlineChips = connectorScopes.length > 0;
+
+  // Keep mid-sentence inputs hugging their text after auto-detect splits.
+  useLayoutEffect(() => {
+    textInputRefs.current.forEach((el) => {
+      if (el instanceof HTMLInputElement) syncComposerSegmentWidth(el);
+    });
+  }, [blocks]);
   /** Connector ids the user removed (X) while the trigger word is still present. */
   const [dismissedConnectorIds, setDismissedConnectorIds] = useState(
     () => new Set<string>(),
@@ -205,6 +245,7 @@ export function Composer({
   const textInputRefs = useRef<
     Map<string, HTMLInputElement | HTMLTextAreaElement>
   >(new Map());
+  const textRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const setValue = (next: string) => {
     setBlocks((current) => {
       if (!next) return emptyComposerBlocks();
@@ -349,7 +390,9 @@ export function Composer({
       copy.add(scope.connectorId);
       return copy;
     });
-    setBlocks((current) => removeConnectorBlock(current, scope.connectionId));
+    setBlocks((current) =>
+      removeConnectorBlockRestoringText(current, scope.connectionId),
+    );
   };
 
   const restoreConnectorMention = (mention: ConnectorMention) => {
@@ -385,6 +428,11 @@ export function Composer({
           selectedConnectionIds: connectorScopes.map((c) => c.connectionId),
           selectedConnectionId: connectorScopes[0]!.connectionId,
           scopedConnectorId: connectorScopes[0]!.connectorId,
+          composerConnectors: connectorScopes.map((c) => ({
+            connectionId: c.connectionId,
+            connectorId: c.connectorId,
+            label: c.label,
+          })),
         }
       : {};
 
@@ -459,7 +507,6 @@ export function Composer({
   const cameraRef = useRef<HTMLInputElement>(null);
   const photoLibRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const speechRef = useRef<SpeechSession | null>(null);
   const dictationRef = useRef<VoiceDictationSession | null>(null);
   /** After stop: insert into composer; after send-while-recording: send immediately. */
@@ -639,7 +686,7 @@ export function Composer({
 
   const stayInPlace = compact || hideSpaceTools;
   const dictatingActive = dictating || transcribing;
-  const hasText = value.trim().length > 0;
+  const hasText = value.trim().length > 0 || connectorScopes.length > 0;
   const hasPayload = hasText || images.length > 0 || files.length > 0;
   const pinTarget = thread
     ? ({ kind: "thread" as const, id: thread.id })
@@ -682,33 +729,45 @@ export function Composer({
         : entityReference
           ? `[ref: ${entityReference.label ?? entityReference.type} — ${entityReference.snapshot ?? entityReference.id}] `
           : "";
-      const body = `${refPrefix}${next}`.trim();
       const usableImages = images.filter((img) =>
         img.url?.startsWith("data:image/"),
       );
       const sendAttachments = toSendAttachments(usableImages, files);
-      if (!body && !usableImages.length && !files.length) {
-        setValue(next);
-        // Empty send-from-dictate shouldn't sticky-error the composer.
-        setDictateError(null);
-        return;
-      }
       // Detect connectors from the final transcript before chips have synced.
       const liveMentions = detectConnectorMentions(next, detectCandidates).filter(
         (m) => !dismissedConnectorIds.has(m.connectorId),
       );
       const liveScopes =
-        liveMentions.length > 0
-          ? liveMentions
-          : connectorScopes;
+        liveMentions.length > 0 ? liveMentions : connectorScopes;
+      // Swap trigger words for connector labels so the AI sees the app name.
+      let spoken = next;
+      for (const mention of [...liveMentions].sort(
+        (a, b) => b.index - a.index,
+      )) {
+        spoken =
+          spoken.slice(0, mention.index) +
+          mention.label +
+          spoken.slice(mention.index + mention.matched.length);
+      }
+      const body = `${refPrefix}${spoken}`.trim();
       const liveConnectorPayload =
         liveScopes.length > 0
           ? {
               selectedConnectionIds: liveScopes.map((c) => c.connectionId),
               selectedConnectionId: liveScopes[0]!.connectionId,
               scopedConnectorId: liveScopes[0]!.connectorId,
+              composerConnectors: liveScopes.map((c) => ({
+                connectionId: c.connectionId,
+                connectorId: c.connectorId,
+                label: c.label,
+              })),
             }
           : {};
+      if (!body && !usableImages.length && !files.length) {
+        setValue(next);
+        setDictateError(null);
+        return;
+      }
       suppressAutoFocusRef.current = true;
       try {
         getNativeCapabilities().keyboard.dismiss();
@@ -835,8 +894,8 @@ export function Composer({
       : entityReference
         ? `[ref: ${entityReference.label ?? entityReference.type} — ${entityReference.snapshot ?? entityReference.id}] `
       : "";
-    // Visible chat text = what the user typed only. File bodies go via opts.files.
-    const body = `${refPrefix}${value}`.trim();
+    // Visible chat text = typed words with connector labels in chip slots.
+    const body = `${refPrefix}${serializedValue}`.trim();
     if (!body && !images.length && !files.length) return;
     speechRef.current?.stop();
     speechRef.current = null;
@@ -1473,11 +1532,11 @@ export function Composer({
             <div
               className={cn(
                 "flex min-h-8 gap-1",
-                growUpward
-                  ? "items-end"
-                  : hasText
-                    ? "items-start"
-                    : "items-center",
+                // With inline connector chips, keep a single vertically-centered row.
+                // Multi-line drafts still dock controls to the bottom while growing up.
+                inlineChips || !growUpward || !hasText
+                  ? "items-center"
+                  : "items-end",
                 dictatingActive && "invisible pointer-events-none",
               )}
               aria-hidden={dictatingActive || undefined}
@@ -1492,10 +1551,8 @@ export function Composer({
               </ToolBtn>
               <div
                 className={cn(
-                  "flex min-h-8 min-w-0 flex-1 flex-wrap gap-x-1 gap-y-0.5",
-                  hasText || connectorScopes.length
-                    ? "content-start items-start py-1"
-                    : "content-center items-center py-[6px]",
+                  "flex min-h-8 min-w-0 flex-1 flex-wrap items-center gap-y-0.5",
+                  !hasText && !inlineChips && "content-center py-[6px]",
                   transcriptReveal && "opacity-100 transition-opacity duration-200",
                 )}
                 onMouseDown={(event) => {
@@ -1518,21 +1575,19 @@ export function Composer({
                       .some((b) => b.type === "connector");
                     return (
                       <Fragment key={block.key}>
-                        <span className="group/conn relative inline-flex max-w-full shrink-0 items-center gap-1 rounded-md py-0.5 pl-0.5 pr-1 text-[14px] text-sky-500/95 dark:text-sky-400/95">
+                        <span className="group/conn relative inline max-w-full shrink-0 text-[14px] leading-5 text-sky-500/95 sm:text-[14px] dark:text-sky-400/95">
                           <ConnectorMark
                             id={iconId}
                             size="nav"
-                            className="!h-[0.9em] !w-[0.9em]"
+                            className="!mr-[0.15em] !inline-block !h-[0.7em] !w-[0.7em] !align-[-0.05em]"
                           />
-                          <span className="truncate font-medium leading-none">
-                            {block.scope.label}
-                          </span>
+                          <span className="font-medium">{block.scope.label}</span>
                           <button
                             type="button"
                             aria-label={`Remove ${block.scope.label}`}
                             onMouseDown={(event) => event.preventDefault()}
                             onClick={() => dismissConnectorChip(block.scope)}
-                            className="ml-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-sky-500/80 opacity-0 transition-opacity duration-150 hover:bg-sky-500/15 hover:text-sky-600 group-hover/conn:opacity-100 dark:text-sky-400/80 dark:hover:text-sky-300"
+                            className="pointer-events-none absolute -right-1.5 -top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-muted text-muted-foreground opacity-0 shadow-sm ring-1 ring-border transition-opacity duration-150 group-hover/conn:pointer-events-auto group-hover/conn:opacity-100 hover:bg-muted hover:text-foreground"
                           >
                             <X className="h-2.5 w-2.5" strokeWidth={2.25} />
                           </button>
@@ -1612,22 +1667,18 @@ export function Composer({
                     block.value.length === 0 &&
                     restoreMentions.length === 0;
                   const collapsed = !block.value && !isLastText;
-                  const widthCh = Math.max(block.value.length + 1, 1);
                   const fieldClassName = cn(
                     "bg-transparent text-[16px] leading-5 outline-none placeholder:text-muted-foreground sm:text-[14px]",
                     isLastText
-                      ? "min-h-5 min-w-0 w-full flex-1 basis-full resize-none overflow-y-auto"
+                      ? cn(
+                          "min-h-5 min-w-[1ch] flex-1 resize-none overflow-y-auto",
+                          // Full-row only when there are no inline chips yet.
+                          !inlineChips && "w-full basis-full",
+                        )
                       : collapsed
-                        ? "w-0 max-w-0 overflow-hidden p-0"
-                        : "shrink-0",
+                        ? "w-0 max-w-0 min-w-0 overflow-hidden p-0 border-0"
+                        : "min-w-0 max-w-full shrink-0 p-0",
                   );
-                  const fieldStyle =
-                    isLastText || collapsed
-                      ? undefined
-                      : {
-                          width: `${widthCh}ch`,
-                          maxWidth: "100%",
-                        };
 
                   if (isLastText) {
                     return (
@@ -1747,6 +1798,7 @@ export function Composer({
                       ref={(el) => {
                         if (el) {
                           textInputRefs.current.set(block.key, el);
+                          syncComposerSegmentWidth(el);
                         } else {
                           textInputRefs.current.delete(block.key);
                         }
@@ -1773,6 +1825,7 @@ export function Composer({
                         setBlocks((current) =>
                           updateTextBlock(current, block.key, next),
                         );
+                        syncComposerSegmentWidth(event.currentTarget);
                       }}
                       onKeyDown={(event) => {
                         if (dictatingActive) {
@@ -1806,7 +1859,6 @@ export function Composer({
                         }
                       }}
                       className={fieldClassName}
-                      style={fieldStyle}
                     />
                   );
                 })}
@@ -1814,11 +1866,9 @@ export function Composer({
               <div
                 className={cn(
                   "flex shrink-0 items-center gap-0.5",
-                  growUpward
-                    ? "self-end"
-                    : hasText || connectorScopes.length
-                      ? "self-start"
-                      : "self-center",
+                  inlineChips || !growUpward || !hasText
+                    ? "self-center"
+                    : "self-end",
                 )}
               >
                 <ComposerTrailingActions

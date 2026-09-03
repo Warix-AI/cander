@@ -263,6 +263,13 @@ export type ChatBlock =
       /** Extracted text for model continuity — not shown in the bubble. */
       text?: string;
     }
+  /** Connector chip the user scoped in the composer (shown inline in the bubble). */
+  | {
+      type: "user_connector";
+      connectionId: string;
+      connectorId: string;
+      label: string;
+    }
   /** Structured answer-shape blocks (rich response format). */
   | {
       type: "process";

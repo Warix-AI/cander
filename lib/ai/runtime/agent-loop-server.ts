@@ -254,9 +254,9 @@ export async function runAgentServerLoop(
   );
   const scopePrompt =
     scopedConnections.length > 0
-      ? `User scoped this turn to: ${scopedConnections
-          .map((c) => `${c.connectorId} (${c.connectionId})`)
-          .join(", ")}. Prefer those connectors’ tools and do not ask which app to use unless the request clearly needs a different connected app.`
+      ? `User scoped this turn to connected apps: ${scopedConnections
+          .map((c) => c.connectorId)
+          .join(", ")}. The user message names those apps inline where relevant. Prefer those connectors’ tools and do not ask which app to use unless the request clearly needs a different connected app.`
       : "";
   const system = [
     SYSTEM_BASE,
