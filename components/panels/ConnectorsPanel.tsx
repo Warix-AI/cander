@@ -278,6 +278,11 @@ export function ConnectorsPanel() {
                     type="button"
                     disabled={disconnecting}
                     onClick={async () => {
+                      const label = selected.name;
+                      const ok = window.confirm(
+                        `Are you sure you want to disconnect ${label}?`,
+                      );
+                      if (!ok) return;
                       setConnectError("");
                       setDisconnecting(true);
                       try {

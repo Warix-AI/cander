@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ArrowRight, Ellipsis, X } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { ConnectorInfoSection } from "@/components/connectors/ConnectorInfoSection";
@@ -56,6 +57,7 @@ export function ConnectorDetailModal({
   workAttach,
   onConnect,
   onDisconnect,
+  onOpen,
   onConnectionsRefresh,
   onSkillPermissionsUpdated,
   onSetPin,
@@ -76,6 +78,7 @@ export function ConnectorDetailModal({
   workAttach?: boolean;
   onConnect: () => Promise<void>;
   onDisconnect: () => Promise<void>;
+  onOpen?: () => void;
   onConnectionsRefresh: () => void;
   onSkillPermissionsUpdated: (connection: ConnectorConnection) => void;
   onSetPin: () => void;
@@ -123,6 +126,11 @@ export function ConnectorDetailModal({
           : "Install";
 
   const showActionsMenu = !blocked;
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+
+  useEffect(() => {
+    if (!open) setConfirmDisconnect(false);
+  }, [open, item.id]);
 
   const showConnectFooter = !blocked && (workAttach || !isConnected);
 
@@ -156,12 +164,63 @@ export function ConnectorDetailModal({
       className={cn("flex flex-col", MODAL_WIDTH, MODAL_HEIGHT, SHELL_G3_RADIUS)}
       backdropClassName="bg-black/30"
     >
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {confirmDisconnect ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/25 p-4">
+            <div
+              className={cn(
+                "w-full max-w-sm border border-border bg-background p-4 shadow-lg",
+                SHELL_G3_RADIUS,
+              )}
+            >
+              <p className="text-[15px] font-semibold tracking-[-0.02em]">
+                {canManageServerConnection
+                  ? "Disconnect connector?"
+                  : "Uninstall connector?"}
+              </p>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                {canManageServerConnection
+                  ? `Are you sure you want to disconnect ${item.name}?`
+                  : `Are you sure you want to uninstall ${item.name}?`}
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setConfirmDisconnect(false)}
+                  className="inline-flex h-9 items-center rounded-full px-3 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    void (async () => {
+                      await onDisconnect();
+                      setConfirmDisconnect(false);
+                    })();
+                  }}
+                  className="inline-flex h-9 items-center rounded-full bg-destructive px-4 text-[13px] font-medium text-destructive-foreground disabled:opacity-50"
+                >
+                  {busy
+                    ? canManageServerConnection
+                      ? "Disconnecting…"
+                      : "Uninstalling…"
+                    : canManageServerConnection
+                      ? "Disconnect"
+                      : "Uninstall"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         <div className="relative shrink-0 px-5 pt-5">
           <div className="absolute right-4 top-3 flex items-center gap-0.5">
             {showActionsMenu ? (
               <Dropdown
                 align="end"
+                placement="bottom"
                 menuClassName="min-w-[10rem]"
                 matchTrigger={false}
                 trigger={({ toggle }) => (
@@ -205,6 +264,19 @@ export function ConnectorDetailModal({
                         Pin
                       </button>
                     )}
+                    {onOpen ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          close();
+                          onOpen();
+                        }}
+                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                      >
+                        Open
+                      </button>
+                    ) : null}
                     {!isConnected &&
                     !pendingConnection &&
                     !item.installed &&
@@ -232,15 +304,13 @@ export function ConnectorDetailModal({
                         disabled={busy}
                         onClick={() => {
                           close();
-                          void onDisconnect();
+                          setConfirmDisconnect(true);
                         }}
                         className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] text-destructive hover:bg-destructive/5 disabled:opacity-50"
                       >
-                        {busy
-                          ? "Disconnecting…"
-                          : canManageServerConnection
-                            ? "Disconnect"
-                            : "Uninstall"}
+                        {canManageServerConnection
+                          ? "Disconnect"
+                          : "Uninstall"}
                       </button>
                     )}
                   </>

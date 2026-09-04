@@ -41,11 +41,12 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
   const immersive = panelMode === "immersive";
   const wide = panelMode === "wide";
   // Compact only for home new-chat choice (“What would you like to do?”).
-  // Browser / space work uses the normal adjustable panel width.
+  // Never use that width for connectors, spaces, projects, or browser.
   const choicePanel =
     view === "chat" &&
     !spaceId &&
     !projectId &&
+    !connectorId &&
     !standaloneBrowserOpen;
   const panelPct = immersive
     ? 100

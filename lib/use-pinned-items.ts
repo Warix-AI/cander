@@ -20,6 +20,19 @@ export type PinnedItem = {
   spaceId?: SpaceId;
 };
 
+/** Short sidebar labels — full product names stay in catalog / detail. */
+const PIN_CONNECTOR_TITLE: Record<string, string> = {
+  gmail: "Gmail",
+  gcal: "Calendar",
+  gdrive: "Drive",
+  gsheets: "Sheets",
+  gdocs: "Documents",
+};
+
+function pinConnectorTitle(id: string, catalogName?: string) {
+  return PIN_CONNECTOR_TITLE[id] ?? catalogName ?? id;
+}
+
 export function usePinnedItems() {
   const { pins, threads, workspaceId } = useApp();
   const { ctx } = useSpaceData();
@@ -37,7 +50,7 @@ export function usePinnedItems() {
         resolved.push({
           kind: "connector",
           id: pin.id,
-          title: connector?.name ?? pin.id,
+          title: pinConnectorTitle(pin.id, connector?.name),
           icon: connector?.id ?? pin.id,
         });
         continue;

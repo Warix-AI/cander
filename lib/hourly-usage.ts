@@ -15,8 +15,18 @@ function seededPercent(hourKey: number) {
   return Math.round(22 + (n - Math.floor(n)) * 58);
 }
 
+function hourBucket(now: number) {
+  return Math.floor(now / 3_600_000);
+}
+
 export function hourlyUsage(now = Date.now()): HourlyUsage {
-  const startOfHour = Math.floor(now / 3_600_000) * 3_600_000;
-  const percent = seededPercent(startOfHour / 3_600_000);
+  const percent = seededPercent(hourBucket(now));
+  return { percent };
+}
+
+/** Distinct hourly demo % per category (chat / images / build). */
+export function hourlyUsageFor(key: string, now = Date.now()): HourlyUsage {
+  const salt = key.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  const percent = seededPercent(hourBucket(now) + salt * 17);
   return { percent };
 }

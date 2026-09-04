@@ -245,7 +245,7 @@ export function SpaceChatLayout() {
           "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden @container",
           projectId || connectorId || showStandaloneBrowser
             ? BROWSER_CHROME_BG
-            : "bg-space-canvas dark:bg-background",
+            : SPACE_CANVAS_BG,
           chatOpen && liveChatPct > 0 && "border-l border-border/40",
           !spaceOpen && !pinChat && "invisible pointer-events-none",
         )}

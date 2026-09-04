@@ -45,6 +45,8 @@ export function ContextPanel() {
     view === "chat" &&
     !spaceId &&
     !projectId &&
+    !connectorId &&
+    !standaloneBrowserOpen &&
     panelMode !== "collapsed";
 
   const showEmpty =
@@ -73,7 +75,7 @@ export function ContextPanel() {
           ? cn("light-surface my-3 mr-3 overflow-hidden", SHELL_G3_RADIUS)
           : mobile
             ? cn("overflow-hidden", MOBILE_APP_BG)
-            : "overflow-hidden rounded-none border-0 bg-white shadow-none dark:bg-background",
+            : "overflow-hidden rounded-none border-0 bg-white shadow-none dark:bg-space-canvas",
         !dragging &&
           !mobile &&
           "transition-[width] duration-[550ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
@@ -96,8 +98,13 @@ export function ContextPanel() {
           <ScheduledPanel />
         ) : spaceId === "connectors" && connectorId === "handshake" ? (
           <HandshakePanel />
-        ) : spaceId === "connectors" && connectorId === "gmail" ? (
-          <ConnectorViewHost connectorId="gmail" />
+        ) : spaceId === "connectors" &&
+          (connectorId === "gmail" ||
+            connectorId === "gcal" ||
+            connectorId === "gdrive" ||
+            connectorId === "gsheets" ||
+            connectorId === "gdocs") ? (
+          <ConnectorViewHost connectorId={connectorId} />
         ) : spaceId === "connectors" && connectorId === "apple-health" ? (
           <AppleHealthConnectorPanel />
         ) : spaceId === "connectors" ? (

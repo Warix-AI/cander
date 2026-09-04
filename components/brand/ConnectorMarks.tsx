@@ -92,12 +92,13 @@ function Svg({
 const GMAIL_ICON_SRC = "/connectors/gmail.png";
 
 const BRAND_ICON_SRC: Record<string, string> = {
-  googlecalendar: "/connectors/gcal.svg",
-  gcal: "/connectors/gcal.svg",
-  gdrive: "/connectors/gdrive.svg",
+  googlecalendar: "/connectors/gcal.png",
+  gcal: "/connectors/gcal.png",
+  gdrive: "/connectors/gdrive.png",
   outlook: "/connectors/outlook.svg",
   slack: "/connectors/slack.svg",
-  gsheets: "/connectors/gsheets.svg",
+  gsheets: "/connectors/gsheets.png",
+  gdocs: "/connectors/gdocs.png",
   notion: "/connectors/notion.svg",
   hubspot: "/connectors/hubspot.svg",
   github: "/connectors/github.svg",
@@ -776,6 +777,8 @@ const marks: Record<
   jira: makeBrandMark("jira", "Jira"),
   gdrive: makeBrandMark("gdrive", "Google Drive"),
   gsheets: makeBrandMark("gsheets", "Google Sheets"),
+  gdocs: makeBrandMark("gdocs", "Google Docs"),
+  googledocs: makeBrandMark("gdocs", "Google Docs"),
   outlook: makeBrandMark("outlook", "Outlook"),
   teams: makeBrandMark("teams", "Microsoft Teams"),
   salesforce: makeBrandMark("salesforce", "Salesforce"),

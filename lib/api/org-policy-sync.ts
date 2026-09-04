@@ -265,12 +265,14 @@ export async function syncUserPrefsToSupabase(ctx: WorkspaceCtx) {
       if (pinError) throw pinError;
 
       // Remove pins that are no longer local — only after upsert succeeds.
+      // Quote string ids so PostgREST does not misparse hyphenated pin ids.
       const keepIds = pinRows.map((row) => row.id);
+      const keepList = `(${keepIds.map((id) => `"${id}"`).join(",")})`;
       const { error: pruneError } = await supabase
         .from("user_pins")
         .delete()
         .eq("profile_id", ctx.actorId)
-        .not("id", "in", `(${keepIds.join(",")})`);
+        .not("id", "in", keepList);
       if (pruneError) throw pruneError;
     } else {
       const { error: deletePinsError } = await supabase

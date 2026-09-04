@@ -17,12 +17,17 @@ import {
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { AccountMenu } from "@/components/shell/AccountMenu";
 import { PinControl } from "@/components/shell/PinControl";
+import { PinnedFilterMenu } from "@/components/shell/PinnedFilterMenu";
 import { WindowChrome } from "@/components/shell/WindowChrome";
 import { LeftNavToggleDock } from "@/components/shell/NavToggle";
 import { WorkspaceRail } from "@/components/shell/WorkspaceRail";
 import { useApp } from "@/components/app/AppProvider";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { workspacesFor } from "@/lib/entitlements";
+import {
+  organizePinnedItems,
+  usePinDisplayPrefs,
+} from "@/lib/pin-display-prefs";
 import { spaceIcons, spaceIconTint } from "@/lib/space-icons";
 import { type SidebarNavId, isExtraNavId, isComingSoonNav } from "@/lib/spaces";
 import {
@@ -81,6 +86,7 @@ export function Sidebar() {
 
   const mainNavItems = useMainNavItems({ spacesOnly: true });
   const { pinnedItems } = usePinnedItems();
+  const { prefs: pinPrefs } = usePinDisplayPrefs();
   useSyncExternalStore(
     subscribeWorkspaceCatalog,
     getWorkspaceCatalogSnapshot,
@@ -209,19 +215,10 @@ export function Sidebar() {
     return spaceId === id && (view === "space" || view === "chat");
   };
 
-  const pinSections = useMemo(() => {
-    const order: { kind: PinnedItem["kind"]; label: string }[] = [
-      { kind: "connector", label: "Connectors" },
-      { kind: "project", label: "Projects" },
-      { kind: "thread", label: "Chats" },
-    ];
-    return order
-      .map((section) => ({
-        ...section,
-        items: pinnedItems.filter((item) => item.kind === section.kind),
-      }))
-      .filter((section) => section.items.length > 0);
-  }, [pinnedItems]);
+  const visiblePins = useMemo(
+    () => organizePinnedItems(pinnedItems, pinPrefs),
+    [pinnedItems, pinPrefs],
+  );
 
   const pinRowActive = (item: PinnedItem) => {
     if (item.kind === "thread") return threadId === item.id;
@@ -420,17 +417,17 @@ export function Sidebar() {
 
             <div className="relative mt-3 min-h-0 flex-1 overflow-hidden">
               <div className="h-full overflow-y-auto">
-                {pinSections.map((section, index) => (
-                  <div
-                    key={section.kind}
-                    className={cn(index > 0 && "mt-3")}
-                  >
-                    <p className="px-3 pb-1 text-[12px] text-muted-foreground">
-                      {section.label}
-                    </p>
-                    {section.items.map(renderPinnedRow)}
+                {visiblePins.length > 0 ? (
+                  <div className="group/pins">
+                    <div className="mb-1 flex items-center gap-1 px-3">
+                      <p className="min-w-0 flex-1 text-[12px] text-muted-foreground">
+                        Pinned
+                      </p>
+                      <PinnedFilterMenu />
+                    </div>
+                    {visiblePins.map(renderPinnedRow)}
                   </div>
-                ))}
+                ) : null}
               </div>
             </div>
           </nav>

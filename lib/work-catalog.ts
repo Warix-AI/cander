@@ -71,9 +71,11 @@ export function workEmptyCopy(scope: WorkScope) {
 /** Featured connectors shown in Work when none are attached yet. */
 export const WORK_FEATURED_CONNECTOR_IDS = [
   "gmail",
-  "slack",
   "gcal",
   "gdrive",
+  "gsheets",
+  "gdocs",
+  "slack",
 ] as const;
 
 export function workAppsFor(

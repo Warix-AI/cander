@@ -4,22 +4,21 @@ import { useMemo } from "react";
 import { FolderKanban, MessageSquare } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
+import { PinnedFilterMenu } from "@/components/shell/PinnedFilterMenu";
 import {
   MOBILE_MENU_ICON_SIZE,
   MOBILE_MENU_ICON_STROKE,
   mobileMenuRowActiveClass,
   mobileMenuRowClass,
 } from "@/lib/mobile-menu-styles";
+import {
+  organizePinnedItems,
+  usePinDisplayPrefs,
+} from "@/lib/pin-display-prefs";
 import { usePinnedItems, type PinnedItem } from "@/lib/use-pinned-items";
 import { spaceIcons } from "@/lib/space-icons";
 import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-const PIN_SECTIONS: { kind: PinnedItem["kind"]; label: string }[] = [
-  { kind: "connector", label: "Connectors" },
-  { kind: "project", label: "Projects" },
-  { kind: "thread", label: "Chats" },
-];
 
 function PinLeading({
   item,
@@ -57,14 +56,11 @@ export function PinsSheet({
     openConnector,
   } = useApp();
   const { pinnedItems } = usePinnedItems();
+  const { prefs: pinPrefs } = usePinDisplayPrefs();
 
-  const pinSections = useMemo(
-    () =>
-      PIN_SECTIONS.map((section) => ({
-        ...section,
-        items: pinnedItems.filter((item) => item.kind === section.kind),
-      })).filter((section) => section.items.length > 0),
-    [pinnedItems],
+  const visiblePins = useMemo(
+    () => organizePinnedItems(pinnedItems, pinPrefs),
+    [pinnedItems, pinPrefs],
   );
 
   const openItem = (item: PinnedItem) => {
@@ -82,32 +78,35 @@ export function PinsSheet({
     return projectId === item.id;
   };
 
-  if (!pinSections.length) return null;
+  if (!visiblePins.length && hideHeading) return null;
 
   return (
-    <div className="space-y-3">
-      {pinSections.map((section) => (
-        <div key={section.kind} className="space-y-px">
-          <p
-            className="mb-2 px-1 text-[12px] font-medium tracking-[0.04em] text-muted-foreground uppercase"
-          >
-            {section.label}
+    <div className="space-y-px">
+      {!hideHeading ? (
+        <div className="group/pins mb-2 flex items-center gap-1 px-1">
+          <p className="min-w-0 flex-1 text-[12px] font-medium tracking-[0.04em] text-muted-foreground uppercase">
+            Pinned
           </p>
-          {section.items.map((item) => (
-            <button
-              key={`${item.kind}-${item.id}`}
-              type="button"
-              onClick={() => openItem(item)}
-              className={cn(
-                mobileMenuRowClass,
-                isActive(item) && mobileMenuRowActiveClass,
-              )}
-            >
-              <PinLeading item={item} />
-              <span className="truncate">{item.title}</span>
-            </button>
-          ))}
+          {visiblePins.length > 0 ? <PinnedFilterMenu /> : null}
         </div>
+      ) : visiblePins.length > 0 ? (
+        <div className="group/pins mb-2 flex justify-end px-1">
+          <PinnedFilterMenu />
+        </div>
+      ) : null}
+      {visiblePins.map((item) => (
+        <button
+          key={`${item.kind}-${item.id}`}
+          type="button"
+          onClick={() => openItem(item)}
+          className={cn(
+            mobileMenuRowClass,
+            isActive(item) && mobileMenuRowActiveClass,
+          )}
+        >
+          <PinLeading item={item} />
+          <span className="truncate">{item.title}</span>
+        </button>
       ))}
     </div>
   );

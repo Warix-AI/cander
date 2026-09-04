@@ -4,6 +4,7 @@
  */
 
 import type { CanderTool, CapabilityFamily } from "./types.ts";
+import { registerGoogleWorkspaceTools } from "./google-workspace-registry.ts";
 
 const tools = new Map<string, CanderTool>();
 
@@ -303,3 +304,5 @@ registerCanderTool({
     },
   },
 });
+
+registerGoogleWorkspaceTools(registerCanderTool);

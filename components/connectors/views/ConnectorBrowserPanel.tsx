@@ -24,6 +24,11 @@ import {
   GmailConnectorView,
   type GmailToolbarState,
 } from "@/components/connectors/views/GmailConnectorView";
+import { CalendarConnectorView } from "@/components/connectors/views/CalendarConnectorView";
+import { DriveConnectorView } from "@/components/connectors/views/DriveConnectorView";
+import { SheetsConnectorView } from "@/components/connectors/views/SheetsConnectorView";
+import { DocsConnectorView } from "@/components/connectors/views/DocsConnectorView";
+import type { WorkspaceToolbarState } from "@/components/connectors/views/WorkspaceViewChrome";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import {
   BrowserChromeIconButton,
@@ -50,9 +55,9 @@ import {
 } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
-const PANEL_SURFACE = "bg-white dark:bg-black";
-/** Connector chrome matches the reading surface — pure white / pure black. */
-const CONNECTOR_CHROME_BG = "bg-white dark:bg-black";
+const PANEL_SURFACE = "bg-white dark:bg-space-canvas";
+/** Connector chrome matches the space canvas (menu-matched dark). */
+const CONNECTOR_CHROME_BG = "bg-white dark:bg-space-canvas";
 
 function sessionSnapshot(
   key: string,
@@ -117,6 +122,31 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
       return next;
     });
   }, []);
+  const [workspaceToolbar, setWorkspaceToolbar] =
+    useState<WorkspaceToolbarState | null>(null);
+  const workspaceToolbarRef = useRef(workspaceToolbar);
+  workspaceToolbarRef.current = workspaceToolbar;
+  const onWorkspaceToolbarChange = useCallback((next: WorkspaceToolbarState) => {
+    workspaceToolbarRef.current = next;
+    setWorkspaceToolbar((prev) => {
+      if (
+        prev &&
+        prev.title === next.title &&
+        prev.syncing === next.syncing &&
+        prev.busy === next.busy &&
+        prev.canGoBack === next.canGoBack &&
+        prev.primaryLabel === next.primaryLabel
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+  const isWorkspaceConnector =
+    connectorId === "gcal" ||
+    connectorId === "gdrive" ||
+    connectorId === "gsheets" ||
+    connectorId === "gdocs";
   const [addressDraft, setAddressDraft] = useState(active.url);
 
   useEffect(() => {
@@ -268,14 +298,14 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         </span>
       </div>
 
-      {/* Bottom header — inbox tools or message actions */}
+      {/* Bottom header — connector tools or web URL nav */}
       <div
         className={cn(
           "relative flex h-[45px] min-w-0 shrink-0 items-center gap-1 border-t border-black/5 px-2 dark:border-white/10",
           CONNECTOR_CHROME_BG,
         )}
       >
-        {isConnectorTab ? (
+        {isConnectorTab && connectorId === "gmail" ? (
           gmailToolbar?.page === "detail" ? (
             <>
               <ChromeBtn
@@ -339,11 +369,12 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
               <span className="truncate px-1 text-[12.5px] font-medium text-foreground">
                 Inbox
               </span>
-              {gmailToolbar?.syncHint ? (
-                <span className="min-w-0 truncate text-[11px] text-muted-foreground">
-                  {gmailToolbar.syncHint}
-                </span>
-              ) : null}
+              <span
+                className="min-w-0 max-w-[11rem] truncate text-[11px] text-muted-foreground"
+                aria-live="polite"
+              >
+                {gmailToolbar?.syncHint ?? ""}
+              </span>
               <div className="ml-auto flex items-center gap-0.5">
                 <ChromeBtn
                   label="Refresh"
@@ -367,6 +398,48 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
               </div>
             </>
           )
+        ) : isConnectorTab && isWorkspaceConnector ? (
+          <>
+            {workspaceToolbar?.canGoBack ? (
+              <ChromeBtn
+                label={workspaceToolbar.backLabel ?? "Back"}
+                onClick={() => workspaceToolbarRef.current?.onBack()}
+              >
+                <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </ChromeBtn>
+            ) : null}
+            <span className="truncate px-1 text-[12.5px] font-medium text-foreground">
+              {workspaceToolbar?.title ?? title}
+            </span>
+            <div className="ml-auto flex items-center gap-0.5">
+              <ChromeBtn
+                label="Refresh"
+                disabled={Boolean(workspaceToolbar?.syncing)}
+                onClick={() => workspaceToolbarRef.current?.onRefresh()}
+              >
+                <RefreshCw
+                  className={cn(
+                    "h-3.5 w-3.5",
+                    workspaceToolbar?.syncing && "animate-spin",
+                  )}
+                  strokeWidth={1.6}
+                />
+              </ChromeBtn>
+              {workspaceToolbar?.primaryLabel && workspaceToolbar.onPrimary ? (
+                <ChromeBtn
+                  label={workspaceToolbar.primaryLabel}
+                  disabled={Boolean(workspaceToolbar.busy)}
+                  onClick={() => workspaceToolbarRef.current?.onPrimary?.()}
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </ChromeBtn>
+              ) : null}
+            </div>
+          </>
+        ) : isConnectorTab ? (
+          <span className="truncate px-1 text-[12.5px] font-medium text-foreground">
+            {title}
+          </span>
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-1">
             <div className="min-w-0 flex-1">
@@ -384,7 +457,7 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         )}
       </div>
 
-      {/* Body — keep Gmail mounted when opening link tabs so scroll/selection survive */}
+      {/* Body — keep connector views mounted when opening link tabs */}
       <div
         className={cn(
           "relative flex min-h-0 flex-1 flex-col overflow-hidden",
@@ -403,6 +476,46 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
               onOpenLink={openLink}
               onToolbarChange={onGmailToolbarChange}
             />
+          </div>
+        ) : connectorId === "gcal" ? (
+          <div
+            className={cn(
+              "absolute inset-0 flex min-h-0 flex-col",
+              !isConnectorTab && "invisible pointer-events-none",
+            )}
+            aria-hidden={!isConnectorTab}
+          >
+            <CalendarConnectorView onToolbarChange={onWorkspaceToolbarChange} />
+          </div>
+        ) : connectorId === "gdrive" ? (
+          <div
+            className={cn(
+              "absolute inset-0 flex min-h-0 flex-col",
+              !isConnectorTab && "invisible pointer-events-none",
+            )}
+            aria-hidden={!isConnectorTab}
+          >
+            <DriveConnectorView onToolbarChange={onWorkspaceToolbarChange} />
+          </div>
+        ) : connectorId === "gsheets" ? (
+          <div
+            className={cn(
+              "absolute inset-0 flex min-h-0 flex-col",
+              !isConnectorTab && "invisible pointer-events-none",
+            )}
+            aria-hidden={!isConnectorTab}
+          >
+            <SheetsConnectorView onToolbarChange={onWorkspaceToolbarChange} />
+          </div>
+        ) : connectorId === "gdocs" ? (
+          <div
+            className={cn(
+              "absolute inset-0 flex min-h-0 flex-col",
+              !isConnectorTab && "invisible pointer-events-none",
+            )}
+            aria-hidden={!isConnectorTab}
+          >
+            <DocsConnectorView onToolbarChange={onWorkspaceToolbarChange} />
           </div>
         ) : isConnectorTab ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-muted-foreground">

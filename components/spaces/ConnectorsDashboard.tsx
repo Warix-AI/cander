@@ -503,6 +503,10 @@ export function ConnectorsDashboard() {
         onDisconnect={async () => {
           await disconnectConnector(detailItem.id);
         }}
+        onOpen={() => {
+          openConnector(detailItem.id);
+          setDetailConnectorId(null);
+        }}
         onConnectionsRefresh={() => {
           void refreshConnections();
         }}

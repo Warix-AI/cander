@@ -528,6 +528,10 @@ export function setStoredPin(kind: PinKind, id: string, tier: PinTier) {
     (item) => !(item.kind === kind && item.id === id),
   );
   persistPins([{ kind, id, tier }, ...without]);
+  // Avoid “pinned but invisible” when the Pinned filter has that kind hidden.
+  void import("@/lib/pin-display-prefs").then((mod) => {
+    mod.ensurePinKindVisible(kind);
+  });
 }
 
 export function removeStoredPin(kind: PinKind, id: string) {

@@ -4,6 +4,7 @@ import {
   Fragment,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -101,17 +102,36 @@ import {
   type ComposerConnectorScope,
   type ComposerTriggerBlock,
 } from "@/lib/composer-blocks";
+import {
+  ComposerEditableSurface,
+  caretPlainOffset,
+  composerPlainOffsetForTextKey,
+  setCaretPlainOffset,
+} from "@/components/shell/ComposerEditableSurface";
 import { createComposerSpeculationController } from "@/lib/ai/composer-speculation/controller";
 import { isComposerSpeculationEnabled } from "@/lib/ai/composer-speculation/flags";
+import {
+  clearComposerDraft,
+  composerDraftKey,
+  isComposerDraftThreadMigration,
+  migrateComposerDraft,
+  readComposerDraft,
+  writeComposerDraft,
+  type ComposerDraftSnapshot,
+} from "@/lib/composer-draft-store";
 
 /** Grow composer text to N lines, then scroll. */
 function syncComposerFieldHeight(el: HTMLTextAreaElement, maxLines: number) {
   const styles = getComputedStyle(el);
   const lineHeight = Number.parseFloat(styles.lineHeight) || 20;
+  const padY =
+    (Number.parseFloat(styles.paddingTop) || 0) +
+    (Number.parseFloat(styles.paddingBottom) || 0);
+  const minHeight = Math.max(32, lineHeight + padY);
   el.style.height = "0px";
   const next = Math.min(
-    lineHeight * maxLines,
-    Math.max(lineHeight, el.scrollHeight),
+    lineHeight * maxLines + padY,
+    Math.max(minHeight, el.scrollHeight),
   );
   el.style.height = `${next}px`;
 }
@@ -139,6 +159,16 @@ function syncComposerSegmentWidth(el: HTMLInputElement) {
   const width = Math.ceil(mirror.getBoundingClientRect().width);
   mirror.remove();
   el.style.width = `${Math.max(width, el.value ? 1 : 0)}px`;
+}
+
+function focusComposerTextEnd(el: HTMLSpanElement | HTMLTextAreaElement | HTMLElement) {
+  el.focus({ preventScroll: true });
+  if (el instanceof HTMLTextAreaElement) {
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+    return;
+  }
+  setCaretPlainOffset(el, 10_000);
 }
 
 export type { ComposerConnectorScope };
@@ -215,13 +245,51 @@ export function Composer({
     panelMode,
     setDraftAsDefaultChat,
     openStandaloneBrowser,
+    jobId,
+    skillId,
+    standaloneBrowserOpen,
   } = useApp();
   const floating = useShellStyle() === "floating";
   const mobile = useMobileShell();
   const { centered, chatMaxWidthClass } = useChatCanvasCentered();
-  const [blocks, setBlocks] = useState<ComposerBlock[]>(() =>
-    emptyComposerBlocks(),
+
+  const draftKey = useMemo(
+    () =>
+      composerDraftKey({
+        workspaceId,
+        view,
+        spaceId,
+        threadId,
+        projectId,
+        connectorId,
+        jobId,
+        skillId,
+        browser:
+          view === "browser"
+            ? "view"
+            : standaloneBrowserOpen
+              ? "standalone"
+              : null,
+      }),
+    [
+      workspaceId,
+      view,
+      spaceId,
+      threadId,
+      projectId,
+      connectorId,
+      jobId,
+      skillId,
+      standaloneBrowserOpen,
+    ],
   );
+  const draftKeyRef = useRef(draftKey);
+  const skipPersistRef = useRef(false);
+
+  const [blocks, setBlocks] = useState<ComposerBlock[]>(() => {
+    const snap = readComposerDraft(draftKey);
+    return snap?.blocks ?? emptyComposerBlocks();
+  });
   const value = textFromBlocks(blocks);
   const serializedValue = serializeComposerBlocks(blocks);
   const connectorScopes = connectorsFromBlocks(blocks);
@@ -230,19 +298,13 @@ export function Composer({
     (b) => b.type === "connector" || b.type === "trigger",
   );
 
-  // Keep mid-sentence inputs hugging their text after auto-detect splits.
-  useLayoutEffect(() => {
-    textInputRefs.current.forEach((el) => {
-      if (el instanceof HTMLInputElement) syncComposerSegmentWidth(el);
-    });
-  }, [blocks]);
   /** Connector ids the user removed (X) while the trigger word is still present. */
   const [dismissedConnectorIds, setDismissedConnectorIds] = useState(
-    () => new Set<string>(),
+    () => new Set(readComposerDraft(draftKey)?.dismissedConnectorIds ?? []),
   );
   /** Connector ids added via the + menu — keep even if the word is removed. */
   const [manualConnectorIds, setManualConnectorIds] = useState(
-    () => new Set<string>(),
+    () => new Set(readComposerDraft(draftKey)?.manualConnectorIds ?? []),
   );
   const [dictating, setDictating] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -255,10 +317,12 @@ export function Composer({
   );
   const focusedTextKeyRef = useRef<string | null>(null);
   const textCursorRef = useRef(0);
-  const textInputRefs = useRef<
-    Map<string, HTMLInputElement | HTMLTextAreaElement>
-  >(new Map());
-  const textRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const textInputRefs = useRef<Map<string, HTMLSpanElement>>(new Map());
+  const textRef = useRef<HTMLSpanElement | HTMLTextAreaElement | null>(null);
+  const registerTextEl = (key: string, el: HTMLSpanElement | null) => {
+    if (el) textInputRefs.current.set(key, el);
+    else textInputRefs.current.delete(key);
+  };
   const setValue = (next: string) => {
     setBlocks((current) => {
       if (!next) return emptyComposerBlocks();
@@ -296,34 +360,36 @@ export function Composer({
   });
   const detectedMentions = detectConnectorMentions(value, detectCandidates);
 
-  useEffect(() => {
-    setBlocks(emptyComposerBlocks());
-    setMenu(null);
-    setTriggerPicker(null);
-    setDismissedConnectorIds(new Set());
-    setManualConnectorIds(new Set());
-    focusedTextKeyRef.current = null;
-    textCursorRef.current = 0;
-  }, [threadId]);
-
   const focusTextKey = (key: string, cursor?: number) => {
     focusedTextKeyRef.current = key;
     const apply = () => {
+      const editable = document.querySelector(
+        ".composer-shell [role='textbox'][contenteditable='true']",
+      ) as HTMLElement | null;
+      if (editable) {
+        const pos = composerPlainOffsetForTextKey(
+          blocksLiveRef.current,
+          key,
+          cursor ?? 0,
+        );
+        setCaretPlainOffset(editable, pos);
+        textCursorRef.current = pos;
+        textRef.current = editable;
+        return true;
+      }
       const el = textInputRefs.current.get(key);
       if (!el) return false;
-      el.focus({ preventScroll: true });
-      const pos =
-        cursor == null ? el.value.length : Math.min(cursor, el.value.length);
-      try {
+      if (el instanceof HTMLTextAreaElement) {
+        const len = el.value.length;
+        const pos = cursor == null ? len : Math.min(cursor, len);
+        el.focus({ preventScroll: true });
         el.setSelectionRange(pos, pos);
-      } catch {
-        /* ignore */
+        textCursorRef.current = pos;
+        textRef.current = el;
+        return true;
       }
-      textCursorRef.current = pos;
-      textRef.current = el;
-      return true;
+      return false;
     };
-    // New text segment after a chip may mount one frame later.
     window.requestAnimationFrame(() => {
       if (apply()) return;
       window.requestAnimationFrame(() => {
@@ -517,8 +583,12 @@ export function Composer({
         }
       : {};
 
-  const [files, setFiles] = useState<ChatFileAttachment[]>([]);
-  const [images, setImages] = useState<ChatImageAttachment[]>([]);
+  const [files, setFiles] = useState<ChatFileAttachment[]>(
+    () => readComposerDraft(draftKey)?.files ?? [],
+  );
+  const [images, setImages] = useState<ChatImageAttachment[]>(
+    () => readComposerDraft(draftKey)?.images ?? [],
+  );
   const [dictateError, setDictateError] = useState(null as string | null);
   const [attachError, setAttachError] = useState(null as string | null);
 
@@ -534,15 +604,70 @@ export function Composer({
   const blocksLiveRef = useRef(blocks);
   const filesLiveRef = useRef(files);
   const imagesLiveRef = useRef(images);
+  const dismissedLiveRef = useRef(dismissedConnectorIds);
+  const manualLiveRef = useRef(manualConnectorIds);
   const dictatingLiveRef = useRef(dictating);
   const transcribingLiveRef = useRef(transcribing);
   const turnActiveLiveRef = useRef(turnActive);
   blocksLiveRef.current = blocks;
   filesLiveRef.current = files;
   imagesLiveRef.current = images;
+  dismissedLiveRef.current = dismissedConnectorIds;
+  manualLiveRef.current = manualConnectorIds;
   dictatingLiveRef.current = dictating;
   transcribingLiveRef.current = transcribing;
   turnActiveLiveRef.current = turnActive;
+
+  useEffect(() => {
+    if (skipPersistRef.current) {
+      skipPersistRef.current = false;
+      return;
+    }
+    const snap: ComposerDraftSnapshot = {
+      blocks,
+      dismissedConnectorIds: [...dismissedConnectorIds],
+      manualConnectorIds: [...manualConnectorIds],
+      files,
+      images,
+    };
+    const timer = window.setTimeout(() => {
+      writeComposerDraft(draftKeyRef.current, snap);
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [blocks, dismissedConnectorIds, manualConnectorIds, files, images]);
+
+  // Save / restore unsent drafts when leaving a space, project, connector, or chat.
+  useEffect(() => {
+    const prevKey = draftKeyRef.current;
+    if (prevKey === draftKey) return;
+
+    writeComposerDraft(prevKey, {
+      blocks: blocksLiveRef.current,
+      dismissedConnectorIds: [...dismissedLiveRef.current],
+      manualConnectorIds: [...manualLiveRef.current],
+      files: filesLiveRef.current,
+      images: imagesLiveRef.current,
+    });
+
+    if (isComposerDraftThreadMigration(prevKey, draftKey)) {
+      migrateComposerDraft(prevKey, draftKey);
+    }
+
+    const incoming = readComposerDraft(draftKey);
+    skipPersistRef.current = true;
+    setBlocks(incoming?.blocks ?? emptyComposerBlocks());
+    setDismissedConnectorIds(
+      new Set(incoming?.dismissedConnectorIds ?? []),
+    );
+    setManualConnectorIds(new Set(incoming?.manualConnectorIds ?? []));
+    setFiles(incoming?.files ?? []);
+    setImages(incoming?.images ?? []);
+    setMenu(null);
+    setTriggerPicker(null);
+    focusedTextKeyRef.current = null;
+    textCursorRef.current = 0;
+    draftKeyRef.current = draftKey;
+  }, [draftKey]);
 
   useEffect(() => {
     if (!isComposerSpeculationEnabled()) return;
@@ -643,12 +768,8 @@ export function Composer({
           }
         }
         window.requestAnimationFrame(() => {
-          textRef.current?.focus();
           const el = textRef.current;
-          if (el) {
-            const end = el.value.length;
-            el.setSelectionRange(end, end);
-          }
+          if (el) focusComposerTextEnd(el);
         });
         return;
       }
@@ -656,12 +777,8 @@ export function Composer({
       if (!seed) return;
       setValue(seed);
       window.requestAnimationFrame(() => {
-        textRef.current?.focus();
         const el = textRef.current;
-        if (el) {
-          const end = el.value.length;
-          el.setSelectionRange(end, end);
-        }
+        if (el) focusComposerTextEnd(el);
       });
     };
     if (peekComposerPendingInput() || peekComposerSeed()) apply();
@@ -859,6 +976,7 @@ export function Composer({
         ...(sendAttachments.length ? { sendAttachments } : {}),
         ...liveConnectorPayload,
       });
+      clearComposerDraft(draftKeyRef.current);
       setValue("");
       setFiles([]);
       setImages([]);
@@ -878,11 +996,7 @@ export function Composer({
       speculationRef.current?.onStabilizedText(next);
       setTranscriptReveal(false);
       const el = textRef.current;
-      if (el) {
-        el.focus();
-        const end = el.value.length;
-        el.setSelectionRange(end, end);
-      }
+      if (el) focusComposerTextEnd(el);
     }, 180);
   };
 
@@ -939,11 +1053,7 @@ export function Composer({
         window.setTimeout(() => {
           setTranscriptReveal(false);
           const el = textRef.current;
-          if (el) {
-            el.focus();
-            const end = el.value.length;
-            el.setSelectionRange(end, end);
-          }
+          if (el) focusComposerTextEnd(el);
         }, 180);
       }
       return;
@@ -1008,6 +1118,7 @@ export function Composer({
       ...(sendAttachments.length ? { sendAttachments } : {}),
       ...connectorScopePayload,
     });
+    clearComposerDraft(draftKeyRef.current);
     setValue("");
     setFiles([]);
     setImages([]);
@@ -1443,7 +1554,7 @@ export function Composer({
         ) : null}
 
         {compact ? (
-          <div className="composer-shell py-1.5 pr-1.5 pl-3">
+          <div className="composer-shell bg-white py-1.5 pr-1.5 pl-3 dark:bg-input">
             <div className={cn("relative", dictatingActive && "h-9")}>
               {dictatingActive ? (
                 <div className="absolute inset-0 z-10 flex items-center">
@@ -1515,8 +1626,7 @@ export function Composer({
         ) : (
           <div
             className={cn(
-              "composer-shell px-2.5",
-              mobile ? "py-1.5" : "py-2",
+              "composer-shell bg-white px-2.5 py-1.5 dark:bg-input",
             )}
           >
             {files.length || images.length ? (
@@ -1646,12 +1756,7 @@ export function Composer({
               ) : null}
             <div
               className={cn(
-                "flex min-h-8 gap-1",
-                // With inline connector chips, keep a single vertically-centered row.
-                // Multi-line drafts still dock controls to the bottom while growing up.
-                inlineChips || hasInlineAtoms || !growUpward || !hasText
-                  ? "items-center"
-                  : "items-end",
+                "flex min-h-8 items-end gap-1",
                 dictatingActive && "invisible pointer-events-none",
               )}
               aria-hidden={dictatingActive || undefined}
@@ -1664,169 +1769,193 @@ export function Composer({
               >
                 <Plus className="h-5 w-5" strokeWidth={2.25} />
               </ToolBtn>
-              <div
-                className={cn(
-                  "flex min-h-8 min-w-0 flex-1 flex-wrap items-center gap-y-0.5",
-                  !hasText && !inlineChips && !hasInlineAtoms && "content-center py-[6px]",
-                  transcriptReveal && "opacity-100 transition-opacity duration-200",
-                )}
-                onMouseDown={(event) => {
-                  // Clicking padding focuses the last text segment.
-                  if (event.target === event.currentTarget) {
-                    const last = [...blocks]
-                      .reverse()
-                      .find((b) => b.type === "text");
-                    if (last) focusTextKey(last.key);
-                  }
-                }}
-              >
-                {blocks.map((block, index) => {
-                  if (block.type === "connector") {
+              {!hasInlineAtoms ? (
+                <textarea
+                  ref={(el) => {
+                    textRef.current = el;
+                    if (el) {
+                      const key =
+                        blocks.find((b) => b.type === "text")?.key ?? "main";
+                      textInputRefs.current.set(key, el as unknown as HTMLSpanElement);
+                      if (!dictatingActive) {
+                        syncComposerFieldHeight(el, composerMaxLines);
+                      }
+                    }
+                  }}
+                  value={value}
+                  rows={1}
+                  placeholder={hint}
+                  autoFocus={autoFocus}
+                  enterKeyHint="send"
+                  autoComplete="off"
+                  onFocus={() => {
+                    const key =
+                      blocks.find((b) => b.type === "text")?.key ?? null;
+                    focusedTextKeyRef.current = key;
+                    suppressAutoFocusRef.current = false;
+                    onFocus?.();
+                  }}
+                  onChange={(event) => {
+                    if (dictatingActive) return;
+                    const next = event.target.value;
+                    textCursorRef.current =
+                      event.target.selectionStart ?? next.length;
+                    if (dictateError) setDictateError(null);
+                    setBlocks(blocksFromText(next));
+                    syncComposerFieldHeight(
+                      event.currentTarget,
+                      composerMaxLines,
+                    );
+                    if (landing || stayInPlace) return;
+                    if (projectId) return;
+                    if (next.trim() && isChatSpace(spaceId)) {
+                      armChatInterface(spaceId);
+                    } else if (!next.trim() && !thread) {
+                      collapseDraft();
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (dictatingActive) {
+                      event.preventDefault();
+                      return;
+                    }
+                    textCursorRef.current =
+                      event.currentTarget.selectionStart ?? 0;
+                    if (
+                      event.key === "/" &&
+                      value === "" &&
+                      !event.metaKey &&
+                      !event.ctrlKey
+                    ) {
+                      event.preventDefault();
+                      toggleMenu("plus");
+                      return;
+                    }
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      submit();
+                    }
+                  }}
+                  className="box-border min-h-8 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-[6px] text-[16px] leading-5 outline-none placeholder:text-muted-foreground sm:text-[14px]"
+                  style={{ maxHeight: `${composerMaxLines * 1.25}rem` }}
+                />
+              ) : (
+                <ComposerEditableSurface
+                  blocks={blocks}
+                  placeholder={hint}
+                  autoFocus={autoFocus}
+                  disabled={dictatingActive}
+                  style={{ maxHeight: `${composerMaxLines * 1.25}rem` }}
+                  className="min-h-8 overflow-y-auto py-[6px] text-[16px] leading-5 sm:text-[14px]"
+                  renderConnector={(block) => {
                     const iconId =
                       connectors.find((c) => c.id === block.scope.connectorId)
                         ?.icon ?? block.scope.connectorId;
                     return (
-                      <Fragment key={block.key}>
-                        <span className="group/conn relative inline max-w-full shrink-0 text-[14px] leading-5 text-sky-500/95 sm:text-[14px] dark:text-sky-400/95">
-                          <ConnectorMark
-                            id={iconId}
-                            size="nav"
-                            className="!mr-[0.15em] !inline-block !h-[0.7em] !w-[0.7em] !align-[-0.05em]"
-                          />
-                          <span className="font-medium">{block.scope.label}</span>
-                          <button
-                            type="button"
-                            aria-label={`Remove ${block.scope.label}`}
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => dismissConnectorChip(block.scope)}
-                            className="pointer-events-none absolute -right-1.5 -top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-muted text-muted-foreground opacity-0 shadow-sm ring-1 ring-border transition-opacity duration-150 group-hover/conn:pointer-events-auto group-hover/conn:opacity-100 hover:bg-muted hover:text-foreground"
-                          >
-                            <X className="h-2.5 w-2.5" strokeWidth={2.25} />
-                          </button>
-                        </span>
-                      </Fragment>
-                    );
-                  }
-
-                  if (block.type === "trigger") {
-                    const open =
-                      triggerPicker?.triggerKey === block.key;
-                    return (
-                      <Fragment key={block.key}>
+                      <span
+                        className={cn(
+                          "group/conn relative mx-[0.12em] inline whitespace-nowrap align-baseline",
+                          "text-sky-500/95 dark:text-sky-400/95",
+                        )}
+                      >
+                        <ConnectorMark
+                          id={iconId}
+                          size="nav"
+                          className="!mr-[0.2em] !inline-block !h-[0.75em] !w-[0.75em] !align-[-0.05em]"
+                        />
+                        {block.scope.label}
                         <button
                           type="button"
-                          data-composer-trigger-word={block.key}
-                          aria-label={`Add connector for ${block.matched}`}
-                          aria-expanded={open}
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={(event) =>
-                            onTriggerWordClick(block, event.currentTarget)
-                          }
-                          className={cn(
-                            "inline shrink-0 rounded-sm text-[14px] leading-5 font-medium text-sky-600/90 underline decoration-sky-500/50 decoration-dotted underline-offset-[3px] transition-colors sm:text-[14px]",
-                            "hover:text-sky-500 hover:decoration-sky-500 dark:text-sky-400/90 dark:hover:text-sky-300",
-                            open && "bg-sky-500/10 text-sky-500",
-                          )}
+                          data-remove-connection={block.scope.connectionId}
+                          aria-label={`Remove ${block.scope.label}`}
+                          className="pointer-events-none absolute -right-1.5 -top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-muted text-muted-foreground opacity-0 shadow-sm ring-1 ring-border transition-opacity duration-150 group-hover/conn:pointer-events-auto group-hover/conn:opacity-100"
                         >
-                          {block.matched}
+                          <X className="h-2.5 w-2.5" strokeWidth={2.25} />
                         </button>
-                      </Fragment>
+                      </span>
                     );
-                  }
-
-                  const isLastText =
-                    !blocks.slice(index + 1).some((b) => b.type === "text");
-                  const showPlaceholder =
-                    blocks.length === 1 && block.value.length === 0;
-                  const collapsed = !block.value && !isLastText;
-                  const fieldClassName = cn(
-                    "bg-transparent text-[16px] leading-5 outline-none placeholder:text-muted-foreground sm:text-[14px]",
-                    isLastText
-                      ? cn(
-                          "min-h-5 min-w-[1ch] flex-1 resize-none overflow-y-auto",
-                          // Full-row only when there are no inline chips yet.
-                          !inlineChips && !hasInlineAtoms && "w-full basis-full",
-                        )
-                      : collapsed
-                        ? "w-0 max-w-0 min-w-0 overflow-hidden p-0 border-0"
-                        : "min-w-0 max-w-full shrink-0 p-0",
-                  );
-
-                  if (isLastText) {
+                  }}
+                  renderTrigger={(block) => {
+                    const open = triggerPicker?.triggerKey === block.key;
                     return (
-                      <Fragment key={block.key}>
-                        <textarea
-                        ref={(el) => {
-                          if (el) {
-                            textInputRefs.current.set(block.key, el);
-                            textRef.current = el;
-                            if (!dictatingActive) {
-                              syncComposerFieldHeight(el, composerMaxLines);
-                            }
-                          } else {
-                            textInputRefs.current.delete(block.key);
-                          }
-                        }}
-                        value={block.value}
-                        rows={1}
-                        placeholder={showPlaceholder ? hint : undefined}
-                        autoFocus={autoFocus && index === 0}
-                        enterKeyHint="send"
-                        autoComplete="off"
-                        onFocus={(event) => {
-                          focusedTextKeyRef.current = block.key;
-                          textCursorRef.current =
-                            event.target.selectionStart ?? 0;
-                          suppressAutoFocusRef.current = false;
-                          onFocus?.();
-                          window.setTimeout(() => {
-                            event.target.scrollIntoView({
-                              block: "nearest",
-                              inline: "nearest",
-                            });
-                            window.scrollTo(0, 0);
-                          }, 50);
-                        }}
-                        onSelect={(event) => {
-                          textCursorRef.current =
-                            event.currentTarget.selectionStart ?? 0;
-                        }}
-                        onChange={(event) => {
-                          if (dictatingActive) return;
-                          const next = event.target.value;
-                          textCursorRef.current =
-                            event.target.selectionStart ?? next.length;
-                          if (dictateError) setDictateError(null);
-                          setBlocks((current) =>
-                            updateTextBlock(current, block.key, next),
-                          );
-                          syncComposerFieldHeight(
-                            event.currentTarget,
-                            composerMaxLines,
-                          );
-                          if (landing || stayInPlace) return;
-                          if (projectId) return;
-                          if (next.trim() && isChatSpace(spaceId)) {
-                            armChatInterface(spaceId);
-                          } else if (
-                            !next.trim() &&
-                            !thread &&
-                            connectorsFromBlocks(blocks).length === 0
-                          ) {
-                            collapseDraft();
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (dictatingActive) {
-                            event.preventDefault();
-                            return;
-                          }
-                          textCursorRef.current =
-                            event.currentTarget.selectionStart ?? 0;
+                      <span
+                        className={cn(
+                          "inline whitespace-nowrap rounded-sm align-baseline text-sky-600/90 underline decoration-sky-500/50 decoration-dotted underline-offset-[3px] dark:text-sky-400/90",
+                          open && "bg-sky-500/10 text-sky-500",
+                        )}
+                      >
+                        {block.matched}
+                      </span>
+                    );
+                  }}
+                  onFocus={() => {
+                    suppressAutoFocusRef.current = false;
+                    onFocus?.();
+                  }}
+                  onCursorChange={(cursor) => {
+                    textCursorRef.current = cursor;
+                  }}
+                  onRemoveConnector={(connectionId) => {
+                    const scope = connectorScopes.find(
+                      (c) => c.connectionId === connectionId,
+                    );
+                    if (scope) dismissConnectorChip(scope);
+                  }}
+                  onTriggerClick={(triggerKey, anchor) => {
+                    const trigger = blocks.find(
+                      (b): b is ComposerTriggerBlock =>
+                        b.type === "trigger" && b.key === triggerKey,
+                    );
+                    if (trigger) onTriggerWordClick(trigger, anchor);
+                  }}
+                  onBlocksChange={(next, cursor) => {
+                    if (dictatingActive) return;
+                    textCursorRef.current = cursor;
+                    if (dictateError) setDictateError(null);
+                    setBlocks(next);
+                    const plain = textFromBlocks(next);
+                    if (landing || stayInPlace) return;
+                    if (projectId) return;
+                    if (plain.trim() && isChatSpace(spaceId)) {
+                      armChatInterface(spaceId);
+                    } else if (
+                      !plain.trim() &&
+                      !thread &&
+                      connectorsFromBlocks(next).length === 0
+                    ) {
+                      collapseDraft();
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (dictatingActive) {
+                      event.preventDefault();
+                      return;
+                    }
+                    if (
+                      event.key === "/" &&
+                      value === "" &&
+                      !event.metaKey &&
+                      !event.ctrlKey
+                    ) {
+                      event.preventDefault();
+                      toggleMenu("plus");
+                      return;
+                    }
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      submit();
+                    }
+                    if (event.key === "Backspace") {
+                      const root = event.currentTarget;
+                      const caret = caretPlainOffset(root);
+                      textCursorRef.current = caret;
+                      // Map caret to text key at offset 0 of a segment after a chip.
+                      let offset = 0;
+                      for (let i = 0; i < blocks.length; i += 1) {
+                        const block = blocks[i]!;
+                        if (block.type === "text") {
                           if (
-                            event.key === "Backspace" &&
-                            event.currentTarget.selectionStart === 0 &&
-                            event.currentTarget.selectionEnd === 0 &&
+                            caret === offset &&
                             block.value.length === 0
                           ) {
                             const removed = backspaceRemoveConnector(
@@ -1839,101 +1968,20 @@ export function Composer({
                               if (removed.focusKey) {
                                 focusTextKey(removed.focusKey);
                               }
-                              return;
                             }
-                          }
-                          if (
-                            event.key === "/" &&
-                            value === "" &&
-                            !event.metaKey &&
-                            !event.ctrlKey
-                          ) {
-                            event.preventDefault();
-                            toggleMenu("plus");
                             return;
                           }
-                          if (event.key === "Enter" && !event.shiftKey) {
-                            event.preventDefault();
-                            submit();
-                          }
-                        }}
-                        className={fieldClassName}
-                      />
-                      </Fragment>
-                    );
-                  }
-
-                  return (
-                    <input
-                      key={block.key}
-                      ref={(el) => {
-                        if (el) {
-                          textInputRefs.current.set(block.key, el);
-                          syncComposerSegmentWidth(el);
+                          offset += block.value.length;
+                        } else if (block.type === "connector") {
+                          offset += block.scope.label.length;
                         } else {
-                          textInputRefs.current.delete(block.key);
+                          offset += block.matched.length;
                         }
-                      }}
-                      value={block.value}
-                      size={1}
-                      placeholder={undefined}
-                      autoComplete="off"
-                      onFocus={(event) => {
-                        focusedTextKeyRef.current = block.key;
-                        textCursorRef.current = event.target.selectionStart ?? 0;
-                        suppressAutoFocusRef.current = false;
-                        onFocus?.();
-                      }}
-                      onSelect={(event) => {
-                        textCursorRef.current =
-                          event.currentTarget.selectionStart ?? 0;
-                      }}
-                      onChange={(event) => {
-                        if (dictatingActive) return;
-                        const next = event.target.value;
-                        textCursorRef.current =
-                          event.target.selectionStart ?? next.length;
-                        setBlocks((current) =>
-                          updateTextBlock(current, block.key, next),
-                        );
-                        syncComposerSegmentWidth(event.currentTarget);
-                      }}
-                      onKeyDown={(event) => {
-                        if (dictatingActive) {
-                          event.preventDefault();
-                          return;
-                        }
-                        textCursorRef.current =
-                          event.currentTarget.selectionStart ?? 0;
-                        if (
-                          event.key === "Backspace" &&
-                          event.currentTarget.selectionStart === 0 &&
-                          event.currentTarget.selectionEnd === 0 &&
-                          block.value.length === 0
-                        ) {
-                          const removed = backspaceRemoveConnector(
-                            blocks,
-                            block.key,
-                          );
-                          if (removed) {
-                            event.preventDefault();
-                            setBlocks(removed.blocks);
-                            if (removed.focusKey) {
-                              focusTextKey(removed.focusKey);
-                            }
-                            return;
-                          }
-                        }
-                        if (event.key === "Enter" && !event.shiftKey) {
-                          event.preventDefault();
-                          submit();
-                        }
-                      }}
-                      className={fieldClassName}
-                    />
-                  );
-                })}
-              </div>
+                      }
+                    }
+                  }}
+                />
+              )}
               <div
                 className={cn(
                   "flex shrink-0 items-center gap-0.5",

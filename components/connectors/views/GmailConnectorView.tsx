@@ -328,11 +328,13 @@ export function GmailConnectorView({
 
   useEffect(() => {
     if (!onToolbarChange) return;
-    const syncHint = syncing
-      ? "Syncing…"
-      : lastSyncedAt
-        ? `Last sync ${formatWhen(lastSyncedAt)}`
-        : null;
+    const syncHint = loading
+      ? "Loading…"
+      : syncing
+        ? "Syncing…"
+        : lastSyncedAt
+          ? `Last sync ${formatWhen(lastSyncedAt)}`
+          : null;
     onToolbarChange({
       page,
       syncing,
@@ -350,6 +352,7 @@ export function GmailConnectorView({
     });
   }, [
     page,
+    loading,
     syncing,
     busy,
     lastSyncedAt,
@@ -534,7 +537,7 @@ export function GmailConnectorView({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white dark:bg-black">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white dark:bg-space-canvas">
       {error ? (
         <p className="shrink-0 border-b border-black/5 px-3 py-2 text-[12px] text-destructive dark:border-white/10">
           {error}
@@ -565,7 +568,7 @@ export function GmailConnectorView({
               value={composeBody}
               onChange={(event) => setComposeBody(event.target.value)}
               rows={10}
-              className="mt-1 w-full resize-none rounded-[10px] border border-border bg-white px-3 py-2 text-[13px] outline-none dark:bg-black"
+              className="mt-1 w-full resize-none rounded-[10px] border border-border bg-white px-3 py-2 text-[13px] outline-none dark:bg-space-canvas"
             />
           </label>
           <button
@@ -616,7 +619,7 @@ export function GmailConnectorView({
                           </p>
                         </div>
                       </div>
-                      <div className="w-full overflow-hidden px-[10px] bg-white dark:bg-black">
+                      <div className="w-full overflow-hidden px-[10px] bg-white dark:bg-space-canvas">
                         {(() => {
                           const loadingBody =
                             busy &&
@@ -624,7 +627,7 @@ export function GmailConnectorView({
                             !html;
                           if (loadingBody) {
                             return (
-                              <div className="flex min-h-[12rem] items-center justify-center bg-white dark:bg-black">
+                              <div className="flex min-h-[12rem] items-center justify-center bg-white dark:bg-space-canvas">
                                 <Loader2
                                   className="h-6 w-6 animate-spin text-muted-foreground"
                                   strokeWidth={1.8}
@@ -665,7 +668,7 @@ export function GmailConnectorView({
           </div>
 
           {replyOpen ? (
-            <div className="shrink-0 border-t border-black/5 bg-white px-4 py-3 dark:border-white/10 dark:bg-black">
+            <div className="shrink-0 border-t border-black/5 bg-white px-4 py-3 dark:border-white/10 dark:bg-space-canvas">
               <textarea
                 ref={replyRef}
                 value={replyBody}
@@ -702,11 +705,6 @@ export function GmailConnectorView({
 
       {page === "inbox" ? (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          {loading ? (
-            <p className="px-4 py-6 text-[12.5px] text-muted-foreground">
-              Loading inbox…
-            </p>
-          ) : null}
           {!loading && !threads.length ? (
             <div className="px-4 py-10 text-center">
               <p className="text-[13px] font-medium text-foreground">
@@ -805,7 +803,7 @@ function Field({
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 h-9 w-full rounded-[10px] border border-border bg-white px-3 text-[13px] outline-none dark:bg-black"
+        className="mt-1 h-9 w-full rounded-[10px] border border-border bg-white px-3 text-[13px] outline-none dark:bg-space-canvas"
       />
     </label>
   );

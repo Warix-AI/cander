@@ -3801,6 +3801,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (space === "research") setResearchTool("overview");
     if (space === "studio") setStudioTool("canvas");
     setPanelMode("split");
+    setPanelRatioState((ratio) =>
+      ratio < PANEL_RATIO_OPEN_FLOOR ? PANEL_RATIO_OPEN_FLOOR : ratio,
+    );
     if (opts?.landOnPanel) {
       setMobileSurface("panel");
     } else {
@@ -4857,6 +4860,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDrafting(!hasMessages);
     setPanelIntent("execute");
     setPanelMode("split");
+    // Choice-panel compact ratio must not stick after leaving New Chat.
+    setPanelRatioState((ratio) =>
+      ratio < PANEL_RATIO_OPEN_FLOOR ? PANEL_RATIO_OPEN_FLOOR : ratio,
+    );
     setMobileSurface("panel");
     pushTarget({
       view: "chat",
@@ -4887,6 +4894,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     setPanelIntent("execute");
     setPanelMode("split");
+    setPanelRatioState((ratio) =>
+      ratio < PANEL_RATIO_OPEN_FLOOR ? PANEL_RATIO_OPEN_FLOOR : ratio,
+    );
     setMobileSurface("chat");
     pushTarget({
       view: "chat",
@@ -4918,6 +4928,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPanelIntent("execute");
     setSkillsTool("editor");
     setPanelMode("split");
+    setPanelRatioState((ratio) =>
+      ratio < PANEL_RATIO_OPEN_FLOOR ? PANEL_RATIO_OPEN_FLOOR : ratio,
+    );
     setMobileSurface("chat");
     pushTarget({
       view: "chat",

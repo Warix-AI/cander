@@ -61,28 +61,31 @@
 }
 
 .dark {
-  --card: oklch(0.165 0 0);
-  --mobile-menu-canvas: oklch(0 0 0);
-  --mobile-app-surface: oklch(0.19 0.005 265);
+  --card: oklch(0.14 0 0);
+  --mobile-menu-canvas: oklch(0.12 0 0);
+  --mobile-app-surface: oklch(0.17 0.005 265);
   --ring: oklch(0.556 0 0);
-  --input: oklch(0.175 0 0);
-  --muted: oklch(0.269 0 0);
-  --accent: oklch(0.371 0 0);
-  --border: oklch(0.269 0 0);
+  --input: oklch(0.12 0 0);
+  --muted: oklch(0.22 0 0);
+  --accent: oklch(0.26 0 0);
+  --border: oklch(0.2 0 0);
   --radius: 10px;
   --chart-1: oklch(0.81 0.1 252);
   --chart-2: oklch(0.62 0.19 260);
   --chart-3: oklch(0.55 0.22 263);
   --chart-4: oklch(0.49 0.22 264);
   --chart-5: oklch(0.42 0.18 266);
-  --popover: oklch(0.205 0 0);
+  --popover: oklch(0.14 0 0);
   --primary: oklch(0.922 0 0);
-  --sidebar: oklch(0.175 0 0);
+  /* Menu + right panel: slightly lighter black */
+  --sidebar: oklch(0.12 0 0);
   --spacing: 0.25rem;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-sans: var(--font-dm-sans), ui-sans-serif, sans-serif, system-ui;
-  --secondary: oklch(0.269 0 0);
-  --background: oklch(0.205 0 0);
+  --secondary: oklch(0.22 0 0);
+  /* Chat / new-chat canvas: lighter than menu + right panel */
+  --background: oklch(0.17 0 0);
+  --space-canvas: oklch(0.12 0 0);
   --canvas-hover: var(--muted);
   --canvas-active: var(--muted);
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
@@ -94,8 +97,8 @@
   --shadow-spread: 0px;
   --letter-spacing: 0.008em;
   --shadow-opacity: 0.1;
-  --sidebar-accent: oklch(0.22 0 0);
-  --sidebar-border: oklch(0.22 0 0);
+  --sidebar-accent: oklch(0.18 0 0);
+  --sidebar-border: oklch(0.16 0 0);
   --card-foreground: oklch(0.985 0 0);
   --shadow-offset-x: 0;
   --shadow-offset-y: 1px;
@@ -103,13 +106,12 @@
   --muted-foreground: oklch(0.708 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.12 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --destructive-foreground: oklch(0.985 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --footer: oklch(0.165 0 0);
+  --footer: oklch(0.12 0 0);
   --footer-foreground: oklch(0.985 0 0);
 }
 
@@ -362,25 +364,24 @@ html.dark.cander-narrow .mobile-dropdown-menu,
   background: oklch(1 0 0 / 0.05);
 }
 
-.dark html.cander-mobile .composer-shell,
-.dark html.cander-narrow .composer-shell {
-  background-color: oklch(0.135 0.006 265) !important;
-  border-color: oklch(1 0 0 / 0.08) !important;
-  box-shadow:
-    0 1px 2px oklch(0 0 0 / 0.22),
-    0 6px 20px oklch(0 0 0 / 0.18) !important;
+html.dark.cander-mobile .composer-shell,
+html.dark.cander-narrow .composer-shell {
+  background-color: var(--input) !important;
+  border: 1px solid oklch(1 0 0 / 0.06) !important;
+  box-shadow: none !important;
 }
 
-.dark html.cander-mobile .composer-dock,
-.dark html.cander-narrow .composer-dock {
-  background-color: oklch(0 0 0);
+html.dark.cander-mobile .composer-dock,
+html.dark.cander-narrow .composer-dock {
+  background-color: transparent;
 }
 
-.dark html.cander-mobile .composer-dock .light-surface,
-.dark html.cander-narrow .composer-dock .light-surface,
-.dark html.cander-mobile .light-surface[class*="fixed"]:not(.mobile-dropdown-menu),
-.dark html.cander-narrow .light-surface[class*="fixed"]:not(.mobile-dropdown-menu) {
-  background-color: oklch(0.135 0.006 265) !important;
+html.dark.cander-mobile .composer-dock .light-surface,
+html.dark.cander-narrow .composer-dock .light-surface,
+html.dark.cander-mobile .light-surface[class*="fixed"]:not(.mobile-dropdown-menu),
+html.dark.cander-narrow .light-surface[class*="fixed"]:not(.mobile-dropdown-menu) {
+  background-color: var(--popover) !important;
+  border-color: oklch(1 0 0 / 0.06) !important;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
@@ -602,17 +603,18 @@ html:not(.dark) .courier-app-appearance[data-palette="mono"] {
 /* Dark tinted / mono surfaces */
 html.dark .courier-app-appearance[data-palette="tint"],
 html.dark .courier-app-appearance[data-palette="mono"] {
-  --background: oklch(0.205 var(--app-chroma) var(--app-hue));
-  --card: oklch(0.175 calc(var(--app-chroma) * 0.85) var(--app-hue));
-  --muted: oklch(0.269 calc(var(--app-chroma) * 0.7) var(--app-hue));
-  --accent: oklch(0.32 calc(var(--app-chroma) * 0.9) var(--app-hue));
-  --border: oklch(0.28 calc(var(--app-chroma) * 0.55) var(--app-hue));
-  --input: oklch(0.269 calc(var(--app-chroma) * 0.5) var(--app-hue));
-  --sidebar: oklch(0.175 calc(var(--app-chroma) * 0.75) var(--app-hue));
-  --sidebar-accent: oklch(0.23 calc(var(--app-chroma) * 0.85) var(--app-hue));
-  --sidebar-border: oklch(0.24 calc(var(--app-chroma) * 0.5) var(--app-hue));
-  --secondary: oklch(0.269 calc(var(--app-chroma) * 0.55) var(--app-hue));
-  --popover: oklch(0.2 calc(var(--app-chroma) * 0.7) var(--app-hue));
+  --background: oklch(0.17 var(--app-chroma) var(--app-hue));
+  --card: oklch(0.14 calc(var(--app-chroma) * 0.85) var(--app-hue));
+  --muted: oklch(0.22 calc(var(--app-chroma) * 0.7) var(--app-hue));
+  --accent: oklch(0.26 calc(var(--app-chroma) * 0.9) var(--app-hue));
+  --border: oklch(0.2 calc(var(--app-chroma) * 0.55) var(--app-hue));
+  --input: oklch(0.12 calc(var(--app-chroma) * 0.5) var(--app-hue));
+  --sidebar: oklch(0.12 calc(var(--app-chroma) * 0.35) var(--app-hue));
+  --sidebar-accent: oklch(0.18 calc(var(--app-chroma) * 0.85) var(--app-hue));
+  --sidebar-border: oklch(0.16 calc(var(--app-chroma) * 0.5) var(--app-hue));
+  --secondary: oklch(0.22 calc(var(--app-chroma) * 0.55) var(--app-hue));
+  --popover: oklch(0.14 calc(var(--app-chroma) * 0.7) var(--app-hue));
+  --space-canvas: oklch(0.12 calc(var(--app-chroma) * 0.25) var(--app-hue));
 }
 
 .courier-app-appearance .rounded-box {
@@ -1026,13 +1028,25 @@ html:not(.dark) .menu-row-hover[data-active="true"] {
   background-color: var(--muted);
 }
 
-.dark .composer-shell,
-.dark .light-surface {
-  background: var(--input);
-  border: 0.75px solid var(--border);
-  box-shadow:
-    0 1px 2px oklch(0 0 0 / 0.22),
-    0 4px 12px oklch(0 0 0 / 0.16);
+html.dark .composer-shell {
+  background-color: var(--input) !important;
+  background-image: none !important;
+  /* Extremely dark stroke — barely there */
+  border: 1px solid oklch(1 0 0 / 0.06) !important;
+  box-shadow: none !important;
+}
+
+html.dark .light-surface {
+  background-color: var(--popover) !important;
+  background-image: none !important;
+  border: 1px solid oklch(1 0 0 / 0.06);
+  box-shadow: none;
+}
+
+.composer-shell [contenteditable],
+.composer-shell [contenteditable]:focus {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .dark .landing-suggestion:hover {

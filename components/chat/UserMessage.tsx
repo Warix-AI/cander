@@ -71,7 +71,7 @@ function InlineConnectorChip({ item }: { item: UserConnector }) {
         id={iconId}
         size="nav"
         // Letter-sized glyph on the text baseline (no flex centering).
-        className="!mr-[0.15em] !inline-block !h-[0.7em] !w-[0.7em] !align-[-0.05em]"
+        className="!mr-[0.2em] !inline-block !h-[0.75em] !w-[0.75em] !align-[-0.05em]"
       />
       <span className="font-medium">{item.label}</span>
     </span>
@@ -141,7 +141,7 @@ export function UserMessage({
         </div>
       ) : null}
       {content ? (
-        <div className="light-surface rounded-2xl px-3.5 py-2.5">
+        <div className="light-surface rounded-2xl px-3.5 py-2.5 dark:bg-input dark:shadow-none">
           <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed tracking-[-0.01em]">
             {parts.map((part, index) =>
               part.kind === "text" ? (
