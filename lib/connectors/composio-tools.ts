@@ -34,7 +34,15 @@ const SECRET_KEYS = new Set([
 ]);
 
 const MAX_BODY_CHARS = 8_000;
+const MAX_HTML_CHARS = 200_000;
 const MAX_SNIPPET_CHARS = 500;
+const LONG_HTML_KEYS = new Set([
+  "html",
+  "bodyHtml",
+  "body_html",
+  "bodyHtmlContent",
+]);
+
 
 export function mapGmailToolArguments(
   tool: GmailConnectorToolName,
@@ -51,7 +59,7 @@ export function mapGmailToolArguments(
   if (tool === "gmail.read") {
     const messageId = args.messageId ?? args.message_id;
     if (!messageId) throw new Error("Missing required argument: messageId");
-    return { message_id: String(messageId) };
+    return { message_id: String(messageId), format: "full" };
   }
 
   if (tool === "gmail.archive") {
@@ -163,14 +171,15 @@ export function mapGmailToolArguments(
   return out;
 }
 
-export function redactComposioPayload(value: unknown): unknown {
+export function redactComposioPayload(value: unknown, keyHint = ""): unknown {
   if (value == null) return value;
   if (Array.isArray(value)) {
-    return value.map((item) => redactComposioPayload(item));
+    return value.map((item) => redactComposioPayload(item, keyHint));
   }
   if (typeof value !== "object") {
-    if (typeof value === "string" && value.length > MAX_BODY_CHARS) {
-      return `${value.slice(0, MAX_BODY_CHARS)}…`;
+    if (typeof value === "string") {
+      const max = LONG_HTML_KEYS.has(keyHint) ? MAX_HTML_CHARS : MAX_BODY_CHARS;
+      if (value.length > max) return `${value.slice(0, max)}…`;
     }
     return value;
   }
@@ -178,7 +187,7 @@ export function redactComposioPayload(value: unknown): unknown {
   const out: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     if (SECRET_KEYS.has(key)) continue;
-    out[key] = redactComposioPayload(child);
+    out[key] = redactComposioPayload(child, key);
   }
   return out;
 }
@@ -204,6 +213,45 @@ function headerValue(headers: unknown, name: string): string | undefined {
   return undefined;
 }
 
+function decodeGmailBase64(data: string): string | undefined {
+  try {
+    const normalized = data.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+    return Buffer.from(`${normalized}${pad}`, "base64").toString("utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+function collectMimeBodies(
+  node: Record<string, unknown> | null | undefined,
+  out: { text?: string; html?: string },
+) {
+  if (!node) return;
+  const mime = pickString(node.mimeType, node.mime_type)?.toLowerCase() ?? "";
+  const body = node.body;
+  const bodyObj =
+    body && typeof body === "object"
+      ? (body as Record<string, unknown>)
+      : null;
+  const data = pickString(bodyObj?.data);
+  if (data) {
+    const decoded = decodeGmailBase64(data);
+    if (decoded) {
+      if (mime.includes("text/html") && !out.html) out.html = decoded;
+      if (mime.includes("text/plain") && !out.text) out.text = decoded;
+    }
+  }
+  const parts = node.parts;
+  if (Array.isArray(parts)) {
+    for (const part of parts) {
+      if (part && typeof part === "object") {
+        collectMimeBodies(part as Record<string, unknown>, out);
+      }
+    }
+  }
+}
+
 function extractMessageSummary(message: Record<string, unknown>): Record<string, unknown> {
   const payload = message.payload;
   const payloadObj =
@@ -217,45 +265,31 @@ function extractMessageSummary(message: Record<string, unknown>): Record<string,
   const to = headerValue(headers, "To") ?? pickString(message.to);
   const date = headerValue(headers, "Date") ?? pickString(message.date, message.internalDate);
 
-  let body = pickString(message.body, message.text, message.snippet);
-  if (!body && payloadObj) {
-    const parts = payloadObj.parts;
-    if (Array.isArray(parts)) {
-      for (const part of parts) {
-        if (!part || typeof part !== "object") continue;
-        const partObj = part as Record<string, unknown>;
-        const mime = pickString(partObj.mimeType)?.toLowerCase();
-        const data = pickString(partObj.body && typeof partObj.body === "object"
-          ? (partObj.body as Record<string, unknown>).data
-          : undefined);
-        if (data && (!mime || mime.includes("text/plain"))) {
-          try {
-            body = Buffer.from(data, "base64").toString("utf8");
-            break;
-          } catch {
-            /* ignore decode errors */
-          }
-        }
-      }
-    }
-    const bodyData =
-      payloadObj.body && typeof payloadObj.body === "object"
-        ? pickString((payloadObj.body as Record<string, unknown>).data)
-        : undefined;
-    if (!body && bodyData) {
-      try {
-        body = Buffer.from(bodyData, "base64").toString("utf8");
-      } catch {
-        /* ignore decode errors */
-      }
-    }
-  }
+  const mimeBodies: { text?: string; html?: string } = {};
+  if (payloadObj) collectMimeBodies(payloadObj, mimeBodies);
+  // Some Composio responses already flatten bodies onto the message.
+  collectMimeBodies(message, mimeBodies);
+
+  const body =
+    pickString(message.body, message.text, mimeBodies.text, message.snippet) ??
+    mimeBodies.text;
+  const html =
+    pickString(
+      message.html,
+      message.bodyHtml,
+      message.body_html,
+      mimeBodies.html,
+    ) ?? mimeBodies.html;
 
   const snippet = pickString(message.snippet);
   const trimmedBody =
     body && body.length > MAX_BODY_CHARS
       ? `${body.slice(0, MAX_BODY_CHARS)}…`
       : body;
+  const trimmedHtml =
+    html && html.length > MAX_HTML_CHARS
+      ? `${html.slice(0, MAX_HTML_CHARS)}…`
+      : html;
   const trimmedSnippet =
     snippet && snippet.length > MAX_SNIPPET_CHARS
       ? `${snippet.slice(0, MAX_SNIPPET_CHARS)}…`
@@ -270,6 +304,7 @@ function extractMessageSummary(message: Record<string, unknown>): Record<string,
     date,
     snippet: trimmedSnippet,
     body: trimmedBody,
+    html: trimmedHtml,
     labelIds: Array.isArray(message.labelIds)
       ? message.labelIds
       : Array.isArray(message.label_ids)
@@ -290,16 +325,20 @@ export function formatGmailToolOutput(
   tool: GmailConnectorToolName,
   raw: unknown,
 ): string {
-  const data = redactComposioPayload(unwrapComposioData(raw));
+  // Unwrap first — do NOT redact before MIME decode or base64 HTML parts get truncated.
+  const data = unwrapComposioData(raw);
 
   if (tool === "gmail.search") {
-    const messages = extractSearchMessages(data);
+    const messages = extractSearchMessages(data).map((row) => {
+      const { html: _html, ...rest } = row;
+      return rest;
+    });
     const summary = {
       outcome: "ok",
       count: messages.length,
       messages,
     };
-    return JSON.stringify(summary);
+    return JSON.stringify(redactComposioPayload(summary));
   }
 
   if (tool === "gmail.send") {
@@ -307,13 +346,15 @@ export function formatGmailToolOutput(
       data && typeof data === "object"
         ? (data as Record<string, unknown>)
         : { result: data };
-    return JSON.stringify({
-      outcome: "ok",
-      sent: {
-        id: pickString(sent.id, sent.messageId, sent.message_id),
-        threadId: pickString(sent.threadId, sent.thread_id),
-      },
-    });
+    return JSON.stringify(
+      redactComposioPayload({
+        outcome: "ok",
+        sent: {
+          id: pickString(sent.id, sent.messageId, sent.message_id),
+          threadId: pickString(sent.threadId, sent.thread_id),
+        },
+      }),
+    );
   }
 
   if (tool === "gmail.draft" || tool === "gmail.reply") {
@@ -321,19 +362,36 @@ export function formatGmailToolOutput(
       data && typeof data === "object"
         ? (data as Record<string, unknown>)
         : { result: data };
-    return JSON.stringify({
-      outcome: "ok",
-      [tool === "gmail.draft" ? "draft" : "reply"]: {
-        id: pickString(payload.id, payload.draftId, payload.draft_id, payload.messageId, payload.message_id),
-        threadId: pickString(payload.threadId, payload.thread_id),
-      },
-    });
+    return JSON.stringify(
+      redactComposioPayload({
+        outcome: "ok",
+        [tool === "gmail.draft" ? "draft" : "reply"]: {
+          id: pickString(
+            payload.id,
+            payload.draftId,
+            payload.draft_id,
+            payload.messageId,
+            payload.message_id,
+          ),
+          threadId: pickString(payload.threadId, payload.thread_id),
+        },
+      }),
+    );
   }
 
-  const message =
-    data && typeof data === "object"
-      ? extractMessageSummary(data as Record<string, unknown>)
-      : { body: String(data ?? "") };
+  // gmail.read — extract HTML/text from full MIME before any truncation.
+  let messageSource: Record<string, unknown> | null =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : null;
+  if (
+    messageSource?.message &&
+    typeof messageSource.message === "object" &&
+    !messageSource.payload
+  ) {
+    messageSource = messageSource.message as Record<string, unknown>;
+  }
+  const message = messageSource
+    ? extractMessageSummary(messageSource)
+    : { body: String(data ?? "") };
   return JSON.stringify({ outcome: "ok", message });
 }
 

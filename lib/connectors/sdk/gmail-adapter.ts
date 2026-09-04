@@ -229,7 +229,9 @@ export const gmailViewAdapter: ConnectorViewAdapter = {
             ok: true,
             data: {
               bodyText: pickString(message.body, message.text) ?? null,
-              bodyHtml: pickString(message.html, message.bodyHtml) ?? null,
+              bodyHtml:
+                pickString(message.html, message.bodyHtml, message.body_html) ??
+                null,
               subject: pickString(message.subject) ?? null,
               from: pickString(message.from) ?? null,
               to: pickString(message.to) ?? null,

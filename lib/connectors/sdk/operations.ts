@@ -133,11 +133,17 @@ export async function ensureMailBodyCached(input: {
     return { ok: false, status: 404, error: "Message not found." };
   }
 
-  if (row.body_fetched_at && (row.body_text || row.body_html)) {
+  const cachedHtml = row.body_html;
+  const cachedText = row.body_text ?? null;
+  // null body_html means we never successfully stored an HTML attempt (legacy
+  // rows). Empty string means "fetched, no HTML part". Only skip refetch when
+  // body_html is a string (including "").
+  const htmlAttemptStored = typeof cachedHtml === "string";
+  if (row.body_fetched_at && htmlAttemptStored) {
     return {
       ok: true,
-      bodyText: row.body_text ?? null,
-      bodyHtml: row.body_html ?? null,
+      bodyText: cachedText,
+      bodyHtml: cachedHtml.trim() ? cachedHtml : null,
     };
   }
 
@@ -168,7 +174,8 @@ export async function ensureMailBodyCached(input: {
     .from("connector_mail_messages")
     .update({
       body_text: bodyText,
-      body_html: bodyHtml,
+      // Empty string marks "fetched, no HTML" so we don't refetch forever.
+      body_html: bodyHtml ?? "",
       body_fetched_at: now,
       updated_at: now,
     })

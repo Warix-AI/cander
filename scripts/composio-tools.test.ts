@@ -32,7 +32,7 @@ test("mapGmailToolArguments maps search, read, and send args", () => {
   );
   assert.deepEqual(
     mapGmailToolArguments("gmail.read", { messageId: "msg_123" }),
-    { message_id: "msg_123" },
+    { message_id: "msg_123", format: "full" },
   );
   assert.deepEqual(
     mapGmailToolArguments("gmail.send", {
@@ -218,6 +218,68 @@ Best, Alex`,
   assert.equal(draft?.subject, "Check out my new app, Cander");
   assert.match(draft?.body ?? "", /Hey Matt/);
   assert.match(draft?.body ?? "", /cander\.app/);
+});
+
+test("formatGmailToolOutput extracts HTML from multipart MIME before redact", () => {
+  const html = "<html><body><img src=\"https://cdn.example.com/hero.jpg\" /><p>Hello</p></body></html>";
+  const plain = "Hello";
+  const htmlB64 = Buffer.from(html, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+  const plainB64 = Buffer.from(plain, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+  // Long base64 that would be truncated by redact if applied first.
+  const longHtml = `<html><body>${"x".repeat(12_000)}<img src="https://cdn.example.com/a.png" /></body></html>`;
+  const longB64 = Buffer.from(longHtml, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+
+  const small = formatGmailToolOutput("gmail.read", {
+    data: {
+      id: "msg_html",
+      threadId: "thr_1",
+      payload: {
+        mimeType: "multipart/alternative",
+        parts: [
+          {
+            mimeType: "text/plain",
+            body: { data: plainB64 },
+          },
+          {
+            mimeType: "text/html",
+            body: { data: htmlB64 },
+          },
+        ],
+      },
+    },
+  });
+  const smallParsed = JSON.parse(small) as {
+    message: { body?: string; html?: string };
+  };
+  assert.equal(smallParsed.message.body, plain);
+  assert.equal(smallParsed.message.html, html);
+
+  const large = formatGmailToolOutput("gmail.read", {
+    data: {
+      id: "msg_long",
+      payload: {
+        mimeType: "text/html",
+        body: { data: longB64 },
+      },
+    },
+  });
+  const largeParsed = JSON.parse(large) as {
+    message: { html?: string };
+  };
+  assert.match(String(largeParsed.message.html), /cdn\.example\.com\/a\.png/);
+  assert.ok(String(largeParsed.message.html).length > 8_000);
 });
 
 test("formatGmailToolOutput summarizes send results", () => {

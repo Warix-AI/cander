@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
+  Archive,
   ArrowLeft,
+  Forward,
+  Mail,
+  MailOpen,
   Maximize2,
   Minimize2,
   Pencil,
@@ -44,6 +48,8 @@ import {
   SHELL_PANEL_BODY,
 } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
+
+const PANEL_SURFACE = "bg-white dark:bg-black";
 
 function sessionSnapshot(
   key: string,
@@ -99,7 +105,8 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         prev.page === next.page &&
         prev.syncing === next.syncing &&
         prev.busy === next.busy &&
-        prev.canGoInbox === next.canGoInbox
+        prev.canGoInbox === next.canGoInbox &&
+        prev.isUnread === next.isUnread
       ) {
         return prev;
       }
@@ -245,52 +252,93 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         </span>
       </div>
 
-      {/* Bottom header — connector tools or browser URL */}
+      {/* Bottom header — inbox tools or message actions */}
       <div
         className={cn(
-          "relative flex h-[45px] min-w-0 shrink-0 items-center gap-1 border-t border-black/5 px-2 dark:border-white/5",
+          "relative flex h-[45px] min-w-0 shrink-0 items-center gap-1 border-t border-black/5 px-2 dark:border-white/10",
           BROWSER_CHROME_BG,
         )}
       >
         {isConnectorTab ? (
-          <>
-            {gmailToolbar?.canGoInbox ? (
+          gmailToolbar?.page === "detail" ? (
+            <>
               <ChromeBtn
                 label="Inbox"
                 onClick={() => gmailToolbarRef.current?.onInbox()}
               >
                 <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
               </ChromeBtn>
-            ) : null}
-            <ChromeBtn
-              label="Refresh"
-              disabled={Boolean(gmailToolbar?.syncing)}
-              onClick={() => gmailToolbarRef.current?.onRefresh()}
-            >
-              <RefreshCw
-                className={cn(
-                  "h-3.5 w-3.5",
-                  gmailToolbar?.syncing && "animate-spin",
-                )}
-                strokeWidth={1.6}
-              />
-            </ChromeBtn>
-            <ChromeBtn
-              label="Compose"
-              onClick={() => gmailToolbarRef.current?.onCompose()}
-            >
-              <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
-            </ChromeBtn>
-            <div className="ml-2 flex min-w-0 flex-1 items-center gap-2 px-1">
-              <ConnectorMark id={connectorId} size="xs" />
               <span className="truncate text-[12.5px] font-medium text-foreground">
-                {title}
-              </span>
-              <span className="truncate text-[11px] text-muted-foreground">
                 Inbox
               </span>
-            </div>
-          </>
+              <div className="ml-auto flex items-center gap-0.5">
+                <ChromeBtn
+                  label="Archive"
+                  disabled={Boolean(gmailToolbar?.busy)}
+                  onClick={() => gmailToolbarRef.current?.onArchive()}
+                >
+                  <Archive className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </ChromeBtn>
+                <ChromeBtn
+                  label={gmailToolbar.isUnread ? "Mark read" : "Mark unread"}
+                  disabled={Boolean(gmailToolbar?.busy)}
+                  onClick={() => gmailToolbarRef.current?.onToggleRead()}
+                >
+                  {gmailToolbar.isUnread ? (
+                    <MailOpen className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  ) : (
+                    <Mail className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  )}
+                </ChromeBtn>
+                <ChromeBtn
+                  label="Forward"
+                  disabled={Boolean(gmailToolbar?.busy)}
+                  onClick={() => gmailToolbarRef.current?.onForward()}
+                >
+                  <Forward className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </ChromeBtn>
+              </div>
+            </>
+          ) : gmailToolbar?.canGoInbox ? (
+            <>
+              <ChromeBtn
+                label="Inbox"
+                onClick={() => gmailToolbarRef.current?.onInbox()}
+              >
+                <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </ChromeBtn>
+              <span className="truncate text-[12.5px] font-medium text-foreground">
+                {gmailToolbar.page === "forward" ? "Forward" : "Compose"}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="truncate px-1 text-[12.5px] font-medium text-foreground">
+                Inbox
+              </span>
+              <div className="ml-auto flex items-center gap-0.5">
+                <ChromeBtn
+                  label="Refresh"
+                  disabled={Boolean(gmailToolbar?.syncing)}
+                  onClick={() => gmailToolbarRef.current?.onRefresh()}
+                >
+                  <RefreshCw
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      gmailToolbar?.syncing && "animate-spin",
+                    )}
+                    strokeWidth={1.6}
+                  />
+                </ChromeBtn>
+                <ChromeBtn
+                  label="Compose"
+                  onClick={() => gmailToolbarRef.current?.onCompose()}
+                >
+                  <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </ChromeBtn>
+              </div>
+            </>
+          )
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-1">
             <div className="min-w-0 flex-1">
@@ -307,20 +355,32 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         )}
       </div>
 
-      {/* Body */}
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
-        {isConnectorTab ? (
-          connectorId === "gmail" ? (
+      {/* Body — keep Gmail mounted when opening link tabs so scroll/selection survive */}
+      <div
+        className={cn(
+          "relative flex min-h-0 flex-1 flex-col overflow-hidden",
+          PANEL_SURFACE,
+        )}
+      >
+        {connectorId === "gmail" ? (
+          <div
+            className={cn(
+              "absolute inset-0 flex min-h-0 flex-col",
+              !isConnectorTab && "invisible pointer-events-none",
+            )}
+            aria-hidden={!isConnectorTab}
+          >
             <GmailConnectorView
               onOpenLink={openLink}
               onToolbarChange={onGmailToolbarChange}
             />
-          ) : (
-            <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-muted-foreground">
-              Connector view coming soon for {title}.
-            </div>
-          )
-        ) : (
+          </div>
+        ) : isConnectorTab ? (
+          <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-muted-foreground">
+            Connector view coming soon for {title}.
+          </div>
+        ) : null}
+        {!isConnectorTab ? (
           <BrowserSurfaceHost
             tabId={active.id}
             url={
@@ -333,7 +393,7 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
             onTitleChange={onWebTitleChange}
             onOpenNewTab={openLink}
           />
-        )}
+        ) : null}
       </div>
     </div>
   );

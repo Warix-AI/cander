@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { ExternalLink } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronDown, ExternalLink, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const URL_RE = /https?:\/\/[^\s<>"'`)\]]+/gi;
@@ -11,8 +11,7 @@ function shortenUrl(url: string) {
     const parsed = new URL(url);
     const host = parsed.hostname.replace(/^www\./, "");
     const path = parsed.pathname === "/" ? "" : parsed.pathname;
-    const clipped =
-      path.length > 28 ? `${path.slice(0, 24)}…` : path;
+    const clipped = path.length > 28 ? `${path.slice(0, 24)}…` : path;
     return `${host}${clipped}`;
   } catch {
     return url.length > 42 ? `${url.slice(0, 39)}…` : url;
@@ -22,7 +21,6 @@ function shortenUrl(url: string) {
 function stripTrackingNoise(url: string) {
   try {
     const parsed = new URL(url);
-    // Drop common tracking params for display; keep href intact.
     const drop = [
       "utm_source",
       "utm_medium",
@@ -103,10 +101,12 @@ function collapseLinkHeavyBlocks(text: string): {
 export function MailBody({
   text,
   onOpenLink,
+  hasAttachments,
   className,
 }: {
   text: string;
   onOpenLink?: (url: string) => void;
+  hasAttachments?: boolean;
   className?: string;
 }) {
   const { prose, links } = useMemo(
@@ -114,6 +114,7 @@ export function MailBody({
     [text],
   );
   const segments = useMemo(() => segmentBody(prose), [prose]);
+  const [linksOpen, setLinksOpen] = useState(false);
 
   if (!text.trim()) {
     return (
@@ -134,39 +135,60 @@ export function MailBody({
                 key={`l-${index}`}
                 type="button"
                 onClick={() => onOpenLink?.(segment.href)}
-                className="mx-0.5 inline-flex max-w-full items-center gap-1 rounded-md bg-sky-500/10 px-1.5 py-0.5 align-baseline text-[12.5px] font-medium text-sky-700 underline-offset-2 hover:bg-sky-500/15 hover:underline dark:text-sky-300"
+                className="mx-0.5 inline font-medium text-sky-700 underline underline-offset-2 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-200"
                 title={segment.href}
               >
-                <ExternalLink className="h-3 w-3 shrink-0 opacity-70" />
-                <span className="truncate">{segment.label}</span>
+                {segment.label}
               </button>
             );
           })}
         </div>
       ) : null}
 
+      {hasAttachments ? (
+        <div className="flex items-center gap-2 rounded-[10px] border border-border/70 bg-muted/20 px-3 py-2.5 text-[12.5px] text-muted-foreground">
+          <Paperclip className="h-3.5 w-3.5 shrink-0" />
+          <span>This message has attachments</span>
+        </div>
+      ) : null}
+
       {links.length ? (
-        <div className="rounded-[10px] border border-border/80 bg-muted/30 p-3">
-          <p className="mb-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-            Links · {links.length}
-          </p>
-          <ul className="space-y-1.5">
-            {links.map((href) => (
-              <li key={href}>
-                <button
-                  type="button"
-                  onClick={() => onOpenLink?.(href)}
-                  className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-sky-700 transition-colors hover:bg-background dark:text-sky-300"
-                  title={href}
-                >
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60 group-hover:opacity-100" />
-                  <span className="min-w-0 truncate font-medium">
-                    {shortenUrl(stripTrackingNoise(href))}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+        <div className="rounded-[10px] border border-border/70 bg-muted/20">
+          <button
+            type="button"
+            onClick={() => setLinksOpen((open) => !open)}
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[12px] font-medium text-muted-foreground hover:text-foreground"
+          >
+            <ChevronDown
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 transition-transform",
+                linksOpen ? "rotate-0" : "-rotate-90",
+              )}
+              strokeWidth={1.8}
+            />
+            <span>
+              Links · {links.length}
+            </span>
+          </button>
+          {linksOpen ? (
+            <ul className="space-y-0.5 border-t border-border/60 px-2 pb-2 pt-1">
+              {links.map((href) => (
+                <li key={href}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenLink?.(href)}
+                    className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-sky-700 transition-colors hover:bg-background dark:text-sky-300"
+                    title={href}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60 group-hover:opacity-100" />
+                    <span className="min-w-0 truncate font-medium">
+                      {shortenUrl(stripTrackingNoise(href))}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
     </div>
