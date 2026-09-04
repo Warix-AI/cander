@@ -479,7 +479,10 @@ app.whenReady().then(() => {
     browserSurface.setChromeOverlay(Boolean(active));
   });
   ipcMain.handle("cander:browser-set-pip", async (_e, tabId) => {
-    browserSurface.setPipTab(tabId || null);
+    await browserSurface.setPipTab(tabId || null);
+  });
+  ipcMain.handle("cander:browser-has-playing-video", async (_e, tabId) => {
+    return browserSurface.hasPlayingVideo(tabId);
   });
   ipcMain.handle("cander:browser-read-page", async (_e, tabId) => {
     return browserSurface.readPage(tabId);

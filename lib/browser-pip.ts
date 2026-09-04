@@ -56,11 +56,12 @@ export async function startBrowserPip(
     return true;
   }
 
+  // Release prior PiP without destroying — tab strip may still own that session.
   if (prev && prev.tabId !== input.tabId) {
     exitBrowserPip();
     if (!prev.webEmbed) {
       await adapter.setPipTab?.(null);
-      await adapter.destroyTab(prev.tabId);
+      await adapter.hideTab(prev.tabId);
     }
   }
 
@@ -78,11 +79,18 @@ export async function startBrowserPip(
   return true;
 }
 
-export async function stopBrowserPip(): Promise<void> {
+/** Exit PiP chrome. Destroy native tab only when the tab is being closed. */
+export async function stopBrowserPip(opts?: {
+  destroy?: boolean;
+}): Promise<void> {
   const prev = getBrowserPipSnapshot();
   exitBrowserPip();
   if (!prev || prev.webEmbed) return;
   const adapter = getBrowserSurfaceAdapter();
   await adapter.setPipTab?.(null);
-  await adapter.destroyTab(prev.tabId);
+  if (opts?.destroy) {
+    await adapter.destroyTab(prev.tabId);
+  } else {
+    await adapter.hideTab(prev.tabId);
+  }
 }

@@ -19,7 +19,10 @@ import {
   isBrowserPipTab,
   subscribeBrowserPip,
 } from "@/lib/browser-pip-store";
-import { startBrowserPip } from "@/lib/browser-pip";
+import {
+  clearBrowserTabMediaPlaying,
+  markBrowserTabMediaPlaying,
+} from "@/lib/browser-tab-media";
 
 type BrowserSurfaceHostProps = {
   tabId: string;
@@ -175,26 +178,11 @@ export function BrowserSurfaceHost({
         onOpenNewTabRef.current?.(String(event.url));
       }
       if (event.type === "mediaPlaying") {
-        // Auto video PiP — only for ordinary browsing (not isolated previews).
-        const uid = userIdRef.current;
-        if (
-          !isolatedPartition &&
-          !previewOnly &&
-          !isBrowserPipTab(tabId) &&
-          uid
-        ) {
-          const pageUrl = urlRef.current;
-          void startBrowserPip({
-            tabId,
-            url: pageUrl,
-            title: titleRef.current,
-            faviconUrl: null,
-            userId: uid,
-            sourceProjectId: projectIdRef.current ?? null,
-            webEmbed:
-              adapter.id === "web-pwa" && canEmbedInPwa(pageUrl, previewOnly),
-          });
-        }
+        // Track for tab-switch / panel-hide PiP (play alone does not force PiP).
+        markBrowserTabMediaPlaying(tabId, true);
+      }
+      if (event.type === "mediaPaused") {
+        markBrowserTabMediaPlaying(tabId, false);
       }
       if (event.type === "processGone") {
         setRecoverToken((n) => n + 1);
@@ -205,12 +193,17 @@ export function BrowserSurfaceHost({
       cancelled = true;
       setTabReady(false);
       unsub();
-      // PiP owns this native tab — overlay keeps painting; do not destroy.
+      // PiP owns this native tab — overlay keeps painting; do not hide/destroy.
       if (isBrowserPipTab(tabId) || getBrowserPipSnapshot()?.tabId === tabId) {
         return;
       }
+      // Keep ordinary web sessions alive across tab switches (hide only).
+      // Isolated / preview tabs are cheap one-offs — destroy on unmount.
       void adapter.hideTab(tabId);
-      void adapter.destroyTab(tabId);
+      if (isolatedPartition || previewOnly) {
+        clearBrowserTabMediaPlaying(tabId);
+        void adapter.destroyTab(tabId);
+      }
     };
   }, [
     tabId,

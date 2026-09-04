@@ -336,24 +336,22 @@ function recoverTab(tabId, lastUrl, options) {
   });
 }
 
+function urlsMatch(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  try {
+    return new URL(a).href === new URL(b).href;
+  } catch {
+    return false;
+  }
+}
+
 function createTab(tabId, initialUrl, options = {}) {
   if (!hostWindow || hostWindow.isDestroyed()) {
     throw new Error("No host window for browser surface.");
   }
-  // Reuse a live view (PiP retain / remount) — never tear it down.
+  // Reuse a live view (tab switch / PiP) — never tear it down or reload here.
   if (tabs.has(tabId)) {
-    const entry = tabs.get(tabId);
-    if (
-      initialUrl &&
-      isAllowedUrl(initialUrl) &&
-      initialUrl !== "about:blank" &&
-      entry &&
-      entry.lastUrl !== initialUrl &&
-      tabId !== pipTabId
-    ) {
-      entry.lastUrl = initialUrl;
-      void entry.view.webContents.loadURL(initialUrl);
-    }
     return;
   }
   if (initialUrl && !isAllowedUrl(initialUrl)) {
@@ -420,7 +418,15 @@ async function applyVideoPipMode(tabId, enabled) {
   try {
     await wc.executeJavaScript(VIDEO_PIP_INSTALL_SCRIPT, true);
     if (enabled) {
-      return Boolean(await wc.executeJavaScript(VIDEO_PIP_ENTER_SCRIPT, true));
+      // YouTube / SPA players may mount <video> a beat after media-started-playing.
+      for (let i = 0; i < 6; i++) {
+        const ok = Boolean(
+          await wc.executeJavaScript(VIDEO_PIP_ENTER_SCRIPT, true),
+        );
+        if (ok) return true;
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      return false;
     }
     await wc.executeJavaScript(VIDEO_PIP_EXIT_SCRIPT, true);
     return true;
@@ -430,11 +436,28 @@ async function applyVideoPipMode(tabId, enabled) {
   }
 }
 
-function setPipTab(tabId) {
+async function hasPlayingVideo(tabId) {
+  const entry = tabs.get(tabId);
+  if (!entry) return false;
+  const wc = entry.view.webContents;
+  try {
+    await wc.executeJavaScript(VIDEO_PIP_INSTALL_SCRIPT, true);
+    return Boolean(
+      await wc.executeJavaScript(
+        "Boolean(window.__canderHasPlayingVideo && window.__canderHasPlayingVideo())",
+        true,
+      ),
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function setPipTab(tabId) {
   const next = tabId ? String(tabId) : null;
   const prev = pipTabId;
   if (prev && prev !== next) {
-    void applyVideoPipMode(prev, false);
+    await applyVideoPipMode(prev, false);
   }
   pipTabId = next;
   if (pipTabId) {
@@ -447,7 +470,7 @@ function setPipTab(tabId) {
         // ignore
       }
       raiseView(entry);
-      void applyVideoPipMode(pipTabId, true);
+      await applyVideoPipMode(pipTabId, true);
     }
   }
 }
@@ -524,6 +547,14 @@ function navigate(tabId, url) {
     });
     return;
   }
+  let current = entry.lastUrl;
+  try {
+    current = entry.view.webContents.getURL() || current;
+  } catch {
+    // ignore
+  }
+  // Remounting a retained tab must not reload (YouTube / live media).
+  if (urlsMatch(current, url)) return;
   entry.lastUrl = url;
   void entry.view.webContents.loadURL(url);
 }
@@ -609,6 +640,7 @@ module.exports = {
   createTab,
   destroyTab,
   setPipTab,
+  hasPlayingVideo,
   showTab,
   hideTab,
   hideAll,

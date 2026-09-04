@@ -65,6 +65,8 @@ export interface BrowserSurfaceAdapter {
   setChromeOverlay?(active: boolean): Promise<void> | void;
   /** Retain this tab for in-app PiP (skip hideAll / destroy while set). */
   setPipTab?(tabId: string | null): Promise<void> | void;
+  /** True when a <video> is actively playing in the native tab. */
+  hasPlayingVideo?(tabId: string): Promise<boolean> | boolean;
   navigate(tabId: string, url: string): Promise<void> | void;
   back(tabId: string): Promise<void> | void;
   forward(tabId: string): Promise<void> | void;

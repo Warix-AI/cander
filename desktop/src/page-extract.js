@@ -91,27 +91,69 @@ const SELECTION_SCRIPT = `(() => {
   return { text: sel.trim().slice(0, 4000), url: location.href };
 })()`;
 
-/** Install helpers used by in-app video Picture-in-Picture. */
+/** Install helpers used by in-app video/image Picture-in-Picture. */
 const VIDEO_PIP_INSTALL_SCRIPT = `(() => {
   if (window.__canderVideoPipInstalled) return true;
   window.__canderVideoPipInstalled = true;
   const STYLE_ID = 'cander-video-pip-style';
+  const ATTR = 'data-cander-pip-media';
+  const ANC = 'data-cander-pip-ancestor';
+  const collectVideos = (root) => {
+    const out = [];
+    try {
+      out.push(...root.querySelectorAll('video'));
+    } catch (_) {}
+    let frames = [];
+    try {
+      frames = Array.from(root.querySelectorAll('iframe'));
+    } catch (_) {}
+    for (const frame of frames) {
+      try {
+        const doc = frame.contentDocument;
+        if (doc) out.push(...collectVideos(doc));
+      } catch (_) {}
+    }
+    return out;
+  };
+  const score = (el) => {
+    const w = el.clientWidth || el.videoWidth || 0;
+    const h = el.clientHeight || el.videoHeight || 0;
+    return w * h;
+  };
   const findVideo = () => {
-    const videos = Array.from(document.querySelectorAll('video'));
+    const videos = collectVideos(document);
     const playing = videos.find((v) => !v.paused && !v.ended && v.readyState > 1);
     if (playing) return playing;
-    return videos
-      .slice()
-      .sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0] || null;
+    return videos.slice().sort((a, b) => score(b) - score(a))[0] || null;
+  };
+  const findImage = () => {
+    const imgs = Array.from(document.querySelectorAll('img')).filter((img) => {
+      const w = img.naturalWidth || img.clientWidth;
+      const h = img.naturalHeight || img.clientHeight;
+      return w >= 120 && h >= 120 && img.offsetParent !== null;
+    });
+    return imgs.slice().sort((a, b) => score(b) - score(a))[0] || null;
+  };
+  const markAncestors = (el) => {
+    let p = el.parentElement;
+    while (p && p !== document.documentElement) {
+      p.setAttribute(ANC, '1');
+      p = p.parentElement;
+    }
+  };
+  const clearMarks = () => {
+    document.querySelectorAll('[' + ATTR + ']').forEach((el) => el.removeAttribute(ATTR));
+    document.querySelectorAll('[' + ANC + ']').forEach((el) => el.removeAttribute(ANC));
   };
   window.__canderEnterVideoPip = () => {
-    const v = findVideo();
-    if (!v) return false;
-    document.querySelectorAll('[data-cander-pip-video]').forEach((el) => {
-      el.removeAttribute('data-cander-pip-video');
-    });
-    v.setAttribute('data-cander-pip-video', '1');
-    try { void v.play(); } catch (_) {}
+    const media = findVideo() || findImage();
+    if (!media) return false;
+    clearMarks();
+    media.setAttribute(ATTR, '1');
+    markAncestors(media);
+    if (media.tagName === 'VIDEO') {
+      try { void media.play(); } catch (_) {}
+    }
     let style = document.getElementById(STYLE_ID);
     if (!style) {
       style = document.createElement('style');
@@ -123,16 +165,22 @@ const VIDEO_PIP_INSTALL_SCRIPT = `(() => {
       '  background:#000!important; overflow:hidden!important;',
       '}',
       'html.cander-video-pip body * { visibility:hidden!important; }',
-      'html.cander-video-pip video[data-cander-pip-video="1"],',
-      'html.cander-video-pip video[data-cander-pip-video="1"] * {',
-      '  visibility:visible!important;',
+      'html.cander-video-pip [' + ANC + '="1"] {',
+      '  visibility:visible!important; overflow:visible!important;',
+      '  transform:none!important; clip:auto!important; clip-path:none!important;',
+      '  opacity:1!important;',
       '}',
-      'html.cander-video-pip video[data-cander-pip-video="1"] {',
+      'html.cander-video-pip [' + ANC + '="1"] > *:not([' + ANC + ']):not([' + ATTR + ']) {',
+      '  visibility:hidden!important;',
+      '}',
+      'html.cander-video-pip [' + ATTR + '="1"] {',
+      '  visibility:visible!important;',
       '  position:fixed!important; inset:0!important;',
       '  width:100vw!important; height:100vh!important;',
       '  max-width:none!important; max-height:none!important;',
       '  object-fit:contain!important; z-index:2147483647!important;',
-      '  background:#000!important;',
+      '  background:#000!important; transform:none!important;',
+      '  margin:0!important; padding:0!important;',
       '}',
     ].join('\\n');
     document.documentElement.classList.add('cander-video-pip');
@@ -142,13 +190,11 @@ const VIDEO_PIP_INSTALL_SCRIPT = `(() => {
     document.documentElement.classList.remove('cander-video-pip');
     const style = document.getElementById(STYLE_ID);
     if (style) style.remove();
-    document.querySelectorAll('[data-cander-pip-video]').forEach((el) => {
-      el.removeAttribute('data-cander-pip-video');
-    });
+    clearMarks();
     return true;
   };
   window.__canderHasPlayingVideo = () => {
-    return Array.from(document.querySelectorAll('video')).some(
+    return collectVideos(document).some(
       (v) => !v.paused && !v.ended && v.readyState > 1,
     );
   };

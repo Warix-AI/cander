@@ -150,7 +150,7 @@ export function BrowserPipOverlay() {
     if (!tabId || webEmbed) return;
     const adapter = getBrowserSurfaceAdapter();
     await adapter.setPipTab?.(null);
-    await adapter.destroyTab(tabId);
+    await adapter.hideTab(tabId);
   }, [pip]);
 
   const returnToProject = useCallback(async () => {
