@@ -209,17 +209,6 @@ export function ProjectBrowserPanel({
     getProjectBrowserSessionRevision,
   );
 
-  const key: ProjectBrowserKey | null = standalone
-    ? standaloneBrowserKey(actor.id, workspaceId)
-    : projectId && spaceId && spaceId !== "connectors"
-      ? {
-          profileId: actor.id,
-          workspaceId,
-          spaceId,
-          projectId,
-        }
-      : null;
-
   const entity = useMemo(() => {
     if (standalone || !projectId) return null;
     return (
@@ -229,13 +218,36 @@ export function ProjectBrowserPanel({
     );
   }, [standalone, projectId, workspaceId, entityRevision]);
 
+  /** Prefer the project's stored space so Create/Image stays on studio sessions. */
+  const browserSpaceId = (
+    entity?.space === "studio" ||
+    entity?.space === "build" ||
+    entity?.space === "research" ||
+    entity?.space === "work"
+      ? entity.space
+      : spaceId === "connectors"
+        ? "build"
+        : spaceId
+  ) ?? "build";
+
+  const key: ProjectBrowserKey | null = standalone
+    ? standaloneBrowserKey(actor.id, workspaceId)
+    : projectId
+      ? {
+          profileId: actor.id,
+          workspaceId,
+          spaceId: browserSpaceId,
+          projectId,
+        }
+      : null;
+
   const fallback = useMemo(() => {
     if (standalone) return defaultStandaloneBrowserSession();
     if (!projectId) {
       return defaultProjectBrowserSession({
         projectId: "project",
         title: "Project",
-        spaceId: spaceId === "connectors" ? "build" : (spaceId ?? "build"),
+        spaceId: browserSpaceId,
       });
     }
     const workItem = findWorkCollectionItem(projectId);
@@ -246,9 +258,16 @@ export function ProjectBrowserPanel({
       projectId,
       title: project?.name ?? entity?.title ?? "Project",
       publishedUrl: entity?.publishedUrl,
-      spaceId: spaceId === "connectors" ? "build" : (spaceId ?? "build"),
+      spaceId: browserSpaceId,
     });
-  }, [standalone, projectId, project?.name, entity?.title, entity?.publishedUrl, spaceId]);
+  }, [
+    standalone,
+    projectId,
+    project?.name,
+    entity?.title,
+    entity?.publishedUrl,
+    browserSpaceId,
+  ]);
 
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
@@ -476,7 +495,11 @@ export function ProjectBrowserPanel({
   /** Work space items hide URL/nav chrome until the user adds a browser tab. */
   const isWorkItemBrowser =
     !standalone && spaceId === "work" && isWorkItemBrowserProjectId(projectId);
-  const isStudioProject = !standalone && spaceId === "studio";
+  const isStudioProject =
+    !standalone &&
+    (browserSpaceId === "studio" ||
+      project?.space === "studio" ||
+      entity?.space === "studio");
   const showBrowserNavChrome = isMarkdownDocTab
     ? true
     : isStudioProject
@@ -569,7 +592,10 @@ export function ProjectBrowserPanel({
             };
             targetIndex = emptyIndex;
             changed = true;
-            if (index === studioImageJobs.length - 1) {
+            if (
+              job.status === "generating" ||
+              index === studioImageJobs.length - 1
+            ) {
               focusTabId = empty.id;
             }
           } else {
@@ -580,7 +606,10 @@ export function ProjectBrowserPanel({
             nextTabs = [...nextTabs, tab];
             targetIndex = nextTabs.length - 1;
             changed = true;
-            if (index === studioImageJobs.length - 1) {
+            if (
+              job.status === "generating" ||
+              index === studioImageJobs.length - 1
+            ) {
               focusTabId = tab.id;
             }
           }
@@ -595,8 +624,13 @@ export function ProjectBrowserPanel({
         const existingUrl = target.url?.trim() ?? "";
         const hasCanvas =
           existingUrl.length > 0 && existingUrl !== "about:blank";
-        // Seed once from chat; never clobber an edited / restored canvas.
-        if (!hasCanvas) {
+        const sameImage = existingUrl === imageUrl;
+        // Seed from chat when empty. Also replace a stale/wrong URL that isn't
+        // a durable studio asset yet (attachment URLs / prior bind races).
+        const shouldSeed =
+          !hasCanvas ||
+          (!sameImage && !isStudioAssetUrl(existingUrl));
+        if (shouldSeed) {
           nextTabs[targetIndex] = {
             ...target,
             boundGenerationId: genId,
@@ -604,7 +638,10 @@ export function ProjectBrowserPanel({
             history: [imageUrl],
             historyIndex: 0,
             title:
-              target.title === "Canvas" || target.title === "Document"
+              target.title === "Canvas" ||
+              target.title === "Document" ||
+              target.title === "Image" ||
+              /^Image \d+$/.test(target.title)
                 ? label
                 : target.title,
           };
@@ -2468,7 +2505,8 @@ function StudioMediaSurface({
   }, [lockedAspectRatio]);
 
   // Restore empty canvases. Bound tabs use their chat generation URL — never
-  // steal the project's newest asset onto the wrong tab.
+  // steal the project's newest asset onto the wrong tab. Unbound empty tabs
+  // wait for chat bind while image jobs are in flight / pending paint.
   useEffect(() => {
     if (kind !== "studio-image" || !projectId) return;
     if (hasMedia || src === "about:blank") return;
@@ -2481,6 +2519,18 @@ function StudioMediaSurface({
         return;
       }
       if (imageJob?.status === "generating") return;
+      // Bound but job not ready yet — don't pull an unrelated project asset.
+      if (!imageJob || imageJob.status !== "completed") return;
+    } else if (thread) {
+      const pendingChatImage = thread.messages.some((message) =>
+        (message.blocks ?? []).some(
+          (block) =>
+            block.type === "image_generation" &&
+            (block.status === "generating" ||
+              (block.status === "completed" && Boolean(block.imageUrl?.trim()))),
+        ),
+      );
+      if (pendingChatImage) return;
     }
 
     let cancelled = false;
@@ -2506,6 +2556,7 @@ function StudioMediaSurface({
     boundGenerationId,
     imageJob?.status,
     imageJob?.imageUrl,
+    thread,
   ]);
 
   useEffect(() => {

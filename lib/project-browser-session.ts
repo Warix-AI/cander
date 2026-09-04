@@ -251,8 +251,8 @@ export function defaultProjectBrowserSession(input: {
   }
 
   if (spaceId === "studio") {
-    const canvas = makeStudioMediaTab("studio-image", "Canvas");
-    return { tabs: [canvas], activeTabId: canvas.id };
+    const image = makeStudioMediaTab("studio-image");
+    return { tabs: [image], activeTabId: image.id };
   }
 
   if (spaceId === "build") {
@@ -422,6 +422,22 @@ export function ensurePinnedTab(
   session: ProjectBrowserSession,
   pinned: ProjectBrowserTab,
 ): ProjectBrowserSession {
+  // Studio media tabs are not pinned identity tabs. Prepending a fresh
+  // empty "Image"/"Canvas" on every hydrate broke bind + generation UI.
+  if (isStudioMediaTabKind(pinned.kind)) {
+    if (!session.tabs.length) {
+      return { tabs: [pinned], activeTabId: pinned.id };
+    }
+    return {
+      ...session,
+      tabs: session.tabs.map((tab) =>
+        tab.kind === "studio-image" && tab.title === "Canvas"
+          ? { ...tab, title: "Image" }
+          : tab,
+      ),
+    };
+  }
+
   const existing = session.tabs.find((tab) => tab.pinned || tab.id === pinned.id);
   if (existing) {
     const tabs = session.tabs.map((tab) =>

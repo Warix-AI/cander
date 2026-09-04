@@ -1690,11 +1690,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     next.status === "completed" &&
                     (next.imageUrl?.trim() || patch.attachmentId)
                   ) {
-                    const durable = resolveChatImageUrl({
-                      attachmentId: next.attachmentId ?? patch.attachmentId,
-                      dataUrl: next.imageUrl,
-                    });
-                    if (durable) next.imageUrl = durable;
+                    const inline = next.imageUrl?.trim() ?? "";
+                    // Keep inline data for immediate chat/panel paint. Attachment
+                    // ids stay on the block for durable refs; swapping to the
+                    // attachment URL too early can 502 before bytes are ready.
+                    if (!inline.startsWith("data:")) {
+                      const durable = resolveChatImageUrl({
+                        attachmentId: next.attachmentId ?? patch.attachmentId,
+                        dataUrl: next.imageUrl,
+                      });
+                      if (durable) next.imageUrl = durable;
+                    }
                   }
                   return next;
                 }),

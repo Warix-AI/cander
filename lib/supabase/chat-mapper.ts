@@ -140,6 +140,10 @@ function sanitizeBlocksForRemoteSync(
 ): NonNullable<Message["blocks"]> {
   return blocks.map((block) => {
     if (block.type === "image_generation") {
+      const inline = block.imageUrl?.trim() ?? "";
+      // Keep inline data in the row when present so clients can paint before
+      // attachment bytes are fetchable. Prefer attachment URL only otherwise.
+      if (inline.startsWith("data:")) return block;
       const imageUrl = resolveChatImageUrl({
         attachmentId: block.attachmentId,
         dataUrl: block.imageUrl,
@@ -148,6 +152,8 @@ function sanitizeBlocksForRemoteSync(
       return { ...block, imageUrl };
     }
     if (block.type === "image") {
+      const inline = block.url?.trim() ?? "";
+      if (inline.startsWith("data:")) return block;
       const url = resolveChatImageUrl({
         attachmentId: block.attachmentId,
         dataUrl: block.url,

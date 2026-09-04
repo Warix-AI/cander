@@ -146,9 +146,14 @@ export async function updateImageGenerationJob(
   };
   memory.set(id, next);
 
+  const b64 =
+    next.dataUrl && next.dataUrl.includes("base64,")
+      ? next.dataUrl.split("base64,")[1]
+      : null;
+
   try {
     const admin = createSupabaseAdminClient();
-    await admin
+    const { error } = await admin
       .from("image_generation_jobs")
       .update({
         status: next.status,
@@ -157,20 +162,16 @@ export async function updateImageGenerationJob(
         attachment_id: next.attachmentId ?? null,
         error: next.error ?? null,
         updated_at: next.updatedAt,
+        ...(b64 ? { result_b64: b64 } : {}),
       })
       .eq("id", id)
       .eq("user_id", userId);
-
-    const b64 =
-      next.dataUrl && next.dataUrl.includes("base64,")
-        ? next.dataUrl.split("base64,")[1]
-        : null;
-    if (b64) {
-      await admin
-        .from("image_generation_jobs")
-        .update({ result_b64: b64 })
-        .eq("id", id)
-        .eq("user_id", userId);
+    if (error) {
+      console.log("[IMAGE_JOB]", {
+        event: "db_update_failed",
+        id,
+        error: error.message.slice(0, 200),
+      });
     }
   } catch (e) {
     console.log("[IMAGE_JOB]", {
