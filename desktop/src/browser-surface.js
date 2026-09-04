@@ -1,6 +1,6 @@
 const { WebContentsView, session, systemPreferences } = require("electron");
 const { partitionFor, isAllowedUrl } = require("./browser-security");
-const { PAGE_EXTRACT_SCRIPT, SELECTION_SCRIPT } = require("./page-extract");
+const { PAGE_EXTRACT_SCRIPT, SELECTION_SCRIPT, VIDEO_PIP_INSTALL_SCRIPT, VIDEO_PIP_ENTER_SCRIPT, VIDEO_PIP_EXIT_SCRIPT } = require("./page-extract");
 
 /**
  * Local Chromium tab surfaces for the right-panel browser workspace.
@@ -220,6 +220,39 @@ function attachViewListeners(tabId, view) {
     });
   });
 
+  wc.on("did-finish-load", () => {
+    void wc.executeJavaScript(VIDEO_PIP_INSTALL_SCRIPT, true).catch(() => {});
+    if (tabId === pipTabId) {
+      void applyVideoPipMode(tabId, true);
+    }
+  });
+
+  wc.on("media-started-playing", () => {
+    void (async () => {
+      try {
+        await wc.executeJavaScript(VIDEO_PIP_INSTALL_SCRIPT, true);
+        const hasVideo = await wc.executeJavaScript(
+          "Boolean(window.__canderHasPlayingVideo && window.__canderHasPlayingVideo())",
+          true,
+        );
+        if (!hasVideo) return;
+      } catch {
+        // Fall through — still notify; enter script no-ops without a video.
+      }
+      emitToRenderer("cander:browser-event", {
+        type: "mediaPlaying",
+        tabId,
+      });
+    })();
+  });
+
+  wc.on("media-paused", () => {
+    emitToRenderer("cander:browser-event", {
+      type: "mediaPaused",
+      tabId,
+    });
+  });
+
   wc.on("render-process-gone", (_e, details) => {
     emitToRenderer("cander:browser-event", {
       type: "processGone",
@@ -251,10 +284,16 @@ function createView(tabId, initialUrl, options) {
       webSecurity: true,
       allowRunningInsecureContent: false,
       navigateOnDragDrop: false,
+      backgroundThrottling: false,
     },
   });
   attachViewListeners(tabId, view);
   applyBrowserUserAgent(view.webContents);
+  try {
+    view.webContents.setBackgroundThrottling(false);
+  } catch {
+    // ignore
+  }
   try {
     view.setBackgroundColor("#FFFFFF");
   } catch {
@@ -364,16 +403,51 @@ function destroyTab(tabId, opts = {}) {
   }
 }
 
+function raiseView(entry) {
+  if (!entry || !hostWindow || hostWindow.isDestroyed()) return;
+  try {
+    hostWindow.contentView.removeChildView(entry.view);
+    hostWindow.contentView.addChildView(entry.view);
+  } catch {
+    // ignore
+  }
+}
+
+async function applyVideoPipMode(tabId, enabled) {
+  const entry = tabs.get(tabId);
+  if (!entry) return false;
+  const wc = entry.view.webContents;
+  try {
+    await wc.executeJavaScript(VIDEO_PIP_INSTALL_SCRIPT, true);
+    if (enabled) {
+      return Boolean(await wc.executeJavaScript(VIDEO_PIP_ENTER_SCRIPT, true));
+    }
+    await wc.executeJavaScript(VIDEO_PIP_EXIT_SCRIPT, true);
+    return true;
+  } catch (err) {
+    console.warn("[cander-desktop] video pip mode failed", err);
+    return false;
+  }
+}
+
 function setPipTab(tabId) {
   const next = tabId ? String(tabId) : null;
-  if (pipTabId && pipTabId !== next) {
-    // Previous PiP slot released — leave the view alone until explicit destroy.
+  const prev = pipTabId;
+  if (prev && prev !== next) {
+    void applyVideoPipMode(prev, false);
   }
   pipTabId = next;
   if (pipTabId) {
     const entry = tabs.get(pipTabId);
     if (entry) {
       entry.visible = true;
+      try {
+        entry.view.webContents.setBackgroundThrottling(false);
+      } catch {
+        // ignore
+      }
+      raiseView(entry);
+      void applyVideoPipMode(pipTabId, true);
     }
   }
 }
@@ -401,6 +475,9 @@ function showTab(tabId, bounds) {
     return;
   }
   entry.view.setBounds(nextBounds);
+  if (tabId === pipTabId) {
+    raiseView(entry);
+  }
 }
 
 function hideTab(tabId) {

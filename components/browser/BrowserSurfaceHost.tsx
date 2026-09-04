@@ -19,6 +19,7 @@ import {
   isBrowserPipTab,
   subscribeBrowserPip,
 } from "@/lib/browser-pip-store";
+import { startBrowserPip } from "@/lib/browser-pip";
 
 type BrowserSurfaceHostProps = {
   tabId: string;
@@ -70,10 +71,18 @@ export function BrowserSurfaceHost({
   const onTitleChangeRef = useRef(onTitleChange);
   const onFaviconChangeRef = useRef(onFaviconChange);
   const onOpenNewTabRef = useRef(onOpenNewTab);
+  const urlRef = useRef(url);
+  const titleRef = useRef(title);
+  const userIdRef = useRef(userId);
+  const projectIdRef = useRef(projectId);
   onUrlChangeRef.current = onUrlChange;
   onTitleChangeRef.current = onTitleChange;
   onFaviconChangeRef.current = onFaviconChange;
   onOpenNewTabRef.current = onOpenNewTab;
+  urlRef.current = url;
+  titleRef.current = title;
+  userIdRef.current = userId;
+  projectIdRef.current = projectId;
 
   const suppressed = useSyncExternalStore(
     subscribeNativeBrowserSurfaceSuppress,
@@ -164,6 +173,28 @@ export function BrowserSurfaceHost({
       }
       if (event.type === "openInNewTab" && "url" in event) {
         onOpenNewTabRef.current?.(String(event.url));
+      }
+      if (event.type === "mediaPlaying") {
+        // Auto video PiP — only for ordinary browsing (not isolated previews).
+        const uid = userIdRef.current;
+        if (
+          !isolatedPartition &&
+          !previewOnly &&
+          !isBrowserPipTab(tabId) &&
+          uid
+        ) {
+          const pageUrl = urlRef.current;
+          void startBrowserPip({
+            tabId,
+            url: pageUrl,
+            title: titleRef.current,
+            faviconUrl: null,
+            userId: uid,
+            sourceProjectId: projectIdRef.current ?? null,
+            webEmbed:
+              adapter.id === "web-pwa" && canEmbedInPwa(pageUrl, previewOnly),
+          });
+        }
       }
       if (event.type === "processGone") {
         setRecoverToken((n) => n + 1);
@@ -280,7 +311,7 @@ export function BrowserSurfaceHost({
       >
         <p className="text-sm font-medium tracking-[-0.01em]">Playing in Picture in Picture</p>
         <p className="max-w-xs text-[12px] text-muted-foreground">
-          This tab is floating over Cander. Close the mini player to bring it back here.
+          Video is floating over Cander. Use Back on the mini player to return here.
         </p>
       </div>
     );

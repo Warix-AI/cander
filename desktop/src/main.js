@@ -12,7 +12,7 @@ const DEFAULT_URL = "https://cander.app";
 const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Bumped when the native shell changes — visible on <html data-cander-shell>. */
-const SHELL_BUILD = "2026-09-04-browser-pip";
+const SHELL_BUILD = "2026-09-04-browser-video-pip";
 /** macOS content-view mask — keep in sync with DESKTOP_WINDOW_RADIUS_PX in lib/shell-chrome.ts */
 const DESKTOP_WINDOW_RADIUS_PX = 24;
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");

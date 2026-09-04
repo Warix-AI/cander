@@ -3,6 +3,8 @@ import {
   enterBrowserPip,
   exitBrowserPip,
   getBrowserPipSnapshot,
+  DEFAULT_PIP_HEIGHT,
+  DEFAULT_PIP_WIDTH,
   type BrowserPipState,
 } from "@/lib/browser-pip-store";
 import { hasDesktopBrowserBridge, isDesktopShell } from "@/lib/desktop-shell";
@@ -35,13 +37,24 @@ export function canEnterBrowserPip(url: string): {
 
 /** Start PiP for a live browser tab. Replaces any existing PiP. */
 export async function startBrowserPip(
-  input: Omit<BrowserPipState, "webEmbed"> & { webEmbed?: boolean },
+  input: Omit<BrowserPipState, "webEmbed" | "width" | "height"> & {
+    webEmbed?: boolean;
+    width?: number;
+    height?: number;
+  },
 ): Promise<boolean> {
   const gate = canEnterBrowserPip(input.url);
   if (!gate.ok) return false;
 
   const prev = getBrowserPipSnapshot();
   const adapter = getBrowserSurfaceAdapter();
+
+  if (prev?.tabId === input.tabId) {
+    if (!prev.webEmbed) {
+      await adapter.setPipTab?.(input.tabId);
+    }
+    return true;
+  }
 
   if (prev && prev.tabId !== input.tabId) {
     exitBrowserPip();
@@ -55,6 +68,8 @@ export async function startBrowserPip(
   enterBrowserPip({
     ...input,
     webEmbed,
+    width: input.width ?? prev?.width ?? DEFAULT_PIP_WIDTH,
+    height: input.height ?? prev?.height ?? DEFAULT_PIP_HEIGHT,
   });
 
   if (!webEmbed) {

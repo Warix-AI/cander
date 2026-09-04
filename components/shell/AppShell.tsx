@@ -9,6 +9,7 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { MobileAppChrome } from "@/components/shell/MobileAppChrome";
 import { MobileMenuScaffold } from "@/components/shell/MobileMenuScaffold";
 import { SpaceChatLayout } from "@/components/shell/SpaceChatLayout";
+import { BrowserPipOverlay } from "@/components/browser/BrowserPipOverlay";
 import { RecentsView } from "@/components/shell/RecentsView";
 import { SplitMainLayout } from "@/components/shell/SplitMainLayout";
 import { SettingsView } from "@/components/settings/SettingsView";
@@ -293,6 +294,7 @@ function AuthenticatedShell() {
           <InviteWall />
           <PublishSheet />
           <DomainsSheet />
+          <BrowserPipOverlay />
         </div>
       </MobilePanelActionsProvider>
     </AppearanceProvider>

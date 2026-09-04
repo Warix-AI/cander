@@ -558,15 +558,6 @@ export function ProjectBrowserPanel({
   };
 
   const leaveProject = async () => {
-    if (
-      !standalone &&
-      active?.kind === "web" &&
-      address &&
-      address !== "about:blank" &&
-      !pipForActive
-    ) {
-      await enterPipForActive();
-    }
     backToSpaceHome();
   };
 

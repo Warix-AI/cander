@@ -34,6 +34,9 @@ export type BrowserSurfaceEventMap = {
   embedBlocked: { tabId: string; url: string };
   /** Popup / target=_blank from the page — open as another in-app tab. */
   openInNewTab: { tabId: string; url: string };
+  /** Native Chromium media started (video/audio). */
+  mediaPlaying: { tabId: string };
+  mediaPaused: { tabId: string };
 };
 
 export type BrowserSurfaceEvent =
