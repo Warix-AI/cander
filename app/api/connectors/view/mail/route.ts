@@ -78,7 +78,10 @@ export async function GET(request: Request) {
 
     let bodyText = row.body_text as string | null;
     let bodyHtml = row.body_html as string | null;
-    if (fetchBody && !row.body_fetched_at) {
+    // Always go through ensureMailBodyCached — it no-ops when HTML was already
+    // stored (including "" = fetched, no HTML part). Skipping on body_fetched_at
+    // alone left legacy text-only rows stuck without images forever.
+    if (fetchBody) {
       const cached = await ensureMailBodyCached({
         client: ctx.client,
         workspaceId: ctx.workspaceId,
@@ -91,6 +94,9 @@ export async function GET(request: Request) {
         bodyText = cached.bodyText;
         bodyHtml = cached.bodyHtml;
       }
+    }
+    if (typeof bodyHtml === "string" && !bodyHtml.trim()) {
+      bodyHtml = null;
     }
 
     return NextResponse.json({
