@@ -9,7 +9,7 @@ import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const rowClass =
-  "menu-row-hover flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[13.5px] transition-colors duration-200";
+  "menu-row-hover flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-left text-[15px] transition-colors duration-200";
 
 export function SpacesSheet({ onSelect }: { onSelect: () => void }) {
   const {
@@ -80,14 +80,14 @@ export function SpacesSheet({ onSelect }: { onSelect: () => void }) {
           >
             <Icon
               className={cn(
-                "h-3.5 w-3.5 shrink-0",
+                "h-4 w-4 shrink-0",
                 tinted ? spaceIconTint(id as SpaceId) : "text-muted-foreground",
               )}
               strokeWidth={2}
             />
             <span className="min-w-0 flex-1 truncate">{label}</span>
             {comingSoon ? (
-              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                 Coming soon
               </span>
             ) : null}

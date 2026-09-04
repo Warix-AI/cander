@@ -29,6 +29,12 @@ import {
 } from "@/components/shell/ComposerVoice";
 import { connectors } from "@/lib/data";
 import { APP_MESSAGE_PLACEHOLDER } from "@/lib/app-brand";
+import {
+  browsingFocusComposerPlaceholder,
+  getBrowsingFocusServerSnapshot,
+  getBrowsingFocusSnapshot,
+  subscribeBrowsingFocus,
+} from "@/lib/browser-context/browsing-focus";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import {
   isSpaceLibrarySpace,
@@ -1243,11 +1249,20 @@ export function Composer({
     const id = window.setInterval(keepComposerKeyboard, 350);
     return () => window.clearInterval(id);
   }, [dictatingActive]);
+  const browsingFocus = useSyncExternalStore(
+    subscribeBrowsingFocus,
+    getBrowsingFocusSnapshot,
+    getBrowsingFocusServerSnapshot,
+  );
+  const browsingFocusHint =
+    !pageReference && browsingFocus
+      ? browsingFocusComposerPlaceholder(browsingFocus)
+      : null;
   const hint =
     placeholder ??
     (selectedId && !stayInPlace
       ? `Change the ${labelFor(selectedId)}…`
-      : APP_MESSAGE_PLACEHOLDER);
+      : browsingFocusHint ?? APP_MESSAGE_PLACEHOLDER);
 
   /** Split view / mobile: composer grows upward; controls stay on the bottom row. */
   const growUpward = mobile || panelMode !== "collapsed";

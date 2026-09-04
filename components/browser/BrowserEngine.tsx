@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceApi, useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
+import { setActiveBrowserContextTab } from "@/lib/browser-context/active-tab";
 import type { BrowserPage } from "@/lib/space-entities";
 
 type BrowserEngineProps = {
@@ -33,7 +34,17 @@ export function BrowserEngine({
 
   useEffect(() => {
     setBrowserPage(page);
-  }, [page, setBrowserPage]);
+    setActiveBrowserContextTab({
+      tabId: `engine:${page.url}`,
+      tabKind: "web",
+      title: page.title,
+      url: page.url,
+      projectId: projectId ?? undefined,
+      canReadText: true,
+      canCaptureViewport: false,
+    });
+    return () => setActiveBrowserContextTab(null);
+  }, [page, projectId, setBrowserPage]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">

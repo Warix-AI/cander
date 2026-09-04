@@ -1,11 +1,11 @@
 import {
   Blocks,
   Briefcase,
+  Brush,
   Compass,
   Globe,
   Hammer,
   History,
-  Sparkles,
 } from "lucide-react";
 import { isExtraNavId, type SidebarNavId } from "./spaces";
 import type { SpaceId } from "./types";
@@ -15,7 +15,8 @@ export const spaceIcons: Record<SpaceId, typeof Hammer> = {
   work: Briefcase,
   build: Hammer,
   research: Compass,
-  studio: Sparkles,
+  /** Create — brush (not Sparkles; Turbopack must pick this up after cache clear). */
+  studio: Brush,
 };
 
 export const extraNavIcons: Record<

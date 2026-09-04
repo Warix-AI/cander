@@ -117,7 +117,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: mobileShellScript }}
         />
       </head>
-      <body className="min-h-svh overflow-x-hidden overflow-y-auto bg-background font-sans text-foreground">
+      <body
+        className="min-h-svh overflow-x-hidden overflow-y-auto bg-background font-sans text-foreground"
+        suppressHydrationWarning
+      >
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

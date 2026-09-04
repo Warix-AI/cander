@@ -179,7 +179,12 @@ function PreviewFace({
   compact?: boolean;
 }) {
   // Explore cards: peach wash + wide paper; paper shows first-site cover when present.
-  if (kind === "paper" && item.space !== "studio") {
+  // Create (studio/build) uses full-bleed product covers — never the paper frame.
+  if (
+    kind === "paper" &&
+    item.space !== "studio" &&
+    item.space !== "build"
+  ) {
     const preview = item.paperPreview;
     const coverImage =
       projectCoverImageSrc(item.cover) ??

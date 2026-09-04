@@ -122,6 +122,7 @@ export function bindChatStoreOwner(actorId: string | undefined) {
   ownerId = next;
   state = { threads: [], revision: state.revision + 1, hydrated: false };
   hydrate();
+  emit();
 }
 
 export function subscribeChatStore(listener: Listener) {

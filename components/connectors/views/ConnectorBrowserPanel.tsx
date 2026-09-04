@@ -48,6 +48,7 @@ import {
   type ConnectorBrowserTab,
 } from "@/lib/connector-browser-session";
 import { normalizeBrowserUrl, titleFromUrl } from "@/lib/preview-url";
+import { recordBrowserVisit } from "@/lib/browser-recent-history";
 import {
   BROWSER_CHROME_CHIP,
   BROWSER_CHROME_CHIP_HOVER,
@@ -167,7 +168,11 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
   const closeTab = (id: string) => {
     const tab = session.tabs.find((item) => item.id === id);
     if (!tab || tab.pinned || tab.kind === "connector") return;
-    if (session.tabs.length <= 1) return;
+    if (session.tabs.length <= 1) {
+      const blank = makeConnectorWebTab();
+      updateSession({ tabs: [blank], activeTabId: blank.id });
+      return;
+    }
     const tabs = session.tabs.filter((item) => item.id !== id);
     const activeTabId =
       session.activeTabId === id ? tabs[0]!.id : session.activeTabId;
@@ -200,6 +205,9 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         : tab,
     );
     updateSession({ ...session, tabs });
+    if (url !== "about:blank") {
+      recordBrowserVisit({ url, title: titleFromUrl(url) });
+    }
   };
 
   const onWebUrlChange = (url: string) => {
@@ -445,12 +453,28 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
             <div className="min-w-0 flex-1">
               <BrowserAddressField
                 url={active.url || "about:blank"}
-                draft={addressDraft}
+                draft={
+                  addressDraft === "about:blank" ? "" : addressDraft
+                }
                 onDraftChange={setAddressDraft}
                 onCommit={commitAddress}
+                onNavigateTo={(raw) => {
+                  const url = normalizeBrowserUrl(raw);
+                  setAddressDraft(url === "about:blank" ? "" : url);
+                  if (active.kind !== "web") return;
+                  const tabs = session.tabs.map((tab) =>
+                    tab.id === active.id
+                      ? navigateConnectorWebTab(tab, url, titleFromUrl(url))
+                      : tab,
+                  );
+                  updateSession({ ...session, tabs });
+                  if (url !== "about:blank") {
+                    recordBrowserVisit({ url, title: titleFromUrl(url) });
+                  }
+                }}
                 faviconUrl={active.faviconUrl}
                 showFavicon
-                placeholder="Search or enter URL"
+                placeholder="Search"
               />
             </div>
           </div>

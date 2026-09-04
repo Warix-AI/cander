@@ -160,6 +160,7 @@ export function bindSpaceEntityStoreOwner(actorId: string | undefined) {
   hydrated = false;
   state = { ...EMPTY_ENTITY_STORE };
   hydrate();
+  emit();
 }
 
 function assertWorkspace<T extends { workspaceId: string }>(

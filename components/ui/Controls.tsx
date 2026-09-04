@@ -28,6 +28,7 @@ export function Dropdown({
   placement = "bottom",
   align = "start",
   matchTrigger = true,
+  submenu = false,
   onOpenChange,
 }: {
   trigger: (props: { open: boolean; toggle: () => void }) => ReactNode;
@@ -37,6 +38,8 @@ export function Dropdown({
   placement?: "bottom" | "top" | "right";
   align?: "start" | "end";
   matchTrigger?: boolean;
+  /** Nested flyout — parent menus ignore outside clicks into this portal. */
+  submenu?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -67,6 +70,12 @@ export function Dropdown({
         : align === "end"
           ? rect.right - menuWidth
           : rect.left;
+
+    // Prefer right flyouts, but flip left when the menu would leave the viewport.
+    if (placement === "right" && left + menuWidth > window.innerWidth - pad) {
+      const flipped = rect.left - menuWidth - gap;
+      if (flipped >= pad) left = flipped;
+    }
 
     left = Math.min(left, window.innerWidth - menuWidth - pad);
     left = Math.max(pad, left);
@@ -111,6 +120,13 @@ export function Dropdown({
       const target = event.target as Node;
       if (root.current?.contains(target)) return;
       if (menuRef.current?.contains(target)) return;
+      // Nested menus are also portaled to body — keep parent open while using them.
+      if (
+        target instanceof Element &&
+        target.closest("[data-dropdown-submenu='true']")
+      ) {
+        return;
+      }
       setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
@@ -148,6 +164,7 @@ export function Dropdown({
               ref={menuRef}
               role="menu"
               data-sidebar-flyout=""
+              data-dropdown-submenu={submenu ? "true" : undefined}
               onMouseEnter={holdSidebarPeek}
               onMouseLeave={releaseSidebarPeek}
               style={

@@ -79,6 +79,15 @@ describe("composer connector detect", () => {
     assert.equal(ambiguous.length, 0);
   });
 
+  it("matches gmail alias and generic mail when only Gmail is connected", () => {
+    const byName = detectConnectorMentions("open gmail", [gmail]);
+    assert.equal(byName[0]?.connectorId, "gmail");
+
+    const byMail = detectConnectorMentions("check my mail later", [gmail]);
+    assert.equal(byMail[0]?.connectorId, "gmail");
+    assert.match(byMail[0]!.matched, /mail/i);
+  });
+
   it("builds aliases including catalog name", () => {
     const triggers = triggersForConnector("gcal", "Google Calendar");
     assert.ok(triggers.includes("google calendar"));

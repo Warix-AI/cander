@@ -255,7 +255,11 @@ export function BrowserSurfaceHost({
   if (url === "about:blank") {
     return (
       <div ref={hostRef} className="h-full w-full">
-        <NewTabPage />
+        <NewTabPage
+          onOpenUrl={(next) => {
+            onUrlChangeRef.current?.(next);
+          }}
+        />
       </div>
     );
   }

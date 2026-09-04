@@ -3475,6 +3475,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const chatActive = Boolean(threadId) || drafting;
 
+    // Connectors catalog is the nav destination — if a connector detail is open,
+    // always leave it and show the connectors screen (don't early-return on chat).
+    if (dest === "connectors" && connectorId) {
+      setView("space");
+      setSpaceId("connectors");
+      setConnectorId(null);
+      setProjectId(null);
+      setJobId(null);
+      setSkillId(null);
+      setDrafting(false);
+      setPanelIntent("browse");
+      setPanelMode("collapsed");
+      setMobileSurface("panel");
+      setThreadId(null);
+      pushTarget({
+        view: "space",
+        spaceId: "connectors",
+        threadId: null,
+        projectId: null,
+        panelMode: "collapsed",
+        panelIntent: "browse",
+        connectorId: null,
+        jobId: null,
+        skillId: null,
+      });
+      return;
+    }
+
     if (dest === spaceId && projectId && isChatSpace(dest)) {
       let tid = threadId;
       let hasMessages = Boolean(thread);
@@ -3585,6 +3613,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     spaceId,
     panelMode,
     projectId,
+    connectorId,
     thread,
     openSpaceChat,
     mobile,

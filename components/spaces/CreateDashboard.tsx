@@ -122,7 +122,7 @@ export function CreateDashboard() {
           ) : (
             <PreviewGrid
               layout={spaceLayout}
-              kind="paper"
+              kind="product"
               items={projectItems}
               onOpen={openProject}
               empty={

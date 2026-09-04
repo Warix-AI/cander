@@ -884,24 +884,10 @@ async function buildFmPrompt(
   let activeBrowserMeta = profile.contextPacket.activeBrowserMeta;
   if (!activeBrowserMeta) {
     try {
-      const { getActiveBrowserContextTab } = await import(
-        "@/lib/browser-context/active-tab"
+      const { browsingFocusSystemBlock } = await import(
+        "@/lib/browser-context/browsing-focus"
       );
-      const tab = getActiveBrowserContextTab();
-      if (tab) {
-        let domain = tab.url;
-        try {
-          domain = new URL(tab.url).hostname.replace(/^www\./, "");
-        } catch {
-          // keep raw
-        }
-        activeBrowserMeta = [
-          "## Active right-panel browser (metadata only — not full page text)",
-          `kind=${tab.tabKind}; title=${tab.title}; domain=${domain}; project=${tab.projectId ?? "none"}`,
-          `canReadText=${tab.canReadText}; canCaptureViewport=${tab.canCaptureViewport}`,
-          "When the user refers to this page/screen/preview/selection, call browser.current.get_context (or capture_viewport for visual questions) before saying you cannot see it. Only the selected tab is readable.",
-        ].join("\n");
-      }
+      activeBrowserMeta = browsingFocusSystemBlock();
     } catch {
       // ignore
     }

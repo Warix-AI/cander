@@ -313,7 +313,7 @@ export function Sidebar() {
       <WorkspaceRail />
       <aside
         className={cn(
-          "flex w-[min(244px,calc(100vw-3.5rem))] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:w-[244px]",
+          "flex w-[min(268px,calc(100vw-3.5rem))] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:w-[268px]",
           floating
             ? cn(
                 "light-surface overflow-hidden",
@@ -363,11 +363,11 @@ export function Sidebar() {
               if (canGoBack) goBack();
               else newChat();
             }}
-            className="mb-0.5 flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200 hover:bg-sidebar-accent"
+            className="mb-0.5 flex w-full items-center gap-3 rounded-[10px] px-3 py-2 text-left text-[15px] transition-colors duration-200 hover:bg-sidebar-accent"
             aria-label="Back"
           >
             <ArrowLeft
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              className="h-4 w-4 shrink-0 text-muted-foreground"
               strokeWidth={2}
             />
             <span className="font-medium tracking-[-0.01em]">Back</span>
@@ -380,14 +380,14 @@ export function Sidebar() {
                 type="button"
                 onClick={() => setSettingsTab(tab.id)}
                 className={cn(
-                  "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
+                  "flex w-full items-center gap-3 rounded-[10px] px-3 py-2 text-left text-[15px] transition-colors duration-200",
                   settingsTab === tab.id
                     ? "bg-sidebar-accent font-medium"
                     : "hover:bg-sidebar-accent",
                 )}
               >
                 <Icon
-                  className="h-3.5 w-3.5 text-muted-foreground"
+                  className="h-4 w-4 text-muted-foreground"
                   strokeWidth={2}
                 />
                 {tab.label}
@@ -423,7 +423,7 @@ export function Sidebar() {
                 {visiblePins.length > 0 ? (
                   <div className="group/pins">
                     <div className="mb-1 flex items-center gap-1 px-3">
-                      <p className="min-w-0 flex-1 text-[12px] text-muted-foreground">
+                      <p className="min-w-0 flex-1 text-[13px] text-muted-foreground">
                         Pinned
                       </p>
                       <PinnedFilterMenu />
@@ -478,7 +478,7 @@ function SidebarNavButton({
         if (!comingSoon) onOpen(id);
       }}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13.5px] transition-colors duration-200",
+        "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[15px] transition-colors duration-200",
         comingSoon
           ? "cursor-default opacity-70"
           : active
@@ -488,14 +488,14 @@ function SidebarNavButton({
     >
       <Icon
         className={cn(
-          "h-3.5 w-3.5 shrink-0",
+          "h-4 w-4 shrink-0",
           tinted ? spaceIconTint(id as SpaceId) : "text-muted-foreground",
         )}
         strokeWidth={2}
       />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {comingSoon ? (
-        <span className="shrink-0 rounded-full bg-sidebar-accent px-2 py-0.5 text-[10px] font-medium tracking-[0.02em] text-muted-foreground">
+        <span className="shrink-0 rounded-full bg-sidebar-accent px-2 py-0.5 text-[11px] font-medium tracking-[0.02em] text-muted-foreground">
           Coming soon
         </span>
       ) : null}
@@ -512,7 +512,7 @@ function PinnedLeading({
     spaceId?: SpaceId;
   };
 }) {
-  const iconClass = "h-3.5 w-3.5 shrink-0 text-muted-foreground";
+  const iconClass = "h-4 w-4 shrink-0 text-muted-foreground";
   if (item.kind === "connector") {
     return <ConnectorMark id={item.icon ?? "connector"} size="nav" />;
   }
@@ -584,13 +584,13 @@ function PinnedRow({
           onOpen();
         }}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-2.5 truncate px-3 py-1.5 text-left text-[13.5px]",
+          "flex min-w-0 flex-1 items-center gap-3 truncate px-3 py-2 text-left text-[15px]",
           active && "font-medium",
         )}
       >
         {leading ?? (
           <MessageSquare
-            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+            className="h-4 w-4 shrink-0 text-muted-foreground"
             strokeWidth={2}
           />
         )}
@@ -623,7 +623,7 @@ function PinnedRow({
             : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
         )}
       >
-        <GripVertical className="h-3.5 w-3.5" strokeWidth={1.8} />
+        <GripVertical className="h-4 w-4" strokeWidth={1.8} />
       </button>
       <PinControl kind={kind} id={id} className="mr-1" />
     </div>

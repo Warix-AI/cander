@@ -55,7 +55,14 @@ const CONNECTOR_ALIASES: Record<string, string[]> = {
  * Generic words that only match when exactly one mail connector is connected
  * (avoids Gmail vs Outlook ambiguity).
  */
-const GENERIC_MAIL_ALIASES = ["email", "e-mail", "emails", "inbox", "mailbox"];
+const GENERIC_MAIL_ALIASES = [
+  "email",
+  "e-mail",
+  "emails",
+  "mail",
+  "inbox",
+  "mailbox",
+];
 const MAIL_CONNECTOR_IDS = new Set(["gmail", "outlook"]);
 
 function escapeRegExp(value: string) {

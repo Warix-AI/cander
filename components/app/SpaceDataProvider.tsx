@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useSyncExternalStore,
@@ -66,21 +67,6 @@ export function SpaceDataProvider({
   children,
 }: SpaceDataProviderProps) {
   const backend = getDataBackend();
-  bindSpaceEntityStoreOwner(
-    backend === "supabase" && !isAppearanceActorId(actorId)
-      ? undefined
-      : actorId,
-  );
-  bindChatStoreOwner(
-    backend === "supabase" && !isAppearanceActorId(actorId)
-      ? undefined
-      : actorId,
-  );
-  // Scope pin localStorage to the signed-in profile before any hydrate/sync.
-  if (isAppearanceActorId(actorId)) {
-    bindPinsProfile(actorId);
-  }
-
   const api = useMemo(() => createApiBundle(backend), [backend]);
   const ctx = useMemo(
     () => ({ workspaceId, actorId }),
@@ -92,6 +78,19 @@ export function SpaceDataProvider({
     getSessionReadyServerSnapshot,
   );
   const appearanceBootstrapped = useRef(false);
+
+  // Bind stores after commit — calling emit/setState during render whitescreens.
+  useLayoutEffect(() => {
+    const scopedOwner =
+      backend === "supabase" && !isAppearanceActorId(actorId)
+        ? undefined
+        : actorId;
+    bindSpaceEntityStoreOwner(scopedOwner);
+    bindChatStoreOwner(scopedOwner);
+    if (isAppearanceActorId(actorId)) {
+      bindPinsProfile(actorId);
+    }
+  }, [actorId, backend]);
 
   const entityRevision = useSyncExternalStore(
     subscribeSpaceEntityStore,

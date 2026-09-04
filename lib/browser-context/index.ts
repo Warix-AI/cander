@@ -50,3 +50,12 @@ export {
   prefersViewportCapture,
   refersToPageSelection,
 } from "@/lib/browser-context/routing";
+export {
+  resolveBrowsingFocus,
+  browsingFocusComposerPlaceholder,
+  browsingFocusSystemBlock,
+  subscribeBrowsingFocus,
+  getBrowsingFocusSnapshot,
+  getBrowsingFocusServerSnapshot,
+  type BrowsingFocus,
+} from "@/lib/browser-context/browsing-focus";

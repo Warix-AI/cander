@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Compass, Sparkles } from "lucide-react";
+import { Compass, Brush } from "lucide-react";
 import type { SpaceId } from "./types";
 
 export type PanelChoice = {
@@ -25,7 +25,7 @@ export function panelChoiceSuggestions(): PanelChoice[] {
       label: "Create",
       hint: "Open Create with this chat",
       space: "studio",
-      icon: Sparkles,
+      icon: Brush,
     },
   ];
 }

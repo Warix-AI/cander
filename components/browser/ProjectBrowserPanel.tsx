@@ -18,6 +18,8 @@ import {
   MousePointer2,
   Pencil,
   Plus,
+  FolderKanban,
+  ChevronRight,
   LoaderCircle,
   RotateCw,
   Share,
@@ -123,7 +125,9 @@ import {
   normalizeBrowserUrl,
   previewUrlForProject,
   displayHostFromUrl,
+  titleFromUrl,
 } from "@/lib/preview-url";
+import { recordBrowserVisit } from "@/lib/browser-recent-history";
 import type { ProjectKind, SpaceProject } from "@/lib/space-entities";
 import { DESKTOP_NO_DRAG, useDesktopShell } from "@/lib/desktop-shell";
 import {
@@ -340,7 +344,12 @@ export function ProjectBrowserPanel({
   const closeTab = (id: string) => {
     const tab = session.tabs.find((item) => item.id === id);
     if (!tab || tab.pinned) return;
-    if (session.tabs.length <= 1) return;
+    if (session.tabs.length <= 1) {
+      // Last tab → blank New tab (never leave the strip empty).
+      const blank = makeWebTab();
+      write({ tabs: [blank], activeTabId: blank.id });
+      return;
+    }
     const tabs = session.tabs.filter((item) => item.id !== id);
     if (!tabs.length) return;
     const activeTabId =
@@ -410,6 +419,23 @@ export function ProjectBrowserPanel({
         tab.id === active.id ? navigateProjectBrowserTab(tab, url) : tab,
       ),
     });
+    if (url !== "about:blank") {
+      recordBrowserVisit({ url, title: titleFromUrl(url) });
+    }
+  };
+
+  const navigateAddressTo = (raw: string) => {
+    const url = normalizeBrowserUrl(raw);
+    setUrlDraft(url === "about:blank" ? "" : url);
+    write({
+      ...session,
+      tabs: session.tabs.map((tab) =>
+        tab.id === active.id ? navigateProjectBrowserTab(tab, url) : tab,
+      ),
+    });
+    if (url !== "about:blank") {
+      recordBrowserVisit({ url, title: titleFromUrl(url) });
+    }
   };
 
   const goHistory = (delta: -1 | 1) => {
@@ -1078,12 +1104,13 @@ export function ProjectBrowserPanel({
             </div>
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-[7.5rem]">
               <BrowserAddressField
-                className="pointer-events-auto w-full"
+                className="pointer-events-auto"
                 url={address}
                 faviconUrl={active.faviconUrl}
-                draft={urlDraft}
+                draft={urlDraft === "about:blank" ? "" : urlDraft}
                 onDraftChange={setUrlDraft}
                 onCommit={commitUrl}
+                onNavigateTo={navigateAddressTo}
                 showFavicon={false}
                 placeholder="Search"
               />
@@ -1233,13 +1260,15 @@ export function ProjectBrowserPanel({
               </button>
             ) : (
               <BrowserAddressField
-                className="pointer-events-auto w-full"
+                className="pointer-events-auto"
                 url={address}
                 faviconUrl={active.faviconUrl}
-                draft={urlDraft}
+                draft={urlDraft === "about:blank" ? "" : urlDraft}
                 onDraftChange={setUrlDraft}
                 onCommit={commitUrl}
+                onNavigateTo={navigateAddressTo}
                 showFavicon={false}
+                placeholder="Search"
               />
             )}
           </div>
@@ -1486,22 +1515,39 @@ export function ProjectBrowserPanel({
             {extraProjects.length ? (
               <>
                 <p className="mt-3 px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-                  Other projects
+                  Projects
                 </p>
-                {extraProjects.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      addProjectTab(item);
-                      setMobileSheet(null);
-                    }}
-                    className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left text-[15px] hover:bg-muted/70"
-                  >
-                    <KindGlyph kind={item.kind} />
-                    <span className="truncate">{item.title}</span>
-                  </button>
-                ))}
+                {(["research", "studio"] as const).map((space) => {
+                  const items = extraProjects.filter((item) =>
+                    space === "research"
+                      ? item.space === "research" || item.space === "home"
+                      : item.space === "studio" ||
+                        item.space === "build" ||
+                        (item.space !== "research" && item.space !== "home"),
+                  );
+                  if (!items.length) return null;
+                  return (
+                    <div key={space} className="mb-2">
+                      <p className="px-2 pb-1 text-[12px] text-muted-foreground">
+                        {space === "research" ? "Explore" : "Create"}
+                      </p>
+                      {items.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            addProjectTab(item);
+                            setMobileSheet(null);
+                          }}
+                          className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left text-[15px] hover:bg-muted/70"
+                        >
+                          <KindGlyph kind={item.kind} />
+                          <span className="truncate">{item.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
               </>
             ) : null}
           </div>
@@ -1662,6 +1708,12 @@ function ProjectBrowserBody({
           };
         } else {
           next = navigateProjectBrowserTab(next, patch.url, patch.title);
+        }
+        if (isHttpUrl(patch.url) && patch.url !== "about:blank") {
+          recordBrowserVisit({
+            url: patch.url,
+            title: patch.title ?? next.title,
+          });
         }
       } else if (patch.title && patch.title !== item.title) {
         next = { ...next, title: patch.title };
@@ -1852,7 +1904,7 @@ function ProjectTabStrip({
   webOnly?: boolean;
 }) {
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {tabs.map((tab) => (
         <ProjectTabButton
           key={tab.id}
@@ -1861,7 +1913,7 @@ function ProjectTabStrip({
           project={projects.find((item) => item.id === tab.projectId)}
           onSelect={() => onSelect(tab.id)}
           onClose={() => onClose(tab.id)}
-          canClose={tabs.length > 1 && !tab.pinned}
+          canClose={!tab.pinned}
         />
       ))}
       {webOnly ? (
@@ -1922,7 +1974,7 @@ function ProjectMobileTabBar({
       {tabs.map((tab) => {
         const active = tab.id === activeId;
         const label = labelFor(tab);
-        const canClose = tabs.length > 1 && !tab.pinned;
+        const canClose = !tab.pinned;
         return (
           <button
             key={tab.id}
@@ -2271,11 +2323,33 @@ function AddTabMenu({
   studioMode?: boolean;
   compact?: boolean;
 }) {
+  const exploreProjects = extraProjects.filter(
+    (item) => item.space === "research" || item.space === "home",
+  );
+  const createProjects = extraProjects.filter(
+    (item) => item.space === "studio" || item.space === "build",
+  );
+  const otherProjects = extraProjects.filter(
+    (item) =>
+      item.space !== "research" &&
+      item.space !== "home" &&
+      item.space !== "studio" &&
+      item.space !== "build",
+  );
+  const projectGroups = [
+    { id: "explore", label: "Explore", items: exploreProjects },
+    {
+      id: "create",
+      label: "Create",
+      items: [...createProjects, ...otherProjects],
+    },
+  ].filter((group) => group.items.length > 0);
+
   return (
     <BrowserChromeDropdown
       align="start"
       matchTrigger={false}
-      menuClassName="min-w-[14rem] max-h-[min(20rem,50vh)] overflow-y-auto z-[320]"
+      menuClassName="min-w-[12.5rem] z-[320]"
       trigger={({ toggle }) => (
         <BrowserChromeTooltip label="New tab">
           <button
@@ -2333,29 +2407,73 @@ function AddTabMenu({
             className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] hover:bg-muted"
           >
             <Globe className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.6} />
-            {studioMode ? "Browser tab" : "New browser tab"}
+            {studioMode ? "Browser tab" : "New tab"}
           </button>
-          {extraProjects.length ? (
-            <>
-              <p className="px-2.5 pt-2 pb-1 font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
-                Other projects
-              </p>
-              {extraProjects.map((item) => (
+          {projectGroups.length ? (
+            <Dropdown
+              placement="right"
+              align="start"
+              matchTrigger={false}
+              submenu
+              menuClassName="min-w-[14rem] max-h-[min(20rem,50vh)] overflow-y-auto z-[330]"
+              className="w-full"
+              trigger={({ open, toggle }) => (
                 <button
-                  key={item.id}
                   type="button"
                   role="menuitem"
-                  onClick={() => {
-                    onAddProject(item);
-                    close();
-                  }}
-                  className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] hover:bg-muted"
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  onClick={toggle}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] hover:bg-muted",
+                    open && "bg-muted",
+                  )}
                 >
-                  <KindGlyph kind={item.kind} />
-                  <span className="truncate">{item.title}</span>
+                  <FolderKanban
+                    className="h-3.5 w-3.5 text-muted-foreground"
+                    strokeWidth={1.6}
+                  />
+                  <span className="min-w-0 flex-1">Projects</span>
+                  <ChevronRight
+                    className="h-3.5 w-3.5 text-muted-foreground"
+                    strokeWidth={1.8}
+                  />
                 </button>
-              ))}
-            </>
+              )}
+            >
+              {(closeProjects) => (
+                <>
+                  {projectGroups.map((group, index) => (
+                    <div key={group.id}>
+                      <p
+                        className={cn(
+                          "px-2.5 pb-1 font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase",
+                          index === 0 ? "pt-1" : "pt-2",
+                        )}
+                      >
+                        {group.label}
+                      </p>
+                      {group.items.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            onAddProject(item);
+                            closeProjects();
+                            close();
+                          }}
+                          className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] hover:bg-muted"
+                        >
+                          <KindGlyph kind={item.kind} />
+                          <span className="truncate">{item.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </>
+              )}
+            </Dropdown>
           ) : null}
         </>
       )}

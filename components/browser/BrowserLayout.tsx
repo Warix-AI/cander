@@ -28,6 +28,7 @@ import { NavToggle } from "@/components/shell/NavToggle";
 import { SplitHandle } from "@/components/shell/SplitHandle";
 import { Dropdown } from "@/components/ui/Controls";
 import { normalizeBrowserUrl } from "@/lib/preview-url";
+import { setActiveBrowserContextTab } from "@/lib/browser-context/active-tab";
 import {
   getSidebarPeeking,
   getSidebarPeekingServerSnapshot,
@@ -69,7 +70,16 @@ export function BrowserLayout() {
 
   useEffect(() => {
     setBrowserPage({ url: active.url, title: active.title });
-  }, [active.url, active.title, setBrowserPage]);
+    setActiveBrowserContextTab({
+      tabId: active.id,
+      tabKind: "web",
+      title: active.title,
+      url: active.url,
+      canReadText: true,
+      canCaptureViewport: false,
+    });
+    return () => setActiveBrowserContextTab(null);
+  }, [active.id, active.url, active.title, setBrowserPage]);
 
   const selectTab = (id: string) => {
     setActiveId(id);
@@ -78,7 +88,13 @@ export function BrowserLayout() {
   };
 
   const closeTab = (id: string) => {
-    if (tabs.length === 1) return;
+    if (tabs.length === 1) {
+      const blank = { id: `t-${Math.random().toString(36).slice(2, 6)}`, title: "New tab", url: "about:blank" };
+      setTabs([blank]);
+      setActiveId(blank.id);
+      setUrl(blank.url);
+      return;
+    }
     const next = tabs.filter((item) => item.id !== id);
     setTabs(next);
     if (activeId === id) selectTab(next[0].id);

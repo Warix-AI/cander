@@ -88,6 +88,23 @@ export async function runRawOpenAITurn(
   const attachmentIds = (request.attachmentIds || []).filter(Boolean);
   const started = Date.now();
   const latency = opts?.latency;
+
+  let browsingFocusBlock = "";
+  try {
+    const { browsingFocusSystemBlock } = await import(
+      "@/lib/browser-context/browsing-focus"
+    );
+    browsingFocusBlock = browsingFocusSystemBlock().trim();
+  } catch {
+    // ignore — BrowsingFocus is client ambient context only
+  }
+  const systemParts = [
+    SYSTEM_INSTRUCTIONS,
+    request.toolContext?.trim() || "",
+    browsingFocusBlock,
+  ].filter(Boolean);
+  const system = systemParts.join("\n\n");
+
   let res: Response;
   try {
     const authHeaders = await getRawOpenAIAuthHeaders();
@@ -101,9 +118,7 @@ export async function runRawOpenAITurn(
       },
       body: JSON.stringify({
         messages: history,
-        system: request.toolContext?.trim()
-          ? `${SYSTEM_INSTRUCTIONS}\n\n${request.toolContext.trim()}`
-          : SYSTEM_INSTRUCTIONS,
+        system,
         images: attachmentIds.length ? undefined : request.images?.slice(0, 4),
         attachmentIds: attachmentIds.length ? attachmentIds : undefined,
         threadId: request.threadId,
