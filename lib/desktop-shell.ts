@@ -77,6 +77,7 @@ export type CanderDesktopBridge = {
     hideTab: (tabId: string) => Promise<void>;
     hideAll?: () => Promise<void>;
     setChromeOverlay?: (active: boolean) => Promise<void>;
+    setPipTab?: (tabId: string | null) => Promise<void>;
     navigate: (tabId: string, url: string) => Promise<void>;
     back: (tabId: string) => Promise<void>;
     forward: (tabId: string) => Promise<void>;

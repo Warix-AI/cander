@@ -14,6 +14,11 @@ import {
 } from "@/lib/desktop-shell";
 import { isGoogleUrl } from "@/lib/preview-url";
 import { NewTabPage } from "@/components/browser/NewTabPage";
+import {
+  getBrowserPipSnapshot,
+  isBrowserPipTab,
+  subscribeBrowserPip,
+} from "@/lib/browser-pip-store";
 
 type BrowserSurfaceHostProps = {
   tabId: string;
@@ -73,6 +78,11 @@ export function BrowserSurfaceHost({
   const suppressed = useSyncExternalStore(
     subscribeNativeBrowserSurfaceSuppress,
     areNativeBrowserSurfacesSuppressed,
+    () => false,
+  );
+  const pipActive = useSyncExternalStore(
+    subscribeBrowserPip,
+    () => isBrowserPipTab(tabId),
     () => false,
   );
 
@@ -164,6 +174,10 @@ export function BrowserSurfaceHost({
       cancelled = true;
       setTabReady(false);
       unsub();
+      // PiP owns this native tab — overlay keeps painting; do not destroy.
+      if (isBrowserPipTab(tabId) || getBrowserPipSnapshot()?.tabId === tabId) {
+        return;
+      }
       void adapter.hideTab(tabId);
       void adapter.destroyTab(tabId);
     };
@@ -178,7 +192,7 @@ export function BrowserSurfaceHost({
 
   // Navigate existing tab when URL changes (no destroy/recreate).
   useEffect(() => {
-    if (!tabReady) return;
+    if (!tabReady || pipActive) return;
     const adapter = getBrowserSurfaceAdapter();
     void Promise.resolve(adapter.navigate(tabId, url)).then(() => {
       if (
@@ -192,7 +206,7 @@ export function BrowserSurfaceHost({
         setError(null);
       }
     });
-  }, [tabId, url, previewOnly, tabReady]);
+  }, [tabId, url, previewOnly, tabReady, pipActive]);
 
   // Reload without tearing down native views.
   useEffect(() => {
@@ -206,8 +220,9 @@ export function BrowserSurfaceHost({
   }, [reloadKey, tabId, tabReady]);
 
   // Show / hide / reposition — overlays must not destroy the underlying tab.
+  // When this tab is in PiP, the overlay owns bounds — do not fight it.
   useEffect(() => {
-    if (!tabReady) return;
+    if (!tabReady || pipActive) return;
     const adapter = getBrowserSurfaceAdapter();
     if (adapter.id === "web-pwa") return;
 
@@ -255,7 +270,21 @@ export function BrowserSurfaceHost({
       layoutRoot?.removeEventListener("transitionend", onResize);
       ro?.disconnect();
     };
-  }, [tabId, active, suppressed, tabReady]);
+  }, [tabId, active, suppressed, tabReady, pipActive]);
+
+  if (pipActive) {
+    return (
+      <div
+        ref={hostRef}
+        className="flex h-full flex-col items-center justify-center gap-2 bg-muted/30 px-6 text-center"
+      >
+        <p className="text-sm font-medium tracking-[-0.01em]">Playing in Picture in Picture</p>
+        <p className="max-w-xs text-[12px] text-muted-foreground">
+          This tab is floating over Cander. Close the mini player to bring it back here.
+        </p>
+      </div>
+    );
+  }
 
   if (url === "about:blank") {
     return (

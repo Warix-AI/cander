@@ -17,6 +17,7 @@ import {
   Minimize2,
   MousePointer2,
   Pencil,
+  PictureInPicture2,
   Plus,
   FolderKanban,
   LoaderCircle,
@@ -37,6 +38,8 @@ import { BrowserAddressField } from "@/components/browser/BrowserAddressField";
 import { BrowserChromeTooltip } from "@/components/browser/BrowserChromeTooltip";
 import { FaviconImage } from "@/components/browser/FaviconImage";
 import { getBrowserSurfaceAdapter, usesNativeBrowserSurface } from "@/lib/browser-surface";
+import { canEnterBrowserPip, startBrowserPip } from "@/lib/browser-pip";
+import { isBrowserPipTab, subscribeBrowserPip } from "@/lib/browser-pip-store";
 import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import {
   MobileBottomSheet,
@@ -530,6 +533,42 @@ export function ProjectBrowserPanel({
     : isStudioProject
       ? active?.kind === "web"
       : !isWorkItemBrowser || session.tabs.some((tab) => tab.kind === "web");
+
+  const pipGate = canEnterBrowserPip(
+    active?.kind === "web" ? address || active.url || "" : "",
+  );
+  const pipForActive = useSyncExternalStore(
+    subscribeBrowserPip,
+    () => (active ? isBrowserPipTab(active.id) : false),
+    () => false,
+  );
+
+  const enterPipForActive = async () => {
+    if (!active || active.kind !== "web") return false;
+    const url = address || active.url || "";
+    return startBrowserPip({
+      tabId: active.id,
+      url,
+      title: active.title || projectTitle,
+      faviconUrl: active.faviconUrl ?? null,
+      userId: actor.id,
+      sourceProjectId: projectId ?? null,
+      webEmbed: pipGate.webEmbed,
+    });
+  };
+
+  const leaveProject = async () => {
+    if (
+      !standalone &&
+      active?.kind === "web" &&
+      address &&
+      address !== "about:blank" &&
+      !pipForActive
+    ) {
+      await enterPipForActive();
+    }
+    backToSpaceHome();
+  };
 
   const studioImageJobs = useMemo(() => {
     if (!isStudioProject || !thread) return [];
@@ -1170,14 +1209,36 @@ export function ProjectBrowserPanel({
                 </BrowserChromeIconButton>
               </BrowserChromeTooltip>
             ) : (
-              <BrowserChromeTooltip label="Leave project">
-                <BrowserChromeIconButton
-                  aria-label="Leave project"
-                  onClick={() => backToSpaceHome()}
-                >
-                  <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-                </BrowserChromeIconButton>
-              </BrowserChromeTooltip>
+              <>
+                {active?.kind === "web" && !pipForActive ? (
+                  <BrowserChromeTooltip
+                    label={
+                      pipGate.ok
+                        ? "Picture in picture"
+                        : (pipGate.reason ?? "Picture in picture")
+                    }
+                  >
+                    <BrowserChromeIconButton
+                      aria-label="Picture in picture"
+                      disabled={!pipGate.ok}
+                      onClick={() => void enterPipForActive()}
+                    >
+                      <PictureInPicture2
+                        className="h-3.5 w-3.5"
+                        strokeWidth={1.6}
+                      />
+                    </BrowserChromeIconButton>
+                  </BrowserChromeTooltip>
+                ) : null}
+                <BrowserChromeTooltip label="Leave project">
+                  <BrowserChromeIconButton
+                    aria-label="Leave project"
+                    onClick={() => void leaveProject()}
+                  >
+                    <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  </BrowserChromeIconButton>
+                </BrowserChromeTooltip>
+              </>
             )}
             {chatArmed ? (
               <BrowserChromeTooltip

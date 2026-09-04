@@ -146,6 +146,11 @@ import {
   PANEL_RATIO_OPEN_FLOOR,
 } from "@/lib/right-panel";
 import { isChatSpace, chatSpaceId, isDockChatSpace, PRIMARY_NAV_SPACES, resolveNavSpaceId, resolveProductSpaceId, spaceAllowed, isDashboardOnlySpace, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
+import {
+  clearSpaceProjectFocus,
+  readSpaceProjectFocus,
+  rememberSpaceProjectFocus,
+} from "@/lib/space-focus-memory";
 import type {
   AccountPresetId,
   BuildTool,
@@ -1121,23 +1126,62 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         opts?.keepProject ? product : resolveNavSpaceId(space) ?? product
       ) as SpaceId;
       if (!isDockChatSpace(dest)) return;
-      const keepProject = Boolean(opts?.keepProject && projectId);
+
+      const currentNav =
+        resolveNavSpaceId(spaceId) ?? resolveProductSpaceId(spaceId) ?? spaceId;
+      const sameSpace = currentNav === dest || spaceId === dest;
+
+      // Re-clicking Explore/Create while inside a project should stay on that project.
+      // Re-clicking while already on the space directory stays on the directory.
+      // Switching from another space restores the last project for that space (7-day TTL).
+      let focusProjectId: string | null =
+        opts?.keepProject && projectId
+          ? projectId
+          : sameSpace && projectId
+            ? projectId
+            : null;
+
+      if (!focusProjectId && !sameSpace) {
+        const remembered = readSpaceProjectFocus({
+          profileId: actor.id,
+          workspaceId,
+          spaceId: dest,
+        });
+        if (remembered) {
+          const match =
+            getSpaceEntityStoreSnapshot().projects.find(
+              (item) =>
+                item.id === remembered && item.workspaceId === workspaceId,
+            ) ?? null;
+          if (match) {
+            const matchNav =
+              resolveNavSpaceId(match.space) ??
+              resolveProductSpaceId(match.space) ??
+              match.space;
+            if (matchNav === dest || match.space === dest) {
+              focusProjectId = remembered;
+            }
+          } else {
+            clearSpaceProjectFocus({
+              profileId: actor.id,
+              workspaceId,
+              spaceId: dest,
+            });
+          }
+        }
+      }
+
       let tid = "";
       let hasMessages = false;
       setThreads((current) => {
-        const result =
-          keepProject && projectId
-            ? upsertPersistentProjectThread(
-                current,
-                workspaceId,
-                projectId,
-                dest,
-              )
-            : openSpaceDefaultChat(
-                current,
-                workspaceId,
-                dest,
-              );
+        const result = focusProjectId
+          ? upsertPersistentProjectThread(
+              current,
+              workspaceId,
+              focusProjectId,
+              dest,
+            )
+          : openSpaceDefaultChat(current, workspaceId, dest);
         tid = result.id;
         hasMessages = threadHasTurns(
           result.threads.find((item) => item.id === result.id),
@@ -1146,7 +1190,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       setThreadId(tid);
       setSpaceId(dest);
-      if (!keepProject) setProjectId(null);
+      setProjectId(focusProjectId);
       setConnectorId(null);
       setJobId(null);
       setSkillId(null);
@@ -1162,11 +1206,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (dest === "build") setBuildTool("preview");
       if (dest === "research") setResearchTool("overview");
       if (dest === "studio") setStudioTool("canvas");
+      if (focusProjectId) {
+        rememberSpaceProjectFocus({
+          profileId: actor.id,
+          workspaceId,
+          spaceId: dest,
+          projectId: focusProjectId,
+        });
+      }
       pushTarget({
         view: "space",
         spaceId: dest,
         threadId: tid,
-        projectId: keepProject ? projectId : null,
+        projectId: focusProjectId,
         panelMode: "split",
         panelIntent: "execute",
         connectorId: null,
@@ -1174,7 +1226,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         skillId: null,
       });
     },
-    [workspaceId, pushTarget, projectId, mobile],
+    [workspaceId, pushTarget, projectId, mobile, spaceId, actor.id],
   );
 
   const applyHomeNewChat = useCallback(() => {
@@ -3837,6 +3889,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDrafting(!hasMessages);
     setPanelIntent("execute");
     if (space === "build") setBuildTool("preview");
+    rememberSpaceProjectFocus({
+      profileId: actor.id,
+      workspaceId: itemWorkspaceId,
+      spaceId: resolveNavSpaceId(space) ?? space,
+      projectId: projectKey,
+    });
     if (space === "research") setResearchTool("overview");
     if (space === "studio") setStudioTool("canvas");
     setPanelMode("split");
@@ -3996,6 +4054,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       localSpaceEntityStore.deleteProject(ctx, pid);
       notifyEntityStoreChange();
+      clearSpaceProjectFocus({
+        profileId: actor.id,
+        workspaceId,
+        spaceId: resolveNavSpaceId(spaceId) ?? spaceId ?? "research",
+      });
+      // Also clear any space bucket that pointed at this project.
+      for (const space of ["research", "studio", "build", "work"] as const) {
+        const remembered = readSpaceProjectFocus({
+          profileId: actor.id,
+          workspaceId,
+          spaceId: space,
+        });
+        if (remembered === pid) {
+          clearSpaceProjectFocus({
+            profileId: actor.id,
+            workspaceId,
+            spaceId: space,
+          });
+        }
+      }
       setThreads((current) =>
         current.filter(
           (item) => item.projectId !== pid && item.id !== linkedChatId,

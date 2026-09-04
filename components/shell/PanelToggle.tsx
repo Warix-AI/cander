@@ -187,10 +187,12 @@ export function BrowserChromeIconButton({
   "aria-label": ariaLabel,
   onClick,
   children,
+  disabled,
 }: {
   "aria-label": string;
   onClick: () => void;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   const hover = useChromeHover();
   return (
@@ -198,7 +200,9 @@ export function BrowserChromeIconButton({
       ref={hover.ref}
       type="button"
       aria-label={ariaLabel}
+      disabled={disabled}
       onClick={() => {
+        if (disabled) return;
         hover.clear();
         onClick();
       }}
@@ -209,7 +213,9 @@ export function BrowserChromeIconButton({
       className={cn(
         "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors duration-100",
         hover.hovered &&
+          !disabled &&
           "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
+        disabled && "pointer-events-none opacity-40",
       )}
     >
       {children}

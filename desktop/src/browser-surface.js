@@ -16,6 +16,8 @@ const tabs = new Map();
 let hostWindow = null;
 /** When React chrome (dropdowns) needs hit-testing over the native view. */
 let chromeOverlay = false;
+/** Tab retained for in-app Picture-in-Picture — never zeroed/destroyed while set. */
+let pipTabId = null;
 
 function setHostWindow(win) {
   hostWindow = win;
@@ -299,7 +301,22 @@ function createTab(tabId, initialUrl, options = {}) {
   if (!hostWindow || hostWindow.isDestroyed()) {
     throw new Error("No host window for browser surface.");
   }
-  destroyTab(tabId);
+  // Reuse a live view (PiP retain / remount) — never tear it down.
+  if (tabs.has(tabId)) {
+    const entry = tabs.get(tabId);
+    if (
+      initialUrl &&
+      isAllowedUrl(initialUrl) &&
+      initialUrl !== "about:blank" &&
+      entry &&
+      entry.lastUrl !== initialUrl &&
+      tabId !== pipTabId
+    ) {
+      entry.lastUrl = initialUrl;
+      void entry.view.webContents.loadURL(initialUrl);
+    }
+    return;
+  }
   if (initialUrl && !isAllowedUrl(initialUrl)) {
     emitToRenderer("cander:browser-event", {
       type: "navigationFailed",
@@ -323,7 +340,10 @@ function createTab(tabId, initialUrl, options = {}) {
   });
 }
 
-function destroyTab(tabId) {
+function destroyTab(tabId, opts = {}) {
+  if (tabId === pipTabId && !opts.force) {
+    return;
+  }
   const entry = tabs.get(tabId);
   if (!entry) return;
   try {
@@ -339,6 +359,23 @@ function destroyTab(tabId) {
     // ignore
   }
   tabs.delete(tabId);
+  if (pipTabId === tabId) {
+    pipTabId = null;
+  }
+}
+
+function setPipTab(tabId) {
+  const next = tabId ? String(tabId) : null;
+  if (pipTabId && pipTabId !== next) {
+    // Previous PiP slot released — leave the view alone until explicit destroy.
+  }
+  pipTabId = next;
+  if (pipTabId) {
+    const entry = tabs.get(pipTabId);
+    if (entry) {
+      entry.visible = true;
+    }
+  }
 }
 
 function showTab(tabId, bounds) {
@@ -355,10 +392,11 @@ function showTab(tabId, bounds) {
   entry.visible = true;
   for (const [id, other] of tabs) {
     if (id === tabId) continue;
+    if (id === pipTabId) continue; // Keep PiP floating while panel tab shows.
     other.visible = false;
     other.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
   }
-  if (chromeOverlay) {
+  if (chromeOverlay && tabId !== pipTabId) {
     entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
     return;
   }
@@ -366,6 +404,7 @@ function showTab(tabId, bounds) {
 }
 
 function hideTab(tabId) {
+  if (tabId === pipTabId) return;
   const entry = tabs.get(tabId);
   if (!entry) return;
   entry.visible = false;
@@ -376,7 +415,8 @@ function hideTab(tabId) {
 function setChromeOverlay(active) {
   chromeOverlay = Boolean(active);
   if (chromeOverlay) {
-    for (const entry of tabs.values()) {
+    for (const [id, entry] of tabs) {
+      if (id === pipTabId) continue;
       entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
     }
     return;
@@ -390,6 +430,7 @@ function setChromeOverlay(active) {
 
 function hideAll() {
   for (const tabId of tabs.keys()) {
+    if (tabId === pipTabId) continue;
     hideTab(tabId);
   }
 }
@@ -430,15 +471,20 @@ function stop(tabId) {
 
 function destroyAll() {
   chromeOverlay = false;
+  const pip = pipTabId;
   for (const tabId of [...tabs.keys()]) {
-    destroyTab(tabId);
+    if (tabId === pip) continue;
+    destroyTab(tabId, { force: true });
   }
 }
 
 /** Reset native surfaces when the shell renderer reloads (Cmd+R). */
 function resetForShellReload() {
   chromeOverlay = false;
-  destroyAll();
+  pipTabId = null;
+  for (const tabId of [...tabs.keys()]) {
+    destroyTab(tabId, { force: true });
+  }
 }
 
 async function readPage(tabId) {
@@ -485,6 +531,7 @@ module.exports = {
   setHostWindow,
   createTab,
   destroyTab,
+  setPipTab,
   showTab,
   hideTab,
   hideAll,

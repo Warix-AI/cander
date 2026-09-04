@@ -7,6 +7,7 @@ import { TopRail } from "@/components/shell/TopRail";
 import { ResizeHandle } from "@/components/shell/ContextPanel";
 import { SpaceDashboard } from "@/components/shell/SpaceDashboard";
 import { ProjectBrowserPanel } from "@/components/browser/ProjectBrowserPanel";
+import { BrowserPipOverlay } from "@/components/browser/BrowserPipOverlay";
 import { StandaloneBrowserPanel } from "@/components/browser/StandaloneBrowserPanel";
 import { ConnectorViewHost } from "@/components/connectors/views/ConnectorViewHost";
 import { MobileContentPager } from "@/components/shell/MobileContentPager";
@@ -282,6 +283,7 @@ export function SpaceChatLayout() {
           </div>
         </SpaceRenderModeProvider>
       </div>
+      <BrowserPipOverlay />
     </div>
   );
 }

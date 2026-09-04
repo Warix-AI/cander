@@ -17,6 +17,7 @@ type DesktopBrowserBridge = {
   hideTab: (tabId: string) => Promise<void>;
   hideAll?: () => Promise<void>;
   setChromeOverlay?: (active: boolean) => Promise<void>;
+  setPipTab?: (tabId: string | null) => Promise<void>;
   navigate: (tabId: string, url: string) => Promise<void>;
   back: (tabId: string) => Promise<void>;
   forward: (tabId: string) => Promise<void>;
@@ -104,6 +105,10 @@ export function createElectronBrowserSurfaceAdapter(): BrowserSurfaceAdapter {
 
     async setChromeOverlay(active: boolean) {
       await bridge()?.setChromeOverlay?.(active);
+    },
+
+    async setPipTab(tabId: string | null) {
+      await bridge()?.setPipTab?.(tabId);
     },
 
     subscribe(listener) {
