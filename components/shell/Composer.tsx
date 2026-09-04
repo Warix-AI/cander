@@ -753,10 +753,6 @@ export function Composer({
   };
 
   const browserMode = view === "browser";
-  const activeConnector =
-    connectorId && spaceId === "connectors"
-      ? connectors.find((item) => item.id === connectorId)
-      : null;
   const showLibrary =
     !!spaceId &&
     isSpaceLibrarySpace(spaceId) &&
@@ -1138,11 +1134,9 @@ export function Composer({
   }, [dictatingActive]);
   const hint =
     placeholder ??
-    (activeConnector
-      ? `Ask about ${activeConnector.name}…`
-      : selectedId && !stayInPlace
-        ? `Change the ${labelFor(selectedId)}…`
-        : APP_MESSAGE_PLACEHOLDER);
+    (selectedId && !stayInPlace
+      ? `Change the ${labelFor(selectedId)}…`
+      : APP_MESSAGE_PLACEHOLDER);
 
   /** Split view / mobile: composer grows upward; controls stay on the bottom row. */
   const growUpward = mobile || panelMode !== "collapsed";
@@ -1621,31 +1615,20 @@ export function Composer({
                 </button>
               </div>
             ) : null}
-            {activeConnector || showLibrary ? (
+            {showLibrary ? (
               <div className="mb-1 flex min-w-0 items-center gap-1">
-                {activeConnector ? (
-                  <span
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-muted/70 ring-2 ring-border"
-                    title={`${activeConnector.name} context`}
-                    aria-label={`${activeConnector.name} context`}
-                  >
-                    <ConnectorMark id={activeConnector.icon} size="xs" />
-                  </span>
-                ) : null}
-                {showLibrary ? (
-                  <button
-                    type="button"
-                    onClick={toggleSpaceLibrary}
-                    className={cn(
-                      "inline-flex h-7 items-center rounded-lg px-2 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
-                      spaceLibraryOpen
-                        ? "bg-background text-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    {spaceLibraryLabel(spaceId as SpaceLibraryId)}
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={toggleSpaceLibrary}
+                  className={cn(
+                    "inline-flex h-7 items-center rounded-lg px-2 text-[12px] font-medium tracking-[-0.01em] transition-colors duration-200",
+                    spaceLibraryOpen
+                      ? "bg-background text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  {spaceLibraryLabel(spaceId as SpaceLibraryId)}
+                </button>
               </div>
             ) : null}
             <div className={cn("relative", dictatingActive && "h-8 overflow-hidden")}>

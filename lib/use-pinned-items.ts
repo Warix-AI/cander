@@ -34,14 +34,12 @@ export function usePinnedItems() {
     for (const pin of pins) {
       if (pin.kind === "connector") {
         const connector = CONNECTOR_CATALOG.find((item) => item.id === pin.id);
-        if (connector) {
-          resolved.push({
-            kind: "connector",
-            id: connector.id,
-            title: connector.name,
-            icon: connector.id,
-          });
-        }
+        resolved.push({
+          kind: "connector",
+          id: pin.id,
+          title: connector?.name ?? pin.id,
+          icon: connector?.id ?? pin.id,
+        });
         continue;
       }
       if (pin.kind === "thread") {

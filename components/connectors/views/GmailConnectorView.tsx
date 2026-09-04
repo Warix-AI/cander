@@ -7,15 +7,12 @@ import {
   Mail,
   MailOpen,
   Paperclip,
-  Pencil,
   RefreshCw,
   Reply,
   Send,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { ConnectorMark } from "@/components/brand/ConnectorMarks";
-import { PanelChrome } from "@/components/panels/PanelChrome";
-import { PinControl } from "@/components/shell/PinControl";
+import { MailBody } from "@/components/connectors/views/MailBody";
 import {
   fetchSyncedMailDetail,
   fetchSyncedMailList,
@@ -24,7 +21,6 @@ import {
   type SyncedMailDetail,
   type SyncedMailListItem,
 } from "@/lib/api/connector-client";
-import { SHELL_PANEL_BODY } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 type Page = "inbox" | "compose" | "detail";
@@ -50,7 +46,23 @@ function senderLabel(fromAddr: string | null) {
   return (match?.[1] ?? fromAddr).trim();
 }
 
-export function GmailConnectorView() {
+export type GmailToolbarState = {
+  page: Page;
+  syncing: boolean;
+  busy: boolean;
+  canGoInbox: boolean;
+  onRefresh: () => void;
+  onCompose: () => void;
+  onInbox: () => void;
+};
+
+export function GmailConnectorView({
+  onOpenLink,
+  onToolbarChange,
+}: {
+  onOpenLink?: (url: string) => void;
+  onToolbarChange?: (state: GmailToolbarState) => void;
+} = {}) {
   const { workspaceId } = useApp();
   const [page, setPage] = useState<Page>("inbox");
   const [messages, setMessages] = useState<SyncedMailListItem[]>([]);
@@ -80,6 +92,54 @@ export function GmailConnectorView() {
     setLastSyncedAt(data.sync.lastSyncedAt);
     return data;
   }, [workspaceId]);
+
+  const goInbox = useCallback(() => {
+    setPage("inbox");
+    setDetail(null);
+    setSelectedId(null);
+    setReplyOpen(false);
+    setStatus(null);
+    setError(null);
+  }, []);
+
+  const goCompose = useCallback(() => {
+    setPage("compose");
+    setStatus(null);
+    setError(null);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    setSyncing(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const synced = await syncConnectorView({
+        workspaceId,
+        connectorId: "gmail",
+        connectionId: connectionId ?? undefined,
+      });
+      setLastSyncedAt(synced.lastSyncedAt);
+      await loadList();
+      setStatus(`Synced ${synced.upserted} messages`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sync failed.");
+    } finally {
+      setSyncing(false);
+    }
+  }, [connectionId, loadList, workspaceId]);
+
+  useEffect(() => {
+    if (!onToolbarChange) return;
+    onToolbarChange({
+      page,
+      syncing,
+      busy,
+      canGoInbox: page !== "inbox",
+      onRefresh: () => void refresh(),
+      onCompose: goCompose,
+      onInbox: goInbox,
+    });
+  }, [page, syncing, busy, refresh, goCompose, goInbox, onToolbarChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,9 +212,7 @@ export function GmailConnectorView() {
               ),
             );
             setDetail((current) =>
-              current
-                ? { ...current, isUnread: false }
-                : current,
+              current ? { ...current, isUnread: false } : current,
             );
           })
           .catch(() => {
@@ -165,26 +223,6 @@ export function GmailConnectorView() {
       setError(err instanceof Error ? err.message : "Could not open message.");
     } finally {
       setBusy(false);
-    }
-  };
-
-  const refresh = async () => {
-    setSyncing(true);
-    setError(null);
-    setStatus(null);
-    try {
-      const synced = await syncConnectorView({
-        workspaceId,
-        connectorId: "gmail",
-        connectionId: connectionId ?? undefined,
-      });
-      setLastSyncedAt(synced.lastSyncedAt);
-      await loadList();
-      setStatus(`Synced ${synced.upserted} messages`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Sync failed.");
-    } finally {
-      setSyncing(false);
     }
   };
 
@@ -206,9 +244,7 @@ export function GmailConnectorView() {
       if (okMessage) setStatus(okMessage);
       await loadList();
       if (operation === "archive" && selectedId) {
-        setPage("inbox");
-        setSelectedId(null);
-        setDetail(null);
+        goInbox();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Operation failed.");
@@ -234,7 +270,7 @@ export function GmailConnectorView() {
     setComposeTo("");
     setComposeSubject("");
     setComposeBody("");
-    setPage("inbox");
+    goInbox();
   };
 
   const sendReply = async () => {
@@ -255,245 +291,227 @@ export function GmailConnectorView() {
     setReplyBody("");
   };
 
+  const bodyText =
+    detail?.bodyText?.trim() ||
+    (detail?.bodyHtml
+      ? detail.bodyHtml
+          .replace(/<style[\s\S]*?<\/style>/gi, " ")
+          .replace(/<script[\s\S]*?<\/script>/gi, " ")
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<\/p>/gi, "\n\n")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/[ \t]+\n/g, "\n")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim()
+      : "") ||
+    detail?.snippet?.trim() ||
+    "";
+
   return (
-    <div className={cn(SHELL_PANEL_BODY)}>
-      <PanelChrome
-        title="Gmail"
-        integrated
-        leading={<ConnectorMark id="gmail" size="xs" />}
-        trailing={
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label="Refresh"
-              disabled={syncing}
-              onClick={() => void refresh()}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
-            >
-              <RefreshCw
-                className={cn("h-3.5 w-3.5", syncing && "animate-spin")}
-                strokeWidth={2}
-              />
-            </button>
-            <button
-              type="button"
-              aria-label="Compose"
-              onClick={() => {
-                setPage("compose");
-                setStatus(null);
-                setError(null);
-              }}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
-            </button>
-            <PinControl
-              kind="connector"
-              id="gmail"
-              alwaysVisible
-              className="[&_button]:h-7 [&_button]:w-7"
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+      {error ? (
+        <p className="shrink-0 border-b border-border px-3 py-2 text-[12px] text-destructive">
+          {error}
+        </p>
+      ) : null}
+      {status ? (
+        <p className="shrink-0 border-b border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+          {status}
+          {lastSyncedAt ? ` · Last sync ${formatWhen(lastSyncedAt)}` : null}
+        </p>
+      ) : null}
+
+      {page === "compose" ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+          <Field label="To" value={composeTo} onChange={setComposeTo} />
+          <Field
+            label="Subject"
+            value={composeSubject}
+            onChange={setComposeSubject}
+          />
+          <label className="block">
+            <span className="text-[11px] font-medium text-muted-foreground">
+              Body
+            </span>
+            <textarea
+              value={composeBody}
+              onChange={(event) => setComposeBody(event.target.value)}
+              rows={10}
+              className="mt-1 w-full resize-none rounded-[10px] border border-border bg-card px-3 py-2 text-[13px] outline-none"
             />
-          </div>
-        }
-      />
+          </label>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void sendCompose()}
+            className="inline-flex h-9 w-fit items-center gap-1.5 rounded-full bg-primary px-4 text-[12.5px] font-medium text-primary-foreground disabled:opacity-50"
+          >
+            <Send className="h-3.5 w-3.5" />
+            Send
+          </button>
+        </div>
+      ) : null}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {error ? (
-          <p className="shrink-0 border-b border-border px-3 py-2 text-[12px] text-destructive">
-            {error}
-          </p>
-        ) : null}
-        {status ? (
-          <p className="shrink-0 border-b border-border px-3 py-1.5 text-[11px] text-muted-foreground">
-            {status}
-            {lastSyncedAt
-              ? ` · Last sync ${formatWhen(lastSyncedAt)}`
-              : null}
-          </p>
-        ) : null}
-
-        {page === "compose" ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+      {page === "detail" && detail ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1.5">
             <button
               type="button"
-              onClick={() => setPage("inbox")}
-              className="inline-flex w-fit items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
+              onClick={goInbox}
+              className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
               Inbox
             </button>
-            <Field label="To" value={composeTo} onChange={setComposeTo} />
-            <Field
-              label="Subject"
-              value={composeSubject}
-              onChange={setComposeSubject}
-            />
-            <label className="block">
-              <span className="text-[11px] font-medium text-muted-foreground">
-                Body
-              </span>
-              <textarea
-                value={composeBody}
-                onChange={(event) => setComposeBody(event.target.value)}
-                rows={10}
-                className="mt-1 w-full resize-none rounded-[10px] border border-border bg-card px-3 py-2 text-[13px] outline-none"
+            <div className="ml-auto flex items-center gap-0.5">
+              <IconBtn
+                label="Reply"
+                onClick={() => setReplyOpen(true)}
+                icon={<Reply className="h-3.5 w-3.5" />}
               />
-            </label>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void sendCompose()}
-              className="inline-flex h-9 w-fit items-center gap-1.5 rounded-full bg-primary px-4 text-[12.5px] font-medium text-primary-foreground disabled:opacity-50"
-            >
-              <Send className="h-3.5 w-3.5" />
-              Send
-            </button>
-          </div>
-        ) : null}
-
-        {page === "detail" && detail ? (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setPage("inbox");
-                  setDetail(null);
-                  setSelectedId(null);
-                }}
-                className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Back
-              </button>
-              <div className="ml-auto flex items-center gap-0.5">
-                <IconBtn
-                  label="Reply"
-                  onClick={() => setReplyOpen(true)}
-                  icon={<Reply className="h-3.5 w-3.5" />}
-                />
-                <IconBtn
-                  label={detail.isUnread ? "Mark read" : "Mark unread"}
-                  onClick={() =>
-                    void runOp(
-                      detail.isUnread ? "markRead" : "markUnread",
-                      { messageId: detail.providerMessageId },
-                      detail.isUnread ? "Marked read" : "Marked unread",
-                    ).then(() => {
-                      setDetail((current) =>
-                        current
-                          ? { ...current, isUnread: !current.isUnread }
-                          : current,
-                      );
-                    })
-                  }
-                  icon={
-                    detail.isUnread ? (
-                      <MailOpen className="h-3.5 w-3.5" />
-                    ) : (
-                      <Mail className="h-3.5 w-3.5" />
-                    )
-                  }
-                />
-                <IconBtn
-                  label="Archive"
-                  onClick={() =>
-                    void runOp(
-                      "archive",
-                      { messageId: detail.providerMessageId },
-                      "Archived",
-                    )
-                  }
-                  icon={<Archive className="h-3.5 w-3.5" />}
-                />
-              </div>
+              <IconBtn
+                label={detail.isUnread ? "Mark read" : "Mark unread"}
+                onClick={() =>
+                  void runOp(
+                    detail.isUnread ? "markRead" : "markUnread",
+                    { messageId: detail.providerMessageId },
+                    detail.isUnread ? "Marked read" : "Marked unread",
+                  ).then(() => {
+                    setDetail((current) =>
+                      current
+                        ? { ...current, isUnread: !current.isUnread }
+                        : current,
+                    );
+                  })
+                }
+                icon={
+                  detail.isUnread ? (
+                    <MailOpen className="h-3.5 w-3.5" />
+                  ) : (
+                    <Mail className="h-3.5 w-3.5" />
+                  )
+                }
+              />
+              <IconBtn
+                label="Archive"
+                onClick={() =>
+                  void runOp(
+                    "archive",
+                    { messageId: detail.providerMessageId },
+                    "Archived",
+                  )
+                }
+                icon={<Archive className="h-3.5 w-3.5" />}
+              />
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-              <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
-                {detail.subject || "(no subject)"}
-              </h2>
-              <p className="mt-2 text-[13px] font-medium text-foreground">
-                {senderLabel(detail.fromAddr)}
-              </p>
-              <p className="text-[12px] text-muted-foreground">
-                to {(detail.toAddrs ?? []).join(", ") || "me"}
-                {detail.receivedAt ? ` · ${formatWhen(detail.receivedAt)}` : ""}
-              </p>
-              {detail.hasAttachments ? (
-                <p className="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <Paperclip className="h-3 w-3" />
-                  Attachments
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            <h2 className="text-[17px] font-semibold tracking-[-0.02em] text-foreground">
+              {detail.subject || "(no subject)"}
+            </h2>
+            <div className="mt-3 flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-[12px] font-semibold text-foreground">
+                {senderLabel(detail.fromAddr).slice(0, 1).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13.5px] font-medium text-foreground">
+                  {senderLabel(detail.fromAddr)}
                 </p>
-              ) : null}
-              <div className="mt-4 whitespace-pre-wrap text-[13.5px] leading-relaxed text-foreground">
-                {busy && !detail.bodyText && !detail.bodyHtml
-                  ? "Loading…"
-                  : detail.bodyText ||
-                    detail.snippet ||
-                    "No message body."}
+                <p className="text-[12px] text-muted-foreground">
+                  {detail.fromAddr}
+                </p>
+                <p className="mt-0.5 text-[12px] text-muted-foreground">
+                  to {(detail.toAddrs ?? []).join(", ") || "me"}
+                  {detail.receivedAt ? ` · ${formatWhen(detail.receivedAt)}` : ""}
+                </p>
               </div>
-              {replyOpen ? (
-                <div className="mt-4 space-y-2 rounded-[10px] border border-border bg-card p-3">
-                  <textarea
-                    value={replyBody}
-                    onChange={(event) => setReplyBody(event.target.value)}
-                    rows={5}
-                    placeholder="Write a reply…"
-                    className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-[13px] outline-none"
-                  />
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void sendReply()}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    Send reply
-                  </button>
-                </div>
-              ) : null}
             </div>
-          </div>
-        ) : null}
-
-        {page === "inbox" ? (
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {loading ? (
-              <p className="px-3 py-6 text-[12.5px] text-muted-foreground">
-                Loading inbox…
+            {detail.hasAttachments ? (
+              <p className="mt-3 inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
+                <Paperclip className="h-3 w-3" />
+                Attachments
               </p>
             ) : null}
-            {!loading && !messages.length ? (
-              <div className="px-3 py-8 text-center">
-                <p className="text-[13px] font-medium text-foreground">
-                  No messages yet
-                </p>
-                <p className="mt-1 text-[12px] text-muted-foreground">
-                  Refresh to sync recent mail from Gmail.
-                </p>
+            <div className="mt-5 border-t border-border/70 pt-5">
+              {busy && !detail.bodyText && !detail.bodyHtml ? (
+                <p className="text-[13px] text-muted-foreground">Loading…</p>
+              ) : (
+                <MailBody text={bodyText} onOpenLink={onOpenLink} />
+              )}
+            </div>
+            {replyOpen ? (
+              <div className="mt-5 space-y-2 rounded-[12px] border border-border bg-card p-3 shadow-sm">
+                <textarea
+                  value={replyBody}
+                  onChange={(event) => setReplyBody(event.target.value)}
+                  rows={5}
+                  placeholder="Write a reply…"
+                  className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-[13px] outline-none"
+                />
                 <button
                   type="button"
-                  disabled={syncing}
-                  onClick={() => void refresh()}
-                  className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium hover:bg-muted"
+                  disabled={busy}
+                  onClick={() => void sendReply()}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
                 >
-                  <RefreshCw
-                    className={cn("h-3.5 w-3.5", syncing && "animate-spin")}
-                  />
-                  Sync now
+                  <Send className="h-3.5 w-3.5" />
+                  Send reply
                 </button>
               </div>
             ) : null}
-            {messages.map((item) => (
+          </div>
+        </div>
+      ) : null}
+
+      {page === "inbox" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {loading ? (
+            <p className="px-4 py-6 text-[12.5px] text-muted-foreground">
+              Loading inbox…
+            </p>
+          ) : null}
+          {!loading && !messages.length ? (
+            <div className="px-4 py-10 text-center">
+              <p className="text-[13px] font-medium text-foreground">
+                No messages yet
+              </p>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                Refresh to sync recent mail from Gmail.
+              </p>
               <button
-                key={item.providerMessageId}
                 type="button"
-                onClick={() => void openMessage(item)}
-                className={cn(
-                  "flex w-full flex-col gap-0.5 border-b border-border/70 px-3 py-2.5 text-left transition-colors hover:bg-muted/60",
-                  selectedId === item.providerMessageId && "bg-muted/50",
-                )}
+                disabled={syncing}
+                onClick={() => void refresh()}
+                className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium hover:bg-muted"
               >
+                <RefreshCw
+                  className={cn("h-3.5 w-3.5", syncing && "animate-spin")}
+                />
+                Sync now
+              </button>
+            </div>
+          ) : null}
+          {messages.map((item) => (
+            <button
+              key={item.providerMessageId}
+              type="button"
+              onClick={() => void openMessage(item)}
+              className={cn(
+                "flex w-full gap-3 border-b border-border/70 px-4 py-3 text-left transition-colors hover:bg-muted/50",
+                selectedId === item.providerMessageId && "bg-muted/40",
+              )}
+            >
+              <div
+                className={cn(
+                  "mt-1 h-2 w-2 shrink-0 rounded-full",
+                  item.isUnread ? "bg-sky-500" : "bg-transparent",
+                )}
+              />
+              <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   <span
                     className={cn(
@@ -505,13 +523,13 @@ export function GmailConnectorView() {
                   >
                     {senderLabel(item.fromAddr)}
                   </span>
-                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                  <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
                     {formatWhen(item.receivedAt)}
                   </span>
                 </div>
                 <p
                   className={cn(
-                    "truncate text-[12.5px]",
+                    "mt-0.5 truncate text-[12.5px]",
                     item.isUnread
                       ? "font-medium text-foreground"
                       : "text-foreground/80",
@@ -519,14 +537,14 @@ export function GmailConnectorView() {
                 >
                   {item.subject || "(no subject)"}
                 </p>
-                <p className="truncate text-[12px] text-muted-foreground">
+                <p className="mt-0.5 line-clamp-1 text-[12px] text-muted-foreground">
                   {item.snippet || ""}
                 </p>
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -257,16 +257,27 @@ export async function syncUserPrefsToSupabase(ctx: WorkspaceCtx) {
   // Block realtime hydrate from wiping local pins during delete→insert.
   skipRemoteSync = true;
   try {
-    const { error: deletePinsError } = await supabase
-      .from("user_pins")
-      .delete()
-      .eq("profile_id", ctx.actorId);
-    if (deletePinsError) throw deletePinsError;
-
     if (pins.length) {
       const pinRows = pins.map((pin, index) => pinToRow(pin, ctx.actorId, index));
-      const { error: pinError } = await supabase.from("user_pins").insert(pinRows);
+      const { error: pinError } = await supabase
+        .from("user_pins")
+        .upsert(pinRows, { onConflict: "id" });
       if (pinError) throw pinError;
+
+      // Remove pins that are no longer local — only after upsert succeeds.
+      const keepIds = pinRows.map((row) => row.id);
+      const { error: pruneError } = await supabase
+        .from("user_pins")
+        .delete()
+        .eq("profile_id", ctx.actorId)
+        .not("id", "in", `(${keepIds.join(",")})`);
+      if (pruneError) throw pruneError;
+    } else {
+      const { error: deletePinsError } = await supabase
+        .from("user_pins")
+        .delete()
+        .eq("profile_id", ctx.actorId);
+      if (deletePinsError) throw deletePinsError;
     }
 
     const sidebarRow = sidebarToRow(sidebar, ctx.actorId, SIDEBAR_STORAGE_VERSION);
