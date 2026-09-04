@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Paperclip, RefreshCw, Send } from "lucide-react";
+import { Loader2, Paperclip, RefreshCw, Send } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { MailBody } from "@/components/connectors/views/MailBody";
 import { MailHtmlFrame } from "@/components/connectors/views/MailHtmlFrame";
@@ -90,6 +90,8 @@ export type GmailToolbarState = {
   busy: boolean;
   canGoInbox: boolean;
   isUnread: boolean;
+  /** Shown beside Inbox in the chrome, e.g. "Last sync 6:44 PM". */
+  syncHint: string | null;
   onRefresh: () => void;
   onCompose: () => void;
   onInbox: () => void;
@@ -123,9 +125,12 @@ export function GmailConnectorView({
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+  const [replyOpen, setReplyOpen] = useState(false);
   const replyRef = useRef<HTMLTextAreaElement | null>(null);
   const connectionIdRef = useRef<string | null>(null);
   connectionIdRef.current = connectionId;
+  /** Message IDs marked read in this session — survive list reloads until server catches up. */
+  const locallyReadIdsRef = useRef(new Set<string>());
 
   const threads = useMemo(() => groupIntoThreads(messages), [messages]);
 
@@ -135,7 +140,14 @@ export function GmailConnectorView({
       workspaceId,
       connectorId: "gmail",
     });
-    setMessages(data.messages);
+    const readLocally = locallyReadIdsRef.current;
+    setMessages(
+      data.messages.map((row) =>
+        readLocally.has(row.providerMessageId)
+          ? { ...row, isUnread: false }
+          : row,
+      ),
+    );
     setConnectionId(data.connectionId);
     setLastSyncedAt(data.sync.lastSyncedAt);
     return data;
@@ -147,6 +159,7 @@ export function GmailConnectorView({
     setThreadMessages([]);
     setSelectedId(null);
     setReplyBody("");
+    setReplyOpen(false);
     setStatus(null);
     setError(null);
   }, []);
@@ -162,6 +175,7 @@ export function GmailConnectorView({
 
   const focusReply = useCallback(() => {
     setPage("detail");
+    setReplyOpen(true);
     requestAnimationFrame(() => {
       replyRef.current?.focus();
       replyRef.current?.scrollIntoView({ block: "nearest" });
@@ -181,9 +195,6 @@ export function GmailConnectorView({
       setLastSyncedAt(synced.lastSyncedAt);
       setConnectionId(synced.connectionId);
       await loadList();
-      if (synced.upserted > 0) {
-        setStatus(`Synced ${synced.upserted} messages`);
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sync failed.");
     } finally {
@@ -299,6 +310,8 @@ export function GmailConnectorView({
   const forwardCurrent = useCallback(() => {
     if (!detail) return;
     const plain = resolveMailPlainText(detail);
+    setReplyOpen(false);
+    setReplyBody("");
     setComposeTo("");
     setComposeSubject(
       detail.subject?.toLowerCase().startsWith("fwd:")
@@ -315,12 +328,18 @@ export function GmailConnectorView({
 
   useEffect(() => {
     if (!onToolbarChange) return;
+    const syncHint = syncing
+      ? "Syncing…"
+      : lastSyncedAt
+        ? `Last sync ${formatWhen(lastSyncedAt)}`
+        : null;
     onToolbarChange({
       page,
       syncing,
       busy,
       canGoInbox: page !== "inbox",
       isUnread: Boolean(detail?.isUnread),
+      syncHint,
       onRefresh: () => void refresh(),
       onCompose: goCompose,
       onInbox: goInbox,
@@ -333,6 +352,7 @@ export function GmailConnectorView({
     page,
     syncing,
     busy,
+    lastSyncedAt,
     refresh,
     goCompose,
     goInbox,
@@ -408,10 +428,55 @@ export function GmailConnectorView({
     setSelectedId(item.providerMessageId);
     setPage("detail");
     setReplyBody("");
+    setReplyOpen(false);
     setStatus(null);
     setBusy(true);
     setError(null);
-    setThreadMessages([]);
+
+    const threadKey = item.threadId || item.providerMessageId;
+    const threadUnreadIds = messages
+      .filter(
+        (row) =>
+          row.isUnread &&
+          (row.threadId || row.providerMessageId) === threadKey,
+      )
+      .map((row) => row.providerMessageId);
+
+    // Optimistic: clear blue dots for the whole thread immediately.
+    if (threadUnreadIds.length || item.isUnread) {
+      const unreadSet = new Set(
+        threadUnreadIds.length ? threadUnreadIds : [item.providerMessageId],
+      );
+      for (const id of unreadSet) locallyReadIdsRef.current.add(id);
+      setMessages((prev) =>
+        prev.map((row) =>
+          unreadSet.has(row.providerMessageId)
+            ? { ...row, isUnread: false }
+            : row,
+        ),
+      );
+      for (const messageId of unreadSet) {
+        void runConnectorViewOperation({
+          workspaceId,
+          connectorId: "gmail",
+          connectionId: connectionIdRef.current ?? undefined,
+          operation: "markRead",
+          input: { messageId },
+        }).catch(() => {
+          /* non-blocking */
+        });
+      }
+    }
+
+    // Paint headers immediately so open feels instant while HTML loads.
+    const provisional: SyncedMailDetail = {
+      ...item,
+      isUnread: false,
+      bodyText: null,
+      bodyHtml: null,
+    };
+    setDetail(provisional);
+    setThreadMessages([provisional]);
     try {
       const data = await fetchSyncedMailDetail({
         workspaceId,
@@ -419,32 +484,8 @@ export function GmailConnectorView({
         connectionId: connectionId ?? undefined,
         messageId: item.providerMessageId,
       });
-      setDetail(data.message);
-      await loadThreadBodies(data.message, messages);
-      if (item.isUnread) {
-        void runConnectorViewOperation({
-          workspaceId,
-          connectorId: "gmail",
-          connectionId: connectionId ?? undefined,
-          operation: "markRead",
-          input: { messageId: item.providerMessageId },
-        })
-          .then(() => {
-            setMessages((prev) =>
-              prev.map((row) =>
-                row.providerMessageId === item.providerMessageId
-                  ? { ...row, isUnread: false }
-                  : row,
-              ),
-            );
-            setDetail((current) =>
-              current ? { ...current, isUnread: false } : current,
-            );
-          })
-          .catch(() => {
-            /* non-blocking */
-          });
-      }
+      setDetail({ ...data.message, isUnread: false });
+      await loadThreadBodies({ ...data.message, isUnread: false }, messages);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not open message.");
     } finally {
@@ -487,6 +528,7 @@ export function GmailConnectorView({
       "Reply sent",
     );
     setReplyBody("");
+    setReplyOpen(false);
     // Refresh so the sent reply joins the thread list on next sync.
     void refresh();
   };
@@ -501,7 +543,6 @@ export function GmailConnectorView({
       {status ? (
         <p className="shrink-0 border-b border-black/5 px-3 py-1.5 text-[11px] text-muted-foreground dark:border-white/10">
           {status}
-          {lastSyncedAt ? ` · Last sync ${formatWhen(lastSyncedAt)}` : null}
         </p>
       ) : null}
 
@@ -541,11 +582,13 @@ export function GmailConnectorView({
 
       {page === "detail" && detail ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
-            <h2 className="text-[17px] font-semibold tracking-[-0.02em] text-foreground">
-              {detail.subject || "(no subject)"}
-            </h2>
-            <div className="mt-5 space-y-6">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <div className="px-4 pb-3 pt-4">
+              <h2 className="text-[17px] font-semibold tracking-[-0.02em] text-foreground">
+                {detail.subject || "(no subject)"}
+              </h2>
+            </div>
+            <div className="space-y-0">
               {(threadMessages.length ? threadMessages : [detail]).map(
                 (msg) => {
                   const html = resolveMailHtml(msg);
@@ -553,9 +596,9 @@ export function GmailConnectorView({
                   return (
                     <article
                       key={msg.providerMessageId}
-                      className="border-b border-black/5 pb-6 last:border-b-0 dark:border-white/10"
+                      className="border-b border-black/5 last:border-b-0 dark:border-white/10"
                     >
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-start gap-3 px-4 pb-3">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-[12px] font-semibold text-foreground">
                           {senderLabel(msg.fromAddr).slice(0, 1).toUpperCase()}
                         </div>
@@ -573,28 +616,43 @@ export function GmailConnectorView({
                           </p>
                         </div>
                       </div>
-                      <div className="mt-4 overflow-hidden rounded-[10px] border border-black/5 dark:border-white/10">
-                        {busy &&
-                        msg.providerMessageId === detail.providerMessageId &&
-                        !msg.bodyText &&
-                        !msg.bodyHtml ? (
-                          <p className="px-4 py-3 text-[13px] text-muted-foreground">
-                            Loading…
-                          </p>
-                        ) : html ? (
-                          <MailHtmlFrame html={html} onOpenLink={onOpenLink} />
-                        ) : (
-                          <div className="px-4 py-3">
-                            <MailBody
-                              text={plain}
-                              onOpenLink={onOpenLink}
-                              hasAttachments={msg.hasAttachments}
-                            />
-                          </div>
-                        )}
+                      <div className="w-full overflow-hidden">
+                        {(() => {
+                          const loadingBody =
+                            busy &&
+                            msg.providerMessageId === detail.providerMessageId &&
+                            !html;
+                          if (loadingBody) {
+                            return (
+                              <div className="flex min-h-[12rem] items-center justify-center bg-white dark:bg-black">
+                                <Loader2
+                                  className="h-6 w-6 animate-spin text-muted-foreground"
+                                  strokeWidth={1.8}
+                                />
+                              </div>
+                            );
+                          }
+                          if (html) {
+                            return (
+                              <MailHtmlFrame
+                                html={html}
+                                onOpenLink={onOpenLink}
+                              />
+                            );
+                          }
+                          return (
+                            <div className="px-4 py-3">
+                              <MailBody
+                                text={plain}
+                                onOpenLink={onOpenLink}
+                                hasAttachments={msg.hasAttachments}
+                              />
+                            </div>
+                          );
+                        })()}
                       </div>
                       {html && msg.hasAttachments ? (
-                        <p className="mt-2 inline-flex items-center gap-1.5 px-1 text-[12px] text-muted-foreground">
+                        <p className="inline-flex items-center gap-1.5 px-4 py-2 text-[12px] text-muted-foreground">
                           <Paperclip className="h-3.5 w-3.5" />
                           Attachments
                         </p>
@@ -606,27 +664,39 @@ export function GmailConnectorView({
             </div>
           </div>
 
-          <div className="shrink-0 border-t border-black/5 bg-white px-4 py-3 dark:border-white/10 dark:bg-black">
-            <textarea
-              ref={replyRef}
-              value={replyBody}
-              onChange={(event) => setReplyBody(event.target.value)}
-              rows={3}
-              placeholder="Write a reply…"
-              className="w-full resize-none rounded-[10px] border border-border bg-transparent px-3 py-2 text-[13px] outline-none"
-            />
-            <div className="mt-2 flex items-center justify-end">
-              <button
-                type="button"
-                disabled={busy || !replyBody.trim()}
-                onClick={() => void sendReply()}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
-              >
-                <Send className="h-3.5 w-3.5" />
-                Send reply
-              </button>
+          {replyOpen ? (
+            <div className="shrink-0 border-t border-black/5 bg-white px-4 py-3 dark:border-white/10 dark:bg-black">
+              <textarea
+                ref={replyRef}
+                value={replyBody}
+                onChange={(event) => setReplyBody(event.target.value)}
+                rows={3}
+                placeholder="Write a reply…"
+                className="w-full resize-none rounded-[10px] border border-border bg-transparent px-3 py-2 text-[13px] outline-none"
+              />
+              <div className="mt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplyOpen(false);
+                    setReplyBody("");
+                  }}
+                  className="inline-flex h-8 items-center rounded-full px-3 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || !replyBody.trim()}
+                  onClick={() => void sendReply()}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  Send reply
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       ) : null}
 

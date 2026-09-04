@@ -12,6 +12,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Reply,
   X,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
@@ -106,7 +107,8 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         prev.syncing === next.syncing &&
         prev.busy === next.busy &&
         prev.canGoInbox === next.canGoInbox &&
-        prev.isUnread === next.isUnread
+        prev.isUnread === next.isUnread &&
+        prev.syncHint === next.syncHint
       ) {
         return prev;
       }
@@ -273,6 +275,13 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
               </span>
               <div className="ml-auto flex items-center gap-0.5">
                 <ChromeBtn
+                  label="Reply"
+                  disabled={Boolean(gmailToolbar?.busy)}
+                  onClick={() => gmailToolbarRef.current?.onFocusReply()}
+                >
+                  <Reply className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </ChromeBtn>
+                <ChromeBtn
                   label="Archive"
                   disabled={Boolean(gmailToolbar?.busy)}
                   onClick={() => gmailToolbarRef.current?.onArchive()}
@@ -316,6 +325,11 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
               <span className="truncate px-1 text-[12.5px] font-medium text-foreground">
                 Inbox
               </span>
+              {gmailToolbar?.syncHint ? (
+                <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+                  {gmailToolbar.syncHint}
+                </span>
+              ) : null}
               <div className="ml-auto flex items-center gap-0.5">
                 <ChromeBtn
                   label="Refresh"

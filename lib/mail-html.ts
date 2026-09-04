@@ -1,19 +1,26 @@
 /**
  * Prepare email HTML for sandboxed iframe display.
- * Strips scripts/handlers, keeps remote images, bridges link clicks to the host.
+ * Strips scripts/handlers, keeps remote images + style blocks, bridges link clicks.
  */
 
-const DANGEROUS_TAGS_RE =
-  /<\/?(?:script|iframe|object|embed|form|link|meta|base)[^>]*>/gi;
 const EVENT_HANDLER_RE = /\son[a-z]+\s*=\s*(["'])[\s\S]*?\1/gi;
 const JS_URL_RE = /\bhref\s*=\s*(["'])\s*javascript:[\s\S]*?\1/gi;
+/** JSON-LD / schema.org blobs that sometimes leak as visible text after bad stripping. */
+const SCHEMA_JSON_RE =
+  /\[\s*\{\s*"@context"\s*:\s*"https?:\/\/schema\.org\/?"[\s\S]*?\}\s*\]/gi;
 
 export function sanitizeMailHtml(html: string): string {
   return html
-    .replace(DANGEROUS_TAGS_RE, "")
+    // Remove whole elements (content included) — bare tag stripping leaves JSON-LD visible.
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, "")
+    .replace(/<\/?(?:iframe|object|embed|form|link|meta|base)(?:\s[^>]*)?>/gi, "")
     .replace(EVENT_HANDLER_RE, "")
     .replace(JS_URL_RE, 'href="#"')
-    .replace(/\starget\s*=\s*(["'])[\s\S]*?\1/gi, "");
+    .replace(/\starget\s*=\s*(["'])[\s\S]*?\1/gi, "")
+    .replace(SCHEMA_JSON_RE, "")
+    // Tracking pixels / 1x1 spacers still load; leave images alone.
+    .trim();
 }
 
 export function buildMailSrcDoc(html: string): string {
@@ -30,11 +37,12 @@ export function buildMailSrcDoc(html: string): string {
     background: #fff;
     color: #111;
     font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    overflow-x: auto;
+    overflow-x: hidden;
+    overflow-y: hidden;
   }
-  img, video { max-width: 100%; height: auto; }
+  img, video { max-width: 100% !important; height: auto !important; }
   a { color: #0b57d0; }
-  table { max-width: 100%; }
+  table { max-width: 100% !important; }
 </style>
 </head>
 <body>
@@ -42,10 +50,18 @@ ${safe}
 <script>
 (function () {
   function reportHeight() {
-    var h = Math.max(
-      document.body ? document.body.scrollHeight : 0,
-      document.documentElement ? document.documentElement.scrollHeight : 0
-    );
+    var root = document.documentElement;
+    var body = document.body;
+    var h = 0;
+    if (body) {
+      h = Math.max(h, body.scrollHeight, body.offsetHeight);
+      var last = body.lastElementChild;
+      if (last) {
+        var rect = last.getBoundingClientRect();
+        h = Math.max(h, Math.ceil(rect.bottom + (window.scrollY || 0)));
+      }
+    }
+    if (root) h = Math.max(h, root.scrollHeight, root.offsetHeight);
     parent.postMessage({ type: "cander-mail-height", height: h }, "*");
   }
   document.addEventListener("click", function (event) {
@@ -59,9 +75,14 @@ ${safe}
     parent.postMessage({ type: "cander-mail-link", href: href }, "*");
   }, true);
   window.addEventListener("load", reportHeight);
+  [].forEach.call(document.images || [], function (img) {
+    if (img.complete) return;
+    img.addEventListener("load", reportHeight);
+    img.addEventListener("error", reportHeight);
+  });
   setTimeout(reportHeight, 50);
   setTimeout(reportHeight, 300);
-  setTimeout(reportHeight, 1000);
+  setTimeout(reportHeight, 1200);
   if (window.ResizeObserver) {
     new ResizeObserver(reportHeight).observe(document.body);
   }

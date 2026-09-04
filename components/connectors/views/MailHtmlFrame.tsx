@@ -18,8 +18,12 @@ export function MailHtmlFrame({
   className?: string;
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [height, setHeight] = useState(280);
+  const [height, setHeight] = useState(0);
   const srcDoc = useMemo(() => buildMailSrcDoc(html), [html]);
+
+  useEffect(() => {
+    setHeight(0);
+  }, [srcDoc]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -35,7 +39,8 @@ export function MailHtmlFrame({
         typeof payload.height === "number" &&
         Number.isFinite(payload.height)
       ) {
-        setHeight(Math.min(Math.max(Math.ceil(payload.height) + 8, 120), 6000));
+        // Exact content height — extra padding showed as a white strip under every mail.
+        setHeight(Math.min(Math.max(Math.ceil(payload.height), 1), 8000));
       }
     };
     window.addEventListener("message", onMessage);
@@ -43,14 +48,16 @@ export function MailHtmlFrame({
   }, [onOpenLink]);
 
   return (
-    <iframe
-      ref={iframeRef}
-      title="Email message"
-      sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-      referrerPolicy="no-referrer"
-      srcDoc={srcDoc}
-      className={cn("block w-full border-0 bg-white", className)}
-      style={{ height }}
-    />
+    <div className={cn("w-full overflow-hidden", className)}>
+      <iframe
+        ref={iframeRef}
+        title="Email message"
+        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+        referrerPolicy="no-referrer"
+        srcDoc={srcDoc}
+        className="block w-full border-0 bg-transparent"
+        style={{ height: height || undefined, minHeight: height ? undefined : 1 }}
+      />
+    </div>
   );
 }
