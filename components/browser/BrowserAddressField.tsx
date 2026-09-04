@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { createPortal } from "react-dom";
 import { FaviconImage } from "@/components/browser/FaviconImage";
 import { NativeOverlayGate } from "@/components/browser/NativeOverlayGate";
 import {
@@ -42,6 +50,11 @@ export function BrowserAddressField({
 }) {
   const [editing, setEditing] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const lastAutoEditKey = useRef<string | null>(null);
@@ -60,12 +73,25 @@ export function BrowserAddressField({
     () => (typedQuery ? filterRecentBrowserVisits(typedQuery, 8) : []),
     [typedQuery],
   );
-  const showSuggestions = suggestOpen && typedQuery.length > 0 && suggestions.length > 0;
+  const showSuggestions =
+    suggestOpen && typedQuery.length > 0 && suggestions.length > 0;
+
+  const placeMenu = () => {
+    const el = rootRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setMenuPos({
+      top: rect.bottom + 6,
+      left: rect.left + rect.width / 2,
+      width: Math.max(rect.width, 256),
+    });
+  };
 
   const beginEdit = () => {
     // Idle shows host only; editing always expands to the full URL.
     onDraftChange(url === "about:blank" ? "" : url);
     setEditing(true);
+    setSuggestOpen(true);
   };
 
   useEffect(() => {
@@ -88,16 +114,37 @@ export function BrowserAddressField({
   }, [editing, url]);
 
   useEffect(() => {
+    if (!showSuggestions) {
+      setMenuPos(null);
+      return;
+    }
+    placeMenu();
+    const onMove = () => placeMenu();
+    window.addEventListener("resize", onMove);
+    window.addEventListener("scroll", onMove, true);
+    return () => {
+      window.removeEventListener("resize", onMove);
+      window.removeEventListener("scroll", onMove, true);
+    };
+  }, [showSuggestions, typedQuery, suggestions.length]);
+
+  useEffect(() => {
     if (!editing) return;
     const onPointer = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setEditing(false);
-        setSuggestOpen(false);
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (
+        target instanceof Element &&
+        target.closest(`[data-browser-suggest="${listId}"]`)
+      ) {
+        return;
       }
+      setEditing(false);
+      setSuggestOpen(false);
     };
     window.addEventListener("mousedown", onPointer);
     return () => window.removeEventListener("mousedown", onPointer);
-  }, [editing]);
+  }, [editing, listId]);
 
   const finishEdit = () => {
     setEditing(false);
@@ -151,39 +198,49 @@ export function BrowserAddressField({
             className="h-8 w-full rounded-full border border-border/60 bg-input px-3 text-center text-[13px] text-foreground caret-foreground outline-none placeholder:text-center"
           />
         </form>
-        {showSuggestions ? (
-          <ul
-            id={listId}
-            role="listbox"
-            className="absolute top-[calc(100%+0.35rem)] left-1/2 z-40 w-full min-w-[16rem] -translate-x-1/2 overflow-hidden rounded-[12px] border border-border/70 bg-popover py-1 shadow-[0_12px_40px_rgba(0,0,0,0.12)]"
-          >
-            <li className="px-3 py-1.5 text-[11px] font-medium tracking-[0.04em] text-muted-foreground uppercase">
-              Recently viewed
-            </li>
-            {suggestions.map((item) => {
-              const host = displayHostFromUrl(item.url) || item.title;
-              return (
-                <li key={host} role="option">
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-muted/70"
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      pickSuggestion(item.url);
-                    }}
-                  >
-                    <FaviconImage url={item.url} size={14} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium">
-                        {host}
-                      </span>
-                    </span>
-                  </button>
+        {showSuggestions && menuPos
+          ? createPortal(
+              <ul
+                id={listId}
+                data-browser-suggest={listId}
+                role="listbox"
+                style={{
+                  top: menuPos.top,
+                  left: menuPos.left,
+                  width: menuPos.width,
+                  transform: "translateX(-50%)",
+                }}
+                className="pointer-events-auto fixed z-[360] overflow-hidden rounded-[12px] border border-border/70 bg-popover py-1 shadow-[0_12px_40px_rgba(0,0,0,0.18)]"
+              >
+                <li className="px-3 py-1.5 text-[11px] font-medium tracking-[0.04em] text-muted-foreground uppercase">
+                  Recently viewed
                 </li>
-              );
-            })}
-          </ul>
-        ) : null}
+                {suggestions.map((item) => {
+                  const host = displayHostFromUrl(item.url) || item.title;
+                  return (
+                    <li key={host} role="option">
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-muted/70"
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          pickSuggestion(item.url);
+                        }}
+                      >
+                        <FaviconImage url={item.url} size={14} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13px] font-medium">
+                            {host}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>,
+              document.body,
+            )
+          : null}
       </div>
     );
   }

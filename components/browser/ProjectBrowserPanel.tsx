@@ -367,22 +367,31 @@ export function ProjectBrowserPanel({
       return;
     }
 
-    // Leaving a playing video tab → float PiP first, then switch (keep media alive).
+    // Leaving a web tab — float PiP if media was playing (sticky + live check).
     if (
       leaving?.kind === "web" &&
       leaving.id !== id &&
-      !isBrowserPipTab(leaving.id) &&
-      isBrowserTabMediaPlaying(leaving.id)
+      !isBrowserPipTab(leaving.id)
     ) {
       void (async () => {
-        await startBrowserPip({
-          tabId: leaving.id,
-          url: leaving.url || "",
-          title: leaving.title || "Browser",
-          faviconUrl: leaving.faviconUrl ?? null,
-          userId: actor.id,
-          sourceProjectId: projectId ?? null,
-        });
+        let playing = isBrowserTabMediaPlaying(leaving.id);
+        if (!playing && typeof adapter.hasPlayingVideo === "function") {
+          try {
+            playing = await adapter.hasPlayingVideo(leaving.id);
+          } catch {
+            playing = false;
+          }
+        }
+        if (playing) {
+          await startBrowserPip({
+            tabId: leaving.id,
+            url: leaving.url || "",
+            title: leaving.title || "Browser",
+            faviconUrl: leaving.faviconUrl ?? null,
+            userId: actor.id,
+            sourceProjectId: projectId ?? null,
+          });
+        }
         write({ ...session, activeTabId: id });
       })();
       return;
@@ -441,14 +450,46 @@ export function ProjectBrowserPanel({
   };
 
   const addUrlTab = (url?: string) => {
+    const leaving = active;
     const tab = makeWebTab();
     const next = url
       ? navigateProjectBrowserTab(tab, normalizeBrowserUrl(url))
       : tab;
-    write({
-      tabs: [...session.tabs, next],
-      activeTabId: next.id,
-    });
+    const commit = () =>
+      write({
+        tabs: [...session.tabs, next],
+        activeTabId: next.id,
+      });
+
+    if (leaving?.kind === "web" && !isBrowserPipTab(leaving.id)) {
+      void (async () => {
+        let playing = isBrowserTabMediaPlaying(leaving.id);
+        if (!playing) {
+          const adapter = getBrowserSurfaceAdapter();
+          if (typeof adapter.hasPlayingVideo === "function") {
+            try {
+              playing = await adapter.hasPlayingVideo(leaving.id);
+            } catch {
+              playing = false;
+            }
+          }
+        }
+        if (playing) {
+          await startBrowserPip({
+            tabId: leaving.id,
+            url: leaving.url || "",
+            title: leaving.title || "Browser",
+            faviconUrl: leaving.faviconUrl ?? null,
+            userId: actor.id,
+            sourceProjectId: projectId ?? null,
+          });
+        }
+        commit();
+      })();
+      return;
+    }
+
+    commit();
   };
 
   const addStudioMediaTab = (

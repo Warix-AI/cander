@@ -1,6 +1,9 @@
 type Listener = () => void;
 
 const playingWebTabs = new Set<string>();
+/** Sticky “recently playing” so brief pause-on-blur still triggers PiP. */
+const stickyPlayingUntil = new Map<string, number>();
+const STICKY_MS = 90_000;
 const listeners = new Set<Listener>();
 
 function emit() {
@@ -9,20 +12,28 @@ function emit() {
 
 /** Track native mediaPlaying / mediaPaused for instant tab-switch PiP. */
 export function markBrowserTabMediaPlaying(tabId: string, playing: boolean) {
-  const before = playingWebTabs.has(tabId);
-  if (playing) playingWebTabs.add(tabId);
-  else playingWebTabs.delete(tabId);
-  if (before !== playingWebTabs.has(tabId)) emit();
+  const before = isBrowserTabMediaPlaying(tabId);
+  if (playing) {
+    playingWebTabs.add(tabId);
+    stickyPlayingUntil.set(tabId, Date.now() + STICKY_MS);
+  } else {
+    playingWebTabs.delete(tabId);
+    // Keep sticky window — Chromium often pauses media the instant focus leaves.
+  }
+  if (before !== isBrowserTabMediaPlaying(tabId)) emit();
 }
 
 export function isBrowserTabMediaPlaying(tabId: string): boolean {
-  return playingWebTabs.has(tabId);
+  if (playingWebTabs.has(tabId)) return true;
+  const until = stickyPlayingUntil.get(tabId) ?? 0;
+  return Date.now() < until;
 }
 
 export function clearBrowserTabMediaPlaying(tabId: string) {
-  if (!playingWebTabs.has(tabId)) return;
+  const before = isBrowserTabMediaPlaying(tabId);
   playingWebTabs.delete(tabId);
-  emit();
+  stickyPlayingUntil.delete(tabId);
+  if (before) emit();
 }
 
 export function subscribeBrowserTabMediaPlaying(listener: Listener): () => void {

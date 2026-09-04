@@ -2,8 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("canderDesktop", {
   platform: process.platform,
-  shellBuild: "2026-09-04-browser-pip-hover-v2",
-  shellVersion: "0.1.12",
+  shellBuild: "2026-09-04-browser-pip-suggest-fix",
+  shellVersion: "0.1.13",
   window: {
     minimize: () => ipcRenderer.send("cander:window-minimize"),
     maximize: () => ipcRenderer.send("cander:window-toggle-maximize"),

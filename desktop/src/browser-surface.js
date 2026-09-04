@@ -269,22 +269,12 @@ function attachViewListeners(tabId, view) {
   });
 
   wc.on("media-started-playing", () => {
-    void (async () => {
-      try {
-        await wc.executeJavaScript(VIDEO_PIP_INSTALL_SCRIPT, true);
-        const hasVideo = await wc.executeJavaScript(
-          "Boolean(window.__canderHasPlayingVideo && window.__canderHasPlayingVideo())",
-          true,
-        );
-        if (!hasVideo) return;
-      } catch {
-        // Fall through — still notify; enter script no-ops without a video.
-      }
-      emitToRenderer("cander:browser-event", {
-        type: "mediaPlaying",
-        tabId,
-      });
-    })();
+    // Always notify — YouTube / SPAs may not expose a detectable <video> yet.
+    void wc.executeJavaScript(VIDEO_PIP_INSTALL_SCRIPT, true).catch(() => {});
+    emitToRenderer("cander:browser-event", {
+      type: "mediaPlaying",
+      tabId,
+    });
   });
 
   wc.on("media-paused", () => {
