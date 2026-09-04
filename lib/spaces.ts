@@ -1,29 +1,48 @@
 import type { BillingPlan, NavDestinationId, SpaceId } from "./types";
 
 /**
- * Product spaces — Home is Explore (`research`) under a Home label.
+ * Product spaces — Explore (`research`) and Create (`studio`).
+ * Build projects keep internal id `build` but live under Create in the UI.
  * Legacy `home` remains on SpaceId for redirects only.
  * Work exists in data/chat but is hidden from the primary menu.
  */
-export const PRIMARY_NAV_SPACES: SpaceId[] = [
-  "research",
-  "build",
-  "studio",
-];
+export const PRIMARY_NAV_SPACES: SpaceId[] = ["research", "studio"];
 
 /** Work space stays in the product model but is not shown in nav. */
 export const SHOW_WORK_NAV = false;
 
-/** Studio is back in the primary menu. */
+/** Create (studio) stays in the primary menu. */
 export const SHOW_STUDIO_NAV = true;
 
-/** Map legacy dashboard Home → today's Home (research / Explore). */
+/** Map legacy dashboard Home → Explore (`research`). */
 export function resolveProductSpaceId(
   id: SpaceId | NavDestinationId | null | undefined,
 ): SpaceId | null {
   if (!id || id === "connectors") return null;
   if (id === "home") return "research";
   return id as SpaceId;
+}
+
+/**
+ * Nav destinations only — Build opens Create so the sidebar stays Explore + Create.
+ * Do not use when resolving a project's stored `space` for ProjectBrowserPanel.
+ */
+export function resolveNavSpaceId(
+  id: SpaceId | NavDestinationId | null | undefined,
+): SpaceId | null {
+  const resolved = resolveProductSpaceId(id);
+  if (resolved === "build") return "studio";
+  return resolved;
+}
+
+/** Sidebar highlight: Build projects light up Create. */
+export function navSpaceMatches(
+  navId: SidebarNavId,
+  spaceId: SpaceId | NavDestinationId | null | undefined,
+): boolean {
+  if (!spaceId || spaceId === "connectors") return false;
+  if (navId === spaceId) return true;
+  return navId === "studio" && spaceId === "build";
 }
 
 /** Nav-only for now — shown disabled with “Coming soon”. */
@@ -105,7 +124,7 @@ export function isSidebarNavId(id: string): id is SidebarNavId {
 /** Connectors nav visible for all plans — installs ship later. */
 export const SHOW_CONNECTORS_NAV = true;
 
-/** Default sidebar — Home, Build, Studio, Connectors, Recents. */
+/** Default sidebar — Explore, Create, Connectors, Recents. */
 export const DEFAULT_SIDEBAR_MAIN: SidebarNavId[] = [
   ...PRIMARY_NAV_SPACES,
   ...(SHOW_CONNECTORS_NAV ? (["connectors"] as const) : []),
@@ -178,8 +197,10 @@ export function migrateSidebarId(id: string): SidebarNavId | null {
   ) {
     return null;
   }
-  // Old Home dashboard slot → new Home (research).
+  // Old Home dashboard slot → Explore (research).
   if (id === "home") return "research";
+  // Build merged into Create (studio).
+  if (id === "build") return "studio";
   // Work removed from primary nav.
   if (id === "work") return null;
   if (isSidebarNavId(id)) return id;

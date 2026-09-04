@@ -75,7 +75,7 @@ export function ResearchDashboard() {
     <>
       <DashFrame
         banner={false}
-        title="Home"
+        title="Explore"
         subtitle="Research, browse, analyze, and discover."
       >
         <DashToolbar

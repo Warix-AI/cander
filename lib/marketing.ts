@@ -28,9 +28,9 @@ export const marketingPages: Record<string, MarketingPage> = {
   },
   "/spaces": {
     path: "/spaces",
-    title: "Spaces — Work, Build, Studio, Research & Personal",
+    title: "Spaces — Explore & Create",
     description:
-      "Your work has different shapes. Enter Work, Build, Studio, Research, or Personal — or route work into them from chat.",
+      "Explore for research and discovery. Create for apps, sites, automations, and images — in one product.",
   },
   "/work": {
     path: "/work",
@@ -38,23 +38,29 @@ export const marketingPages: Record<string, MarketingPage> = {
     description:
       "Work is for day-to-day operations — inbox, calendar, and customers. Available on every plan.",
   },
+  "/create": {
+    path: "/create",
+    title: "Create — Apps, Sites, Automations & Images",
+    description:
+      "Make apps, websites, automations, and images in one Create space. Live preview and image playground — on every plan.",
+  },
   "/build": {
     path: "/build",
-    title: "Build — Apps, Websites & Agents with AI",
+    title: "Create — Apps, Sites, Automations & Images",
     description:
-      "Software, sites, and agents with live preview, files, and runtime wired in. No build pipeline to manage. Available on every plan.",
+      "Make apps, websites, automations, and images in one Create space. Live preview and image playground — on every plan.",
   },
   "/studio": {
     path: "/studio",
-    title: "Studio — Images & Video",
+    title: "Create — Apps, Sites, Automations & Images",
     description:
-      "Create images and video in the app. Generate, canvas, library, and export — on every plan.",
+      "Make apps, websites, automations, and images in one Create space. Live preview and image playground — on every plan.",
   },
   "/research": {
     path: "/research",
-    title: "Research — Sources, Browser & Reports",
+    title: "Explore — Sources, Browser & Reports",
     description:
-      "Research that becomes usable work — browser, sources, notes, and reports in the app. Available on every plan.",
+      "Explore research that becomes usable work — browser, sources, notes, and reports in the app. Available on every plan.",
   },
   "/personal": {
     path: "/personal",
@@ -122,10 +128,9 @@ export function marketingMetadata(path: keyof typeof marketingPages): Metadata {
 }
 
 export const spacesNav = [
-  { href: "/spaces", title: "Overview", body: "Five spaces, one product." },
-  { href: "/build", title: "Build", body: "Software, sites, and agents." },
-  { href: "/studio", title: "Studio", body: "Images and video." },
-  { href: "/research", title: "Research", body: "Browser, sources, reports." },
+  { href: "/spaces", title: "Overview", body: "Explore and Create in one product." },
+  { href: "/create", title: "Create", body: "Apps, sites, automations, and images." },
+  { href: "/research", title: "Explore", body: "Browser, sources, reports." },
   { href: "/work", title: "Work", body: "Inbox, calendar, customers." },
   { href: "/personal", title: "Personal", body: "Today, money, health, goals." },
 ] as const;
@@ -149,9 +154,8 @@ export const footerGroups: {
     links: [
       { href: "/home", title: "Home" },
       { href: "/spaces", title: "Spaces" },
-      { href: "/build", title: "Build" },
-      { href: "/studio", title: "Studio" },
-      { href: "/research", title: "Research" },
+      { href: "/create", title: "Create" },
+      { href: "/research", title: "Explore" },
       { href: "/hosting", title: "Hosting" },
       { href: "/models", title: "Models" },
       { href: "/connectors", title: "Connectors" },
@@ -184,24 +188,24 @@ export const marketingSpaces = [
   },
   {
     id: "build",
-    href: "/build",
-    title: "Build",
+    href: "/create",
+    title: "Create",
     kicker: "Every plan",
-    blurb: "Software, sites, and agents.",
+    blurb: "Apps, sites, automations, and images.",
     media: "media-b",
   },
   {
     id: "studio",
-    href: "/studio",
-    title: "Studio",
+    href: "/create",
+    title: "Create",
     kicker: "Every plan",
-    blurb: "Create images and video in the app.",
+    blurb: "Apps, sites, automations, and images.",
     media: "media-c",
   },
   {
     id: "research",
     href: "/research",
-    title: "Research",
+    title: "Explore",
     kicker: "Every plan",
     blurb: "Research that becomes usable work.",
     media: "media-d",

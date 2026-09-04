@@ -29,7 +29,7 @@ import {
   usePinDisplayPrefs,
 } from "@/lib/pin-display-prefs";
 import { spaceIcons, spaceIconTint } from "@/lib/space-icons";
-import { type SidebarNavId, isExtraNavId, isComingSoonNav } from "@/lib/spaces";
+import { type SidebarNavId, isExtraNavId, isComingSoonNav, navSpaceMatches } from "@/lib/spaces";
 import {
   setSidebarPeeking,
   subscribeSidebarPeekHold,
@@ -211,8 +211,11 @@ export function Sidebar() {
     // Pinned connector detail — highlight the pin, not the Connectors tab.
     if (id === "connectors" && connectorId) return false;
     // Pinned project — highlight the pin row, not the space.
-    if (activePinnedProject && id === spaceId) return false;
-    return spaceId === id && (view === "space" || view === "chat");
+    if (activePinnedProject && (id === spaceId || (id === "studio" && spaceId === "build")))
+      return false;
+    return (
+      navSpaceMatches(id, spaceId) && (view === "space" || view === "chat")
+    );
   };
 
   const visiblePins = useMemo(

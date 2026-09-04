@@ -393,7 +393,18 @@ let pinsHydrated = false;
 /** Bumped on local pin/unpin so remote hydrate cannot resurrect stale pins. */
 let pinsLocalEpoch = 0;
 let pinsDirty = false;
-const PINS_SYNCED_FP_KEY = "courier-pins-synced-fp";
+/** Profile scope for local pin storage — avoids cross-account clobber. */
+let pinsProfileId: string | null = null;
+const PINS_LEGACY_KEY = "courier-pins";
+const PINS_SYNCED_LEGACY_KEY = "courier-pins-synced-fp";
+
+function pinsStorageKey(profileId: string) {
+  return `courier-pins:${profileId}`;
+}
+
+function pinsSyncedKey(profileId: string) {
+  return `courier-pins-synced-fp:${profileId}`;
+}
 
 function pinsFingerprintLocal(list: Pin[]) {
   return list
@@ -434,17 +445,84 @@ function emitPins() {
   pinListeners.forEach((listener) => listener());
 }
 
+function readPinsForProfile(profileId: string | null): {
+  pins: Pin[];
+  synced: string;
+} {
+  if (typeof window === "undefined") {
+    return { pins: emptyPins, synced: "" };
+  }
+  if (profileId) {
+    const scoped = window.localStorage.getItem(pinsStorageKey(profileId));
+    if (scoped != null) {
+      return {
+        pins: parsePins(scoped),
+        synced: window.localStorage.getItem(pinsSyncedKey(profileId)) ?? "",
+      };
+    }
+    // One-time migrate unscoped legacy key into this profile.
+    const legacy = window.localStorage.getItem(PINS_LEGACY_KEY);
+    if (legacy != null) {
+      const migrated = parsePins(legacy);
+      window.localStorage.setItem(pinsStorageKey(profileId), legacy);
+      const legacySynced =
+        window.localStorage.getItem(PINS_SYNCED_LEGACY_KEY) ?? "";
+      window.localStorage.setItem(pinsSyncedKey(profileId), legacySynced);
+      window.localStorage.removeItem(PINS_LEGACY_KEY);
+      window.localStorage.removeItem(PINS_SYNCED_LEGACY_KEY);
+      return { pins: migrated, synced: legacySynced };
+    }
+    return { pins: emptyPins, synced: "" };
+  }
+  return {
+    pins: parsePins(window.localStorage.getItem(PINS_LEGACY_KEY)),
+    synced: window.localStorage.getItem(PINS_SYNCED_LEGACY_KEY) ?? "",
+  };
+}
+
+function writePinsForProfile(profileId: string | null, list: Pin[], syncedFp?: string) {
+  if (typeof window === "undefined") return;
+  const raw = JSON.stringify(list);
+  if (profileId) {
+    window.localStorage.setItem(pinsStorageKey(profileId), raw);
+    if (syncedFp !== undefined) {
+      window.localStorage.setItem(pinsSyncedKey(profileId), syncedFp);
+    }
+    return;
+  }
+  window.localStorage.setItem(PINS_LEGACY_KEY, raw);
+  if (syncedFp !== undefined) {
+    window.localStorage.setItem(PINS_SYNCED_LEGACY_KEY, syncedFp);
+  }
+}
+
 function hydratePins() {
   if (pinsHydrated || typeof window === "undefined") return;
   pinsHydrated = true;
-  pins = parsePins(window.localStorage.getItem("courier-pins"));
-  const synced = window.localStorage.getItem(PINS_SYNCED_FP_KEY) ?? "";
+  const { pins: loaded, synced } = readPinsForProfile(pinsProfileId);
+  pins = loaded;
   const current = pinsFingerprintLocal(pins);
   // Unsynced local edits survive reload — block remote resurrect until push.
   if (synced !== current) {
     pinsDirty = true;
     pinsLocalEpoch = Math.max(pinsLocalEpoch, 1);
   }
+}
+
+/**
+ * Bind pin localStorage to the signed-in profile. Call when actor id is known
+ * so accounts do not overwrite each other's pins in the same browser.
+ */
+export function bindPinsProfile(profileId: string | null) {
+  const next = profileId?.trim() || null;
+  if (pinsProfileId === next && pinsHydrated) return;
+  pinsProfileId = next;
+  pinsHydrated = false;
+  pinsLocalEpoch = 0;
+  pinsDirty = false;
+  pins = emptyPins;
+  hydratePins();
+  emitPins();
 }
 
 export function subscribePins(listener: Listener) {
@@ -476,10 +554,7 @@ export function markPinsSynced(epoch: number) {
   if (epoch < pinsLocalEpoch) return;
   pinsDirty = false;
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(
-      PINS_SYNCED_FP_KEY,
-      pinsFingerprintLocal(pins),
-    );
+    writePinsForProfile(pinsProfileId, pins, pinsFingerprintLocal(pins));
   }
 }
 
@@ -487,7 +562,7 @@ export function persistPins(next: Pin[]) {
   pins = next.length ? next.map(normalizePin) : emptyPins;
   pinsLocalEpoch += 1;
   pinsDirty = true;
-  window.localStorage.setItem("courier-pins", JSON.stringify(pins));
+  writePinsForProfile(pinsProfileId, pins);
   emitPins();
 }
 
@@ -505,11 +580,7 @@ export function replacePinsState(next: Pin[]) {
   if (same) return;
   pins = normalized;
   if (typeof window !== "undefined") {
-    window.localStorage.setItem("courier-pins", JSON.stringify(pins));
-    window.localStorage.setItem(
-      PINS_SYNCED_FP_KEY,
-      pinsFingerprintLocal(pins),
-    );
+    writePinsForProfile(pinsProfileId, pins, pinsFingerprintLocal(pins));
     pinsDirty = false;
   }
   emitPins();

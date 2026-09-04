@@ -7,7 +7,7 @@ import { AccountSheet } from "@/components/shell/mobile/AccountSheet";
 import { PinsSheet } from "@/components/shell/mobile/PinsSheet";
 import { WorkspaceSheet } from "@/components/shell/mobile/WorkspaceSheet";
 import { useMainNavItems } from "@/lib/use-main-nav-items";
-import { isChatSpace, isComingSoonNav, isExtraNavId, type SidebarNavId } from "@/lib/spaces";
+import { isChatSpace, isComingSoonNav, isExtraNavId, navSpaceMatches, type SidebarNavId } from "@/lib/spaces";
 import { spaceIconTint } from "@/lib/space-icons";
 import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -50,7 +50,9 @@ export function MobileMenuDrawer() {
 
   const navActive = (id: SidebarNavId) => {
     if (id === "recents") return view === "recents";
-    return spaceId === id && (view === "space" || view === "chat");
+    return (
+      navSpaceMatches(id, spaceId) && (view === "space" || view === "chat")
+    );
   };
 
   const openNav = (id: SidebarNavId) => {

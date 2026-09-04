@@ -98,7 +98,7 @@ function Shell({
             Spaces
           </p>
           <div className="mt-1 space-y-0.5">
-            {["Work", "Build", "Studio", "Research", "Personal"].map((space) => (
+            {["Explore", "Create", "Work", "Personal"].map((space) => (
               <NavRow key={space} active={space === "Build"}>
                 {space}
               </NavRow>

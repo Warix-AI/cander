@@ -20,7 +20,7 @@ import {
   mobileMenuRowClass,
 } from "@/lib/mobile-menu-styles";
 import { navLabel, useMainNavItems } from "@/lib/use-main-nav-items";
-import { isComingSoonNav, isExtraNavId, type SidebarNavId } from "@/lib/spaces";
+import { isComingSoonNav, isExtraNavId, navSpaceMatches, type SidebarNavId } from "@/lib/spaces";
 import { navIcon } from "@/lib/space-icons";
 import type { MobileMenuScreen, NavDestinationId, SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -136,7 +136,9 @@ function MenuMain({
 
   const navActive = (id: SidebarNavId) => {
     if (id === "recents") return view === "recents";
-    return spaceId === id && (view === "space" || view === "chat");
+    return (
+      navSpaceMatches(id, spaceId) && (view === "space" || view === "chat")
+    );
   };
 
   return (

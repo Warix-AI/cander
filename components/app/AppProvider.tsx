@@ -145,7 +145,7 @@ import {
   NEW_CHAT_CHOICE_PANEL_RATIO,
   PANEL_RATIO_OPEN_FLOOR,
 } from "@/lib/right-panel";
-import { isChatSpace, chatSpaceId, isDockChatSpace, PRIMARY_NAV_SPACES, resolveProductSpaceId, spaceAllowed, isDashboardOnlySpace, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
+import { isChatSpace, chatSpaceId, isDockChatSpace, PRIMARY_NAV_SPACES, resolveNavSpaceId, resolveProductSpaceId, spaceAllowed, isDashboardOnlySpace, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
 import type {
   AccountPresetId,
   BuildTool,
@@ -1115,7 +1115,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const openSpaceChat = useCallback(
     (space: SpaceId, opts?: { keepProject?: boolean; landOnPanel?: boolean }) => {
-      const dest = resolveProductSpaceId(space) ?? space;
+      const product = resolveProductSpaceId(space) ?? space;
+      // Nav opens map Build → Create; keepProject preserves the project's space id.
+      const dest = (
+        opts?.keepProject ? product : resolveNavSpaceId(space) ?? product
+      ) as SpaceId;
       if (!isDockChatSpace(dest)) return;
       const keepProject = Boolean(opts?.keepProject && projectId);
       let tid = "";
@@ -3436,12 +3440,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const allowed = memberSpaces(workspaceId, actor.id, workspacePolicies);
     const planOpts = { billingPlan };
     let target: NavDestinationId | null =
-      resolveProductSpaceId(id) ?? id;
+      resolveNavSpaceId(id) ?? id;
     if (target && !spaceAllowed(target, allowed, planOpts)) {
       target = null;
     }
     if (!target) {
-      const fallback = (["research", "build", "studio"] as const).find(
+      const fallback = (["research", "studio"] as const).find(
         (space) => spaceAllowed(space, allowed, planOpts),
       );
       if (!fallback) {
@@ -4172,7 +4176,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return {
             ok: true,
-            detail: `Created “${project.title}” in ${space === "research" ? "Home" : space === "build" ? "Build" : "Work"}.`,
+            detail: `Created “${project.title}” in ${
+              space === "research"
+                ? "Explore"
+                : space === "studio"
+                  ? "Create"
+                  : space === "build"
+                    ? "Create"
+                    : "Work"
+            }.`,
             projectId: project.id,
           };
         } catch (err) {

@@ -115,17 +115,17 @@ export function SearchModal() {
         run: () => openSettings("plans"),
       },
       {
-        id: "action-new-build",
-        title: "New Build",
-        meta: "Start a build with this chat",
+        id: "action-new-create",
+        title: "New Create chat",
+        meta: "Start creating with this chat",
         group: "Actions",
-        run: () => newChat("build"),
+        run: () => newChat("studio"),
       },
       ...(SHOW_STUDIO_NAV
         ? [
             {
               id: "action-new-research",
-              title: "New Home project",
+              title: "New Explore project",
               meta: "Start a search with this chat",
               group: "Actions" as const,
               run: () => newChat("research"),

@@ -1,56 +1,23 @@
 "use client";
 
-import { Plus } from "lucide-react";
-import { DashBtn } from "@/components/spaces/ItemSet";
-import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flow";
-import type { ProjectKind } from "@/lib/space-entities";
+/**
+ * Studio create menu — re-exports Create menu for leftover imports.
+ * Prefer `@/components/spaces/NewCreateMenu`.
+ */
+export {
+  NewCreateMenu as NewStudioMenu,
+  CREATE_MENU_OPTIONS,
+} from "@/components/spaces/NewCreateMenu";
 
-export type StudioStart = {
-  id: "project";
-  label: string;
-  summary: string;
-  kind: ProjectKind;
-  title: string;
-};
+export type { CreateStart as StudioStart } from "@/components/spaces/NewCreateMenu";
 
-/** Studio projects are creative canvases with optional browser tabs. */
-export const STUDIO_CREATE_OPTIONS: StudioStart[] = [
+/** @deprecated Prefer CREATE_MENU_OPTIONS image entry. */
+export const STUDIO_CREATE_OPTIONS = [
   {
-    id: "project",
-    label: "New project",
-    summary: "Create",
-    kind: "general",
-    title: "Studio project",
+    id: "project" as const,
+    label: "Image",
+    summary: "Generate and edit images",
+    kind: "general" as const,
+    title: "Image project",
   },
 ];
-
-type NewStudioMenuProps = {
-  onCreated: (projectId: string) => void;
-};
-
-export function NewStudioMenu({ onCreated }: NewStudioMenuProps) {
-  const { openCreate, busy, modal } = useCreateProjectFlow(onCreated);
-  const item = STUDIO_CREATE_OPTIONS[0]!;
-
-  return (
-    <>
-      <DashBtn
-        primary
-        icon
-        label="New in Studio"
-        onClick={() => {
-          if (busy) return;
-          openCreate({
-            space: "studio",
-            kind: item.kind,
-            defaultTitle: item.title,
-            summary: item.summary,
-          });
-        }}
-      >
-        <Plus className="h-3.5 w-3.5" strokeWidth={1.6} />
-      </DashBtn>
-      {modal}
-    </>
-  );
-}

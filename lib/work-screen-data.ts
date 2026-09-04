@@ -36,19 +36,19 @@ export const WORK_FOCUS_NOW: WorkTodayItem[] = [
   {
     id: "focus-2",
     title: "Review Q3 roadmap draft",
-    source: "Home",
+    source: "Explore",
     action: "Review",
   },
   {
     id: "focus-3",
     title: "Continue client portal fixes",
-    source: "Build",
+    source: "Create",
     action: "Continue",
   },
   {
     id: "focus-4",
     title: "Approve design system updates",
-    source: "Studio",
+    source: "Create",
     action: "Review",
   },
 ];
@@ -63,13 +63,13 @@ export const WORK_ON_DECK: WorkTodayItem[] = [
   {
     id: "deck-2",
     title: "Check deployment status for staging",
-    source: "Build",
+    source: "Create",
     action: "Open",
   },
   {
     id: "deck-3",
     title: "Summarize competitor research notes",
-    source: "Home",
+    source: "Explore",
     action: "Open",
   },
 ];
@@ -79,7 +79,7 @@ export const WORK_COLLECTION_ITEMS: WorkCollectionItem[] = [
     id: "col-build-1",
     title: "Team standup board",
     summary: "Daily standup and blockers",
-    source: "Build",
+    source: "Create",
     category: "build",
     addedAt: "2026-08-28T14:00:00Z",
     cover: "/previews/portal.png",
@@ -89,7 +89,7 @@ export const WORK_COLLECTION_ITEMS: WorkCollectionItem[] = [
     id: "col-build-2",
     title: "Expense tracker",
     summary: "Receipts and reimbursements",
-    source: "Build",
+    source: "Create",
     category: "build",
     addedAt: "2026-08-20T09:30:00Z",
     cover: "/previews/crm.png",
@@ -99,7 +99,7 @@ export const WORK_COLLECTION_ITEMS: WorkCollectionItem[] = [
     id: "col-build-3",
     title: "Client portal v2",
     summary: "Auth, billing, and account settings",
-    source: "Build",
+    source: "Create",
     category: "build",
     addedAt: "2026-08-25T16:45:00Z",
     cover: "/previews/console.png",
@@ -109,7 +109,7 @@ export const WORK_COLLECTION_ITEMS: WorkCollectionItem[] = [
     id: "col-home-1",
     title: "Market research — AI tools",
     summary: "Competitive landscape and pricing",
-    source: "Home",
+    source: "Explore",
     category: "home",
     addedAt: "2026-08-22T11:15:00Z",
     cover: "/previews/docs.png",
@@ -119,7 +119,7 @@ export const WORK_COLLECTION_ITEMS: WorkCollectionItem[] = [
     id: "col-home-2",
     title: "Q3 planning doc",
     summary: "Goals, milestones, and owners",
-    source: "Home",
+    source: "Explore",
     category: "home",
     addedAt: "2026-08-15T13:20:00Z",
     cover: "/previews/docs.png",
@@ -129,7 +129,7 @@ export const WORK_COLLECTION_ITEMS: WorkCollectionItem[] = [
     id: "col-studio-1",
     title: "Brand guidelines",
     summary: "Logo, color, and typography rules",
-    source: "Studio",
+    source: "Create",
     category: "studio",
     addedAt: "2026-08-18T08:00:00Z",
     cover: "/previews/studio-campaign.png",
@@ -139,7 +139,7 @@ export const WORK_COLLECTION_ITEMS: WorkCollectionItem[] = [
     id: "col-studio-2",
     title: "Design system updates",
     summary: "Component and token refresh",
-    source: "Studio",
+    source: "Create",
     category: "studio",
     addedAt: "2026-08-16T12:00:00Z",
     cover: "/previews/portal.png",
@@ -151,9 +151,9 @@ export const WORK_COLLECTION_CATEGORY_OPTIONS: {
   id: WorkCollectionCategory;
   label: string;
 }[] = [
-  { id: "home", label: "Home" },
-  { id: "build", label: "Build" },
-  { id: "studio", label: "Studio" },
+  { id: "home", label: "Explore" },
+  { id: "build", label: "Create" },
+  { id: "studio", label: "Images" },
 ];
 
 export function workCollectionCategoryLabel(
@@ -161,10 +161,10 @@ export function workCollectionCategoryLabel(
 ): string {
   switch (category) {
     case "home":
-      return "Home";
+      return "Explore";
     case "build":
-      return "Build";
+      return "Create";
     case "studio":
-      return "Studio";
+      return "Images";
   }
 }

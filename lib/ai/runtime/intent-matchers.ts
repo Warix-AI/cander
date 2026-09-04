@@ -8,14 +8,14 @@ export function matchNavIntent(
   const text = content.trim();
   const patterns: Array<{ re: RegExp; target: string; label: string }> = [
     {
-      re: /\b(go to|open|take me to|switch to|show)\b.*\bbuild\b/i,
+      re: /\b(go to|open|take me to|switch to|show)\b.*\b(create|studio|build)\b/i,
       target: "build",
-      label: "Build",
+      label: "Create",
     },
     {
-      re: /\b(go to|open|take me to|switch to|show)\b.*\b(explore|research)\b/i,
+      re: /\b(go to|open|take me to|switch to|show)\b.*\b(explore|research|home)\b/i,
       target: "research",
-      label: "Home",
+      label: "Explore",
     },
     {
       re: /\b(go to|open|take me to|switch to|show)\b.*\bwork\b/i,
@@ -66,7 +66,11 @@ export function matchOpenProjectIntent(content: string): {
     );
   if (!named?.[1]?.trim()) return null;
   const q = named[1].trim();
-  if (/^(build|explore|research|work|recents?|connectors?|settings?)$/i.test(q)) {
+  if (
+    /^(build|create|studio|explore|research|home|work|recents?|connectors?|settings?)$/i.test(
+      q,
+    )
+  ) {
     return null;
   }
   return { query: q };

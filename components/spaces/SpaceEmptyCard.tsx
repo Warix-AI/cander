@@ -38,13 +38,13 @@ const SPACE_VISUAL: Record<
   studio: {
     gradient:
       "linear-gradient(270deg, oklch(0.68 0.15 318) 0%, oklch(0.75 0.12 295) 18%, oklch(0.84 0.07 285 / 0.68) 38%, oklch(0.92 0.04 280 / 0.3) 58%, oklch(0.96 0.02 280 / 0.1) 74%, transparent 92%)",
-    words: ["Image", "Video", "Audio", "Present"],
-    comingSoonWords: ["Video", "Audio", "Present"],
+    words: ["Image", "App", "Website", "Automation", "Video"],
+    comingSoonWords: ["Video"],
   },
   work: {
     gradient:
       "linear-gradient(270deg, oklch(0.6 0.13 248) 0%, oklch(0.7 0.1 245) 18%, oklch(0.82 0.06 245 / 0.65) 38%, oklch(0.9 0.03 245 / 0.28) 58%, oklch(0.95 0.015 245 / 0.1) 74%, transparent 92%)",
-    words: ["Home", "Build", "Studio", "Pins"],
+    words: ["Explore", "Create", "Pins", "Recents"],
   },
 };
 
@@ -238,12 +238,14 @@ export function SpaceEmptyCard({
 export const SPACE_EMPTY_COPY = {
   studio: {
     title: "Start creating",
-    description: "Generate or edit an image in seconds.",
+    description:
+      "Make an image, app, website, or automation — all from Create.",
     actionLabel: "New project",
   },
   build: {
-    title: "Start building",
-    description: "Ship an app, site, or automation in minutes.",
+    title: "Start creating",
+    description:
+      "Make an image, app, website, or automation — all from Create.",
     actionLabel: "New project",
   },
   research: {
@@ -253,7 +255,7 @@ export const SPACE_EMPTY_COPY = {
   },
   work: {
     title: "Start organizing",
-    description: "Bring Home, Build, and Studio projects together.",
+    description: "Bring Explore and Create projects together.",
     actionLabel: "New project",
   },
 } as const;

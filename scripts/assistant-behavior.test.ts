@@ -163,8 +163,8 @@ describe("clarification cards", () => {
           label: "Which space should this live in?",
           required: true,
           choices: [
-            { id: "build", label: "Build" },
-            { id: "research", label: "Home" },
+            { id: "build", label: "Create" },
+            { id: "research", label: "Explore" },
           ],
         },
       ],
@@ -184,10 +184,10 @@ describe("clarification cards", () => {
     assert.equal(normalized.title, "Hey Dude");
 
     const rows = formatClarificationAnswersForDisplay({
-      undefined: "Home",
+      undefined: "Explore",
     });
     assert.equal(rows[0]?.label, "Space");
-    assert.equal(rows[0]?.value, "Home");
+    assert.equal(rows[0]?.value, "Explore");
 
     const sanitized = sanitizeClarificationQuestions([
       {

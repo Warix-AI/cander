@@ -27,8 +27,8 @@ export type SpaceSettingsConfig = {
 
 export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
   home: {
-    title: "Home",
-    subtitle: "Legacy dashboard — use Home (research) in the sidebar.",
+    title: "Explore",
+    subtitle: "Legacy dashboard — use Explore (research) in the sidebar.",
     sections: [],
   },
   work: {
@@ -79,7 +79,7 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
     ],
   },
   build: {
-    title: "Build library",
+    title: "Create library",
     subtitle: "Templates, themes, and components — like a built-in 21st.dev kit for new apps.",
     sections: [
       {
@@ -232,7 +232,7 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
     ],
   },
   research: {
-    title: "Home library",
+    title: "Explore library",
     subtitle: "Briefs, layouts, and citation styles for research papers.",
     sections: [
       {
@@ -334,8 +334,8 @@ export const spaceSettings: Record<SpaceId, SpaceSettingsConfig> = {
     ],
   },
   studio: {
-    title: "Studio",
-    subtitle: "Creative projects with browser tabs beside chat.",
+    title: "Create",
+    subtitle: "Apps, sites, automations, and images with browser tabs beside chat.",
     sections: [],
   },
 };

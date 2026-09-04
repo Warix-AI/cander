@@ -103,6 +103,13 @@ export function normalizeToolArguments(
   delete input.user_id;
   delete input.userId;
 
+  if (toolName === "nav.open" && typeof input.target === "string") {
+    const t = input.target.toLowerCase();
+    if (t === "explore" || t === "home") input.target = "research";
+    // Spoken Create / Studio → Build id (nav resolves Build → Create/studio).
+    if (t === "create" || t === "studio") input.target = "build";
+  }
+
   if (toolName === "project.create") {
     if (input.name != null && input.title == null) input.title = input.name;
     if (input.description != null && input.summary == null) {
@@ -112,15 +119,10 @@ export function normalizeToolArguments(
     delete input.description;
     if (typeof input.space === "string") {
       const s = input.space.toLowerCase();
-      if (s === "explore") input.space = "research";
+      if (s === "explore" || s === "home") input.space = "research";
+      // "Create" without a kind defaults to Build apps/sites/automations.
+      if (s === "create") input.space = "build";
     }
-  }
-
-  if (toolName === "nav.open" && typeof input.target === "string") {
-    const t = input.target.toLowerCase();
-    if (t === "explore") input.target = "research";
-    // Legacy dashboard Home → product Home (research).
-    if (t === "home") input.target = "research";
   }
 
   if (toolName === "gmail.read") {

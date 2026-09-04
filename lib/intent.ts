@@ -232,8 +232,8 @@ export function nextId(prefix: string) {
 }
 
 export function labelFor(space: SpaceId) {
-  if (space === "home" || space === "research") return "Home";
+  if (space === "home" || space === "research") return "Explore";
   if (space === "work") return "Work";
-  if (space === "studio") return "Studio";
-  return "Build";
+  if (space === "studio" || space === "build") return "Create";
+  return "Create";
 }

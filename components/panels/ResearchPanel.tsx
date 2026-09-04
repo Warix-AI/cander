@@ -66,7 +66,7 @@ export function ResearchPanel() {
   return (
     <div className={SHELL_PANEL_BODY}>
       <PanelChrome
-        kicker="Home"
+        kicker="Explore"
         title={project?.name ?? "New brief"}
         trailing={mobile ? tabs : undefined}
       />

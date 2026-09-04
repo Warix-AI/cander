@@ -42,6 +42,7 @@ import {
   getSessionReadySnapshot,
   subscribeSessionReady,
 } from "@/lib/session-ready";
+import { bindPinsProfile } from "@/lib/session";
 import type { WorkspaceCtx } from "@/lib/space-entities";
 
 type SpaceDataContextValue = {
@@ -75,6 +76,10 @@ export function SpaceDataProvider({
       ? undefined
       : actorId,
   );
+  // Scope pin localStorage to the signed-in profile before any hydrate/sync.
+  if (isAppearanceActorId(actorId)) {
+    bindPinsProfile(actorId);
+  }
 
   const api = useMemo(() => createApiBundle(backend), [backend]);
   const ctx = useMemo(

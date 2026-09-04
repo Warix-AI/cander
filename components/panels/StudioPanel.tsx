@@ -17,7 +17,7 @@ export function StudioPanel() {
   return (
     <div className={SHELL_PANEL_BODY}>
       <PanelChrome
-        kicker="Studio"
+        kicker="Create"
         title={project?.name ?? "Studio project"}
       />
       <div className={SHELL_PANEL_SCROLL}>

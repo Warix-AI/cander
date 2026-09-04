@@ -32,7 +32,7 @@ export const BANNER_PRESETS: {
   { id: "price", label: "Indigo", className: "panel-wash-price" },
   { id: "spaces", label: "Aurora", className: "panel-wash-spaces" },
   { id: "dusk", label: "Dusk", className: "panel-wash-dusk" },
-  { id: "promo", label: "Studio", className: "panel-wash-promo" },
+  { id: "promo", label: "Create", className: "panel-wash-promo" },
 ];
 
 /** Default wash for previews — lighter Studio orange (panel-wash-promo). */

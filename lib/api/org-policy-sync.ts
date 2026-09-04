@@ -265,14 +265,21 @@ export async function syncUserPrefsToSupabase(ctx: WorkspaceCtx) {
       if (pinError) throw pinError;
 
       // Remove pins that are no longer local — only after upsert succeeds.
-      // Quote string ids so PostgREST does not misparse hyphenated pin ids.
       const keepIds = pinRows.map((row) => row.id);
-      const keepList = `(${keepIds.map((id) => `"${id}"`).join(",")})`;
-      const { error: pruneError } = await supabase
+      let pruneQuery = supabase
         .from("user_pins")
         .delete()
-        .eq("profile_id", ctx.actorId)
-        .not("id", "in", keepList);
+        .eq("profile_id", ctx.actorId);
+      if (keepIds.length === 1) {
+        pruneQuery = pruneQuery.neq("id", keepIds[0]!);
+      } else {
+        pruneQuery = pruneQuery.not(
+          "id",
+          "in",
+          `(${keepIds.map((id) => `"${id.replace(/"/g, "")}"`).join(",")})`,
+        );
+      }
+      const { error: pruneError } = await pruneQuery;
       if (pruneError) throw pruneError;
     } else {
       const { error: deletePinsError } = await supabase
@@ -331,7 +338,9 @@ export async function hydrateUserPrefsFromRemote(ctx: WorkspaceCtx) {
       replacePinsState(remotePins);
     }
   } else if (localPins.length) {
-    // Mid-sync race (delete before insert) — keep local pins.
+    // Remote empty but local still has pins — keep them and re-push so the
+    // account does not permanently lose pins after a failed prune/race.
+    pushDirtyPins = true;
   } else {
     lastRemotePinsFingerprint = "";
     replacePinsState([]);
@@ -541,6 +550,8 @@ export function startOrgPolicyRealtimePull(ctx: WorkspaceCtx) {
 }
 
 export async function bootstrapSupabaseOrgPolicy(ctx: WorkspaceCtx) {
+  const { bindPinsProfile } = await import("@/lib/session");
+  bindPinsProfile(ctx.actorId);
   await importLocalOrgPolicyIfNeeded(ctx);
   await hydrateOrgPolicyFromRemote(ctx);
   await hydrateUserPrefsFromRemote(ctx);

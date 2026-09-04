@@ -34,14 +34,14 @@ export function WorkPanel() {
         title: item.title,
         meta:
           tab === "home"
-            ? "Home"
+            ? "Explore"
             : tab === "build"
               ? item.kind === "automation"
-                ? "Build · Automation"
+                ? "Create · Automation"
                 : item.status === "published"
-                  ? "Build · Published"
-                  : "Build"
-              : "Studio",
+                  ? "Create · Published"
+                  : "Create"
+              : "Create",
       })),
     [projects, tab],
   );
@@ -51,9 +51,9 @@ export function WorkPanel() {
   }
 
   const tabs = [
-    { id: "home" as const, label: "Home" },
-    { id: "build" as const, label: "Build" },
-    { id: "studio" as const, label: "Studio" },
+    { id: "home" as const, label: "Explore" },
+    { id: "build" as const, label: "Create" },
+    { id: "studio" as const, label: "Images" },
   ];
 
   return (

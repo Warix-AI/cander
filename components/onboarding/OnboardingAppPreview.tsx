@@ -6,9 +6,8 @@ import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 const PREVIEW_NAV = [
-  { label: "Home", dot: "bg-green-500", active: true },
-  { label: "Build", dot: "bg-orange-500" },
-  { label: "Studio", dot: "bg-violet-500" },
+  { label: "Explore", dot: "bg-green-500", active: true },
+  { label: "Create", dot: "bg-violet-500" },
   { label: "Connectors" },
   { label: "Recents" },
 ] as const;

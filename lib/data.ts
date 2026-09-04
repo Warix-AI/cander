@@ -216,10 +216,10 @@ export const workspaceResources: WorkspaceResource[] = [
 ];
 
 export const spaces: { id: SpaceId; label: string }[] = [
-  { id: "research", label: "Home" },
+  { id: "research", label: "Explore" },
   { id: "work", label: "Work" },
   { id: "build", label: "Build" },
-  { id: "studio", label: "Studio" },
+  { id: "studio", label: "Create" },
 ];
 
 export const workspaces: Workspace[] = [

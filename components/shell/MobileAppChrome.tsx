@@ -14,13 +14,10 @@ import {
   MobilePanelActionsCluster,
   useMobilePanelActionsState,
 } from "@/components/shell/mobile/MobilePanelActions";
-import { BUILD_CREATE_OPTIONS } from "@/components/spaces/NewBuildMenu";
+import { CREATE_MENU_OPTIONS } from "@/components/spaces/NewCreateMenu";
 import {
   EXPLORE_CREATE_OPTIONS,
 } from "@/components/spaces/NewExploreMenu";
-import {
-  STUDIO_CREATE_OPTIONS,
-} from "@/components/spaces/NewStudioMenu";
 import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flow";
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import { normalizeProjectTitle } from "@/lib/project-name";
@@ -242,17 +239,11 @@ export function MobileAppChrome({ className }: { className?: string }) {
   };
 
   const handlePanelCompose = () => {
-    if (spaceId === "studio") {
-      const item = STUDIO_CREATE_OPTIONS[0]!;
-      openCreate({
-        space: "studio",
-        kind: item.kind,
-        defaultTitle: item.title,
-        summary: item.summary,
-      });
+    if (spaceId === "studio" || spaceId === "build") {
+      setNewProjectOpen(true);
       return;
     }
-    if (spaceId === "build" || spaceId === "research") {
+    if (spaceId === "research") {
       setNewProjectOpen(true);
       return;
     }
@@ -419,12 +410,12 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
   const projectPanelLabel =
     spaceId === "research"
-      ? "Home"
-      : spaceId === "studio"
-        ? "Studio"
+      ? "Explore"
+      : spaceId === "studio" || spaceId === "build"
+        ? "Create"
         : spaceId === "work"
           ? "Work"
-          : "Build";
+          : "Create";
 
   return (
     <>
@@ -585,12 +576,12 @@ export function MobileAppChrome({ className }: { className?: string }) {
       >
         <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-1">
           <p className="px-1 text-[17px] font-medium tracking-[-0.02em]">
-            {spaceId === "research" ? "New search" : "New build"}
+            {spaceId === "research" ? "New search" : "New project"}
           </p>
           <p className="mt-1 px-1 text-[13px] text-muted-foreground">
             {spaceId === "research"
               ? "Create a tab group for browsing and research."
-              : "Choose what to create in this space."}
+              : "Choose what to create."}
           </p>
           <div className="mt-4 space-y-0.5">
             {spaceId === "research" ? (
@@ -637,17 +628,17 @@ export function MobileAppChrome({ className }: { className?: string }) {
                 ))}
               </>
             ) : (
-              BUILD_CREATE_OPTIONS.map((item) => (
+              CREATE_MENU_OPTIONS.map((item) => (
                 <button
-                  key={item.kind}
+                  key={item.id}
                   type="button"
                   disabled={newProjectBusy}
                   onClick={() => {
                     setNewProjectOpen(false);
                     openCreate({
-                      space: "build",
+                      space: item.space,
                       kind: item.kind,
-                      defaultTitle: `New ${item.label}`,
+                      defaultTitle: item.title,
                       summary: item.summary,
                     });
                   }}

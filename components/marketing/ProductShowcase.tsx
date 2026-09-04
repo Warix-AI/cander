@@ -7,16 +7,16 @@ import { cn } from "@/lib/utils";
 const modes = [
   {
     id: "home",
-    label: "Home",
+    label: "Explore",
     title: "Chat",
-    body: "For questions, everyday work, and handing tasks into Spaces.",
+    body: "For questions, research, and handing tasks into Create.",
     variant: "hero" as const,
   },
   {
     id: "build",
-    label: "Build",
-    title: "Build",
-    body: "Software, sites, and agents with live preview and runtime wired in.",
+    label: "Create",
+    title: "Create",
+    body: "Apps, sites, automations, and images with live preview and playground.",
     variant: "build" as const,
   },
 ];

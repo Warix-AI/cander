@@ -1,9 +1,8 @@
 "use client";
 
-import { BuildDashboard } from "@/components/spaces/BuildDashboard";
 import { ConnectorsDashboard } from "@/components/spaces/ConnectorsDashboard";
+import { CreateDashboard } from "@/components/spaces/CreateDashboard";
 import { ResearchDashboard } from "@/components/spaces/ResearchDashboard";
-import { StudioDashboard } from "@/components/spaces/StudioDashboard";
 import { WorkDashboard } from "@/components/spaces/WorkDashboard";
 import { useApp } from "@/components/app/AppProvider";
 import { useMobileShell } from "@/lib/use-media-query";
@@ -20,23 +19,21 @@ export function SpaceDashboard({
 }) {
   const { spaceId } = useApp();
   const mobile = useMobileShell();
-  // Legacy `home` redirects elsewhere; treat as Home (research) if it slips through.
+  // Build projects keep spaceId "build"; dashboard is unified Create.
   const body =
     spaceId === "home" || spaceId === "research" ? (
       <ResearchDashboard />
     ) : spaceId === "work" ? (
       <WorkDashboard />
-    ) : spaceId === "build" ? (
-      <BuildDashboard />
-    ) : spaceId === "studio" ? (
-      <StudioDashboard />
+    ) : spaceId === "build" || spaceId === "studio" ? (
+      <CreateDashboard />
     ) : spaceId === "connectors" ? (
       <ConnectorsDashboard />
     ) : null;
   if (!body) return null;
   return (
     <div
-      key={spaceId ?? "none"}
+      key={spaceId === "build" ? "studio" : (spaceId ?? "none")}
       className={cn(
         "min-h-0 flex-1",
         mobile &&

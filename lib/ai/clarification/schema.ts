@@ -224,8 +224,8 @@ function pickString(value: unknown): string | null {
 }
 
 function spaceDisplayLabel(space: "build" | "research" | "work"): string {
-  if (space === "research") return "Home";
-  if (space === "build") return "Build";
+  if (space === "research") return "Explore";
+  if (space === "build") return "Create";
   return "Work";
 }
 
@@ -347,19 +347,21 @@ export function sanitizeClarificationQuestions(
       else if (!choiceId) choiceId = `opt${j}`;
       const display =
         choiceId === "research"
-          ? "Home"
+          ? "Explore"
           : choiceId === "build"
-            ? "Build"
-            : choiceId === "work"
-              ? "Work"
-              : label;
+            ? "Create"
+            : choiceId === "studio"
+              ? "Create"
+              : choiceId === "work"
+                ? "Work"
+                : label;
       return { id: choiceId, label: display };
     });
 
     const blob = `${q.label ?? ""} ${q.description ?? ""} ${q.placeholder ?? ""}`.toLowerCase();
     const asksSpace =
       id === "space" ||
-      /\b(build|research|explore|studio)\b/.test(blob);
+      /\b(build|research|explore|studio|create|home)\b/.test(blob);
     if (
       asksSpace &&
       (q.type === "text" || q.type === "textarea") &&
@@ -371,8 +373,8 @@ export function sanitizeClarificationQuestions(
         label: "Which space should this live in?",
         required: true,
         choices: [
-          { id: "build", label: "Build" },
-          { id: "research", label: "Home" },
+          { id: "build", label: "Create" },
+          { id: "research", label: "Explore" },
         ],
       };
     }
@@ -421,8 +423,8 @@ export const CREATE_PROJECT_SPACE_QUESTIONS: ClarificationQuestion[] = [
     label: "Which space should this live in?",
     required: true,
     choices: [
-      { id: "build", label: "Build" },
-      { id: "research", label: "Home" },
+      { id: "build", label: "Create" },
+      { id: "research", label: "Explore" },
     ],
   },
   {
