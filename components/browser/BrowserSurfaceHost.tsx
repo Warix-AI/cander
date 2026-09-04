@@ -89,7 +89,12 @@ export function BrowserSurfaceHost({
   };
 
   // Create / destroy native tab — avoid remounting on url, overlay, or visibility changes.
+  // Wait for userId on ordinary web tabs so cookies always land in persist:cander-web-{userId}
+  // (same jar across every project / connector for this account).
   useEffect(() => {
+    if (!isolatedPartition && !userId?.trim()) {
+      return;
+    }
     const adapter = getBrowserSurfaceAdapter();
     setAdapterId(adapter.id);
     let cancelled = false;
@@ -330,6 +335,7 @@ export function BrowserSurfaceHost({
           data-tab-id={tabId}
           src={url}
           sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+          allow="accelerometer; autoplay; camera; display-capture; encrypted-media; fullscreen; microphone; clipboard-write"
           referrerPolicy="no-referrer"
           className="h-full w-full border-0 bg-white"
           onError={() => setEmbedBlocked(true)}

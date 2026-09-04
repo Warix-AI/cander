@@ -72,11 +72,8 @@ export function BrowserAddressField({
   }, [editing]);
 
   const beginEdit = () => {
-    if (url !== "about:blank" && draft.trim() === url) {
-      onDraftChange(displayHost || draft);
-    } else if (url === "about:blank") {
-      onDraftChange("");
-    }
+    // Idle shows host only; editing always expands to the full URL.
+    onDraftChange(url === "about:blank" ? "" : url);
     setEditing(true);
   };
 
@@ -100,9 +97,15 @@ export function BrowserAddressField({
 
   if (editing) {
     return (
-      <div ref={rootRef} className={cn("relative min-w-0 flex-1", className)}>
+      <div
+        ref={rootRef}
+        className={cn(
+          "relative mx-auto min-w-0 w-full max-w-[min(100%,22rem)]",
+          className,
+        )}
+      >
         <form
-          className="relative w-full max-w-[min(100%,28rem)]"
+          className="relative w-full"
           onSubmit={(event) => {
             event.preventDefault();
             finishEdit();
@@ -129,7 +132,7 @@ export function BrowserAddressField({
             aria-controls={listId}
             aria-expanded={suggestOpen && suggestions.length > 0}
             placeholder={placeholder}
-            className="h-8 w-full rounded-full border border-border/60 bg-input px-3 text-center text-[13px] text-foreground caret-foreground outline-none"
+            className="h-8 w-full rounded-full border border-border/60 bg-input px-3 text-left text-[13px] text-foreground caret-foreground outline-none"
           />
         </form>
         {suggestOpen && suggestions.length > 0 ? (

@@ -11,6 +11,8 @@ const BLOCKED_HOSTS = new Set([
 ]);
 
 function partitionFor(options) {
+  // `persist:` writes cookies / localStorage / cache to disk — same jar across
+  // every project for this Cander account until the site expires the session.
   if (options?.isolatedPartition && options?.projectId) {
     return `persist:cander-preview-${options.projectId}`;
   }

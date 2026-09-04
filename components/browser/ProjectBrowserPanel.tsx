@@ -1293,6 +1293,10 @@ export function ProjectBrowserPanel({
                   <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.6} />
                 </RailBtn>
               </>
+            ) : browserSpaceId === "research" ? (
+              <RailBtn label="Project tools" disabled>
+                <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </RailBtn>
             ) : (
               <DesktopProjectToolsMenu
                 selectMode={selectMode}

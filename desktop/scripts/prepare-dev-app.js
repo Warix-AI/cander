@@ -71,8 +71,12 @@ function ensurePlistString(key, value) {
 
 function ensurePrivacyPlist() {
   ensurePlistString(
+    "NSCameraUsageDescription",
+    "Cander uses the camera for in-app browsing and video calls.",
+  );
+  ensurePlistString(
     "NSMicrophoneUsageDescription",
-    "Cander uses the microphone for dictation and voice chat.",
+    "Cander uses the microphone for dictation, voice chat, and in-app browsing.",
   );
   ensurePlistString(
     "NSSpeechRecognitionUsageDescription",

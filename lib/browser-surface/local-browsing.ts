@@ -67,7 +67,9 @@ export function assertAllowedLocalBrowserUrl(raw: string): string {
 
 /**
  * Session partition / data-store key.
- * Ordinary web: persist per user. Previews: isolated per project (no cookie bleed).
+ * Ordinary web: one durable jar per Cander user (cookies survive tab close,
+ * project switches, and app relaunch — Discord stays signed in).
+ * Previews: isolated per project (no cookie bleed into personal browsing).
  */
 export function localBrowserPartition(options: {
   userId?: string | null;

@@ -641,6 +641,7 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
                 ? active.url
                 : "about:blank"
             }
+            userId={actor.id}
             active={panelMode !== "collapsed"}
             reloadKey={webReloadKey}
             onUrlChange={onWebUrlChange}

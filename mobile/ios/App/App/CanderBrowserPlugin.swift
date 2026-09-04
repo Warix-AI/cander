@@ -2,6 +2,7 @@ import Foundation
 import Capacitor
 import WebKit
 import UIKit
+import CryptoKit
 
 /**
  * Native right-panel browser surfaces (WKWebView).
@@ -69,6 +70,7 @@ public class CanderBrowserPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDeleg
         }
         let isolated = call.getBool("isolated") ?? false
         let projectId = call.getString("projectId")
+        let userId = call.getString("userId")
         DispatchQueue.main.async {
             self.destroyTabSync(tabId)
             guard let url = self.sanitizedURL(urlString) else {
@@ -80,10 +82,15 @@ public class CanderBrowserPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDeleg
                 return
             }
             let config = WKWebViewConfiguration()
-            // Isolated previews never share the default cookie jar with ordinary browsing.
+            // Ordinary web: durable per-user cookie jar (Discord stays signed in).
+            // Isolated previews: non-persistent so they never bleed into personal browsing.
             if isolated {
                 config.websiteDataStore = .nonPersistent()
+            } else {
+                config.websiteDataStore = self.persistentDataStore(userId: userId)
             }
+            config.allowsInlineMediaPlayback = true
+            config.mediaTypesRequiringUserActionForPlayback = []
             config.preferences.javaScriptCanOpenWindowsAutomatically = false
             let webView = WKWebView(frame: .zero, configuration: config)
             webView.navigationDelegate = self
@@ -492,7 +499,8 @@ public class CanderBrowserPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDeleg
         type: WKMediaCaptureType,
         decisionHandler: @escaping (WKPermissionDecision) -> Void
     ) {
-        decisionHandler(.deny)
+        // Allow camera / mic for in-panel browsing; OS still prompts on first use.
+        decisionHandler(.grant)
     }
 
     // MARK: - Helpers
@@ -570,6 +578,32 @@ public class CanderBrowserPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDeleg
         for (id, entry) in tabs where id != activeTabId {
             entry.webView.stopLoading()
         }
+    }
+
+    private func persistentDataStore(userId: String?) -> WKWebsiteDataStore {
+        guard let userId, !userId.isEmpty else {
+            return .default()
+        }
+        if #available(iOS 17.0, *) {
+            return WKWebsiteDataStore(forIdentifier: Self.stableUUID(from: "cander-web-\(userId)"))
+        }
+        // Pre-iOS 17: shared persistent default store (still survives relaunch).
+        return .default()
+    }
+
+    /// Deterministic UUID so the same Cander account reuses one cookie jar.
+    private static func stableUUID(from string: String) -> UUID {
+        let digest = Insecure.MD5.hash(data: Data(string.utf8))
+        var bytes = Array(digest)
+        // RFC 4122 variant bits for a synthetic name-based UUID.
+        bytes[6] = (bytes[6] & 0x0F) | 0x30
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
     }
 
     private func sanitizedURL(_ raw: String) -> URL? {

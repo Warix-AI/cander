@@ -26,15 +26,29 @@ function emitToRenderer(channel, payload) {
   hostWindow.webContents.send(channel, payload);
 }
 
+/** Camera / mic / screen share for in-panel browsing (Discord, Meet, etc.). */
+function isBrowserMediaPermission(permission) {
+  return (
+    permission === "media" ||
+    permission === "mediaKeySystem" ||
+    permission === "display-capture" ||
+    permission === "camera" ||
+    permission === "microphone"
+  );
+}
+
 function hardenSession(ses) {
   if (ses.__canderBrowserHardened) return;
   ses.__canderBrowserHardened = true;
 
-  ses.setPermissionRequestHandler((_wc, _permission, callback) => {
-    callback(false);
+  ses.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(isBrowserMediaPermission(permission));
   });
 
-  ses.setPermissionCheckHandler(() => false);
+  // Checks run before requests — must allow media or getUserMedia never prompts.
+  ses.setPermissionCheckHandler((_wc, permission) =>
+    isBrowserMediaPermission(permission),
+  );
 
   ses.on("will-download", (event) => {
     event.preventDefault();
@@ -255,12 +269,12 @@ function destroyTab(tabId) {
 function showTab(tabId, bounds) {
   const entry = tabs.get(tabId);
   if (!entry || !hostWindow || hostWindow.isDestroyed()) return;
-  const bleed = 2;
+  // Match host bounds exactly — any bleed spills under the chat/panel divider.
   const nextBounds = {
-    x: Math.max(0, Math.round(bounds.x || 0) - bleed),
-    y: Math.max(0, Math.round(bounds.y || 0) - bleed),
-    width: Math.max(1, Math.round(bounds.width || 1) + bleed * 2),
-    height: Math.max(1, Math.round(bounds.height || 1) + bleed * 2),
+    x: Math.max(0, Math.round(bounds.x || 0)),
+    y: Math.max(0, Math.round(bounds.y || 0)),
+    width: Math.max(1, Math.round(bounds.width || 1)),
+    height: Math.max(1, Math.round(bounds.height || 1)),
   };
   entry.lastBounds = nextBounds;
   entry.visible = true;

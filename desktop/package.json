@@ -48,7 +48,8 @@
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Cander uses the microphone for dictation and voice chat.",
+        "NSCameraUsageDescription": "Cander uses the camera for in-app browsing and video calls.",
+        "NSMicrophoneUsageDescription": "Cander uses the microphone for dictation, voice chat, and in-app browsing.",
         "NSSpeechRecognitionUsageDescription": "Cander turns your speech into text for dictation and voice chat."
       }
     },

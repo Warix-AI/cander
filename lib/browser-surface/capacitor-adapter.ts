@@ -11,6 +11,7 @@ type CapacitorBrowserPlugin = {
     url: string;
     isolated?: boolean;
     projectId?: string;
+    userId?: string;
   }) => Promise<void>;
   destroyTab: (opts: { tabId: string }) => Promise<void>;
   showTab: (opts: {
@@ -90,6 +91,7 @@ export function createCapacitorBrowserSurfaceAdapter(): BrowserSurfaceAdapter {
         url: initialUrl,
         isolated: Boolean(options?.isolatedPartition),
         projectId: options?.projectId ?? undefined,
+        userId: options?.userId ?? undefined,
       });
     },
 
