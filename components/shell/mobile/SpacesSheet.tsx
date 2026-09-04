@@ -9,7 +9,7 @@ import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const rowClass =
-  "menu-row-hover flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-left text-[15px] transition-colors duration-200";
+  "menu-row-hover flex w-full items-center gap-3 rounded-[10px] px-3 py-[0.6875rem] text-left text-[15px] transition-colors duration-200";
 
 export function SpacesSheet({ onSelect }: { onSelect: () => void }) {
   const {
@@ -40,7 +40,7 @@ export function SpacesSheet({ onSelect }: { onSelect: () => void }) {
   };
 
   return (
-    <div className="p-2">
+    <div className="flex flex-col gap-[0.1rem] p-2">
       <button
         type="button"
         data-active={chatActive ? "true" : undefined}

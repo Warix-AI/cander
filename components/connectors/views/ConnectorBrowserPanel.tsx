@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Re
 import {
   Archive,
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
   Forward,
   Mail,
   MailOpen,
@@ -13,6 +16,7 @@ import {
   Plus,
   RefreshCw,
   Reply,
+  RotateCw,
   X,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
@@ -149,6 +153,7 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
     connectorId === "gsheets" ||
     connectorId === "gdocs";
   const [addressDraft, setAddressDraft] = useState(active.url);
+  const [webReloadKey, setWebReloadKey] = useState(0);
 
   useEffect(() => {
     setAddressDraft(active.kind === "web" ? active.url : "");
@@ -449,9 +454,77 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
             {title}
           </span>
         ) : (
-          <div className="flex min-w-0 flex-1 items-center gap-1">
-            <div className="min-w-0 flex-1">
+          <>
+            <div className="flex shrink-0 items-center gap-0.5">
+              <ChromeBtn
+                label="Back"
+                disabled={
+                  active.kind !== "web" || active.historyIndex <= 0
+                }
+                onClick={() => {
+                  if (active.kind !== "web" || active.historyIndex <= 0) return;
+                  const nextIndex = active.historyIndex - 1;
+                  const url = active.history[nextIndex]!;
+                  const tabs = session.tabs.map((tab) =>
+                    tab.id === active.id
+                      ? {
+                          ...tab,
+                          url,
+                          historyIndex: nextIndex,
+                          title: titleFromUrl(url) || tab.title,
+                        }
+                      : tab,
+                  );
+                  updateSession({ ...session, tabs });
+                  setAddressDraft(url === "about:blank" ? "" : url);
+                }}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </ChromeBtn>
+              <ChromeBtn
+                label="Forward"
+                disabled={
+                  active.kind !== "web" ||
+                  active.historyIndex >= active.history.length - 1
+                }
+                onClick={() => {
+                  if (
+                    active.kind !== "web" ||
+                    active.historyIndex >= active.history.length - 1
+                  ) {
+                    return;
+                  }
+                  const nextIndex = active.historyIndex + 1;
+                  const url = active.history[nextIndex]!;
+                  const tabs = session.tabs.map((tab) =>
+                    tab.id === active.id
+                      ? {
+                          ...tab,
+                          url,
+                          historyIndex: nextIndex,
+                          title: titleFromUrl(url) || tab.title,
+                        }
+                      : tab,
+                  );
+                  updateSession({ ...session, tabs });
+                  setAddressDraft(url === "about:blank" ? "" : url);
+                }}
+              >
+                <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </ChromeBtn>
+              <ChromeBtn
+                label="Reload"
+                onClick={() => {
+                  if (active.kind !== "web") return;
+                  setWebReloadKey((key) => key + 1);
+                }}
+              >
+                <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </ChromeBtn>
+            </div>
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-[7.5rem]">
               <BrowserAddressField
+                className="pointer-events-auto"
                 url={active.url || "about:blank"}
                 draft={
                   addressDraft === "about:blank" ? "" : addressDraft
@@ -473,11 +546,25 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
                   }
                 }}
                 faviconUrl={active.faviconUrl}
-                showFavicon
+                showFavicon={false}
                 placeholder="Search"
               />
             </div>
-          </div>
+            <div className="ml-auto flex shrink-0 items-center gap-0.5">
+              <ChromeBtn
+                label="Open in new tab"
+                onClick={() => {
+                  if (active.kind !== "web" || !active.url || active.url === "about:blank") {
+                    addUrlTab();
+                    return;
+                  }
+                  openLink(active.url);
+                }}
+              >
+                <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </ChromeBtn>
+            </div>
+          </>
         )}
       </div>
 
@@ -555,6 +642,7 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
                 : "about:blank"
             }
             active={panelMode !== "collapsed"}
+            reloadKey={webReloadKey}
             onUrlChange={onWebUrlChange}
             onTitleChange={onWebTitleChange}
             onFaviconChange={onWebFaviconChange}

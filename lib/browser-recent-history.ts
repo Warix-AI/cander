@@ -1,5 +1,8 @@
 /**
  * Global recent browser visits for blank-tab + address-bar suggestions.
+ *
+ * useSyncExternalStore requires referentially stable snapshots — never return a
+ * fresh [] / .slice() from getSnapshot on every call.
  */
 
 import { displayHostFromUrl, isHttpUrl, titleFromUrl } from "@/lib/preview-url";
@@ -13,8 +16,11 @@ export type BrowserRecentVisit = {
 const STORAGE_KEY = "courier-browser-recent-v1";
 const MAX_RECENTS = 40;
 const LISTENERS = new Set<() => void>();
+const EMPTY_RECENTS: BrowserRecentVisit[] = [];
 
 let cache: BrowserRecentVisit[] | null = null;
+/** Cached listRecentBrowserVisits(limit) results — cleared on write. */
+const limitedSnapshots = new Map<number, BrowserRecentVisit[]>();
 
 function emit() {
   LISTENERS.forEach((listener) => listener());
@@ -23,17 +29,17 @@ function emit() {
 function read(): BrowserRecentVisit[] {
   if (cache) return cache;
   if (typeof window === "undefined") {
-    cache = [];
+    cache = EMPTY_RECENTS;
     return cache;
   }
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as unknown) : [];
     if (!Array.isArray(parsed)) {
-      cache = [];
+      cache = EMPTY_RECENTS;
       return cache;
     }
-    cache = parsed
+    const next = parsed
       .filter(
         (item): item is BrowserRecentVisit =>
           Boolean(item) &&
@@ -52,17 +58,19 @@ function read(): BrowserRecentVisit[] {
       .filter((item) => isHttpUrl(item.url) && item.url !== "about:blank")
       .sort((a, b) => b.visitedAt - a.visitedAt)
       .slice(0, MAX_RECENTS);
+    cache = next.length ? next : EMPTY_RECENTS;
   } catch {
-    cache = [];
+    cache = EMPTY_RECENTS;
   }
   return cache;
 }
 
 function write(next: BrowserRecentVisit[]) {
-  cache = next;
+  cache = next.length ? next : EMPTY_RECENTS;
+  limitedSnapshots.clear();
   if (typeof window !== "undefined") {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
     } catch {
       /* ignore quota */
     }
@@ -82,12 +90,21 @@ export function getBrowserRecentHistorySnapshot() {
 }
 
 export function getBrowserRecentHistoryServerSnapshot(): BrowserRecentVisit[] {
-  return [];
+  return EMPTY_RECENTS;
 }
 
-/** Most recent unique visits (default 5 for blank tab). */
+/** Most recent unique visits (default 5 for blank tab). Stable reference per limit. */
 export function listRecentBrowserVisits(limit = 5): BrowserRecentVisit[] {
-  return read().slice(0, Math.max(0, limit));
+  const all = read();
+  const n = Math.max(0, limit);
+  if (n <= 0) return EMPTY_RECENTS;
+  if (n >= all.length) return all;
+  let snap = limitedSnapshots.get(n);
+  if (!snap) {
+    snap = all.slice(0, n);
+    limitedSnapshots.set(n, snap);
+  }
+  return snap;
 }
 
 export function filterRecentBrowserVisits(
@@ -96,7 +113,7 @@ export function filterRecentBrowserVisits(
 ): BrowserRecentVisit[] {
   const q = query.trim().toLowerCase();
   const all = read();
-  if (!q) return all.slice(0, limit);
+  if (!q) return listRecentBrowserVisits(limit);
   return all
     .filter(
       (item) =>
@@ -118,9 +135,19 @@ export function recordBrowserVisit(input: {
     displayHostFromUrl(url) ||
     titleFromUrl(url);
   const now = Date.now();
+  const prev = read();
+  if (prev[0]?.url === url && prev[0]?.title === title) {
+    // Same top entry — bump timestamp without churning listeners if identical order.
+    const next = [{ url, title, visitedAt: now }, ...prev.slice(1)].slice(
+      0,
+      MAX_RECENTS,
+    );
+    write(next);
+    return;
+  }
   const next = [
     { url, title, visitedAt: now },
-    ...read().filter((item) => item.url !== url),
+    ...prev.filter((item) => item.url !== url),
   ].slice(0, MAX_RECENTS);
   write(next);
 }

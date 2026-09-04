@@ -155,8 +155,8 @@ function MenuMain({
         </button>
       </div>
 
-      <div className="mt-[30px] flex min-h-0 flex-1 flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="space-y-px">
+        <div className="mt-[30px] flex min-h-0 flex-1 flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="flex flex-col gap-[0.1rem]">
           {spaceItems.map((item) => (
             <MobileNavRow
               key={item.id}
@@ -185,7 +185,7 @@ function MenuMain({
           </button>
         </div>
 
-        <div className="mt-auto space-y-px pt-3">
+        <div className="mt-auto flex flex-col gap-[0.1rem] pt-3">
           {MOBILE_SECONDARY_NAV.map((id) => {
             const Icon = navIcon(id);
             const label = navLabel(id);

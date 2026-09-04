@@ -30,11 +30,12 @@ export function setActiveBrowserContextTab(
   } | null,
 ) {
   if (!next) {
+    if (active === null) return;
     active = null;
     emit();
     return;
   }
-  active = {
+  const resolved: ActiveBrowserTab = {
     tabId: next.tabId,
     tabKind: next.tabKind,
     title: next.title,
@@ -44,6 +45,20 @@ export function setActiveBrowserContextTab(
     canReadText: next.canReadText ?? true,
     canCaptureViewport: next.canCaptureViewport ?? true,
   };
+  if (
+    active &&
+    active.tabId === resolved.tabId &&
+    active.tabKind === resolved.tabKind &&
+    active.title === resolved.title &&
+    active.url === resolved.url &&
+    active.projectId === resolved.projectId &&
+    active.sessionId === resolved.sessionId &&
+    active.canReadText === resolved.canReadText &&
+    active.canCaptureViewport === resolved.canCaptureViewport
+  ) {
+    return;
+  }
+  active = resolved;
   emit();
 }
 

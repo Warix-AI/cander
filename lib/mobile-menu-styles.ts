@@ -30,7 +30,7 @@ export const MOBILE_GLASS_INSET = "mobile-glass-inset";
 export const MOBILE_GLASS_DOCK = "mobile-glass-dock";
 
 export const mobileMenuRowClass = [
-  "flex w-full items-center gap-3 px-4 py-3 text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200",
+  "flex w-full items-center gap-3 px-4 py-[0.825rem] text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200",
   SHELL_G3_RADIUS,
   "hover:bg-black/[0.03] dark:hover:bg-white/8",
 ].join(" ");

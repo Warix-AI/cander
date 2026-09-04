@@ -9,6 +9,10 @@ import {
 } from "@/lib/browser-recent-history";
 import { displayHostFromUrl } from "@/lib/preview-url";
 
+function getNewTabRecentsSnapshot() {
+  return listRecentBrowserVisits(5);
+}
+
 /** Blank / new-tab surface with recent browsing history. */
 export function NewTabPage({
   onOpenUrl,
@@ -17,7 +21,7 @@ export function NewTabPage({
 } = {}) {
   const recents = useSyncExternalStore(
     subscribeBrowserRecentHistory,
-    () => listRecentBrowserVisits(5),
+    getNewTabRecentsSnapshot,
     getBrowserRecentHistoryServerSnapshot,
   );
 

@@ -363,7 +363,7 @@ export function Sidebar() {
               if (canGoBack) goBack();
               else newChat();
             }}
-            className="mb-0.5 flex w-full items-center gap-3 rounded-[10px] px-3 py-2 text-left text-[15px] transition-colors duration-200 hover:bg-sidebar-accent"
+            className="mb-0.5 flex w-full items-center gap-3 rounded-[10px] px-3 py-[0.55rem] text-left text-[15px] transition-colors duration-200 hover:bg-sidebar-accent"
             aria-label="Back"
           >
             <ArrowLeft
@@ -372,6 +372,7 @@ export function Sidebar() {
             />
             <span className="font-medium tracking-[-0.01em]">Back</span>
           </button>
+          <div className="flex flex-col gap-[0.1rem]">
           {settingsNav.map((tab) => {
             const Icon = settingsIcons[tab.id];
             return (
@@ -380,7 +381,7 @@ export function Sidebar() {
                 type="button"
                 onClick={() => setSettingsTab(tab.id)}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-[10px] px-3 py-2 text-left text-[15px] transition-colors duration-200",
+                  "flex w-full items-center gap-3 rounded-[10px] px-3 py-[0.55rem] text-left text-[15px] transition-colors duration-200",
                   settingsTab === tab.id
                     ? "bg-sidebar-accent font-medium"
                     : "hover:bg-sidebar-accent",
@@ -394,6 +395,7 @@ export function Sidebar() {
               </button>
             );
           })}
+          </div>
         </nav>
       ) : (
         <>
@@ -404,7 +406,7 @@ export function Sidebar() {
             )}
             aria-label="Main"
           >
-            <div className="min-h-0 shrink overflow-y-auto">
+            <div className="flex min-h-0 shrink flex-col gap-[0.1rem] overflow-y-auto">
               {mainNavItems.map((item) => (
                 <SidebarNavButton
                   key={item.id}
@@ -428,7 +430,9 @@ export function Sidebar() {
                       </p>
                       <PinnedFilterMenu />
                     </div>
-                    {visiblePins.map(renderPinnedRow)}
+                    <div className="flex flex-col gap-[0.1rem]">
+                      {visiblePins.map(renderPinnedRow)}
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -478,7 +482,7 @@ function SidebarNavButton({
         if (!comingSoon) onOpen(id);
       }}
       className={cn(
-        "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[15px] transition-colors duration-200",
+        "flex w-full items-center gap-3 rounded-lg px-3 py-[0.55rem] text-left text-[15px] transition-colors duration-200",
         comingSoon
           ? "cursor-default opacity-70"
           : active
@@ -584,7 +588,7 @@ function PinnedRow({
           onOpen();
         }}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-3 truncate px-3 py-2 text-left text-[15px]",
+          "flex min-w-0 flex-1 items-center gap-3 truncate px-3 py-[0.55rem] text-left text-[15px]",
           active && "font-medium",
         )}
       >

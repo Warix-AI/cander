@@ -40,7 +40,6 @@ export function BrowserAddressField({
   const listId = useId();
   const displayHost = displayHostFromUrl(url);
   const showPlaceholder = url === "about:blank" || !displayHost;
-  const longHost = (displayHost || "").length > 28;
 
   useSyncExternalStore(
     subscribeBrowserRecentHistory,
@@ -101,14 +100,9 @@ export function BrowserAddressField({
 
   if (editing) {
     return (
-      <div ref={rootRef} className={cn("relative min-w-0", className)}>
+      <div ref={rootRef} className={cn("relative min-w-0 flex-1", className)}>
         <form
-          className={cn(
-            "relative",
-            draft.trim().length > 28 || suggestOpen
-              ? "w-[min(100%,28rem)]"
-              : "w-[min(100%,14rem)]",
-          )}
+          className="relative w-full max-w-[min(100%,28rem)]"
           onSubmit={(event) => {
             event.preventDefault();
             finishEdit();
@@ -184,10 +178,7 @@ export function BrowserAddressField({
       onClick={beginEdit}
       aria-label={placeholder}
       className={cn(
-        "relative mx-auto flex h-8 items-center justify-center gap-2 rounded-full px-3 transition-colors duration-200 hover:bg-muted/50",
-        longHost
-          ? "min-w-0 max-w-[min(100%,22rem)] flex-1"
-          : "w-auto max-w-[min(100%,14rem)] shrink-0",
+        "relative mx-auto flex h-8 min-w-0 max-w-[min(100%,22rem)] flex-1 items-center justify-center gap-2 rounded-full px-3 transition-colors duration-200 hover:bg-muted/50",
         className,
       )}
     >

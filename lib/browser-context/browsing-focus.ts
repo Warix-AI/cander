@@ -9,6 +9,9 @@
  * - The visible user message must not include the URL unless they attached it explicitly.
  * - The model receives metadata + soft instructions: use the page only when the user
  *   is clearly asking about it; otherwise ignore BrowsingFocus entirely.
+ *
+ * getBrowsingFocusSnapshot must return a stable reference between tab changes
+ * (useSyncExternalStore / Object.is).
  */
 
 import {
@@ -28,6 +31,24 @@ export type BrowsingFocus = {
   tabKind: ActiveBrowserTab["tabKind"];
   projectId?: string;
 };
+
+let cachedFocus: BrowsingFocus | null = null;
+let cachedFromTab: ActiveBrowserTab | null = null;
+
+function sameTab(
+  a: ActiveBrowserTab | null,
+  b: ActiveBrowserTab | null,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.tabId === b.tabId &&
+    a.url === b.url &&
+    a.title === b.title &&
+    a.tabKind === b.tabKind &&
+    a.projectId === b.projectId
+  );
+}
 
 export function isMeaningfulBrowsingUrl(url: string | null | undefined): boolean {
   const raw = (url || "").trim();
@@ -75,7 +96,7 @@ export function resolveBrowsingFocus(
 
 /** Soft composer placeholder while BrowsingFocus is active. */
 export function browsingFocusComposerPlaceholder(
-  focus: BrowsingFocus | null = resolveBrowsingFocus(),
+  focus: BrowsingFocus | null = getBrowsingFocusSnapshot(),
 ): string | null {
   if (!focus) return null;
   return `Message about ${focus.label}`;
@@ -86,7 +107,7 @@ export function browsingFocusComposerPlaceholder(
  * the user's message signals page-related intent.
  */
 export function browsingFocusSystemBlock(
-  focus: BrowsingFocus | null = resolveBrowsingFocus(),
+  focus: BrowsingFocus | null = getBrowsingFocusSnapshot(),
 ): string {
   if (!focus) return "";
   return [
@@ -103,7 +124,11 @@ export function subscribeBrowsingFocus(listener: () => void) {
 }
 
 export function getBrowsingFocusSnapshot(): BrowsingFocus | null {
-  return resolveBrowsingFocus();
+  const tab = getActiveBrowserContextTab();
+  if (sameTab(tab, cachedFromTab)) return cachedFocus;
+  cachedFromTab = tab;
+  cachedFocus = resolveBrowsingFocus(tab);
+  return cachedFocus;
 }
 
 export function getBrowsingFocusServerSnapshot(): BrowsingFocus | null {
