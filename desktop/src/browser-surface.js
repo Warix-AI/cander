@@ -1,4 +1,4 @@
-const { WebContentsView, session } = require("electron");
+const { WebContentsView, session, systemPreferences } = require("electron");
 const { partitionFor, isAllowedUrl } = require("./browser-security");
 const { PAGE_EXTRACT_SCRIPT, SELECTION_SCRIPT } = require("./page-extract");
 
@@ -37,18 +37,89 @@ function isBrowserMediaPermission(permission) {
   );
 }
 
+/**
+ * Discord calls enumerateDevices / getUserMedia — Chromium will not expose mics
+ * until macOS TCC grants the shell access via askForMediaAccess.
+ */
+function mediaKindsForRequest(permission, details) {
+  const kinds = new Set();
+  if (permission === "microphone") kinds.add("microphone");
+  if (permission === "camera") kinds.add("camera");
+  if (permission === "display-capture") kinds.add("screen");
+  const mediaTypes = Array.isArray(details?.mediaTypes)
+    ? details.mediaTypes
+    : [];
+  if (mediaTypes.includes("audio")) kinds.add("microphone");
+  if (mediaTypes.includes("video")) kinds.add("camera");
+  // Bare "media" (device list / unspecified) → request both.
+  if (permission === "media" && mediaTypes.length === 0) {
+    kinds.add("microphone");
+    kinds.add("camera");
+  }
+  if (permission === "mediaKeySystem") {
+    kinds.add("microphone");
+    kinds.add("camera");
+  }
+  return [...kinds];
+}
+
+function macMediaGranted(kind) {
+  if (process.platform !== "darwin") return true;
+  if (kind === "screen") {
+    // Screen share uses a different TCC prompt path; don't block mic/cam on it.
+    return true;
+  }
+  try {
+    return systemPreferences.getMediaAccessStatus(kind) === "granted";
+  } catch {
+    return false;
+  }
+}
+
+async function ensureMacMediaAccess(permission, details) {
+  if (process.platform !== "darwin") return true;
+  const kinds = mediaKindsForRequest(permission, details).filter(
+    (kind) => kind === "microphone" || kind === "camera",
+  );
+  if (kinds.length === 0) return true;
+  for (const kind of kinds) {
+    if (macMediaGranted(kind)) continue;
+    try {
+      const ok = await systemPreferences.askForMediaAccess(kind);
+      if (!ok) return false;
+    } catch (err) {
+      console.warn(`[cander-desktop] askForMediaAccess(${kind}) failed`, err);
+      return false;
+    }
+  }
+  return true;
+}
+
 function hardenSession(ses) {
   if (ses.__canderBrowserHardened) return;
   ses.__canderBrowserHardened = true;
 
-  ses.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback(isBrowserMediaPermission(permission));
+  ses.setPermissionRequestHandler((wc, permission, callback, details) => {
+    if (!isBrowserMediaPermission(permission)) {
+      callback(false);
+      return;
+    }
+    void ensureMacMediaAccess(permission, details).then((ok) => {
+      callback(Boolean(ok));
+    });
   });
 
-  // Checks run before requests — must allow media or getUserMedia never prompts.
-  ses.setPermissionCheckHandler((_wc, permission) =>
-    isBrowserMediaPermission(permission),
-  );
+  // Return false until OS TCC is granted so Chromium issues a real request
+  // (which triggers askForMediaAccess). Returning true too early hides devices.
+  ses.setPermissionCheckHandler((_wc, permission, _origin, details) => {
+    if (!isBrowserMediaPermission(permission)) return false;
+    if (process.platform !== "darwin") return true;
+    const kinds = mediaKindsForRequest(permission, details);
+    if (kinds.length === 0) return true;
+    return kinds.every((kind) =>
+      kind === "screen" ? true : macMediaGranted(kind),
+    );
+  });
 
   ses.on("will-download", (event) => {
     event.preventDefault();
@@ -237,6 +308,10 @@ function createTab(tabId, initialUrl, options = {}) {
       error: "URL not allowed for local browser surface",
     });
     initialUrl = "about:blank";
+  }
+  // Warm macOS TCC so Discord can see mics when the page enumerates devices.
+  if (!options?.isolatedPartition) {
+    void ensureMacMediaAccess("media", { mediaTypes: [] });
   }
   const view = createView(tabId, initialUrl, options);
   tabs.set(tabId, {

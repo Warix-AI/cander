@@ -53,17 +53,22 @@ function needsRebuild() {
 
 function ensurePlistString(key, value) {
   if (!fs.existsSync(plistPath)) return;
+  const escaped = String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   const check = spawnSync("/usr/libexec/PlistBuddy", [
     "-c",
     `Print :${key}`,
     plistPath,
   ]);
   if (check.status === 0) {
-    run("/usr/libexec/PlistBuddy", ["-c", `Set :${key} ${value}`, plistPath]);
+    run("/usr/libexec/PlistBuddy", [
+      "-c",
+      `Set :${key} "${escaped}"`,
+      plistPath,
+    ]);
   } else {
     run("/usr/libexec/PlistBuddy", [
       "-c",
-      `Add :${key} string ${value}`,
+      `Add :${key} string "${escaped}"`,
       plistPath,
     ]);
   }
