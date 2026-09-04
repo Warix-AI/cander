@@ -35,7 +35,9 @@ type Corner = "nw" | "ne" | "sw" | "se";
 /**
  * Floating video PiP — fixed to the viewport so it survives space/settings
  * navigation. Native Electron views paint over the content box.
- * Chrome (favicon / title / expand / close) appears only while hovered.
+ *
+ * Hover chrome grows *above* the video (same video bounds) so the native
+ * surface does not resize/flicker.
  */
 export function BrowserPipOverlay() {
   const pip = useSyncExternalStore(
@@ -45,7 +47,6 @@ export function BrowserPipOverlay() {
   );
   const { openProject, openStandaloneBrowser } = useApp();
   const hostRef = useRef<HTMLDivElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -94,7 +95,7 @@ export function BrowserPipOverlay() {
     });
   }, [pip?.tabId, pip?.width, pip?.height]);
 
-  // Native views steal mouse events — poll cursor vs PiP bounds from main.
+  // Native views steal mouse events — poll cursor vs PiP (+ header) bounds.
   useEffect(() => {
     if (!pip || pip.webEmbed) return;
     const adapter = getBrowserSurfaceAdapter();
@@ -109,7 +110,7 @@ export function BrowserPipOverlay() {
       }
     };
     void tick();
-    const id = window.setInterval(() => void tick(), 80);
+    const id = window.setInterval(() => void tick(), 100);
     return () => {
       cancelled = true;
       window.clearInterval(id);
@@ -187,11 +188,12 @@ export function BrowserPipOverlay() {
     };
   }, [pip?.tabId, pip?.webEmbed, paintNative]);
 
+  // Only re-paint when video geometry changes — not when hover chrome toggles.
   useEffect(() => {
     if (!pip || pip.webEmbed) return;
     lastPaintBounds.current = null;
     void paintNative();
-  }, [pip?.tabId, pip?.webEmbed, pip?.width, pip?.height, pos, hovered, paintNative]);
+  }, [pip?.tabId, pip?.webEmbed, pip?.width, pip?.height, pos, paintNative]);
 
   const closePip = useCallback(async () => {
     const tabId = pip?.tabId;
@@ -341,9 +343,9 @@ export function BrowserPipOverlay() {
   if (!pip || !pos) return null;
 
   const showChrome = hovered || dragging;
-  // Native video fills the box; on hover it yields a strip for React chrome
-  // (native views paint above DOM, so the header cannot overlay the video).
-  const videoTop = showChrome ? PIP_CHROME_HEIGHT : 0;
+  // Grow upward: video screen position stays fixed; header adds above.
+  const rootTop = showChrome ? pos.y - PIP_CHROME_HEIGHT : pos.y;
+  const rootHeight = showChrome ? pip.height + PIP_CHROME_HEIGHT : pip.height;
 
   const cornerHandle = (corner: Corner, className: string, cursor: string) => (
     <div
@@ -360,18 +362,15 @@ export function BrowserPipOverlay() {
 
   return (
     <div
-      ref={rootRef}
       className={cn(
         "pointer-events-auto fixed z-[400] overflow-hidden bg-black",
-        "shadow-[0_16px_48px_rgba(0,0,0,0.28)]",
-        // Square corners — no curve.
-        "rounded-none",
+        "shadow-[0_16px_48px_rgba(0,0,0,0.28)] rounded-none",
       )}
       style={{
         left: pos.x,
-        top: pos.y,
+        top: rootTop,
         width: pip.width,
-        height: pip.height,
+        height: rootHeight,
       }}
       onPointerEnter={() => {
         if (pip.webEmbed) setHovered(true);
@@ -382,7 +381,8 @@ export function BrowserPipOverlay() {
     >
       {showChrome ? (
         <div
-          className="absolute inset-x-0 top-0 z-10 flex h-9 cursor-grab items-center gap-2 bg-neutral-950/95 px-2 active:cursor-grabbing"
+          className="absolute inset-x-0 top-0 z-10 flex h-9 cursor-grab items-center gap-2 bg-neutral-950 px-2 active:cursor-grabbing"
+          style={{ height: PIP_CHROME_HEIGHT }}
           onPointerDown={onDragDown}
           onPointerMove={onDragMove}
           onPointerUp={onDragUp}
@@ -414,14 +414,11 @@ export function BrowserPipOverlay() {
         </div>
       ) : null}
 
+      {/* Video host — fixed height; never shrinks when chrome appears. */}
       <div
         ref={hostRef}
-        className="absolute bg-black"
-        style={
-          showChrome
-            ? { top: videoTop, left: 3, right: 3, bottom: 3 }
-            : { inset: 0 }
-        }
+        className="absolute inset-x-0 bottom-0 bg-black"
+        style={{ height: pip.height }}
       >
         {pip.webEmbed ? (
           <iframe

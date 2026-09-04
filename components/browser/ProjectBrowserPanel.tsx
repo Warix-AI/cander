@@ -395,24 +395,48 @@ export function ProjectBrowserPanel({
     const tab = session.tabs.find((item) => item.id === id);
     if (!tab || tab.pinned) return;
     const adapter = getBrowserSurfaceAdapter();
-    if (isBrowserPipTab(id) || getBrowserPipSnapshot()?.tabId === id) {
+    const pip = getBrowserPipSnapshot();
+
+    // Closing the PiP source tab — dismiss PiP and destroy.
+    if (pip && pip.tabId === id) {
       void stopBrowserPip({ destroy: true });
     } else if (tab.kind === "web" && adapter.id !== "web-pwa") {
       clearBrowserTabMediaPlaying(id);
       void adapter.destroyTab(id);
     }
+
     if (session.tabs.length <= 1) {
-      // Last tab → blank New tab (never leave the strip empty).
       const blank = makeWebTab();
       write({ tabs: [blank], activeTabId: blank.id });
       return;
     }
+
     const tabs = session.tabs.filter((item) => item.id !== id);
     if (!tabs.length) return;
-    const activeTabId =
+    let activeTabId =
       session.activeTabId === id
         ? (tabs[0]?.id ?? session.activeTabId)
         : session.activeTabId;
+
+    // Only the PiP source tab remains (or becomes active) → restore into panel.
+    const pipStill =
+      pip && pip.tabId !== id ? pip : getBrowserPipSnapshot();
+    if (
+      pipStill &&
+      tabs.some((item) => item.id === pipStill.tabId) &&
+      (tabs.length === 1 || activeTabId === pipStill.tabId)
+    ) {
+      activeTabId = pipStill.tabId;
+      void (async () => {
+        exitBrowserPip();
+        if (!pipStill.webEmbed) {
+          await adapter.setPipTab?.(null);
+        }
+        write({ tabs, activeTabId });
+      })();
+      return;
+    }
+
     write({ tabs, activeTabId });
   };
 
@@ -643,11 +667,32 @@ export function ProjectBrowserPanel({
     };
   }, [surfaceActive, active?.id, active?.kind]);
 
-  // Leaving this browser session destroys retained native tabs (except PiP).
+  // Visible panel focused on the PiP source tab → restore video into the panel.
+  useEffect(() => {
+    if (!surfaceActive) return;
+    if (!active || active.kind !== "web") return;
+    if (!isBrowserPipTab(active.id)) return;
+    let cancelled = false;
+    void (async () => {
+      const pip = getBrowserPipSnapshot();
+      if (!pip || pip.tabId !== active.id || cancelled) return;
+      exitBrowserPip();
+      if (!pip.webEmbed) {
+        await getBrowserSurfaceAdapter().setPipTab?.(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [surfaceActive, active?.id, pipForActive]);
+
+  // Leaving this browser session — promote playing tabs to PiP, destroy the rest.
   useEffect(() => {
     if (!key) return;
     const sessionKey = key;
     const isStandalone = standalone;
+    const leaveUserId = actor.id;
+    const leaveProjectId = projectId ?? null;
     return () => {
       const adapter = getBrowserSurfaceAdapter();
       if (adapter.id === "web-pwa") return;
@@ -665,6 +710,17 @@ export function ProjectBrowserPanel({
       for (const tab of current.tabs) {
         if (tab.kind !== "web") continue;
         if (tab.id === pipId) continue;
+        if (isBrowserTabMediaPlaying(tab.id)) {
+          void startBrowserPip({
+            tabId: tab.id,
+            url: tab.url || "",
+            title: tab.title || "Browser",
+            faviconUrl: tab.faviconUrl ?? null,
+            userId: leaveUserId,
+            sourceProjectId: leaveProjectId,
+          });
+          continue;
+        }
         clearBrowserTabMediaPlaying(tab.id);
         void adapter.destroyTab(tab.id);
       }

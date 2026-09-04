@@ -19,11 +19,33 @@ const LISTENERS = new Set<() => void>();
 const EMPTY_RECENTS: BrowserRecentVisit[] = [];
 
 let cache: BrowserRecentVisit[] | null = null;
-/** Cached listRecentBrowserVisits(limit) results — cleared on write. */
-const limitedSnapshots = new Map<number, BrowserRecentVisit[]>();
+/** Cached listRecentBrowserSites(limit) results — cleared on write. */
+const siteSnapshots = new Map<number, BrowserRecentVisit[]>();
 
 function emit() {
   LISTENERS.forEach((listener) => listener());
+}
+
+function hostKey(url: string): string {
+  const host = displayHostFromUrl(url).toLowerCase();
+  return host || url.toLowerCase();
+}
+
+/** One entry per website host — keeps the newest path for that host. */
+function uniqueByHost(items: BrowserRecentVisit[]): BrowserRecentVisit[] {
+  const seen = new Set<string>();
+  const out: BrowserRecentVisit[] = [];
+  for (const item of items) {
+    const key = hostKey(item.url);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      ...item,
+      // Prefer the host as the display title for site lists.
+      title: displayHostFromUrl(item.url) || item.title,
+    });
+  }
+  return out;
 }
 
 function read(): BrowserRecentVisit[] {
@@ -67,7 +89,7 @@ function read(): BrowserRecentVisit[] {
 
 function write(next: BrowserRecentVisit[]) {
   cache = next.length ? next : EMPTY_RECENTS;
-  limitedSnapshots.clear();
+  siteSnapshots.clear();
   if (typeof window !== "undefined") {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
@@ -93,35 +115,46 @@ export function getBrowserRecentHistoryServerSnapshot(): BrowserRecentVisit[] {
   return EMPTY_RECENTS;
 }
 
-/** Most recent unique visits (default 5 for blank tab). Stable reference per limit. */
-export function listRecentBrowserVisits(limit = 5): BrowserRecentVisit[] {
-  const all = read();
+/**
+ * Recent websites for the new-tab page — one row per host.
+ * Stable reference per limit.
+ */
+export function listRecentBrowserSites(limit = 5): BrowserRecentVisit[] {
   const n = Math.max(0, limit);
   if (n <= 0) return EMPTY_RECENTS;
-  if (n >= all.length) return all;
-  let snap = limitedSnapshots.get(n);
+  let snap = siteSnapshots.get(n);
   if (!snap) {
-    snap = all.slice(0, n);
-    limitedSnapshots.set(n, snap);
+    const sites = uniqueByHost(read()).slice(0, n);
+    snap = sites.length ? sites : EMPTY_RECENTS;
+    siteSnapshots.set(n, snap);
   }
   return snap;
 }
 
+/** @deprecated Prefer listRecentBrowserSites for new-tab UI. */
+export function listRecentBrowserVisits(limit = 5): BrowserRecentVisit[] {
+  return listRecentBrowserSites(limit);
+}
+
+/**
+ * Address-bar suggestions — only when the user has typed a query.
+ * Deduped by host; matched against host / title / url.
+ */
 export function filterRecentBrowserVisits(
   query: string,
   limit = 8,
 ): BrowserRecentVisit[] {
   const q = query.trim().toLowerCase();
-  const all = read();
-  if (!q) return listRecentBrowserVisits(limit);
-  return all
-    .filter(
-      (item) =>
-        item.url.toLowerCase().includes(q) ||
-        item.title.toLowerCase().includes(q) ||
-        displayHostFromUrl(item.url).toLowerCase().includes(q),
-    )
-    .slice(0, limit);
+  if (!q) return EMPTY_RECENTS;
+  const matched = uniqueByHost(read()).filter((item) => {
+    const host = displayHostFromUrl(item.url).toLowerCase();
+    return (
+      host.includes(q) ||
+      item.url.toLowerCase().includes(q) ||
+      item.title.toLowerCase().includes(q)
+    );
+  });
+  return matched.slice(0, limit);
 }
 
 export function recordBrowserVisit(input: {
@@ -136,18 +169,17 @@ export function recordBrowserVisit(input: {
     titleFromUrl(url);
   const now = Date.now();
   const prev = read();
-  if (prev[0]?.url === url && prev[0]?.title === title) {
-    // Same top entry — bump timestamp without churning listeners if identical order.
-    const next = [{ url, title, visitedAt: now }, ...prev.slice(1)].slice(
-      0,
-      MAX_RECENTS,
-    );
-    write(next);
+  const key = hostKey(url);
+  // Keep at most one entry per host — newest visit wins.
+  const withoutHost = prev.filter((item) => hostKey(item.url) !== key);
+  if (
+    prev[0] &&
+    hostKey(prev[0].url) === key &&
+    prev[0].url === url &&
+    prev[0].title === title
+  ) {
+    write([{ url, title, visitedAt: now }, ...withoutHost].slice(0, MAX_RECENTS));
     return;
   }
-  const next = [
-    { url, title, visitedAt: now },
-    ...prev.filter((item) => item.url !== url),
-  ].slice(0, MAX_RECENTS);
-  write(next);
+  write([{ url, title, visitedAt: now }, ...withoutHost].slice(0, MAX_RECENTS));
 }

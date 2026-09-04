@@ -615,10 +615,12 @@ function isCursorOverPip() {
   const x = point.x - content.x;
   const y = point.y - content.y;
   const b = entry.lastBounds;
+  // Include a header strip above the video so hover chrome stays hittable.
+  const HEADER = 36;
   return (
     x >= b.x &&
     x <= b.x + b.width &&
-    y >= b.y &&
+    y >= b.y - HEADER &&
     y <= b.y + b.height
   );
 }

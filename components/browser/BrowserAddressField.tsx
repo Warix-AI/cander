@@ -12,6 +12,9 @@ import {
 import { displayHostFromUrl } from "@/lib/preview-url";
 import { cn } from "@/lib/utils";
 
+const ADDRESS_FIELD_WIDTH =
+  "relative mx-auto min-w-0 w-full max-w-[min(100%,22rem)]";
+
 export function BrowserAddressField({
   url,
   faviconUrl,
@@ -52,10 +55,12 @@ export function BrowserAddressField({
     getBrowserRecentHistoryServerSnapshot,
   );
 
+  const typedQuery = editing ? draft.trim() : "";
   const suggestions = useMemo(
-    () => filterRecentBrowserVisits(editing ? draft : "", 8),
-    [editing, draft],
+    () => (typedQuery ? filterRecentBrowserVisits(typedQuery, 8) : []),
+    [typedQuery],
   );
+  const showSuggestions = suggestOpen && typedQuery.length > 0 && suggestions.length > 0;
 
   const beginEdit = () => {
     // Idle shows host only; editing always expands to the full URL.
@@ -80,7 +85,6 @@ export function BrowserAddressField({
     if (url !== "about:blank" && input.value) {
       input.select();
     }
-    setSuggestOpen(true);
   }, [editing, url]);
 
   useEffect(() => {
@@ -109,25 +113,13 @@ export function BrowserAddressField({
       return;
     }
     onDraftChange(nextUrl);
-    // Commit after draft settles.
     queueMicrotask(() => onCommit());
   };
 
-  // Compact field that grows with the typed URL — stays centered.
-  const measureText = editing ? draft || placeholder : "";
-  const editWidthCh = Math.min(
-    42,
-    Math.max(12, Math.ceil(measureText.length * 0.62) + 4),
-  );
-
   if (editing) {
     return (
-      <div
-        ref={rootRef}
-        className={cn("relative mx-auto min-w-0", className)}
-        style={{ width: `min(100%, max(10rem, ${editWidthCh}ch))` }}
-      >
-        <NativeOverlayGate open={suggestOpen && suggestions.length > 0} />
+      <div ref={rootRef} className={cn(ADDRESS_FIELD_WIDTH, className)}>
+        <NativeOverlayGate open={showSuggestions} />
         <form
           className="relative w-full"
           onSubmit={(event) => {
@@ -154,16 +146,16 @@ export function BrowserAddressField({
             aria-label="Search or enter address"
             aria-autocomplete="list"
             aria-controls={listId}
-            aria-expanded={suggestOpen && suggestions.length > 0}
+            aria-expanded={showSuggestions}
             placeholder={placeholder}
             className="h-8 w-full rounded-full border border-border/60 bg-input px-3 text-center text-[13px] text-foreground caret-foreground outline-none placeholder:text-center"
           />
         </form>
-        {suggestOpen && suggestions.length > 0 ? (
+        {showSuggestions ? (
           <ul
             id={listId}
             role="listbox"
-            className="absolute top-[calc(100%+0.35rem)] left-1/2 z-40 w-[min(100vw-2rem,22rem)] -translate-x-1/2 overflow-hidden rounded-[12px] border border-border/70 bg-popover py-1 shadow-[0_12px_40px_rgba(0,0,0,0.12)]"
+            className="absolute top-[calc(100%+0.35rem)] left-1/2 z-40 w-full min-w-[16rem] -translate-x-1/2 overflow-hidden rounded-[12px] border border-border/70 bg-popover py-1 shadow-[0_12px_40px_rgba(0,0,0,0.12)]"
           >
             <li className="px-3 py-1.5 text-[11px] font-medium tracking-[0.04em] text-muted-foreground uppercase">
               Recently viewed
@@ -171,7 +163,7 @@ export function BrowserAddressField({
             {suggestions.map((item) => {
               const host = displayHostFromUrl(item.url) || item.title;
               return (
-                <li key={item.url} role="option">
+                <li key={host} role="option">
                   <button
                     type="button"
                     className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-muted/70"
@@ -183,9 +175,6 @@ export function BrowserAddressField({
                     <FaviconImage url={item.url} size={14} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-medium">
-                        {item.title || host}
-                      </span>
-                      <span className="block truncate text-[11.5px] text-muted-foreground">
                         {host}
                       </span>
                     </span>
@@ -205,7 +194,8 @@ export function BrowserAddressField({
       onClick={beginEdit}
       aria-label={placeholder}
       className={cn(
-        "relative mx-auto flex h-8 min-w-0 max-w-[min(100%,22rem)] flex-1 items-center justify-center gap-2 rounded-full px-3 transition-colors duration-200 hover:bg-muted/50",
+        ADDRESS_FIELD_WIDTH,
+        "flex h-8 flex-1 items-center justify-center gap-2 rounded-full px-3 transition-colors duration-200 hover:bg-muted/50",
         className,
       )}
     >

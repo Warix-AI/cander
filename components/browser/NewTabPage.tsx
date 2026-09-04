@@ -4,16 +4,18 @@ import { useSyncExternalStore } from "react";
 import { FaviconImage } from "@/components/browser/FaviconImage";
 import {
   getBrowserRecentHistoryServerSnapshot,
-  listRecentBrowserVisits,
+  listRecentBrowserSites,
   subscribeBrowserRecentHistory,
 } from "@/lib/browser-recent-history";
+import { BROWSER_CHROME_BG } from "@/lib/shell-chrome";
 import { displayHostFromUrl } from "@/lib/preview-url";
+import { cn } from "@/lib/utils";
 
 function getNewTabRecentsSnapshot() {
-  return listRecentBrowserVisits(5);
+  return listRecentBrowserSites(8);
 }
 
-/** Blank / new-tab surface with recent browsing history. */
+/** Blank / new-tab surface with recent browsing history (one row per site). */
 export function NewTabPage({
   onOpenUrl,
 }: {
@@ -26,7 +28,12 @@ export function NewTabPage({
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col items-center justify-center gap-6 bg-background px-6 text-center">
+    <div
+      className={cn(
+        "flex h-full min-h-0 flex-col items-center justify-center gap-6 px-6 text-center",
+        BROWSER_CHROME_BG,
+      )}
+    >
       <div className="space-y-1">
         <p className="text-[15px] font-medium tracking-[-0.02em] text-foreground">
           New tab
@@ -40,11 +47,11 @@ export function NewTabPage({
           <p className="mb-2 px-1 text-[12px] font-medium tracking-[0.02em] text-muted-foreground uppercase">
             Recently viewed
           </p>
-          <ul className="overflow-hidden rounded-[12px] border border-border/60 bg-card">
+          <ul className="overflow-hidden rounded-[12px] border border-border/60 bg-card/80">
             {recents.map((item) => {
               const host = displayHostFromUrl(item.url) || item.title;
               return (
-                <li key={item.url} className="border-b border-border/40 last:border-0">
+                <li key={host} className="border-b border-border/40 last:border-0">
                   {onOpenUrl ? (
                     <button
                       type="button"
@@ -54,9 +61,6 @@ export function NewTabPage({
                       <FaviconImage url={item.url} size={16} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13.5px] font-medium tracking-[-0.01em]">
-                          {item.title || host}
-                        </span>
-                        <span className="block truncate text-[12px] text-muted-foreground">
                           {host}
                         </span>
                       </span>
@@ -66,9 +70,6 @@ export function NewTabPage({
                       <FaviconImage url={item.url} size={16} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13.5px] font-medium tracking-[-0.01em]">
-                          {item.title || host}
-                        </span>
-                        <span className="block truncate text-[12px] text-muted-foreground">
                           {host}
                         </span>
                       </span>
