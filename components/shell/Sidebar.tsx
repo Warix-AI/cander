@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   ArrowLeft,
   Building2,
@@ -209,6 +209,20 @@ export function Sidebar() {
     return spaceId === id && (view === "space" || view === "chat");
   };
 
+  const pinSections = useMemo(() => {
+    const order: { kind: PinnedItem["kind"]; label: string }[] = [
+      { kind: "connector", label: "Connectors" },
+      { kind: "project", label: "Projects" },
+      { kind: "thread", label: "Chats" },
+    ];
+    return order
+      .map((section) => ({
+        ...section,
+        items: pinnedItems.filter((item) => item.kind === section.kind),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [pinnedItems]);
+
   const pinRowActive = (item: PinnedItem) => {
     if (item.kind === "thread") return threadId === item.id;
     if (item.kind === "connector")
@@ -406,10 +420,17 @@ export function Sidebar() {
 
             <div className="relative mt-3 min-h-0 flex-1 overflow-hidden">
               <div className="h-full overflow-y-auto">
-                <p className="px-3 pb-1 text-[12px] text-muted-foreground">
-                  Pinned
-                </p>
-                {pinnedItems.map(renderPinnedRow)}
+                {pinSections.map((section, index) => (
+                  <div
+                    key={section.kind}
+                    className={cn(index > 0 && "mt-3")}
+                  >
+                    <p className="px-3 pb-1 text-[12px] text-muted-foreground">
+                      {section.label}
+                    </p>
+                    {section.items.map(renderPinnedRow)}
+                  </div>
+                ))}
               </div>
             </div>
           </nav>
@@ -596,7 +617,8 @@ function PinnedRow({
         }}
         className={cn(
           "inline-flex h-6 w-5 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground transition-opacity duration-200 active:cursor-grabbing",
-          active || dragging
+          // Only while hovering / dragging — not while the pin is merely selected.
+          dragging
             ? "opacity-100"
             : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
         )}

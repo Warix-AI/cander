@@ -253,10 +253,8 @@ html:not(.dark).cander-narrow .composer-shell {
   background-color: oklch(1 0 0) !important;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  border-color: oklch(0 0 0 / 0.07) !important;
-  box-shadow:
-    0 1px 2px oklch(0 0 0 / 0.04),
-    0 6px 20px oklch(0 0 0 / 0.05) !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 html:not(.dark).cander-mobile .composer-dock,
@@ -951,7 +949,20 @@ select:focus-visible {
   background-color: var(--background);
 }
 
-html:not(.dark) .composer-shell,
+html:not(.dark) .composer-shell {
+  /* White fill, flat — no stroke / elevation in light mode. */
+  background-color: oklch(1 0 0) !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+html:not(.dark) .composer-shell:hover,
+html:not(.dark) .composer-shell:focus-within {
+  border: none !important;
+  box-shadow: none !important;
+}
+
 html:not(.dark) .light-surface {
   background-color: oklch(1 0 0);
   border: 0.75px solid oklch(0.91 0.003 265);

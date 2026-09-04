@@ -149,9 +149,6 @@ export function MobileMenuDrawer() {
             })}
           </div>
 
-          <p className="mt-4 px-3 pb-1 text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
-            Pinned
-          </p>
           <PinsSheet onSelect={close} />
 
           <p className="mt-3 px-3 pb-1 text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase">

@@ -45,7 +45,7 @@ export function WorkSpaceView({
       title={copy.title}
       description={copy.description}
       actionLabel={copy.actionLabel}
-      onAction={() => openSpace("connectors")}
+      onAction={() => openSpace("research")}
     />
   );
 

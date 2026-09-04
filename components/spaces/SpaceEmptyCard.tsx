@@ -135,7 +135,7 @@ export const SPACE_EMPTY_COPY = {
   },
   work: {
     title: "Start organizing",
-    description: "Pin apps, projects, and connections in one place.",
+    description: "Bring Home, Build, and Studio projects together.",
     actionLabel: "New project",
   },
 } as const;

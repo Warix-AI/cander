@@ -616,7 +616,7 @@ export function GmailConnectorView({
                           </p>
                         </div>
                       </div>
-                      <div className="w-full overflow-hidden">
+                      <div className="w-full overflow-hidden px-[10px] bg-white dark:bg-black">
                         {(() => {
                           const loadingBody =
                             busy &&
@@ -641,7 +641,7 @@ export function GmailConnectorView({
                             );
                           }
                           return (
-                            <div className="px-4 py-3">
+                            <div className="py-3">
                               <MailBody
                                 text={plain}
                                 onOpenLink={onOpenLink}

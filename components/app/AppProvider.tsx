@@ -3441,7 +3441,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       target = null;
     }
     if (!target) {
-      const fallback = (["research", "work", "build", "studio"] as const).find(
+      const fallback = (["research", "build", "studio"] as const).find(
         (space) => spaceAllowed(space, allowed, planOpts),
       );
       if (!fallback) {
@@ -3641,11 +3641,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (spaceId !== "work") return;
-    const allowed = memberSpaces(workspaceId, actor.id, workspacePolicies);
-    const opts = { billingPlan };
-    if (spaceAllowed("work", allowed, opts)) return;
-    queueMicrotask(() => openSpace("work"));
-  }, [spaceId, workspaceId, workspacePolicies, billingPlan, openSpace, actor.id]);
+    // Work is hidden from nav — bounce anyone still on it to Home.
+    queueMicrotask(() => openSpace("research"));
+  }, [spaceId, openSpace]);
 
   useEffect(() => {
     if (!workspaceId) return;

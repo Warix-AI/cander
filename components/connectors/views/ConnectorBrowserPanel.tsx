@@ -19,6 +19,7 @@ import { useApp } from "@/components/app/AppProvider";
 import { BrowserSurfaceHost } from "@/components/browser/BrowserSurfaceHost";
 import { BrowserChromeTooltip } from "@/components/browser/BrowserChromeTooltip";
 import { BrowserAddressField } from "@/components/browser/BrowserAddressField";
+import { FaviconImage } from "@/components/browser/FaviconImage";
 import {
   GmailConnectorView,
   type GmailToolbarState,
@@ -43,7 +44,6 @@ import {
 } from "@/lib/connector-browser-session";
 import { normalizeBrowserUrl, titleFromUrl } from "@/lib/preview-url";
 import {
-  BROWSER_CHROME_BG,
   BROWSER_CHROME_CHIP,
   BROWSER_CHROME_CHIP_HOVER,
   SHELL_PANEL_BODY,
@@ -51,6 +51,8 @@ import {
 import { cn } from "@/lib/utils";
 
 const PANEL_SURFACE = "bg-white dark:bg-black";
+/** Connector chrome matches the reading surface — pure white / pure black. */
+const CONNECTOR_CHROME_BG = "bg-white dark:bg-black";
 
 function sessionSnapshot(
   key: string,
@@ -173,7 +175,12 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
   const onWebUrlChange = (url: string) => {
     const tabs = session.tabs.map((tab) =>
       tab.id === active.id
-        ? { ...tab, url, title: titleFromUrl(url) || tab.title }
+        ? {
+            ...tab,
+            url,
+            title: titleFromUrl(url) || tab.title,
+            faviconUrl: url === tab.url ? tab.faviconUrl : null,
+          }
         : tab,
     );
     updateSession({ ...session, tabs });
@@ -186,15 +193,22 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
     updateSession({ ...session, tabs });
   };
 
+  const onWebFaviconChange = (faviconUrl: string | null) => {
+    const tabs = session.tabs.map((tab) =>
+      tab.id === active.id ? { ...tab, faviconUrl } : tab,
+    );
+    updateSession({ ...session, tabs });
+  };
+
   const isConnectorTab = active.kind === "connector";
 
   return (
-    <div className={cn(SHELL_PANEL_BODY, BROWSER_CHROME_BG)}>
+    <div className={cn(SHELL_PANEL_BODY, CONNECTOR_CHROME_BG)}>
       {/* Top header — tabs + expand + panel only */}
       <div
         className={cn(
           "flex h-[45px] min-w-0 shrink-0 items-center gap-1 px-2",
-          BROWSER_CHROME_BG,
+          CONNECTOR_CHROME_BG,
         )}
         onPointerLeave={clearBrowserChromeHovers}
       >
@@ -258,7 +272,7 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
       <div
         className={cn(
           "relative flex h-[45px] min-w-0 shrink-0 items-center gap-1 border-t border-black/5 px-2 dark:border-white/10",
-          BROWSER_CHROME_BG,
+          CONNECTOR_CHROME_BG,
         )}
       >
         {isConnectorTab ? (
@@ -361,7 +375,8 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
                 draft={addressDraft}
                 onDraftChange={setAddressDraft}
                 onCommit={commitAddress}
-                showFavicon={false}
+                faviconUrl={active.faviconUrl}
+                showFavicon
                 placeholder="Search or enter URL"
               />
             </div>
@@ -405,6 +420,7 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
             active={panelMode !== "collapsed"}
             onUrlChange={onWebUrlChange}
             onTitleChange={onWebTitleChange}
+            onFaviconChange={onWebFaviconChange}
             onOpenNewTab={openLink}
           />
         ) : null}
@@ -441,7 +457,14 @@ function ConnectorTabButton({
       >
         {tab.kind === "connector" && tab.connectorId ? (
           <ConnectorMark id={tab.connectorId} size="xs" className="!h-3.5 !w-3.5" />
-        ) : null}
+        ) : (
+          <FaviconImage
+            url={tab.url}
+            faviconUrl={tab.faviconUrl}
+            size={14}
+            className="shrink-0"
+          />
+        )}
         <span className="truncate font-medium">{tab.title}</span>
       </button>
       {canClose ? (

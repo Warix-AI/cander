@@ -102,6 +102,7 @@ function sessionsEqual(
       tab.kind === other.kind &&
       tab.title === other.title &&
       tab.url === other.url &&
+      tab.faviconUrl === other.faviconUrl &&
       Boolean(tab.pinned) === Boolean(other.pinned) &&
       tab.connectorId === other.connectorId
     );
@@ -213,6 +214,7 @@ export function navigateConnectorWebTab(
     ...tab,
     url,
     title: title || titleFromUrl(url) || tab.title,
+    faviconUrl: null,
     history,
     historyIndex: history.length - 1,
   };

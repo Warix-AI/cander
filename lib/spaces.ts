@@ -3,13 +3,16 @@ import type { BillingPlan, NavDestinationId, SpaceId } from "./types";
 /**
  * Product spaces — Home is Explore (`research`) under a Home label.
  * Legacy `home` remains on SpaceId for redirects only.
+ * Work exists in data/chat but is hidden from the primary menu.
  */
 export const PRIMARY_NAV_SPACES: SpaceId[] = [
   "research",
-  "work",
   "build",
   "studio",
 ];
+
+/** Work space stays in the product model but is not shown in nav. */
+export const SHOW_WORK_NAV = false;
 
 /** Studio is back in the primary menu. */
 export const SHOW_STUDIO_NAV = true;
@@ -27,7 +30,13 @@ export function resolveProductSpaceId(
 export const COMING_SOON_NAV_SPACES: SpaceId[] = [];
 
 export const NAV_SPACES: SpaceId[] = [...PRIMARY_NAV_SPACES];
-export const ALL_SPACE_IDS: SpaceId[] = [...PRIMARY_NAV_SPACES];
+/** All product space ids including hidden Work (data / legacy chat). */
+export const ALL_SPACE_IDS: SpaceId[] = [
+  "research",
+  "work",
+  "build",
+  "studio",
+];
 
 /** Non-space sidebar destinations. */
 export const EXTRA_NAV_IDS = ["browser", "recents", "connectors"] as const;
@@ -85,6 +94,7 @@ export function isExtraNavId(id: string): id is ExtraNavId {
 
 export function isNavVisible(id: SidebarNavId): boolean {
   if (id === "studio") return SHOW_STUDIO_NAV;
+  if (id === "work") return SHOW_WORK_NAV;
   return true;
 }
 
@@ -95,7 +105,7 @@ export function isSidebarNavId(id: string): id is SidebarNavId {
 /** Connectors nav visible for all plans — installs ship later. */
 export const SHOW_CONNECTORS_NAV = true;
 
-/** Default sidebar — Home, Work, Build, Studio, Connectors, Recents. */
+/** Default sidebar — Home, Build, Studio, Connectors, Recents. */
 export const DEFAULT_SIDEBAR_MAIN: SidebarNavId[] = [
   ...PRIMARY_NAV_SPACES,
   ...(SHOW_CONNECTORS_NAV ? (["connectors"] as const) : []),
@@ -140,6 +150,8 @@ export function spaceAllowed(
   if (id === "studio") return true;
   // Legacy dashboard home is not a nav destination.
   if (id === "home") return false;
+  // Work is hidden from the menu on desktop and mobile.
+  if (id === "work") return SHOW_WORK_NAV;
   return allowed.includes(id as SpaceId);
 }
 
@@ -168,6 +180,8 @@ export function migrateSidebarId(id: string): SidebarNavId | null {
   }
   // Old Home dashboard slot → new Home (research).
   if (id === "home") return "research";
+  // Work removed from primary nav.
+  if (id === "work") return null;
   if (isSidebarNavId(id)) return id;
   return null;
 }

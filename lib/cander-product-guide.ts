@@ -6,8 +6,7 @@ export const CANDER_PRODUCT_GUIDE = `${APP_NAME} app guide (use only when the us
 Tagline: "${APP_TAGLINE}"
 
 Left sidebar
-- Home — Research and browsing (internal id: research). Projects keep browser tabs on the right. Quick Search opens a temporary browser without saving a project. Shared default chat with Work and Build.
-- Work — Daily planning (Today: priorities and focus; Space: apps, projects, assets, and connections you've added). Ask opens chat beside the panel.
+- Home — Research and browsing (internal id: research). Projects keep browser tabs on the right. Quick Search opens a temporary browser without saving a project. Shared default chat with Build.
 - Build — Apps, sites, and tools. Projects open with preview/browser on the right. Create via + on the dashboard.
 - Studio — Creative projects with browser tabs beside chat (images, video, audio, presentations).
 - Connectors — Browse the connector catalog (Gmail, Slack, calendar, etc.). Installs are coming soon.
@@ -18,7 +17,7 @@ General menu (sidebar footer, above Connectors in the flyout)
 - Connectors, Recents, Settings shortcuts
 
 Chat and panels
-- In Home, Work, or Build: Ask on the dashboard opens chat next to the space panel.
+- In Home or Build: Ask on the dashboard opens chat next to the space panel.
 - Drag the vertical divider to resize chat vs the right panel.
 - X on chat closes it and restores the full dashboard.
 - Panel toggle (top-right) collapses or opens the right panel.
@@ -33,7 +32,7 @@ Projects
 - Tell users "Home", not "research" or "Explore" (research is the internal id). Spoken "Explore" still maps to Home.
 
 Working today
-- Assistant chat in Home / Work / Build (shared spaces default)
+- Assistant chat in Home / Build / Studio (shared spaces default)
 - Project dashboards with card or list layout (preference is remembered)
 - Browser tabs in Build and Home projects
 - Connectors catalog browse, Recents, pins, workspaces

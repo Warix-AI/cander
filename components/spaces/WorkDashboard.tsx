@@ -36,7 +36,7 @@ export function WorkDashboard() {
     <DashFrame
       banner={false}
       title="Work"
-      subtitle="Organize apps, projects, assets, and connections."
+      subtitle="Projects from Home, Build, and Studio."
     >
       <DashToolbar
         active={hoistFilters}
@@ -51,7 +51,10 @@ export function WorkDashboard() {
           id: item.id,
           label: item.label,
           active: category === item.id,
-          onClick: () => setCategory(item.id),
+          onClick: () =>
+            setCategory((current) =>
+              current === item.id ? "all" : item.id,
+            ),
         }))}
         actions={
           <>

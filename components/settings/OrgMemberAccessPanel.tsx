@@ -145,7 +145,9 @@ function WorkspaceAccessBody({
             <div>
               <p className="text-[12px] font-medium text-muted-foreground">Spaces</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {workspace.spaces.map((spaceId) => {
+                {workspace.spaces
+                  .filter((spaceId) => spaceId !== "work")
+                  .map((spaceId) => {
                   const on = row.spaces.includes(spaceId);
                   const space = spaceCatalog.find((item) => item.id === spaceId);
                   return (
@@ -331,7 +333,9 @@ export function OrgMemberAccessMobile(props: Props) {
             </button>
             {expanded ? (
               <SettingsGroup className="mt-2 border-0">
-                {workspace.spaces.map((spaceId) => {
+                {workspace.spaces
+                  .filter((spaceId) => spaceId !== "work")
+                  .map((spaceId) => {
                   const on = row.spaces.includes(spaceId);
                   const space = spaceCatalog.find((item) => item.id === spaceId);
                   return (

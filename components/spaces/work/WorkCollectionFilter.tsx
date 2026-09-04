@@ -9,6 +9,14 @@ import {
 import { FLOAT_CONTROL_SHELL, FLOAT_TOGGLE_ACTIVE } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
+const FILTER_OPTIONS: {
+  id: "all" | WorkCollectionCategory;
+  label: string;
+}[] = [
+  { id: "all", label: "All" },
+  ...WORK_COLLECTION_CATEGORY_OPTIONS,
+];
+
 export function WorkCollectionFilter({
   value,
   onChange,
@@ -17,8 +25,7 @@ export function WorkCollectionFilter({
   onChange: (value: "all" | WorkCollectionCategory) => void;
 }) {
   const active =
-    WORK_COLLECTION_CATEGORY_OPTIONS.find((item) => item.id === value) ??
-    WORK_COLLECTION_CATEGORY_OPTIONS[0];
+    FILTER_OPTIONS.find((item) => item.id === value) ?? FILTER_OPTIONS[0];
   const filtered = value !== "all";
 
   return (
@@ -52,7 +59,7 @@ export function WorkCollectionFilter({
     >
       {(close) => (
         <>
-          {WORK_COLLECTION_CATEGORY_OPTIONS.map((item) => {
+          {FILTER_OPTIONS.map((item) => {
             const selected = value === item.id;
             return (
               <button
