@@ -520,6 +520,27 @@ export function setProjectBrowserSession(
   persistKey(projectBrowserStorageKey(key), session);
 }
 
+/**
+ * Focus a retained web tab by id across any in-memory browser session.
+ * Used when returning from Picture-in-Picture to the exact source tab.
+ */
+export function activateProjectBrowserTab(
+  tabId: string,
+): ProjectBrowserKey | null {
+  const id = tabId.trim();
+  if (!id) return null;
+  for (const [storageKey, session] of cache) {
+    if (!session.tabs.some((tab) => tab.id === id)) continue;
+    const parsed = parseProjectBrowserStorageKey(storageKey);
+    if (!parsed) continue;
+    if (session.activeTabId !== id) {
+      persistKey(storageKey, { ...session, activeTabId: id });
+    }
+    return parsed;
+  }
+  return null;
+}
+
 /** In-memory session only — used for ephemeral quick-search browsing. */
 export function setProjectBrowserSessionVolatile(
   key: ProjectBrowserKey,

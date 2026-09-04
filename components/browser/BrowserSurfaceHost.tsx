@@ -130,7 +130,11 @@ export function BrowserSurfaceHost({
           userId,
           projectId,
         });
-        await adapter.navigate(tabId, url);
+        if (url !== "about:blank") {
+          await adapter.navigate(tabId, url);
+        } else {
+          await adapter.hideTab(tabId);
+        }
         if (cancelled) return;
         setTabReady(true);
         if (
@@ -217,6 +221,11 @@ export function BrowserSurfaceHost({
   // Navigate existing tab when URL changes (no destroy/recreate).
   useEffect(() => {
     if (!tabReady || pipActive) return;
+    if (url === "about:blank") {
+      const adapter = getBrowserSurfaceAdapter();
+      void adapter.hideTab(tabId);
+      return;
+    }
     const adapter = getBrowserSurfaceAdapter();
     void Promise.resolve(adapter.navigate(tabId, url)).then(() => {
       if (
@@ -251,7 +260,8 @@ export function BrowserSurfaceHost({
     if (adapter.id === "web-pwa") return;
 
     const paint = async () => {
-      if (!active || suppressed) {
+      // New-tab page is React — never paint a blank native view over it.
+      if (!active || suppressed || url === "about:blank") {
         await adapter.hideTab(tabId);
         return;
       }
@@ -294,7 +304,7 @@ export function BrowserSurfaceHost({
       layoutRoot?.removeEventListener("transitionend", onResize);
       ro?.disconnect();
     };
-  }, [tabId, active, suppressed, tabReady, pipActive]);
+  }, [tabId, active, suppressed, tabReady, pipActive, url]);
 
   if (pipActive) {
     return (

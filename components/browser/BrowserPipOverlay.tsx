@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Maximize2, PictureInPicture2, X } from "lucide-react";
+import { Maximize2, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { FaviconImage } from "@/components/browser/FaviconImage";
 import { getBrowserSurfaceAdapter } from "@/lib/browser-surface";
@@ -25,11 +25,17 @@ import {
   updateBrowserPipMeta,
   updateBrowserPipSize,
 } from "@/lib/browser-pip-store";
+import { clearBrowserTabMediaPlaying } from "@/lib/browser-tab-media";
+import { activateProjectBrowserTab } from "@/lib/project-browser-session";
+import { STANDALONE_BROWSER_PROJECT_ID } from "@/lib/standalone-browser-session";
 import { cn } from "@/lib/utils";
+
+type Corner = "nw" | "ne" | "sw" | "se";
 
 /**
  * Floating video PiP — fixed to the viewport so it survives space/settings
  * navigation. Native Electron views paint over the content box.
+ * Chrome (favicon / title / expand / close) appears only while hovered.
  */
 export function BrowserPipOverlay() {
   const pip = useSyncExternalStore(
@@ -37,9 +43,12 @@ export function BrowserPipOverlay() {
     getBrowserPipSnapshot,
     getBrowserPipServerSnapshot,
   );
-  const { openProject } = useApp();
+  const { openProject, openStandaloneBrowser } = useApp();
   const hostRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [hovered, setHovered] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -49,15 +58,26 @@ export function BrowserPipOverlay() {
   } | null>(null);
   const resizeRef = useRef<{
     pointerId: number;
+    corner: Corner;
     startX: number;
     startY: number;
     origW: number;
     origH: number;
+    origX: number;
+    origY: number;
+  } | null>(null);
+  const lastPaintBounds = useRef<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
   } | null>(null);
 
   useEffect(() => {
     if (!pip) {
       setPos(null);
+      setHovered(false);
+      lastPaintBounds.current = null;
       return;
     }
     setPos((prev) => {
@@ -69,10 +89,32 @@ export function BrowserPipOverlay() {
         typeof window !== "undefined" ? window.innerHeight : pip.height + 80;
       return {
         x: Math.max(margin, w - pip.width - margin),
-        y: Math.max(margin, h - pip.height - PIP_CHROME_HEIGHT - margin - 48),
+        y: Math.max(margin, h - pip.height - margin - 48),
       };
     });
   }, [pip?.tabId, pip?.width, pip?.height]);
+
+  // Native views steal mouse events — poll cursor vs PiP bounds from main.
+  useEffect(() => {
+    if (!pip || pip.webEmbed) return;
+    const adapter = getBrowserSurfaceAdapter();
+    if (typeof adapter.isPipCursorHit !== "function") return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const hit = await adapter.isPipCursorHit!();
+        if (!cancelled) setHovered(Boolean(hit));
+      } catch {
+        // ignore
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 80);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [pip?.tabId, pip?.webEmbed]);
 
   const paintNative = useCallback(async () => {
     if (!pip || pip.webEmbed) return;
@@ -82,13 +124,25 @@ export function BrowserPipOverlay() {
     const adapter = getBrowserSurfaceAdapter();
     if (adapter.id === "web-pwa") return;
     if (rect.width < 2 || rect.height < 2) return;
-    await adapter.showTab(pip.tabId, {
+    const next = {
       x: Math.round(rect.left),
       y: Math.round(rect.top),
       width: Math.round(rect.width),
       height: Math.round(rect.height),
-    });
-  }, [pip]);
+    };
+    const prev = lastPaintBounds.current;
+    if (
+      prev &&
+      prev.x === next.x &&
+      prev.y === next.y &&
+      prev.width === next.width &&
+      prev.height === next.height
+    ) {
+      return;
+    }
+    lastPaintBounds.current = next;
+    await adapter.showTab(pip.tabId, next);
+  }, [pip?.tabId, pip?.webEmbed]);
 
   useEffect(() => {
     if (!pip || pip.webEmbed) return;
@@ -109,8 +163,9 @@ export function BrowserPipOverlay() {
     if (hostRef.current && ro) ro.observe(hostRef.current);
 
     const adapter = getBrowserSurfaceAdapter();
+    const tabId = pip.tabId;
     const unsub = adapter.subscribe((event) => {
-      if (event.tabId !== pip.tabId) return;
+      if (event.tabId !== tabId) return;
       if (event.type === "url" && "url" in event) {
         updateBrowserPipMeta({ url: String(event.url) });
       }
@@ -124,24 +179,19 @@ export function BrowserPipOverlay() {
       }
     });
 
-    // Keep painting while the user navigates the shell (layout transitions).
-    const interval = window.setInterval(() => {
-      void paintNative();
-    }, 500);
-
     return () => {
       if (raf) cancelAnimationFrame(raf);
       window.removeEventListener("resize", schedule);
       ro?.disconnect();
       unsub();
-      window.clearInterval(interval);
     };
-  }, [pip, paintNative]);
+  }, [pip?.tabId, pip?.webEmbed, paintNative]);
 
   useEffect(() => {
     if (!pip || pip.webEmbed) return;
+    lastPaintBounds.current = null;
     void paintNative();
-  }, [pip, pos, paintNative]);
+  }, [pip?.tabId, pip?.webEmbed, pip?.width, pip?.height, pos, hovered, paintNative]);
 
   const closePip = useCallback(async () => {
     const tabId = pip?.tabId;
@@ -149,6 +199,8 @@ export function BrowserPipOverlay() {
     exitBrowserPip();
     if (!tabId || webEmbed) return;
     const adapter = getBrowserSurfaceAdapter();
+    await adapter.pauseMedia?.(tabId);
+    clearBrowserTabMediaPlaying(tabId);
     await adapter.setPipTab?.(null);
     await adapter.hideTab(tabId);
   }, [pip]);
@@ -157,20 +209,34 @@ export function BrowserPipOverlay() {
     const projectId = pip?.sourceProjectId;
     const tabId = pip?.tabId;
     const webEmbed = pip?.webEmbed;
+    if (tabId) {
+      activateProjectBrowserTab(tabId);
+    }
     exitBrowserPip();
     if (tabId && !webEmbed) {
       const adapter = getBrowserSurfaceAdapter();
-      // Release PiP retain but keep the WebContents alive for the remounted panel.
       await adapter.setPipTab?.(null);
     }
+    if (projectId === STANDALONE_BROWSER_PROJECT_ID) {
+      openStandaloneBrowser?.();
+      return;
+    }
     if (projectId) openProject(projectId);
-  }, [pip?.sourceProjectId, pip?.tabId, pip?.webEmbed, openProject]);
+  }, [
+    pip?.sourceProjectId,
+    pip?.tabId,
+    pip?.webEmbed,
+    openProject,
+    openStandaloneBrowser,
+  ]);
 
   const onDragDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!pos || !pip) return;
     const target = event.target as HTMLElement;
     if (target.closest("button") || target.closest("[data-pip-resize]")) return;
     event.currentTarget.setPointerCapture(event.pointerId);
+    setDragging(true);
+    setHovered(true);
     dragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -186,10 +252,7 @@ export function BrowserPipOverlay() {
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
     const maxX = Math.max(8, window.innerWidth - pip.width - 8);
-    const maxY = Math.max(
-      8,
-      window.innerHeight - pip.height - PIP_CHROME_HEIGHT - 8,
-    );
+    const maxY = Math.max(8, window.innerHeight - pip.height - 8);
     setPos({
       x: Math.min(maxX, Math.max(8, drag.origX + dx)),
       y: Math.min(maxY, Math.max(8, drag.origY + dy)),
@@ -199,6 +262,7 @@ export function BrowserPipOverlay() {
   const onDragUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (dragRef.current?.pointerId === event.pointerId) {
       dragRef.current = null;
+      setDragging(false);
       try {
         event.currentTarget.releasePointerCapture(event.pointerId);
       } catch {
@@ -207,30 +271,59 @@ export function BrowserPipOverlay() {
     }
   };
 
-  const onResizeDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!pip) return;
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    resizeRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      origW: pip.width,
-      origH: pip.height,
+  const onResizeDown =
+    (corner: Corner) => (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!pip || !pos) return;
+      event.stopPropagation();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      resizeRef.current = {
+        pointerId: event.pointerId,
+        corner,
+        startX: event.clientX,
+        startY: event.clientY,
+        origW: pip.width,
+        origH: pip.height,
+        origX: pos.x,
+        origY: pos.y,
+      };
     };
-  };
 
   const onResizeMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const resize = resizeRef.current;
-    if (!resize || resize.pointerId !== event.pointerId) return;
-    const nextW = Math.min(
-      PIP_MAX_WIDTH,
-      Math.max(PIP_MIN_WIDTH, resize.origW + (event.clientX - resize.startX)),
-    );
-    const nextH = Math.min(
-      PIP_MAX_HEIGHT,
-      Math.max(PIP_MIN_HEIGHT, resize.origH + (event.clientY - resize.startY)),
-    );
+    if (!resize || resize.pointerId !== event.pointerId || !pip) return;
+    const dx = event.clientX - resize.startX;
+    const dy = event.clientY - resize.startY;
+    let nextW = resize.origW;
+    let nextH = resize.origH;
+    let nextX = resize.origX;
+    let nextY = resize.origY;
+
+    if (resize.corner.includes("e")) nextW = resize.origW + dx;
+    if (resize.corner.includes("w")) {
+      nextW = resize.origW - dx;
+      nextX = resize.origX + dx;
+    }
+    if (resize.corner.includes("s")) nextH = resize.origH + dy;
+    if (resize.corner.includes("n")) {
+      nextH = resize.origH - dy;
+      nextY = resize.origY + dy;
+    }
+
+    nextW = Math.min(PIP_MAX_WIDTH, Math.max(PIP_MIN_WIDTH, nextW));
+    nextH = Math.min(PIP_MAX_HEIGHT, Math.max(PIP_MIN_HEIGHT, nextH));
+    if (resize.corner.includes("w")) {
+      nextX = resize.origX + (resize.origW - nextW);
+    }
+    if (resize.corner.includes("n")) {
+      nextY = resize.origY + (resize.origH - nextH);
+    }
+
+    const maxX = Math.max(8, window.innerWidth - nextW - 8);
+    const maxY = Math.max(8, window.innerHeight - nextH - 8);
+    setPos({
+      x: Math.min(maxX, Math.max(8, nextX)),
+      y: Math.min(maxY, Math.max(8, nextY)),
+    });
     updateBrowserPipSize(nextW, nextH);
   };
 
@@ -247,55 +340,89 @@ export function BrowserPipOverlay() {
 
   if (!pip || !pos) return null;
 
+  const showChrome = hovered || dragging;
+  // Native video fills the box; on hover it yields a strip for React chrome
+  // (native views paint above DOM, so the header cannot overlay the video).
+  const videoTop = showChrome ? PIP_CHROME_HEIGHT : 0;
+
+  const cornerHandle = (corner: Corner, className: string, cursor: string) => (
+    <div
+      key={corner}
+      data-pip-resize={corner}
+      onPointerDown={onResizeDown(corner)}
+      onPointerMove={onResizeMove}
+      onPointerUp={onResizeUp}
+      onPointerCancel={onResizeUp}
+      className={cn("absolute z-20 h-4 w-4", className, cursor)}
+      aria-hidden
+    />
+  );
+
   return (
     <div
+      ref={rootRef}
       className={cn(
-        "pointer-events-auto fixed z-[400] flex flex-col overflow-hidden rounded-[14px]",
-        "border border-border/70 bg-background shadow-[0_16px_48px_rgba(0,0,0,0.28)]",
+        "pointer-events-auto fixed z-[400] overflow-hidden bg-black",
+        "shadow-[0_16px_48px_rgba(0,0,0,0.28)]",
+        // Square corners — no curve.
+        "rounded-none",
       )}
       style={{
         left: pos.x,
         top: pos.y,
         width: pip.width,
-        height: pip.height + PIP_CHROME_HEIGHT,
+        height: pip.height,
+      }}
+      onPointerEnter={() => {
+        if (pip.webEmbed) setHovered(true);
+      }}
+      onPointerLeave={() => {
+        if (pip.webEmbed && !dragging) setHovered(false);
       }}
     >
-      <div
-        className="flex h-9 shrink-0 cursor-grab items-center gap-2 border-b border-border/50 bg-muted/40 px-2 active:cursor-grabbing"
-        onPointerDown={onDragDown}
-        onPointerMove={onDragMove}
-        onPointerUp={onDragUp}
-        onPointerCancel={onDragUp}
-      >
-        <PictureInPicture2
-          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-          strokeWidth={1.6}
-        />
-        <FaviconImage url={pip.url} faviconUrl={pip.faviconUrl} size={14} />
-        <span className="min-w-0 flex-1 truncate text-[12px] font-medium tracking-[-0.01em]">
-          {pip.title || "Video"}
-        </span>
-        {pip.sourceProjectId ? (
+      {showChrome ? (
+        <div
+          className="absolute inset-x-0 top-0 z-10 flex h-9 cursor-grab items-center gap-2 bg-neutral-950/95 px-2 active:cursor-grabbing"
+          onPointerDown={onDragDown}
+          onPointerMove={onDragMove}
+          onPointerUp={onDragUp}
+          onPointerCancel={onDragUp}
+        >
+          <FaviconImage url={pip.url} faviconUrl={pip.faviconUrl} size={14} />
+          <span className="min-w-0 flex-1 truncate text-left text-[12px] font-medium tracking-[-0.01em] text-white">
+            {pip.title || "Video"}
+          </span>
+          {pip.sourceProjectId ? (
+            <button
+              type="button"
+              onClick={() => void returnToProject()}
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center text-white/70 hover:bg-white/10 hover:text-white"
+              aria-label="Return to tab"
+              title="Return to tab"
+            >
+              <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+            </button>
+          ) : null}
           <button
             type="button"
-            onClick={() => void returnToProject()}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Return to page"
+            aria-label="Close picture in picture"
+            onClick={() => void closePip()}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center text-white/70 hover:bg-white/10 hover:text-white"
           >
-            <Maximize2 className="h-3 w-3" strokeWidth={1.8} />
-            Back
+            <X className="h-3.5 w-3.5" strokeWidth={1.8} />
           </button>
-        ) : null}
-        <button
-          type="button"
-          aria-label="Close picture in picture"
-          onClick={() => void closePip()}
-          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-        </button>
-      </div>
-      <div ref={hostRef} className="relative min-h-0 flex-1 bg-black">
+        </div>
+      ) : null}
+
+      <div
+        ref={hostRef}
+        className="absolute bg-black"
+        style={
+          showChrome
+            ? { top: videoTop, left: 3, right: 3, bottom: 3 }
+            : { inset: 0 }
+        }
+      >
         {pip.webEmbed ? (
           <iframe
             title={pip.title}
@@ -308,18 +435,16 @@ export function BrowserPipOverlay() {
         ) : (
           <div className="h-full w-full" aria-hidden />
         )}
-        <div
-          data-pip-resize=""
-          onPointerDown={onResizeDown}
-          onPointerMove={onResizeMove}
-          onPointerUp={onResizeUp}
-          onPointerCancel={onResizeUp}
-          className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize"
-          aria-hidden
-        >
-          <span className="absolute right-1 bottom-1 h-2 w-2 rounded-sm border-r-2 border-b-2 border-white/50" />
-        </div>
       </div>
+
+      {showChrome ? (
+        <>
+          {cornerHandle("nw", "top-0 left-0", "cursor-nwse-resize")}
+          {cornerHandle("ne", "top-0 right-0", "cursor-nesw-resize")}
+          {cornerHandle("sw", "bottom-0 left-0", "cursor-nesw-resize")}
+          {cornerHandle("se", "right-0 bottom-0", "cursor-nwse-resize")}
+        </>
+      ) : null}
     </div>
   );
 }

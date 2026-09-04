@@ -1252,6 +1252,12 @@ export function ProjectBrowserPanel({
                 onNavigateTo={navigateAddressTo}
                 showFavicon={false}
                 placeholder="Search"
+                autoEditKey={
+                  active.kind === "web" &&
+                  (address === "about:blank" || active.url === "about:blank")
+                    ? active.id
+                    : null
+                }
               />
             </div>
           </div>
@@ -1430,6 +1436,12 @@ export function ProjectBrowserPanel({
                 onNavigateTo={navigateAddressTo}
                 showFavicon={false}
                 placeholder="Search"
+                autoEditKey={
+                  active.kind === "web" &&
+                  (address === "about:blank" || active.url === "about:blank")
+                    ? active.id
+                    : null
+                }
               />
             )}
           </div>

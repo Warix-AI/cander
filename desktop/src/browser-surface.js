@@ -1,6 +1,6 @@
 const { WebContentsView, session, systemPreferences } = require("electron");
 const { partitionFor, isAllowedUrl } = require("./browser-security");
-const { PAGE_EXTRACT_SCRIPT, SELECTION_SCRIPT, VIDEO_PIP_INSTALL_SCRIPT, VIDEO_PIP_ENTER_SCRIPT, VIDEO_PIP_EXIT_SCRIPT } = require("./page-extract");
+const { PAGE_EXTRACT_SCRIPT, SELECTION_SCRIPT, VIDEO_PIP_INSTALL_SCRIPT, VIDEO_PIP_ENTER_SCRIPT, VIDEO_PIP_EXIT_SCRIPT, VIDEO_PIP_PAUSE_SCRIPT } = require("./page-extract");
 
 /**
  * Local Chromium tab surfaces for the right-panel browser workspace.
@@ -9,8 +9,15 @@ const { PAGE_EXTRACT_SCRIPT, SELECTION_SCRIPT, VIDEO_PIP_INSTALL_SCRIPT, VIDEO_P
  * Keep partition + URL allow rules aligned with lib/browser-surface/local-browsing.ts.
  */
 
-/** @type {Map<string, { view: import('electron').WebContentsView, lastUrl: string, options: object, lastBounds: { x:number,y:number,width:number,height:number } | null, visible: boolean }>} */
+/** @type {Map<string, { view: import('electron').WebContentsView, lastUrl: string, options: object, lastBounds: { x:number,y:number,width:number,height:number } | null, visible: boolean, partition: string }>} */
 const tabs = new Map();
+
+/**
+ * Retain Electron Session objects for the app lifetime so cookies / localStorage
+ * for persist:cander-web-{userId} survive tab destroy + project switches.
+ * @type {Map<string, import('electron').Session>}
+ */
+const retainedSessions = new Map();
 
 /** @type {import('electron').BrowserWindow | null} */
 let hostWindow = null;
@@ -126,6 +133,40 @@ function hardenSession(ses) {
   ses.on("will-download", (event) => {
     event.preventDefault();
   });
+}
+
+/** One shared Chromium profile per partition for the whole shell lifetime. */
+function sessionForPartition(partition) {
+  let ses = retainedSessions.get(partition);
+  if (!ses) {
+    ses = session.fromPartition(partition);
+    retainedSessions.set(partition, ses);
+  }
+  hardenSession(ses);
+  return ses;
+}
+
+async function flushSessionCookies(ses) {
+  if (!ses) return;
+  try {
+    await ses.cookies.flushStore();
+  } catch (err) {
+    console.warn("[cander-desktop] cookie flush failed", err);
+  }
+}
+
+async function flushPartitionCookies(partition) {
+  if (!partition) return;
+  const ses =
+    retainedSessions.get(partition) || session.fromPartition(partition);
+  retainedSessions.set(partition, ses);
+  await flushSessionCookies(ses);
+}
+
+async function flushAllBrowserCookies() {
+  for (const ses of retainedSessions.values()) {
+    await flushSessionCookies(ses);
+  }
 }
 
 /** Sites flag Electron's default UA as automation — present as desktop Chrome. */
@@ -273,8 +314,7 @@ function attachViewListeners(tabId, view) {
 
 function createView(tabId, initialUrl, options) {
   const partition = partitionFor(options);
-  const ses = session.fromPartition(partition);
-  hardenSession(ses);
+  const ses = sessionForPartition(partition);
   const view = new WebContentsView({
     webPreferences: {
       session: ses,
@@ -302,12 +342,16 @@ function createView(tabId, initialUrl, options) {
   view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
   if (hostWindow && !hostWindow.isDestroyed()) {
     hostWindow.contentView.addChildView(view);
+    // New panel tabs stack on top — pull PiP back above immediately.
+    if (tabId !== pipTabId) {
+      ensurePipOnTop();
+    }
   }
   const url = initialUrl && isAllowedUrl(initialUrl) ? initialUrl : "about:blank";
   if (url) {
     void view.webContents.loadURL(url);
   }
-  return view;
+  return { view, partition };
 }
 
 function recoverTab(tabId, lastUrl, options) {
@@ -326,13 +370,18 @@ function recoverTab(tabId, lastUrl, options) {
       // ignore
     }
   }
-  const view = createView(tabId, lastUrl || "about:blank", options || {});
+  const { view, partition } = createView(
+    tabId,
+    lastUrl || "about:blank",
+    options || {},
+  );
   tabs.set(tabId, {
     view,
     lastUrl: lastUrl || "about:blank",
     options: options || {},
     lastBounds: prev?.lastBounds ?? null,
     visible: false,
+    partition,
   });
 }
 
@@ -354,6 +403,14 @@ function createTab(tabId, initialUrl, options = {}) {
   if (tabs.has(tabId)) {
     return;
   }
+  if (
+    !options?.isolatedPartition &&
+    !String(options?.userId || "").trim()
+  ) {
+    throw new Error(
+      "userId required for shared browser cookies (persist:cander-web-{userId}).",
+    );
+  }
   if (initialUrl && !isAllowedUrl(initialUrl)) {
     emitToRenderer("cander:browser-event", {
       type: "navigationFailed",
@@ -367,13 +424,14 @@ function createTab(tabId, initialUrl, options = {}) {
   if (!options?.isolatedPartition) {
     void ensureMacMediaAccess("media", { mediaTypes: [] });
   }
-  const view = createView(tabId, initialUrl, options);
+  const { view, partition } = createView(tabId, initialUrl, options);
   tabs.set(tabId, {
     view,
     lastUrl: initialUrl || "about:blank",
     options,
     lastBounds: null,
     visible: false,
+    partition,
   });
 }
 
@@ -383,6 +441,10 @@ function destroyTab(tabId, opts = {}) {
   }
   const entry = tabs.get(tabId);
   if (!entry) return;
+  // Persist cookies before tearing down the last views for this jar.
+  if (entry.partition && !entry.options?.isolatedPartition) {
+    void flushPartitionCookies(entry.partition);
+  }
   try {
     if (hostWindow && !hostWindow.isDestroyed()) {
       hostWindow.contentView.removeChildView(entry.view);
@@ -409,6 +471,14 @@ function raiseView(entry) {
   } catch {
     // ignore
   }
+}
+
+/** Keep the floating PiP view above panel tabs without thrashing on every paint. */
+function ensurePipOnTop() {
+  if (!pipTabId) return;
+  const entry = tabs.get(pipTabId);
+  if (!entry) return;
+  raiseView(entry);
 }
 
 async function applyVideoPipMode(tabId, enabled) {
@@ -453,6 +523,18 @@ async function hasPlayingVideo(tabId) {
   }
 }
 
+async function pauseMedia(tabId) {
+  const entry = tabs.get(tabId);
+  if (!entry) return false;
+  const wc = entry.view.webContents;
+  try {
+    return Boolean(await wc.executeJavaScript(VIDEO_PIP_PAUSE_SCRIPT, true));
+  } catch (err) {
+    console.warn("[cander-desktop] pauseMedia failed", err);
+    return false;
+  }
+}
+
 async function setPipTab(tabId) {
   const next = tabId ? String(tabId) : null;
   const prev = pipTabId;
@@ -485,22 +567,60 @@ function showTab(tabId, bounds) {
     width: Math.max(1, Math.round(bounds.width || 1)),
     height: Math.max(1, Math.round(bounds.height || 1)),
   };
+  const prev = entry.lastBounds;
+  const unchanged =
+    entry.visible &&
+    prev &&
+    prev.x === nextBounds.x &&
+    prev.y === nextBounds.y &&
+    prev.width === nextBounds.width &&
+    prev.height === nextBounds.height;
   entry.lastBounds = nextBounds;
   entry.visible = true;
   for (const [id, other] of tabs) {
     if (id === tabId) continue;
     if (id === pipTabId) continue; // Keep PiP floating while panel tab shows.
+    if (!other.visible && other.lastBounds && other.lastBounds.width === 0) {
+      continue;
+    }
     other.visible = false;
     other.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
   }
   if (chromeOverlay && tabId !== pipTabId) {
     entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+    ensurePipOnTop();
     return;
   }
-  entry.view.setBounds(nextBounds);
-  if (tabId === pipTabId) {
-    raiseView(entry);
+  if (!unchanged) {
+    entry.view.setBounds(nextBounds);
   }
+  // Never re-parent PiP on every identical paint — that flickers the video.
+  if (tabId === pipTabId) {
+    if (!unchanged) raiseView(entry);
+    return;
+  }
+  // Panel tab moved/shown — keep PiP above it (once per real change).
+  if (!unchanged) {
+    ensurePipOnTop();
+  }
+}
+
+function isCursorOverPip() {
+  if (!pipTabId || !hostWindow || hostWindow.isDestroyed()) return false;
+  const entry = tabs.get(pipTabId);
+  if (!entry?.lastBounds || !entry.visible) return false;
+  const { screen } = require("electron");
+  const point = screen.getCursorScreenPoint();
+  const content = hostWindow.getContentBounds();
+  const x = point.x - content.x;
+  const y = point.y - content.y;
+  const b = entry.lastBounds;
+  return (
+    x >= b.x &&
+    x <= b.x + b.width &&
+    y >= b.y &&
+    y <= b.y + b.height
+  );
 }
 
 function hideTab(tabId) {
@@ -584,6 +704,7 @@ function destroyAll() {
     if (tabId === pip) continue;
     destroyTab(tabId, { force: true });
   }
+  void flushAllBrowserCookies();
 }
 
 /** Reset native surfaces when the shell renderer reloads (Cmd+R). */
@@ -593,6 +714,7 @@ function resetForShellReload() {
   for (const tabId of [...tabs.keys()]) {
     destroyTab(tabId, { force: true });
   }
+  void flushAllBrowserCookies();
 }
 
 async function readPage(tabId) {
@@ -641,6 +763,7 @@ module.exports = {
   destroyTab,
   setPipTab,
   hasPlayingVideo,
+  pauseMedia,
   showTab,
   hideTab,
   hideAll,
@@ -652,6 +775,8 @@ module.exports = {
   stop,
   destroyAll,
   resetForShellReload,
+  flushAllBrowserCookies,
+  isCursorOverPip,
   readPage,
   getSelection,
   captureViewport,

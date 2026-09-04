@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { FaviconImage } from "@/components/browser/FaviconImage";
+import { NativeOverlayGate } from "@/components/browser/NativeOverlayGate";
 import {
   filterRecentBrowserVisits,
   getBrowserRecentHistoryServerSnapshot,
@@ -21,6 +22,8 @@ export function BrowserAddressField({
   className,
   showFavicon = true,
   placeholder = "Search",
+  /** When this key changes to a blank-tab id, enter edit mode and focus. */
+  autoEditKey = null,
 }: {
   url: string;
   faviconUrl?: string | null;
@@ -32,11 +35,13 @@ export function BrowserAddressField({
   className?: string;
   showFavicon?: boolean;
   placeholder?: string;
+  autoEditKey?: string | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const lastAutoEditKey = useRef<string | null>(null);
   const listId = useId();
   const displayHost = displayHostFromUrl(url);
   const showPlaceholder = url === "about:blank" || !displayHost;
@@ -52,12 +57,31 @@ export function BrowserAddressField({
     [editing, draft],
   );
 
+  const beginEdit = () => {
+    // Idle shows host only; editing always expands to the full URL.
+    onDraftChange(url === "about:blank" ? "" : url);
+    setEditing(true);
+  };
+
+  useEffect(() => {
+    if (!autoEditKey) return;
+    if (lastAutoEditKey.current === autoEditKey) return;
+    lastAutoEditKey.current = autoEditKey;
+    beginEdit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to key changes
+  }, [autoEditKey]);
+
   useEffect(() => {
     if (!editing) return;
-    inputRef.current?.focus();
-    inputRef.current?.select();
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus();
+    // Existing URL: select once for quick replace. Blank tab: caret only.
+    if (url !== "about:blank" && input.value) {
+      input.select();
+    }
     setSuggestOpen(true);
-  }, [editing]);
+  }, [editing, url]);
 
   useEffect(() => {
     if (!editing) return;
@@ -70,12 +94,6 @@ export function BrowserAddressField({
     window.addEventListener("mousedown", onPointer);
     return () => window.removeEventListener("mousedown", onPointer);
   }, [editing]);
-
-  const beginEdit = () => {
-    // Idle shows host only; editing always expands to the full URL.
-    onDraftChange(url === "about:blank" ? "" : url);
-    setEditing(true);
-  };
 
   const finishEdit = () => {
     setEditing(false);
@@ -95,15 +113,21 @@ export function BrowserAddressField({
     queueMicrotask(() => onCommit());
   };
 
+  // Compact field that grows with the typed URL — stays centered.
+  const measureText = editing ? draft || placeholder : "";
+  const editWidthCh = Math.min(
+    42,
+    Math.max(12, Math.ceil(measureText.length * 0.62) + 4),
+  );
+
   if (editing) {
     return (
       <div
         ref={rootRef}
-        className={cn(
-          "relative mx-auto min-w-0 w-full max-w-[min(100%,22rem)]",
-          className,
-        )}
+        className={cn("relative mx-auto min-w-0", className)}
+        style={{ width: `min(100%, max(10rem, ${editWidthCh}ch))` }}
       >
+        <NativeOverlayGate open={suggestOpen && suggestions.length > 0} />
         <form
           className="relative w-full"
           onSubmit={(event) => {
@@ -132,7 +156,7 @@ export function BrowserAddressField({
             aria-controls={listId}
             aria-expanded={suggestOpen && suggestions.length > 0}
             placeholder={placeholder}
-            className="h-8 w-full rounded-full border border-border/60 bg-input px-3 text-left text-[13px] text-foreground caret-foreground outline-none"
+            className="h-8 w-full rounded-full border border-border/60 bg-input px-3 text-center text-[13px] text-foreground caret-foreground outline-none placeholder:text-center"
           />
         </form>
         {suggestOpen && suggestions.length > 0 ? (

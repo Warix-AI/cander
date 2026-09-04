@@ -68,7 +68,7 @@ export function assertAllowedLocalBrowserUrl(raw: string): string {
 /**
  * Session partition / data-store key.
  * Ordinary web: one durable jar per Cander user (cookies survive tab close,
- * project switches, and app relaunch — Discord stays signed in).
+ * project switches, and app relaunch — YouTube / Discord stay signed in).
  * Previews: isolated per project (no cookie bleed into personal browsing).
  */
 export function localBrowserPartition(options: {
@@ -76,11 +76,15 @@ export function localBrowserPartition(options: {
   projectId?: string | null;
   isolatedPartition?: boolean;
 }): string {
+  const sanitize = (raw: string) =>
+    raw.trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 128);
   if (options.isolatedPartition && options.projectId) {
-    return `persist:cander-preview-${options.projectId}`;
+    const projectId = sanitize(options.projectId) || "project";
+    return `persist:cander-preview-${projectId}`;
   }
-  if (options.userId) {
-    return `persist:cander-web-${options.userId}`;
+  const userId = options.userId ? sanitize(options.userId) : "";
+  if (userId) {
+    return `persist:cander-web-${userId}`;
   }
   return "persist:cander-web";
 }

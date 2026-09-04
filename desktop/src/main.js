@@ -484,6 +484,12 @@ app.whenReady().then(() => {
   ipcMain.handle("cander:browser-has-playing-video", async (_e, tabId) => {
     return browserSurface.hasPlayingVideo(tabId);
   });
+  ipcMain.handle("cander:browser-pause-media", async (_e, tabId) => {
+    return browserSurface.pauseMedia(tabId);
+  });
+  ipcMain.handle("cander:browser-pip-cursor-hit", async () => {
+    return browserSurface.isCursorOverPip();
+  });
   ipcMain.handle("cander:browser-read-page", async (_e, tabId) => {
     return browserSurface.readPage(tabId);
   });
@@ -551,6 +557,7 @@ app.whenReady().then(() => {
 });
 
 app.on("will-quit", () => {
+  void browserSurface.flushAllBrowserCookies?.();
   desktopShell.dispose();
 });
 

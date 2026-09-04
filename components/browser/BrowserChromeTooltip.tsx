@@ -16,6 +16,7 @@ export function BrowserChromeTooltip({
 }) {
   const id = useId();
   const anchorRef = useRef<HTMLSpanElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -24,8 +25,20 @@ export function BrowserChromeTooltip({
     const el = anchorRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
+    const margin = 10;
+    // Prefer measured tip width once mounted; fall back to a label estimate.
+    const measured = tipRef.current?.offsetWidth;
+    const tipWidth = measured && measured > 0 ? measured : label.length * 7.2 + 28;
+    const half = tipWidth / 2;
+    const center = rect.left + rect.width / 2;
+    const minCenter = margin + half;
+    const maxCenter = window.innerWidth - margin - half;
+    const left =
+      maxCenter < minCenter
+        ? window.innerWidth / 2
+        : Math.min(maxCenter, Math.max(minCenter, center));
     setPos({
-      left: rect.left + rect.width / 2,
+      left,
       top: side === "top" ? rect.top - 8 : rect.bottom + 8,
     });
   };
@@ -33,14 +46,17 @@ export function BrowserChromeTooltip({
   useEffect(() => {
     if (!open) return;
     place();
+    // Re-measure after paint so we can clamp using real tip width.
+    const raf = requestAnimationFrame(() => place());
     const onMove = () => place();
     window.addEventListener("scroll", onMove, true);
     window.addEventListener("resize", onMove);
     return () => {
+      cancelAnimationFrame(raf);
       window.removeEventListener("scroll", onMove, true);
       window.removeEventListener("resize", onMove);
     };
-  }, [open, side]);
+  }, [open, side, label]);
 
   const show = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -72,6 +88,7 @@ export function BrowserChromeTooltip({
       {open && pos
         ? createPortal(
             <div
+              ref={tipRef}
               id={id}
               role="tooltip"
               style={{

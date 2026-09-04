@@ -548,6 +548,12 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
                 faviconUrl={active.faviconUrl}
                 showFavicon={false}
                 placeholder="Search"
+                autoEditKey={
+                  active.kind === "web" &&
+                  (!active.url || active.url === "about:blank")
+                    ? active.id
+                    : null
+                }
               />
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-0.5">

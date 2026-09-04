@@ -19,6 +19,8 @@ type DesktopBrowserBridge = {
   setChromeOverlay?: (active: boolean) => Promise<void>;
   setPipTab?: (tabId: string | null) => Promise<void>;
   hasPlayingVideo?: (tabId: string) => Promise<boolean>;
+  pauseMedia?: (tabId: string) => Promise<boolean>;
+  isPipCursorHit?: () => Promise<boolean>;
   navigate: (tabId: string, url: string) => Promise<void>;
   back: (tabId: string) => Promise<void>;
   forward: (tabId: string) => Promise<void>;
@@ -116,6 +118,18 @@ export function createElectronBrowserSurfaceAdapter(): BrowserSurfaceAdapter {
       const native = bridge();
       if (!native?.hasPlayingVideo) return false;
       return Boolean(await native.hasPlayingVideo(tabId));
+    },
+
+    async pauseMedia(tabId: string) {
+      const native = bridge();
+      if (!native?.pauseMedia) return false;
+      return Boolean(await native.pauseMedia(tabId));
+    },
+
+    async isPipCursorHit() {
+      const native = bridge();
+      if (!native?.isPipCursorHit) return false;
+      return Boolean(await native.isPipCursorHit());
     },
 
     subscribe(listener) {

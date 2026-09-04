@@ -2,8 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("canderDesktop", {
   platform: process.platform,
-  shellBuild: "2026-09-04-browser-tab-retain-pip",
-  shellVersion: "0.1.10",
+  shellBuild: "2026-09-04-browser-pip-hover",
+  shellVersion: "0.1.11",
   window: {
     minimize: () => ipcRenderer.send("cander:window-minimize"),
     maximize: () => ipcRenderer.send("cander:window-toggle-maximize"),
@@ -68,6 +68,10 @@ contextBridge.exposeInMainWorld("canderDesktop", {
       ipcRenderer.invoke("cander:browser-set-pip", tabId ?? null),
     hasPlayingVideo: (tabId) =>
       ipcRenderer.invoke("cander:browser-has-playing-video", tabId),
+    pauseMedia: (tabId) =>
+      ipcRenderer.invoke("cander:browser-pause-media", tabId),
+    isPipCursorHit: () =>
+      ipcRenderer.invoke("cander:browser-pip-cursor-hit"),
     readPage: (tabId) => ipcRenderer.invoke("cander:browser-read-page", tabId),
     getSelection: (tabId) =>
       ipcRenderer.invoke("cander:browser-get-selection", tabId),

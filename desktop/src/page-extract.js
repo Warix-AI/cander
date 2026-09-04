@@ -219,10 +219,43 @@ const VIDEO_PIP_EXIT_SCRIPT = `(() => {
   return false;
 })()`;
 
+const VIDEO_PIP_PAUSE_SCRIPT = `(() => {
+  try {
+    const pauseAll = (root) => {
+      let n = 0;
+      try {
+        for (const v of root.querySelectorAll('video, audio')) {
+          try {
+            v.pause();
+            n += 1;
+          } catch (_) {}
+        }
+      } catch (_) {}
+      let frames = [];
+      try {
+        frames = Array.from(root.querySelectorAll('iframe'));
+      } catch (_) {}
+      for (const frame of frames) {
+        try {
+          const doc = frame.contentDocument;
+          if (doc) n += pauseAll(doc);
+        } catch (_) {}
+      }
+      return n;
+    };
+    if (typeof window.__canderExitVideoPip === 'function') {
+      window.__canderExitVideoPip();
+    }
+    return pauseAll(document) > 0;
+  } catch (_) {}
+  return false;
+})()`;
+
 module.exports = {
   PAGE_EXTRACT_SCRIPT,
   SELECTION_SCRIPT,
   VIDEO_PIP_INSTALL_SCRIPT,
   VIDEO_PIP_ENTER_SCRIPT,
   VIDEO_PIP_EXIT_SCRIPT,
+  VIDEO_PIP_PAUSE_SCRIPT,
 };

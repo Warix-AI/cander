@@ -67,6 +67,10 @@ export interface BrowserSurfaceAdapter {
   setPipTab?(tabId: string | null): Promise<void> | void;
   /** True when a <video> is actively playing in the native tab. */
   hasPlayingVideo?(tabId: string): Promise<boolean> | boolean;
+  /** Pause media elements in the tab (PiP close). */
+  pauseMedia?(tabId: string): Promise<boolean> | boolean;
+  /** Cursor is over the floating PiP native bounds (for hover chrome). */
+  isPipCursorHit?(): Promise<boolean> | boolean;
   navigate(tabId: string, url: string): Promise<void> | void;
   back(tabId: string): Promise<void> | void;
   forward(tabId: string): Promise<void> | void;
