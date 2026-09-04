@@ -2,6 +2,9 @@
  * POST /api/ai/raw-openai/image-jobs — start GPT Image generation.
  * Creates the job, returns 202 immediately, and finishes OpenAI work in `after()`
  * so leave/navigation does not cancel generation.
+ *
+ * Re-POSTing the same generating job re-attaches the worker (HMR / reload safe)
+ * without double-billing when a runner is already active or a reservation exists.
  */
 
 import { after, NextResponse } from "next/server";
@@ -18,7 +21,9 @@ import {
   updateImageGenerationJob,
 } from "@/lib/ai/raw-openai/image-jobs-store";
 import {
+  isImageJobRunnerActive,
   isImageJobStale,
+  rememberImageJobReservation,
   runImageGenerationJob,
 } from "@/lib/ai/raw-openai/run-image-generation-job";
 import { enforceUsageForRequest } from "@/lib/usage/server/guard-route";
@@ -45,6 +50,23 @@ function jobResponse(job: NonNullable<Awaited<ReturnType<typeof getImageGenerati
     openaiFileId: job.openaiFileId,
     error: job.error,
   };
+}
+
+function scheduleImageJob(jobId: string, work: () => Promise<void>) {
+  const run = () =>
+    work().catch((error) => {
+      console.log("[IMAGE_JOB]", {
+        event: "after_failure",
+        id: jobId,
+        error: error instanceof Error ? error.message.slice(0, 300) : "fail",
+      });
+    });
+  after(run);
+  // Local/dev: `after()` can be dropped on HMR; kick immediately too.
+  // In-process lock in runImageGenerationJob prevents duplicate OpenAI calls.
+  if (process.env.NODE_ENV !== "production") {
+    void run();
+  }
 }
 
 export async function POST(request: Request) {
@@ -93,11 +115,15 @@ export async function POST(request: Request) {
     return NextResponse.json(jobResponse(existing), { status: 200 });
   }
 
-  if (existing?.status === "generating" && !isImageJobStale(existing)) {
-    return NextResponse.json(jobResponse(existing), { status: 202 });
-  }
+  const stale =
+    existing?.status === "generating" && isImageJobStale(existing);
+  const runnerActive =
+    existing != null && isImageJobRunnerActive(existing.id);
 
-  if (existing?.status === "generating" && isImageJobStale(existing)) {
+  // Fresh create or stale retry → reserve usage. Live re-attach → reuse.
+  const needsReservation = !existing || stale;
+
+  if (stale && existing) {
     console.log("[IMAGE_JOB]", { event: "retry_stale_job", id: existing.id });
     await updateImageGenerationJob(existing.id, auth.user.id, {
       status: "generating",
@@ -105,18 +131,22 @@ export async function POST(request: Request) {
     });
   }
 
-  const usage = await enforceUsageForRequest({
-    request,
-    feature: "image_generation",
-    workspaceId: body.workspaceId,
-    threadId: body.threadId,
-    idempotencyKey,
-    estimatedUnits: 1,
-    provider: "openai",
-    model: resolveOpenAIImageModel(),
-  });
-  if (!usage.ok) {
-    return usage.response;
+  let reservationId: string | null = null;
+  if (needsReservation) {
+    const usage = await enforceUsageForRequest({
+      request,
+      feature: "image_generation",
+      workspaceId: body.workspaceId,
+      threadId: body.threadId,
+      idempotencyKey,
+      estimatedUnits: 1,
+      provider: "openai",
+      model: resolveOpenAIImageModel(),
+    });
+    if (!usage.ok) {
+      return usage.response;
+    }
+    reservationId = usage.reservationId;
   }
 
   if (!existing) {
@@ -133,30 +163,32 @@ export async function POST(request: Request) {
       model: resolveOpenAIImageModel(),
       quality: resolveOpenAIImageQuality(),
     });
+  } else if (!runnerActive) {
+    console.log("[IMAGE_JOB]", {
+      event: "provider_request_reattached",
+      id: existing.id,
+      stale: Boolean(stale),
+    });
   }
 
   const jobId = existing.id;
   const jobPrompt = existing.prompt || prompt;
   const userId = auth.user.id;
-  const reservationId = usage.reservationId;
+  rememberImageJobReservation(jobId, reservationId);
 
   // Detach OpenAI work from the client connection so leave/navigation cannot
-  // abort generation. Client resumes via poll.
-  after(() =>
-    runImageGenerationJob({
-      jobId,
-      userId,
-      prompt: jobPrompt,
-      apiKey,
-      reservationId,
-    }).catch((error) => {
-      console.log("[IMAGE_JOB]", {
-        event: "after_failure",
-        id: jobId,
-        error: error instanceof Error ? error.message.slice(0, 300) : "fail",
-      });
-    }),
-  );
+  // abort generation. Client resumes via poll; re-POST re-attaches if needed.
+  if (!runnerActive) {
+    scheduleImageJob(jobId, () =>
+      runImageGenerationJob({
+        jobId,
+        userId,
+        prompt: jobPrompt,
+        apiKey,
+        reservationId,
+      }).then(() => undefined),
+    );
+  }
 
   const latest = await getImageGenerationJob(jobId, userId);
   return NextResponse.json(jobResponse(latest ?? existing), { status: 202 });

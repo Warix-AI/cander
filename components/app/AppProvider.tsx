@@ -1717,69 +1717,69 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       threadId: string;
       messageId: string;
       workspaceId?: string | null;
-      /** `poll` resumes an existing job after reload — do not POST a new job. */
+      /** `poll` = resume after reload; still POSTs to re-attach the worker. */
       mode?: "start" | "poll";
     }) => {
       if (imageJobPollRef.current.has(opts.generationId)) return;
       imageJobPollRef.current.add(opts.generationId);
       try {
-        if (opts.mode !== "poll") {
-          const started = await startImageGenerationJob({
-            prompt: opts.prompt,
-            generationId: opts.generationId,
-            threadId: opts.threadId,
-            messageId: opts.messageId,
-            workspaceId: opts.workspaceId ?? workspaceId,
-          });
-          if (!started.ok) {
-            const transient =
-              /network_error|failed to fetch|abort|load failed|timeout/i.test(
-                started.error,
-              );
-            if (!transient) {
-              patchImageGenerationBlock(
-                opts.threadId,
-                opts.messageId,
-                opts.generationId,
-                { status: "failed", error: started.error },
-              );
-              return;
-            }
-            // Keep generating + poll — leave/reload often aborts the start POST.
-          } else if (started.status === "completed" && started.dataUrl) {
-            patchImageGenerationBlock(
-              opts.threadId,
-              opts.messageId,
-              opts.generationId,
-              {
-                status: "completed",
-                imageUrl: started.dataUrl,
-                mime: started.mimeType || "image/png",
-                name: "generated.png",
-                attachmentId: started.attachmentId,
-                openaiFileId: started.openaiFileId,
-              },
+        // Always POST — including resume after reload — so the server can
+        // re-attach an orphaned worker (HMR / process restart). Idempotent.
+        const started = await startImageGenerationJob({
+          prompt: opts.prompt,
+          generationId: opts.generationId,
+          threadId: opts.threadId,
+          messageId: opts.messageId,
+          workspaceId: opts.workspaceId ?? workspaceId,
+        });
+        if (!started.ok) {
+          const transient =
+            /network_error|failed to fetch|abort|load failed|timeout/i.test(
+              started.error,
             );
-            if (started.attachmentId) {
-              void linkRawOpenAIAttachments({
-                attachmentIds: [started.attachmentId],
-                messageId: opts.messageId,
-                threadId: opts.threadId,
-              });
-            }
-            return;
-          } else if (started.status === "failed") {
+          if (!transient && opts.mode !== "poll") {
             patchImageGenerationBlock(
               opts.threadId,
               opts.messageId,
               opts.generationId,
-              {
-                status: "failed",
-                error: started.error || "Image generation failed.",
-              },
+              { status: "failed", error: started.error },
             );
             return;
           }
+          // Keep generating + poll — leave/reload often aborts the start POST.
+        } else if (started.status === "completed" && started.dataUrl) {
+          patchImageGenerationBlock(
+            opts.threadId,
+            opts.messageId,
+            opts.generationId,
+            {
+              status: "completed",
+              imageUrl: started.dataUrl,
+              mime: started.mimeType || "image/png",
+              name: "generated.png",
+              attachmentId: started.attachmentId,
+              openaiFileId: started.openaiFileId,
+            },
+          );
+          if (started.attachmentId) {
+            void linkRawOpenAIAttachments({
+              attachmentIds: [started.attachmentId],
+              messageId: opts.messageId,
+              threadId: opts.threadId,
+            });
+          }
+          return;
+        } else if (started.status === "failed") {
+          patchImageGenerationBlock(
+            opts.threadId,
+            opts.messageId,
+            opts.generationId,
+            {
+              status: "failed",
+              error: started.error || "Image generation failed.",
+            },
+          );
+          return;
         }
         const result = await waitForImageGenerationJob(opts.generationId, {
           intervalMs: 1200,

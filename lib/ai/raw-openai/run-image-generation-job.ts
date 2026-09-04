@@ -22,6 +22,10 @@ import { finalizeUsageReservation } from "@/lib/usage/server/guard-route";
 
 export const IMAGE_JOB_STALE_MS = 130_000;
 
+/** In-process lock so POST re-attach / dual schedule cannot double-call OpenAI. */
+const activeImageJobs = new Set<string>();
+const jobReservationIds = new Map<string, string>();
+
 export function isImageJobStale(job: ImageGenerationJob): boolean {
   if (job.status !== "generating") return false;
   const updated = Date.parse(job.updatedAt || job.createdAt);
@@ -29,16 +33,66 @@ export function isImageJobStale(job: ImageGenerationJob): boolean {
   return Date.now() - updated > IMAGE_JOB_STALE_MS;
 }
 
+export function rememberImageJobReservation(
+  jobId: string,
+  reservationId: string | null | undefined,
+) {
+  if (reservationId) jobReservationIds.set(jobId, reservationId);
+}
+
+export function isImageJobRunnerActive(jobId: string): boolean {
+  return activeImageJobs.has(jobId);
+}
+
 export async function runImageGenerationJob(opts: {
   jobId: string;
   userId: string;
   prompt: string;
   apiKey: string;
-  reservationId: string;
+  reservationId?: string | null;
+}): Promise<ImageGenerationJob | null> {
+  if (activeImageJobs.has(opts.jobId)) {
+    console.log("[IMAGE_JOB]", {
+      event: "skip_already_running",
+      id: opts.jobId,
+    });
+    return null;
+  }
+  activeImageJobs.add(opts.jobId);
+  if (opts.reservationId) {
+    jobReservationIds.set(opts.jobId, opts.reservationId);
+  }
+  const reservationId =
+    opts.reservationId ?? jobReservationIds.get(opts.jobId) ?? null;
+
+  try {
+    return await executeImageGenerationJob({
+      ...opts,
+      reservationId,
+    });
+  } finally {
+    activeImageJobs.delete(opts.jobId);
+  }
+}
+
+async function executeImageGenerationJob(opts: {
+  jobId: string;
+  userId: string;
+  prompt: string;
+  apiKey: string;
+  reservationId: string | null;
 }): Promise<ImageGenerationJob | null> {
   const latest = await getImageGenerationJob(opts.jobId, opts.userId);
   if (!latest || latest.status === "cancelled") {
     console.log("[IMAGE_JOB]", { event: "skip_cancelled", id: opts.jobId });
+    return latest;
+  }
+  if (latest.status === "completed" || latest.status === "failed") {
+    console.log("[IMAGE_JOB]", {
+      event: "skip_terminal",
+      id: opts.jobId,
+      status: latest.status,
+    });
     return latest;
   }
 
@@ -120,6 +174,7 @@ export async function runImageGenerationJob(opts: {
       status: "confirmed",
       actualUnits: 1,
     });
+    jobReservationIds.delete(opts.jobId);
     console.log("[IMAGE_JOB]", {
       event: "provider_request_completed",
       id: opts.jobId,
@@ -140,6 +195,7 @@ export async function runImageGenerationJob(opts: {
       reservationId: opts.reservationId,
       status: "failed",
     });
+    jobReservationIds.delete(opts.jobId);
     return failed;
   } finally {
     clearInterval(heartbeat);
