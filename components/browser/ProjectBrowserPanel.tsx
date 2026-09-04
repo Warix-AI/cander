@@ -19,7 +19,6 @@ import {
   Pencil,
   Plus,
   FolderKanban,
-  ChevronRight,
   LoaderCircle,
   RotateCw,
   Share,
