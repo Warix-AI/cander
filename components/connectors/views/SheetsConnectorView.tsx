@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Table2 } from "lucide-react";
+import { useApp } from "@/components/app/AppProvider";
 import {
   WorkspaceEmptyState,
   WorkspaceField,
@@ -10,6 +11,11 @@ import {
   type WorkspaceToolbarState,
 } from "@/components/connectors/views/WorkspaceViewChrome";
 import { GSHEETS_COMPOSIO_SLUGS } from "@/lib/connectors/google-workspace-composio";
+import {
+  peekViewCache,
+  viewCacheKey,
+  writeViewCache,
+} from "@/lib/connectors/view-session-cache";
 
 type Page = "spreadsheets" | "workbook" | "range" | "create";
 
@@ -20,6 +26,15 @@ type StubSheet = {
   modified: string;
 };
 
+type SheetsSessionCache = {
+  status: string | null;
+  page: Page;
+  selected: StubSheet | null;
+  activeTab: string | null;
+  range: string;
+  newTitle: string;
+};
+
 const DEMO_SHEETS: StubSheet[] = [];
 
 export function SheetsConnectorView({
@@ -27,31 +42,77 @@ export function SheetsConnectorView({
 }: {
   onToolbarChange?: (state: WorkspaceToolbarState) => void;
 }) {
-  const [page, setPage] = useState<Page>("spreadsheets");
+  const { workspaceId } = useApp();
+  const cacheKey = viewCacheKey("gsheets", workspaceId);
+  const cached = peekViewCache<SheetsSessionCache>(cacheKey);
+  const [page, setPage] = useState<Page>(() => cached?.data.page ?? "spreadsheets");
   const [syncing, setSyncing] = useState(false);
-  const [selected, setSelected] = useState<StubSheet | null>(null);
-  const [activeTab, setActiveTab] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [range, setRange] = useState("Sheet1!A1:D20");
-  const [newTitle, setNewTitle] = useState("");
+  const [selected, setSelected] = useState<StubSheet | null>(
+    () => cached?.data.selected ?? null,
+  );
+  const [activeTab, setActiveTab] = useState<string | null>(
+    () => cached?.data.activeTab ?? null,
+  );
+  const [status, setStatus] = useState<string | null>(
+    () => cached?.data.status ?? null,
+  );
+  const [range, setRange] = useState(
+    () => cached?.data.range ?? "Sheet1!A1:D20",
+  );
+  const [newTitle, setNewTitle] = useState(() => cached?.data.newTitle ?? "");
 
-  const refresh = () => {
-    setSyncing(true);
-    setStatus(`Will search via ${GSHEETS_COMPOSIO_SLUGS["gsheets.search"]}`);
-    window.setTimeout(() => {
-      setSyncing(false);
-      setStatus(
-        DEMO_SHEETS.length
+  const persist = useCallback(
+    (patch: Partial<SheetsSessionCache>) => {
+      const prev = peekViewCache<SheetsSessionCache>(cacheKey)?.data;
+      writeViewCache(cacheKey, {
+        status: patch.status !== undefined ? patch.status : (prev?.status ?? status),
+        page: patch.page ?? prev?.page ?? page,
+        selected:
+          patch.selected !== undefined ? patch.selected : (prev?.selected ?? selected),
+        activeTab:
+          patch.activeTab !== undefined
+            ? patch.activeTab
+            : (prev?.activeTab ?? activeTab),
+        range: patch.range ?? prev?.range ?? range,
+        newTitle: patch.newTitle ?? prev?.newTitle ?? newTitle,
+      });
+    },
+    [activeTab, cacheKey, newTitle, page, range, selected, status],
+  );
+
+  const refresh = useCallback(
+    (opts?: { force?: boolean }) => {
+      if (!opts?.force && peekViewCache<SheetsSessionCache>(cacheKey)?.fresh) {
+        return;
+      }
+      setSyncing(true);
+      setStatus(`Will search via ${GSHEETS_COMPOSIO_SLUGS["gsheets.search"]}`);
+      window.setTimeout(() => {
+        const nextStatus = DEMO_SHEETS.length
           ? null
-          : "No spreadsheets yet — connect Sheets to browse workbooks.",
-      );
-    }, 450);
-  };
+          : "No spreadsheets yet — connect Sheets to browse workbooks.";
+        setSyncing(false);
+        setStatus(nextStatus);
+        persist({ status: nextStatus, page: "spreadsheets" });
+      }, 450);
+    },
+    [cacheKey, persist],
+  );
 
   useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    refresh({ force: false });
+  }, [refresh]);
+
+  useEffect(() => {
+    persist({
+      page,
+      selected,
+      activeTab,
+      range,
+      newTitle,
+      status,
+    });
+  }, [activeTab, newTitle, page, persist, range, selected, status]);
 
   useEffect(() => {
     onToolbarChange?.({
@@ -84,7 +145,7 @@ export function SheetsConnectorView({
         setSelected(null);
         setActiveTab(null);
       },
-      onRefresh: refresh,
+      onRefresh: () => refresh({ force: true }),
       onPrimary:
         page === "spreadsheets"
           ? () => setPage("create")
@@ -97,7 +158,7 @@ export function SheetsConnectorView({
                   )
               : null,
     });
-  }, [page, syncing, onToolbarChange, selected, activeTab, range, newTitle]);
+  }, [page, syncing, onToolbarChange, selected, activeTab, range, newTitle, refresh]);
 
   return (
     <WorkspacePanelFrame status={status}>
@@ -194,7 +255,7 @@ export function SheetsConnectorView({
               body="Workbooks will list here after Sheets search is connected."
               actionLabel="Search Sheets"
               syncing={syncing}
-              onAction={refresh}
+              onAction={() => refresh({ force: true })}
             />
           ) : (
             DEMO_SHEETS.map((sheet) => (

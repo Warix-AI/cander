@@ -11,6 +11,11 @@ import {
   type WorkspaceToolbarState,
 } from "@/components/connectors/views/WorkspaceViewChrome";
 import { runConnectorViewOperation } from "@/lib/api/connector-client";
+import {
+  peekViewCache,
+  viewCacheKey,
+  writeViewCache,
+} from "@/lib/connectors/view-session-cache";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +34,11 @@ type CalendarEvent = {
   htmlLink?: string;
 };
 
+type CalendarMonthCache = {
+  events: CalendarEvent[];
+  monthKey: string;
+};
+
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const ACCENT = "#1A73E8";
 
@@ -42,6 +52,10 @@ function addMonths(d: Date, n: number) {
 
 function formatMonthLabel(d: Date) {
   return d.toLocaleDateString([], { month: "long", year: "numeric" });
+}
+
+function monthCacheScope(d: Date) {
+  return `month:${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function dayKey(d: Date) {
@@ -190,7 +204,16 @@ export function CalendarConnectorView({
   const { workspaceId } = useApp();
   const [page, setPage] = useState<Page>("month");
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const initialScope = monthCacheScope(startOfMonth(new Date()));
+  const initialCache = peekViewCache<CalendarMonthCache>(
+    viewCacheKey("gcal", workspaceId, initialScope),
+  );
+  const [events, setEvents] = useState<CalendarEvent[]>(
+    () =>
+      initialCache?.fresh && initialCache.data.monthKey === initialScope
+        ? initialCache.data.events
+        : [],
+  );
   const [selected, setSelected] = useState<CalendarEvent | null>(null);
   const [selectedDay, setSelectedDay] = useState<Date | null>(new Date());
   const [syncing, setSyncing] = useState(false);
@@ -201,53 +224,70 @@ export function CalendarConnectorView({
   const [startLocal, setStartLocal] = useState(() => defaultCreateStart(new Date()));
   const [attendees, setAttendees] = useState("");
 
-  const loadEvents = useCallback(async () => {
-    setSyncing(true);
-    setError(null);
-    try {
-      const timeMin = new Date(
-        month.getFullYear(),
-        month.getMonth(),
-        1,
-      ).toISOString();
-      const timeMax = new Date(
-        month.getFullYear(),
-        month.getMonth() + 1,
-        1,
-      ).toISOString();
-      const result = await runConnectorViewOperation({
-        workspaceId,
-        connectorId: "gcal",
-        operation: "listEvents",
-        input: { timeMin, timeMax, maxResults: 80, calendarId: "primary" },
-      });
-      const rawEvents = Array.isArray(result.data.events)
-        ? result.data.events
-        : [];
-      const parsed = rawEvents
-        .map(parseEvent)
-        .filter((e): e is CalendarEvent => Boolean(e))
-        .sort((a, b) => {
-          const at = a.startIso ? new Date(a.startIso).getTime() : 0;
-          const bt = b.startIso ? new Date(b.startIso).getTime() : 0;
-          return at - bt;
+  const loadEvents = useCallback(
+    async (opts?: { force?: boolean }) => {
+      const scope = monthCacheScope(month);
+      const key = viewCacheKey("gcal", workspaceId, scope);
+      const cached = peekViewCache<CalendarMonthCache>(key);
+      if (
+        !opts?.force &&
+        cached?.fresh &&
+        cached.data.monthKey === scope
+      ) {
+        setEvents(cached.data.events);
+        setStatus(null);
+        return;
+      }
+
+      setSyncing(true);
+      setError(null);
+      try {
+        const timeMin = new Date(
+          month.getFullYear(),
+          month.getMonth(),
+          1,
+        ).toISOString();
+        const timeMax = new Date(
+          month.getFullYear(),
+          month.getMonth() + 1,
+          1,
+        ).toISOString();
+        const result = await runConnectorViewOperation({
+          workspaceId,
+          connectorId: "gcal",
+          operation: "listEvents",
+          input: { timeMin, timeMax, maxResults: 80, calendarId: "primary" },
         });
-      setEvents(parsed);
-      setStatus(null);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Could not load calendar. Connect Google Calendar and try again.",
-      );
-      setEvents([]);
-    } finally {
-      setSyncing(false);
-    }
-  }, [month, workspaceId]);
+        const rawEvents = Array.isArray(result.data.events)
+          ? result.data.events
+          : [];
+        const parsed = rawEvents
+          .map(parseEvent)
+          .filter((e): e is CalendarEvent => Boolean(e))
+          .sort((a, b) => {
+            const at = a.startIso ? new Date(a.startIso).getTime() : 0;
+            const bt = b.startIso ? new Date(b.startIso).getTime() : 0;
+            return at - bt;
+          });
+        setEvents(parsed);
+        setStatus(null);
+        writeViewCache(key, { events: parsed, monthKey: scope });
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not load calendar. Connect Google Calendar and try again.",
+        );
+        setEvents([]);
+      } finally {
+        setSyncing(false);
+      }
+    },
+    [month, workspaceId],
+  );
 
   useEffect(() => {
-    void loadEvents();
+    void loadEvents({ force: false });
   }, [loadEvents]);
 
   const eventsByDay = useMemo(() => {
@@ -303,7 +343,7 @@ export function CalendarConnectorView({
       setSummary("");
       setAttendees("");
       setPage("month");
-      await loadEvents();
+      await loadEvents({ force: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create event.");
     } finally {
@@ -335,7 +375,7 @@ export function CalendarConnectorView({
         setPage("month");
         setSelected(null);
       },
-      onRefresh: () => void loadEvents(),
+      onRefresh: () => void loadEvents({ force: true }),
       onPrimary: page === "create" ? () => void createEvent() : null,
       calendarNav:
         page === "month"

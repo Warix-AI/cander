@@ -24,9 +24,21 @@ import {
   resolveMailHtml,
   resolveMailPlainText,
 } from "@/lib/mail-body-sanitize";
+import {
+  peekViewCache,
+  viewCacheKey,
+  writeViewCache,
+} from "@/lib/connectors/view-session-cache";
 import { cn } from "@/lib/utils";
 
 type Page = "inbox" | "compose" | "detail" | "forward";
+
+type GmailListCache = {
+  messages: SyncedMailListItem[];
+  connectionId: string | null;
+  lastSyncedAt: string | null;
+  listScrollTop: number;
+};
 
 const POLL_MS = 45_000;
 
@@ -110,14 +122,22 @@ export function GmailConnectorView({
   onToolbarChange?: (state: GmailToolbarState) => void;
 } = {}) {
   const { workspaceId } = useApp();
+  const cacheKey = viewCacheKey("gmail", workspaceId, "list");
+  const cached = peekViewCache<GmailListCache>(cacheKey);
   const [page, setPage] = useState<Page>("inbox");
-  const [messages, setMessages] = useState<SyncedMailListItem[]>([]);
+  const [messages, setMessages] = useState<SyncedMailListItem[]>(
+    () => cached?.data.messages ?? [],
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SyncedMailDetail | null>(null);
   const [threadMessages, setThreadMessages] = useState<SyncedMailDetail[]>([]);
-  const [connectionId, setConnectionId] = useState<string | null>(null);
-  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [connectionId, setConnectionId] = useState<string | null>(
+    () => cached?.data.connectionId ?? null,
+  );
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(
+    () => cached?.data.lastSyncedAt ?? null,
+  );
+  const [loading, setLoading] = useState(() => !cached?.data.messages.length);
   const [syncing, setSyncing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,12 +148,38 @@ export function GmailConnectorView({
   const [status, setStatus] = useState<string | null>(null);
   const [replyOpen, setReplyOpen] = useState(false);
   const replyRef = useRef<HTMLTextAreaElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const listScrollTopRef = useRef(cached?.data.listScrollTop ?? 0);
+  const restoreScrollPendingRef = useRef(Boolean(cached?.data.listScrollTop));
   const connectionIdRef = useRef<string | null>(null);
   connectionIdRef.current = connectionId;
   /** Message IDs marked read in this session — survive list reloads until server catches up. */
   const locallyReadIdsRef = useRef(new Set<string>());
 
   const threads = useMemo(() => groupIntoThreads(messages), [messages]);
+
+  const persistListCache = useCallback(
+    (patch: Partial<GmailListCache>) => {
+      const prev = peekViewCache<GmailListCache>(cacheKey)?.data;
+      writeViewCache(cacheKey, {
+        messages: patch.messages ?? prev?.messages ?? messages,
+        connectionId:
+          patch.connectionId !== undefined
+            ? patch.connectionId
+            : (prev?.connectionId ?? connectionId),
+        lastSyncedAt:
+          patch.lastSyncedAt !== undefined
+            ? patch.lastSyncedAt
+            : (prev?.lastSyncedAt ?? lastSyncedAt),
+        listScrollTop:
+          patch.listScrollTop ??
+          listScrollTopRef.current ??
+          prev?.listScrollTop ??
+          0,
+      });
+    },
+    [cacheKey, connectionId, lastSyncedAt, messages],
+  );
 
   const loadList = useCallback(async () => {
     setError(null);
@@ -142,19 +188,25 @@ export function GmailConnectorView({
       connectorId: "gmail",
     });
     const readLocally = locallyReadIdsRef.current;
-    setMessages(
-      data.messages.map((row) =>
-        readLocally.has(row.providerMessageId)
-          ? { ...row, isUnread: false }
-          : row,
-      ),
+    const nextMessages = data.messages.map((row) =>
+      readLocally.has(row.providerMessageId)
+        ? { ...row, isUnread: false }
+        : row,
     );
+    setMessages(nextMessages);
     setConnectionId(data.connectionId);
     setLastSyncedAt(data.sync.lastSyncedAt);
+    writeViewCache(cacheKey, {
+      messages: nextMessages,
+      connectionId: data.connectionId,
+      lastSyncedAt: data.sync.lastSyncedAt,
+      listScrollTop: listScrollTopRef.current,
+    });
     return data;
-  }, [workspaceId]);
+  }, [cacheKey, workspaceId]);
 
   const goInbox = useCallback(() => {
+    restoreScrollPendingRef.current = true;
     setPage("inbox");
     setDetail(null);
     setThreadMessages([]);
@@ -371,6 +423,15 @@ export function GmailConnectorView({
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const hit = peekViewCache<GmailListCache>(cacheKey);
+      if (hit?.fresh && hit.data.messages.length) {
+        // Instant paint from session cache; quiet refresh in the background.
+        setLoading(false);
+        void loadList().catch(() => {
+          /* keep cached list */
+        });
+        return;
+      }
       setLoading(true);
       try {
         const data = await loadList();
@@ -404,7 +465,15 @@ export function GmailConnectorView({
     return () => {
       cancelled = true;
     };
-  }, [loadList, workspaceId]);
+  }, [cacheKey, loadList, workspaceId]);
+
+  useEffect(() => {
+    if (page !== "inbox" || !restoreScrollPendingRef.current) return;
+    const node = listRef.current;
+    if (!node) return;
+    node.scrollTop = listScrollTopRef.current;
+    restoreScrollPendingRef.current = false;
+  }, [page, threads.length]);
 
   // Quiet background sync so new mail lands as threads without manual refresh.
   useEffect(() => {
@@ -429,6 +498,8 @@ export function GmailConnectorView({
   }, [loadList, workspaceId]);
 
   const openMessage = async (item: SyncedMailListItem) => {
+    listScrollTopRef.current = listRef.current?.scrollTop ?? 0;
+    persistListCache({ listScrollTop: listScrollTopRef.current });
     setSelectedId(item.providerMessageId);
     setPage("detail");
     setReplyBody("");
@@ -658,7 +729,7 @@ export function GmailConnectorView({
                       className="border-b border-black/5 last:border-b-0 dark:border-white/10"
                     >
                       <div className="flex items-start gap-3 px-4 pb-3">
-                        <MailSenderAvatar fromAddr={msg.fromAddr} size={36} />
+                        <MailSenderAvatar fromAddr={msg.fromAddr} size={32} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline gap-2">
                             <p className="truncate text-[13.5px] font-medium text-foreground">
@@ -758,7 +829,13 @@ export function GmailConnectorView({
       ) : null}
 
       {page === "inbox" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div
+          ref={listRef}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          onScroll={(event) => {
+            listScrollTopRef.current = event.currentTarget.scrollTop;
+          }}
+        >
           {!loading && !threads.length ? (
             <div className="px-4 py-10 text-center">
               <p className="text-[13px] font-medium text-foreground">
@@ -792,7 +869,7 @@ export function GmailConnectorView({
               )}
             >
               <div className="relative mt-0.5 shrink-0">
-                <MailSenderAvatar fromAddr={item.fromAddr} size={36} />
+                <MailSenderAvatar fromAddr={item.fromAddr} size={32} />
                 {item.isUnread ? (
                   <span className="absolute -left-1 top-0 h-2 w-2 rounded-full bg-sky-500 ring-2 ring-white dark:ring-space-canvas" />
                 ) : null}

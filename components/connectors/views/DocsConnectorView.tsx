@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FileText } from "lucide-react";
+import { useApp } from "@/components/app/AppProvider";
 import {
   WorkspaceEmptyState,
   WorkspaceField,
@@ -10,6 +11,11 @@ import {
   type WorkspaceToolbarState,
 } from "@/components/connectors/views/WorkspaceViewChrome";
 import { GDOCS_COMPOSIO_SLUGS } from "@/lib/connectors/google-workspace-composio";
+import {
+  peekViewCache,
+  viewCacheKey,
+  writeViewCache,
+} from "@/lib/connectors/view-session-cache";
 
 type Page = "documents" | "editor" | "create";
 
@@ -20,6 +26,14 @@ type StubDoc = {
   preview?: string;
 };
 
+type DocsSessionCache = {
+  status: string | null;
+  page: Page;
+  selected: StubDoc | null;
+  title: string;
+  markdown: string;
+};
+
 const DEMO_DOCS: StubDoc[] = [];
 
 export function DocsConnectorView({
@@ -27,30 +41,61 @@ export function DocsConnectorView({
 }: {
   onToolbarChange?: (state: WorkspaceToolbarState) => void;
 }) {
-  const [page, setPage] = useState<Page>("documents");
+  const { workspaceId } = useApp();
+  const cacheKey = viewCacheKey("gdocs", workspaceId);
+  const cached = peekViewCache<DocsSessionCache>(cacheKey);
+  const [page, setPage] = useState<Page>(() => cached?.data.page ?? "documents");
   const [syncing, setSyncing] = useState(false);
-  const [selected, setSelected] = useState<StubDoc | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [title, setTitle] = useState("");
-  const [markdown, setMarkdown] = useState("");
+  const [selected, setSelected] = useState<StubDoc | null>(
+    () => cached?.data.selected ?? null,
+  );
+  const [status, setStatus] = useState<string | null>(
+    () => cached?.data.status ?? null,
+  );
+  const [title, setTitle] = useState(() => cached?.data.title ?? "");
+  const [markdown, setMarkdown] = useState(() => cached?.data.markdown ?? "");
 
-  const refresh = () => {
-    setSyncing(true);
-    setStatus(`Will search via ${GDOCS_COMPOSIO_SLUGS["gdocs.search"]}`);
-    window.setTimeout(() => {
-      setSyncing(false);
-      setStatus(
-        DEMO_DOCS.length
+  const persist = useCallback(
+    (patch: Partial<DocsSessionCache>) => {
+      const prev = peekViewCache<DocsSessionCache>(cacheKey)?.data;
+      writeViewCache(cacheKey, {
+        status: patch.status !== undefined ? patch.status : (prev?.status ?? status),
+        page: patch.page ?? prev?.page ?? page,
+        selected:
+          patch.selected !== undefined ? patch.selected : (prev?.selected ?? selected),
+        title: patch.title ?? prev?.title ?? title,
+        markdown: patch.markdown ?? prev?.markdown ?? markdown,
+      });
+    },
+    [cacheKey, markdown, page, selected, status, title],
+  );
+
+  const refresh = useCallback(
+    (opts?: { force?: boolean }) => {
+      if (!opts?.force && peekViewCache<DocsSessionCache>(cacheKey)?.fresh) {
+        return;
+      }
+      setSyncing(true);
+      setStatus(`Will search via ${GDOCS_COMPOSIO_SLUGS["gdocs.search"]}`);
+      window.setTimeout(() => {
+        const nextStatus = DEMO_DOCS.length
           ? null
-          : "No documents yet — connect Docs to browse and open files.",
-      );
-    }, 450);
-  };
+          : "No documents yet — connect Docs to browse and open files.";
+        setSyncing(false);
+        setStatus(nextStatus);
+        persist({ status: nextStatus, page: "documents" });
+      }, 450);
+    },
+    [cacheKey, persist],
+  );
 
   useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    refresh({ force: false });
+  }, [refresh]);
+
+  useEffect(() => {
+    persist({ page, selected, title, markdown, status });
+  }, [markdown, page, persist, selected, status, title]);
 
   useEffect(() => {
     onToolbarChange?.({
@@ -70,7 +115,7 @@ export function DocsConnectorView({
         setPage("documents");
         setSelected(null);
       },
-      onRefresh: refresh,
+      onRefresh: () => refresh({ force: true }),
       onPrimary:
         page === "documents"
           ? () => setPage("create")
@@ -85,7 +130,7 @@ export function DocsConnectorView({
               }
             : null,
     });
-  }, [page, syncing, onToolbarChange, selected, title, markdown]);
+  }, [page, syncing, onToolbarChange, selected, title, markdown, refresh]);
 
   return (
     <WorkspacePanelFrame status={status}>
@@ -146,7 +191,7 @@ export function DocsConnectorView({
               body="Docs you can open and edit will list here."
               actionLabel="Search Docs"
               syncing={syncing}
-              onAction={refresh}
+              onAction={() => refresh({ force: true })}
             />
           ) : (
             DEMO_DOCS.map((doc) => (

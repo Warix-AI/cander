@@ -126,7 +126,7 @@ function brandIconUrls(domain: string): string[] {
 
 export function MailSenderAvatar({
   fromAddr,
-  size = 36,
+  size = 32,
   className,
 }: {
   fromAddr: string | null | undefined;
