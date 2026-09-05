@@ -13,14 +13,16 @@ import {
 } from "@/lib/usage-meters";
 import { cn } from "@/lib/utils";
 
-/** Shared footer row chrome for AccountMenu. */
+/** Shared footer row chrome for AccountMenu — matches SidebarNavButton. */
 export const SIDEBAR_FOOTER_ROW =
-  "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-200 hover:bg-sidebar-accent";
+  "flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[15px] transition-colors duration-200 hover:bg-sidebar-accent";
 
 export { signOutAccount };
 
 const flyoutRowClass =
-  "flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-1.5 text-left text-[13px] transition-colors duration-200 hover:bg-sidebar-accent";
+  "flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[15px] transition-colors duration-200 hover:bg-sidebar-accent";
+
+const flyoutIconClass = "h-4 w-4 shrink-0 text-muted-foreground";
 
 const USAGE_CYCLE: {
   id: UsageMeterId;
@@ -70,7 +72,7 @@ function UsageFlyoutRow() {
       aria-label={`Usage · ${meter.label} ${percent}% this hour`}
     >
       <Gauge
-        className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+        className={flyoutIconClass}
         strokeWidth={2}
       />
       <span className="shrink-0">Usage</span>
@@ -95,7 +97,7 @@ function UsageFlyoutRow() {
               style={{ width: `${percent}%` }}
             />
           </span>
-          <span className="shrink-0 tabular-nums text-[12px] text-muted-foreground">
+          <span className="shrink-0 tabular-nums text-[13px] text-muted-foreground">
             {percent}%
           </span>
         </>
@@ -120,14 +122,13 @@ export function AccountMenu() {
           onClick={toggle}
           className={cn(
             SIDEBAR_FOOTER_ROW,
-            "w-full text-[13.5px]",
             (open || view === "settings") && "bg-sidebar-accent font-medium",
           )}
           aria-label="General"
           aria-expanded={open}
         >
           <CircleUser
-            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+            className="h-4 w-4 shrink-0 text-muted-foreground"
             strokeWidth={2}
           />
           General
@@ -137,7 +138,7 @@ export function AccountMenu() {
       {(close) => (
         <div className="flex flex-col gap-px">
           <div className="border-b border-border/50 px-2 py-2">
-            <ColorModeToggle compact />
+            <ColorModeToggle />
           </div>
           <button
             type="button"
@@ -148,7 +149,7 @@ export function AccountMenu() {
             }}
           >
             <Blocks
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              className={flyoutIconClass}
               strokeWidth={2}
             />
             Connectors
@@ -163,7 +164,7 @@ export function AccountMenu() {
             }}
           >
             <History
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              className={flyoutIconClass}
               strokeWidth={2}
             />
             Recents
@@ -181,7 +182,7 @@ export function AccountMenu() {
             }}
           >
             <Settings
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              className={flyoutIconClass}
               strokeWidth={2}
             />
             Settings

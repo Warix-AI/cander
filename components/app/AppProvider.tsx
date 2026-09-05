@@ -454,6 +454,7 @@ type AppContextValue = {
   reorderPins: (
     from: { kind: PinKind; id: string },
     to: { kind: PinKind; id: string },
+    placement?: "before" | "after",
   ) => void;
   sidebarLayout: SidebarLayout;
   moveSidebarNav: (id: SidebarNavId, dir: -1 | 1) => void;
@@ -3774,8 +3775,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (
       from: { kind: PinKind; id: string },
       to: { kind: PinKind; id: string },
+      placement: "before" | "after" = "before",
     ) => {
-      reorderStoredPins(from, to);
+      reorderStoredPins(from, to, placement);
     },
     [],
   );

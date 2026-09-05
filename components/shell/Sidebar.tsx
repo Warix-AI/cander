@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react";
 import {
   ArrowLeft,
   Building2,
@@ -95,6 +95,7 @@ export function Sidebar() {
   const inSettings = view === "settings";
   const [peek, setPeek] = useState(false);
   const [peekVisible, setPeekVisible] = useState(false);
+  const [pinDragKey, setPinDragKey] = useState<string | null>(null);
   const peekCloseTimer = useRef<number | null>(null);
   const peekExitTimer = useRef<number | null>(null);
   const edgeRef = useRef<HTMLDivElement>(null);
@@ -252,6 +253,8 @@ export function Sidebar() {
         else openProject(item.id);
       }}
       onReorder={reorderPins}
+      dragActiveKey={pinDragKey}
+      onDragActiveKeyChange={setPinDragKey}
     />
   );
 
@@ -363,7 +366,7 @@ export function Sidebar() {
               if (canGoBack) goBack();
               else newChat();
             }}
-            className="mb-0.5 flex w-full items-center gap-3 rounded-[10px] px-3 py-[0.55rem] text-left text-[15px] transition-colors duration-200 hover:bg-sidebar-accent"
+            className="mb-0.5 flex w-full items-center gap-3 rounded-[10px] px-3 py-1.5 text-left text-[15px] transition-colors duration-200 hover:bg-sidebar-accent"
             aria-label="Back"
           >
             <ArrowLeft
@@ -372,7 +375,7 @@ export function Sidebar() {
             />
             <span className="font-medium tracking-[-0.01em]">Back</span>
           </button>
-          <div className="flex flex-col gap-[0.1rem]">
+          <div className="flex flex-col gap-0">
           {settingsNav.map((tab) => {
             const Icon = settingsIcons[tab.id];
             return (
@@ -381,7 +384,7 @@ export function Sidebar() {
                 type="button"
                 onClick={() => setSettingsTab(tab.id)}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-[10px] px-3 py-[0.55rem] text-left text-[15px] transition-colors duration-200",
+                  "flex w-full items-center gap-3 rounded-[10px] px-3 py-1.5 text-left text-[15px] transition-colors duration-200",
                   settingsTab === tab.id
                     ? "bg-sidebar-accent font-medium"
                     : "hover:bg-sidebar-accent",
@@ -406,7 +409,7 @@ export function Sidebar() {
             )}
             aria-label="Main"
           >
-            <div className="flex min-h-0 shrink flex-col gap-[0.1rem] overflow-y-auto">
+            <div className="flex min-h-0 shrink flex-col gap-0 overflow-y-auto">
               {mainNavItems.map((item) => (
                 <SidebarNavButton
                   key={item.id}
@@ -420,17 +423,17 @@ export function Sidebar() {
               ))}
             </div>
 
-            <div className="relative mt-3 min-h-0 flex-1 overflow-hidden">
+            <div className="relative mt-2 min-h-0 flex-1 overflow-hidden">
               <div className="h-full overflow-y-auto">
                 {visiblePins.length > 0 ? (
                   <div className="group/pins">
-                    <div className="mb-1 flex items-center gap-1 px-3">
+                    <div className="mb-0.5 flex items-center gap-1 px-3">
                       <p className="min-w-0 flex-1 text-[13px] text-muted-foreground">
                         Pinned
                       </p>
                       <PinnedFilterMenu />
                     </div>
-                    <div className="flex flex-col gap-[0.1rem]">
+                    <div className="flex flex-col gap-0">
                       {visiblePins.map(renderPinnedRow)}
                     </div>
                   </div>
@@ -482,7 +485,7 @@ function SidebarNavButton({
         if (!comingSoon) onOpen(id);
       }}
       className={cn(
-        "flex w-full items-center gap-3 rounded-lg px-3 py-[0.55rem] text-left text-[15px] transition-colors duration-200",
+        "flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[15px] transition-colors duration-200",
         comingSoon
           ? "cursor-default opacity-70"
           : active
@@ -538,6 +541,8 @@ function PinnedRow({
   onOpen,
   onReorder,
   leading,
+  dragActiveKey,
+  onDragActiveKeyChange,
 }: {
   kind: PinKind;
   id: string;
@@ -547,48 +552,81 @@ function PinnedRow({
   onReorder: (
     from: { kind: PinKind; id: string },
     to: { kind: PinKind; id: string },
+    placement?: "before" | "after",
   ) => void;
   leading?: ReactNode;
+  dragActiveKey: string | null;
+  onDragActiveKeyChange: (key: string | null) => void;
 }) {
-  const [dragging, setDragging] = useState(false);
-  const [over, setOver] = useState(false);
+  const [dropPlacement, setDropPlacement] = useState<"before" | "after" | null>(
+    null,
+  );
+  const rowRef = useRef<HTMLDivElement>(null);
   const dragKey = `${kind}:${id}`;
-  const skipClick = useRef(false);
+  const dragging = dragActiveKey === dragKey;
+
+  useEffect(() => {
+    if (!dragActiveKey) setDropPlacement(null);
+  }, [dragActiveKey]);
+
+  const placementFromEvent = (event: {
+    clientY: number;
+  }): "before" | "after" => {
+    const rect = rowRef.current?.getBoundingClientRect();
+    if (!rect) return "before";
+    return event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+  };
 
   return (
     <div
+      ref={rowRef}
       className={cn(
-        "group flex w-full items-center rounded-lg transition-colors duration-200",
+        "group relative flex w-full items-center rounded-lg transition-colors duration-200",
         active ? "bg-sidebar-accent" : "hover:bg-sidebar-accent",
-        dragging && "opacity-50",
-        over && !dragging && "ring-1 ring-foreground/20",
+        dragging && "opacity-40",
       )}
       onDragOver={(event) => {
+        if (!dragActiveKey || dragActiveKey === dragKey) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
-        setOver(true);
+        setDropPlacement(placementFromEvent(event));
       }}
-      onDragLeave={() => setOver(false)}
+      onDragLeave={(event) => {
+        const next = event.relatedTarget as Node | null;
+        if (next && rowRef.current?.contains(next)) return;
+        setDropPlacement(null);
+      }}
       onDrop={(event) => {
         event.preventDefault();
-        setOver(false);
         const raw =
           event.dataTransfer.getData("text/pin") ||
           event.dataTransfer.getData("text/plain");
+        const placement = placementFromEvent(event);
+        setDropPlacement(null);
+        onDragActiveKeyChange(null);
         if (!raw || raw === dragKey) return;
         const [fromKind, fromId] = raw.split(":") as [PinKind, string];
         if (!fromKind || !fromId) return;
-        onReorder({ kind: fromKind, id: fromId }, { kind, id });
+        onReorder({ kind: fromKind, id: fromId }, { kind, id }, placement);
       }}
     >
+      {dropPlacement === "before" ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-2 top-0 z-10 h-0.5 -translate-y-1/2 rounded-full bg-foreground/70"
+        />
+      ) : null}
+      {dropPlacement === "after" ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-2 bottom-0 z-10 h-0.5 translate-y-1/2 rounded-full bg-foreground/70"
+        />
+      ) : null}
       <button
         type="button"
-        onClick={() => {
-          if (skipClick.current) return;
-          onOpen();
-        }}
+        onClick={onOpen}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-3 truncate px-3 py-[0.55rem] text-left text-[15px]",
+          "flex min-w-0 flex-1 items-center gap-3 truncate px-3 py-1.5 text-left text-[15px]",
           active && "font-medium",
         )}
       >
@@ -598,30 +636,28 @@ function PinnedRow({
             strokeWidth={2}
           />
         )}
-        {title}
+        <span className="min-w-0 flex-1 truncate">{title}</span>
       </button>
       <button
         type="button"
         draggable
         aria-label={`Reorder ${title}`}
         title="Drag to reorder"
-        onDragStart={(event) => {
-          skipClick.current = true;
-          setDragging(true);
+        onDragStart={(event: DragEvent) => {
+          onDragActiveKeyChange(dragKey);
           event.dataTransfer.effectAllowed = "move";
           event.dataTransfer.setData("text/plain", dragKey);
           event.dataTransfer.setData("text/pin", dragKey);
+          if (rowRef.current) {
+            event.dataTransfer.setDragImage(rowRef.current, 16, 16);
+          }
         }}
         onDragEnd={() => {
-          setDragging(false);
-          setOver(false);
-          window.setTimeout(() => {
-            skipClick.current = false;
-          }, 0);
+          setDropPlacement(null);
+          onDragActiveKeyChange(null);
         }}
         className={cn(
-          "inline-flex h-6 w-5 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground transition-opacity duration-200 active:cursor-grabbing",
-          // Only while hovering / dragging — not while the pin is merely selected.
+          "inline-flex h-6 w-5 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground transition-opacity duration-150 active:cursor-grabbing",
           dragging
             ? "opacity-100"
             : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",

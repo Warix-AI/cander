@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Loader2,
   MapPin,
-  Plus,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import {
@@ -12,6 +11,7 @@ import {
   type WorkspaceToolbarState,
 } from "@/components/connectors/views/WorkspaceViewChrome";
 import { runConnectorViewOperation } from "@/lib/api/connector-client";
+import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 type Page = "month" | "detail" | "create";
@@ -343,6 +343,7 @@ export function CalendarConnectorView({
               onToday: goToday,
               onPrev: () => setMonth((m) => addMonths(m, -1)),
               onNext: () => setMonth((m) => addMonths(m, 1)),
+              onCreate: () => openCreate(),
               viewLabel: "Month",
             }
           : null,
@@ -378,7 +379,10 @@ export function CalendarConnectorView({
                 onChange={(e) => setSummary(e.target.value)}
                 placeholder="Add title"
                 autoFocus
-                className="h-10 w-full rounded-[10px] border border-border bg-transparent px-3 text-[14px] outline-none focus:border-[#1A73E8]/50 focus:ring-2 focus:ring-[#1A73E8]/15"
+                className={cn(
+                  "h-10 w-full border border-border bg-transparent px-3 text-[14px] outline-none focus:border-[#1A73E8]/50 focus:ring-2 focus:ring-[#1A73E8]/15",
+                  SHELL_G3_RADIUS,
+                )}
               />
             </label>
             <label className="block">
@@ -389,7 +393,10 @@ export function CalendarConnectorView({
                 type="datetime-local"
                 value={startLocal}
                 onChange={(e) => setStartLocal(e.target.value)}
-                className="h-10 w-full rounded-[10px] border border-border bg-transparent px-3 text-[14px] outline-none focus:border-[#1A73E8]/50 focus:ring-2 focus:ring-[#1A73E8]/15"
+                className={cn(
+                  "h-10 w-full border border-border bg-transparent px-3 text-[14px] outline-none focus:border-[#1A73E8]/50 focus:ring-2 focus:ring-[#1A73E8]/15",
+                  SHELL_G3_RADIUS,
+                )}
               />
             </label>
             <label className="block">
@@ -400,7 +407,10 @@ export function CalendarConnectorView({
                 value={attendees}
                 onChange={(e) => setAttendees(e.target.value)}
                 placeholder="name@email.com"
-                className="h-10 w-full rounded-[10px] border border-border bg-transparent px-3 text-[14px] outline-none focus:border-[#1A73E8]/50 focus:ring-2 focus:ring-[#1A73E8]/15"
+                className={cn(
+                  "h-10 w-full border border-border bg-transparent px-3 text-[14px] outline-none focus:border-[#1A73E8]/50 focus:ring-2 focus:ring-[#1A73E8]/15",
+                  SHELL_G3_RADIUS,
+                )}
               />
             </label>
             <p className="text-[12px] text-muted-foreground">
@@ -503,7 +513,8 @@ export function CalendarConnectorView({
                   <div className="flex shrink-0 items-center justify-center">
                     <span
                       className={cn(
-                        "inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[12px] tabular-nums",
+                        "inline-flex h-6 min-w-6 items-center justify-center px-1 text-[12px] tabular-nums",
+                        SHELL_G3_RADIUS,
                         !cell.inMonth && "text-muted-foreground/50",
                         isToday && "font-semibold text-white",
                         isSelected && !isToday && "font-semibold",
@@ -530,7 +541,10 @@ export function CalendarConnectorView({
                           setSelectedDay(cell.date);
                           setPage("detail");
                         }}
-                        className="flex min-w-0 items-center gap-0.5 truncate rounded-[4px] px-1 py-0.5 text-left text-[10px] font-medium leading-tight text-white"
+                        className={cn(
+                          "flex min-w-0 items-center gap-0.5 truncate px-1 py-0.5 text-left text-[10px] font-medium leading-tight text-white",
+                          SHELL_G3_RADIUS,
+                        )}
                         style={{ backgroundColor: ACCENT }}
                         title={event.summary}
                       >
@@ -554,21 +568,8 @@ export function CalendarConnectorView({
           </div>
         </div>
 
-        {/* Right rail — wider mini calendar for condensed desktop */}
+        {/* Right rail — mini calendar top-aligned */}
         <aside className="flex w-[min(16rem,42%)] shrink-0 flex-col gap-3 overflow-y-auto border-l border-black/[0.06] p-3 dark:border-white/10">
-          <button
-            type="button"
-            onClick={() => openCreate()}
-            className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full bg-white text-[13px] font-medium tracking-[-0.01em] text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.06] transition hover:shadow-[0_2px_8px_rgba(0,0,0,0.12)] dark:bg-zinc-900 dark:ring-white/10"
-          >
-            <Plus
-              className="h-4 w-4"
-              strokeWidth={2}
-              style={{ color: ACCENT }}
-            />
-            Create
-          </button>
-
           <div>
             <div className="mb-2 flex items-center justify-between px-0.5">
               <p className="text-[12.5px] font-medium tracking-[-0.01em]">
@@ -603,7 +604,8 @@ export function CalendarConnectorView({
                       }
                     }}
                     className={cn(
-                      "relative flex h-7 items-center justify-center rounded-full text-[11.5px] transition-colors",
+                      "relative flex h-7 items-center justify-center text-[11.5px] transition-colors",
+                      SHELL_G3_RADIUS,
                       !cell.inMonth && "text-muted-foreground/45",
                       isSelected && "text-white",
                       isToday && !isSelected && "font-semibold",
@@ -633,7 +635,12 @@ export function CalendarConnectorView({
             <p className="mb-1.5 px-0.5 text-[11px] font-medium text-muted-foreground">
               My calendars
             </p>
-            <div className="flex items-center gap-2 rounded-[8px] px-1.5 py-1.5">
+            <div
+              className={cn(
+                "flex items-center gap-2 px-1.5 py-1.5",
+                SHELL_G3_RADIUS,
+              )}
+            >
               <span
                 className="h-3 w-3 shrink-0 rounded-[3px]"
                 style={{ backgroundColor: ACCENT }}
@@ -665,7 +672,10 @@ export function CalendarConnectorView({
                           setSelected(event);
                           setPage("detail");
                         }}
-                        className="w-full rounded-[8px] px-1.5 py-1 text-left hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                        className={cn(
+                          "w-full px-1.5 py-1 text-left hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
+                          SHELL_G3_RADIUS,
+                        )}
                       >
                         <p className="truncate text-[12px] font-medium">
                           {event.summary}

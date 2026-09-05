@@ -621,6 +621,7 @@ export function toggleStoredPin(kind: PinKind, id: string) {
 export function reorderStoredPins(
   from: { kind: PinKind; id: string },
   to: { kind: PinKind; id: string },
+  placement: "before" | "after" = "before",
 ) {
   hydratePins();
   if (from.kind === to.kind && from.id === to.id) return;
@@ -637,10 +638,12 @@ export function reorderStoredPins(
   // Keep tiers aligned when reordering across lists.
   const next = [...pins];
   const [item] = next.splice(fromIndex, 1);
-  const insertAt = next.findIndex(
+  if (!item) return;
+  let insertAt = next.findIndex(
     (row) => row.kind === to.kind && row.id === to.id,
   );
   if (insertAt < 0) return;
+  if (placement === "after") insertAt += 1;
   next.splice(insertAt, 0, {
     ...item,
     tier: toPin.tier === "secondary" ? "secondary" : "primary",

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
+import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 /** Shared chrome contract for Calendar / Drive / Sheets / Docs panels. */
@@ -20,6 +21,7 @@ export type WorkspaceToolbarState = {
     onToday: () => void;
     onPrev: () => void;
     onNext: () => void;
+    onCreate?: () => void;
     viewLabel?: string;
   } | null;
 };
@@ -73,7 +75,10 @@ export function WorkspaceEmptyState({
         type="button"
         disabled={syncing}
         onClick={onAction}
-        className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium hover:bg-muted disabled:opacity-50"
+        className={cn(
+          "mt-3 inline-flex h-8 items-center gap-1.5 border border-border px-3 text-[12px] font-medium hover:bg-muted disabled:opacity-50",
+          SHELL_G3_RADIUS,
+        )}
       >
         <RefreshCw
           className={cn("h-3.5 w-3.5", syncing && "animate-spin")}

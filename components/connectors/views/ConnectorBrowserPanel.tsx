@@ -56,6 +56,7 @@ import { recordBrowserVisit } from "@/lib/browser-recent-history";
 import {
   BROWSER_CHROME_CHIP,
   BROWSER_CHROME_CHIP_HOVER,
+  SHELL_G3_RADIUS,
   SHELL_PANEL_BODY,
 } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
@@ -142,7 +143,9 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         prev.canGoBack === next.canGoBack &&
         prev.primaryLabel === next.primaryLabel &&
         Boolean(prev.calendarNav) === Boolean(next.calendarNav) &&
-        prev.calendarNav?.viewLabel === next.calendarNav?.viewLabel
+        prev.calendarNav?.viewLabel === next.calendarNav?.viewLabel &&
+        Boolean(prev.calendarNav?.onCreate) ===
+          Boolean(next.calendarNav?.onCreate)
       ) {
         return prev;
       }
@@ -430,7 +433,10 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
                   onClick={() =>
                     workspaceToolbarRef.current?.calendarNav?.onToday()
                   }
-                  className="inline-flex h-7 shrink-0 items-center rounded-full border border-border px-2.5 text-[11.5px] font-medium tracking-[-0.01em] text-foreground hover:bg-muted"
+                  className={cn(
+                    "inline-flex h-7 shrink-0 items-center border border-border px-2.5 text-[11.5px] font-medium tracking-[-0.01em] text-foreground hover:bg-muted",
+                    SHELL_G3_RADIUS,
+                  )}
                 >
                   Today
                 </button>
@@ -455,12 +461,7 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
             <span className="truncate px-1 text-[12.5px] font-medium text-foreground">
               {workspaceToolbar?.title ?? title}
             </span>
-            <div className="ml-auto flex items-center gap-0.5">
-              {workspaceToolbar?.calendarNav?.viewLabel ? (
-                <span className="mr-0.5 hidden h-7 items-center rounded-full border border-border px-2 text-[11px] text-muted-foreground sm:inline-flex">
-                  {workspaceToolbar.calendarNav.viewLabel}
-                </span>
-              ) : null}
+            <div className="ml-auto flex items-center gap-1">
               <ChromeBtn
                 label="Refresh"
                 disabled={Boolean(workspaceToolbar?.syncing)}
@@ -474,14 +475,48 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
                   strokeWidth={1.6}
                 />
               </ChromeBtn>
+              {workspaceToolbar?.calendarNav?.onCreate &&
+              !workspaceToolbar.canGoBack ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    workspaceToolbarRef.current?.calendarNav?.onCreate?.()
+                  }
+                  className={cn(
+                    "inline-flex h-7 shrink-0 items-center gap-1 border border-border px-2.5 text-[11.5px] font-medium tracking-[-0.01em] text-foreground hover:bg-muted",
+                    SHELL_G3_RADIUS,
+                  )}
+                >
+                  <Plus
+                    className="h-3.5 w-3.5"
+                    strokeWidth={2}
+                    style={{ color: "#1A73E8" }}
+                  />
+                  Create
+                </button>
+              ) : null}
+              {workspaceToolbar?.calendarNav?.viewLabel ? (
+                <span
+                  className={cn(
+                    "hidden h-7 items-center border border-border px-2.5 text-[11.5px] font-medium tracking-[-0.01em] text-muted-foreground sm:inline-flex",
+                    SHELL_G3_RADIUS,
+                  )}
+                >
+                  {workspaceToolbar.calendarNav.viewLabel}
+                </span>
+              ) : null}
               {workspaceToolbar?.primaryLabel && workspaceToolbar.onPrimary ? (
-                <ChromeBtn
-                  label={workspaceToolbar.primaryLabel}
+                <button
+                  type="button"
                   disabled={Boolean(workspaceToolbar.busy)}
                   onClick={() => workspaceToolbarRef.current?.onPrimary?.()}
+                  className={cn(
+                    "inline-flex h-7 shrink-0 items-center border border-border px-2.5 text-[11.5px] font-medium tracking-[-0.01em] text-foreground hover:bg-muted disabled:opacity-40",
+                    SHELL_G3_RADIUS,
+                  )}
                 >
-                  <Plus className="h-3.5 w-3.5" strokeWidth={1.6} />
-                </ChromeBtn>
+                  {workspaceToolbar.primaryLabel}
+                </button>
               ) : null}
             </div>
           </>
@@ -771,7 +806,8 @@ function ChromeBtn({
         disabled={disabled}
         onClick={onClick}
         className={cn(
-          "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors disabled:opacity-40",
+          "inline-flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground transition-colors disabled:opacity-40",
+          SHELL_G3_RADIUS,
           BROWSER_CHROME_CHIP_HOVER,
           "hover:text-foreground",
         )}
