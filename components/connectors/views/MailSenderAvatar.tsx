@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { faviconUrlForSite } from "@/lib/preview-url";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const AVATAR_COLORS = [
@@ -38,6 +37,34 @@ const PERSONAL_MAIL_HOSTS = new Set([
   "hey.com",
 ]);
 
+/** Common ESP / marketing subdomains in From: addresses. */
+const STRIP_LABELS = new Set([
+  "mail",
+  "email",
+  "emails",
+  "e",
+  "em",
+  "m",
+  "mg",
+  "send",
+  "sender",
+  "bounce",
+  "news",
+  "newsletter",
+  "notify",
+  "notification",
+  "notifications",
+  "updates",
+  "info",
+  "support",
+  "hello",
+  "go",
+  "click",
+  "links",
+  "reply",
+  "replies",
+]);
+
 function hashHue(value: string) {
   let hash = 0;
   for (let i = 0; i < value.length; i += 1) {
@@ -58,19 +85,45 @@ function senderEmail(fromAddr: string | null | undefined) {
   return (match?.[1] ?? fromAddr).trim().toLowerCase();
 }
 
-function senderDomain(email: string) {
+function senderHost(email: string) {
   const at = email.lastIndexOf("@");
   if (at < 0) return null;
   const host = email.slice(at + 1).trim().toLowerCase();
   return host || null;
 }
 
+/** Prefer the registrable brand host (linkedin.com from mail.linkedin.com). */
+function brandDomain(host: string): string {
+  const parts = host.split(".").filter(Boolean);
+  while (parts.length > 2 && STRIP_LABELS.has(parts[0]!)) {
+    parts.shift();
+  }
+  // keep foo.co.uk / foo.com.au style
+  if (
+    parts.length >= 3 &&
+    parts[parts.length - 1]!.length === 2 &&
+    ["co", "com", "org", "net", "ac", "gov"].includes(parts[parts.length - 2]!)
+  ) {
+    return parts.slice(-3).join(".");
+  }
+  if (parts.length >= 2) return parts.slice(-2).join(".");
+  return parts.join(".");
+}
+
 function shouldTryFavicon(domain: string | null) {
   if (!domain) return false;
   if (PERSONAL_MAIL_HOSTS.has(domain)) return false;
-  // Skip bare IP / invalid hosts
   if (!domain.includes(".")) return false;
   return true;
+}
+
+/** High-res enough for retina 36px circles. Google often ignores small sz=. */
+function brandIconUrls(domain: string): string[] {
+  const d = encodeURIComponent(domain);
+  return [
+    `https://www.google.com/s2/favicons?domain=${d}&sz=128`,
+    `https://icons.duckduckgo.com/ip3/${d}.ico`,
+  ];
 }
 
 export function MailSenderAvatar({
@@ -84,15 +137,24 @@ export function MailSenderAvatar({
 }) {
   const label = senderLabel(fromAddr);
   const email = senderEmail(fromAddr);
-  const domain = senderDomain(email);
+  const host = senderHost(email);
+  const domain = host ? brandDomain(host) : null;
   const letter = (label.slice(0, 1) || "?").toUpperCase();
   const color = hashHue(email || label);
-  const favicon =
-    shouldTryFavicon(domain) && domain
-      ? faviconUrlForSite(`https://${domain}`, Math.max(size * 2, 64))
-      : null;
-  const [broken, setBroken] = useState(false);
-  const showFavicon = Boolean(favicon) && !broken;
+  const sources = useMemo(
+    () => (shouldTryFavicon(domain) && domain ? brandIconUrls(domain) : []),
+    [domain],
+  );
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const [useLetter, setUseLetter] = useState(sources.length === 0);
+
+  useEffect(() => {
+    setSourceIndex(0);
+    setUseLetter(sources.length === 0);
+  }, [domain, sources.length]);
+
+  const src = !useLetter ? sources[sourceIndex] : undefined;
+  const iconPx = Math.round(size * 0.72);
 
   return (
     <span
@@ -104,22 +166,38 @@ export function MailSenderAvatar({
       style={{
         width: size,
         height: size,
-        backgroundColor: showFavicon ? "#E8EAED" : color,
+        backgroundColor: useLetter ? color : "#F1F3F4",
       }}
     >
-      {showFavicon ? (
+      {src ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={favicon!}
+          key={src}
+          src={src}
           alt=""
-          width={Math.round(size * 0.58)}
-          height={Math.round(size * 0.58)}
+          width={iconPx}
+          height={iconPx}
+          decoding="async"
           className="object-contain"
-          style={{
-            width: Math.round(size * 0.58),
-            height: Math.round(size * 0.58),
+          style={{ width: iconPx, height: iconPx }}
+          onLoad={(event) => {
+            const img = event.currentTarget;
+            // Google's "missing" globe (and many tiny icos) are ≤16px — skip them.
+            if (img.naturalWidth > 0 && img.naturalWidth < 32) {
+              if (sourceIndex + 1 < sources.length) {
+                setSourceIndex((i) => i + 1);
+              } else {
+                setUseLetter(true);
+              }
+            }
           }}
-          onError={() => setBroken(true)}
+          onError={() => {
+            if (sourceIndex + 1 < sources.length) {
+              setSourceIndex((i) => i + 1);
+            } else {
+              setUseLetter(true);
+            }
+          }}
         />
       ) : (
         <span
