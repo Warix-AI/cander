@@ -490,6 +490,9 @@ app.whenReady().then(() => {
   ipcMain.handle("cander:browser-pip-cursor-hit", async () => {
     return browserSurface.isCursorOverPip();
   });
+  ipcMain.handle("cander:browser-pip-pointer-passthrough", async (_e, active) => {
+    browserSurface.setPipPointerPassthrough(Boolean(active));
+  });
   ipcMain.handle("cander:browser-read-page", async (_e, tabId) => {
     return browserSurface.readPage(tabId);
   });

@@ -521,19 +521,74 @@ export function GmailConnectorView({
       setError("Write a reply first.");
       return;
     }
-    await runOp(
+    const body = replyBody.trim();
+    const threadId = detail.threadId;
+    // Optimistic: stack the reply in this thread immediately.
+    const optimistic: SyncedMailDetail = {
+      id: `local-reply-${Date.now()}`,
+      providerMessageId: `local-reply-${Date.now()}`,
+      threadId,
+      fromAddr: "Me",
+      toAddrs: [
+        senderEmail(detail.fromAddr) || detail.fromAddr || "",
+      ].filter(Boolean),
+      ccAddrs: [],
+      subject: detail.subject,
+      snippet: body.slice(0, 140),
+      receivedAt: new Date().toISOString(),
+      isUnread: false,
+      isArchived: false,
+      hasAttachments: false,
+      hasBody: true,
+      bodyText: body,
+      bodyHtml: null,
+    };
+    setThreadMessages((prev) => [...prev, optimistic]);
+    setReplyBody("");
+    setReplyOpen(false);
+    setStatus("Sending…");
+
+    const ok = await runOp(
       "reply",
       {
-        threadId: detail.threadId,
-        body: replyBody,
+        threadId,
+        body,
         to: senderEmail(detail.fromAddr) || detail.fromAddr || undefined,
       },
       "Reply sent",
     );
-    setReplyBody("");
-    setReplyOpen(false);
-    // Refresh so the sent reply joins the thread list on next sync.
-    void refresh();
+    if (!ok) {
+      setThreadMessages((prev) =>
+        prev.filter((m) => m.providerMessageId !== optimistic.providerMessageId),
+      );
+      setReplyOpen(true);
+      setReplyBody(body);
+      return;
+    }
+    // Sync so the real Sent message replaces the optimistic row in the thread.
+    try {
+      await syncConnectorView({
+        workspaceId,
+        connectorId: "gmail",
+        connectionId: connectionIdRef.current ?? undefined,
+      });
+      const data = await loadList();
+      const seed =
+        data.messages.find((m) => m.threadId === threadId) ?? detail;
+      const refreshed = await fetchSyncedMailDetail({
+        workspaceId,
+        connectorId: "gmail",
+        connectionId: connectionIdRef.current ?? undefined,
+        messageId: seed.providerMessageId,
+      });
+      setDetail({ ...refreshed.message, isUnread: false });
+      await loadThreadBodies(
+        { ...refreshed.message, isUnread: false },
+        data.messages,
+      );
+    } catch {
+      /* keep optimistic stack */
+    }
   };
 
   return (

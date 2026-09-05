@@ -537,6 +537,9 @@ async function setPipTab(tabId) {
     await applyVideoPipMode(prev, false);
   }
   pipTabId = next;
+  if (!pipTabId) {
+    setPipPointerPassthrough(false);
+  }
   if (pipTabId) {
     const entry = tabs.get(pipTabId);
     if (entry) {
@@ -623,6 +626,34 @@ function isCursorOverPip() {
     y >= b.y - HEADER &&
     y <= b.y + b.height
   );
+}
+
+/**
+ * When the cursor is over PiP (+ header), let React receive pointer events by
+ * ignoring mouse on every non-PiP WebContentsView (panel browser would otherwise
+ * steal drag / hover). The PiP video view also ignores mouse so the overlay
+ * chrome above/around it stays interactive.
+ */
+let pipPointerPassthrough = false;
+
+function setPipPointerPassthrough(active) {
+  const next = Boolean(active);
+  if (pipPointerPassthrough === next) return;
+  pipPointerPassthrough = next;
+  for (const [id, entry] of tabs) {
+    try {
+      if (typeof entry.view.setIgnoreMouseEvents !== "function") continue;
+      if (next) {
+        // Forward keeps move events flowing to the shell for hover polling.
+        entry.view.setIgnoreMouseEvents(true, { forward: true });
+      } else {
+        entry.view.setIgnoreMouseEvents(false);
+      }
+    } catch {
+      // ignore
+    }
+    void id;
+  }
 }
 
 function hideTab(tabId) {
@@ -781,6 +812,7 @@ module.exports = {
   resetForShellReload,
   flushAllBrowserCookies,
   isCursorOverPip,
+  setPipPointerPassthrough,
   readPage,
   getSelection,
   captureViewport,

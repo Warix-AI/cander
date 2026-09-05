@@ -61,9 +61,16 @@ function slackAuthConfigId(): string {
   return id;
 }
 
+function gcalAuthConfigId(): string {
+  const id = process.env.COMPOSIO_GCAL_AUTH_CONFIG_ID?.trim();
+  if (!id) throw new Error("COMPOSIO_GCAL_AUTH_CONFIG_ID is not configured");
+  return id;
+}
+
 function authConfigIdForConnector(connectorId: string): string {
   if (connectorId === "gmail") return gmailAuthConfigId();
   if (connectorId === "slack") return slackAuthConfigId();
+  if (connectorId === "gcal") return gcalAuthConfigId();
   throw new Error(`No Composio auth config for connector: ${connectorId}`);
 }
 
@@ -78,7 +85,7 @@ export async function createConnectLink(input: {
   composioUserId: string;
   connectorId: string;
 }): Promise<ComposioLinkSession> {
-  if (input.connectorId !== "gmail" && input.connectorId !== "slack") {
+  if (input.connectorId !== "gmail" && input.connectorId !== "slack" && input.connectorId !== "gcal") {
     throw new Error(`Connector not available via Composio: ${input.connectorId}`);
   }
   const res = await fetch(`${COMPOSIO_API_BASE}/connected_accounts/link`, {

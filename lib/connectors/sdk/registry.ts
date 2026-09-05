@@ -4,6 +4,7 @@
 
 import type { ConnectorViewAdapter } from "./types.ts";
 import { gmailViewAdapter } from "./gmail-adapter.ts";
+import { gcalViewAdapter } from "./gcal-adapter.ts";
 
 const adapters = new Map<string, ConnectorViewAdapter>();
 
@@ -18,3 +19,4 @@ export function getConnectorViewAdapter(
 }
 
 registerConnectorViewAdapter(gmailViewAdapter);
+registerConnectorViewAdapter(gcalViewAdapter);

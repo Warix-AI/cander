@@ -16,6 +16,10 @@ const ALLOWED_OPS = new Set([
   "markRead",
   "markUnread",
   "readBody",
+  "listEvents",
+  "listCalendars",
+  "createEvent",
+  "quickAdd",
 ]);
 
 /**

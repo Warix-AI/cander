@@ -79,6 +79,22 @@ describe("composer connector detect", () => {
     assert.equal(ambiguous.length, 0);
   });
 
+  it("does not match connector names that follow @ in an email address", () => {
+    const hits = detectConnectorMentions("email sk@gmail.com please", [gmail]);
+    // Generic "email" may still match when only Gmail is connected —
+    // but "gmail" inside the address must not.
+    assert.ok(
+      !hits.some((h) => h.matched.toLowerCase() === "gmail"),
+      "gmail after @ must not become a connector chip",
+    );
+  });
+
+  it("still matches Gmail when not part of an email address", () => {
+    const hits = detectConnectorMentions("open Gmail for me", [gmail]);
+    assert.equal(hits[0]?.connectorId, "gmail");
+    assert.match(hits[0]!.matched, /gmail/i);
+  });
+
   it("matches gmail alias and generic mail when only Gmail is connected", () => {
     const byName = detectConnectorMentions("open gmail", [gmail]);
     assert.equal(byName[0]?.connectorId, "gmail");

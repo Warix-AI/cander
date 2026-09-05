@@ -95,27 +95,36 @@ export function BrowserPipOverlay() {
     });
   }, [pip?.tabId, pip?.width, pip?.height]);
 
-  // Native views steal mouse events — poll cursor vs PiP (+ header) bounds.
+  // Native views steal mouse events — poll cursor vs PiP (+ header) bounds,
+  // and pass pointer events through to React so drag/chrome work over the browser.
   useEffect(() => {
-    if (!pip || pip.webEmbed) return;
+    if (!pip || pip.webEmbed) {
+      const adapter = getBrowserSurfaceAdapter();
+      void adapter.setPipPointerPassthrough?.(false);
+      return;
+    }
     const adapter = getBrowserSurfaceAdapter();
     if (typeof adapter.isPipCursorHit !== "function") return;
     let cancelled = false;
     const tick = async () => {
       try {
         const hit = await adapter.isPipCursorHit!();
-        if (!cancelled) setHovered(Boolean(hit));
+        if (cancelled) return;
+        const interactive = Boolean(hit) || dragging;
+        setHovered(interactive);
+        await adapter.setPipPointerPassthrough?.(interactive);
       } catch {
         // ignore
       }
     };
     void tick();
-    const id = window.setInterval(() => void tick(), 100);
+    const id = window.setInterval(() => void tick(), 80);
     return () => {
       cancelled = true;
       window.clearInterval(id);
+      void adapter.setPipPointerPassthrough?.(false);
     };
-  }, [pip?.tabId, pip?.webEmbed]);
+  }, [pip?.tabId, pip?.webEmbed, dragging]);
 
   const paintNative = useCallback(async () => {
     if (!pip || pip.webEmbed) return;

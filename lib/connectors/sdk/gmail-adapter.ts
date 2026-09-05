@@ -126,42 +126,29 @@ export const gmailViewAdapter: ConnectorViewAdapter = {
 
   async sync(ctx: SyncContext): Promise<SyncResult> {
     const limit = Math.min(50, Math.max(1, ctx.limit ?? 40));
-    const result = await runTool(ctx, "gmail.search", {
-      query: "in:inbox",
-      maxResults: Math.min(25, limit),
-    });
-    if (!result.ok) {
-      throw new Error(result.error);
-    }
-    const payload = parseToolJson(result.output);
-    const messages = Array.isArray(payload.messages) ? payload.messages : [];
+    const queries = ["in:inbox", "in:sent newer_than:14d", "newer_than:14d"];
     const upserted: SyncMessageHeader[] = [];
-    for (const item of messages) {
-      if (!item || typeof item !== "object") continue;
-      const header = headerFromSearchRow(item as Record<string, unknown>);
-      if (header) upserted.push(header);
-    }
+    const seen = new Set<string>();
 
-    // Second page-ish: also pull recent mail outside inbox if under limit.
-    if (upserted.length < limit) {
-      const recent = await runTool(ctx, "gmail.search", {
-        query: "newer_than:14d",
+    for (const query of queries) {
+      if (upserted.length >= limit) break;
+      const result = await runTool(ctx, "gmail.search", {
+        query,
         maxResults: Math.min(25, limit - upserted.length),
       });
-      if (recent.ok) {
-        const recentPayload = parseToolJson(recent.output);
-        const recentMessages = Array.isArray(recentPayload.messages)
-          ? recentPayload.messages
-          : [];
-        const seen = new Set(upserted.map((m) => m.providerMessageId));
-        for (const item of recentMessages) {
-          if (!item || typeof item !== "object") continue;
-          const header = headerFromSearchRow(item as Record<string, unknown>);
-          if (!header || seen.has(header.providerMessageId)) continue;
-          upserted.push(header);
-          seen.add(header.providerMessageId);
-          if (upserted.length >= limit) break;
-        }
+      if (!result.ok) {
+        if (query === "in:inbox") throw new Error(result.error);
+        continue;
+      }
+      const payload = parseToolJson(result.output);
+      const messages = Array.isArray(payload.messages) ? payload.messages : [];
+      for (const item of messages) {
+        if (!item || typeof item !== "object") continue;
+        const header = headerFromSearchRow(item as Record<string, unknown>);
+        if (!header || seen.has(header.providerMessageId)) continue;
+        upserted.push(header);
+        seen.add(header.providerMessageId);
+        if (upserted.length >= limit) break;
       }
     }
 
@@ -169,7 +156,7 @@ export const gmailViewAdapter: ConnectorViewAdapter = {
       upserted: upserted.slice(0, limit),
       cursor: new Date().toISOString(),
       providerState: {
-        lastQuery: "in:inbox",
+        lastQuery: queries.join(" | "),
         count: upserted.length,
       },
     };
@@ -196,7 +183,34 @@ export const gmailViewAdapter: ConnectorViewAdapter = {
         case "reply": {
           const result = await runTool(ctx, "gmail.reply", args, true);
           if (!result.ok) return { ok: false, error: result.error };
-          return { ok: true, data: parseToolJson(result.output) };
+          const replyData = parseToolJson(result.output);
+          // Pull the whole thread so the sent reply joins the local stack.
+          const threadId = pickString(
+            args.threadId,
+            args.thread_id,
+            (replyData.reply as Record<string, unknown> | undefined)?.threadId,
+            (replyData.reply as Record<string, unknown> | undefined)?.thread_id,
+          );
+          if (threadId) {
+            const threadSearch = await runTool(ctx, "gmail.search", {
+              query: `thread:${threadId}`,
+              maxResults: 25,
+            });
+            if (threadSearch.ok) {
+              const threadPayload = parseToolJson(threadSearch.output);
+              return {
+                ok: true,
+                data: {
+                  ...replyData,
+                  threadId,
+                  threadMessages: Array.isArray(threadPayload.messages)
+                    ? threadPayload.messages
+                    : [],
+                },
+              };
+            }
+          }
+          return { ok: true, data: replyData };
         }
         case "archive": {
           const result = await runTool(ctx, "gmail.archive", args, true);

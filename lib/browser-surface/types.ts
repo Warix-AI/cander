@@ -71,6 +71,8 @@ export interface BrowserSurfaceAdapter {
   pauseMedia?(tabId: string): Promise<boolean> | boolean;
   /** Cursor is over the floating PiP native bounds (for hover chrome). */
   isPipCursorHit?(): Promise<boolean> | boolean;
+  /** Ignore mouse on native views so React PiP chrome can drag/hover over the browser. */
+  setPipPointerPassthrough?(active: boolean): Promise<void> | void;
   navigate(tabId: string, url: string): Promise<void> | void;
   back(tabId: string): Promise<void> | void;
   forward(tabId: string): Promise<void> | void;

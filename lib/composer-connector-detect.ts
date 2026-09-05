@@ -99,12 +99,24 @@ function firstMatchInText(
 ): { matched: string; index: number } | null {
   if (!text || !trigger) return null;
   const re = wordBoundaryPattern(trigger);
-  const hit = re.exec(text);
-  if (!hit?.[1]) return null;
-  const matched = hit[1];
-  // Group 1 may sit after a boundary char at hit.index.
-  const index = hit.index + hit[0].indexOf(matched);
-  return { matched, index };
+  let searchFrom = 0;
+  while (searchFrom <= text.length) {
+    re.lastIndex = 0;
+    const slice = text.slice(searchFrom);
+    const hit = re.exec(slice);
+    if (!hit?.[1]) return null;
+    const matched = hit[1];
+    // Group 1 may sit after a boundary char at hit.index.
+    const localIndex = hit.index + hit[0].indexOf(matched);
+    const index = searchFrom + localIndex;
+    // Email local-part: "sk@gmail.com" — never treat the domain app name as a connector.
+    if (index > 0 && text[index - 1] === "@") {
+      searchFrom = index + matched.length;
+      continue;
+    }
+    return { matched, index };
+  }
+  return null;
 }
 
 /**

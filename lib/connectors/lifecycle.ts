@@ -105,7 +105,7 @@ export async function initiateConnection(input: {
   if (!catalog?.enabled) {
     return { ok: false, status: 404, error: "Connector not found." };
   }
-  if (input.connectorId !== "gmail" && input.connectorId !== "slack") {
+  if (input.connectorId !== "gmail" && input.connectorId !== "slack" && input.connectorId !== "gcal") {
     return { ok: false, status: 404, error: "Connector not found." };
   }
   const { data: existing, error: existingError } = await input.client

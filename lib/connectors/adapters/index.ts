@@ -4,10 +4,12 @@
 
 import type { ConnectorAdapter } from "./types.ts";
 import { gmailAdapter } from "./gmail.ts";
+import { gcalAdapter } from "./gcal.ts";
 import { slackAdapter } from "./slack.ts";
 
 const adapters = new Map<string, ConnectorAdapter>([
   [gmailAdapter.connectorId, gmailAdapter],
+  [gcalAdapter.connectorId, gcalAdapter],
   [slackAdapter.connectorId, slackAdapter],
 ]);
 

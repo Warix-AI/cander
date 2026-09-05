@@ -15,6 +15,7 @@ Pinned SDK: `@composio/core@0.18.0` (see `package.json`).
 |----------|---------|
 | `COMPOSIO_API_KEY` | Composio project API key |
 | `COMPOSIO_GMAIL_AUTH_CONFIG_ID` | Gmail auth config nanoid from Composio dashboard |
+| `COMPOSIO_GCAL_AUTH_CONFIG_ID` | Google Calendar auth config id (`ac_…`) from Composio |
 | `COMPOSIO_WEBHOOK_SECRET` | Webhook signature verification secret |
 | `COMPOSIO_CALLBACK_VERIFIER_URL` | Fixed HTTPS verifier URL registered in Composio dashboard |
 
