@@ -82,6 +82,18 @@ export const CONNECTOR_CONNECTION_SERVER_COLUMNS = [
   "composio_user_id",
 ].join(", ");
 
+/**
+ * Supabase types dynamic `.select(string)` results as GenericStringError.
+ * Cast after the query error check — column lists are intentional.
+ */
+export function asConnectionRow(data: unknown): ConnectorConnectionRow {
+  return data as ConnectorConnectionRow;
+}
+
+export function asConnectionRows(data: unknown): ConnectorConnectionRow[] {
+  return (Array.isArray(data) ? data : []) as ConnectorConnectionRow[];
+}
+
 /** Strip secret fields before any client-facing response. */
 export function connectionRowToPublic(row: ConnectorConnectionRow): ConnectorConnection {
   return {

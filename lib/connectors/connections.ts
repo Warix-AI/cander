@@ -5,6 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CONNECTOR_CONNECTION_SERVER_COLUMNS,
+  asConnectionRows,
   type ConnectorConnectionRow,
 } from "./mapper.ts";
 
@@ -72,7 +73,7 @@ export async function listActiveConnections(input: {
   if (error) throw error;
 
   const connections: ResolvedConnection[] = [];
-  for (const row of (data ?? []) as ConnectorConnectionRow[]) {
+  for (const row of asConnectionRows(data)) {
     if (!row.provider_connection_id) continue;
     connections.push({
       connectionId: row.id,

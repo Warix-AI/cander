@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { mergeToolPermissions } from "./tool-catalog.ts";
 import { connectionNotFoundError } from "./authz.ts";
 import type { ConnectorConnection } from "./types.ts";
-import { connectionRowToPublic, type ConnectorConnectionRow, CONNECTOR_CONNECTION_PUBLIC_COLUMNS } from "./mapper.ts";
+import { connectionRowToPublic, asConnectionRow, CONNECTOR_CONNECTION_PUBLIC_COLUMNS, type ConnectorConnectionRow } from "./mapper.ts";
 
 export {
   mergeToolPermissions,
@@ -87,7 +87,7 @@ async function persistToolPermissionsDirect(input: {
     return { ok: false, ...connectionNotFoundError() };
   }
 
-  const publicRow = connectionRowToPublic(updated as ConnectorConnectionRow);
+  const publicRow = connectionRowToPublic(asConnectionRow(updated));
   return {
     ok: true,
     connection: {

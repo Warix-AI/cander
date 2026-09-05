@@ -26,6 +26,8 @@ import {
   pendingExpiresAtIso,
   CONNECTOR_CONNECTION_PUBLIC_COLUMNS,
   CONNECTOR_CONNECTION_SERVER_COLUMNS,
+  asConnectionRow,
+  asConnectionRows,
   type ConnectorCatalogRow,
   type ConnectorConnectionRow,
 } from "./mapper.ts";
@@ -56,7 +58,7 @@ export async function listUserConnections(input: {
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return ((data ?? []) as ConnectorConnectionRow[]).map(connectionRowToPublic);
+  return asConnectionRows(data).map(connectionRowToPublic);
 }
 
 export async function getUserConnection(input: {
@@ -80,7 +82,7 @@ export async function getUserConnection(input: {
   }
   return {
     ok: true,
-    connection: connectionRowToPublic(data as ConnectorConnectionRow),
+    connection: connectionRowToPublic(asConnectionRow(data)),
   };
 }
 
@@ -124,7 +126,7 @@ export async function initiateConnection(input: {
   if (existingError) throw existingError;
 
   if (existing) {
-    const row = existing as ConnectorConnectionRow;
+    const row = asConnectionRow(existing);
     const decision = resolveInitiateExisting(row);
     if (decision.action === "reuse") {
       const auth = await beginProviderAuthorization({
@@ -182,8 +184,9 @@ export async function initiateConnection(input: {
         .is("deleted_at", null)
         .maybeSingle();
       if (raced) {
+        const racedRow = asConnectionRow(raced);
         const auth = await beginProviderAuthorization({
-          connectionId: raced.id,
+          connectionId: racedRow.id,
           workspaceId: input.workspaceId,
           ownerId: input.ownerId,
           connectorId: input.connectorId,
@@ -193,7 +196,7 @@ export async function initiateConnection(input: {
         }
         return {
           ok: true,
-          connection: connectionRowToPublic(raced as ConnectorConnectionRow),
+          connection: connectionRowToPublic(racedRow),
           reused: true,
           authorizationUrl: auth.authorizationUrl,
         };
@@ -224,7 +227,7 @@ export async function initiateConnection(input: {
 
   return {
     ok: true,
-    connection: connectionRowToPublic(inserted as ConnectorConnectionRow),
+    connection: connectionRowToPublic(asConnectionRow(inserted)),
     reused: false,
     authorizationUrl: auth.authorizationUrl,
   };
@@ -486,7 +489,7 @@ export async function disconnectConnection(input: {
     return { ok: false, ...connectionNotFoundError() };
   }
 
-  const row = data as ConnectorConnectionRow;
+  const row = asConnectionRow(data);
   if (row.status === "disconnected") {
     return {
       ok: true,
@@ -547,7 +550,7 @@ async function expireStalePendingConnections(input: {
     .is("deleted_at", null);
   if (error) throw error;
 
-  const stale = ((data ?? []) as ConnectorConnectionRow[]).filter((row) =>
+  const stale = asConnectionRows(data).filter((row) =>
     isPendingExpired(row),
   );
   if (!stale.length) return;
