@@ -78,7 +78,7 @@ export function MobileMenuDrawer() {
       <aside
         aria-hidden={!sidebarOpen}
         className={cn(
-          "fixed inset-y-0 left-0 z-[70] flex w-[min(20rem,86vw)] flex-col bg-sidebar text-sidebar-foreground shadow-[8px_0_32px_oklch(0_0_0/0.18)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:hidden",
+          "fixed inset-y-0 left-0 z-[70] flex w-[min(calc(20rem+5px),calc(86vw+5px))] flex-col bg-sidebar text-sidebar-foreground shadow-[8px_0_32px_oklch(0_0_0/0.18)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:hidden",
           "pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}

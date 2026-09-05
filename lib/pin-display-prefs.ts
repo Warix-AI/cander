@@ -185,11 +185,10 @@ export function groupPinnedItemsByKind<T extends PinnableRow>(
   return groups;
 }
 
-const COLLAPSE_STORAGE_KEY = "cander:pin-section-collapsed";
+/** Accordion: at most one pin section open. Stores the open section id, or null. */
+const OPEN_STORAGE_KEY = "cander:pin-section-open-v3";
 
-type CollapseMap = Partial<Record<PinKind, boolean>>;
-
-let collapseMap: CollapseMap = {};
+let openSectionId: string | null = null;
 let collapseHydrated = false;
 const collapseListeners = new Set<Listener>();
 
@@ -197,21 +196,26 @@ function hydrateCollapse() {
   if (collapseHydrated || typeof window === "undefined") return;
   collapseHydrated = true;
   try {
-    const raw = window.localStorage.getItem(COLLAPSE_STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const next: CollapseMap = {};
-    for (const kind of PIN_KIND_ORDER) {
-      if (parsed[kind] === true) next[kind] = true;
-    }
-    collapseMap = next;
+    const raw = window.localStorage.getItem(OPEN_STORAGE_KEY);
+    if (raw == null) return;
+    const parsed = JSON.parse(raw) as unknown;
+    openSectionId = typeof parsed === "string" && parsed.length ? parsed : null;
   } catch {
-    collapseMap = {};
+    openSectionId = null;
   }
 }
 
 function emitCollapse() {
   collapseListeners.forEach((listener) => listener());
+}
+
+function persistOpenSection() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(OPEN_STORAGE_KEY, JSON.stringify(openSectionId));
+  } catch {
+    /* ignore */
+  }
 }
 
 export function subscribePinSectionCollapse(listener: Listener) {
@@ -222,38 +226,42 @@ export function subscribePinSectionCollapse(listener: Listener) {
   };
 }
 
-export function getPinSectionCollapseSnapshot(): CollapseMap {
+export function getPinSectionCollapseSnapshot(): string | null {
   hydrateCollapse();
-  return collapseMap;
+  return openSectionId;
 }
 
-export function getPinSectionCollapseServerSnapshot(): CollapseMap {
-  return {};
+export function getPinSectionCollapseServerSnapshot(): string | null {
+  return null;
 }
 
-export function togglePinSectionCollapsed(kind: PinKind) {
+/** Accordion toggle — opening one section closes any other. */
+export function togglePinSectionCollapsed(sectionId: string) {
   hydrateCollapse();
-  const next = { ...collapseMap, [kind]: !collapseMap[kind] };
-  collapseMap = next;
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore */
-    }
-  }
+  openSectionId = openSectionId === sectionId ? null : sectionId;
+  persistOpenSection();
+  emitCollapse();
+}
+
+/** Collapse any open pin folder (e.g. after navigating to New / Canvas). */
+export function closeAllPinSections() {
+  hydrateCollapse();
+  if (openSectionId == null) return;
+  openSectionId = null;
+  persistOpenSection();
   emitCollapse();
 }
 
 export function usePinSectionCollapse() {
-  const collapsed = useSyncExternalStore(
+  const openId = useSyncExternalStore(
     subscribePinSectionCollapse,
     getPinSectionCollapseSnapshot,
     getPinSectionCollapseServerSnapshot,
   );
   return {
-    collapsed,
-    isCollapsed: (kind: PinKind) => Boolean(collapsed[kind]),
+    openId,
+    isCollapsed: (sectionId: string) => openId !== sectionId,
     toggle: togglePinSectionCollapsed,
+    closeAll: closeAllPinSections,
   };
 }

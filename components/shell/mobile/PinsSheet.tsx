@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { ChevronDown, FolderKanban, MessageSquare } from "lucide-react";
-import { ConnectorMark } from "@/components/brand/ConnectorMarks";
+import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
+import { PinSectionFolder } from "@/components/shell/PinSectionFolder";
+import { PinnedEmptyHint } from "@/components/shell/PinnedEmptyHint";
 import { useApp } from "@/components/app/AppProvider";
-import { PinnedFilterMenu } from "@/components/shell/PinnedFilterMenu";
 import {
   MOBILE_MENU_ICON_SIZE,
   MOBILE_MENU_ICON_STROKE,
@@ -12,34 +12,16 @@ import {
   mobileMenuRowClass,
 } from "@/lib/mobile-menu-styles";
 import {
-  groupPinnedItemsByKind,
-  PIN_KIND_LABEL,
   usePinDisplayPrefs,
   usePinSectionCollapse,
 } from "@/lib/pin-display-prefs";
+import {
+  groupPinnedItemsBySection,
+  PIN_SECTION_ICONS,
+  PIN_SECTION_LABEL,
+} from "@/lib/pin-sections";
 import { usePinnedItems, type PinnedItem } from "@/lib/use-pinned-items";
-import { spaceIcons } from "@/lib/space-icons";
-import type { SpaceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-function PinLeading({
-  item,
-}: {
-  item: Pick<PinnedItem, "kind" | "icon" | "spaceId">;
-}) {
-  if (item.kind === "connector") {
-    return <ConnectorMark id={item.icon ?? "connector"} size="nav" />;
-  }
-  const Icon =
-    (item.spaceId && spaceIcons[item.spaceId as SpaceId]) ||
-    (item.kind === "project" ? FolderKanban : MessageSquare);
-  return (
-    <Icon
-      className={cn(MOBILE_MENU_ICON_SIZE, "shrink-0 text-muted-foreground")}
-      strokeWidth={MOBILE_MENU_ICON_STROKE}
-    />
-  );
-}
 
 export function PinsSheet({
   onSelect,
@@ -56,13 +38,18 @@ export function PinsSheet({
     openThread,
     openProject,
     openConnector,
+    newChat,
   } = useApp();
   const { pinnedItems } = usePinnedItems();
   const { prefs: pinPrefs } = usePinDisplayPrefs();
-  const { isCollapsed, toggle: togglePinSection } = usePinSectionCollapse();
+  const { isCollapsed, toggle: togglePinSection } =
+    usePinSectionCollapse();
 
   const pinGroups = useMemo(
-    () => groupPinnedItemsByKind(pinnedItems, pinPrefs),
+    () =>
+      groupPinnedItemsBySection(pinnedItems, {
+        visibleKinds: pinPrefs.visible,
+      }),
     [pinnedItems, pinPrefs],
   );
 
@@ -81,58 +68,88 @@ export function PinsSheet({
     return projectId === item.id;
   };
 
-  if (!pinGroups.length && hideHeading) return null;
+  if (!pinGroups.length) {
+    return (
+      <div className="space-y-1">
+        {!hideHeading ? (
+          <div className="mb-2 flex items-center gap-1 px-1">
+            <p className="min-w-0 flex-1 text-[12px] font-medium tracking-[0.04em] text-muted-foreground uppercase">
+              Pinned
+            </p>
+          </div>
+        ) : null}
+        <PinnedEmptyHint rowClassName={mobileMenuRowClass} />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-3">
-      {!hideHeading && pinGroups.length === 0 ? (
-        <div className="group/pins mb-2 flex items-center gap-1 px-1">
-          <p className="min-w-0 flex-1 text-[12px] font-medium tracking-[0.04em] text-muted-foreground uppercase">
-            Pinned
-          </p>
-        </div>
-      ) : null}
-      {pinGroups.map((group, index) => {
-        const collapsed = isCollapsed(group.kind);
+    <div className="space-y-1">
+      {pinGroups.map((group) => {
+        const collapsed = isCollapsed(group.id);
+        const SectionIcon = PIN_SECTION_ICONS[group.id];
+        const activeChild = group.items.find((item) => isActive(item));
+        const sectionActive = !collapsed || Boolean(activeChild);
+        const treeActiveKey = activeChild
+          ? `${activeChild.kind}:${activeChild.id}`
+          : null;
         return (
-          <div key={group.kind} className="space-y-px">
-            <div className="group/pins mb-1 flex items-center gap-1 px-1">
-              <button
-                type="button"
-                onClick={() => togglePinSection(group.kind)}
-                aria-expanded={!collapsed}
-                className="flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1.5 text-left text-[12px] font-medium tracking-[0.04em] text-muted-foreground uppercase transition-colors hover:bg-black/[0.03] hover:text-foreground dark:hover:bg-white/8"
-              >
-                <ChevronDown
+          <PinSectionFolder
+            key={group.id}
+            label={PIN_SECTION_LABEL[group.id]}
+            icon={SectionIcon}
+            expanded={!collapsed}
+            sectionActive={sectionActive}
+            onToggle={() => {
+              const closing = !collapsed;
+              const ownsView = Boolean(activeChild);
+              togglePinSection(group.id);
+              if (closing && ownsView) newChat();
+            }}
+            activeKey={treeActiveKey}
+            deps={group.items
+              .map((item) => `${item.kind}:${item.id}`)
+              .join(",")}
+            headerClassName={cn(
+              mobileMenuRowClass,
+              sectionActive && mobileMenuRowActiveClass,
+            )}
+            iconClassName={cn(
+              MOBILE_MENU_ICON_SIZE,
+              "shrink-0 text-muted-foreground",
+            )}
+            iconStrokeWidth={MOBILE_MENU_ICON_STROKE}
+          >
+            {group.items.map((item) => {
+              const inUse = isActive(item);
+              return (
+                <button
+                  key={`${item.kind}-${item.id}`}
+                  type="button"
+                  data-pin-tree-key={`${item.kind}:${item.id}`}
+                  onClick={() => openItem(item)}
                   className={cn(
-                    "h-3.5 w-3.5 shrink-0 normal-case transition-transform duration-200",
-                    collapsed && "-rotate-90",
+                    mobileMenuRowClass,
+                    "group relative pl-1.5",
+                    inUse && "font-medium",
                   )}
-                  strokeWidth={2}
-                />
-                <span className="min-w-0 flex-1 truncate normal-case tracking-[-0.01em]">
-                  {PIN_KIND_LABEL[group.kind]}
-                </span>
-              </button>
-              {index === 0 ? <PinnedFilterMenu /> : null}
-            </div>
-            {!collapsed
-              ? group.items.map((item) => (
-                  <button
-                    key={`${item.kind}-${item.id}`}
-                    type="button"
-                    onClick={() => openItem(item)}
-                    className={cn(
-                      mobileMenuRowClass,
-                      isActive(item) && mobileMenuRowActiveClass,
-                    )}
-                  >
-                    <PinLeading item={item} />
-                    <span className="truncate">{item.title}</span>
-                  </button>
-                ))
-              : null}
-          </div>
+                >
+                  <span data-pin-leading className="inline-flex shrink-0">
+                    <PinPreviewThumb item={item} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-left">
+                    {item.title}
+                  </span>
+                  {inUse ? (
+                    <span
+                      aria-hidden
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-[oklch(0.62_0.19_260)]"
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
+          </PinSectionFolder>
         );
       })}
     </div>

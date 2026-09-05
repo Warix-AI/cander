@@ -15,9 +15,14 @@ import {
   MOBILE_MENU_BG,
   MOBILE_MENU_ICON_SIZE,
   MOBILE_MENU_ICON_STROKE,
+  PRIMARY_NAV_CARD_ACTIVE,
+  PRIMARY_NAV_CARD_HOVER,
+  PRIMARY_NAV_CARD_RADIUS_FIRST_MOBILE,
+  PRIMARY_NAV_CARD_RADIUS_LAST_MOBILE,
   mobileMenuRowActiveClass,
   mobileMenuRowClass,
 } from "@/lib/mobile-menu-styles";
+import { closeAllPinSections } from "@/lib/pin-display-prefs";
 import { navLabel, useMainNavItems } from "@/lib/use-main-nav-items";
 import { isComingSoonNav, isExtraNavId, navSpaceMatches, type SidebarNavId } from "@/lib/spaces";
 import { navIcon } from "@/lib/space-icons";
@@ -82,12 +87,14 @@ export function MobileMenuPane() {
             connectorId={connectorId}
             showWorkspaces={entitlements.hasWorkspaces}
             onNewChat={() => {
+              closeAllPinSections();
               newChat();
               setMobileSurface("chat");
             }}
             onOpenScreen={setMobileMenuScreen}
             onOpenNav={(id) => {
               if (isComingSoonNav(id)) return;
+              closeAllPinSections();
               if (id === "browser") {
                 openBrowser();
               } else if (id === "recents") {
@@ -100,6 +107,7 @@ export function MobileMenuPane() {
               setMobileMenuScreen("main");
             }}
             onOpenSettings={() => {
+              closeAllPinSections();
               openSettings(undefined, { hub: true });
               setMobileMenuScreen("main");
               setMobileSurface("chat");
@@ -162,37 +170,44 @@ function MenuMain({
 
         <div className="mt-[30px] flex min-h-0 flex-1 flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="flex flex-col gap-[0.1rem]">
-          <button
-            type="button"
-            onClick={onNewChat}
-            className={cn(
-              mobileMenuRowClass,
-              newActive && mobileMenuRowActiveClass,
-            )}
-            aria-label="New"
-          >
-            <SquarePen
-              className={cn(MOBILE_MENU_ICON_SIZE, "text-muted-foreground")}
-              strokeWidth={MOBILE_MENU_ICON_STROKE}
-            />
-            <span className="min-w-0 flex-1 truncate">New</span>
-          </button>
-          {spaceItems.map((item) => (
-            <MobileNavRow
-              key={item.id}
-              id={item.id}
-              label={item.label}
-              Icon={item.Icon}
-              active={navActive(item.id)}
-              comingSoon={item.comingSoon}
-              onOpen={onOpenNav}
-            />
-          ))}
+          <div className="rounded-[12px] bg-black/[0.03] p-[3px] dark:bg-white/[0.045]">
+            <button
+              type="button"
+              onClick={onNewChat}
+              className={cn(
+                "flex w-full items-center gap-3 px-4 py-[0.825rem] text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200",
+                PRIMARY_NAV_CARD_RADIUS_FIRST_MOBILE,
+                newActive ? PRIMARY_NAV_CARD_ACTIVE : PRIMARY_NAV_CARD_HOVER,
+              )}
+              aria-label="New"
+            >
+              <SquarePen
+                className={cn(MOBILE_MENU_ICON_SIZE, "text-muted-foreground")}
+                strokeWidth={MOBILE_MENU_ICON_STROKE}
+              />
+              <span className="min-w-0 flex-1 truncate">New</span>
+            </button>
+            {spaceItems.map((item, index) => (
+              <MobileNavRow
+                key={item.id}
+                id={item.id}
+                label={item.label}
+                Icon={item.Icon}
+                active={navActive(item.id)}
+                comingSoon={item.comingSoon}
+                onOpen={onOpenNav}
+                cardSurface
+                cardEdge={
+                  index === spaceItems.length - 1 ? "last" : "middle"
+                }
+              />
+            ))}
+          </div>
 
           <button
             type="button"
             onClick={() => onOpenScreen("pinned")}
-            className={mobileMenuRowClass}
+            className={cn(mobileMenuRowClass, "mt-2")}
           >
             <Pin
               className={cn(
@@ -264,6 +279,8 @@ function MobileNavRow({
   active,
   comingSoon,
   onOpen,
+  cardSurface = false,
+  cardEdge = "middle",
 }: {
   id: SidebarNavId;
   label: string;
@@ -271,6 +288,8 @@ function MobileNavRow({
   active: boolean;
   comingSoon?: boolean;
   onOpen: (id: SidebarNavId) => void;
+  cardSurface?: boolean;
+  cardEdge?: "first" | "middle" | "last";
 }) {
   const tinted =
     id === "home" ||
@@ -279,6 +298,13 @@ function MobileNavRow({
     id === "research" ||
     id === "studio";
 
+  const cardRadius =
+    cardEdge === "first"
+      ? PRIMARY_NAV_CARD_RADIUS_FIRST_MOBILE
+      : cardEdge === "last"
+        ? PRIMARY_NAV_CARD_RADIUS_LAST_MOBILE
+        : "rounded-none";
+
   return (
     <button
       type="button"
@@ -286,9 +312,19 @@ function MobileNavRow({
       aria-disabled={comingSoon || undefined}
       onClick={() => onOpen(id)}
       className={cn(
-        mobileMenuRowClass,
-        active && mobileMenuRowActiveClass,
-        comingSoon && "cursor-default opacity-70",
+        cardSurface
+          ? "flex w-full items-center gap-3 px-4 py-[0.825rem] text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200"
+          : mobileMenuRowClass,
+        cardSurface && cardRadius,
+        comingSoon
+          ? "cursor-default opacity-70"
+          : active
+            ? cardSurface
+              ? PRIMARY_NAV_CARD_ACTIVE
+              : mobileMenuRowActiveClass
+            : cardSurface
+              ? PRIMARY_NAV_CARD_HOVER
+              : undefined,
       )}
     >
       <Icon

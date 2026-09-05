@@ -5,9 +5,7 @@ import {
   ArrowLeft,
   Building2,
   ChartNoAxesColumn,
-  ChevronDown,
   CreditCard,
-  FolderKanban,
   GripVertical,
   LayoutGrid,
   MessageSquare,
@@ -15,10 +13,14 @@ import {
   SquarePen,
   UserRound,
 } from "lucide-react";
-import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { AccountMenu } from "@/components/shell/AccountMenu";
 import { PinControl } from "@/components/shell/PinControl";
-import { PinnedFilterMenu } from "@/components/shell/PinnedFilterMenu";
+import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
+import {
+  PinSectionFolder,
+  pinSectionHeaderClass,
+} from "@/components/shell/PinSectionFolder";
+import { PinnedEmptyHint } from "@/components/shell/PinnedEmptyHint";
 import { WindowChrome } from "@/components/shell/WindowChrome";
 import { LeftNavToggleDock } from "@/components/shell/NavToggle";
 import { WorkspaceRail } from "@/components/shell/WorkspaceRail";
@@ -26,12 +28,21 @@ import { useApp } from "@/components/app/AppProvider";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { workspacesFor } from "@/lib/entitlements";
 import {
-  groupPinnedItemsByKind,
-  PIN_KIND_LABEL,
+  PRIMARY_NAV_CARD_ACTIVE,
+  PRIMARY_NAV_CARD_HOVER,
+  PRIMARY_NAV_CARD_RADIUS_FIRST,
+  PRIMARY_NAV_CARD_RADIUS_LAST,
+} from "@/lib/mobile-menu-styles";
+import {
   usePinDisplayPrefs,
   usePinSectionCollapse,
 } from "@/lib/pin-display-prefs";
-import { spaceIcons, spaceIconTint } from "@/lib/space-icons";
+import {
+  groupPinnedItemsBySection,
+  PIN_SECTION_ICONS,
+  PIN_SECTION_LABEL,
+} from "@/lib/pin-sections";
+import { spaceIconTint } from "@/lib/space-icons";
 import { type SidebarNavId, isExtraNavId, isComingSoonNav, navSpaceMatches } from "@/lib/spaces";
 import {
   setSidebarPeeking,
@@ -90,7 +101,8 @@ export function Sidebar() {
   const mainNavItems = useMainNavItems({ spacesOnly: true });
   const { pinnedItems } = usePinnedItems();
   const { prefs: pinPrefs } = usePinDisplayPrefs();
-  const { isCollapsed, toggle: togglePinSection } = usePinSectionCollapse();
+  const { isCollapsed, toggle: togglePinSection, closeAll: closePinSections } =
+    usePinSectionCollapse();
   useSyncExternalStore(
     subscribeWorkspaceCatalog,
     getWorkspaceCatalogSnapshot,
@@ -233,7 +245,10 @@ export function Sidebar() {
   };
 
   const pinGroups = useMemo(
-    () => groupPinnedItemsByKind(pinnedItems, pinPrefs),
+    () =>
+      groupPinnedItemsBySection(pinnedItems, {
+        visibleKinds: pinPrefs.visible,
+      }),
     [pinnedItems, pinPrefs],
   );
 
@@ -247,6 +262,7 @@ export function Sidebar() {
 
   const openNav = (id: SidebarNavId) => {
     if (isComingSoonNav(id)) return;
+    closePinSections();
     if (id === "browser") openBrowser();
     else if (id === "recents") openRecents();
     else openSpace(id);
@@ -258,8 +274,9 @@ export function Sidebar() {
       kind={item.kind}
       id={item.id}
       title={item.title}
-      leading={<PinnedLeading item={item} />}
-      active={pinRowActive(item)}
+      leading={<PinPreviewThumb item={item} />}
+      // Stroke marks the active child; blue dot shows in-use (no row fill).
+      inUse={pinRowActive(item)}
       onOpen={() => {
         if (item.kind === "thread") openThread(item.id);
         else if (item.kind === "connector") openConnector(item.id);
@@ -329,7 +346,7 @@ export function Sidebar() {
       <WorkspaceRail />
       <aside
         className={cn(
-          "flex w-[min(268px,calc(100vw-3.5rem))] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:w-[268px]",
+          "flex w-[min(273px,calc(100vw-3.5rem))] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:w-[273px]",
           floating
             ? cn(
                 "light-surface overflow-hidden",
@@ -376,6 +393,7 @@ export function Sidebar() {
           <button
             type="button"
             onClick={() => {
+              closePinSections();
               if (canGoBack) goBack();
               else newChat();
             }}
@@ -423,75 +441,96 @@ export function Sidebar() {
             aria-label="Main"
           >
             <div className="flex min-h-0 shrink flex-col gap-0 overflow-y-auto">
-              <button
-                type="button"
-                onClick={() => newChat()}
+              <div
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[15px] transition-colors duration-200",
-                  chatActive
-                    ? "bg-sidebar-accent font-medium"
-                    : "hover:bg-sidebar-accent",
+                  "flex flex-col gap-0 p-[3px]",
+                  SHELL_G3_RADIUS,
+                  "bg-black/[0.03] dark:bg-white/[0.045]",
                 )}
               >
-                <SquarePen
-                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                  strokeWidth={2}
-                />
-                <span className="min-w-0 flex-1 truncate">New</span>
-              </button>
-              {mainNavItems.map((item) => (
-                <SidebarNavButton
-                  key={item.id}
-                  id={item.id}
-                  Icon={item.Icon}
-                  label={item.label}
-                  active={navActive(item.id)}
-                  comingSoon={item.comingSoon}
-                  onOpen={openNav}
-                />
-              ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    closePinSections();
+                    newChat();
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-3 px-3 py-1.5 text-left text-[15px] transition-colors duration-200",
+                    PRIMARY_NAV_CARD_RADIUS_FIRST,
+                    chatActive
+                      ? PRIMARY_NAV_CARD_ACTIVE
+                      : PRIMARY_NAV_CARD_HOVER,
+                  )}
+                >
+                  <SquarePen
+                    className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                    strokeWidth={2}
+                  />
+                  <span className="min-w-0 flex-1 truncate">New</span>
+                </button>
+                {mainNavItems.map((item, index) => (
+                  <SidebarNavButton
+                    key={item.id}
+                    id={item.id}
+                    Icon={item.Icon}
+                    label={item.label}
+                    active={navActive(item.id)}
+                    comingSoon={item.comingSoon}
+                    onOpen={openNav}
+                    cardSurface
+                    cardEdge={
+                      index === mainNavItems.length - 1 ? "last" : "middle"
+                    }
+                  />
+                ))}
+              </div>
             </div>
 
-            <div className="relative mt-2 min-h-0 flex-1 overflow-hidden">
+            <div className="relative mt-1 min-h-0 flex-1 overflow-hidden">
               <div className="h-full overflow-y-auto">
                 {pinGroups.length > 0 ? (
-                  <div className="group/pins flex flex-col gap-2">
+                  <div className="flex flex-col gap-1">
                     {pinGroups.map((group) => {
-                      const collapsed = isCollapsed(group.kind);
+                      const collapsed = isCollapsed(group.id);
+                      const SectionIcon = PIN_SECTION_ICONS[group.id];
+                      const activeChild = group.items.find((item) =>
+                        pinRowActive(item),
+                      );
+                      // Open folder, or the folder that owns the current view.
+                      const sectionActive =
+                        !collapsed || Boolean(activeChild);
+                      const treeActiveKey = activeChild
+                        ? `${activeChild.kind}:${activeChild.id}`
+                        : null;
                       return (
-                        <div key={group.kind}>
-                          <div className="mb-0.5 flex items-center gap-1 px-1">
-                            <button
-                              type="button"
-                              onClick={() => togglePinSection(group.kind)}
-                              aria-expanded={!collapsed}
-                              className="flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1 text-left text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
-                            >
-                              <ChevronDown
-                                className={cn(
-                                  "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
-                                  collapsed && "-rotate-90",
-                                )}
-                                strokeWidth={2}
-                              />
-                              <span className="min-w-0 flex-1 truncate">
-                                {PIN_KIND_LABEL[group.kind]}
-                              </span>
-                            </button>
-                            {group.kind === pinGroups[0]?.kind ? (
-                              <PinnedFilterMenu />
-                            ) : null}
-                          </div>
-                          {!collapsed ? (
-                            <div className="flex flex-col gap-0">
-                              {group.items.map(renderPinnedRow)}
-                            </div>
-                          ) : null}
-                        </div>
+                        <PinSectionFolder
+                          key={group.id}
+                          label={PIN_SECTION_LABEL[group.id]}
+                          icon={SectionIcon}
+                          expanded={!collapsed}
+                          sectionActive={sectionActive}
+                          onToggle={() => {
+                            const closing = !collapsed;
+                            const ownsView = Boolean(activeChild);
+                            togglePinSection(group.id);
+                            // Closing the folder that owns the current view → New.
+                            if (closing && ownsView) newChat();
+                          }}
+                          activeKey={treeActiveKey}
+                          deps={group.items
+                            .map((item) => `${item.kind}:${item.id}`)
+                            .join(",")}
+                          headerClassName={pinSectionHeaderClass(sectionActive)}
+                          iconClassName="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                        >
+                          {group.items.map((item) => renderPinnedRow(item))}
+                        </PinSectionFolder>
                       );
                     })}
                   </div>
-                ) : null}
+                ) : (
+                  <PinnedEmptyHint />
+                )}
               </div>
             </div>
           </nav>
@@ -516,6 +555,8 @@ function SidebarNavButton({
   active,
   comingSoon,
   onOpen,
+  cardSurface = false,
+  cardEdge = "middle",
 }: {
   id: SidebarNavId;
   Icon: (props: { className?: string; strokeWidth?: number }) => ReactNode;
@@ -523,6 +564,10 @@ function SidebarNavButton({
   active: boolean;
   comingSoon?: boolean;
   onOpen: (id: SidebarNavId) => void;
+  /** Stronger hover/active when nested in the New+Canvas inset card. */
+  cardSurface?: boolean;
+  /** Asymmetric radius so the highlight follows the card curve. */
+  cardEdge?: "first" | "middle" | "last";
 }) {
   const tinted =
     id === "home" ||
@@ -530,6 +575,12 @@ function SidebarNavButton({
     id === "build" ||
     id === "research" ||
     id === "studio";
+  const cardRadius =
+    cardEdge === "first"
+      ? PRIMARY_NAV_CARD_RADIUS_FIRST
+      : cardEdge === "last"
+        ? PRIMARY_NAV_CARD_RADIUS_LAST
+        : "rounded-none";
   return (
     <button
       type="button"
@@ -539,12 +590,17 @@ function SidebarNavButton({
         if (!comingSoon) onOpen(id);
       }}
       className={cn(
-        "flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[15px] transition-colors duration-200",
+        "flex w-full items-center gap-3 px-3 py-1.5 text-left text-[15px] transition-colors duration-200",
+        cardSurface ? cardRadius : "rounded-lg",
         comingSoon
           ? "cursor-default opacity-70"
           : active
-            ? "bg-sidebar-accent font-medium"
-            : "hover:bg-sidebar-accent",
+            ? cardSurface
+              ? PRIMARY_NAV_CARD_ACTIVE
+              : "bg-sidebar-accent font-medium"
+            : cardSurface
+              ? PRIMARY_NAV_CARD_HOVER
+              : "hover:bg-sidebar-accent",
       )}
     >
       <Icon
@@ -564,34 +620,11 @@ function SidebarNavButton({
   );
 }
 
-function PinnedLeading({
-  item,
-}: {
-  item: {
-    kind: "thread" | "project" | "connector";
-    icon?: string;
-    spaceId?: SpaceId;
-  };
-}) {
-  const iconClass = "h-3.5 w-3.5 shrink-0 text-muted-foreground";
-  if (item.kind === "connector") {
-    return <ConnectorMark id={item.icon ?? "connector"} size="nav" />;
-  }
-  if (item.kind === "project") {
-    const Icon =
-      (item.spaceId && spaceIcons[item.spaceId]) || FolderKanban;
-    return <Icon className={iconClass} strokeWidth={2} />;
-  }
-  const Icon =
-    (item.spaceId && spaceIcons[item.spaceId]) || MessageSquare;
-  return <Icon className={iconClass} strokeWidth={2} />;
-}
-
 function PinnedRow({
   kind,
   id,
   title,
-  active,
+  inUse,
   onOpen,
   onReorder,
   leading,
@@ -601,7 +634,7 @@ function PinnedRow({
   kind: PinKind;
   id: string;
   title: string;
-  active: boolean;
+  inUse: boolean;
   onOpen: () => void;
   onReorder: (
     from: { kind: PinKind; id: string },
@@ -634,9 +667,10 @@ function PinnedRow({
   return (
     <div
       ref={rowRef}
+      data-pin-tree-key={dragKey}
       className={cn(
         "group relative flex w-full items-center rounded-lg transition-colors duration-200",
-        active ? "bg-sidebar-accent" : "hover:bg-sidebar-accent",
+        "hover:bg-sidebar-accent",
         dragging && "opacity-40",
       )}
       onDragOver={(event) => {
@@ -680,16 +714,18 @@ function PinnedRow({
         type="button"
         onClick={onOpen}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-3 truncate px-3 py-1.5 text-left text-[15px]",
-          active && "font-medium",
+          "flex min-w-0 flex-1 items-center gap-3 truncate py-1.5 pr-1 pl-1.5 text-left text-[15px]",
+          inUse && "font-medium",
         )}
       >
-        {leading ?? (
-          <MessageSquare
-            className="h-4 w-4 shrink-0 text-muted-foreground"
-            strokeWidth={2}
-          />
-        )}
+        <span data-pin-leading className="inline-flex shrink-0">
+          {leading ?? (
+            <MessageSquare
+              className="h-4 w-4 shrink-0 text-muted-foreground"
+              strokeWidth={2}
+            />
+          )}
+        </span>
         <span className="min-w-0 flex-1 truncate">{title}</span>
       </button>
       <button
@@ -714,12 +750,20 @@ function PinnedRow({
           "inline-flex h-6 w-5 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground transition-opacity duration-150 active:cursor-grabbing",
           dragging
             ? "opacity-100"
-            : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+            : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
         )}
       >
         <GripVertical className="h-4 w-4" strokeWidth={1.8} />
       </button>
-      <PinControl kind={kind} id={id} className="mr-1" />
+      <div className="relative mr-1 flex h-6 w-6 shrink-0 items-center justify-center">
+        {inUse ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-[oklch(0.62_0.19_260)] transition-opacity duration-150 group-hover:opacity-0"
+          />
+        ) : null}
+        <PinControl kind={kind} id={id} />
+      </div>
     </div>
   );
 }

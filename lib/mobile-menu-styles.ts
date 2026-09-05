@@ -42,6 +42,25 @@ export const MOBILE_MENU_ICON_STROKE = 2.15;
 /** Letter-height glyphs — match desktop sidebar / connector `nav` marks. */
 export const MOBILE_MENU_ICON_SIZE = "h-3.5 w-3.5";
 
+/**
+ * New / Canvas inset card hover & active.
+ * Light: lift toward white (short of the menu). Dark: press darker than the card.
+ * `!` beats the shared row hover baked into mobileMenuRowClass.
+ */
+export const PRIMARY_NAV_CARD_ACTIVE =
+  "!bg-white/75 font-medium dark:!bg-black/40";
+export const PRIMARY_NAV_CARD_HOVER =
+  "hover:!bg-white/75 dark:hover:!bg-black/40";
+
+/** Card is G3 (20px) with 3px padding — inner highlight follows the outer curve. */
+export const PRIMARY_NAV_CARD_RADIUS_FIRST = "primary-nav-card-first";
+export const PRIMARY_NAV_CARD_RADIUS_LAST = "primary-nav-card-last";
+/** Mobile New/Canvas card uses 12px shell — slightly tighter inner curve. */
+export const PRIMARY_NAV_CARD_RADIUS_FIRST_MOBILE =
+  "primary-nav-card-first-mobile";
+export const PRIMARY_NAV_CARD_RADIUS_LAST_MOBILE =
+  "primary-nav-card-last-mobile";
+
 /** Chrome icon / pill button on mobile. */
 export const mobileChromeButtonClass =
   "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--mobile-chrome-surface)] text-foreground transition-colors duration-200 hover:bg-muted";

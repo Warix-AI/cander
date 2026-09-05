@@ -642,6 +642,25 @@ html.dark .courier-app-appearance[data-palette="mono"] {
   -electron-corner-smoothing: system-ui;
 }
 
+/* New / Canvas inset highlights — follow the card curve on one edge only
+   (card padding is 3px; outer radius 20px desktop / 12px mobile). */
+.primary-nav-card-first {
+  border-radius: 17px 17px 0 0 !important;
+  -electron-corner-smoothing: system-ui;
+}
+.primary-nav-card-last {
+  border-radius: 0 0 17px 17px !important;
+  -electron-corner-smoothing: system-ui;
+}
+.primary-nav-card-first-mobile {
+  border-radius: 9px 9px 0 0 !important;
+  -electron-corner-smoothing: system-ui;
+}
+.primary-nav-card-last-mobile {
+  border-radius: 0 0 9px 9px !important;
+  -electron-corner-smoothing: system-ui;
+}
+
 /* Density shows up on common padding/gap utilities */
 .courier-app-appearance {
   --space-1: calc(0.25rem * var(--density));

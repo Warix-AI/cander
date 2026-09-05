@@ -25,8 +25,8 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
   if (!mobile) return <>{children}</>;
 
   const menuOpen = mobileSurface === "menu";
+  const menuWidth = `calc(${MOBILE_MENU_WIDTH * 100}% + 5px)`;
   const peekPct = (1 - MOBILE_MENU_WIDTH) * 100;
-  const shiftPct = MOBILE_MENU_WIDTH * 100;
 
   return (
     <div
@@ -48,7 +48,7 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
           menuOpen && MOBILE_PEEK_RADIUS,
         )}
         style={{
-          transform: menuOpen ? `translate3d(${shiftPct}%, 0, 0)` : undefined,
+          transform: menuOpen ? `translate3d(${menuWidth}, 0, 0)` : undefined,
         }}
       >
         {children}
@@ -62,7 +62,7 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
           "transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform",
           menuOpen ? "translate-x-0" : "-translate-x-full pointer-events-none",
         )}
-        style={{ width: `${MOBILE_MENU_WIDTH * 100}%` }}
+        style={{ width: menuWidth }}
       >
         <MobileMenuPane />
       </div>
@@ -73,7 +73,7 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
           aria-label="Close menu"
           data-allow-swipe=""
           className="absolute inset-y-0 right-0 z-30"
-          style={{ width: `${peekPct}%` }}
+          style={{ width: `calc(${peekPct}% - 5px)` }}
           onClick={() => setMobileSurface(mobileContentSurface)}
         />
       ) : null}

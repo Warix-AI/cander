@@ -8,7 +8,13 @@ import {
   getSpaceEntityStoreSnapshot,
   localSpaceEntityStore,
 } from "@/lib/api/space-entity-store";
+import { imageCoverFromMessages } from "@/lib/chat-image-cover";
+import {
+  projectCoverGradientClass,
+  projectCoverImageSrc,
+} from "@/lib/project-cover";
 import { healMisclassifiedPins } from "@/lib/session";
+import type { ProjectKind } from "@/lib/space-entities";
 import type { PinKind, SpaceId } from "@/lib/types";
 
 export type PinnedItem = {
@@ -17,6 +23,12 @@ export type PinnedItem = {
   title: string;
   icon?: string;
   spaceId?: SpaceId;
+  /** Set for project pins — drives Agents / Websites / Apps / … folders. */
+  projectKind?: ProjectKind;
+  /** Live preview image URL (project cover or chat image). */
+  coverImage?: string;
+  /** Banner gradient class when cover is a preset (projects). */
+  coverGradient?: string;
 };
 
 /** Short sidebar labels — full product names stay in catalog / detail. */
@@ -89,6 +101,7 @@ export function usePinnedItems() {
             id: thread.id,
             title: chatDisplayTitle(thread.title, thread.snippet),
             spaceId: thread.spaceId,
+            coverImage: imageCoverFromMessages(thread.messages),
           });
         } else if (thread) {
           resolved.push({
@@ -96,6 +109,7 @@ export function usePinnedItems() {
             id: pin.id,
             title: chatDisplayTitle(thread.title, thread.snippet),
             spaceId: thread.spaceId,
+            coverImage: imageCoverFromMessages(thread.messages),
           });
         } else {
           resolved.push({
@@ -113,6 +127,9 @@ export function usePinnedItems() {
           id: project.id,
           title: project.title,
           spaceId: project.space,
+          projectKind: project.kind,
+          coverImage: projectCoverImageSrc(project.cover),
+          coverGradient: projectCoverGradientClass(project.cover),
         });
       } else {
         resolved.push({

@@ -7,6 +7,7 @@ import { ColorModeToggle } from "@/components/shell/ColorModeToggle";
 import { Dropdown } from "@/components/ui/Controls";
 import { signOutAccount } from "@/lib/auth/sign-out";
 import { hourlyUsageFor } from "@/lib/hourly-usage";
+import { closeAllPinSections } from "@/lib/pin-display-prefs";
 import {
   USAGE_METER_TONES,
   type UsageMeterId,
@@ -144,6 +145,7 @@ export function AccountMenu() {
             type="button"
             className={flyoutRowClass}
             onClick={() => {
+              closeAllPinSections();
               openSpace("connectors");
               close();
             }}
@@ -159,6 +161,7 @@ export function AccountMenu() {
             type="button"
             className={flyoutRowClass}
             onClick={() => {
+              closeAllPinSections();
               openRecents();
               close();
             }}
@@ -177,6 +180,7 @@ export function AccountMenu() {
               view === "settings" && "bg-sidebar-accent font-medium",
             )}
             onClick={() => {
+              closeAllPinSections();
               openSettings();
               close();
             }}
