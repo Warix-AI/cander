@@ -11,6 +11,7 @@ import { toolsForConnector } from "@/lib/connectors/tool-catalog";
 import type { ConnectorConnection } from "@/lib/connectors/types";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import type { Connector, PinTier } from "@/lib/types";
+import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import { cn } from "@/lib/utils";
 
 type ConnectorPrompt = {
@@ -21,6 +22,10 @@ const CONNECTOR_PROMPTS: Record<string, ConnectorPrompt[]> = {
   gmail: [
     { text: "Search my inbox for unread emails from this week." },
     { text: "Send a quick reply to the latest admissions thread." },
+  ],
+  gcal: [
+    { text: "What's on my calendar today?" },
+    { text: "Create a meeting for tomorrow afternoon." },
   ],
   slack: [
     { text: "Search recent Slack messages about the launch." },
@@ -95,7 +100,7 @@ export function ConnectorDetailModal({
   const isConnected = Boolean(activeConnection);
   const skills = toolsForConnector(item.id);
   const prompts = promptsForConnector(item);
-  const canManageServerConnection = item.id === "gmail";
+  const canManageServerConnection = isOauthConnectorId(item.id);
 
   const statusLabel = blocked
     ? "Blocked"

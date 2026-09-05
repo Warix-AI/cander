@@ -27,6 +27,7 @@ import {
   initiateConnectorConnection,
   disconnectConnectorConnection,
 } from "@/lib/api/connector-client";
+import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import { replaceConnectorConnectionsForWorkspace } from "@/lib/connector-connections-store";
 import { detachWorkConnector } from "@/lib/work-connectors";
 
@@ -243,7 +244,9 @@ export function ConnectorsPanel() {
                 <button
                   type="button"
                   disabled={
-                    selected.id !== "gmail" || hasActiveConnection || disconnecting
+                    !isOauthConnectorId(selected.id) ||
+                    hasActiveConnection ||
+                    disconnecting
                   }
                   onClick={async () => {
                     setConnectError("");

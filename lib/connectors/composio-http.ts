@@ -2,6 +2,8 @@
  * Server-only Composio REST client (v3.1) — no browser imports.
  */
 
+import { isOauthConnectorId } from "./oauth-connectors.ts";
+
 const COMPOSIO_API_BASE = "https://backend.composio.dev/api/v3.1";
 
 const COMPOSIO_API_KEY_NAMES = [
@@ -85,7 +87,7 @@ export async function createConnectLink(input: {
   composioUserId: string;
   connectorId: string;
 }): Promise<ComposioLinkSession> {
-  if (input.connectorId !== "gmail" && input.connectorId !== "slack" && input.connectorId !== "gcal") {
+  if (!isOauthConnectorId(input.connectorId)) {
     throw new Error(`Connector not available via Composio: ${input.connectorId}`);
   }
   const res = await fetch(`${COMPOSIO_API_BASE}/connected_accounts/link`, {

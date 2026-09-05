@@ -11,6 +11,7 @@ import {
   revokeComposioConnectedAccount,
 } from "../composio-http.ts";
 import { composioUserId } from "../composio-identity.ts";
+import { isOauthConnectorId } from "../oauth-connectors.ts";
 import { verifyComposioWebhook } from "../composio-webhook.ts";
 
 export const composioProviderAdapter: ConnectorProviderAdapter = {
@@ -20,7 +21,7 @@ export const composioProviderAdapter: ConnectorProviderAdapter = {
     if (!isComposioConfigured()) {
       return { ok: false, error: "Composio is not configured." };
     }
-    if (input.connectorId !== "gmail" && input.connectorId !== "slack" && input.connectorId !== "gcal") {
+    if (!isOauthConnectorId(input.connectorId)) {
       return { ok: false, error: "Connector not available." };
     }
     try {

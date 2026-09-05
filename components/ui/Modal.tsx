@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import { NativeOverlayGate } from "@/components/browser/NativeOverlayGate";
 import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
@@ -47,40 +48,43 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-[60] flex",
-        edgeToEdge
-          ? "items-stretch justify-stretch p-0"
-          : cn(
-              "items-center justify-center",
-              floating ? "p-5 sm:p-8" : "p-4 sm:p-6",
-            ),
-      )}
-    >
-      <button
-        type="button"
-        aria-label="Close dialog"
-        className={cn("absolute inset-0", backdropClassName)}
-        onClick={onClose}
-      />
+    <>
+      <NativeOverlayGate open={open} />
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelledBy}
         className={cn(
-          "relative z-10 overflow-hidden light-surface bg-popover text-popover-foreground shadow-[0_16px_48px_rgba(0,0,0,0.12)] dark:border dark:border-border dark:bg-zinc-900 dark:shadow-[0_20px_56px_rgba(0,0,0,0.45)]",
+          "fixed inset-0 z-[60] flex",
           edgeToEdge
-            ? "h-full max-h-none w-full rounded-none"
+            ? "items-stretch justify-stretch p-0"
             : cn(
-                "max-h-[calc(100vh-2rem)]",
-                floating ? SHELL_G3_RADIUS : "rounded-[10px]",
+                "items-center justify-center",
+                floating ? "p-5 sm:p-8" : "p-4 sm:p-6",
               ),
-          className,
         )}
       >
-        {children}
+        <button
+          type="button"
+          aria-label="Close dialog"
+          className={cn("absolute inset-0", backdropClassName)}
+          onClick={onClose}
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={labelledBy}
+          className={cn(
+            "relative z-10 overflow-hidden light-surface bg-popover text-popover-foreground shadow-[0_16px_48px_rgba(0,0,0,0.12)] dark:border dark:border-border dark:bg-zinc-900 dark:shadow-[0_20px_56px_rgba(0,0,0,0.45)]",
+            edgeToEdge
+              ? "h-full max-h-none w-full rounded-none"
+              : cn(
+                  "max-h-[calc(100vh-2rem)]",
+                  floating ? SHELL_G3_RADIUS : "rounded-[10px]",
+                ),
+            className,
+          )}
+        >
+          {children}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -13,6 +13,7 @@ import {
 import { composioUserId } from "./composio-identity.ts";
 import { composioConfigurationStatus } from "./composio-http.ts";
 import { createOAuthState } from "./oauth-state.ts";
+import { isOauthConnectorId } from "./oauth-connectors.ts";
 import { getConnectorProvider } from "./provider/index.ts";
 import { reconcileConnectionDisconnected, reconcileConnectionFailed } from "./reconcile.ts";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -105,7 +106,7 @@ export async function initiateConnection(input: {
   if (!catalog?.enabled) {
     return { ok: false, status: 404, error: "Connector not found." };
   }
-  if (input.connectorId !== "gmail" && input.connectorId !== "slack" && input.connectorId !== "gcal") {
+  if (!isOauthConnectorId(input.connectorId)) {
     return { ok: false, status: 404, error: "Connector not found." };
   }
   const { data: existing, error: existingError } = await input.client

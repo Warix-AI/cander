@@ -17,6 +17,7 @@ import {
   replaceConnectorConnectionsForWorkspace,
 } from "@/lib/connector-connections-store";
 import { isUiConnectedStatus } from "@/lib/connectors/authz";
+import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { ConnectorCatalogRow } from "@/lib/supabase/connector-mapper";
 import {
@@ -67,7 +68,7 @@ export function createSupabaseConnectorApi(
     },
 
     async connect(ctx, connectorId) {
-      if (connectorId !== "gmail") {
+      if (!isOauthConnectorId(connectorId)) {
         throw new Error("Connector not available.");
       }
       const { connection, authorizationUrl } = await initiateConnectorConnection({

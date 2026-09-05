@@ -42,6 +42,7 @@ import {
 } from "@/lib/api/connector-client";
 import { ConnectorDetailModal } from "@/components/connectors/ConnectorDetailModal";
 import type { ConnectorConnection } from "@/lib/connectors/types";
+import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import { setComposerPendingInput } from "@/lib/composer-seed";
 
 const SECTION_ORDER = [
@@ -164,7 +165,7 @@ export function ConnectorsDashboard() {
 
   const connectConnector = async (id: string) => {
     if (blockedIds.includes(id)) return;
-    if (id === "gmail") {
+    if (isOauthConnectorId(id)) {
       setInfo("");
       setConnectingId(id);
       try {
@@ -178,7 +179,7 @@ export function ConnectorsDashboard() {
           window.location.assign(authorizationUrl);
           return;
         }
-        setInfo("Could not start Gmail authorization.");
+        setInfo(`Could not start ${id} authorization.`);
       } catch (err) {
         setInfo(
           err instanceof Error ? err.message : "Could not start connection.",
@@ -194,7 +195,7 @@ export function ConnectorsDashboard() {
   };
 
   const openConnectorDetail = (id: string) => {
-    if (workAttachFor && id !== "gmail") {
+    if (workAttachFor && !isOauthConnectorId(id)) {
       installConnector(id);
       bindToWorkIfArmed(id);
     }
@@ -459,7 +460,7 @@ export function ConnectorsDashboard() {
                       connecting={connectingId === item.id}
                       disconnecting={disconnectingId === item.id}
                       onOpen={() => selectConnector(item.id)}
-                      onConnect={() => void connectConnector(item.id)}
+                      onConnect={() => selectConnector(item.id)}
                     />
                   ))}
                 </div>
@@ -610,7 +611,11 @@ function DirectoryItem({
         {isConnected || statusLabel === "Installed" || item.pending ? null : (
           <button
             type="button"
-            aria-label={item.id === "gmail" ? `Connect ${item.name}` : `Install ${item.name}`}
+            aria-label={
+              isOauthConnectorId(item.id)
+                ? `Configure ${item.name}`
+                : `Install ${item.name}`
+            }
             disabled={blocked || connecting || disconnecting}
             onClick={(event) => {
               event.stopPropagation();
