@@ -120,7 +120,7 @@ export function BrowserPipOverlay() {
         // #region agent log
         tickCount += 1;
         if (hit || tickCount <= 3 || tickCount % 12 === 0) {
-          fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'A',location:'BrowserPipOverlay.tsx:tick',message:'pip hover tick',data:{hit:Boolean(hit),interactive,dragging,tickCount,hoveredWillBe:interactive},timestamp:Date.now()})}).catch(()=>{});
+          fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'post-fix',hypothesisId:'A',location:'BrowserPipOverlay.tsx:tick',message:'pip hover tick',data:{hit:Boolean(hit),interactive,dragging,tickCount,hoveredWillBe:interactive},timestamp:Date.now()})}).catch(()=>{});
         }
         // #endregion
       } catch (err) {

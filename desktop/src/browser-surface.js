@@ -589,7 +589,7 @@ function showTab(tabId, bounds) {
       void pauseMedia(id);
     }
   }
-  if (chromeOverlay && tabId !== pipTabId) {
+  if ((chromeOverlay || pipPointerPassthrough) && tabId !== pipTabId) {
     entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
     ensurePipOnTop();
     return;
@@ -659,10 +659,9 @@ function isCursorOverPip() {
 }
 
 /**
- * When the cursor is over PiP (+ header), let React receive pointer events by
- * ignoring mouse on every non-PiP WebContentsView (panel browser would otherwise
- * steal drag / hover). The PiP video view also ignores mouse so the overlay
- * chrome above/around it stays interactive.
+ * WebContentsView has no setIgnoreMouseEvents — panel browser views paint over
+ * the React PiP header. While the cursor is over PiP, collapse non-PiP views so
+ * the overlay chrome is visible and can receive drag/clicks.
  */
 let pipPointerPassthrough = false;
 
@@ -670,25 +669,19 @@ function setPipPointerPassthrough(active) {
   const next = Boolean(active);
   if (pipPointerPassthrough === next) return;
   pipPointerPassthrough = next;
-  let applied = 0;
-  let missing = 0;
-  for (const [id, entry] of tabs) {
-    try {
-      if (typeof entry.view.setIgnoreMouseEvents !== "function") {
-        missing += 1;
-        continue;
-      }
-      if (next) {
-        // Forward keeps move events flowing to the shell for hover polling.
-        entry.view.setIgnoreMouseEvents(true, { forward: true });
-      } else {
-        entry.view.setIgnoreMouseEvents(false);
-      }
-      applied += 1;
-    } catch {
-      // ignore
+  if (next) {
+    for (const [id, entry] of tabs) {
+      if (id === pipTabId) continue;
+      entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
     }
-    void id;
+    ensurePipOnTop();
+  } else if (!chromeOverlay) {
+    for (const entry of tabs.values()) {
+      if (entry.visible && entry.lastBounds) {
+        entry.view.setBounds(entry.lastBounds);
+      }
+    }
+    ensurePipOnTop();
   }
   // #region agent log
   try {
@@ -697,16 +690,15 @@ function setPipPointerPassthrough(active) {
       "/Users/matthewdavila/Projects/cander/.cursor/debug-20f195.log",
       JSON.stringify({
         sessionId: "20f195",
-        runId: "pre-fix",
+        runId: "post-fix",
         hypothesisId: "D",
         location: "browser-surface.js:setPipPointerPassthrough",
-        message: "pip pointer passthrough changed",
+        message: "pip pointer passthrough via collapse",
         data: {
           active: next,
           tabCount: tabs.size,
-          applied,
-          missingFn: missing,
-          hasIgnoreApi: typeof (tabs.values().next().value?.view?.setIgnoreMouseEvents) === "function",
+          chromeOverlay,
+          pipTabId,
         },
         timestamp: Date.now(),
       }) + "\n",
@@ -733,6 +725,15 @@ function setChromeOverlay(active) {
       if (id === pipTabId) continue;
       entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
     }
+    return;
+  }
+  // PiP hover may still need non-PiP views collapsed.
+  if (pipPointerPassthrough) {
+    for (const [id, entry] of tabs) {
+      if (id === pipTabId) continue;
+      entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+    }
+    ensurePipOnTop();
     return;
   }
   for (const entry of tabs.values()) {
