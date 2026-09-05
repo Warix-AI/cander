@@ -147,6 +147,7 @@ import {
   makeStudioMediaTab,
   makeWebTab,
   navigateProjectBrowserTab,
+  repairAgentSurfaceTab,
   setProjectBrowserSession,
   stepProjectBrowserTab,
   subscribeProjectBrowserSession,
@@ -161,6 +162,8 @@ import {
   deleteProjectAgentClient,
   listProjectAgentsClient,
 } from "@/lib/agents/client";
+import { peekCachedProjectAgents } from "@/lib/agents/cache";
+import { applyAgentsToBrowserSession } from "@/lib/agents/prime-browser-session";
 import {
   isGoogleUrl,
   isHttpUrl,
@@ -330,14 +333,44 @@ export function ProjectBrowserPanel({
       : fallback;
 
   // Keep agent-builder tabs in sync with project_agents (one tab per agent).
+  // Do not depend on sessionRevision — that re-fetched on every tab write.
   useEffect(() => {
     if (!key || standalone || !entity || entity.kind !== "automation") return;
     const current = getProjectBrowserSession(key, fallback);
-    // Pin overview sessions stay read-only until Edit in project.
+    const repairedTabs = current.tabs.map(repairAgentSurfaceTab);
+    const needsRepair = repairedTabs.some(
+      (tab, i) =>
+        tab.kind !== current.tabs[i]!.kind ||
+        tab.agentId !== current.tabs[i]!.agentId,
+    );
+    if (needsRepair) {
+      setProjectBrowserSession(key, {
+        ...current,
+        tabs: repairedTabs,
+      });
+      return;
+    }
     if (
       current.tabs.some((tab) => tab.kind === "agent-overview") &&
       !current.tabs.some((tab) => tab.kind === "agent-builder")
     ) {
+      return;
+    }
+
+    const hasBoundAgents = current.tabs.some(
+      (tab) => tab.kind === "agent-builder" && tab.agentId,
+    );
+    if (hasBoundAgents) return;
+
+    // Prefer cache so the first paint after open isn't a blank wait.
+    const cached = peekCachedProjectAgents(workspaceId, entity.id);
+    if (cached?.length) {
+      applyAgentsToBrowserSession({
+        key,
+        projectId: entity.id,
+        title: entity.title,
+        agents: cached,
+      });
       return;
     }
 
@@ -347,63 +380,13 @@ export function ProjectBrowserPanel({
       projectId: entity.id,
     })
       .then((agents) => {
-        if (cancelled || !key) return;
-        const latest = getProjectBrowserSession(key, fallback);
-        if (
-          latest.tabs.some((tab) => tab.kind === "agent-overview") &&
-          !latest.tabs.some((tab) => tab.kind === "agent-builder")
-        ) {
-          return;
-        }
-
-        const otherTabs = latest.tabs.filter(
-          (tab) => tab.kind !== "agent-builder",
-        );
-        const agentTabs = agents.map((agent) => {
-          const existing = latest.tabs.find(
-            (tab) =>
-              tab.kind === "agent-builder" && tab.agentId === agent.id,
-          );
-          if (existing) {
-            return existing.title === agent.name
-              ? existing
-              : { ...existing, title: agent.name };
-          }
-          return makeAgentBuilderTab({
-            projectId: entity.id,
-            title: agent.name,
-            agentId: agent.id,
-          });
+        if (cancelled || !agents.length) return;
+        applyAgentsToBrowserSession({
+          key,
+          projectId: entity.id,
+          title: entity.title,
+          agents,
         });
-
-        if (!agentTabs.length) {
-          // API ensures a default agent; if empty, wait for next load.
-          return;
-        }
-
-        const nextTabs = [...agentTabs, ...otherTabs];
-        const activeStill = nextTabs.some(
-          (tab) => tab.id === latest.activeTabId,
-        );
-        const next = {
-          tabs: nextTabs,
-          activeTabId: activeStill
-            ? latest.activeTabId
-            : (agentTabs[0]?.id ?? nextTabs[0]!.id),
-        };
-        const same =
-          next.tabs.length === latest.tabs.length &&
-          next.activeTabId === latest.activeTabId &&
-          next.tabs.every((tab, i) => {
-            const prev = latest.tabs[i]!;
-            return (
-              tab.id === prev.id &&
-              tab.title === prev.title &&
-              tab.kind === prev.kind &&
-              tab.agentId === prev.agentId
-            );
-          });
-        if (!same) setProjectBrowserSession(key, next);
       })
       .catch(() => {});
 
@@ -415,9 +398,9 @@ export function ProjectBrowserPanel({
     standalone,
     entity?.id,
     entity?.kind,
+    entity?.title,
     workspaceId,
     fallback,
-    sessionRevision,
   ]);
 
   const active =
@@ -823,10 +806,12 @@ export function ProjectBrowserPanel({
       project?.space === "studio" ||
       entity?.space === "studio");
   const isAgentProject = !standalone && entity?.kind === "automation";
+  const repairedActive = active ? repairAgentSurfaceTab(active) : null;
   const isAgentSurfaceTab =
-    active?.kind === "agent-builder" || active?.kind === "agent-overview";
+    repairedActive?.kind === "agent-builder" ||
+    repairedActive?.kind === "agent-overview";
   const showBrowserNavChrome = isAgentSurfaceTab || isAgentProject
-    ? active?.kind === "web"
+    ? active?.kind === "web" && !isAgentSurfaceTab
     : isMarkdownDocTab
       ? true
       : isStudioProject
@@ -1976,7 +1961,7 @@ export function ProjectBrowserPanel({
           projectTitle={projectTitle}
           onSelect={selectTab}
           onClose={closeTab}
-          onAdd={isAgentProject ? addAgentTab : openAddSheet}
+          onAdd={openAddSheet}
         />
       ) : null}
 
@@ -2007,7 +1992,35 @@ export function ProjectBrowserPanel({
         onClose={() => setMobileSheet(null)}
         mode="add"
       >
-        {isStudioProject ? (
+        {isAgentProject ? (
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] pt-3">
+            <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
+              Add to project
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                addAgentTab();
+                setMobileSheet(null);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left text-[15px] hover:bg-muted/70"
+            >
+              <Bot className="h-4 w-4 text-muted-foreground" strokeWidth={1.6} />
+              New agent
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                addUrlTab();
+                setMobileSheet(null);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left text-[15px] hover:bg-muted/70"
+            >
+              <Globe className="h-4 w-4 text-muted-foreground" strokeWidth={1.6} />
+              Browser tab
+            </button>
+          </div>
+        ) : isStudioProject ? (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] pt-3">
             <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
               Add to project
@@ -2131,7 +2144,7 @@ export function ProjectBrowserPanel({
 }
 
 function ProjectBrowserBody({
-  tab,
+  tab: rawTab,
   projects,
   fallbackName,
   fallbackSummary,
@@ -2157,6 +2170,7 @@ function ProjectBrowserBody({
   chatImageFallbackSrc?: string | null;
   chatImageGenerating?: boolean;
 }) {
+  const tab = repairAgentSurfaceTab(rawTab);
   const computerSession = useSyncExternalStore(
     subscribeActiveComputerSession,
     getActiveComputerSessionSnapshot,
@@ -2276,7 +2290,7 @@ function ProjectBrowserBody({
           studioCleared: patch.studioCleared ? true : undefined,
         };
       }
-      return next;
+      return repairAgentSurfaceTab(next);
     });
     if (nextTabs.some((item, i) => item !== current.tabs[i])) {
       const next = { ...current, tabs: nextTabs };
@@ -2309,25 +2323,6 @@ function ProjectBrowserBody({
     );
   }
 
-  if (tab.kind === "web") {
-    return (
-      <div className="relative h-full min-h-0">
-        <BrowserSurfaceHost
-          tabId={tab.id}
-          url={tab.url}
-          reloadKey={reloadKey}
-          title={tab.title}
-          userId={userId}
-          active={surfaceActive}
-          onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
-          onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
-          onFaviconChange={(faviconUrl) => syncSurfaceMeta({ faviconUrl })}
-          onOpenNewTab={openNewInAppTab}
-        />
-      </div>
-    );
-  }
-
   if (tab.kind === "agent-overview") {
     const match =
       projects.find((item) => item.id === (tab.projectId ?? projectId)) ?? null;
@@ -2356,9 +2351,17 @@ function ProjectBrowserBody({
     const agentId = tab.agentId?.trim();
     if (!agentId || !projectId) {
       return (
-        <div className="flex h-full items-center justify-center bg-neutral-100 text-[13px] text-muted-foreground dark:bg-neutral-950">
-          Loading agent…
-        </div>
+        <div
+          className={cn(
+            "relative h-full overflow-hidden",
+            BROWSER_CHROME_BG,
+          )}
+          style={{
+            backgroundImage:
+              "radial-gradient(circle, color-mix(in oklab, var(--foreground) 12%, transparent) 1px, transparent 1px)",
+            backgroundSize: "18px 18px",
+          }}
+        />
       );
     }
     return (
@@ -2370,6 +2373,25 @@ function ProjectBrowserBody({
           syncSurfaceMeta({ title })
         }
       />
+    );
+  }
+
+  if (tab.kind === "web") {
+    return (
+      <div className="relative h-full min-h-0">
+        <BrowserSurfaceHost
+          tabId={tab.id}
+          url={tab.url}
+          reloadKey={reloadKey}
+          title={tab.title}
+          userId={userId}
+          active={surfaceActive}
+          onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
+          onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
+          onFaviconChange={(faviconUrl) => syncSurfaceMeta({ faviconUrl })}
+          onOpenNewTab={openNewInAppTab}
+        />
+      </div>
     );
   }
 
@@ -2533,24 +2555,15 @@ function ProjectTabStrip({
             <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
           </button>
         </BrowserChromeTooltip>
-      ) : agentMode && onAddAgent ? (
-        <BrowserChromeTooltip label="New agent">
-          <button
-            type="button"
-            aria-label="New agent"
-            onClick={onAddAgent}
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-black/[0.06] dark:hover:bg-white/[0.1] hover:text-foreground"
-          >
-            <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
-          </button>
-        </BrowserChromeTooltip>
       ) : (
         <AddTabMenu
           extraProjects={extraProjects}
           onAddUrl={onAddUrl}
           onAddProject={onAddProject}
           onAddStudioMedia={onAddStudioMedia}
+          onAddAgent={onAddAgent}
           studioMode={studioMode}
+          agentMode={agentMode}
         />
       )}
     </div>
@@ -2928,7 +2941,9 @@ function AddTabMenu({
   onAddUrl,
   onAddProject,
   onAddStudioMedia,
+  onAddAgent,
   studioMode = false,
+  agentMode = false,
   compact = false,
 }: {
   extraProjects: SpaceProject[];
@@ -2937,7 +2952,9 @@ function AddTabMenu({
   onAddStudioMedia?: (
     kind: "studio-image" | "studio-document",
   ) => void;
+  onAddAgent?: () => void;
   studioMode?: boolean;
+  agentMode?: boolean;
   compact?: boolean;
 }) {
   const exploreProjects = extraProjects.filter(
@@ -2985,6 +3002,20 @@ function AddTabMenu({
     >
       {(close) => (
         <>
+          {agentMode && onAddAgent ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onAddAgent();
+                close();
+              }}
+              className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] hover:bg-muted"
+            >
+              <Bot className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.6} />
+              New agent
+            </button>
+          ) : null}
           {studioMode && onAddStudioMedia ? (
             <>
               {(
@@ -3831,7 +3862,8 @@ function TabGlyph({
   kind?: ProjectKind;
   className?: string;
 }) {
-  if (tab.kind === "agent-builder" || tab.kind === "agent-overview") {
+  const surface = repairAgentSurfaceTab(tab);
+  if (surface.kind === "agent-builder" || surface.kind === "agent-overview") {
     return <Bot className={cn("h-3.5 w-3.5 shrink-0", className)} strokeWidth={1.6} />;
   }
   if (tab.kind === "agent-browser") {

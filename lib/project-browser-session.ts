@@ -120,8 +120,14 @@ function withHistory(url: string, prior?: string[]): Pick<
 /** Migrate legacy `project` / `url` kinds from saved state. */
 export function normalizeTabKind(
   raw: string | undefined,
-  opts?: { pinned?: boolean; spaceId?: SpaceId },
+  opts?: { pinned?: boolean; spaceId?: SpaceId; url?: string },
 ): ProjectBrowserTabKind {
+  // Recover tabs that were coerced to "web" by older clients that didn't
+  // know agent-builder / agent-overview kinds yet.
+  const url = opts?.url?.trim() ?? "";
+  if (url.startsWith("cander://agent-builder")) return "agent-builder";
+  if (url.startsWith("cander://agent-overview")) return "agent-overview";
+
   if (
     raw === "build-preview" ||
     raw === "project-preview" ||
@@ -143,6 +149,45 @@ export function normalizeTabKind(
   }
   // Legacy url (and unknown) → web
   return "web";
+}
+
+export function agentIdFromBuilderUrl(url: string): string | undefined {
+  const match = /^cander:\/\/agent-builder\/([^/?#]+)/i.exec(url.trim());
+  const id = match?.[1]?.trim();
+  return id || undefined;
+}
+
+export function isAgentBuilderUrl(url: string) {
+  return url.trim().toLowerCase().startsWith("cander://agent-builder");
+}
+
+export function isAgentOverviewUrl(url: string) {
+  return url.trim().toLowerCase().startsWith("cander://agent-overview");
+}
+
+export function isAgentSurfaceUrl(url: string) {
+  return isAgentBuilderUrl(url) || isAgentOverviewUrl(url);
+}
+
+/** Fix tabs older clients coerced to `web` while keeping cander:// agent URLs. */
+export function repairAgentSurfaceTab(tab: ProjectBrowserTab): ProjectBrowserTab {
+  if (isAgentBuilderUrl(tab.url)) {
+    const agentId = tab.agentId?.trim() || agentIdFromBuilderUrl(tab.url);
+    if (tab.kind === "agent-builder" && tab.agentId === agentId) return tab;
+    return {
+      ...tab,
+      kind: "agent-builder",
+      agentId,
+      url: agentId
+        ? `cander://agent-builder/${agentId}`
+        : "cander://agent-builder",
+    };
+  }
+  if (isAgentOverviewUrl(tab.url)) {
+    if (tab.kind === "agent-overview") return tab;
+    return { ...tab, kind: "agent-overview" };
+  }
+  return tab;
 }
 
 export function makePinnedBuildPreviewTab(input: {
@@ -345,11 +390,12 @@ function parseTab(
   if (!raw || typeof raw !== "object") return null;
   const data = raw as Partial<ProjectBrowserTab> & { kind?: string };
   if (!data.id || !data.title) return null;
+  const url = String(data.url ?? "");
   const kind = normalizeTabKind(data.kind, {
     pinned: Boolean(data.pinned),
     spaceId,
+    url,
   });
-  const url = String(data.url ?? "");
   const history = Array.isArray(data.history)
     ? data.history.map((item) => String(item)).filter(Boolean)
     : url
@@ -361,11 +407,17 @@ function parseTab(
     data.historyIndex < history.length
       ? data.historyIndex
       : Math.max(0, history.length - 1);
+  const resolvedUrl = history[historyIndex] ?? url;
+  const agentId =
+    (typeof data.agentId === "string" && data.agentId.trim()
+      ? data.agentId.trim()
+      : undefined) ||
+    (kind === "agent-builder" ? agentIdFromBuilderUrl(resolvedUrl) : undefined);
   return {
     id: String(data.id),
     kind,
     title: String(data.title),
-    url: history[historyIndex] ?? url,
+    url: resolvedUrl,
     pinned: Boolean(data.pinned),
     projectId: data.projectId ? String(data.projectId) : undefined,
     computerSessionId: data.computerSessionId
@@ -385,10 +437,7 @@ function parseTab(
       typeof data.shareId === "string" && data.shareId.trim()
         ? data.shareId.trim()
         : undefined,
-    agentId:
-      typeof data.agentId === "string" && data.agentId.trim()
-        ? data.agentId.trim()
-        : undefined,
+    agentId,
     history: history.length ? history : [url],
     historyIndex,
   };

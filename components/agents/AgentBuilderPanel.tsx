@@ -1,12 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import {
   Bot,
   Check,
   ChevronDown,
   ChevronRight,
   LoaderCircle,
+  Minus,
   Pencil,
   Plus,
   Trash2,
@@ -18,6 +26,7 @@ import {
   loadAgentBundleClient,
   updateProjectAgentClient,
 } from "@/lib/agents/client";
+import { peekCachedAgentBundle } from "@/lib/agents/cache";
 import type {
   AgentConfigPatch,
   AgentRoute,
@@ -27,6 +36,7 @@ import { fetchConnectorConnections } from "@/lib/api/connector-client";
 import type { ConnectorConnection } from "@/lib/connectors/types";
 import { toolsForConnector } from "@/lib/connectors/tool-catalog";
 import { policyFor } from "@/lib/workspace-policy";
+import { BROWSER_CHROME_BG } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 type CanvasSelection =
@@ -35,6 +45,10 @@ type CanvasSelection =
   | { type: "knowledge" }
   | { type: "access" }
   | { type: "route"; routeId: string; focus?: "when" | "if" | "do" };
+
+const MIN_ZOOM = 0.4;
+const MAX_ZOOM = 2.2;
+const ZOOM_STEP = 0.1;
 
 export function AgentBuilderPanel({
   workspaceId,
@@ -47,44 +61,73 @@ export function AgentBuilderPanel({
   agentId: string;
   onTitleChange?: (title: string) => void;
 }) {
-  const [bundle, setBundle] = useState<ProjectAgentBundle | null>(null);
+  const cachedBundle = peekCachedAgentBundle(workspaceId, projectId, agentId);
+  const [bundle, setBundle] = useState<ProjectAgentBundle | null>(
+    () => cachedBundle,
+  );
   const [connections, setConnections] = useState<ConnectorConnection[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !cachedBundle);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState<CanvasSelection>({
     type: "identity",
   });
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [expandedConnector, setExpandedConnector] = useState<string | null>(
     null,
   );
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+  const [panning, setPanning] = useState(false);
 
   const knowledgeBases = policyFor(workspaceId).knowledgeBases;
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    const peek = peekCachedAgentBundle(workspaceId, projectId, agentId);
+    if (peek) {
+      setBundle(peek);
+      setLoading(false);
+    } else {
+      setLoading(true);
+      setBundle(null);
+    }
     setError(null);
     setSelection({ type: "identity" });
-    void (async () => {
-      try {
-        const [next, conns] = await Promise.all([
-          loadAgentBundleClient({ workspaceId, projectId, agentId }),
-          fetchConnectorConnections(workspaceId).catch(() => []),
-        ]);
+    setPanelOpen(false);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+
+    void loadAgentBundleClient({ workspaceId, projectId, agentId })
+      .then((next) => {
         if (cancelled) return;
         setBundle(next);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Could not load agent.");
+        if (!peek) setBundle(null);
+        setLoading(false);
+      });
+
+    void fetchConnectorConnections(workspaceId)
+      .then((conns) => {
+        if (cancelled) return;
         setConnections(conns.filter((c) => c.status === "active"));
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load agent.");
-          setBundle(null);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+      })
+      .catch(() => {
+        if (!cancelled) setConnections([]);
+      });
+
     return () => {
       cancelled = true;
     };
@@ -169,20 +212,134 @@ export function AgentBuilderPanel({
     setPanelOpen(true);
   };
 
-  if (loading) {
+  const clampZoom = (value: number) =>
+    Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(value * 100) / 100));
+
+  const zoomAt = (nextZoom: number, clientX: number, clientY: number) => {
+    const el = viewportRef.current;
+    if (!el) {
+      setZoom(clampZoom(nextZoom));
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    const z = clampZoom(nextZoom);
+    setPan((prev) => ({
+      x: px - ((px - prev.x) * z) / zoom,
+      y: py - ((py - prev.y) * z) / zoom,
+    }));
+    setZoom(z);
+  };
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const onNativeWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      if (event.ctrlKey || event.metaKey) {
+        const delta = event.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+        const rect = el.getBoundingClientRect();
+        const px = event.clientX - rect.left;
+        const py = event.clientY - rect.top;
+        setZoom((current) => {
+          const z = Math.min(
+            MAX_ZOOM,
+            Math.max(MIN_ZOOM, Math.round((current + delta) * 100) / 100),
+          );
+          setPan((prev) => ({
+            x: px - ((px - prev.x) * z) / current,
+            y: py - ((py - prev.y) * z) / current,
+          }));
+          return z;
+        });
+        return;
+      }
+      setPan((prev) => ({
+        x: prev.x - event.deltaX,
+        y: prev.y - event.deltaY,
+      }));
+    };
+    el.addEventListener("wheel", onNativeWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onNativeWheel);
+  }, []);
+
+  // Native non-passive wheel listener owns pan/zoom.
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 && event.button !== 1) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-canvas-node]")) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: pan.x,
+      originY: pan.y,
+    };
+    setPanning(true);
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    setPan({
+      x: drag.originX + (event.clientX - drag.startX),
+      y: drag.originY + (event.clientY - drag.startY),
+    });
+  };
+
+  const endPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setPanning(false);
+  };
+
+  const addRoute = () => {
+    const count = bundle?.routes.length ?? 0;
+    void applyPatch({
+      upsertRoutes: [
+        {
+          name: `Route ${count + 1}`,
+          enabled: true,
+          trigger: { type: "manual", label: "WHEN something happens" },
+          condition: { type: "always", expression: "IF always" },
+          actions: [{ type: "notify", label: "DO an action" }],
+        },
+      ],
+    });
+  };
+
+  if (loading && !bundle) {
     return (
-      <div className="flex h-full items-center justify-center bg-neutral-100 dark:bg-neutral-950">
-        <LoaderCircle
-          className="h-6 w-6 animate-spin text-muted-foreground"
-          strokeWidth={1.75}
-        />
+      <div
+        className={cn("relative h-full overflow-hidden", BROWSER_CHROME_BG)}
+        style={{
+          backgroundImage:
+            "radial-gradient(circle, color-mix(in oklab, var(--foreground) 12%, transparent) 1px, transparent 1px)",
+          backgroundSize: "18px 18px",
+        }}
+      >
+        <div className="absolute inset-0 flex items-center justify-center">
+          <LoaderCircle
+            className="h-5 w-5 animate-spin text-muted-foreground/70"
+            strokeWidth={1.75}
+          />
+        </div>
       </div>
     );
   }
 
   if (!bundle) {
     return (
-      <div className="flex h-full items-center justify-center bg-neutral-100 px-6 text-center text-[13px] text-muted-foreground dark:bg-neutral-950">
+      <div
+        className={cn(
+          "flex h-full items-center justify-center px-6 text-center text-[13px] text-muted-foreground",
+          BROWSER_CHROME_BG,
+        )}
+      >
         {error || "Agent not found."}
       </div>
     );
@@ -196,172 +353,128 @@ export function AgentBuilderPanel({
       : null;
 
   return (
-    <div className="relative flex h-full min-h-0 overflow-hidden bg-neutral-100 dark:bg-neutral-950">
-      {/* Soft canvas wash */}
+    <div className={cn("relative flex h-full min-h-0 overflow-hidden", BROWSER_CHROME_BG)}>
       <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.55] dark:opacity-30"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 20% 10%, color-mix(in oklch, var(--chart-2) 18%, transparent), transparent 42%), radial-gradient(circle at 80% 80%, color-mix(in oklch, var(--chart-3) 14%, transparent), transparent 40%)",
-        }}
-      />
+        ref={viewportRef}
+        className={cn(
+          "relative min-h-0 min-w-0 flex-1 touch-none overflow-hidden",
+          panning ? "cursor-grabbing" : "cursor-grab",
+        )}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endPan}
+        onPointerCancel={endPan}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.9] dark:opacity-[0.55]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle, color-mix(in oklch, var(--foreground) 14%, transparent) 1px, transparent 1.2px)",
+            backgroundSize: "22px 22px",
+            backgroundPosition: `${pan.x}px ${pan.y}px`,
+          }}
+        />
 
-      <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-8 sm:px-10">
-        <div className="mx-auto flex w-full max-w-[28rem] flex-col items-stretch pb-16">
-          <CanvasCard
-            selected={selection.type === "identity"}
-            onClick={() => select({ type: "identity" })}
-            eyebrow="Agent"
-            title={agent.name || "Untitled agent"}
-            meta={
-              agent.enabled
-                ? agent.description || "Identity & instructions"
-                : "Disabled"
-            }
-            icon={<Bot className="h-4 w-4" strokeWidth={1.6} />}
-            status={agent.enabled ? "ready" : "off"}
-          />
-
-          <CanvasJoin
-            onAdd={() =>
-              void applyPatch({
-                upsertRoutes: [
-                  {
-                    name: `Route ${routes.length + 1}`,
-                    enabled: true,
-                    trigger: {
-                      type: "manual",
-                      label: "WHEN something happens",
-                    },
-                    condition: {
-                      type: "always",
-                      expression: "IF always",
-                    },
-                    actions: [{ type: "notify", label: "DO an action" }],
-                  },
-                ],
-              })
-            }
-          />
-
-          {routes.length === 0 ? (
+        <div
+          className="absolute left-1/2 top-16 origin-top"
+          style={{
+            transform: `translate(calc(-50% + ${pan.x}px), ${pan.y}px) scale(${zoom})`,
+            width: "28rem",
+            maxWidth: "calc(100vw - 3rem)",
+          }}
+        >
+          <div className="flex flex-col items-stretch pb-24">
             <CanvasCard
-              selected={false}
-              dashed
-              onClick={() =>
-                void applyPatch({
-                  upsertRoutes: [
-                    {
-                      name: "Route 1",
-                      enabled: true,
-                      trigger: {
-                        type: "manual",
-                        label: "WHEN something happens",
-                      },
-                      condition: {
-                        type: "always",
-                        expression: "IF always",
-                      },
-                      actions: [{ type: "notify", label: "DO an action" }],
-                    },
-                  ],
-                })
+              selected={selection.type === "identity"}
+              onClick={() => select({ type: "identity" })}
+              eyebrow="Agent"
+              title={agent.name || "Untitled agent"}
+              meta={
+                agent.enabled
+                  ? agent.description || "Identity & instructions"
+                  : "Disabled"
               }
-              eyebrow="Route"
-              title="Add a route"
-              meta="WHEN → IF → DO"
-              icon={<Zap className="h-4 w-4" strokeWidth={1.6} />}
+              icon={<Bot className="h-4 w-4" strokeWidth={1.6} />}
+              status={agent.enabled ? "ready" : "off"}
             />
-          ) : (
-            routes.map((route, index) => (
-              <div key={route.id} className="contents">
-                {index > 0 ? (
-                  <CanvasJoin
-                    onAdd={() =>
-                      void applyPatch({
-                        upsertRoutes: [
-                          {
-                            name: `Route ${routes.length + 1}`,
-                            enabled: true,
-                            trigger: {
-                              type: "manual",
-                              label: "WHEN something happens",
-                            },
-                            condition: {
-                              type: "always",
-                              expression: "IF always",
-                            },
-                            actions: [
-                              { type: "notify", label: "DO an action" },
-                            ],
-                          },
-                        ],
-                      })
+
+            <CanvasJoin onAdd={addRoute} />
+
+            {routes.length === 0 ? (
+              <CanvasCard
+                selected={false}
+                dashed
+                onClick={addRoute}
+                eyebrow="Route"
+                title="Add a route"
+                meta="WHEN → IF → DO"
+                icon={<Zap className="h-4 w-4" strokeWidth={1.6} />}
+              />
+            ) : (
+              routes.map((route, index) => (
+                <div key={route.id} className="contents">
+                  {index > 0 ? <CanvasJoin onAdd={addRoute} /> : null}
+                  <RouteStack
+                    route={route}
+                    index={index}
+                    selected={
+                      selection.type === "route" &&
+                      selection.routeId === route.id
+                        ? (selection.focus ?? "when")
+                        : null
+                    }
+                    onSelectStep={(focus) =>
+                      select({ type: "route", routeId: route.id, focus })
                     }
                   />
-                ) : null}
-                <RouteStack
-                  route={route}
-                  index={index}
-                  selected={
-                    selection.type === "route" &&
-                    selection.routeId === route.id
-                      ? (selection.focus ?? "when")
-                      : null
-                  }
-                  onSelectStep={(focus) =>
-                    select({ type: "route", routeId: route.id, focus })
-                  }
-                />
-              </div>
-            ))
-          )}
-
-          <CanvasJoin
-            onAdd={() => select({ type: "access" })}
-            label="Configure access"
-          />
-
-          <CanvasCard
-            selected={selection.type === "access"}
-            onClick={() => select({ type: "access" })}
-            eyebrow="Access"
-            title={
-              connections.length
-                ? `${connections.filter((c) => connectorEnabled.get(c.id)).length} connectors enabled`
-                : "Connectors & tools"
-            }
-            meta="Least-privilege tool access"
-            icon={<Zap className="h-4 w-4" strokeWidth={1.6} />}
-          />
-
-          <CanvasJoin onAdd={() => select({ type: "skills" })} />
-
-          <div className="grid grid-cols-2 gap-3">
-            <CanvasCard
-              compact
-              selected={selection.type === "skills"}
-              onClick={() => select({ type: "skills" })}
-              eyebrow="Skills"
-              title={
-                bundle.skills.length
-                  ? `${bundle.skills.length} attached`
-                  : "Add skills"
-              }
-            />
-            <CanvasCard
-              compact
-              selected={selection.type === "knowledge"}
-              onClick={() => select({ type: "knowledge" })}
-              eyebrow="Knowledge"
-              title={
-                bundle.knowledge.length
-                  ? `${bundle.knowledge.length} sources`
-                  : "Attach sources"
-              }
-            />
+                </div>
+              ))
+            )}
           </div>
+        </div>
+
+        <div className="absolute bottom-4 left-4 z-10 flex items-center gap-1 rounded-[12px] border border-border bg-background/95 p-1 shadow-sm backdrop-blur">
+          <ZoomBtn
+            label="Zoom out"
+            onClick={() => {
+              const el = viewportRef.current;
+              if (!el) return setZoom(clampZoom(zoom - ZOOM_STEP));
+              const rect = el.getBoundingClientRect();
+              zoomAt(
+                zoom - ZOOM_STEP,
+                rect.left + rect.width / 2,
+                rect.top + rect.height / 2,
+              );
+            }}
+          >
+            <Minus className="h-3.5 w-3.5" strokeWidth={1.8} />
+          </ZoomBtn>
+          <button
+            type="button"
+            onClick={() => {
+              setZoom(1);
+              setPan({ x: 0, y: 0 });
+            }}
+            className="min-w-[3.25rem] rounded-[8px] px-2 py-1.5 text-center font-mono text-[11px] tabular-nums text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <ZoomBtn
+            label="Zoom in"
+            onClick={() => {
+              const el = viewportRef.current;
+              if (!el) return setZoom(clampZoom(zoom + ZOOM_STEP));
+              const rect = el.getBoundingClientRect();
+              zoomAt(
+                zoom + ZOOM_STEP,
+                rect.left + rect.width / 2,
+                rect.top + rect.height / 2,
+              );
+            }}
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
+          </ZoomBtn>
         </div>
       </div>
 
@@ -387,6 +500,31 @@ export function AgentBuilderPanel({
             >
               <X className="h-4 w-4" strokeWidth={1.7} />
             </button>
+          </div>
+
+          <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-2 py-2 [scrollbar-width:none]">
+            {(
+              [
+                ["identity", "Agent"],
+                ["access", "Access"],
+                ["skills", "Skills"],
+                ["knowledge", "Knowledge"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => select({ type: id })}
+                className={cn(
+                  "shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-medium",
+                  selection.type === id
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
@@ -478,7 +616,10 @@ export function AgentBuilderPanel({
       ) : (
         <button
           type="button"
-          onClick={() => setPanelOpen(true)}
+          onClick={() => {
+            setSelection({ type: "identity" });
+            setPanelOpen(true);
+          }}
           className="absolute top-4 right-4 z-20 inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-border bg-background px-3 text-[12.5px] font-medium shadow-sm hover:bg-muted"
         >
           <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
@@ -486,6 +627,27 @@ export function AgentBuilderPanel({
         </button>
       )}
     </div>
+  );
+}
+
+function ZoomBtn({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-muted-foreground hover:bg-muted hover:text-foreground"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -512,7 +674,7 @@ function CanvasJoin({
   label?: string;
 }) {
   return (
-    <div className="relative flex h-10 items-center justify-center">
+    <div className="relative flex h-10 items-center justify-center" data-canvas-node>
       <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border" />
       <button
         type="button"
@@ -534,26 +696,24 @@ function CanvasCard({
   selected,
   onClick,
   dashed,
-  compact,
   status,
 }: {
   eyebrow: string;
   title: string;
   meta?: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
   selected?: boolean;
   onClick: () => void;
   dashed?: boolean;
-  compact?: boolean;
   status?: "ready" | "off";
 }) {
   return (
     <button
       type="button"
+      data-canvas-node
       onClick={onClick}
       className={cn(
-        "w-full rounded-[14px] border bg-background text-left shadow-[0_8px_24px_rgba(0,0,0,0.04)] transition-colors",
-        compact ? "px-3 py-3" : "px-3.5 py-3.5",
+        "w-full cursor-pointer rounded-[14px] border bg-background px-3.5 py-3.5 text-left shadow-[0_8px_24px_rgba(0,0,0,0.04)] transition-colors",
         dashed && "border-dashed",
         selected
           ? "border-foreground/35 ring-1 ring-foreground/10"
@@ -578,12 +738,7 @@ function CanvasCard({
               <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
             ) : null}
           </div>
-          <p
-            className={cn(
-              "mt-0.5 truncate font-medium tracking-[-0.02em]",
-              compact ? "text-[13px]" : "text-[14px]",
-            )}
-          >
+          <p className="mt-0.5 truncate text-[14px] font-medium tracking-[-0.02em]">
             {title}
           </p>
           {meta ? (
@@ -627,7 +782,10 @@ function RouteStack({
   ];
 
   return (
-    <div className="overflow-hidden rounded-[14px] border border-border bg-background shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
+    <div
+      data-canvas-node
+      className="overflow-hidden rounded-[14px] border border-border bg-background shadow-[0_8px_24px_rgba(0,0,0,0.04)]"
+    >
       <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5">
         <div className="min-w-0">
           <p className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
@@ -650,7 +808,7 @@ function RouteStack({
             type="button"
             onClick={() => onSelectStep(step.id)}
             className={cn(
-              "flex w-full items-start gap-3 px-3.5 py-3 text-left transition-colors hover:bg-muted/40",
+              "flex w-full cursor-pointer items-start gap-3 px-3.5 py-3 text-left transition-colors hover:bg-muted/40",
               selected === step.id && "bg-muted/60",
             )}
           >

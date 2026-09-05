@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Bot, LoaderCircle, Pencil } from "lucide-react";
 import { listProjectAgentsClient } from "@/lib/agents/client";
+import { peekCachedProjectAgents } from "@/lib/agents/cache";
 import type { ProjectAgent } from "@/lib/agents/types";
 import { cn } from "@/lib/utils";
 import { BROWSER_CHROME_BG } from "@/lib/shell-chrome";
@@ -18,13 +19,23 @@ export function AgentOverviewPanel({
   projectTitle?: string;
   onEditInProject: () => void;
 }) {
-  const [agents, setAgents] = useState<ProjectAgent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [agents, setAgents] = useState<ProjectAgent[]>(
+    () => peekCachedProjectAgents(workspaceId, projectId) ?? [],
+  );
+  const [loading, setLoading] = useState(
+    () => !peekCachedProjectAgents(workspaceId, projectId),
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    const peek = peekCachedProjectAgents(workspaceId, projectId);
+    if (peek) {
+      setAgents(peek);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     void listProjectAgentsClient({ workspaceId, projectId })
       .then((list) => {
         if (!cancelled) setAgents(list);

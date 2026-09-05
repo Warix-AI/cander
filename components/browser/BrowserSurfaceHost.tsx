@@ -332,6 +332,11 @@ export function BrowserSurfaceHost({
     );
   }
 
+  // Internal app surfaces (agent builder, etc.) are React panels — never browse them.
+  if (/^cander:\/\//i.test(url.trim())) {
+    return <div ref={hostRef} className="h-full w-full" />;
+  }
+
   if (adapterId === "web-pwa" && isGoogleUrl(url)) {
     return (
       <div

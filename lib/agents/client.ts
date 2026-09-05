@@ -3,6 +3,17 @@
  */
 
 import { getRawOpenAIAuthHeaders } from "@/lib/ai/raw-openai/upload-client";
+import {
+  getAgentsInflight,
+  getBundleInflight,
+  peekCachedAgentBundle,
+  peekCachedProjectAgents,
+  rememberAgentsInflight,
+  rememberBundleInflight,
+  setCachedAgentBundle,
+  setCachedProjectAgents,
+  invalidateCachedProjectAgents,
+} from "@/lib/agents/cache";
 import type {
   AgentConfigPatch,
   AgentConfigProposal,
@@ -27,17 +38,32 @@ async function parseJson<T>(res: Response): Promise<T> {
 export async function listProjectAgentsClient(opts: {
   workspaceId: string;
   projectId: string;
+  force?: boolean;
 }): Promise<ProjectAgent[]> {
-  const headers = await authHeaders();
-  const params = new URLSearchParams({
-    workspaceId: opts.workspaceId,
-  });
-  const res = await fetch(
-    `/api/projects/${encodeURIComponent(opts.projectId)}/agents?${params}`,
-    { headers },
-  );
-  const data = await parseJson<{ agents: ProjectAgent[] }>(res);
-  return data.agents ?? [];
+  if (!opts.force) {
+    const cached = peekCachedProjectAgents(opts.workspaceId, opts.projectId);
+    if (cached) return cached;
+    const inflight = getAgentsInflight(opts.workspaceId, opts.projectId);
+    if (inflight) return inflight;
+  }
+
+  const promise = (async () => {
+    const headers = await authHeaders();
+    const params = new URLSearchParams({
+      workspaceId: opts.workspaceId,
+    });
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(opts.projectId)}/agents?${params}`,
+      { headers },
+    );
+    const data = await parseJson<{ agents: ProjectAgent[] }>(res);
+    const agents = data.agents ?? [];
+    setCachedProjectAgents(opts.workspaceId, opts.projectId, agents);
+    return agents;
+  })();
+
+  rememberAgentsInflight(opts.workspaceId, opts.projectId, promise);
+  return promise;
 }
 
 export async function createProjectAgentClient(opts: {
@@ -57,6 +83,11 @@ export async function createProjectAgentClient(opts: {
     },
   );
   const data = await parseJson<{ agent: ProjectAgent }>(res);
+  const cached = peekCachedProjectAgents(opts.workspaceId, opts.projectId) ?? [];
+  setCachedProjectAgents(opts.workspaceId, opts.projectId, [
+    ...cached.filter((agent) => agent.id !== data.agent.id),
+    data.agent,
+  ]);
   return data.agent;
 }
 
@@ -64,14 +95,47 @@ export async function loadAgentBundleClient(opts: {
   workspaceId: string;
   projectId: string;
   agentId: string;
+  force?: boolean;
 }): Promise<ProjectAgentBundle> {
-  const headers = await authHeaders();
-  const params = new URLSearchParams({ workspaceId: opts.workspaceId });
-  const res = await fetch(
-    `/api/projects/${encodeURIComponent(opts.projectId)}/agents/${encodeURIComponent(opts.agentId)}?${params}`,
-    { headers },
+  if (!opts.force) {
+    const cached = peekCachedAgentBundle(
+      opts.workspaceId,
+      opts.projectId,
+      opts.agentId,
+    );
+    if (cached) return cached;
+    const inflight = getBundleInflight(
+      opts.workspaceId,
+      opts.projectId,
+      opts.agentId,
+    );
+    if (inflight) return inflight;
+  }
+
+  const promise = (async () => {
+    const headers = await authHeaders();
+    const params = new URLSearchParams({ workspaceId: opts.workspaceId });
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(opts.projectId)}/agents/${encodeURIComponent(opts.agentId)}?${params}`,
+      { headers },
+    );
+    const bundle = await parseJson<ProjectAgentBundle>(res);
+    setCachedAgentBundle(
+      opts.workspaceId,
+      opts.projectId,
+      opts.agentId,
+      bundle,
+    );
+    return bundle;
+  })();
+
+  rememberBundleInflight(
+    opts.workspaceId,
+    opts.projectId,
+    opts.agentId,
+    promise,
   );
-  return parseJson<ProjectAgentBundle>(res);
+  return promise;
 }
 
 export async function updateProjectAgentClient(opts: {
@@ -95,6 +159,22 @@ export async function updateProjectAgentClient(opts: {
     },
   );
   const data = await parseJson<{ agent: ProjectAgent }>(res);
+  const list =
+    peekCachedProjectAgents(opts.workspaceId, opts.projectId)?.map((agent) =>
+      agent.id === data.agent.id ? data.agent : agent,
+    ) ?? [data.agent];
+  setCachedProjectAgents(opts.workspaceId, opts.projectId, list);
+  const cached = peekCachedAgentBundle(
+    opts.workspaceId,
+    opts.projectId,
+    opts.agentId,
+  );
+  if (cached) {
+    setCachedAgentBundle(opts.workspaceId, opts.projectId, opts.agentId, {
+      ...cached,
+      agent: data.agent,
+    });
+  }
   return data.agent;
 }
 
@@ -110,6 +190,7 @@ export async function deleteProjectAgentClient(opts: {
     { method: "DELETE", headers },
   );
   await parseJson<{ ok: boolean }>(res);
+  invalidateCachedProjectAgents(opts.workspaceId, opts.projectId);
 }
 
 export async function duplicateProjectAgentClient(opts: {
@@ -126,7 +207,15 @@ export async function duplicateProjectAgentClient(opts: {
       body: JSON.stringify({ workspaceId: opts.workspaceId }),
     },
   );
-  return parseJson<ProjectAgentBundle>(res);
+  const bundle = await parseJson<ProjectAgentBundle>(res);
+  invalidateCachedProjectAgents(opts.workspaceId, opts.projectId);
+  setCachedAgentBundle(
+    opts.workspaceId,
+    opts.projectId,
+    bundle.agent.id,
+    bundle,
+  );
+  return bundle;
 }
 
 export async function applyAgentConfigPatchClient(opts: {
@@ -149,7 +238,14 @@ export async function applyAgentConfigPatchClient(opts: {
       }),
     },
   );
-  return parseJson<ProjectAgentBundle>(res);
+  const bundle = await parseJson<ProjectAgentBundle>(res);
+  setCachedAgentBundle(
+    opts.workspaceId,
+    opts.projectId,
+    opts.agentId,
+    bundle,
+  );
+  return bundle;
 }
 
 export async function proposeAgentConfigClient(opts: {
