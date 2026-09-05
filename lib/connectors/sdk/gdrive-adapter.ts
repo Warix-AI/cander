@@ -1,5 +1,5 @@
 /**
- * Google Drive ConnectorViewAdapter — list / create via Composio.
+ * Google Drive ConnectorViewAdapter — list / create / preview via Composio.
  */
 
 import { executeConnectorTool } from "../tool-execute.ts";
@@ -61,6 +61,101 @@ function extractFiles(payload: Record<string, unknown>): unknown[] {
   return [];
 }
 
+/** Export mime for Google Workspace types so previews are readable. */
+export function exportMimeForDriveFile(sourceMime: string | undefined): string | undefined {
+  switch (sourceMime) {
+    case "application/vnd.google-apps.document":
+      return "text/plain";
+    case "application/vnd.google-apps.spreadsheet":
+      return "text/csv";
+    case "application/vnd.google-apps.presentation":
+      return "text/plain";
+    case "application/vnd.google-apps.drawing":
+      return "image/png";
+    default:
+      return undefined;
+  }
+}
+
+function isTextishMime(mime: string | undefined): boolean {
+  if (!mime) return false;
+  return (
+    mime.startsWith("text/") ||
+    mime === "application/json" ||
+    mime === "application/xml" ||
+    mime === "application/javascript" ||
+    mime === "application/csv" ||
+    mime.includes("markdown")
+  );
+}
+
+function isImageMime(mime: string | undefined): boolean {
+  return Boolean(mime?.startsWith("image/"));
+}
+
+function isPdfMime(mime: string | undefined): boolean {
+  return mime === "application/pdf";
+}
+
+async function fetchTextPreview(url: string, maxChars = 48_000): Promise<string | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (text.length <= maxChars) return text;
+    return `${text.slice(0, maxChars)}\n\n…preview truncated`;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeDownloadPreview(payload: Record<string, unknown>): Record<string, unknown> {
+  const downloaded =
+    payload.downloaded_file_content &&
+    typeof payload.downloaded_file_content === "object"
+      ? (payload.downloaded_file_content as Record<string, unknown>)
+      : null;
+
+  const displayUrl =
+    pickString(
+      payload.display_url,
+      payload.displayUrl,
+      payload.export_link,
+      payload.exportLink,
+      downloaded?.s3url,
+      downloaded?.s3Url,
+      downloaded?.url,
+    ) ?? null;
+
+  const mimeType =
+    pickString(
+      downloaded?.mimetype,
+      downloaded?.mimeType,
+      payload.mimeType,
+      payload.mime_type,
+    ) ?? "application/octet-stream";
+
+  const name =
+    pickString(payload.name, downloaded?.name) ?? "File";
+
+  let previewKind: "text" | "image" | "pdf" | "link" | "unsupported" = "unsupported";
+  if (isTextishMime(mimeType)) previewKind = "text";
+  else if (isImageMime(mimeType)) previewKind = "image";
+  else if (isPdfMime(mimeType)) previewKind = "pdf";
+  else if (displayUrl) previewKind = "link";
+
+  return {
+    id: pickString(payload.id) ?? null,
+    name,
+    mimeType,
+    displayUrl,
+    previewKind,
+    linkLabel: pickString(payload.link_label, payload.linkLabel) ?? "Open file",
+    exportApplied: Boolean(payload.export_applied ?? payload.exportApplied),
+    raw: payload,
+  };
+}
+
 export const gdriveViewAdapter: ConnectorViewAdapter = {
   connectorId: "gdrive",
   capabilities: {
@@ -109,17 +204,40 @@ export const gdriveViewAdapter: ConnectorViewAdapter = {
         case "downloadFile": {
           const fileId = pickString(args.fileId, args.file_id, args.id);
           if (!fileId) return { ok: false, error: "Missing file id." };
+          const sourceMime = pickString(
+            args.sourceMimeType,
+            args.source_mime_type,
+            args.mimeType,
+            args.mime_type,
+          );
+          const exportMime =
+            pickString(args.exportMimeType, args.export_mime_type) ||
+            exportMimeForDriveFile(sourceMime);
           const result = await runTool(
             ctx,
             "gdrive.download",
             {
               fileId,
-              mimeType: pickString(args.mimeType, args.mime_type),
+              mimeType: exportMime,
             },
             false,
           );
           if (!result.ok) return { ok: false, error: result.error };
-          return { ok: true, data: parseToolJson(result.output) };
+          const payload = parseToolJson(result.output);
+          const preview = normalizeDownloadPreview(payload);
+
+          if (
+            preview.previewKind === "text" &&
+            typeof preview.displayUrl === "string" &&
+            preview.displayUrl
+          ) {
+            const text = await fetchTextPreview(preview.displayUrl);
+            if (text != null) {
+              preview.textContent = text;
+            }
+          }
+
+          return { ok: true, data: preview };
         }
         default:
           return { ok: false, error: `Unsupported action: ${action}` };
