@@ -581,6 +581,9 @@ async function setPipTab(tabId) {
   }
 }
 
+/** Last non-PiP tab shown in the panel — restored if a PiP paint blanked it. */
+let activePanelTabId = null;
+
 function showTab(tabId, bounds) {
   const entry = tabs.get(tabId);
   if (!entry || !hostWindow || hostWindow.isDestroyed()) return;
@@ -601,6 +604,20 @@ function showTab(tabId, bounds) {
     prev.height === nextBounds.height;
   entry.lastBounds = nextBounds;
   entry.visible = true;
+
+  // PiP paints must NEVER hide the active panel tab — that blanked the browser
+  // whenever the floating video moved or hovered.
+  if (tabId === pipTabId) {
+    if (!unchanged) {
+      entry.view.setBounds(nextBounds);
+      raiseView(entry);
+    } else {
+      ensurePipOnTop();
+    }
+    return;
+  }
+
+  activePanelTabId = tabId;
   for (const [id, other] of tabs) {
     if (id === tabId) continue;
     if (id === pipTabId) continue; // Keep PiP floating while panel tab shows.
@@ -615,9 +632,8 @@ function showTab(tabId, bounds) {
       void pauseMedia(id);
     }
   }
-  // Only chrome overlays (menus) should zero the panel tab — never PiP hover
-  // (collapsing blanked the browser under the floating video).
-  if (chromeOverlay && tabId !== pipTabId) {
+  // Only chrome overlays (menus) should zero the panel tab.
+  if (chromeOverlay) {
     entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
     ensurePipOnTop();
     return;
@@ -625,15 +641,21 @@ function showTab(tabId, bounds) {
   if (!unchanged) {
     entry.view.setBounds(nextBounds);
   }
-  // Never re-parent PiP on every identical paint — that flickers the video.
-  if (tabId === pipTabId) {
-    if (!unchanged) raiseView(entry);
-    return;
-  }
   // Panel tab moved/shown — keep PiP above it (once per real change).
   if (!unchanged) {
     ensurePipOnTop();
   }
+}
+
+/** Re-show the panel tab if a prior PiP paint collapsed it. */
+function restoreActivePanelIfNeeded() {
+  if (!activePanelTabId || activePanelTabId === pipTabId) return;
+  if (chromeOverlay) return;
+  const panel = tabs.get(activePanelTabId);
+  if (!panel?.lastBounds || panel.lastBounds.width < 2) return;
+  panel.visible = true;
+  panel.view.setBounds(panel.lastBounds);
+  ensurePipOnTop();
 }
 
 function isCursorOverPip() {
@@ -705,11 +727,14 @@ function handlePipChromeConsole(tabId, message) {
     };
     entry.lastBounds = next;
     entry.view.setBounds(next);
+    // React `pos` is the video top-left; when guest chrome is on the native
+    // view includes the header band above the video.
+    const chromePad = pipPointerPassthrough ? 36 : 0;
     emitToRenderer("cander:browser-event", {
       type: "pipMove",
       tabId,
       x: next.x,
-      y: next.y,
+      y: next.y + chromePad,
     });
     return;
   }
@@ -738,6 +763,7 @@ function setPipPointerPassthrough(active) {
       });
   }
   if (!next) pipDragState = null;
+  restoreActivePanelIfNeeded();
   ensurePipOnTop();
 }
 
@@ -747,6 +773,7 @@ function hideTab(tabId) {
   if (!entry) return;
   entry.visible = false;
   entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+  if (activePanelTabId === tabId) activePanelTabId = null;
   // Keep background tabs paused — Chromium often auto-resumes when shown again.
   void pauseMedia(tabId);
 }

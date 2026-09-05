@@ -197,12 +197,22 @@ export function BrowserPipOverlay() {
     };
   }, [pip?.tabId, pip?.webEmbed, paintNative]);
 
-  // Only re-paint when video geometry changes — not when hover chrome toggles.
+  // Only re-paint when video geometry or hover chrome height changes.
+  // Electron grows the native view upward for in-guest header space.
   useEffect(() => {
     if (!pip || pip.webEmbed) return;
     lastPaintBounds.current = null;
     void paintNative();
-  }, [pip?.tabId, pip?.webEmbed, pip?.width, pip?.height, pos, paintNative]);
+  }, [
+    pip?.tabId,
+    pip?.webEmbed,
+    pip?.width,
+    pip?.height,
+    pos,
+    hovered,
+    dragging,
+    paintNative,
+  ]);
 
   const closePip = useCallback(async () => {
     const tabId = pip?.tabId;
@@ -372,10 +382,11 @@ export function BrowserPipOverlay() {
 
   if (!pip || !pos) return null;
 
-  // Electron uses in-guest chrome; React chrome only for webEmbed iframes.
+  // Grow upward on hover so the header adds above the video (same screen
+  // position for the video). Electron draws the header in-guest; webEmbed
+  // uses the React chrome bar.
+  const showChrome = hovered || dragging;
   const useReactChrome = Boolean(pip.webEmbed);
-  const showChrome = useReactChrome && (hovered || dragging);
-  // Grow upward: video screen position stays fixed; header adds above.
   const rootTop = showChrome ? pos.y - PIP_CHROME_HEIGHT : pos.y;
   const rootHeight = showChrome ? pip.height + PIP_CHROME_HEIGHT : pip.height;
 
@@ -411,7 +422,7 @@ export function BrowserPipOverlay() {
         if (pip.webEmbed && !dragging) setHovered(false);
       }}
     >
-      {showChrome ? (
+      {useReactChrome && showChrome ? (
         <div
           className="absolute inset-x-0 top-0 z-10 flex h-9 cursor-grab items-center gap-2 bg-neutral-950 px-2 active:cursor-grabbing"
           style={{ height: PIP_CHROME_HEIGHT }}
@@ -446,11 +457,16 @@ export function BrowserPipOverlay() {
         </div>
       ) : null}
 
-      {/* Video host — fixed height; never shrinks when chrome appears. */}
+      {/* Native host: full root (incl. header band) on Electron so guest chrome
+          can grow the view; webEmbed keeps the iframe in the video band only. */}
       <div
         ref={hostRef}
-        className="absolute inset-x-0 bottom-0 bg-black"
-        style={{ height: pip.height }}
+        className="absolute inset-x-0 bg-black"
+        style={
+          pip.webEmbed
+            ? { bottom: 0, height: pip.height }
+            : { inset: 0 }
+        }
       >
         {pip.webEmbed ? (
           <iframe
