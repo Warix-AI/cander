@@ -108,7 +108,7 @@ registerCanderTool({
     "Send an email via the user's connected Gmail. Requires write access enabled in Connectors.",
   risk: "write",
   confirmationPolicy: "when_ambiguous",
-  defaultEnabled: false,
+  defaultEnabled: true,
   providerTool: "GMAIL_SEND_EMAIL",
   inputSchema: {
     type: "object",
@@ -133,7 +133,7 @@ registerCanderTool({
     "Create a Gmail draft for the user to review. Requires draft mail enabled in Connectors.",
   risk: "write",
   confirmationPolicy: "never",
-  defaultEnabled: false,
+  defaultEnabled: true,
   providerTool: "GMAIL_CREATE_EMAIL_DRAFT",
   inputSchema: {
     type: "object",
@@ -159,7 +159,7 @@ registerCanderTool({
     "Reply within an existing Gmail thread. Requires reply in thread enabled in Connectors.",
   risk: "write",
   confirmationPolicy: "when_ambiguous",
-  defaultEnabled: false,
+  defaultEnabled: true,
   providerTool: "GMAIL_REPLY_TO_THREAD",
   inputSchema: {
     type: "object",
@@ -187,7 +187,7 @@ registerCanderTool({
   description: "Remove a Gmail message from the inbox (archive).",
   risk: "write",
   confirmationPolicy: "never",
-  defaultEnabled: false,
+  defaultEnabled: true,
   providerTool: "GMAIL_REMOVE_LABEL",
   inputSchema: {
     type: "object",
@@ -293,7 +293,7 @@ registerCanderTool({
   description: "Post a message to a Slack channel. Requires send enabled in Connectors.",
   risk: "write",
   confirmationPolicy: "when_ambiguous",
-  defaultEnabled: false,
+  defaultEnabled: true,
   providerTool: "SLACK_SEND_MESSAGE",
   inputSchema: {
     type: "object",

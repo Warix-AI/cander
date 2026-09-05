@@ -163,10 +163,13 @@ export function ConnectorsDashboard() {
         const accounts = activeAccountsForConnector(workspaceId, item.id);
         const pending = pendingConnectorIdsLive(workspaceId).includes(item.id);
         const liveConnected = accounts.length > 0;
-        const mockInstalled = installedIds.includes(item.id) && item.id !== "gmail";
+        // OAuth connectors are only "installed" after a verified active connection.
+        // Local catalog installs never fake Connected/Installed for Composio OAuth apps.
+        const localInstall =
+          !isOauthConnectorId(item.id) && installedIds.includes(item.id);
         return {
           ...item,
-          installed: liveConnected || mockInstalled,
+          installed: liveConnected || localInstall,
           pending,
           accounts,
           liveConnections,
@@ -584,14 +587,14 @@ function DirectoryItem({
   onOpen: () => void;
   onConnect: () => void;
 }) {
-  const hasServerConnection = Boolean(item.liveConnections?.length);
   const isConnected = item.liveConnections?.some((row) => row.status === "active");
+  const isOauth = isOauthConnectorId(item.id);
 
   const statusLabel = item.pending
     ? "Connecting"
     : isConnected
       ? "Connected"
-      : item.installed || hasServerConnection
+      : !isOauth && item.installed
         ? "Installed"
         : null;
 
@@ -645,7 +648,9 @@ function DirectoryItem({
         </div>
       </button>
       <div className="flex shrink-0 items-center self-center">
-        {isConnected || statusLabel === "Installed" || item.pending ? null : (
+        {isConnected ||
+        item.pending ||
+        (!isOauth && item.installed) ? null : (
           <button
             type="button"
             aria-label={

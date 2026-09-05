@@ -22,12 +22,13 @@ describe("connector API security contract", () => {
     assert.match(err.error, /not found/i);
   });
 
-  it("gmail.send is denied unless write permission is enabled", () => {
+  it("gmail.send is denied when send permission is disabled", () => {
     const denied = authorizeConnectorToolAction({
       workspaceId: "ws-a",
       profileId: "user-a",
       connectorId: "gmail",
       toolName: "gmail.send",
+      toolPermissions: { "gmail.send": false },
       connectionId: "conn-1",
     });
     assert.equal(denied.ok, false);
@@ -71,13 +72,14 @@ describe("connector API security contract", () => {
     assert.equal(allowed.ok, true);
   });
 
-  it("gmail.draft and gmail.reply require explicit write permissions", () => {
+  it("gmail.draft and gmail.reply are denied when those skills are disabled", () => {
     for (const toolName of ["gmail.draft", "gmail.reply"] as const) {
       const denied = authorizeConnectorToolAction({
         workspaceId: "ws-a",
         profileId: "user-a",
         connectorId: "gmail",
         toolName,
+        toolPermissions: { [toolName]: false },
         connectionId: "conn-1",
       });
       assert.equal(denied.ok, false, toolName);

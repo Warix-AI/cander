@@ -168,11 +168,11 @@ test("M2: valid scope only exposes that connector family tools", () => {
   );
 });
 
-test("M5: gmail.archive default-disabled; mark read/unread enabled without confirm", () => {
+test("M5: gmail skills default-enabled; mark read/unread without confirm", () => {
   const archive = getCanderTool("gmail.archive")!;
   const markRead = getCanderTool("gmail.markRead")!;
   const markUnread = getCanderTool("gmail.markUnread")!;
-  assert.equal(archive.defaultEnabled, false);
+  assert.equal(archive.defaultEnabled, true);
   assert.equal(archive.risk, "write");
   assert.equal(markRead.defaultEnabled, true);
   assert.equal(markRead.confirmationPolicy, "never");
@@ -180,11 +180,11 @@ test("M5: gmail.archive default-disabled; mark read/unread enabled without confi
   assert.equal(markUnread.confirmationPolicy, "never");
 
   const defaults = defaultToolPermissions("gmail");
-  assert.equal(defaults["gmail.archive"], false);
+  assert.equal(defaults["gmail.archive"], true);
   assert.equal(defaults["gmail.markRead"], true);
   assert.equal(defaults["gmail.markUnread"], true);
   assert.equal(defaults["gmail.read"], true);
-  assert.equal(defaults["gmail.send"], false);
+  assert.equal(defaults["gmail.send"], true);
 });
 
 test("M3: migration revokes authenticated SELECT on provider_connection_id", () => {

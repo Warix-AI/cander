@@ -79,7 +79,7 @@ export function registerGoogleWorkspaceTools(
     description: "Create a Google Calendar event with start time and duration.",
     risk: "write",
     confirmationPolicy: "when_ambiguous",
-    defaultEnabled: false,
+    defaultEnabled: true,
     providerTool: GCAL_COMPOSIO_SLUGS["gcal.createEvent"],
     inputSchema: {
       type: "object",
@@ -103,7 +103,7 @@ export function registerGoogleWorkspaceTools(
     description: "Create a calendar event from natural language (e.g. Lunch tomorrow 1pm).",
     risk: "write",
     confirmationPolicy: "when_ambiguous",
-    defaultEnabled: false,
+    defaultEnabled: true,
     providerTool: GCAL_COMPOSIO_SLUGS["gcal.quickAdd"],
     inputSchema: {
       type: "object",
@@ -144,7 +144,7 @@ export function registerGoogleWorkspaceTools(
     description: "Create a folder in Google Drive.",
     risk: "write",
     confirmationPolicy: "never",
-    defaultEnabled: false,
+    defaultEnabled: true,
     providerTool: GDRIVE_COMPOSIO_SLUGS["gdrive.createFolder"],
     inputSchema: {
       type: "object",
@@ -165,7 +165,7 @@ export function registerGoogleWorkspaceTools(
     description: "Create a Drive file from text content.",
     risk: "write",
     confirmationPolicy: "when_ambiguous",
-    defaultEnabled: false,
+    defaultEnabled: true,
     providerTool: GDRIVE_COMPOSIO_SLUGS["gdrive.createFromText"],
     inputSchema: {
       type: "object",
@@ -288,7 +288,7 @@ export function registerGoogleWorkspaceTools(
     description: "Create a new Google Spreadsheet in Drive.",
     risk: "write",
     confirmationPolicy: "when_ambiguous",
-    defaultEnabled: false,
+    defaultEnabled: true,
     providerTool: GSHEETS_COMPOSIO_SLUGS["gsheets.create"],
     inputSchema: {
       type: "object",
@@ -348,7 +348,7 @@ export function registerGoogleWorkspaceTools(
     description: "Create a Google Doc, optionally seeded with Markdown content.",
     risk: "write",
     confirmationPolicy: "when_ambiguous",
-    defaultEnabled: false,
+    defaultEnabled: true,
     providerTool: GDOCS_COMPOSIO_SLUGS["gdocs.createMarkdown"],
     inputSchema: {
       type: "object",
@@ -369,7 +369,7 @@ export function registerGoogleWorkspaceTools(
     description: "Replace an existing Google Doc's content with Markdown.",
     risk: "write",
     confirmationPolicy: "always",
-    defaultEnabled: false,
+    defaultEnabled: true,
     providerTool: GDOCS_COMPOSIO_SLUGS["gdocs.updateMarkdown"],
     inputSchema: {
       type: "object",

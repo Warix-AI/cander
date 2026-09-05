@@ -96,11 +96,14 @@ export function ConnectorDetailModal({
   const pendingConnection = activeConnection
     ? undefined
     : item.liveConnections?.find((row) => row.status === "pending");
-  const hasLiveConnection = Boolean(item.liveConnections?.length);
   const isConnected = Boolean(activeConnection);
   const skills = toolsForConnector(item.id);
   const prompts = promptsForConnector(item);
   const canManageServerConnection = isOauthConnectorId(item.id);
+  const localInstallOnly =
+    !canManageServerConnection && Boolean(item.installed) && !isConnected;
+  const canDisconnectOrUninstall =
+    isConnected || Boolean(pendingConnection) || localInstallOnly;
 
   const statusLabel = blocked
     ? "Blocked"
@@ -108,7 +111,7 @@ export function ConnectorDetailModal({
       ? "Connected"
       : pendingConnection
         ? "Connecting"
-        : item.installed
+        : localInstallOnly
           ? "Installed"
           : "Not connected";
 
@@ -137,7 +140,13 @@ export function ConnectorDetailModal({
     if (!open) setConfirmDisconnect(false);
   }, [open, item.id]);
 
-  const showConnectFooter = !blocked && (workAttach || !isConnected);
+  // Connected / local-installed apps manage lifecycle from the menu — no Connect footer.
+  // Pending OAuth still shows Continue connecting.
+  const showConnectFooter =
+    !blocked &&
+    (Boolean(workAttach) ||
+      Boolean(pendingConnection) ||
+      (!isConnected && !localInstallOnly));
 
   const previewConnection: ConnectorConnection = {
     id: "preview",
@@ -282,10 +291,7 @@ export function ConnectorDetailModal({
                         Open
                       </button>
                     ) : null}
-                    {!isConnected &&
-                    !pendingConnection &&
-                    !item.installed &&
-                    !hasLiveConnection ? (
+                    {!canDisconnectOrUninstall ? (
                       <button
                         type="button"
                         role="menuitem"
@@ -299,10 +305,7 @@ export function ConnectorDetailModal({
                         {busy ? "Working…" : primaryLabel}
                       </button>
                     ) : null}
-                    {(isConnected ||
-                      pendingConnection ||
-                      hasLiveConnection ||
-                      item.installed) && (
+                    {canDisconnectOrUninstall ? (
                       <button
                         type="button"
                         role="menuitem"
@@ -317,7 +320,7 @@ export function ConnectorDetailModal({
                           ? "Disconnect"
                           : "Uninstall"}
                       </button>
-                    )}
+                    ) : null}
                   </>
                 )}
               </Dropdown>
