@@ -69,10 +69,17 @@ function gcalAuthConfigId(): string {
   return id;
 }
 
+function gdriveAuthConfigId(): string {
+  const id = process.env.COMPOSIO_GDRIVE_AUTH_CONFIG_ID?.trim();
+  if (!id) throw new Error("COMPOSIO_GDRIVE_AUTH_CONFIG_ID is not configured");
+  return id;
+}
+
 function authConfigIdForConnector(connectorId: string): string {
   if (connectorId === "gmail") return gmailAuthConfigId();
   if (connectorId === "slack") return slackAuthConfigId();
   if (connectorId === "gcal") return gcalAuthConfigId();
+  if (connectorId === "gdrive") return gdriveAuthConfigId();
   throw new Error(`No Composio auth config for connector: ${connectorId}`);
 }
 

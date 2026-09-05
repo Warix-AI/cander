@@ -2,7 +2,7 @@
  * Connectors that use Composio OAuth (server initiate + auth config env).
  * Keep in sync with `initiateConnection` allowlist in lifecycle.ts.
  */
-export const OAUTH_CONNECTOR_IDS = ["gmail", "gcal", "slack"] as const;
+export const OAUTH_CONNECTOR_IDS = ["gmail", "gcal", "gdrive", "slack"] as const;
 
 export type OauthConnectorId = (typeof OAUTH_CONNECTOR_IDS)[number];
 

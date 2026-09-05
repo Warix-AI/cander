@@ -58,13 +58,15 @@ const CONNECTOR_INFO: Record<string, Partial<ConnectorInfoMeta>> = {
     termsUrl: "https://policies.google.com/terms",
   },
   gdrive: {
-    capabilities: "Read",
+    capabilities: "Interactive, Write",
     developer: "Google",
     category: "Productivity",
     version: "Preview",
     websiteUrl: "https://drive.google.com",
     privacyPolicyUrl: "https://policies.google.com/privacy",
     termsUrl: "https://policies.google.com/terms",
+    dataNotice:
+      "When connected to Google Drive, Cander can search, open, create, and share files according to the skills you enable. Google's use of your data is subject to their terms and privacy policy. You can disconnect or change permissions anytime.",
   },
   gsheets: {
     capabilities: "Interactive, Write",

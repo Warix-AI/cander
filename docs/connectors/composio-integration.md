@@ -16,6 +16,7 @@ Pinned SDK: `@composio/core@0.18.0` (see `package.json`).
 | `COMPOSIO_API_KEY` | Composio project API key |
 | `COMPOSIO_GMAIL_AUTH_CONFIG_ID` | Gmail auth config nanoid from Composio dashboard |
 | `COMPOSIO_GCAL_AUTH_CONFIG_ID` | Google Calendar auth config id (`ac_…`) from Composio |
+| `COMPOSIO_GDRIVE_AUTH_CONFIG_ID` | Google Drive auth config id (`ac_…`) from Composio |
 | `COMPOSIO_WEBHOOK_SECRET` | Webhook signature verification secret |
 | `COMPOSIO_CALLBACK_VERIFIER_URL` | Fixed HTTPS verifier URL registered in Composio dashboard |
 
@@ -128,6 +129,16 @@ Electron and Capacitor shells load hosted web. OAuth return depends on cookie se
 - [ ] Webhook URL registered with secret
 - [ ] Migrations `039`, `040`, and `041` applied on staging
 - [ ] Staging isolation + callback replay probes pass
+
+## Google Drive enablement
+
+1. In Composio dashboard → Auth configs → create **Google Drive** (`googledrive` toolkit).
+2. Copy the auth config id (`ac_…`) into `COMPOSIO_GDRIVE_AUTH_CONFIG_ID`.
+3. Apply migration `051_gdrive_composio.sql` (enables catalog row + `provider_toolkit_id = googledrive`).
+4. Ensure `COMPOSIO_CALLBACK_VERIFIER_URL` is already registered (same verifier as Gmail/Calendar).
+5. Connect from Cander → Connectors → Google Drive → Connect.
+
+Recommended Drive scopes (Composio usually sets these on the auth config): file metadata read, file content read/write, and sharing as needed for create/share skills.
 
 ## Gmail enablement
 

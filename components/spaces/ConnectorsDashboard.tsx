@@ -114,16 +114,32 @@ export function ConnectorsDashboard() {
     const params = new URLSearchParams(window.location.search);
     const connector = params.get("connectors");
     const result = params.get("result");
-    if (connector !== "gmail" || !result) return;
+    if (
+      !result ||
+      (connector !== "gmail" &&
+        connector !== "gcal" &&
+        connector !== "gdrive" &&
+        connector !== "slack")
+    ) {
+      return;
+    }
     void fetchConnectorConnections(workspaceId)
       .then((connections) => {
         replaceConnectorConnectionsForWorkspace(workspaceId, connections);
       })
       .catch(() => undefined);
+    const label =
+      connector === "gdrive"
+        ? "Google Drive"
+        : connector === "gcal"
+          ? "Google Calendar"
+          : connector === "slack"
+            ? "Slack"
+            : "Gmail";
     if (result === "success") {
-      setInfo("Gmail connection updated. Refresh if status looks stale.");
+      setInfo(`${label} connection updated. Refresh if status looks stale.`);
     } else if (result === "error") {
-      setInfo("Gmail connection could not be completed. Try again.");
+      setInfo(`${label} connection could not be completed. Try again.`);
     }
     window.history.replaceState({}, "", window.location.pathname);
   }, [workspaceId]);
