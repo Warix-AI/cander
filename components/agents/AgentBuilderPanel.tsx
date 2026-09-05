@@ -6,118 +6,80 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Copy,
   LoaderCircle,
+  Pencil,
   Plus,
   Trash2,
+  X,
+  Zap,
 } from "lucide-react";
 import {
   applyAgentConfigPatchClient,
-  createProjectAgentClient,
-  deleteProjectAgentClient,
-  duplicateProjectAgentClient,
-  listProjectAgentsClient,
   loadAgentBundleClient,
-  proposeAgentConfigClient,
   updateProjectAgentClient,
 } from "@/lib/agents/client";
 import type {
   AgentConfigPatch,
-  AgentConfigProposal,
   AgentRoute,
-  ProjectAgent,
   ProjectAgentBundle,
 } from "@/lib/agents/types";
 import { fetchConnectorConnections } from "@/lib/api/connector-client";
 import type { ConnectorConnection } from "@/lib/connectors/types";
 import { toolsForConnector } from "@/lib/connectors/tool-catalog";
 import { policyFor } from "@/lib/workspace-policy";
-import { Dropdown } from "@/components/ui/Controls";
 import { cn } from "@/lib/utils";
-import { BROWSER_CHROME_BG } from "@/lib/shell-chrome";
 
-type ChatLine = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  proposal?: AgentConfigProposal;
-};
+type CanvasSelection =
+  | { type: "identity" }
+  | { type: "skills" }
+  | { type: "knowledge" }
+  | { type: "access" }
+  | { type: "route"; routeId: string; focus?: "when" | "if" | "do" };
 
 export function AgentBuilderPanel({
   workspaceId,
   projectId,
-  projectTitle,
+  agentId,
+  onTitleChange,
 }: {
   workspaceId: string;
   projectId: string;
-  projectTitle?: string;
+  agentId: string;
+  onTitleChange?: (title: string) => void;
 }) {
-  const [agents, setAgents] = useState<ProjectAgent[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
   const [bundle, setBundle] = useState<ProjectAgentBundle | null>(null);
   const [connections, setConnections] = useState<ConnectorConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selection, setSelection] = useState<CanvasSelection>({
+    type: "identity",
+  });
+  const [panelOpen, setPanelOpen] = useState(true);
   const [expandedConnector, setExpandedConnector] = useState<string | null>(
     null,
   );
-  const [chatInput, setChatInput] = useState("");
-  const [chatLines, setChatLines] = useState<ChatLine[]>([]);
-  const [pendingProposal, setPendingProposal] =
-    useState<AgentConfigProposal | null>(null);
 
   const knowledgeBases = policyFor(workspaceId).knowledgeBases;
-
-  const refreshAgents = async (preferId?: string | null) => {
-    const list = await listProjectAgentsClient({ workspaceId, projectId });
-    setAgents(list);
-    const nextId =
-      (preferId && list.some((a) => a.id === preferId) && preferId) ||
-      list[0]?.id ||
-      null;
-    setActiveId(nextId);
-    return nextId;
-  };
-
-  const refreshBundle = async (agentId: string) => {
-    const next = await loadAgentBundleClient({
-      workspaceId,
-      projectId,
-      agentId,
-    });
-    setBundle(next);
-    return next;
-  };
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setSelection({ type: "identity" });
     void (async () => {
       try {
-        const [list, conns] = await Promise.all([
-          listProjectAgentsClient({ workspaceId, projectId }),
+        const [next, conns] = await Promise.all([
+          loadAgentBundleClient({ workspaceId, projectId, agentId }),
           fetchConnectorConnections(workspaceId).catch(() => []),
         ]);
         if (cancelled) return;
-        setAgents(list);
+        setBundle(next);
         setConnections(conns.filter((c) => c.status === "active"));
-        const id = list[0]?.id ?? null;
-        setActiveId(id);
-        if (id) {
-          const next = await loadAgentBundleClient({
-            workspaceId,
-            projectId,
-            agentId: id,
-          });
-          if (!cancelled) setBundle(next);
-        } else {
-          setBundle(null);
-        }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load agents.");
+          setError(err instanceof Error ? err.message : "Could not load agent.");
+          setBundle(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -126,26 +88,7 @@ export function AgentBuilderPanel({
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, projectId]);
-
-  useEffect(() => {
-    if (!activeId || loading) return;
-    let cancelled = false;
-    void loadAgentBundleClient({ workspaceId, projectId, agentId: activeId })
-      .then((next) => {
-        if (!cancelled) setBundle(next);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load agent.");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeId, workspaceId, projectId, loading]);
-
-  const active = bundle?.agent ?? agents.find((a) => a.id === activeId) ?? null;
+  }, [workspaceId, projectId, agentId]);
 
   const toolMap = useMemo(() => {
     const map = new Map<string, boolean>();
@@ -183,66 +126,52 @@ export function AgentBuilderPanel({
       enabled: boolean;
     }>,
   ) => {
-    if (!activeId) return;
     await runBusy(async () => {
       const agent = await updateProjectAgentClient({
         workspaceId,
         projectId,
-        agentId: activeId,
+        agentId,
         patch,
       });
-      setAgents((prev) => prev.map((a) => (a.id === agent.id ? agent : a)));
       setBundle((prev) => (prev ? { ...prev, agent } : prev));
+      if (patch.name !== undefined) onTitleChange?.(agent.name);
     });
   };
 
-  const applyPatch = async (patch: AgentConfigPatch, confirmed = false) => {
-    if (!activeId) return;
+  const applyPatch = async (patch: AgentConfigPatch) => {
     await runBusy(async () => {
-      const identityOnly =
-        Object.keys(patch).every((k) =>
-          ["name", "description", "instructions", "enabled"].includes(k),
-        );
+      const identityOnly = Object.keys(patch).every((k) =>
+        ["name", "description", "instructions", "enabled"].includes(k),
+      );
       if (identityOnly) {
-        const agent = await updateProjectAgentClient({
-          workspaceId,
-          projectId,
-          agentId: activeId,
-          patch: {
-            name: patch.name,
-            description: patch.description,
-            instructions: patch.instructions,
-            enabled: patch.enabled,
-          },
+        await saveIdentity({
+          name: patch.name,
+          description: patch.description,
+          instructions: patch.instructions,
+          enabled: patch.enabled,
         });
-        setAgents((prev) => prev.map((a) => (a.id === agent.id ? agent : a)));
-        setBundle((prev) => (prev ? { ...prev, agent } : prev));
-        setPendingProposal(null);
         return;
       }
       const next = await applyAgentConfigPatchClient({
         workspaceId,
         projectId,
-        agentId: activeId,
+        agentId,
         patch,
-        confirmed: confirmed || undefined,
+        confirmed: true,
       });
       setBundle(next);
-      setAgents((prev) =>
-        prev.map((a) => (a.id === next.agent.id ? next.agent : a)),
-      );
-      setPendingProposal(null);
+      if (patch.name) onTitleChange?.(next.agent.name);
     });
+  };
+
+  const select = (next: CanvasSelection) => {
+    setSelection(next);
+    setPanelOpen(true);
   };
 
   if (loading) {
     return (
-      <div
-        className={cn(
-          "flex h-full items-center justify-center",
-          BROWSER_CHROME_BG,
-        )}
-      >
+      <div className="flex h-full items-center justify-center bg-neutral-100 dark:bg-neutral-950">
         <LoaderCircle
           className="h-6 w-6 animate-spin text-muted-foreground"
           strokeWidth={1.75}
@@ -251,510 +180,109 @@ export function AgentBuilderPanel({
     );
   }
 
+  if (!bundle) {
+    return (
+      <div className="flex h-full items-center justify-center bg-neutral-100 px-6 text-center text-[13px] text-muted-foreground dark:bg-neutral-950">
+        {error || "Agent not found."}
+      </div>
+    );
+  }
+
+  const agent = bundle.agent;
+  const routes = bundle.routes;
+  const selectedRoute =
+    selection.type === "route"
+      ? routes.find((r) => r.id === selection.routeId) ?? null
+      : null;
+
   return (
-    <div
-      className={cn(
-        "flex h-full min-h-0 flex-col overflow-hidden",
-        BROWSER_CHROME_BG,
-      )}
-    >
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-        <div className="mx-auto flex max-w-xl flex-col gap-5">
-          <header className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-                Agent builder
-              </p>
-              <p className="mt-0.5 truncate text-[15px] font-medium tracking-[-0.02em]">
-                {projectTitle ?? "Agent project"}
-              </p>
-            </div>
-            <Dropdown
-              align="end"
-              matchTrigger={false}
-              trigger={({ toggle }) => (
-                <button
-                  type="button"
-                  onClick={toggle}
-                  className="inline-flex h-8 max-w-[12rem] items-center gap-1.5 rounded-[10px] border border-border bg-background px-2.5 text-[12.5px] font-medium hover:bg-muted"
-                >
-                  <Bot className="h-3.5 w-3.5 shrink-0" strokeWidth={1.6} />
-                  <span className="truncate">{active?.name ?? "Agent"}</span>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
-                </button>
-              )}
-            >
-              {(close) => (
-              <div className="min-w-[14rem] p-1">
-                {agents.map((agent) => (
-                  <button
-                    key={agent.id}
-                    type="button"
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-[8px] px-2.5 py-1.5 text-left text-[13px] hover:bg-muted",
-                      agent.id === activeId && "bg-muted",
-                    )}
-                    onClick={() => {
-                      setActiveId(agent.id);
-                      close();
-                    }}
-                  >
-                    <span className="truncate">{agent.name}</span>
-                    {!agent.enabled ? (
-                      <span className="text-[11px] text-muted-foreground">
-                        Off
-                      </span>
-                    ) : null}
-                  </button>
-                ))}
-                <div className="my-1 border-t border-border" />
-                <MenuAction
-                  label="New agent"
-                  icon={<Plus className="h-3.5 w-3.5" strokeWidth={1.6} />}
-                  disabled={busy}
-                  onClick={() => {
-                    close();
-                    void runBusy(async () => {
-                      const agent = await createProjectAgentClient({
-                        workspaceId,
-                        projectId,
-                        name: `Agent ${agents.length + 1}`,
-                      });
-                      await refreshAgents(agent.id);
-                      await refreshBundle(agent.id);
-                    });
-                  }}
-                />
-                <MenuAction
-                  label="Rename"
-                  disabled={busy || !active}
-                  onClick={() => {
-                    close();
-                    if (!active) return;
-                    const next = window.prompt("Agent name", active.name);
-                    if (!next?.trim()) return;
-                    void saveIdentity({ name: next.trim() });
-                  }}
-                />
-                <MenuAction
-                  label="Duplicate"
-                  icon={<Copy className="h-3.5 w-3.5" strokeWidth={1.6} />}
-                  disabled={busy || !activeId}
-                  onClick={() => {
-                    close();
-                    void runBusy(async () => {
-                      if (!activeId) return;
-                      const next = await duplicateProjectAgentClient({
-                        workspaceId,
-                        projectId,
-                        agentId: activeId,
-                      });
-                      await refreshAgents(next.agent.id);
-                      setBundle(next);
-                    });
-                  }}
-                />
-                <MenuAction
-                  label={active?.enabled ? "Disable" : "Enable"}
-                  disabled={busy || !active}
-                  onClick={() => {
-                    close();
-                    void saveIdentity({ enabled: !active?.enabled });
-                  }}
-                />
-                <MenuAction
-                  label="Delete"
-                  danger
-                  icon={<Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />}
-                  disabled={busy || agents.length <= 1 || !activeId}
-                  onClick={() => {
-                    close();
-                    void runBusy(async () => {
-                      if (!activeId || agents.length <= 1) return;
-                      if (!window.confirm("Delete this agent?")) return;
-                      await deleteProjectAgentClient({
-                        workspaceId,
-                        projectId,
-                        agentId: activeId,
-                      });
-                      const nextId = await refreshAgents(null);
-                      if (nextId) await refreshBundle(nextId);
-                      else setBundle(null);
-                    });
-                  }}
-                />
-              </div>
-              )}
-            </Dropdown>
-          </header>
+    <div className="relative flex h-full min-h-0 overflow-hidden bg-neutral-100 dark:bg-neutral-950">
+      {/* Soft canvas wash */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.55] dark:opacity-30"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 20% 10%, color-mix(in oklch, var(--chart-2) 18%, transparent), transparent 42%), radial-gradient(circle at 80% 80%, color-mix(in oklch, var(--chart-3) 14%, transparent), transparent 40%)",
+        }}
+      />
 
-          {error ? (
-            <p className="rounded-[10px] border border-border bg-background px-3 py-2 text-[12.5px] text-destructive">
-              {error}
-            </p>
-          ) : null}
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-8 sm:px-10">
+        <div className="mx-auto flex w-full max-w-[28rem] flex-col items-stretch pb-16">
+          <CanvasCard
+            selected={selection.type === "identity"}
+            onClick={() => select({ type: "identity" })}
+            eyebrow="Agent"
+            title={agent.name || "Untitled agent"}
+            meta={
+              agent.enabled
+                ? agent.description || "Identity & instructions"
+                : "Disabled"
+            }
+            icon={<Bot className="h-4 w-4" strokeWidth={1.6} />}
+            status={agent.enabled ? "ready" : "off"}
+          />
 
-          {active ? (
-            <>
-              <Section title="Identity">
-                <Field
-                  label="Name"
-                  value={active.name}
-                  onCommit={(value) => void saveIdentity({ name: value })}
-                />
-                <Field
-                  label="Description"
-                  value={active.description}
-                  onCommit={(value) =>
-                    void saveIdentity({ description: value })
-                  }
-                />
-                <label className="block">
-                  <span className="font-mono text-[11px] text-muted-foreground">
-                    Instructions
-                  </span>
-                  <textarea
-                    key={`${active.id}-instructions`}
-                    defaultValue={active.instructions}
-                    rows={5}
-                    className="mt-1 w-full resize-y rounded-[10px] border border-border bg-background px-3 py-2 text-[13px] outline-none focus:border-foreground/30"
-                    onBlur={(event) => {
-                      const next = event.target.value;
-                      if (next !== active.instructions) {
-                        void saveIdentity({ instructions: next });
-                      }
-                    }}
-                  />
-                </label>
-                <label className="flex items-center justify-between gap-3 rounded-[10px] border border-border bg-background px-3 py-2">
-                  <span className="text-[13px]">Enabled</span>
-                  <input
-                    type="checkbox"
-                    checked={active.enabled}
-                    onChange={(event) =>
-                      void saveIdentity({ enabled: event.target.checked })
-                    }
-                  />
-                </label>
-              </Section>
+          <CanvasJoin
+            onAdd={() =>
+              void applyPatch({
+                upsertRoutes: [
+                  {
+                    name: `Route ${routes.length + 1}`,
+                    enabled: true,
+                    trigger: {
+                      type: "manual",
+                      label: "WHEN something happens",
+                    },
+                    condition: {
+                      type: "always",
+                      expression: "IF always",
+                    },
+                    actions: [{ type: "notify", label: "DO an action" }],
+                  },
+                ],
+              })
+            }
+          />
 
-              <Section title="Skills">
-                <div className="space-y-1.5">
-                  {(bundle?.skills ?? []).map((skill) => (
-                    <Row
-                      key={skill.id}
-                      title={skill.skillLabel || skill.skillId}
-                      meta={skill.skillId}
-                      onRemove={() =>
-                        void applyPatch(
-                          { removeSkillIds: [skill.skillId] },
-                          true,
-                        )
-                      }
-                    />
-                  ))}
-                  {!bundle?.skills.length ? (
-                    <p className="text-[12.5px] text-muted-foreground">
-                      No skills attached yet.
-                    </p>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  disabled={busy}
-                  className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border bg-background px-2.5 text-[12.5px] font-medium hover:bg-muted disabled:opacity-50"
-                  onClick={() => {
-                    const label = window.prompt(
-                      "Describe a skill to attach (creates a draft package id)",
-                    );
-                    if (!label?.trim()) return;
-                    const skillLabel = label.trim();
-                    void applyPatch(
-                      {
-                        addSkills: [
-                          {
-                            skillId: `skill_${skillLabel
-                              .toLowerCase()
-                              .replace(/[^a-z0-9]+/g, "_")}`,
-                            skillLabel,
-                          },
-                        ],
+          {routes.length === 0 ? (
+            <CanvasCard
+              selected={false}
+              dashed
+              onClick={() =>
+                void applyPatch({
+                  upsertRoutes: [
+                    {
+                      name: "Route 1",
+                      enabled: true,
+                      trigger: {
+                        type: "manual",
+                        label: "WHEN something happens",
                       },
-                      true,
-                    );
-                  }}
-                >
-                  <Plus className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  Add skill
-                </button>
-              </Section>
-
-              <Section title="Knowledge">
-                <p className="mb-2 text-[12.5px] text-muted-foreground">
-                  Attach sources explicitly — nothing is included by default.
-                </p>
-                <div className="space-y-1.5">
-                  {(bundle?.knowledge ?? []).map((item) => (
-                    <Row
-                      key={item.id}
-                      title={item.sourceLabel || item.sourceId}
-                      meta={item.sourceKind}
-                      onRemove={() =>
-                        void applyPatch(
-                          { removeKnowledgeIds: [item.id] },
-                          true,
-                        )
-                      }
-                    />
-                  ))}
-                </div>
-                {knowledgeBases.length ? (
-                  <div className="mt-2 space-y-1">
-                    {knowledgeBases.map((kb) => {
-                      const attached = bundle?.knowledge.some(
-                        (k) =>
-                          k.sourceKind === "knowledge_base" &&
-                          k.sourceId === kb.id,
-                      );
-                      return (
-                        <button
-                          key={kb.id}
-                          type="button"
-                          disabled={busy || attached}
-                          className="flex w-full items-center justify-between rounded-[10px] border border-border bg-background px-3 py-2 text-left text-[13px] hover:bg-muted disabled:opacity-50"
-                          onClick={() =>
-                            void applyPatch(
-                              {
-                                addKnowledge: [
-                                  {
-                                    sourceKind: "knowledge_base",
-                                    sourceId: kb.id,
-                                    sourceLabel: kb.name,
-                                  },
-                                ],
-                              },
-                              true,
-                            )
-                          }
-                        >
-                          <span>{kb.name}</span>
-                          {attached ? (
-                            <Check className="h-3.5 w-3.5" strokeWidth={1.7} />
-                          ) : (
-                            <Plus className="h-3.5 w-3.5" strokeWidth={1.6} />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-[12.5px] text-muted-foreground">
-                    No knowledge bases in this workspace yet.
-                  </p>
-                )}
-              </Section>
-
-              <Section title="Access">
-                {!connections.length ? (
-                  <p className="text-[12.5px] text-muted-foreground">
-                    Install connectors to grant tools to this agent.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {connections.map((conn) => {
-                      const enabled = connectorEnabled.get(conn.id) ?? false;
-                      const open = expandedConnector === conn.id;
-                      const tools = toolsForConnector(conn.connectorId);
-                      return (
-                        <div
-                          key={conn.id}
-                          className="rounded-[10px] border border-border bg-background"
-                        >
-                          <div className="flex items-center gap-2 px-3 py-2">
-                            <button
-                              type="button"
-                              className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                              onClick={() =>
-                                setExpandedConnector(open ? null : conn.id)
-                              }
-                            >
-                              {open ? (
-                                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                              ) : (
-                                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                              )}
-                              <span className="truncate text-[13px] font-medium">
-                                {conn.connectorId}
-                              </span>
-                            </button>
-                            <input
-                              type="checkbox"
-                              checked={enabled}
-                              onChange={(event) =>
-                                void applyPatch(
-                                  {
-                                    setConnectorEnabled: [
-                                      {
-                                        connectionId: conn.id,
-                                        connectorId: conn.connectorId,
-                                        enabled: event.target.checked,
-                                      },
-                                    ],
-                                  },
-                                  true,
-                                )
-                              }
-                            />
-                          </div>
-                          {open ? (
-                            <div className="space-y-2 border-t border-border px-3 py-2">
-                              <div className="flex flex-wrap gap-1.5">
-                                <MiniBtn
-                                  label="Allow all"
-                                  onClick={() =>
-                                    void applyPatch(
-                                      {
-                                        setConnectorEnabled: [
-                                          {
-                                            connectionId: conn.id,
-                                            connectorId: conn.connectorId,
-                                            enabled: true,
-                                          },
-                                        ],
-                                        setToolPermissions: tools.map(
-                                          (tool) => ({
-                                            connectionId: conn.id,
-                                            toolId: tool.id,
-                                            enabled: true,
-                                          }),
-                                        ),
-                                      },
-                                      true,
-                                    )
-                                  }
-                                />
-                                <MiniBtn
-                                  label="Read only"
-                                  onClick={() =>
-                                    void applyPatch(
-                                      {
-                                        setConnectorEnabled: [
-                                          {
-                                            connectionId: conn.id,
-                                            connectorId: conn.connectorId,
-                                            enabled: true,
-                                          },
-                                        ],
-                                        setToolPermissions: tools.map(
-                                          (tool) => ({
-                                            connectionId: conn.id,
-                                            toolId: tool.id,
-                                            enabled: tool.access === "read",
-                                          }),
-                                        ),
-                                      },
-                                      true,
-                                    )
-                                  }
-                                />
-                                <MiniBtn
-                                  label="Disable all"
-                                  onClick={() =>
-                                    void applyPatch(
-                                      {
-                                        setConnectorEnabled: [
-                                          {
-                                            connectionId: conn.id,
-                                            connectorId: conn.connectorId,
-                                            enabled: false,
-                                          },
-                                        ],
-                                        setToolPermissions: tools.map(
-                                          (tool) => ({
-                                            connectionId: conn.id,
-                                            toolId: tool.id,
-                                            enabled: false,
-                                          }),
-                                        ),
-                                      },
-                                      true,
-                                    )
-                                  }
-                                />
-                              </div>
-                              {tools.map((tool) => {
-                                const on =
-                                  toolMap.get(`${conn.id}:${tool.id}`) ?? false;
-                                return (
-                                  <label
-                                    key={tool.id}
-                                    className="flex items-center justify-between gap-3 text-[12.5px]"
-                                  >
-                                    <span className="min-w-0 truncate">
-                                      {tool.label}
-                                      <span className="ml-1 text-muted-foreground">
-                                        {tool.access}
-                                      </span>
-                                    </span>
-                                    <input
-                                      type="checkbox"
-                                      checked={on}
-                                      onChange={(event) =>
-                                        void applyPatch(
-                                          {
-                                            setToolPermissions: [
-                                              {
-                                                connectionId: conn.id,
-                                                toolId: tool.id,
-                                                enabled: event.target.checked,
-                                              },
-                                            ],
-                                          },
-                                          true,
-                                        )
-                                      }
-                                    />
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </Section>
-
-              <Section title="Routes">
-                <p className="mb-2 text-[12.5px] text-muted-foreground">
-                  Saved for a future runtime — triggers are not live yet.
-                </p>
-                <div className="space-y-2">
-                  {(bundle?.routes ?? []).map((route) => (
-                    <RouteCard
-                      key={route.id}
-                      route={route}
-                      busy={busy}
-                      onSave={(next) =>
-                        void applyPatch({ upsertRoutes: [next] }, true)
-                      }
-                      onDelete={() =>
-                        void applyPatch({ deleteRouteIds: [route.id] }, true)
-                      }
-                    />
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  disabled={busy}
-                  className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border bg-background px-2.5 text-[12.5px] font-medium hover:bg-muted disabled:opacity-50"
-                  onClick={() =>
-                    void applyPatch(
-                      {
+                      condition: {
+                        type: "always",
+                        expression: "IF always",
+                      },
+                      actions: [{ type: "notify", label: "DO an action" }],
+                    },
+                  ],
+                })
+              }
+              eyebrow="Route"
+              title="Add a route"
+              meta="WHEN → IF → DO"
+              icon={<Zap className="h-4 w-4" strokeWidth={1.6} />}
+            />
+          ) : (
+            routes.map((route, index) => (
+              <div key={route.id} className="contents">
+                {index > 0 ? (
+                  <CanvasJoin
+                    onAdd={() =>
+                      void applyPatch({
                         upsertRoutes: [
                           {
-                            name: `Route ${(bundle?.routes.length ?? 0) + 1}`,
+                            name: `Route ${routes.length + 1}`,
                             enabled: true,
                             trigger: {
                               type: "manual",
@@ -769,243 +297,696 @@ export function AgentBuilderPanel({
                             ],
                           },
                         ],
-                      },
-                      true,
-                    )
+                      })
+                    }
+                  />
+                ) : null}
+                <RouteStack
+                  route={route}
+                  index={index}
+                  selected={
+                    selection.type === "route" &&
+                    selection.routeId === route.id
+                      ? (selection.focus ?? "when")
+                      : null
                   }
-                >
-                  <Plus className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  Add route
-                </button>
-              </Section>
-            </>
-          ) : null}
+                  onSelectStep={(focus) =>
+                    select({ type: "route", routeId: route.id, focus })
+                  }
+                />
+              </div>
+            ))
+          )}
+
+          <CanvasJoin
+            onAdd={() => select({ type: "access" })}
+            label="Configure access"
+          />
+
+          <CanvasCard
+            selected={selection.type === "access"}
+            onClick={() => select({ type: "access" })}
+            eyebrow="Access"
+            title={
+              connections.length
+                ? `${connections.filter((c) => connectorEnabled.get(c.id)).length} connectors enabled`
+                : "Connectors & tools"
+            }
+            meta="Least-privilege tool access"
+            icon={<Zap className="h-4 w-4" strokeWidth={1.6} />}
+          />
+
+          <CanvasJoin onAdd={() => select({ type: "skills" })} />
+
+          <div className="grid grid-cols-2 gap-3">
+            <CanvasCard
+              compact
+              selected={selection.type === "skills"}
+              onClick={() => select({ type: "skills" })}
+              eyebrow="Skills"
+              title={
+                bundle.skills.length
+                  ? `${bundle.skills.length} attached`
+                  : "Add skills"
+              }
+            />
+            <CanvasCard
+              compact
+              selected={selection.type === "knowledge"}
+              onClick={() => select({ type: "knowledge" })}
+              eyebrow="Knowledge"
+              title={
+                bundle.knowledge.length
+                  ? `${bundle.knowledge.length} sources`
+                  : "Attach sources"
+              }
+            />
+          </div>
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-border bg-background/90 px-4 py-3 backdrop-blur sm:px-5">
-        <div className="mx-auto max-w-xl space-y-2">
-          {chatLines.slice(-4).map((line) => (
-            <p
-              key={line.id}
-              className={cn(
-                "text-[12.5px]",
-                line.role === "user"
-                  ? "text-foreground"
-                  : "text-muted-foreground",
-              )}
-            >
-              <span className="font-medium">
-                {line.role === "user" ? "You" : "Config"}:{" "}
-              </span>
-              {line.text}
-            </p>
-          ))}
-          {pendingProposal ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-border bg-muted/40 px-3 py-2">
-              <p className="flex-1 text-[12.5px]">{pendingProposal.summary}</p>
-              <button
-                type="button"
-                disabled={busy}
-                className="h-7 rounded-[8px] bg-primary px-2.5 text-[12px] font-medium text-primary-foreground"
-                onClick={() =>
-                  void applyPatch(
-                    pendingProposal.patch,
-                    pendingProposal.requiresConfirmation,
-                  )
-                }
-              >
-                {pendingProposal.requiresConfirmation ? "Confirm apply" : "Apply"}
-              </button>
-              <button
-                type="button"
-                className="h-7 rounded-[8px] border border-border px-2.5 text-[12px]"
-                onClick={() => setPendingProposal(null)}
-              >
-                Dismiss
-              </button>
+      {panelOpen ? (
+        <aside className="absolute inset-y-3 right-3 z-20 flex w-[min(100%,22.5rem)] flex-col overflow-hidden rounded-[14px] border border-border bg-background shadow-[0_12px_40px_rgba(0,0,0,0.12)] sm:inset-y-4 sm:right-4">
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-muted">
+              <Bot className="h-4 w-4" strokeWidth={1.6} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13.5px] font-medium tracking-[-0.02em]">
+                {panelTitle(selection, agent.name, selectedRoute)}
+              </p>
+              <p className="truncate text-[11.5px] text-muted-foreground">
+                Setup
+              </p>
             </div>
-          ) : null}
-          <form
-            className="flex gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const message = chatInput.trim();
-              if (!message || !activeId || busy) return;
-              setChatInput("");
-              setChatLines((prev) => [
-                ...prev,
-                {
-                  id: `u_${Date.now()}`,
-                  role: "user",
-                  text: message,
-                },
-              ]);
-              void runBusy(async () => {
-                const proposal = await proposeAgentConfigClient({
-                  workspaceId,
-                  projectId,
-                  agentId: activeId,
-                  message,
-                });
-                setChatLines((prev) => [
-                  ...prev,
-                  {
-                    id: `a_${Date.now()}`,
-                    role: "assistant",
-                    text: proposal.summary,
-                    proposal,
-                  },
-                ]);
-                const keys = Object.keys(proposal.patch);
-                if (!keys.length) return;
-                if (!proposal.requiresConfirmation) {
-                  await applyPatch(proposal.patch, false);
-                } else {
-                  setPendingProposal(proposal);
-                }
-              });
-            }}
-          >
-            <input
-              value={chatInput}
-              onChange={(event) => setChatInput(event.target.value)}
-              placeholder="Propose a config change…"
-              className="h-9 min-w-0 flex-1 rounded-[10px] border border-border bg-background px-3 text-[13px] outline-none focus:border-foreground/30"
-            />
             <button
-              type="submit"
-              disabled={busy || !chatInput.trim() || !activeId}
-              className="h-9 rounded-[10px] bg-primary px-3 text-[13px] font-medium text-primary-foreground disabled:opacity-50"
+              type="button"
+              aria-label="Close panel"
+              onClick={() => setPanelOpen(false)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              Send
+              <X className="h-4 w-4" strokeWidth={1.7} />
             </button>
-          </form>
-        </div>
-      </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            {error ? (
+              <p className="mb-3 rounded-[10px] border border-border px-2.5 py-2 text-[12px] text-destructive">
+                {error}
+              </p>
+            ) : null}
+
+            {selection.type === "identity" ? (
+              <IdentityPanel
+                agent={agent}
+                busy={busy}
+                onSave={(patch) => void saveIdentity(patch)}
+              />
+            ) : null}
+
+            {selection.type === "skills" ? (
+              <SkillsPanel
+                skills={bundle.skills}
+                busy={busy}
+                onAdd={(label) =>
+                  void applyPatch({
+                    addSkills: [
+                      {
+                        skillId: `skill_${label
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, "_")}`,
+                        skillLabel: label,
+                      },
+                    ],
+                  })
+                }
+                onRemove={(skillId) =>
+                  void applyPatch({ removeSkillIds: [skillId] })
+                }
+              />
+            ) : null}
+
+            {selection.type === "knowledge" ? (
+              <KnowledgePanel
+                knowledge={bundle.knowledge}
+                knowledgeBases={knowledgeBases}
+                busy={busy}
+                onAdd={(kb) =>
+                  void applyPatch({
+                    addKnowledge: [
+                      {
+                        sourceKind: "knowledge_base",
+                        sourceId: kb.id,
+                        sourceLabel: kb.name,
+                      },
+                    ],
+                  })
+                }
+                onRemove={(id) =>
+                  void applyPatch({ removeKnowledgeIds: [id] })
+                }
+              />
+            ) : null}
+
+            {selection.type === "access" ? (
+              <AccessPanel
+                connections={connections}
+                connectorEnabled={connectorEnabled}
+                toolMap={toolMap}
+                expandedConnector={expandedConnector}
+                setExpandedConnector={setExpandedConnector}
+                busy={busy}
+                onPatch={(patch) => void applyPatch(patch)}
+              />
+            ) : null}
+
+            {selection.type === "route" && selectedRoute ? (
+              <RoutePanel
+                route={selectedRoute}
+                focus={selection.focus}
+                busy={busy}
+                onSave={(next) =>
+                  void applyPatch({ upsertRoutes: [next] })
+                }
+                onDelete={() =>
+                  void applyPatch({ deleteRouteIds: [selectedRoute.id] })
+                }
+              />
+            ) : null}
+          </div>
+        </aside>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setPanelOpen(true)}
+          className="absolute top-4 right-4 z-20 inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-border bg-background px-3 text-[12.5px] font-medium shadow-sm hover:bg-muted"
+        >
+          <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
+          Setup
+        </button>
+      )}
     </div>
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="space-y-2">
-      <h3 className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-        {title}
-      </h3>
-      {children}
-    </section>
-  );
+function panelTitle(
+  selection: CanvasSelection,
+  agentName: string,
+  route: AgentRoute | null,
+) {
+  if (selection.type === "identity") return agentName || "Agent";
+  if (selection.type === "skills") return "Skills";
+  if (selection.type === "knowledge") return "Knowledge";
+  if (selection.type === "access") return "Access";
+  if (selection.type === "route") {
+    return route?.name || "Route";
+  }
+  return "Setup";
 }
 
-function Field({
-  label,
-  value,
-  onCommit,
+function CanvasJoin({
+  onAdd,
+  label = "Add step",
 }: {
-  label: string;
-  value: string;
-  onCommit: (value: string) => void;
+  onAdd: () => void;
+  label?: string;
 }) {
   return (
-    <label className="block">
-      <span className="font-mono text-[11px] text-muted-foreground">{label}</span>
-      <input
-        key={`${label}-${value}`}
-        defaultValue={value}
-        className="mt-1 h-9 w-full rounded-[10px] border border-border bg-background px-3 text-[13px] outline-none focus:border-foreground/30"
-        onBlur={(event) => {
-          const next = event.target.value;
-          if (next !== value) onCommit(next);
-        }}
-      />
-    </label>
-  );
-}
-
-function Row({
-  title,
-  meta,
-  onRemove,
-}: {
-  title: string;
-  meta?: string;
-  onRemove: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-2 rounded-[10px] border border-border bg-background px-3 py-2">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px]">{title}</p>
-        {meta ? (
-          <p className="truncate text-[11px] text-muted-foreground">{meta}</p>
-        ) : null}
-      </div>
+    <div className="relative flex h-10 items-center justify-center">
+      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border" />
       <button
         type="button"
-        onClick={onRemove}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] text-muted-foreground hover:bg-muted hover:text-foreground"
-        aria-label="Remove"
+        aria-label={label}
+        onClick={onAdd}
+        className="relative z-10 inline-flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm hover:border-foreground/30 hover:text-foreground"
       >
-        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+        <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
       </button>
     </div>
   );
 }
 
-function MenuAction({
-  label,
-  onClick,
-  disabled,
-  danger,
+function CanvasCard({
+  eyebrow,
+  title,
+  meta,
   icon,
+  selected,
+  onClick,
+  dashed,
+  compact,
+  status,
 }: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  danger?: boolean;
+  eyebrow: string;
+  title: string;
+  meta?: string;
   icon?: React.ReactNode;
+  selected?: boolean;
+  onClick: () => void;
+  dashed?: boolean;
+  compact?: boolean;
+  status?: "ready" | "off";
 }) {
   return (
     <button
       type="button"
-      disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-left text-[13px] hover:bg-muted disabled:opacity-40",
-        danger && "text-destructive",
+        "w-full rounded-[14px] border bg-background text-left shadow-[0_8px_24px_rgba(0,0,0,0.04)] transition-colors",
+        compact ? "px-3 py-3" : "px-3.5 py-3.5",
+        dashed && "border-dashed",
+        selected
+          ? "border-foreground/35 ring-1 ring-foreground/10"
+          : "border-border hover:border-foreground/20",
       )}
     >
-      {icon}
-      {label}
+      <div className="flex items-start gap-2.5">
+        {icon ? (
+          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-muted">
+            {icon}
+          </span>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
+              {eyebrow}
+            </p>
+            {status === "ready" ? (
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            ) : null}
+            {status === "off" ? (
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+            ) : null}
+          </div>
+          <p
+            className={cn(
+              "mt-0.5 truncate font-medium tracking-[-0.02em]",
+              compact ? "text-[13px]" : "text-[14px]",
+            )}
+          >
+            {title}
+          </p>
+          {meta ? (
+            <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+              {meta}
+            </p>
+          ) : null}
+        </div>
+      </div>
     </button>
   );
 }
 
-function MiniBtn({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="h-7 rounded-[8px] border border-border px-2 text-[11.5px] font-medium hover:bg-muted"
-    >
-      {label}
-    </button>
-  );
-}
-
-function RouteCard({
+function RouteStack({
   route,
+  index,
+  selected,
+  onSelectStep,
+}: {
+  route: AgentRoute;
+  index: number;
+  selected: "when" | "if" | "do" | null;
+  onSelectStep: (focus: "when" | "if" | "do") => void;
+}) {
+  const steps = [
+    {
+      id: "when" as const,
+      label: "WHEN",
+      value: route.trigger.label || "Something happens",
+    },
+    {
+      id: "if" as const,
+      label: "IF",
+      value: route.condition.expression || "Always",
+    },
+    {
+      id: "do" as const,
+      label: "DO",
+      value: route.actions[0]?.label || "An action",
+    },
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-[14px] border border-border bg-background shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
+      <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5">
+        <div className="min-w-0">
+          <p className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
+            Route {index + 1}
+          </p>
+          <p className="truncate text-[13.5px] font-medium tracking-[-0.02em]">
+            {route.name}
+          </p>
+        </div>
+        {!route.enabled ? (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+            Off
+          </span>
+        ) : null}
+      </div>
+      <div className="divide-y divide-border">
+        {steps.map((step) => (
+          <button
+            key={step.id}
+            type="button"
+            onClick={() => onSelectStep(step.id)}
+            className={cn(
+              "flex w-full items-start gap-3 px-3.5 py-3 text-left transition-colors hover:bg-muted/40",
+              selected === step.id && "bg-muted/60",
+            )}
+          >
+            <span className="mt-0.5 shrink-0 font-mono text-[10px] tracking-[0.08em] text-muted-foreground">
+              {step.label}
+            </span>
+            <span className="min-w-0 flex-1 text-[13px] tracking-[-0.01em]">
+              {step.value}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function IdentityPanel({
+  agent,
+  busy,
+  onSave,
+}: {
+  agent: ProjectAgentBundle["agent"];
+  busy: boolean;
+  onSave: (
+    patch: Partial<{
+      name: string;
+      description: string;
+      instructions: string;
+      enabled: boolean;
+    }>,
+  ) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <Field
+        label="Name"
+        defaultValue={agent.name}
+        disabled={busy}
+        onCommit={(value) => onSave({ name: value })}
+      />
+      <Field
+        label="Description"
+        defaultValue={agent.description}
+        disabled={busy}
+        onCommit={(value) => onSave({ description: value })}
+      />
+      <label className="block">
+        <span className="font-mono text-[11px] text-muted-foreground">
+          Instructions
+        </span>
+        <textarea
+          key={`${agent.id}-instructions`}
+          defaultValue={agent.instructions}
+          disabled={busy}
+          rows={7}
+          className="mt-1 w-full resize-y rounded-[10px] border border-border bg-background px-3 py-2 text-[13px] outline-none focus:border-foreground/30 disabled:opacity-60"
+          onBlur={(event) => {
+            if (event.target.value !== agent.instructions) {
+              onSave({ instructions: event.target.value });
+            }
+          }}
+        />
+      </label>
+      <label className="flex items-center justify-between gap-3 rounded-[10px] border border-border px-3 py-2.5">
+        <span className="text-[13px]">Enabled</span>
+        <input
+          type="checkbox"
+          checked={agent.enabled}
+          disabled={busy}
+          onChange={(event) => onSave({ enabled: event.target.checked })}
+        />
+      </label>
+    </div>
+  );
+}
+
+function SkillsPanel({
+  skills,
+  busy,
+  onAdd,
+  onRemove,
+}: {
+  skills: ProjectAgentBundle["skills"];
+  busy: boolean;
+  onAdd: (label: string) => void;
+  onRemove: (skillId: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {skills.map((skill) => (
+        <ListRow
+          key={skill.id}
+          title={skill.skillLabel || skill.skillId}
+          meta={skill.skillId}
+          onRemove={() => onRemove(skill.skillId)}
+        />
+      ))}
+      {!skills.length ? (
+        <p className="text-[12.5px] text-muted-foreground">
+          No skills attached yet.
+        </p>
+      ) : null}
+      <button
+        type="button"
+        disabled={busy}
+        className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border px-2.5 text-[12.5px] font-medium hover:bg-muted disabled:opacity-50"
+        onClick={() => {
+          const label = window.prompt("Describe a skill to attach");
+          if (!label?.trim()) return;
+          onAdd(label.trim());
+        }}
+      >
+        <Plus className="h-3.5 w-3.5" strokeWidth={1.6} />
+        Add skill
+      </button>
+    </div>
+  );
+}
+
+function KnowledgePanel({
+  knowledge,
+  knowledgeBases,
+  busy,
+  onAdd,
+  onRemove,
+}: {
+  knowledge: ProjectAgentBundle["knowledge"];
+  knowledgeBases: Array<{ id: string; name: string }>;
+  busy: boolean;
+  onAdd: (kb: { id: string; name: string }) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-[12.5px] text-muted-foreground">
+        Attach sources explicitly — nothing is included by default.
+      </p>
+      {knowledge.map((item) => (
+        <ListRow
+          key={item.id}
+          title={item.sourceLabel || item.sourceId}
+          meta={item.sourceKind}
+          onRemove={() => onRemove(item.id)}
+        />
+      ))}
+      {knowledgeBases.map((kb) => {
+        const attached = knowledge.some(
+          (k) =>
+            k.sourceKind === "knowledge_base" && k.sourceId === kb.id,
+        );
+        return (
+          <button
+            key={kb.id}
+            type="button"
+            disabled={busy || attached}
+            className="flex w-full items-center justify-between rounded-[10px] border border-border px-3 py-2 text-left text-[13px] hover:bg-muted disabled:opacity-50"
+            onClick={() => onAdd(kb)}
+          >
+            <span>{kb.name}</span>
+            {attached ? (
+              <Check className="h-3.5 w-3.5" strokeWidth={1.7} />
+            ) : (
+              <Plus className="h-3.5 w-3.5" strokeWidth={1.6} />
+            )}
+          </button>
+        );
+      })}
+      {!knowledgeBases.length ? (
+        <p className="text-[12.5px] text-muted-foreground">
+          No knowledge bases in this workspace yet.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function AccessPanel({
+  connections,
+  connectorEnabled,
+  toolMap,
+  expandedConnector,
+  setExpandedConnector,
+  busy,
+  onPatch,
+}: {
+  connections: ConnectorConnection[];
+  connectorEnabled: Map<string, boolean>;
+  toolMap: Map<string, boolean>;
+  expandedConnector: string | null;
+  setExpandedConnector: (id: string | null) => void;
+  busy: boolean;
+  onPatch: (patch: AgentConfigPatch) => void;
+}) {
+  if (!connections.length) {
+    return (
+      <p className="text-[12.5px] text-muted-foreground">
+        Install connectors to grant tools to this agent.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {connections.map((conn) => {
+        const enabled = connectorEnabled.get(conn.id) ?? false;
+        const open = expandedConnector === conn.id;
+        const tools = toolsForConnector(conn.connectorId);
+        return (
+          <div
+            key={conn.id}
+            className="rounded-[10px] border border-border"
+          >
+            <div className="flex items-center gap-2 px-2.5 py-2">
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                onClick={() =>
+                  setExpandedConnector(open ? null : conn.id)
+                }
+              >
+                {open ? (
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                )}
+                <span className="truncate text-[13px] font-medium">
+                  {conn.connectorId}
+                </span>
+              </button>
+              <input
+                type="checkbox"
+                checked={enabled}
+                disabled={busy}
+                onChange={(event) =>
+                  onPatch({
+                    setConnectorEnabled: [
+                      {
+                        connectionId: conn.id,
+                        connectorId: conn.connectorId,
+                        enabled: event.target.checked,
+                      },
+                    ],
+                  })
+                }
+              />
+            </div>
+            {open ? (
+              <div className="space-y-2 border-t border-border px-2.5 py-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      ["Allow all", true, null],
+                      ["Read only", true, "read"],
+                      ["Disable all", false, null],
+                    ] as const
+                  ).map(([label, connectorOn, access]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      disabled={busy}
+                      className="h-7 rounded-[8px] border border-border px-2 text-[11.5px] font-medium hover:bg-muted disabled:opacity-50"
+                      onClick={() =>
+                        onPatch({
+                          setConnectorEnabled: [
+                            {
+                              connectionId: conn.id,
+                              connectorId: conn.connectorId,
+                              enabled: connectorOn,
+                            },
+                          ],
+                          setToolPermissions: tools.map((tool) => ({
+                            connectionId: conn.id,
+                            toolId: tool.id,
+                            enabled:
+                              access === "read"
+                                ? tool.access === "read"
+                                : connectorOn,
+                          })),
+                        })
+                      }
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {tools.map((tool) => {
+                  const on =
+                    toolMap.get(`${conn.id}:${tool.id}`) ?? false;
+                  return (
+                    <label
+                      key={tool.id}
+                      className="flex items-center justify-between gap-3 text-[12.5px]"
+                    >
+                      <span className="min-w-0 truncate">
+                        {tool.label}
+                        <span className="ml-1 text-muted-foreground">
+                          {tool.access}
+                        </span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        disabled={busy}
+                        onChange={(event) =>
+                          onPatch({
+                            setToolPermissions: [
+                              {
+                                connectionId: conn.id,
+                                toolId: tool.id,
+                                enabled: event.target.checked,
+                              },
+                            ],
+                          })
+                        }
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RoutePanel({
+  route,
+  focus,
   busy,
   onSave,
   onDelete,
 }: {
   route: AgentRoute;
+  focus?: "when" | "if" | "do";
   busy: boolean;
   onSave: (route: AgentRoute) => void;
   onDelete: () => void;
@@ -1029,17 +1010,36 @@ function RouteCard({
   }, [route]);
 
   return (
-    <div className="space-y-2 rounded-[10px] border border-border bg-background p-3">
-      <div className="flex items-center gap-2">
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          className="h-8 min-w-0 flex-1 rounded-[8px] border border-border px-2 text-[13px]"
-        />
+    <div className="space-y-3">
+      <Field
+        label="Route name"
+        value={name}
+        onChange={setName}
+        disabled={busy}
+      />
+      <StackField
+        label="WHEN"
+        value={whenLabel}
+        onChange={setWhenLabel}
+        active={focus === "when"}
+      />
+      <StackField
+        label="IF"
+        value={ifLabel}
+        onChange={setIfLabel}
+        active={focus === "if"}
+      />
+      <StackField
+        label="DO"
+        value={doLabel}
+        onChange={setDoLabel}
+        active={focus === "do"}
+      />
+      <div className="flex gap-2 pt-1">
         <button
           type="button"
           disabled={busy}
-          className="h-8 rounded-[8px] border border-border px-2 text-[12px] font-medium hover:bg-muted disabled:opacity-50"
+          className="h-9 flex-1 rounded-[10px] bg-foreground px-3 text-[13px] font-medium text-background disabled:opacity-50"
           onClick={() =>
             onSave({
               ...route,
@@ -1064,22 +1064,60 @@ function RouteCard({
             })
           }
         >
-          Save
+          Save route
         </button>
         <button
           type="button"
           disabled={busy}
-          onClick={onDelete}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-muted-foreground hover:bg-muted"
           aria-label="Delete route"
+          onClick={onDelete}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-border text-muted-foreground hover:bg-muted hover:text-destructive disabled:opacity-50"
         >
           <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
         </button>
       </div>
-      <StackField label="WHEN" value={whenLabel} onChange={setWhenLabel} />
-      <StackField label="IF" value={ifLabel} onChange={setIfLabel} />
-      <StackField label="DO" value={doLabel} onChange={setDoLabel} />
     </div>
+  );
+}
+
+function Field({
+  label,
+  defaultValue,
+  value,
+  onChange,
+  onCommit,
+  disabled,
+}: {
+  label: string;
+  defaultValue?: string;
+  value?: string;
+  onChange?: (value: string) => void;
+  onCommit?: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="block">
+      <span className="font-mono text-[11px] text-muted-foreground">{label}</span>
+      <input
+        key={onCommit ? `${label}-${defaultValue ?? ""}` : undefined}
+        defaultValue={onCommit ? defaultValue : undefined}
+        value={onChange ? value : undefined}
+        disabled={disabled}
+        onChange={
+          onChange ? (event) => onChange(event.target.value) : undefined
+        }
+        onBlur={
+          onCommit
+            ? (event) => {
+                if (event.target.value !== (defaultValue ?? "")) {
+                  onCommit(event.target.value);
+                }
+              }
+            : undefined
+        }
+        className="mt-1 h-9 w-full rounded-[10px] border border-border bg-background px-3 text-[13px] outline-none focus:border-foreground/30 disabled:opacity-60"
+      />
+    </label>
   );
 }
 
@@ -1087,13 +1125,20 @@ function StackField({
   label,
   value,
   onChange,
+  active,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  active?: boolean;
 }) {
   return (
-    <label className="block rounded-[8px] border border-dashed border-border px-2.5 py-2">
+    <label
+      className={cn(
+        "block rounded-[10px] border px-2.5 py-2",
+        active ? "border-foreground/30 bg-muted/40" : "border-border",
+      )}
+    >
       <span className="font-mono text-[10.5px] tracking-[0.06em] text-muted-foreground">
         {label}
       </span>
@@ -1103,5 +1148,34 @@ function StackField({
         className="mt-1 w-full bg-transparent text-[13px] outline-none"
       />
     </label>
+  );
+}
+
+function ListRow({
+  title,
+  meta,
+  onRemove,
+}: {
+  title: string;
+  meta?: string;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-[10px] border border-border px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px]">{title}</p>
+        {meta ? (
+          <p className="truncate text-[11px] text-muted-foreground">{meta}</p>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] text-muted-foreground hover:bg-muted hover:text-foreground"
+        aria-label="Remove"
+      >
+        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+      </button>
+    </div>
   );
 }

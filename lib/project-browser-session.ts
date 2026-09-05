@@ -45,6 +45,8 @@ export type ProjectBrowserTab = {
   aspectRatio?: string | null;
   /** Public share id for markdown document tabs → {id}.cander.app */
   shareId?: string;
+  /** project_agents.id when kind is agent-builder */
+  agentId?: string;
   history: string[];
   historyIndex: number;
 };
@@ -248,15 +250,21 @@ export function makeAgentBrowserTab(input: {
 export function makeAgentBuilderTab(input: {
   projectId: string;
   title: string;
+  agentId?: string;
+  pinned?: boolean;
 }): ProjectBrowserTab {
+  const agentId = input.agentId?.trim() || undefined;
   return {
-    id: pinnedProjectTabId(input.projectId),
+    id: agentId ? `tab-agent-${agentId}` : newBrowserTabId(),
     kind: "agent-builder",
     title: input.title,
-    url: "cander://agent-builder",
-    pinned: true,
+    url: agentId ? `cander://agent-builder/${agentId}` : "cander://agent-builder",
+    pinned: Boolean(input.pinned),
     projectId: input.projectId,
-    ...withHistory("cander://agent-builder"),
+    agentId,
+    ...withHistory(
+      agentId ? `cander://agent-builder/${agentId}` : "cander://agent-builder",
+    ),
   };
 }
 
@@ -376,6 +384,10 @@ function parseTab(
     shareId:
       typeof data.shareId === "string" && data.shareId.trim()
         ? data.shareId.trim()
+        : undefined,
+    agentId:
+      typeof data.agentId === "string" && data.agentId.trim()
+        ? data.agentId.trim()
         : undefined,
     history: history.length ? history : [url],
     historyIndex,

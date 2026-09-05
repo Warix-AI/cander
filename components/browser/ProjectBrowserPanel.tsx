@@ -157,6 +157,11 @@ import {
 import { AgentBuilderPanel } from "@/components/agents/AgentBuilderPanel";
 import { AgentOverviewPanel } from "@/components/agents/AgentOverviewPanel";
 import {
+  createProjectAgentClient,
+  deleteProjectAgentClient,
+  listProjectAgentsClient,
+} from "@/lib/agents/client";
+import {
   isGoogleUrl,
   isHttpUrl,
   normalizeBrowserUrl,
@@ -324,33 +329,95 @@ export function ProjectBrowserPanel({
         : getProjectBrowserSession(key, fallback)
       : fallback;
 
-  // Upgrade legacy build-preview sessions for Agent projects to the builder surface.
+  // Keep agent-builder tabs in sync with project_agents (one tab per agent).
   useEffect(() => {
     if (!key || standalone || !entity || entity.kind !== "automation") return;
     const current = getProjectBrowserSession(key, fallback);
-    const hasAgentSurface = current.tabs.some(
-      (tab) =>
-        tab.kind === "agent-builder" || tab.kind === "agent-overview",
-    );
-    if (hasAgentSurface) return;
-    const next = defaultProjectBrowserSession({
+    // Pin overview sessions stay read-only until Edit in project.
+    if (
+      current.tabs.some((tab) => tab.kind === "agent-overview") &&
+      !current.tabs.some((tab) => tab.kind === "agent-builder")
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    void listProjectAgentsClient({
+      workspaceId,
       projectId: entity.id,
-      title: entity.title,
-      publishedUrl: entity.publishedUrl,
-      spaceId: browserSpaceId,
-      projectKind: "automation",
-      agentSurface: "builder",
-    });
-    setProjectBrowserSession(key, next);
+    })
+      .then((agents) => {
+        if (cancelled || !key) return;
+        const latest = getProjectBrowserSession(key, fallback);
+        if (
+          latest.tabs.some((tab) => tab.kind === "agent-overview") &&
+          !latest.tabs.some((tab) => tab.kind === "agent-builder")
+        ) {
+          return;
+        }
+
+        const otherTabs = latest.tabs.filter(
+          (tab) => tab.kind !== "agent-builder",
+        );
+        const agentTabs = agents.map((agent) => {
+          const existing = latest.tabs.find(
+            (tab) =>
+              tab.kind === "agent-builder" && tab.agentId === agent.id,
+          );
+          if (existing) {
+            return existing.title === agent.name
+              ? existing
+              : { ...existing, title: agent.name };
+          }
+          return makeAgentBuilderTab({
+            projectId: entity.id,
+            title: agent.name,
+            agentId: agent.id,
+          });
+        });
+
+        if (!agentTabs.length) {
+          // API ensures a default agent; if empty, wait for next load.
+          return;
+        }
+
+        const nextTabs = [...agentTabs, ...otherTabs];
+        const activeStill = nextTabs.some(
+          (tab) => tab.id === latest.activeTabId,
+        );
+        const next = {
+          tabs: nextTabs,
+          activeTabId: activeStill
+            ? latest.activeTabId
+            : (agentTabs[0]?.id ?? nextTabs[0]!.id),
+        };
+        const same =
+          next.tabs.length === latest.tabs.length &&
+          next.activeTabId === latest.activeTabId &&
+          next.tabs.every((tab, i) => {
+            const prev = latest.tabs[i]!;
+            return (
+              tab.id === prev.id &&
+              tab.title === prev.title &&
+              tab.kind === prev.kind &&
+              tab.agentId === prev.agentId
+            );
+          });
+        if (!same) setProjectBrowserSession(key, next);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     key,
     standalone,
     entity?.id,
     entity?.kind,
-    entity?.title,
-    entity?.publishedUrl,
-    browserSpaceId,
+    workspaceId,
     fallback,
+    sessionRevision,
   ]);
 
   const active =
@@ -460,6 +527,30 @@ export function ProjectBrowserPanel({
   const closeTab = (id: string) => {
     const tab = session.tabs.find((item) => item.id === id);
     if (!tab || tab.pinned) return;
+
+    if (tab.kind === "agent-builder") {
+      const agentTabs = session.tabs.filter(
+        (item) => item.kind === "agent-builder",
+      );
+      if (agentTabs.length <= 1) return;
+      if (!window.confirm(`Delete agent “${tab.title}”?`)) return;
+      const agentId = tab.agentId;
+      const tabs = session.tabs.filter((item) => item.id !== id);
+      const activeTabId =
+        session.activeTabId === id
+          ? (tabs[0]?.id ?? session.activeTabId)
+          : session.activeTabId;
+      write({ tabs, activeTabId });
+      if (agentId && projectId) {
+        void deleteProjectAgentClient({
+          workspaceId,
+          projectId,
+          agentId,
+        }).catch(() => {});
+      }
+      return;
+    }
+
     const adapter = getBrowserSurfaceAdapter();
     const pip = getBrowserPipSnapshot();
 
@@ -504,6 +595,32 @@ export function ProjectBrowserPanel({
     }
 
     write({ tabs, activeTabId });
+  };
+
+  const addAgentTab = () => {
+    if (!projectId || !key) return;
+    void createProjectAgentClient({
+      workspaceId,
+      projectId,
+      name: `Agent ${session.tabs.filter((t) => t.kind === "agent-builder").length + 1}`,
+    })
+      .then((agent) => {
+        const tab = makeAgentBuilderTab({
+          projectId,
+          title: agent.name,
+          agentId: agent.id,
+        });
+        const current = getProjectBrowserSession(key, fallback);
+        setProjectBrowserSession(key, {
+          tabs: [
+            ...current.tabs.filter((t) => t.kind === "agent-builder"),
+            tab,
+            ...current.tabs.filter((t) => t.kind !== "agent-builder"),
+          ],
+          activeTabId: tab.id,
+        });
+      })
+      .catch(() => {});
   };
 
   const addUrlTab = (url?: string) => {
@@ -1525,8 +1642,10 @@ export function ProjectBrowserPanel({
             onAddUrl={() => addUrlTab()}
             onAddProject={addProjectTab}
             onAddStudioMedia={addStudioMediaTab}
+            onAddAgent={isAgentProject ? addAgentTab : undefined}
             extraProjects={extraProjects}
             studioMode={isStudioProject}
+            agentMode={isAgentProject}
           />
           {readingPage ? (
             <span
@@ -1857,7 +1976,7 @@ export function ProjectBrowserPanel({
           projectTitle={projectTitle}
           onSelect={selectTab}
           onClose={closeTab}
-          onAdd={openAddSheet}
+          onAdd={isAgentProject ? addAgentTab : openAddSheet}
         />
       ) : null}
 
@@ -2219,40 +2338,37 @@ function ProjectBrowserBody({
         projectTitle={match?.title ?? fallbackName}
         onEditInProject={() => {
           if (!projectId) return;
-          const builder = makeAgentBuilderTab({
-            projectId,
-            title: match?.title ?? fallbackName,
+          // Drop overview; agent sync effect will populate builder tabs.
+          const sessionFallback = defaultProjectBrowserSession({
+            projectId: browserKey.projectId,
+            title: fallbackName,
+            spaceId: browserKey.spaceId,
+            projectKind: "automation",
+            agentSurface: "builder",
           });
-          const sessionFallback =
-            browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID
-              ? defaultStandaloneBrowserSession()
-              : defaultProjectBrowserSession({
-                  projectId: browserKey.projectId,
-                  title: fallbackName,
-                  spaceId: browserKey.spaceId,
-                  projectKind: "automation",
-                  agentSurface: "builder",
-                });
-          const current = getProjectBrowserSession(browserKey, sessionFallback);
-          setProjectBrowserSession(browserKey, {
-            tabs: current.tabs.map((item) =>
-              item.id === tab.id ? { ...builder, id: tab.id } : item,
-            ),
-            activeTabId: tab.id,
-          });
+          setProjectBrowserSession(browserKey, sessionFallback);
         }}
       />
     );
   }
 
   if (tab.kind === "agent-builder") {
-    const match =
-      projects.find((item) => item.id === (tab.projectId ?? projectId)) ?? null;
+    const agentId = tab.agentId?.trim();
+    if (!agentId || !projectId) {
+      return (
+        <div className="flex h-full items-center justify-center bg-neutral-100 text-[13px] text-muted-foreground dark:bg-neutral-950">
+          Loading agent…
+        </div>
+      );
+    }
     return (
       <AgentBuilderPanel
         workspaceId={workspaceId}
-        projectId={projectId ?? tab.projectId ?? ""}
-        projectTitle={match?.title ?? fallbackName}
+        projectId={projectId}
+        agentId={agentId}
+        onTitleChange={(title) =>
+          syncSurfaceMeta({ title })
+        }
       />
     );
   }
@@ -2366,7 +2482,9 @@ function ProjectTabStrip({
   onAddUrl,
   onAddProject,
   onAddStudioMedia,
+  onAddAgent,
   studioMode = false,
+  agentMode = false,
   webOnly = false,
 }: {
   tabs: ProjectBrowserTab[];
@@ -2380,7 +2498,9 @@ function ProjectTabStrip({
   onAddStudioMedia?: (
     kind: "studio-image" | "studio-document",
   ) => void;
+  onAddAgent?: () => void;
   studioMode?: boolean;
+  agentMode?: boolean;
   webOnly?: boolean;
 }) {
   return (
@@ -2393,7 +2513,13 @@ function ProjectTabStrip({
           project={projects.find((item) => item.id === tab.projectId)}
           onSelect={() => onSelect(tab.id)}
           onClose={() => onClose(tab.id)}
-          canClose={!tab.pinned}
+          canClose={
+            !tab.pinned &&
+            !(
+              tab.kind === "agent-builder" &&
+              tabs.filter((item) => item.kind === "agent-builder").length <= 1
+            )
+          }
         />
       ))}
       {webOnly ? (
@@ -2402,6 +2528,17 @@ function ProjectTabStrip({
             type="button"
             aria-label="New tab"
             onClick={onAddUrl}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-black/[0.06] dark:hover:bg-white/[0.1] hover:text-foreground"
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
+          </button>
+        </BrowserChromeTooltip>
+      ) : agentMode && onAddAgent ? (
+        <BrowserChromeTooltip label="New agent">
+          <button
+            type="button"
+            aria-label="New agent"
+            onClick={onAddAgent}
             className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-black/[0.06] dark:hover:bg-white/[0.1] hover:text-foreground"
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
