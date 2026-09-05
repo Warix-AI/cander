@@ -104,8 +104,12 @@ export function BrowserPipOverlay() {
       return;
     }
     const adapter = getBrowserSurfaceAdapter();
+    // #region agent log
+    fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'C',location:'BrowserPipOverlay.tsx:effect',message:'pip hover effect mounted',data:{tabId:pip.tabId,adapterId:adapter.id,hasHitFn:typeof adapter.isPipCursorHit==='function',hasPassFn:typeof adapter.setPipPointerPassthrough==='function'},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (typeof adapter.isPipCursorHit !== "function") return;
     let cancelled = false;
+    let tickCount = 0;
     const tick = async () => {
       try {
         const hit = await adapter.isPipCursorHit!();
@@ -113,8 +117,16 @@ export function BrowserPipOverlay() {
         const interactive = Boolean(hit) || dragging;
         setHovered(interactive);
         await adapter.setPipPointerPassthrough?.(interactive);
-      } catch {
-        // ignore
+        // #region agent log
+        tickCount += 1;
+        if (hit || tickCount <= 3 || tickCount % 12 === 0) {
+          fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'A',location:'BrowserPipOverlay.tsx:tick',message:'pip hover tick',data:{hit:Boolean(hit),interactive,dragging,tickCount,hoveredWillBe:interactive},timestamp:Date.now()})}).catch(()=>{});
+        }
+        // #endregion
+      } catch (err) {
+        // #region agent log
+        fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'C',location:'BrowserPipOverlay.tsx:tick-error',message:'pip hover tick failed',data:{error:err instanceof Error?err.message:String(err)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
       }
     };
     void tick();

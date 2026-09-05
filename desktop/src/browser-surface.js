@@ -620,12 +620,42 @@ function isCursorOverPip() {
   const b = entry.lastBounds;
   // Include a header strip above the video so hover chrome stays hittable.
   const HEADER = 36;
-  return (
+  const hit =
     x >= b.x &&
     x <= b.x + b.width &&
     y >= b.y - HEADER &&
-    y <= b.y + b.height
-  );
+    y <= b.y + b.height;
+  // #region agent log
+  if (!isCursorOverPip._n) isCursorOverPip._n = 0;
+  isCursorOverPip._n += 1;
+  if (hit || isCursorOverPip._n <= 3 || isCursorOverPip._n % 15 === 0) {
+    try {
+      const fs = require("fs");
+      fs.appendFileSync(
+        "/Users/matthewdavila/Projects/cander/.cursor/debug-20f195.log",
+        JSON.stringify({
+          sessionId: "20f195",
+          runId: "pre-fix",
+          hypothesisId: "B",
+          location: "browser-surface.js:isCursorOverPip",
+          message: "native pip hit test",
+          data: {
+            hit,
+            n: isCursorOverPip._n,
+            pipTabId,
+            visible: entry.visible,
+            cursor: { x, y, screenX: point.x, screenY: point.y },
+            content: { x: content.x, y: content.y, w: content.width, h: content.height },
+            bounds: b,
+            headerTop: b.y - HEADER,
+          },
+          timestamp: Date.now(),
+        }) + "\n",
+      );
+    } catch (_) {}
+  }
+  // #endregion
+  return hit;
 }
 
 /**
@@ -640,20 +670,49 @@ function setPipPointerPassthrough(active) {
   const next = Boolean(active);
   if (pipPointerPassthrough === next) return;
   pipPointerPassthrough = next;
+  let applied = 0;
+  let missing = 0;
   for (const [id, entry] of tabs) {
     try {
-      if (typeof entry.view.setIgnoreMouseEvents !== "function") continue;
+      if (typeof entry.view.setIgnoreMouseEvents !== "function") {
+        missing += 1;
+        continue;
+      }
       if (next) {
         // Forward keeps move events flowing to the shell for hover polling.
         entry.view.setIgnoreMouseEvents(true, { forward: true });
       } else {
         entry.view.setIgnoreMouseEvents(false);
       }
+      applied += 1;
     } catch {
       // ignore
     }
     void id;
   }
+  // #region agent log
+  try {
+    const fs = require("fs");
+    fs.appendFileSync(
+      "/Users/matthewdavila/Projects/cander/.cursor/debug-20f195.log",
+      JSON.stringify({
+        sessionId: "20f195",
+        runId: "pre-fix",
+        hypothesisId: "D",
+        location: "browser-surface.js:setPipPointerPassthrough",
+        message: "pip pointer passthrough changed",
+        data: {
+          active: next,
+          tabCount: tabs.size,
+          applied,
+          missingFn: missing,
+          hasIgnoreApi: typeof (tabs.values().next().value?.view?.setIgnoreMouseEvents) === "function",
+        },
+        timestamp: Date.now(),
+      }) + "\n",
+    );
+  } catch (_) {}
+  // #endregion
 }
 
 function hideTab(tabId) {
