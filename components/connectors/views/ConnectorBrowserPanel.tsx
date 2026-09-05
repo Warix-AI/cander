@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Re
 import {
   Archive,
   ArrowLeft,
+  Check,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
   Forward,
+  ListFilter,
   Mail,
   MailOpen,
   Maximize2,
@@ -145,13 +147,20 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         Boolean(prev.calendarNav) === Boolean(next.calendarNav) &&
         prev.calendarNav?.viewLabel === next.calendarNav?.viewLabel &&
         Boolean(prev.calendarNav?.onCreate) ===
-          Boolean(next.calendarNav?.onCreate)
+          Boolean(next.calendarNav?.onCreate) &&
+        Boolean(prev.driveChrome) === Boolean(next.driveChrome) &&
+        prev.driveChrome?.query === next.driveChrome?.query &&
+        prev.driveChrome?.typeFilter === next.driveChrome?.typeFilter &&
+        prev.driveChrome?.sortMode === next.driveChrome?.sortMode
       ) {
         return prev;
       }
       return next;
     });
   }, []);
+  const isDriveBrowse = Boolean(
+    connectorId === "gdrive" && workspaceToolbar?.driveChrome,
+  );
   const isWorkspaceConnector =
     connectorId === "gcal" ||
     connectorId === "gdrive" ||
@@ -458,10 +467,52 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
                 </ChromeBtn>
               </>
             ) : null}
-            <span className="truncate px-1 text-[12.5px] font-medium text-foreground">
-              {workspaceToolbar?.title ?? title}
-            </span>
+            {!isDriveBrowse ? (
+              <span className="truncate px-1 text-[12.5px] font-medium text-foreground">
+                {workspaceToolbar?.title ?? title}
+              </span>
+            ) : workspaceToolbar?.canGoBack ? (
+              <span className="max-w-[7rem] truncate px-1 text-[12.5px] font-medium text-foreground">
+                {workspaceToolbar.title}
+              </span>
+            ) : null}
+            {isDriveBrowse ? (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-[7.5rem]">
+                <div className="pointer-events-auto w-full max-w-[min(100%,22rem)]">
+                  <input
+                    value={workspaceToolbar?.driveChrome?.query ?? ""}
+                    onChange={(event) =>
+                      workspaceToolbarRef.current?.driveChrome?.onQueryChange(
+                        event.target.value,
+                      )
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        workspaceToolbarRef.current?.driveChrome?.onSearch();
+                      }
+                    }}
+                    placeholder="Search Drive"
+                    className={cn(
+                      "h-8 w-full border border-border bg-black/[0.03] px-3 text-center text-[13px] outline-none placeholder:text-muted-foreground dark:bg-white/[0.04]",
+                      SHELL_G3_RADIUS,
+                    )}
+                  />
+                </div>
+              </div>
+            ) : null}
             <div className="ml-auto flex items-center gap-1">
+              {isDriveBrowse && workspaceToolbar?.driveChrome ? (
+                <DriveFilterMenu
+                  typeFilter={workspaceToolbar.driveChrome.typeFilter}
+                  sortMode={workspaceToolbar.driveChrome.sortMode}
+                  onTypeFilter={(value) =>
+                    workspaceToolbarRef.current?.driveChrome?.onTypeFilter(value)
+                  }
+                  onSortMode={(value) =>
+                    workspaceToolbarRef.current?.driveChrome?.onSortMode(value)
+                  }
+                />
+              ) : null}
               <ChromeBtn
                 label="Refresh"
                 disabled={Boolean(workspaceToolbar?.syncing)}
@@ -785,6 +836,125 @@ function ConnectorTabButton({
         >
           <X className="h-3 w-3" strokeWidth={2} />
         </button>
+      ) : null}
+    </div>
+  );
+}
+
+function DriveFilterMenu({
+  typeFilter,
+  sortMode,
+  onTypeFilter,
+  onSortMode,
+}: {
+  typeFilter: string;
+  sortMode: string;
+  onTypeFilter: (value: string) => void;
+  onSortMode: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const active =
+    typeFilter !== "all" || sortMode !== "name-asc";
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
+
+  const typeOptions: Array<{ id: string; label: string }> = [
+    { id: "all", label: "All types" },
+    { id: "folder", label: "Folders" },
+    { id: "doc", label: "Google Docs" },
+    { id: "sheet", label: "Google Sheets" },
+    { id: "slides", label: "Google Slides" },
+    { id: "pdf", label: "PDFs" },
+    { id: "image", label: "Images" },
+    { id: "video", label: "Videos" },
+    { id: "csv", label: "CSV" },
+    { id: "other", label: "Other" },
+  ];
+  const sortOptions: Array<{ id: string; label: string }> = [
+    { id: "name-asc", label: "Name A–Z" },
+    { id: "name-desc", label: "Name Z–A" },
+    { id: "modified-desc", label: "Newest first" },
+    { id: "modified-asc", label: "Oldest first" },
+  ];
+
+  return (
+    <div ref={rootRef} className="relative">
+      <BrowserChromeTooltip label="Filter & sort">
+        <button
+          type="button"
+          aria-label="Filter & sort"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          className={cn(
+            "inline-flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground transition-colors",
+            SHELL_G3_RADIUS,
+            BROWSER_CHROME_CHIP_HOVER,
+            "hover:text-foreground",
+            (open || active) && "text-foreground",
+          )}
+        >
+          <ListFilter className="h-3.5 w-3.5" strokeWidth={1.6} />
+        </button>
+      </BrowserChromeTooltip>
+      {open ? (
+        <div
+          className={cn(
+            "absolute right-0 top-[calc(100%+6px)] z-40 w-[13.5rem] border border-border bg-popover p-1.5 shadow-lg dark:bg-zinc-900",
+            SHELL_G3_RADIUS,
+          )}
+        >
+          <p className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+            Type
+          </p>
+          {typeOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => onTypeFilter(option.id)}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-[8px] px-2 py-1.5 text-left text-[12px] hover:bg-muted",
+                typeFilter === option.id
+                  ? "font-medium text-foreground"
+                  : "text-foreground/80",
+              )}
+            >
+              <span className="min-w-0 flex-1 truncate">{option.label}</span>
+              {typeFilter === option.id ? (
+                <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+              ) : null}
+            </button>
+          ))}
+          <div className="my-1.5 border-t border-border" />
+          <p className="px-2 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+            Sort
+          </p>
+          {sortOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => onSortMode(option.id)}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-[8px] px-2 py-1.5 text-left text-[12px] hover:bg-muted",
+                sortMode === option.id
+                  ? "font-medium text-foreground"
+                  : "text-foreground/80",
+              )}
+            >
+              <span className="min-w-0 flex-1 truncate">{option.label}</span>
+              {sortMode === option.id ? (
+                <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+              ) : null}
+            </button>
+          ))}
+        </div>
       ) : null}
     </div>
   );

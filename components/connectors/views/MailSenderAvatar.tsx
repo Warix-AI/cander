@@ -154,18 +154,22 @@ export function MailSenderAvatar({
   }, [domain, sources.length]);
 
   const src = !useLetter ? sources[sourceIndex] : undefined;
-  const iconPx = Math.round(size * 0.72);
+  // Fill the tile like connector marks — not a small glyph floating in a circle.
+  const iconPx = Math.round(size * 0.78);
+  // Proportional squircle (~iOS app-icon ratio). Fixed shell 20px would look circular at 36px.
+  const radius = Math.max(8, Math.round(size * 0.28));
 
   return (
     <span
       aria-hidden
       className={cn(
-        "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full",
+        "inline-flex shrink-0 items-center justify-center overflow-hidden [-electron-corner-smoothing:system-ui]",
         className,
       )}
       style={{
         width: size,
         height: size,
+        borderRadius: radius,
         backgroundColor: useLetter ? color : "#F1F3F4",
       }}
     >

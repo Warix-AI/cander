@@ -22,14 +22,14 @@ import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 const FILE_TYPE_ICON = {
-  csv: "/file-types/csv.png",
-  image: "/file-types/image.png",
-  pdf: "/file-types/pdf.png",
-  movie: "/file-types/movie.png",
-  earth: "/file-types/earth.png",
-  folder: "/file-types/folder.png",
-  txt: "/file-types/txt.png",
-  file: "/file-types/file.png",
+  csv: "/file-types/csv.png?v=2",
+  image: "/file-types/image.png?v=2",
+  pdf: "/file-types/pdf.png?v=2",
+  movie: "/file-types/movie.png?v=2",
+  earth: "/file-types/earth.png?v=2",
+  folder: "/file-types/folder.png?v=2",
+  txt: "/file-types/txt.png?v=2",
+  file: "/file-types/file.png?v=2",
 } as const;
 
 type Page = "browse" | "detail" | "create";
@@ -40,12 +40,95 @@ type DriveFile = {
   kind: "file" | "folder";
   mimeType: string;
   modified: string;
+  modifiedAt: string | null;
   owner?: string;
   webViewLink?: string;
   sizeLabel?: string;
 };
 
 type FolderCrumb = { id: string; name: string };
+
+type DriveTypeFilter =
+  | "all"
+  | "folder"
+  | "doc"
+  | "sheet"
+  | "slides"
+  | "pdf"
+  | "image"
+  | "video"
+  | "csv"
+  | "other";
+
+type DriveSortMode = "name-asc" | "name-desc" | "modified-desc" | "modified-asc";
+
+const DRIVE_CACHE_TTL_MS = 10 * 60 * 1000;
+
+type DriveFolderCacheEntry = {
+  files: DriveFile[];
+  query: string;
+  fetchedAt: number;
+};
+
+type DriveSessionCache = {
+  workspaceId: string;
+  folderStack: FolderCrumb[];
+  query: string;
+  typeFilter: DriveTypeFilter;
+  sortMode: DriveSortMode;
+  folders: Record<string, DriveFolderCacheEntry>;
+};
+
+let driveSessionCache: DriveSessionCache | null = null;
+
+function folderCacheKey(folderId: string | null) {
+  return folderId ?? "root";
+}
+
+function isCsvMime(mime: string) {
+  const lower = mime.toLowerCase();
+  if (lower.includes("spreadsheetml")) return false;
+  return (
+    lower === "text/csv" ||
+    lower === "application/csv" ||
+    lower.includes("csv")
+  );
+}
+
+function matchesTypeFilter(file: DriveFile, filter: DriveTypeFilter) {
+  if (filter === "all") return true;
+  if (filter === "folder") return file.kind === "folder";
+  if (file.kind === "folder") return false;
+  const mime = file.mimeType;
+  switch (filter) {
+    case "doc":
+      return mime === "application/vnd.google-apps.document";
+    case "sheet":
+      return mime === "application/vnd.google-apps.spreadsheet";
+    case "slides":
+      return mime === "application/vnd.google-apps.presentation";
+    case "pdf":
+      return mime === "application/pdf";
+    case "image":
+      return mime.startsWith("image/");
+    case "video":
+      return mime.startsWith("video/");
+    case "csv":
+      return isCsvMime(mime);
+    case "other":
+      return (
+        mime !== "application/vnd.google-apps.document" &&
+        mime !== "application/vnd.google-apps.spreadsheet" &&
+        mime !== "application/vnd.google-apps.presentation" &&
+        mime !== "application/pdf" &&
+        !mime.startsWith("image/") &&
+        !mime.startsWith("video/") &&
+        !isCsvMime(mime)
+      );
+    default:
+      return true;
+  }
+}
 
 type FilePreview = {
   previewKind:
@@ -123,6 +206,7 @@ function parseDriveFile(raw: unknown): DriveFile | null {
     mimeType,
     kind: isFolderMime(mimeType) ? "folder" : "file",
     modified: formatModified(modifiedRaw),
+    modifiedAt: modifiedRaw,
     owner,
     sizeLabel: formatBytes(row.size ?? row.quotaBytesUsed),
     webViewLink:
@@ -137,16 +221,6 @@ function brandMarkId(mime: string, kind: "file" | "folder"): string | null {
   if (mime === "application/vnd.google-apps.document") return "gdocs";
   if (mime === "application/vnd.google-apps.spreadsheet") return "gsheets";
   return null;
-}
-
-function isCsvMime(mime: string) {
-  const lower = mime.toLowerCase();
-  if (lower.includes("spreadsheetml")) return false;
-  return (
-    lower === "text/csv" ||
-    lower === "application/csv" ||
-    lower.includes("csv")
-  );
 }
 
 function isEarthMime(mime: string) {
@@ -321,9 +395,20 @@ export function DriveConnectorView({
   onOpenLink?: (url: string) => void;
 }) {
   const { workspaceId } = useApp();
+  const restored =
+    driveSessionCache?.workspaceId === workspaceId ? driveSessionCache : null;
   const [page, setPage] = useState<Page>("browse");
-  const [folderStack, setFolderStack] = useState<FolderCrumb[]>([]);
-  const [files, setFiles] = useState<DriveFile[]>([]);
+  const [folderStack, setFolderStack] = useState<FolderCrumb[]>(
+    () => restored?.folderStack ?? [],
+  );
+  const [files, setFiles] = useState<DriveFile[]>(() => {
+    if (!restored) return [];
+    const key = folderCacheKey(
+      restored.folderStack[restored.folderStack.length - 1]?.id ?? null,
+    );
+    const entry = restored.folders[key];
+    return entry && entry.query === restored.query ? entry.files : [];
+  });
   const [syncing, setSyncing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -331,7 +416,13 @@ export function DriveConnectorView({
   const [preview, setPreview] = useState<FilePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => restored?.query ?? "");
+  const [typeFilter, setTypeFilter] = useState<DriveTypeFilter>(
+    () => restored?.typeFilter ?? "all",
+  );
+  const [sortMode, setSortMode] = useState<DriveSortMode>(
+    () => restored?.sortMode ?? "name-asc",
+  );
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
   const [createMode, setCreateMode] = useState<"file" | "folder">("file");
@@ -341,62 +432,156 @@ export function DriveConnectorView({
     ? folderStack[folderStack.length - 1]!.name
     : "My Drive";
 
-  const sortedFiles = useMemo(() => {
-    return [...files].sort((a, b) => {
-      if (a.kind !== b.kind) return a.kind === "folder" ? -1 : 1;
-      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-    });
-  }, [files]);
-
-  const loadFiles = useCallback(async () => {
-    setSyncing(true);
-    setError(null);
-    try {
-      const needle = query.trim();
-      const result = await runConnectorViewOperation({
+  const persistSession = useCallback(
+    (patch: Partial<DriveSessionCache> & { folderEntry?: DriveFolderCacheEntry }) => {
+      const prev =
+        driveSessionCache?.workspaceId === workspaceId
+          ? driveSessionCache
+          : {
+              workspaceId,
+              folderStack: [] as FolderCrumb[],
+              query: "",
+              typeFilter: "all" as DriveTypeFilter,
+              sortMode: "name-asc" as DriveSortMode,
+              folders: {} as Record<string, DriveFolderCacheEntry>,
+            };
+      const { folderEntry, ...rest } = patch;
+      const next: DriveSessionCache = {
+        ...prev,
+        ...rest,
         workspaceId,
-        connectorId: "gdrive",
-        operation: "findFiles",
-        input: {
-          folderId: currentFolderId || undefined,
-          query: needle
-            ? needle.includes("=") || needle.includes("contains")
-              ? needle
-              : `name contains '${needle.replace(/'/g, "\\'")}' and trashed = false`
-            : currentFolderId
-              ? "trashed = false"
-              : undefined,
-          maxResults: 60,
-        },
-      });
-      const rawFiles = Array.isArray(result.data.files) ? result.data.files : [];
-      const parsed = rawFiles
-        .map(parseDriveFile)
-        .filter((file): file is DriveFile => Boolean(file));
-      setFiles(parsed);
-      setStatus(
-        parsed.length
-          ? null
-          : needle
-            ? "No matching files."
-            : "This folder is empty.",
-      );
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Could not load Drive. Connect Google Drive and try again.",
-      );
-      setFiles([]);
-      setStatus(null);
-    } finally {
-      setSyncing(false);
-    }
-  }, [currentFolderId, query, workspaceId]);
+        folders: { ...prev.folders },
+      };
+      if (folderEntry) {
+        next.folders[folderCacheKey(currentFolderId)] = folderEntry;
+      }
+      driveSessionCache = next;
+    },
+    [currentFolderId, workspaceId],
+  );
+
+  const visibleFiles = useMemo(() => {
+    const filtered = files.filter((file) => matchesTypeFilter(file, typeFilter));
+    return [...filtered].sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === "folder" ? -1 : 1;
+      if (sortMode === "name-asc" || sortMode === "name-desc") {
+        const cmp = a.name.localeCompare(b.name, undefined, {
+          sensitivity: "base",
+        });
+        return sortMode === "name-asc" ? cmp : -cmp;
+      }
+      const at = a.modifiedAt ? new Date(a.modifiedAt).getTime() : 0;
+      const bt = b.modifiedAt ? new Date(b.modifiedAt).getTime() : 0;
+      return sortMode === "modified-desc" ? bt - at : at - bt;
+    });
+  }, [files, sortMode, typeFilter]);
+
+  const loadFiles = useCallback(
+    async (opts?: { force?: boolean; searchQuery?: string }) => {
+      const needle = (opts?.searchQuery ?? query).trim();
+      const key = folderCacheKey(currentFolderId);
+      const cached =
+        driveSessionCache?.workspaceId === workspaceId
+          ? driveSessionCache.folders[key]
+          : undefined;
+      if (
+        !opts?.force &&
+        cached &&
+        cached.query === needle &&
+        Date.now() - cached.fetchedAt < DRIVE_CACHE_TTL_MS
+      ) {
+        setFiles(cached.files);
+        setStatus(
+          cached.files.length
+            ? null
+            : needle
+              ? "No matching files."
+              : "This folder is empty.",
+        );
+        return;
+      }
+
+      setSyncing(true);
+      setError(null);
+      try {
+        const result = await runConnectorViewOperation({
+          workspaceId,
+          connectorId: "gdrive",
+          operation: "findFiles",
+          input: {
+            folderId: currentFolderId || undefined,
+            query: needle
+              ? needle.includes("=") || needle.includes("contains")
+                ? needle
+                : `name contains '${needle.replace(/'/g, "\\'")}' and trashed = false`
+              : currentFolderId
+                ? "trashed = false"
+                : undefined,
+            maxResults: 60,
+          },
+        });
+        const rawFiles = Array.isArray(result.data.files)
+          ? result.data.files
+          : [];
+        const parsed = rawFiles
+          .map(parseDriveFile)
+          .filter((file): file is DriveFile => Boolean(file));
+        setFiles(parsed);
+        setStatus(
+          parsed.length
+            ? null
+            : needle
+              ? "No matching files."
+              : "This folder is empty.",
+        );
+        persistSession({
+          folderStack,
+          query: needle,
+          typeFilter,
+          sortMode,
+          folderEntry: {
+            files: parsed,
+            query: needle,
+            fetchedAt: Date.now(),
+          },
+        });
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not load Drive. Connect Google Drive and try again.",
+        );
+        setFiles([]);
+        setStatus(null);
+      } finally {
+        setSyncing(false);
+      }
+    },
+    [
+      currentFolderId,
+      folderStack,
+      persistSession,
+      query,
+      sortMode,
+      typeFilter,
+      workspaceId,
+    ],
+  );
+
+  // Load when folder changes; use cache on remount / revisit.
+  useEffect(() => {
+    void loadFiles({ force: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only folder/workspace should auto-fetch
+  }, [currentFolderId, workspaceId]);
 
   useEffect(() => {
-    if (page === "browse") void loadFiles();
-  }, [loadFiles, page]);
+    persistSession({
+      folderStack,
+      query,
+      typeFilter,
+      sortMode,
+    });
+  }, [folderStack, persistSession, query, sortMode, typeFilter]);
 
   const openFolder = useCallback((folder: DriveFile) => {
     setQuery("");
@@ -454,7 +639,12 @@ export function DriveConnectorView({
         if (video) {
           setPreview((prev) =>
             prev
-              ? { ...prev, previewKind: "unsupported", displayUrl: null, embedUrl: null }
+              ? {
+                  ...prev,
+                  previewKind: "unsupported",
+                  displayUrl: null,
+                  embedUrl: null,
+                }
               : prev,
           );
         }
@@ -515,7 +705,7 @@ export function DriveConnectorView({
       setName("");
       setContent("");
       setPage("browse");
-      await loadFiles();
+      await loadFiles({ force: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create item.");
     } finally {
@@ -525,6 +715,7 @@ export function DriveConnectorView({
 
   useEffect(() => {
     const onDetail = page === "detail" && Boolean(selected);
+    const onBrowse = page === "browse";
     onToolbarChange?.({
       title:
         page === "create"
@@ -567,7 +758,7 @@ export function DriveConnectorView({
           void openFile(selected);
           return;
         }
-        void loadFiles();
+        void loadFiles({ force: true });
       },
       onPrimary: onDetail
         ? () => openExternal()
@@ -585,6 +776,19 @@ export function DriveConnectorView({
                 void createItem();
               }
             : null,
+      driveChrome: onBrowse
+        ? {
+            query,
+            onQueryChange: setQuery,
+            onSearch: () => {
+              void loadFiles({ force: true, searchQuery: query });
+            },
+            typeFilter,
+            sortMode,
+            onTypeFilter: (value) => setTypeFilter(value as DriveTypeFilter),
+            onSortMode: (value) => setSortMode(value as DriveSortMode),
+          }
+        : null,
     });
   }, [
     busy,
@@ -598,8 +802,11 @@ export function DriveConnectorView({
     openFile,
     page,
     previewLoading,
+    query,
     selected,
+    sortMode,
     syncing,
+    typeFilter,
   ]);
 
   const previewSrc =
@@ -790,39 +997,27 @@ export function DriveConnectorView({
 
       {page === "browse" ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="shrink-0 border-b border-black/5 px-3 py-2 dark:border-white/10">
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void loadFiles();
-              }}
-              placeholder={
-                currentFolderId ? `Search in ${locationTitle}…` : "Search Drive…"
-              }
-              className={cn(
-                "h-8 w-full border border-border bg-transparent px-3 text-[13px] outline-none",
-                SHELL_G3_RADIUS,
-              )}
-            />
-          </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {!sortedFiles.length ? (
+            {!visibleFiles.length ? (
               <WorkspaceEmptyState
                 title={syncing ? "Loading Drive…" : "Nothing here yet"}
                 body={
                   error
                     ? "Connect Google Drive in Connectors, then refresh."
-                    : currentFolderId
-                      ? "This folder is empty. Create a file or go back."
-                      : "Search or create a file to get started."
+                    : query.trim()
+                      ? "No files match this search."
+                      : typeFilter !== "all"
+                        ? "No files match this filter."
+                        : currentFolderId
+                          ? "This folder is empty. Create a file or go back."
+                          : "Search or create a file to get started."
                 }
                 actionLabel={syncing ? "Loading…" : "Refresh"}
                 syncing={syncing}
-                onAction={() => void loadFiles()}
+                onAction={() => void loadFiles({ force: true })}
               />
             ) : (
-              sortedFiles.map((file) => (
+              visibleFiles.map((file) => (
                 <WorkspaceListRow
                   key={file.id}
                   title={file.name}

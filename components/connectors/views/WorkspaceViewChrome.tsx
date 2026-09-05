@@ -24,6 +24,16 @@ export type WorkspaceToolbarState = {
     onCreate?: () => void;
     viewLabel?: string;
   } | null;
+  /** Drive browse chrome — centered search + filter (hidden on file detail). */
+  driveChrome?: {
+    query: string;
+    onQueryChange: (value: string) => void;
+    onSearch: () => void;
+    typeFilter: string;
+    sortMode: string;
+    onTypeFilter: (value: string) => void;
+    onSortMode: (value: string) => void;
+  } | null;
 };
 
 export function WorkspacePanelFrame({
