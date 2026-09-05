@@ -135,6 +135,51 @@ test("discovery respects preferConnectorId scope", () => {
   assert.match(result.reason, /scoped:gmail/);
 });
 
+test("discovery fail-closed: scoped prefer never falls through to all connectors", () => {
+  const snapshot: CapabilitySnapshot = {
+    connectors: [
+      {
+        connectorId: "gmail",
+        label: "Gmail",
+        capabilityFamily: "email",
+        accounts: [
+          {
+            connectionId: "c1",
+            label: "Gmail",
+            status: "active",
+            capabilities: { search: true, read: true, send: true },
+          },
+        ],
+      },
+      {
+        connectorId: "slack",
+        label: "Slack",
+        capabilityFamily: "messaging",
+        accounts: [
+          {
+            connectionId: "c2",
+            label: "Slack",
+            status: "active",
+            capabilities: { search: true, read: true, send: true },
+          },
+        ],
+      },
+    ],
+    families: {
+      email: { connected: true, connectorIds: ["gmail"], accounts: [] },
+      messaging: { connected: true, connectorIds: ["slack"], accounts: [] },
+    },
+  };
+  const result = discoverRelevantTools({
+    userMessage: "search my inbox and slack",
+    snapshot,
+    preferConnectorIds: ["does-not-exist"],
+  });
+  assert.deepEqual(result.toolIds, []);
+  assert.match(result.reason, /scoped_empty/);
+  assert.equal(result.reason.includes("all_connected_families"), false);
+});
+
 test("discovery can scope multiple connectors", () => {
   const snapshot: CapabilitySnapshot = {
     connectors: [

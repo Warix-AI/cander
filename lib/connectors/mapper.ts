@@ -46,9 +46,41 @@ export type ConnectorCatalogRow = {
 const SECRET_ROW_KEYS = [
   "token_ref",
   "provider_connection_id",
+  "composio_user_id",
   "access_token",
   "refresh_token",
 ] as const;
+
+/**
+ * Columns safe for authenticated PostgREST SELECT after migration 050
+ * (provider_connection_id / composio_user_id are service-role only).
+ */
+export const CONNECTOR_CONNECTION_PUBLIC_COLUMNS = [
+  "id",
+  "workspace_id",
+  "owner_id",
+  "connector_id",
+  "connection_mode",
+  "status",
+  "provider_name",
+  "failure_detail",
+  "connected_by",
+  "created_at",
+  "updated_at",
+  "connected_at",
+  "disconnected_at",
+  "last_sync_at",
+  "pending_expires_at",
+  "deleted_at",
+  "tool_permissions",
+].join(", ");
+
+/** Public columns plus server-only secrets — use only with service role. */
+export const CONNECTOR_CONNECTION_SERVER_COLUMNS = [
+  CONNECTOR_CONNECTION_PUBLIC_COLUMNS,
+  "provider_connection_id",
+  "composio_user_id",
+].join(", ");
 
 /** Strip secret fields before any client-facing response. */
 export function connectionRowToPublic(row: ConnectorConnectionRow): ConnectorConnection {

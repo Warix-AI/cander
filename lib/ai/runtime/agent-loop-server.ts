@@ -34,6 +34,7 @@ import {
 } from "@/lib/ai/raw-openai/image-generation";
 import { listActiveConnections } from "@/lib/connectors/connections";
 import { authorizeToolExposure } from "@/lib/connectors/authorization";
+import { resolveConnectorScope } from "@/lib/ai/tools/connector-scope";
 
 const SYSTEM_BASE = `You are Cander, a concise and capable AI assistant. Answer the user's request directly.
 Prefer compact, natural responses. Use connected app tools when needed via function calls.
@@ -184,44 +185,54 @@ export async function runAgentServerLoop(
     workspaceId: input.workspaceId,
     profileId: input.profileId,
   });
+  const activeConnections = connections.ok ? connections.connections : [];
   const connectionByConnector = new Map(
-    (connections.ok ? connections.connections : []).map((c) => [
-      c.connectorId,
-      c,
-    ]),
+    activeConnections.map((c) => [c.connectorId, c]),
   );
-  const scopedConnectionIds = [
-    ...(input.selectedConnectionIds ?? []),
-    ...(input.selectedConnectionId ? [input.selectedConnectionId] : []),
-  ].filter((id, i, arr) => Boolean(id) && arr.indexOf(id) === i);
-
-  const scopedConnections =
-    connections.ok && scopedConnectionIds.length
-      ? connections.connections.filter((c) =>
-          scopedConnectionIds.includes(c.connectionId),
-        )
-      : [];
-  const preferConnectorIds = scopedConnections.map((c) => c.connectorId);
+  const scope = resolveConnectorScope({
+    selectedConnectionIds: input.selectedConnectionIds,
+    selectedConnectionId: input.selectedConnectionId,
+    activeConnections: activeConnections.map((c) => ({
+      connectionId: c.connectionId,
+      connectorId: c.connectorId,
+    })),
+  });
+  const preferConnectorIds = scope.preferConnectorIds;
   const scopedByConnector = new Map(
-    scopedConnections.map((c) => [c.connectorId, c]),
+    scope.scopedConnections.map((c) => {
+      const full = activeConnections.find(
+        (row) => row.connectionId === c.connectionId,
+      );
+      return [c.connectorId, full!] as const;
+    }).filter((entry) => Boolean(entry[1])),
   );
+  // When the user scoped the turn, never authorize via unscoped connections.
+  const connectionForTool = (connectorId: string) =>
+    scope.scopeRequested
+      ? scopedByConnector.get(connectorId)
+      : (scopedByConnector.get(connectorId) ??
+        connectionByConnector.get(connectorId));
 
   const userMessage = lastUserMessage(input.messages);
-  let discovery = discoverRelevantTools({
-    userMessage,
-    snapshot,
-    recentEvents,
-    preferConnectorIds,
-  });
+  let discovery = scope.failClosed
+    ? {
+        toolIds: [] as string[],
+        families: [] as string[],
+        reason: "scope_unresolved",
+      }
+    : discoverRelevantTools({
+        userMessage,
+        snapshot,
+        recentEvents,
+        preferConnectorIds,
+      });
   let exposedIds = [...discovery.toolIds];
 
   // Filter to tools that pass exposure authz for at least one account
   exposedIds = exposedIds.filter((toolId) => {
     const tool = getCanderTool(toolId);
     if (!tool?.connectorId) return false;
-    const conn =
-      scopedByConnector.get(tool.connectorId) ??
-      connectionByConnector.get(tool.connectorId);
+    const conn = connectionForTool(tool.connectorId);
     if (!conn) return false;
     const authz = authorizeToolExposure(toolId, {
       workspaceId: input.workspaceId,
@@ -231,13 +242,15 @@ export async function runAgentServerLoop(
     return authz.ok;
   });
 
-  // If scoped but discovery empty, fall back to those connectors' registry tools.
-  if (preferConnectorIds.length && !exposedIds.length) {
+  // If scoped and resolved but discovery empty, fall back to those connectors only.
+  if (
+    !scope.failClosed &&
+    preferConnectorIds.length &&
+    !exposedIds.length
+  ) {
     for (const connectorId of preferConnectorIds) {
       for (const tool of listCanderToolsForConnector(connectorId)) {
-        const conn =
-          scopedByConnector.get(connectorId) ??
-          connectionByConnector.get(connectorId);
+        const conn = connectionForTool(connectorId);
         if (!conn) continue;
         const authz = authorizeToolExposure(tool.id, {
           workspaceId: input.workspaceId,
@@ -253,11 +266,13 @@ export async function runAgentServerLoop(
     collectReferencesFromEvents(recentEvents),
   );
   const scopePrompt =
-    scopedConnections.length > 0
-      ? `User scoped this turn to connected apps: ${scopedConnections
-          .map((c) => c.connectorId)
-          .join(", ")}. The user message names those apps inline where relevant. Prefer those connectors’ tools and do not ask which app to use unless the request clearly needs a different connected app.`
-      : "";
+    scope.scopedConnections.length > 0
+      ? `User scoped this turn to connected apps: ${preferConnectorIds.join(
+          ", ",
+        )}. The user message names those apps inline where relevant. Prefer those connectors’ tools and do not ask which app to use unless the request clearly needs a different connected app.`
+      : scope.failClosed
+        ? "User attempted to scope this turn to a connector that is not available. Do not call connected-app tools."
+        : "";
   const system = [
     SYSTEM_BASE,
     formatCapabilitySnapshotForPrompt(snapshot),
@@ -295,8 +310,14 @@ export async function runAgentServerLoop(
   const imageIntent = imageGenEnabled && detectImageGenerationIntent(userMessage);
 
   for (let round = 0; round < iterations; round++) {
-    // Optional second discovery if first batch empty but connectors exist
-    if (round > 0 && !exposedIds.length && snapshot.connectors.length) {
+    // Optional second discovery if first batch empty but connectors exist.
+    // Never reopen scope after a fail-closed unresolved chip.
+    if (
+      round > 0 &&
+      !exposedIds.length &&
+      !scope.failClosed &&
+      snapshot.connectors.length
+    ) {
       discovery = discoverRelevantTools({
         userMessage,
         snapshot,
@@ -315,6 +336,11 @@ export async function runAgentServerLoop(
         preferConnectorIds,
       });
       for (const id of discovery.toolIds) {
+        const tool = getCanderTool(id);
+        if (!tool?.connectorId) continue;
+        if (scope.scopeRequested && !connectionForTool(tool.connectorId)) {
+          continue;
+        }
         if (!exposedIds.includes(id)) exposedIds.push(id);
       }
     }
@@ -390,14 +416,7 @@ export async function runAgentServerLoop(
         continue;
       }
 
-      const conn =
-        scopedByConnector.get(tool.connectorId) ??
-        (input.selectedConnectionId
-          ? (connections.ok ? connections.connections : []).find(
-              (c) => c.connectionId === input.selectedConnectionId,
-            )
-          : null) ??
-        connectionByConnector.get(tool.connectorId);
+      const conn = connectionForTool(tool.connectorId);
 
       if (!conn) {
         conversation.push({

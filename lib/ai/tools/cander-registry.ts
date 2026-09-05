@@ -187,7 +187,7 @@ registerCanderTool({
   description: "Remove a Gmail message from the inbox (archive).",
   risk: "write",
   confirmationPolicy: "never",
-  defaultEnabled: true,
+  defaultEnabled: false,
   providerTool: "GMAIL_REMOVE_LABEL",
   inputSchema: {
     type: "object",

@@ -135,20 +135,21 @@ export function discoverRelevantTools(input: DiscoveryInput): DiscoveryResult {
         if (!already.has(id) && !ranked.includes(id)) ranked.push(id);
       }
     }
-    if (ranked.length) {
-      ranked.sort((a, b) => {
-        const ta = getCanderTool(a);
-        const tb = getCanderTool(b);
-        const ra = ta?.risk === "read" ? 0 : 1;
-        const rb = tb?.risk === "read" ? 0 : 1;
-        return ra - rb;
-      });
-      return {
-        toolIds: ranked.slice(0, max),
-        families: [...selectedFamilies],
-        reason: reasons.join("|"),
-      };
-    }
+    ranked.sort((a, b) => {
+      const ta = getCanderTool(a);
+      const tb = getCanderTool(b);
+      const ra = ta?.risk === "read" ? 0 : 1;
+      const rb = tb?.risk === "read" ? 0 : 1;
+      return ra - rb;
+    });
+    // Fail closed: explicit connector scope never falls through to other families.
+    return {
+      toolIds: ranked.slice(0, max),
+      families: [...selectedFamilies],
+      reason: ranked.length
+        ? reasons.join("|")
+        : `${reasons.join("|") || "scoped"}|scoped_empty`,
+    };
   }
 
   const events = input.recentEvents ?? [];

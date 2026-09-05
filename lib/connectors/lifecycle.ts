@@ -24,6 +24,8 @@ import {
   isPendingExpired,
   newConnectionId,
   pendingExpiresAtIso,
+  CONNECTOR_CONNECTION_PUBLIC_COLUMNS,
+  CONNECTOR_CONNECTION_SERVER_COLUMNS,
   type ConnectorCatalogRow,
   type ConnectorConnectionRow,
 } from "./mapper.ts";
@@ -48,7 +50,7 @@ export async function listUserConnections(input: {
   await expireStalePendingConnections(input);
   const { data, error } = await input.client
     .from("connector_connections")
-    .select("*")
+    .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
     .eq("workspace_id", input.workspaceId)
     .eq("owner_id", input.ownerId)
     .is("deleted_at", null)
@@ -67,7 +69,7 @@ export async function getUserConnection(input: {
 > {
   const { data, error } = await input.client
     .from("connector_connections")
-    .select("*")
+    .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
     .eq("id", input.connectionId)
     .eq("owner_id", input.ownerId)
     .is("deleted_at", null)
@@ -111,7 +113,7 @@ export async function initiateConnection(input: {
   }
   const { data: existing, error: existingError } = await input.client
     .from("connector_connections")
-    .select("*")
+    .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
     .eq("workspace_id", input.workspaceId)
     .eq("owner_id", input.ownerId)
     .eq("connector_id", input.connectorId)
@@ -164,14 +166,14 @@ export async function initiateConnection(input: {
   const { data: inserted, error: insertError } = await input.client
     .from("connector_connections")
     .insert(row)
-    .select("*")
+    .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
     .single();
 
   if (insertError) {
     if (insertError.code === "23505") {
       const { data: raced } = await input.client
         .from("connector_connections")
-        .select("*")
+        .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
         .eq("workspace_id", input.workspaceId)
         .eq("owner_id", input.ownerId)
         .eq("connector_id", input.connectorId)
@@ -315,10 +317,17 @@ export async function verifyOAuthCallback(input: {
         };
       }
       const oauthWorkspace = await findOAuthWorkspaceForOwner(admin, input.ownerId);
+      if (!oauthWorkspace) {
+        return {
+          ok: false,
+          status: 409,
+          error: "Connection request is already being processed.",
+        };
+      }
       const active = await findActiveConnectionForOwnerOAuth(
         admin,
         input.ownerId,
-        oauthWorkspace ?? undefined,
+        oauthWorkspace,
       );
       if (active) {
         return {
@@ -432,18 +441,18 @@ async function findOAuthWorkspaceForOwner(
 async function findActiveConnectionForOwnerOAuth(
   admin: SupabaseClient,
   ownerId: string,
-  workspaceId?: string,
+  workspaceId: string,
 ): Promise<{ connection: ConnectorConnection; workspaceId: string } | null> {
-  let query = admin
+  const scopedWorkspace = workspaceId.trim();
+  if (!scopedWorkspace) return null;
+
+  const { data, error } = await admin
     .from("connector_connections")
     .select("*")
     .eq("owner_id", ownerId)
+    .eq("workspace_id", scopedWorkspace)
     .eq("status", "active")
-    .is("deleted_at", null);
-  if (workspaceId) {
-    query = query.eq("workspace_id", workspaceId);
-  }
-  const { data, error } = await query
+    .is("deleted_at", null)
     .order("connected_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -462,9 +471,11 @@ export async function disconnectConnection(input: {
   | { ok: true; connection: ConnectorConnection; alreadyDisconnected: boolean }
   | { ok: false; status: number; error: string }
 > {
-  const { data, error } = await input.client
+  // provider_connection_id is service-role SELECT only (migration 050).
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
     .from("connector_connections")
-    .select("*")
+    .select(CONNECTOR_CONNECTION_SERVER_COLUMNS)
     .eq("id", input.connectionId)
     .eq("owner_id", input.ownerId)
     .eq("workspace_id", input.workspaceId)
@@ -499,7 +510,6 @@ export async function disconnectConnection(input: {
     }
   }
 
-  const admin = createSupabaseAdminClient();
   const updated = await reconcileConnectionDisconnected(admin, input.connectionId);
 
   await recordConnectorAuditEvent(input.client, {
@@ -530,7 +540,7 @@ async function expireStalePendingConnections(input: {
 }) {
   const { data, error } = await input.client
     .from("connector_connections")
-    .select("*")
+    .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
     .eq("workspace_id", input.workspaceId)
     .eq("owner_id", input.ownerId)
     .eq("status", "pending")

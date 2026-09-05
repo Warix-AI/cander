@@ -3,7 +3,10 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ConnectorConnectionRow } from "./mapper.ts";
+import {
+  CONNECTOR_CONNECTION_SERVER_COLUMNS,
+  type ConnectorConnectionRow,
+} from "./mapper.ts";
 
 export type ResolvedConnection = {
   connectionId: string;
@@ -38,17 +41,23 @@ function connectionLabel(row: ConnectorConnectionRow): string {
   return base;
 }
 
+/**
+ * List the caller's active connections including provider refs.
+ * Uses service role for provider_connection_id (auth clients cannot SELECT it),
+ * always scoped to the verified workspace + profile from the request.
+ */
 export async function listActiveConnections(input: {
   client: SupabaseClient;
   workspaceId: string;
   profileId: string;
   connectorId?: string;
 }): Promise<ResolveConnectionsResult> {
-  let query = input.client
+  void input.client; // ownership already established by caller JWT/membership
+  const { createSupabaseAdminClient } = await import("../supabase/admin.ts");
+  const admin = createSupabaseAdminClient();
+  let query = admin
     .from("connector_connections")
-    .select(
-      "id, workspace_id, owner_id, connector_id, connection_mode, status, provider_connection_id, provider_name, failure_detail, connected_by, created_at, updated_at, connected_at, disconnected_at, last_sync_at, pending_expires_at, deleted_at, tool_permissions",
-    )
+    .select(CONNECTOR_CONNECTION_SERVER_COLUMNS)
     .eq("workspace_id", input.workspaceId)
     .eq("owner_id", input.profileId)
     .eq("status", "active")

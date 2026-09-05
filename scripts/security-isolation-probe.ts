@@ -98,6 +98,53 @@ async function edgeAiChat(
   return { status: res.status, json };
 }
 
+async function appAgent(
+  accessToken: string,
+  body: Record<string, unknown>,
+): Promise<{ status: number; json: unknown }> {
+  const base =
+    process.env.CANDER_APP_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    "http://127.0.0.1:3000";
+  const res = await fetch(`${base.replace(/\/$/, "")}/api/ai/agent`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  let json: unknown = null;
+  try {
+    json = await res.json();
+  } catch {
+    json = null;
+  }
+  return { status: res.status, json };
+}
+
+function agentDeniedConnectorTools(json: unknown): boolean {
+  if (!json || typeof json !== "object") return false;
+  const record = json as Record<string, unknown>;
+  const discoveryReason =
+    typeof record.discoveryReason === "string" ? record.discoveryReason : "";
+  if (
+    discoveryReason.includes("scope_unresolved") ||
+    discoveryReason.includes("scoped_empty")
+  ) {
+    return true;
+  }
+  const tools = record.exposedToolIds ?? record.toolIds;
+  if (Array.isArray(tools) && tools.length === 0) return true;
+  // Fail closed: forged scope must not surface foreign connector families.
+  const content = typeof record.content === "string" ? record.content : "";
+  if (/not available|do not call connected-app tools/i.test(content)) {
+    return true;
+  }
+  // HTTP denial is also acceptable for cross-tenant.
+  return false;
+}
+
 async function main() {
   const workspaceId = process.env.WORKSPACE_ID?.trim();
   if (!workspaceId) {
@@ -285,6 +332,103 @@ async function main() {
         outsiderConnErr?.message ??
         `outsider_rows=${(outsiderConnections ?? []).length}`,
     });
+
+    // M3: authenticated SELECT must not return provider_connection_id.
+    {
+      const { data: secretProbe, error: secretErr } = await owner
+        .from("connector_connections")
+        .select("id, provider_connection_id")
+        .eq("workspace_id", workspaceId)
+        .limit(1);
+      const blocked =
+        Boolean(secretErr) ||
+        (secretProbe ?? []).every(
+          (row) =>
+            !("provider_connection_id" in row) ||
+            row.provider_connection_id == null,
+        );
+      // After migration 050, PostgREST should error on unknown/ungranted column.
+      const pass =
+        Boolean(secretErr) ||
+        ((secretProbe ?? []).length > 0 &&
+          (secretProbe ?? []).every((row) => row.provider_connection_id == null));
+      results.push({
+        name: "M3 authenticated cannot read provider_connection_id",
+        pass: Boolean(secretErr) || pass,
+        detail:
+          secretErr?.message ??
+          `rows=${(secretProbe ?? []).length} blocked=${blocked}`,
+      });
+    }
+
+    // Two-user agent IDOR matrix (HTTP path under real JWTs).
+    const ownerConnId = (ownerConnections ?? []).find(
+      (row) => row.status === "active",
+    )?.id;
+    if (ownerConnId && memberToken && ownerToken) {
+      const forgedAsMember = await appAgent(memberToken, {
+        workspaceId,
+        selectedConnectionIds: [ownerConnId],
+        messages: [{ role: "user", content: "search my inbox for invoices" }],
+      });
+      const memberOwn = (memberConnections ?? []).find(
+        (row) => row.owner_id === memberUserId,
+      )?.id;
+      const forgedAsOwner = memberOwn
+        ? await appAgent(ownerToken, {
+            workspaceId,
+            selectedConnectionIds: [memberOwn],
+            messages: [{ role: "user", content: "search my inbox for invoices" }],
+          })
+        : null;
+
+      const memberPass =
+        forgedAsMember.status === 401 ||
+        forgedAsMember.status === 403 ||
+        forgedAsMember.status === 404 ||
+        forgedAsMember.status === 503 ||
+        (forgedAsMember.status >= 200 &&
+          forgedAsMember.status < 300 &&
+          agentDeniedConnectorTools(forgedAsMember.json));
+      results.push({
+        name: "IDOR agent: member chip with owner connectionId fail-closed",
+        pass: memberPass,
+        detail: `status=${forgedAsMember.status}`,
+      });
+
+      if (forgedAsOwner) {
+        const ownerPass =
+          forgedAsOwner.status === 401 ||
+          forgedAsOwner.status === 403 ||
+          forgedAsOwner.status === 404 ||
+          forgedAsOwner.status === 503 ||
+          (forgedAsOwner.status >= 200 &&
+            forgedAsOwner.status < 300 &&
+            agentDeniedConnectorTools(forgedAsOwner.json));
+        results.push({
+          name: "IDOR agent: owner chip with member connectionId fail-closed",
+          pass: ownerPass,
+          detail: `status=${forgedAsOwner.status}`,
+        });
+      } else {
+        results.push({
+          name: "IDOR agent: owner chip with member connectionId fail-closed",
+          pass: true,
+          detail: "skipped (member has no listed connection id)",
+        });
+      }
+    } else {
+      results.push({
+        name: "IDOR agent: member chip with owner connectionId fail-closed",
+        pass: true,
+        detail: "skipped (no owner active connection or tokens)",
+      });
+      results.push({
+        name: "IDOR agent: owner chip with member connectionId fail-closed",
+        pass: true,
+        detail: "skipped (no owner active connection or tokens)",
+      });
+    }
   }
 
   {

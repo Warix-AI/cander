@@ -33,6 +33,9 @@ test("enabledToolIds excludes disabled skills", () => {
     "gmail.send": false,
     "gmail.draft": false,
     "gmail.reply": false,
+    "gmail.archive": false,
+    "gmail.markRead": false,
+    "gmail.markUnread": false,
   });
   assert.deepEqual(enabled, ["gmail.read"]);
 });

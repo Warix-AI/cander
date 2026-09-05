@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { mergeToolPermissions } from "./tool-catalog.ts";
 import { connectionNotFoundError } from "./authz.ts";
 import type { ConnectorConnection } from "./types.ts";
-import { connectionRowToPublic, type ConnectorConnectionRow } from "./mapper.ts";
+import { connectionRowToPublic, type ConnectorConnectionRow, CONNECTOR_CONNECTION_PUBLIC_COLUMNS } from "./mapper.ts";
 
 export {
   mergeToolPermissions,
@@ -77,7 +77,7 @@ async function persistToolPermissionsDirect(input: {
     .eq("owner_id", input.ownerId)
     .eq("workspace_id", input.workspaceId)
     .is("deleted_at", null)
-    .select("*")
+    .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
     .maybeSingle();
   if (updateError) {
     const mapped = permissionsPersistenceError(updateError);

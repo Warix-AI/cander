@@ -11,6 +11,9 @@ test("default Gmail permissions enable read and disable write", () => {
   const defaults = defaultToolPermissions("gmail");
   assert.equal(defaults["gmail.search"], true);
   assert.equal(defaults["gmail.read"], true);
+  assert.equal(defaults["gmail.markRead"], true);
+  assert.equal(defaults["gmail.markUnread"], true);
+  assert.equal(defaults["gmail.archive"], false);
   assert.equal(defaults["gmail.send"], false);
   assert.equal(defaults["gmail.draft"], false);
   assert.equal(defaults["gmail.reply"], false);
