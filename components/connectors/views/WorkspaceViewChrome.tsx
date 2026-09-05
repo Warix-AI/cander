@@ -13,6 +13,8 @@ export type WorkspaceToolbarState = {
   canGoBack: boolean;
   backLabel?: string;
   primaryLabel: string | null;
+  /** Left chrome hint, e.g. "My Drive · Last synced 3:20 PM". */
+  syncHint?: string | null;
   onBack: () => void;
   onRefresh: () => void;
   onPrimary: (() => void) | null;

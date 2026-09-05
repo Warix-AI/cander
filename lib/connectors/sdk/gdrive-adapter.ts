@@ -231,15 +231,20 @@ function normalizeDownloadPreview(input: {
     else previewKind = "embed";
   }
 
-  const isVideo = previewKind === "video";
+  // Workspace files must stay on Google embeds. Export/download often returns the
+  // Docs app shell (`docs_flag_initialData`) instead of readable content.
+  if (sourceMime?.startsWith("application/vnd.google-apps.")) {
+    previewKind = "embed";
+  }
 
   return {
     id: pickString(payload.id) ?? fileId,
     name,
     mimeType,
     sourceMimeType: sourceMime ?? null,
-    displayUrl,
-    embedUrl: isVideo ? null : embedUrl,
+    displayUrl: previewKind === "embed" ? null : displayUrl,
+    // Keep embed URL even for video/image so the UI can fall back if media fails.
+    embedUrl,
     openUrl,
     previewKind,
     linkLabel: pickString(payload.link_label, payload.linkLabel) ?? "Open in Drive",
@@ -308,21 +313,29 @@ export const gdriveViewAdapter: ConnectorViewAdapter = {
             exportMimeForDriveFile(sourceMime);
 
           // Always return an embeddable Google preview so the UI can show something
-          // even when Composio download fails (access, size, format). Videos skip
-          // Drive iframe embeds — they spin forever and don't allow clean replay.
+          // even when Composio download fails (access, size, format).
           const isVideo = isVideoMime(sourceMime);
+          const isWorkspace = Boolean(
+            sourceMime?.startsWith("application/vnd.google-apps."),
+          );
           const fallback = {
             id: fileId,
             name: pickString(args.name) ?? "File",
             mimeType: sourceMime ?? "application/octet-stream",
             sourceMimeType: sourceMime ?? null,
             displayUrl: null as string | null,
-            embedUrl: isVideo ? null : embedUrlForDriveFile(fileId, sourceMime),
+            embedUrl: embedUrlForDriveFile(fileId, sourceMime),
             openUrl: openUrlForDriveFile(fileId, sourceMime, webViewLink),
             previewKind: (isVideo ? "video" : "embed") as "video" | "embed",
             linkLabel: "Open in Drive",
             exportApplied: false,
           };
+
+          // Docs/Sheets/Slides: skip download — text/html export often returns the
+          // Docs bootstrap (`docs_flag_initialData`) instead of document body.
+          if (isWorkspace) {
+            return { ok: true, data: { ...fallback, previewKind: "embed" as const } };
+          }
 
           const result = await runTool(
             ctx,
@@ -352,14 +365,21 @@ export const gdriveViewAdapter: ConnectorViewAdapter = {
             preview.displayUrl
           ) {
             const rawText = await fetchTextPreview(preview.displayUrl);
-            if (rawText != null) {
+            const looksLikeDocsShell =
+              rawText != null &&
+              (rawText.includes("docs_flag_initialData") ||
+                rawText.includes("_docs_flag_") ||
+                rawText.includes("DOCS_modelChunk"));
+            if (rawText != null && !looksLikeDocsShell) {
               const mime = String(preview.mimeType ?? "");
               preview.textContent = mime.includes("html")
                 ? htmlToPlainPreview(rawText)
                 : rawText;
             } else {
-              // Keep Google embed if text fetch failed.
+              // Keep Google embed if text fetch failed or returned Docs shell junk.
               preview.previewKind = "embed";
+              preview.displayUrl = null;
+              delete preview.textContent;
             }
           }
 

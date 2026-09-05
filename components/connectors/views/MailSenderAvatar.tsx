@@ -98,7 +98,6 @@ function brandDomain(host: string): string {
   while (parts.length > 2 && STRIP_LABELS.has(parts[0]!)) {
     parts.shift();
   }
-  // keep foo.co.uk / foo.com.au style
   if (
     parts.length >= 3 &&
     parts[parts.length - 1]!.length === 2 &&
@@ -117,7 +116,6 @@ function shouldTryFavicon(domain: string | null) {
   return true;
 }
 
-/** High-res enough for retina 36px circles. Google often ignores small sz=. */
 function brandIconUrls(domain: string): string[] {
   const d = encodeURIComponent(domain);
   return [
@@ -154,9 +152,7 @@ export function MailSenderAvatar({
   }, [domain, sources.length]);
 
   const src = !useLetter ? sources[sourceIndex] : undefined;
-  // Fill the tile like connector marks — not a small glyph floating in a circle.
-  const iconPx = Math.round(size * 0.78);
-  // Proportional squircle (~iOS app-icon ratio). Fixed shell 20px would look circular at 36px.
+  // G3 clip on the mark itself — favicon fills the tile (no inset card).
   const radius = Math.max(8, Math.round(size * 0.28));
 
   return (
@@ -170,7 +166,7 @@ export function MailSenderAvatar({
         width: size,
         height: size,
         borderRadius: radius,
-        backgroundColor: useLetter ? color : "#F1F3F4",
+        backgroundColor: useLetter ? color : "transparent",
       }}
     >
       {src ? (
@@ -179,11 +175,10 @@ export function MailSenderAvatar({
           key={src}
           src={src}
           alt=""
-          width={iconPx}
-          height={iconPx}
+          width={size}
+          height={size}
           decoding="async"
-          className="object-contain"
-          style={{ width: iconPx, height: iconPx }}
+          className="h-full w-full object-cover"
           onLoad={(event) => {
             const img = event.currentTarget;
             // Google's "missing" globe (and many tiny icos) are ≤16px — skip them.

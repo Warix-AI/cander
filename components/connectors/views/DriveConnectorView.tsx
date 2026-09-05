@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -22,14 +23,14 @@ import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 const FILE_TYPE_ICON = {
-  csv: "/file-types/csv.png?v=2",
-  image: "/file-types/image.png?v=2",
-  pdf: "/file-types/pdf.png?v=2",
-  movie: "/file-types/movie.png?v=2",
-  earth: "/file-types/earth.png?v=2",
-  folder: "/file-types/folder.png?v=2",
-  txt: "/file-types/txt.png?v=2",
-  file: "/file-types/file.png?v=2",
+  csv: "/file-types/csv.png?v=3",
+  image: "/file-types/image.png?v=3",
+  pdf: "/file-types/pdf.png?v=3",
+  movie: "/file-types/movie.png?v=3",
+  earth: "/file-types/earth.png?v=3",
+  folder: "/file-types/folder.png?v=3",
+  txt: "/file-types/txt.png?v=3",
+  file: "/file-types/file.png?v=3",
 } as const;
 
 type Page = "browse" | "detail" | "create";
@@ -76,6 +77,8 @@ type DriveSessionCache = {
   query: string;
   typeFilter: DriveTypeFilter;
   sortMode: DriveSortMode;
+  listScrollTop: number;
+  lastSyncedAt: string | null;
   folders: Record<string, DriveFolderCacheEntry>;
 };
 
@@ -372,6 +375,36 @@ function parsePreview(data: Record<string, unknown>, file: DriveFile): FilePrevi
   };
 }
 
+function formatSyncWhen(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function fallBackToEmbed(prev: FilePreview | null): FilePreview | null {
+  if (!prev) return null;
+  const embedUrl = prev.embedUrl;
+  if (!embedUrl) {
+    return {
+      ...prev,
+      previewKind: "unsupported",
+      displayUrl: null,
+    };
+  }
+  return {
+    ...prev,
+    previewKind: "embed",
+    displayUrl: null,
+    embedUrl,
+  };
+}
+
 function PreviewFrame({
   title,
   children,
@@ -426,6 +459,12 @@ export function DriveConnectorView({
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
   const [createMode, setCreateMode] = useState<"file" | "folder">("file");
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(
+    () => restored?.lastSyncedAt ?? null,
+  );
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const listScrollTopRef = useRef(restored?.listScrollTop ?? 0);
+  const restoreScrollPendingRef = useRef(false);
 
   const currentFolderId = folderStack[folderStack.length - 1]?.id ?? null;
   const locationTitle = folderStack.length
@@ -443,6 +482,8 @@ export function DriveConnectorView({
               query: "",
               typeFilter: "all" as DriveTypeFilter,
               sortMode: "name-asc" as DriveSortMode,
+              listScrollTop: 0,
+              lastSyncedAt: null as string | null,
               folders: {} as Record<string, DriveFolderCacheEntry>,
             };
       const { folderEntry, ...rest } = patch;
@@ -534,11 +575,15 @@ export function DriveConnectorView({
               ? "No matching files."
               : "This folder is empty.",
         );
+        const syncedAt = new Date().toISOString();
+        setLastSyncedAt(syncedAt);
         persistSession({
           folderStack,
           query: needle,
           typeFilter,
           sortMode,
+          lastSyncedAt: syncedAt,
+          listScrollTop: listScrollTopRef.current,
           folderEntry: {
             files: parsed,
             query: needle,
@@ -580,10 +625,22 @@ export function DriveConnectorView({
       query,
       typeFilter,
       sortMode,
+      lastSyncedAt,
+      listScrollTop: listScrollTopRef.current,
     });
-  }, [folderStack, persistSession, query, sortMode, typeFilter]);
+  }, [folderStack, lastSyncedAt, persistSession, query, sortMode, typeFilter]);
+
+  useEffect(() => {
+    if (page !== "browse" || !restoreScrollPendingRef.current) return;
+    const node = listRef.current;
+    if (!node) return;
+    node.scrollTop = listScrollTopRef.current;
+    restoreScrollPendingRef.current = false;
+  }, [page, visibleFiles.length]);
 
   const openFolder = useCallback((folder: DriveFile) => {
+    listScrollTopRef.current = 0;
+    restoreScrollPendingRef.current = false;
     setQuery("");
     setSelected(null);
     setPreview(null);
@@ -595,22 +652,28 @@ export function DriveConnectorView({
 
   const openFile = useCallback(
     async (file: DriveFile) => {
+      listScrollTopRef.current = listRef.current?.scrollTop ?? 0;
+      persistSession({ listScrollTop: listScrollTopRef.current });
       setSelected(file);
       setError(null);
       setStatus(null);
       setPage("detail");
       const video = isVideoMimeClient(file.mimeType);
-      // Videos: skip Drive iframe (spins forever). Everything else gets an
-      // instant Google embed while Composio download enriches the preview.
+      const workspace = file.mimeType.startsWith("application/vnd.google-apps.");
+      // Instant Google embed for Docs/Sheets/etc. Videos try native first.
       setPreview({
         previewKind: video ? "video" : "embed",
         mimeType: file.mimeType,
         displayUrl: null,
-        embedUrl: video ? null : clientEmbedUrl(file),
+        embedUrl: clientEmbedUrl(file),
         openUrl: clientOpenUrl(file),
         name: file.name,
         linkLabel: "Open in Drive",
       });
+      if (workspace) {
+        setPreviewLoading(false);
+        return;
+      }
       setPreviewLoading(true);
       try {
         const result = await runConnectorViewOperation({
@@ -626,14 +689,16 @@ export function DriveConnectorView({
         });
         const next = parsePreview(result.data, file);
         if (video) {
-          // Never fall back to Drive video iframe — it can't replay cleanly.
           setPreview({
             ...next,
-            previewKind: next.displayUrl ? "video" : "unsupported",
-            embedUrl: null,
+            previewKind: next.displayUrl ? "video" : "embed",
+            embedUrl: next.embedUrl || clientEmbedUrl(file),
           });
         } else {
-          setPreview(next);
+          setPreview({
+            ...next,
+            embedUrl: next.embedUrl || clientEmbedUrl(file),
+          });
         }
       } catch {
         if (video) {
@@ -641,9 +706,9 @@ export function DriveConnectorView({
             prev
               ? {
                   ...prev,
-                  previewKind: "unsupported",
+                  previewKind: "embed",
                   displayUrl: null,
-                  embedUrl: null,
+                  embedUrl: prev.embedUrl || clientEmbedUrl(file),
                 }
               : prev,
           );
@@ -653,7 +718,7 @@ export function DriveConnectorView({
         setPreviewLoading(false);
       }
     },
-    [workspaceId],
+    [persistSession, workspaceId],
   );
 
   const openExternal = useCallback(() => {
@@ -743,12 +808,14 @@ export function DriveConnectorView({
             : null,
       onBack: () => {
         if (page === "detail" || page === "create") {
+          restoreScrollPendingRef.current = true;
           setPage("browse");
           setSelected(null);
           setPreview(null);
           setError(null);
           return;
         }
+        listScrollTopRef.current = 0;
         setFolderStack((stack) => stack.slice(0, -1));
         setQuery("");
         setError(null);
@@ -776,6 +843,13 @@ export function DriveConnectorView({
                 void createItem();
               }
             : null,
+      syncHint: onBrowse
+        ? syncing && !lastSyncedAt
+          ? `${locationTitle} · Syncing…`
+          : lastSyncedAt
+            ? `${locationTitle} · Last synced ${formatSyncWhen(lastSyncedAt)}`
+            : locationTitle
+        : null,
       driveChrome: onBrowse
         ? {
             query,
@@ -795,6 +869,7 @@ export function DriveConnectorView({
     createItem,
     createMode,
     folderStack,
+    lastSyncedAt,
     loadFiles,
     locationTitle,
     onToolbarChange,
@@ -907,6 +982,9 @@ export function DriveConnectorView({
                     "max-h-full max-w-full object-contain shadow-sm ring-1 ring-black/5 dark:ring-white/10",
                     SHELL_G3_RADIUS,
                   )}
+                  onError={() => {
+                    setPreview((prev) => fallBackToEmbed(prev));
+                  }}
                 />
               </div>
             </PreviewFrame>
@@ -921,16 +999,18 @@ export function DriveConnectorView({
                   src={preview.displayUrl}
                   className="h-full w-full bg-black object-contain"
                   onError={() => {
-                    setPreview((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            previewKind: "unsupported",
-                            displayUrl: null,
-                          }
-                        : prev,
-                    );
+                    setPreview((prev) => fallBackToEmbed(prev));
                   }}
+                />
+              </PreviewFrame>
+            ) : preview.embedUrl ? (
+              <PreviewFrame title={preview.name}>
+                <iframe
+                  title={preview.name}
+                  src={preview.embedUrl}
+                  className="h-full w-full border-0 bg-black"
+                  allow="autoplay; encrypted-media"
+                  referrerPolicy="no-referrer-when-downgrade"
                 />
               </PreviewFrame>
             ) : (
@@ -997,7 +1077,13 @@ export function DriveConnectorView({
 
       {page === "browse" ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div
+            ref={listRef}
+            className="min-h-0 flex-1 overflow-y-auto"
+            onScroll={(event) => {
+              listScrollTopRef.current = event.currentTarget.scrollTop;
+            }}
+          >
             {!visibleFiles.length ? (
               <WorkspaceEmptyState
                 title={syncing ? "Loading Drive…" : "Nothing here yet"}

@@ -151,7 +151,8 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         Boolean(prev.driveChrome) === Boolean(next.driveChrome) &&
         prev.driveChrome?.query === next.driveChrome?.query &&
         prev.driveChrome?.typeFilter === next.driveChrome?.typeFilter &&
-        prev.driveChrome?.sortMode === next.driveChrome?.sortMode
+        prev.driveChrome?.sortMode === next.driveChrome?.sortMode &&
+        prev.syncHint === next.syncHint
       ) {
         return prev;
       }
@@ -471,14 +472,17 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
               <span className="truncate px-1 text-[12.5px] font-medium text-foreground">
                 {workspaceToolbar?.title ?? title}
               </span>
-            ) : workspaceToolbar?.canGoBack ? (
-              <span className="max-w-[7rem] truncate px-1 text-[12.5px] font-medium text-foreground">
-                {workspaceToolbar.title}
+            ) : (
+              <span
+                className="z-[1] min-w-0 max-w-[12.5rem] truncate px-1 text-[11.5px] text-muted-foreground"
+                aria-live="polite"
+              >
+                {workspaceToolbar?.syncHint ?? "My Drive"}
               </span>
-            ) : null}
+            )}
             {isDriveBrowse ? (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-[7.5rem]">
-                <div className="pointer-events-auto w-full max-w-[min(100%,22rem)]">
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-[8.5rem]">
+                <div className="pointer-events-auto w-full max-w-[min(100%,20rem)]">
                   <input
                     value={workspaceToolbar?.driveChrome?.query ?? ""}
                     onChange={(event) =>
