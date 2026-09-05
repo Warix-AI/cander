@@ -12,7 +12,7 @@ const DEFAULT_URL = "https://cander.app";
 const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
 /** Bumped when the native shell changes — visible on <html data-cander-shell>. */
-const SHELL_BUILD = "2026-09-04-browser-video-pip";
+const SHELL_BUILD = "2026-09-04-pip-guest-chrome";
 /** macOS content-view mask — keep in sync with DESKTOP_WINDOW_RADIUS_PX in lib/shell-chrome.ts */
 const DESKTOP_WINDOW_RADIUS_PX = 24;
 const ICON_PATH = path.join(__dirname, "../assets/icon.png");
@@ -217,6 +217,41 @@ async function createWindow() {
       sandbox: true,
     },
   });
+
+  // Shell dictation (composer mic) uses defaultSession — browser tabs use
+  // partitioned sessions with their own handlers in browser-surface.js.
+  try {
+    const { systemPreferences } = require("electron");
+    const ses = session.defaultSession;
+    ses.setPermissionRequestHandler((_wc, permission, callback, details) => {
+      const mediaTypes = Array.isArray(details?.mediaTypes)
+        ? details.mediaTypes
+        : [];
+      const wantsMic =
+        permission === "microphone" ||
+        permission === "media" ||
+        mediaTypes.includes("audio");
+      if (!wantsMic && permission !== "camera" && permission !== "media") {
+        callback(true);
+        return;
+      }
+      void (async () => {
+        let granted = true;
+        if (process.platform === "darwin" && wantsMic) {
+          try {
+            granted = await systemPreferences.askForMediaAccess("microphone");
+          } catch (err) {
+            granted = false;
+            console.warn("[cander-desktop] shell mic access failed", err);
+          }
+        }
+        callback(granted);
+      })();
+    });
+    ses.setPermissionCheckHandler(() => true);
+  } catch (err) {
+    console.warn("[cander-desktop] shell media permission setup failed", err);
+  }
 
   mainWindow.once("ready-to-show", () => {
     applyDesktopWindowCorners();

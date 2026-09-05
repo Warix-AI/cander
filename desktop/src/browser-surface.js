@@ -1,6 +1,14 @@
 const { WebContentsView, session, systemPreferences } = require("electron");
 const { partitionFor, isAllowedUrl } = require("./browser-security");
-const { PAGE_EXTRACT_SCRIPT, SELECTION_SCRIPT, VIDEO_PIP_INSTALL_SCRIPT, VIDEO_PIP_ENTER_SCRIPT, VIDEO_PIP_EXIT_SCRIPT, VIDEO_PIP_PAUSE_SCRIPT } = require("./page-extract");
+const {
+  PAGE_EXTRACT_SCRIPT,
+  SELECTION_SCRIPT,
+  VIDEO_PIP_INSTALL_SCRIPT,
+  VIDEO_PIP_ENTER_SCRIPT,
+  VIDEO_PIP_EXIT_SCRIPT,
+  VIDEO_PIP_PAUSE_SCRIPT,
+  VIDEO_PIP_CHROME_SCRIPT,
+} = require("./page-extract");
 
 /**
  * Local Chromium tab surfaces for the right-panel browser workspace.
@@ -208,11 +216,29 @@ function attachViewListeners(tabId, view) {
   });
 
   wc.on("page-title-updated", (_e, title) => {
+    const entry = tabs.get(tabId);
+    if (entry) entry.lastTitle = String(title || "");
     emitToRenderer("cander:browser-event", {
       type: "title",
       tabId,
       title,
     });
+  });
+
+  // Guest PiP chrome (close / expand / drag) — WebContentsView paints over React.
+  wc.on("console-message", (...args) => {
+    let message = "";
+    if (args[0] && typeof args[0] === "object" && args[0].message != null) {
+      message = String(args[0].message);
+    } else if (args[1] && typeof args[1] === "object" && args[1].message != null) {
+      message = String(args[1].message);
+    } else if (typeof args[2] === "string") {
+      message = args[2];
+    } else if (typeof args[1] === "string" && !/^\d+$/.test(args[1])) {
+      message = args[1];
+    }
+    if (!message.startsWith("cander-pip:")) return;
+    handlePipChromeConsole(tabId, message);
   });
 
   wc.on("page-favicon-updated", (_e, favicons) => {
@@ -589,7 +615,9 @@ function showTab(tabId, bounds) {
       void pauseMedia(id);
     }
   }
-  if ((chromeOverlay || pipPointerPassthrough) && tabId !== pipTabId) {
+  // Only chrome overlays (menus) should zero the panel tab — never PiP hover
+  // (collapsing blanked the browser under the floating video).
+  if (chromeOverlay && tabId !== pipTabId) {
     entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
     ensurePipOnTop();
     return;
@@ -620,91 +648,97 @@ function isCursorOverPip() {
   const b = entry.lastBounds;
   // Include a header strip above the video so hover chrome stays hittable.
   const HEADER = 36;
-  const hit =
+  return (
     x >= b.x &&
     x <= b.x + b.width &&
     y >= b.y - HEADER &&
-    y <= b.y + b.height;
-  // #region agent log
-  if (!isCursorOverPip._n) isCursorOverPip._n = 0;
-  isCursorOverPip._n += 1;
-  if (hit || isCursorOverPip._n <= 3 || isCursorOverPip._n % 15 === 0) {
-    try {
-      const fs = require("fs");
-      fs.appendFileSync(
-        "/Users/matthewdavila/Projects/cander/.cursor/debug-20f195.log",
-        JSON.stringify({
-          sessionId: "20f195",
-          runId: "pre-fix",
-          hypothesisId: "B",
-          location: "browser-surface.js:isCursorOverPip",
-          message: "native pip hit test",
-          data: {
-            hit,
-            n: isCursorOverPip._n,
-            pipTabId,
-            visible: entry.visible,
-            cursor: { x, y, screenX: point.x, screenY: point.y },
-            content: { x: content.x, y: content.y, w: content.width, h: content.height },
-            bounds: b,
-            headerTop: b.y - HEADER,
-          },
-          timestamp: Date.now(),
-        }) + "\n",
-      );
-    } catch (_) {}
-  }
-  // #endregion
-  return hit;
+    y <= b.y + b.height
+  );
 }
 
 /**
- * WebContentsView has no setIgnoreMouseEvents — panel browser views paint over
- * the React PiP header. While the cursor is over PiP, collapse non-PiP views so
- * the overlay chrome is visible and can receive drag/clicks.
+ * WebContentsView has no setIgnoreMouseEvents — React PiP chrome cannot receive
+ * clicks over the native surface. Instead of collapsing panel tabs (which blanked
+ * the browser), inject in-guest chrome when the cursor is over PiP.
  */
 let pipPointerPassthrough = false;
+/** @type {{ tabId: string, startScreenX: number, startScreenY: number, origX: number, origY: number } | null} */
+let pipDragState = null;
+
+function handlePipChromeConsole(tabId, message) {
+  if (tabId !== pipTabId) return;
+  const entry = tabs.get(tabId);
+  if (!entry?.lastBounds) return;
+  if (message === "cander-pip:close") {
+    emitToRenderer("cander:browser-event", { type: "pipClose", tabId });
+    return;
+  }
+  if (message === "cander-pip:expand") {
+    emitToRenderer("cander:browser-event", { type: "pipReturn", tabId });
+    return;
+  }
+  if (message.startsWith("cander-pip:drag-start:")) {
+    const coords = message.slice("cander-pip:drag-start:".length).split(",");
+    const sx = Number(coords[0]);
+    const sy = Number(coords[1]);
+    if (!Number.isFinite(sx) || !Number.isFinite(sy)) return;
+    pipDragState = {
+      tabId,
+      startScreenX: sx,
+      startScreenY: sy,
+      origX: entry.lastBounds.x,
+      origY: entry.lastBounds.y,
+    };
+    return;
+  }
+  if (message.startsWith("cander-pip:drag:") && pipDragState?.tabId === tabId) {
+    const coords = message.slice("cander-pip:drag:".length).split(",");
+    const sx = Number(coords[0]);
+    const sy = Number(coords[1]);
+    if (!Number.isFinite(sx) || !Number.isFinite(sy)) return;
+    const dx = sx - pipDragState.startScreenX;
+    const dy = sy - pipDragState.startScreenY;
+    const next = {
+      ...entry.lastBounds,
+      x: Math.max(0, Math.round(pipDragState.origX + dx)),
+      y: Math.max(0, Math.round(pipDragState.origY + dy)),
+    };
+    entry.lastBounds = next;
+    entry.view.setBounds(next);
+    emitToRenderer("cander:browser-event", {
+      type: "pipMove",
+      tabId,
+      x: next.x,
+      y: next.y,
+    });
+    return;
+  }
+  if (message === "cander-pip:drag-end") {
+    pipDragState = null;
+  }
+}
 
 function setPipPointerPassthrough(active) {
   const next = Boolean(active);
   if (pipPointerPassthrough === next) return;
   pipPointerPassthrough = next;
-  if (next) {
-    for (const [id, entry] of tabs) {
-      if (id === pipTabId) continue;
-      entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
-    }
-    ensurePipOnTop();
-  } else if (!chromeOverlay) {
-    for (const entry of tabs.values()) {
-      if (entry.visible && entry.lastBounds) {
-        entry.view.setBounds(entry.lastBounds);
-      }
-    }
-    ensurePipOnTop();
+  const entry = pipTabId ? tabs.get(pipTabId) : null;
+  if (entry) {
+    const title = entry.lastTitle || "Video";
+    void entry.view.webContents
+      .executeJavaScript(VIDEO_PIP_INSTALL_SCRIPT, true)
+      .then(() =>
+        entry.view.webContents.executeJavaScript(
+          VIDEO_PIP_CHROME_SCRIPT(next, title),
+          true,
+        ),
+      )
+      .catch((err) => {
+        console.warn("[cander-desktop] pip guest chrome failed", err);
+      });
   }
-  // #region agent log
-  try {
-    const fs = require("fs");
-    fs.appendFileSync(
-      "/Users/matthewdavila/Projects/cander/.cursor/debug-20f195.log",
-      JSON.stringify({
-        sessionId: "20f195",
-        runId: "post-fix",
-        hypothesisId: "D",
-        location: "browser-surface.js:setPipPointerPassthrough",
-        message: "pip pointer passthrough via collapse",
-        data: {
-          active: next,
-          tabCount: tabs.size,
-          chromeOverlay,
-          pipTabId,
-        },
-        timestamp: Date.now(),
-      }) + "\n",
-    );
-  } catch (_) {}
-  // #endregion
+  if (!next) pipDragState = null;
+  ensurePipOnTop();
 }
 
 function hideTab(tabId) {
@@ -727,20 +761,12 @@ function setChromeOverlay(active) {
     }
     return;
   }
-  // PiP hover may still need non-PiP views collapsed.
-  if (pipPointerPassthrough) {
-    for (const [id, entry] of tabs) {
-      if (id === pipTabId) continue;
-      entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
-    }
-    ensurePipOnTop();
-    return;
-  }
   for (const entry of tabs.values()) {
     if (entry.visible && entry.lastBounds) {
       entry.view.setBounds(entry.lastBounds);
     }
   }
+  ensurePipOnTop();
 }
 
 function hideAll() {

@@ -95,8 +95,8 @@ export function BrowserPipOverlay() {
     });
   }, [pip?.tabId, pip?.width, pip?.height]);
 
-  // Native views steal mouse events — poll cursor vs PiP (+ header) bounds,
-  // and pass pointer events through to React so drag/chrome work over the browser.
+  // Native views steal mouse events — poll cursor vs PiP bounds and toggle
+  // in-guest chrome (React chrome cannot receive clicks over WebContentsView).
   useEffect(() => {
     if (!pip || pip.webEmbed) {
       const adapter = getBrowserSurfaceAdapter();
@@ -104,12 +104,8 @@ export function BrowserPipOverlay() {
       return;
     }
     const adapter = getBrowserSurfaceAdapter();
-    // #region agent log
-    fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'C',location:'BrowserPipOverlay.tsx:effect',message:'pip hover effect mounted',data:{tabId:pip.tabId,adapterId:adapter.id,hasHitFn:typeof adapter.isPipCursorHit==='function',hasPassFn:typeof adapter.setPipPointerPassthrough==='function'},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (typeof adapter.isPipCursorHit !== "function") return;
     let cancelled = false;
-    let tickCount = 0;
     const tick = async () => {
       try {
         const hit = await adapter.isPipCursorHit!();
@@ -117,16 +113,8 @@ export function BrowserPipOverlay() {
         const interactive = Boolean(hit) || dragging;
         setHovered(interactive);
         await adapter.setPipPointerPassthrough?.(interactive);
-        // #region agent log
-        tickCount += 1;
-        if (hit || tickCount <= 3 || tickCount % 12 === 0) {
-          fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'post-fix',hypothesisId:'A',location:'BrowserPipOverlay.tsx:tick',message:'pip hover tick',data:{hit:Boolean(hit),interactive,dragging,tickCount,hoveredWillBe:interactive},timestamp:Date.now()})}).catch(()=>{});
-        }
-        // #endregion
-      } catch (err) {
-        // #region agent log
-        fetch('http://127.0.0.1:7521/ingest/0b7940f7-640a-4835-98e0-f86faa434abe',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'20f195'},body:JSON.stringify({sessionId:'20f195',runId:'pre-fix',hypothesisId:'C',location:'BrowserPipOverlay.tsx:tick-error',message:'pip hover tick failed',data:{error:err instanceof Error?err.message:String(err)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
+      } catch {
+        // ignore transient IPC failures while polling
       }
     };
     void tick();
@@ -253,6 +241,27 @@ export function BrowserPipOverlay() {
     openStandaloneBrowser,
   ]);
 
+  // Guest chrome → close / return / drag position sync
+  useEffect(() => {
+    if (!pip || pip.webEmbed) return;
+    const adapter = getBrowserSurfaceAdapter();
+    const tabId = pip.tabId;
+    return adapter.subscribe((event) => {
+      if (event.tabId !== tabId) return;
+      if (event.type === "pipClose") {
+        void closePip();
+        return;
+      }
+      if (event.type === "pipReturn") {
+        void returnToProject();
+        return;
+      }
+      if (event.type === "pipMove" && "x" in event && "y" in event) {
+        setPos({ x: Number(event.x), y: Number(event.y) });
+      }
+    });
+  }, [pip?.tabId, pip?.webEmbed, closePip, returnToProject]);
+
   const onDragDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!pos || !pip) return;
     const target = event.target as HTMLElement;
@@ -363,7 +372,9 @@ export function BrowserPipOverlay() {
 
   if (!pip || !pos) return null;
 
-  const showChrome = hovered || dragging;
+  // Electron uses in-guest chrome; React chrome only for webEmbed iframes.
+  const useReactChrome = Boolean(pip.webEmbed);
+  const showChrome = useReactChrome && (hovered || dragging);
   // Grow upward: video screen position stays fixed; header adds above.
   const rootTop = showChrome ? pos.y - PIP_CHROME_HEIGHT : pos.y;
   const rootHeight = showChrome ? pip.height + PIP_CHROME_HEIGHT : pip.height;

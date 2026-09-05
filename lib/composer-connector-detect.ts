@@ -110,9 +110,13 @@ function firstMatchInText(
     const localIndex = hit.index + hit[0].indexOf(matched);
     const index = searchFrom + localIndex;
     // Email local-part: "sk@gmail.com" — never treat the domain app name as a connector.
+    // Intentional "@gmail" mentions (start of text / after space) still match.
     if (index > 0 && text[index - 1] === "@") {
-      searchFrom = index + matched.length;
-      continue;
+      const beforeAt = index >= 2 ? text[index - 2]! : "";
+      if (/[\p{L}\p{N}_.]/u.test(beforeAt)) {
+        searchFrom = index + matched.length;
+        continue;
+      }
     }
     return { matched, index };
   }

@@ -37,6 +37,10 @@ export type BrowserSurfaceEventMap = {
   /** Native Chromium media started (video/audio). */
   mediaPlaying: { tabId: string };
   mediaPaused: { tabId: string };
+  /** In-guest PiP chrome actions (Electron WebContentsView). */
+  pipClose: { tabId: string };
+  pipReturn: { tabId: string };
+  pipMove: { tabId: string; x: number; y: number };
 };
 
 export type BrowserSurfaceEvent =

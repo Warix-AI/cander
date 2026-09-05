@@ -89,6 +89,15 @@ describe("composer connector detect", () => {
     );
   });
 
+  it("still matches intentional @gmail mentions", () => {
+    const atStart = detectConnectorMentions("@gmail summarize inbox", [gmail]);
+    assert.equal(atStart[0]?.connectorId, "gmail");
+    assert.match(atStart[0]!.matched, /gmail/i);
+
+    const afterSpace = detectConnectorMentions("check @gmail please", [gmail]);
+    assert.equal(afterSpace[0]?.connectorId, "gmail");
+  });
+
   it("still matches Gmail when not part of an email address", () => {
     const hits = detectConnectorMentions("open Gmail for me", [gmail]);
     assert.equal(hits[0]?.connectorId, "gmail");
