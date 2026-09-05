@@ -9,7 +9,7 @@ import {
   LayoutToggle,
   useSpaceChatClosed,
 } from "@/components/spaces/ItemSet";
-import { NewCreateMenu } from "@/components/spaces/NewCreateMenu";
+import { NewCanvasMenu } from "@/components/spaces/NewCanvasMenu";
 import { PreviewGrid } from "@/components/spaces/PreviewCard";
 import {
   SPACE_EMPTY_COPY,
@@ -50,7 +50,9 @@ export function CreateDashboard() {
     useSpaceProjects("studio");
   const { data: buildProjects, loading: buildLoading } =
     useSpaceProjects("build");
-  const projectsLoading = studioLoading || buildLoading;
+  const { data: researchProjects, loading: researchLoading } =
+    useSpaceProjects("research");
+  const projectsLoading = studioLoading || buildLoading || researchLoading;
 
   const workspace = getWorkspaceCatalogSnapshot().find(
     (item) => item.id === workspaceId,
@@ -61,9 +63,11 @@ export function CreateDashboard() {
   );
 
   const projectItems = useMemo(() => {
-    const merged = [...studioProjects, ...buildProjects].sort((a, b) =>
-      b.updatedAt.localeCompare(a.updatedAt),
-    );
+    const merged = [
+      ...studioProjects,
+      ...buildProjects,
+      ...researchProjects,
+    ].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     return merged.map((item) => ({
       id: item.id,
       name: item.title,
@@ -78,7 +82,7 @@ export function CreateDashboard() {
       space: item.space,
       badge: item.status === "published" ? "Published" : undefined,
     }));
-  }, [studioProjects, buildProjects, showCreator, actor.id]);
+  }, [studioProjects, buildProjects, researchProjects, showCreator, actor.id]);
 
   const copy = SPACE_EMPTY_COPY.studio;
 
@@ -96,8 +100,8 @@ export function CreateDashboard() {
     <>
       <DashFrame
         banner={false}
-        title="Create"
-        subtitle="Make apps, sites, automations, and images."
+        title="Canvas"
+        subtitle="Search, apps, sites, agents, and images."
       >
         <DashToolbar
           active={hoistFilters}
@@ -109,7 +113,7 @@ export function CreateDashboard() {
               {chatClosed ? (
                 <DashBtn onClick={() => openSpaceChat("studio")}>Ask</DashBtn>
               ) : null}
-              <NewCreateMenu onCreated={openProject} />
+              <NewCanvasMenu onCreated={openProject} />
             </>
           }
         >

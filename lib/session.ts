@@ -610,6 +610,28 @@ export function removeStoredPin(kind: PinKind, id: string) {
   persistPins(pins.filter((item) => !(item.kind === kind && item.id === id)));
 }
 
+/**
+ * Recents used to pin chats as `project`. Reclassify those to `thread`
+ * when the id matches a chat and no project exists.
+ */
+export function healMisclassifiedPins(opts: {
+  threadIds: Iterable<string>;
+  projectIds: Iterable<string>;
+}) {
+  hydratePins();
+  const threads = new Set(opts.threadIds);
+  const projects = new Set(opts.projectIds);
+  let changed = false;
+  const next = pins.map((pin) => {
+    if (pin.kind !== "project") return pin;
+    if (projects.has(pin.id)) return pin;
+    if (!threads.has(pin.id)) return pin;
+    changed = true;
+    return { ...pin, kind: "thread" as const };
+  });
+  if (changed) persistPins(next);
+}
+
 /** @deprecated Prefer setStoredPin / removeStoredPin — toggles primary. */
 export function toggleStoredPin(kind: PinKind, id: string) {
   hydratePins();

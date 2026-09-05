@@ -1896,7 +1896,7 @@ export function ProjectBrowserPanel({
                   return (
                     <div key={space} className="mb-2">
                       <p className="px-2 pb-1 text-[12px] text-muted-foreground">
-                        {space === "research" ? "Explore" : "Create"}
+                        {space === "research" ? "Search" : "Create"}
                       </p>
                       {items.map((item) => (
                         <button
@@ -2710,7 +2710,7 @@ function AddTabMenu({
       item.space !== "build",
   );
   const projectGroups = [
-    { id: "explore", label: "Explore", items: exploreProjects },
+    { id: "explore", label: "Search", items: exploreProjects },
     {
       id: "create",
       label: "Create",

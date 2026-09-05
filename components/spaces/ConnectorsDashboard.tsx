@@ -41,6 +41,7 @@ import {
   initiateConnectorConnection,
 } from "@/lib/api/connector-client";
 import { ConnectorDetailModal } from "@/components/connectors/ConnectorDetailModal";
+import { ComposioConsentModal } from "@/components/connectors/ComposioConsentModal";
 import type { ConnectorConnection } from "@/lib/connectors/types";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import { setComposerPendingInput } from "@/lib/composer-seed";
@@ -99,6 +100,9 @@ export function ConnectorsDashboard() {
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [detailConnectorId, setDetailConnectorId] = useState<string | null>(null);
+  const [consentConnectorId, setConsentConnectorId] = useState<string | null>(
+    null,
+  );
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -167,31 +171,39 @@ export function ConnectorsDashboard() {
     if (blockedIds.includes(id)) return;
     if (isOauthConnectorId(id)) {
       setInfo("");
-      setConnectingId(id);
-      try {
-        const { authorizationUrl } = await initiateConnectorConnection({
-          workspaceId,
-          connectorId: id,
-        });
-        const connections = await fetchConnectorConnections(workspaceId);
-        replaceConnectorConnectionsForWorkspace(workspaceId, connections);
-        if (authorizationUrl) {
-          window.location.assign(authorizationUrl);
-          return;
-        }
-        setInfo(`Could not start ${id} authorization.`);
-      } catch (err) {
-        setInfo(
-          err instanceof Error ? err.message : "Could not start connection.",
-        );
-      } finally {
-        setConnectingId(null);
-      }
+      setConsentConnectorId(id);
       return;
     }
     installConnector(id);
     bindToWorkIfArmed(id);
     openConnector(id);
+  };
+
+  const proceedComposioOAuth = async () => {
+    const id = consentConnectorId;
+    if (!id) return;
+    setConnectingId(id);
+    try {
+      const { authorizationUrl } = await initiateConnectorConnection({
+        workspaceId,
+        connectorId: id,
+      });
+      const connections = await fetchConnectorConnections(workspaceId);
+      replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+      if (authorizationUrl) {
+        window.location.assign(authorizationUrl);
+        return;
+      }
+      setInfo(`Could not start ${id} authorization.`);
+      setConsentConnectorId(null);
+    } catch (err) {
+      setInfo(
+        err instanceof Error ? err.message : "Could not start connection.",
+      );
+      setConsentConnectorId(null);
+    } finally {
+      setConnectingId(null);
+    }
   };
 
   const openConnectorDetail = (id: string) => {
@@ -522,6 +534,15 @@ export function ConnectorsDashboard() {
         }}
       />
     ) : null}
+    <ComposioConsentModal
+      open={Boolean(consentConnectorId)}
+      connectorName={
+        apps.find((entry) => entry.id === consentConnectorId)?.name
+      }
+      busy={connectingId === consentConnectorId}
+      onClose={() => setConsentConnectorId(null)}
+      onProceed={proceedComposioOAuth}
+    />
     </>
   );
 }

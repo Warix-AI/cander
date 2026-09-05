@@ -1,20 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { Globe, MessageSquare } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { PanelToggle } from "@/components/shell/PanelToggle";
-import { panelChoiceSuggestions } from "@/lib/panel-suggestions";
+import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flow";
+import { canvasStartOptions } from "@/lib/canvas-start-options";
 import { useMobileShell } from "@/lib/use-media-query";
 
 export function PanelChoiceState() {
-  const { setDraftAsDefaultChat, openStandaloneBrowser } = useApp();
+  const { openProject, openQuickSearchBrowser, threadId } = useApp();
   const mobile = useMobileShell();
-  const items = panelChoiceSuggestions();
+  const items = canvasStartOptions();
   const [busy, setBusy] = useState<string | null>(null);
+  const { openCreate, busy: createBusy, modal } = useCreateProjectFlow(
+    (projectId) => {
+      openProject(projectId, {
+        migrateFromThreadId: threadId,
+        landOnPanel: true,
+      });
+    },
+  );
 
   const run = async (key: string, fn: () => void | Promise<void>) => {
-    if (busy) return;
+    if (busy || createBusy) return;
     setBusy(key);
     try {
       await fn();
@@ -41,21 +49,25 @@ export function PanelChoiceState() {
         <div className="mt-8 flex w-full max-w-[16rem] flex-col gap-2">
           {items.map((item) => {
             const Icon = item.icon;
-            const dest =
-              item.space === "research"
-                ? "research"
-                : item.space === "studio"
-                  ? "studio"
-                  : item.space === "build"
-                    ? "build"
-                    : "work";
             return (
               <button
                 key={item.id}
                 type="button"
-                disabled={Boolean(busy)}
+                disabled={Boolean(busy) || createBusy}
                 onClick={() =>
-                  void run(item.id, () => setDraftAsDefaultChat(dest))
+                  void run(item.id, () => {
+                    if (item.action === "quick-search") {
+                      openQuickSearchBrowser();
+                      return;
+                    }
+                    if (!item.space || !item.kind || !item.title) return;
+                    openCreate({
+                      space: item.space,
+                      kind: item.kind,
+                      defaultTitle: item.title,
+                      summary: item.summary,
+                    });
+                  })
                 }
                 className={choiceButtonClass}
               >
@@ -70,56 +82,15 @@ export function PanelChoiceState() {
                     {busy === item.id ? "Starting…" : item.label}
                   </span>
                   <span className="block truncate text-[11.5px] text-muted-foreground">
-                    {item.hint}
+                    {item.summary}
                   </span>
                 </span>
               </button>
             );
           })}
-          <button
-            type="button"
-            disabled={Boolean(busy)}
-            onClick={() => void run("default-all", () => setDraftAsDefaultChat())}
-            className={choiceButtonClass}
-          >
-            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-muted">
-              <MessageSquare
-                className="h-3.5 w-3.5 text-foreground"
-                strokeWidth={1.65}
-              />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[13px] font-medium tracking-[-0.01em]">
-                {busy === "default-all" ? "Saving…" : "Default chat"}
-              </span>
-              <span className="block truncate text-[11.5px] text-muted-foreground">
-                Replace spaces default chat
-              </span>
-            </span>
-          </button>
-          <button
-            type="button"
-            disabled={Boolean(busy)}
-            onClick={() => void run("browser", () => openStandaloneBrowser())}
-            className={choiceButtonClass}
-          >
-            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-muted">
-              <Globe
-                className="h-3.5 w-3.5 text-foreground"
-                strokeWidth={1.65}
-              />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[13px] font-medium tracking-[-0.01em]">
-                {busy === "browser" ? "Opening…" : "Browser"}
-              </span>
-              <span className="block truncate text-[11.5px] text-muted-foreground">
-                Browse the web beside chat
-              </span>
-            </span>
-          </button>
         </div>
       </div>
+      {modal}
     </div>
   );
 }

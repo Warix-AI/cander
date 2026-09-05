@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { FolderKanban, MessageSquare } from "lucide-react";
+import { ChevronDown, FolderKanban, MessageSquare } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import { PinnedFilterMenu } from "@/components/shell/PinnedFilterMenu";
@@ -12,8 +12,10 @@ import {
   mobileMenuRowClass,
 } from "@/lib/mobile-menu-styles";
 import {
-  organizePinnedItems,
+  groupPinnedItemsByKind,
+  PIN_KIND_LABEL,
   usePinDisplayPrefs,
+  usePinSectionCollapse,
 } from "@/lib/pin-display-prefs";
 import { usePinnedItems, type PinnedItem } from "@/lib/use-pinned-items";
 import { spaceIcons } from "@/lib/space-icons";
@@ -26,7 +28,7 @@ function PinLeading({
   item: Pick<PinnedItem, "kind" | "icon" | "spaceId">;
 }) {
   if (item.kind === "connector") {
-    return <ConnectorMark id={item.icon ?? "connector"} size="xs" />;
+    return <ConnectorMark id={item.icon ?? "connector"} size="nav" />;
   }
   const Icon =
     (item.spaceId && spaceIcons[item.spaceId as SpaceId]) ||
@@ -57,9 +59,10 @@ export function PinsSheet({
   } = useApp();
   const { pinnedItems } = usePinnedItems();
   const { prefs: pinPrefs } = usePinDisplayPrefs();
+  const { isCollapsed, toggle: togglePinSection } = usePinSectionCollapse();
 
-  const visiblePins = useMemo(
-    () => organizePinnedItems(pinnedItems, pinPrefs),
+  const pinGroups = useMemo(
+    () => groupPinnedItemsByKind(pinnedItems, pinPrefs),
     [pinnedItems, pinPrefs],
   );
 
@@ -78,36 +81,60 @@ export function PinsSheet({
     return projectId === item.id;
   };
 
-  if (!visiblePins.length && hideHeading) return null;
+  if (!pinGroups.length && hideHeading) return null;
 
   return (
-    <div className="space-y-px">
-      {!hideHeading ? (
+    <div className="space-y-3">
+      {!hideHeading && pinGroups.length === 0 ? (
         <div className="group/pins mb-2 flex items-center gap-1 px-1">
           <p className="min-w-0 flex-1 text-[12px] font-medium tracking-[0.04em] text-muted-foreground uppercase">
             Pinned
           </p>
-          {visiblePins.length > 0 ? <PinnedFilterMenu /> : null}
-        </div>
-      ) : visiblePins.length > 0 ? (
-        <div className="group/pins mb-2 flex justify-end px-1">
-          <PinnedFilterMenu />
         </div>
       ) : null}
-      {visiblePins.map((item) => (
-        <button
-          key={`${item.kind}-${item.id}`}
-          type="button"
-          onClick={() => openItem(item)}
-          className={cn(
-            mobileMenuRowClass,
-            isActive(item) && mobileMenuRowActiveClass,
-          )}
-        >
-          <PinLeading item={item} />
-          <span className="truncate">{item.title}</span>
-        </button>
-      ))}
+      {pinGroups.map((group, index) => {
+        const collapsed = isCollapsed(group.kind);
+        return (
+          <div key={group.kind} className="space-y-px">
+            <div className="group/pins mb-1 flex items-center gap-1 px-1">
+              <button
+                type="button"
+                onClick={() => togglePinSection(group.kind)}
+                aria-expanded={!collapsed}
+                className="flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1.5 text-left text-[12px] font-medium tracking-[0.04em] text-muted-foreground uppercase transition-colors hover:bg-black/[0.03] hover:text-foreground dark:hover:bg-white/8"
+              >
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0 normal-case transition-transform duration-200",
+                    collapsed && "-rotate-90",
+                  )}
+                  strokeWidth={2}
+                />
+                <span className="min-w-0 flex-1 truncate normal-case tracking-[-0.01em]">
+                  {PIN_KIND_LABEL[group.kind]}
+                </span>
+              </button>
+              {index === 0 ? <PinnedFilterMenu /> : null}
+            </div>
+            {!collapsed
+              ? group.items.map((item) => (
+                  <button
+                    key={`${item.kind}-${item.id}`}
+                    type="button"
+                    onClick={() => openItem(item)}
+                    className={cn(
+                      mobileMenuRowClass,
+                      isActive(item) && mobileMenuRowActiveClass,
+                    )}
+                  >
+                    <PinLeading item={item} />
+                    <span className="truncate">{item.title}</span>
+                  </button>
+                ))
+              : null}
+          </div>
+        );
+      })}
     </div>
   );
 }

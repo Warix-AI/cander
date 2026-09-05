@@ -52,7 +52,7 @@ export function ConfigureModal() {
             Configure
           </h2>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            Reorder the sidebar. New chat stays put.
+            Reorder the sidebar. New stays put.
           </p>
         </div>
         <button
@@ -89,7 +89,7 @@ function LockedRow() {
         strokeWidth={1.6}
       />
       <span className="min-w-0 flex-1 truncate px-1.5 text-[13.5px]">
-        New chat
+        New
       </span>
       <span
         className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground"

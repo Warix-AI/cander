@@ -39,7 +39,8 @@ export const mobileMenuRowActiveClass =
   "bg-black/[0.04] font-semibold dark:bg-white/8";
 
 export const MOBILE_MENU_ICON_STROKE = 2.15;
-export const MOBILE_MENU_ICON_SIZE = "h-5 w-5";
+/** Letter-height glyphs — match desktop sidebar / connector `nav` marks. */
+export const MOBILE_MENU_ICON_SIZE = "h-3.5 w-3.5";
 
 /** Chrome icon / pill button on mobile. */
 export const mobileChromeButtonClass =

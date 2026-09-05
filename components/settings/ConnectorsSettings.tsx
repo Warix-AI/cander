@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
+import { ComposioConsentModal } from "@/components/connectors/ComposioConsentModal";
 import { useApp } from "@/components/app/AppProvider";
 import {
   SettingsGroup,
@@ -27,6 +28,7 @@ import {
   subscribeWorkspaceConnections,
   getWorkspaceConnectionsSnapshot,
 } from "@/lib/workspace-connections";
+import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import { useSyncExternalStore } from "react";
 
 function useConnectionRevision(local: boolean) {
@@ -46,6 +48,10 @@ export function ConnectorsSettings() {
   const kind = workspaceKindOf(workspace);
   const catalog = useMemo(() => connectorsAvailableForKind(kind), [kind]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [consentConnectorId, setConsentConnectorId] = useState<string | null>(
+    null,
+  );
+  const consentItem = catalog.find((item) => item.id === consentConnectorId);
 
   return (
     <SettingsPage>
@@ -112,9 +118,9 @@ export function ConnectorsSettings() {
                       type="button"
                       disabled={busy === item.id}
                       onClick={async () => {
-                        setBusy(item.id);
-                        try {
-                          if (isLocal) {
+                        if (isLocal) {
+                          setBusy(item.id);
+                          try {
                             addWorkspaceConnection(
                               workspaceId,
                               item.id,
@@ -123,9 +129,18 @@ export function ConnectorsSettings() {
                                 : "Work account",
                               workspace,
                             );
-                          } else {
-                            await connectConnector(item.id);
+                          } finally {
+                            setBusy(null);
                           }
+                          return;
+                        }
+                        if (isOauthConnectorId(item.id)) {
+                          setConsentConnectorId(item.id);
+                          return;
+                        }
+                        setBusy(item.id);
+                        try {
+                          await connectConnector(item.id);
                         } finally {
                           setBusy(null);
                         }
@@ -202,6 +217,24 @@ export function ConnectorsSettings() {
           })}
         </div>
       </SettingsSection>
+
+      <ComposioConsentModal
+        open={Boolean(consentConnectorId)}
+        connectorName={consentItem?.name}
+        busy={busy === consentConnectorId}
+        onClose={() => setConsentConnectorId(null)}
+        onProceed={async () => {
+          const id = consentConnectorId;
+          if (!id) return;
+          setBusy(id);
+          try {
+            await connectConnector(id);
+          } finally {
+            setBusy(null);
+            setConsentConnectorId(null);
+          }
+        }}
+      />
     </SettingsPage>
   );
 }

@@ -398,6 +398,7 @@ type AppContextValue = {
   updateSessionSummary: (text: string, threadId?: string | null) => void;
   clearPersistentChat: (threadId?: string | null) => void;
   deleteChat: (id?: string | null) => boolean;
+  renameChat: (id: string, title: string) => boolean;
   deleteProjectCompletely: (projectId: string) => Promise<void>;
   sendMessage: (text: string, opts?: SendOpts) => void;
   /** After a clarification card submit — persist answers and continue the assistant. */
@@ -1706,6 +1707,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [threadId, threads, supabaseUser, projectId],
   );
 
+  const renameChat = useCallback(
+    (id: string, title: string) => {
+      const next = title.trim();
+      if (!id || !next) return false;
+      const row = threads.find((item) => item.id === id);
+      if (!row || row.projectId) return false;
+      setThreads((current) =>
+        current.map((item) =>
+          item.id === id
+            ? { ...item, title: next.slice(0, 80), updatedAt: new Date().toISOString() }
+            : item,
+        ),
+      );
+      return true;
+    },
+    [threads, setThreads],
+  );
+
   const patchImageGenerationBlock = useCallback(
     (
       threadId: string,
@@ -2453,7 +2472,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               item.id === existing.id
                 ? {
                     ...item,
-                    title: item.messages.length ? item.title : displayText.slice(0, 48),
+                    title:
+                      item.messages.length && item.title && item.title !== "Chat"
+                        ? item.title
+                        : displayText.slice(0, 48),
                     snippet: displayText,
                     updatedAt: new Date().toISOString(),
                     // Detached drafts must not inherit the current space lens.
@@ -4299,13 +4321,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return {
             ok: true,
             detail: `Created “${project.title}” in ${
-              space === "research"
-                ? "Explore"
-                : space === "studio"
-                  ? "Create"
-                  : space === "build"
-                    ? "Create"
-                    : "Work"
+              space === "research" ||
+              space === "studio" ||
+              space === "build"
+                ? "Canvas"
+                : "Work"
             }.`,
             projectId: project.id,
           };
@@ -5195,6 +5215,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateSessionSummary,
       clearPersistentChat,
       deleteChat,
+      renameChat,
       deleteProjectCompletely,
       sendMessage,
       continueAfterClarification,
@@ -5355,6 +5376,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateSessionSummary,
       clearPersistentChat,
       deleteChat,
+      renameChat,
       deleteProjectCompletely,
       sendMessage,
       continueAfterClarification,

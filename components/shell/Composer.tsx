@@ -13,7 +13,6 @@ import {
 } from "react";
 import {
   FileText,
-  Globe,
   Link2,
   MessageSquare,
   Paperclip,
@@ -42,7 +41,12 @@ import {
   type SpaceLibraryId,
 } from "@/lib/space-library";
 import { isChatSpace } from "@/lib/spaces";
-import { panelChoiceSuggestions } from "@/lib/panel-suggestions";
+import { canvasStartOptions } from "@/lib/canvas-start-options";
+import {
+  isSpaceAttachedChat,
+  threadHasTurns,
+} from "@/lib/persistent-chat";
+import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flow";
 import {
   detectConnectorMentions,
   relatedCandidatesForTrigger,
@@ -250,14 +254,38 @@ export function Composer({
     stopTurn,
     panelMode,
     setDraftAsDefaultChat,
-    openStandaloneBrowser,
+    openQuickSearchBrowser,
+    openProject,
     jobId,
     skillId,
     standaloneBrowserOpen,
   } = useApp();
+  const { openCreate, modal: createModal } = useCreateProjectFlow(
+    (projectId) => {
+      openProject(projectId, {
+        migrateFromThreadId: threadId,
+        landOnPanel: true,
+      });
+    },
+  );
   const floating = useShellStyle() === "floating";
   const mobile = useMobileShell();
   const { centered, chatMaxWidthClass } = useChatCanvasCentered();
+
+  const detachedUnattached =
+    view === "chat" &&
+    !spaceId &&
+    !projectId &&
+    !connectorId &&
+    Boolean(threadId) &&
+    Boolean(thread) &&
+    !isSpaceAttachedChat(thread, workspaceId);
+  /** Start lives in the right panel on New; only orphan Recents chats get it in +. */
+  const showStartInPlus =
+    detachedUnattached &&
+    !drafting &&
+    panelMode === "collapsed" &&
+    threadHasTurns(thread);
 
   const draftKey = useMemo(
     () =>
@@ -1378,55 +1406,58 @@ export function Composer({
       >
         {menu === "plus" && !compact ? (
           <ComposerMenu mobile={mobile} openAbove={!landing}>
-            <div>
-              <MenuSection title="Start" />
-              {panelChoiceSuggestions().map((item) => {
-                const Icon = item.icon;
-                const dest =
-                  item.space === "research"
-                    ? "research"
-                    : item.space === "studio"
-                      ? "studio"
-                      : item.space === "build"
-                        ? "build"
-                        : "work";
-                return (
-                  <MenuRow
-                    key={item.id}
-                    icon={<Icon className="h-full w-full" strokeWidth={1.75} />}
-                    label={item.label}
-                    description={item.hint}
-                    onClick={() => {
-                      void setDraftAsDefaultChat(dest);
-                      setMenu(null);
-                    }}
-                  />
-                );
-              })}
-              <MenuRow
-                icon={
-                  <MessageSquare className="h-full w-full" strokeWidth={1.75} />
-                }
-                label="Default chat"
-                description="Replace spaces default chat"
-                onClick={() => {
-                  void setDraftAsDefaultChat();
-                  setMenu(null);
-                }}
-              />
-              <MenuRow
-                icon={<Globe className="h-full w-full" strokeWidth={1.75} />}
-                label="Browser"
-                description="Browse the web beside chat"
-                onClick={() => {
-                  openStandaloneBrowser();
-                  setMenu(null);
-                }}
-              />
-            </div>
+            {showStartInPlus ? (
+              <div>
+                <MenuSection title="Start" />
+                {canvasStartOptions().map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <MenuRow
+                      key={item.id}
+                      icon={
+                        <Icon className="h-full w-full" strokeWidth={1.75} />
+                      }
+                      label={item.label}
+                      description={item.summary}
+                      onClick={() => {
+                        if (item.action === "quick-search") {
+                          openQuickSearchBrowser();
+                          setMenu(null);
+                          return;
+                        }
+                        if (!item.space || !item.kind || !item.title) return;
+                        openCreate({
+                          space: item.space,
+                          kind: item.kind,
+                          defaultTitle: item.title,
+                          summary: item.summary,
+                        });
+                        setMenu(null);
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            ) : null}
 
             <div>
               <MenuSection title="Add" />
+              {detachedUnattached ? (
+                <MenuRow
+                  icon={
+                    <MessageSquare
+                      className="h-full w-full"
+                      strokeWidth={1.75}
+                    />
+                  }
+                  label="Add to canvas chat"
+                  description="Use this chat as Canvas default"
+                  onClick={() => {
+                    void setDraftAsDefaultChat("studio");
+                    setMenu(null);
+                  }}
+                />
+              ) : null}
               <MenuRow
                 icon={<Paperclip className="h-full w-full" strokeWidth={1.75} />}
                 label="Add photos & files"
@@ -1536,6 +1567,7 @@ export function Composer({
             </div>
           </ComposerMenu>
         ) : null}
+        {createModal}
 
         {triggerPicker
           ? (() => {

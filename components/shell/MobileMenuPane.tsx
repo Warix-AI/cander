@@ -15,7 +15,6 @@ import {
   MOBILE_MENU_BG,
   MOBILE_MENU_ICON_SIZE,
   MOBILE_MENU_ICON_STROKE,
-  mobileChromeButtonClass,
   mobileMenuRowActiveClass,
   mobileMenuRowClass,
 } from "@/lib/mobile-menu-styles";
@@ -34,6 +33,9 @@ export function MobileMenuPane() {
   const {
     view,
     spaceId,
+    threadId,
+    projectId,
+    connectorId,
     mobileSurface,
     setMobileSurface,
     mobileMenuScreen,
@@ -75,6 +77,9 @@ export function MobileMenuPane() {
           <MenuMain
             view={view}
             spaceId={spaceId}
+            threadId={threadId}
+            projectId={projectId}
+            connectorId={connectorId}
             showWorkspaces={entitlements.hasWorkspaces}
             onNewChat={() => {
               newChat();
@@ -118,6 +123,9 @@ export function MobileMenuPane() {
 function MenuMain({
   view,
   spaceId,
+  threadId,
+  projectId,
+  connectorId,
   showWorkspaces,
   onNewChat,
   onOpenScreen,
@@ -126,6 +134,9 @@ function MenuMain({
 }: {
   view: string;
   spaceId: NavDestinationId | null;
+  threadId: string | null;
+  projectId: string | null;
+  connectorId: string | null;
   showWorkspaces: boolean;
   onNewChat: () => void;
   onOpenScreen: (screen: MobileMenuScreen) => void;
@@ -133,6 +144,8 @@ function MenuMain({
   onOpenSettings: () => void;
 }) {
   const spaceItems = useMainNavItems({ spacesOnly: true });
+  const newActive =
+    view === "chat" && !spaceId && !projectId && !connectorId;
 
   const navActive = (id: SidebarNavId) => {
     if (id === "recents") return view === "recents";
@@ -145,18 +158,25 @@ function MenuMain({
     <>
       <div className="flex shrink-0 items-center justify-between gap-3 px-3 pl-7 pr-3 pt-[calc(env(safe-area-inset-top,0px)+22px)]">
         <CanderWordmark />
-        <button
-          type="button"
-          aria-label="New chat"
-          onClick={onNewChat}
-          className={mobileChromeButtonClass}
-        >
-          <SquarePen className="h-5 w-5" strokeWidth={1.8} />
-        </button>
       </div>
 
         <div className="mt-[30px] flex min-h-0 flex-1 flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="flex flex-col gap-[0.1rem]">
+          <button
+            type="button"
+            onClick={onNewChat}
+            className={cn(
+              mobileMenuRowClass,
+              newActive && mobileMenuRowActiveClass,
+            )}
+            aria-label="New"
+          >
+            <SquarePen
+              className={cn(MOBILE_MENU_ICON_SIZE, "text-muted-foreground")}
+              strokeWidth={MOBILE_MENU_ICON_STROKE}
+            />
+            <span className="min-w-0 flex-1 truncate">New</span>
+          </button>
           {spaceItems.map((item) => (
             <MobileNavRow
               key={item.id}

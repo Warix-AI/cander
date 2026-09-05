@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Building2,
   ChartNoAxesColumn,
+  ChevronDown,
   CreditCard,
   FolderKanban,
   GripVertical,
@@ -25,8 +26,10 @@ import { useApp } from "@/components/app/AppProvider";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { workspacesFor } from "@/lib/entitlements";
 import {
-  organizePinnedItems,
+  groupPinnedItemsByKind,
+  PIN_KIND_LABEL,
   usePinDisplayPrefs,
+  usePinSectionCollapse,
 } from "@/lib/pin-display-prefs";
 import { spaceIcons, spaceIconTint } from "@/lib/space-icons";
 import { type SidebarNavId, isExtraNavId, isComingSoonNav, navSpaceMatches } from "@/lib/spaces";
@@ -87,6 +90,7 @@ export function Sidebar() {
   const mainNavItems = useMainNavItems({ spacesOnly: true });
   const { pinnedItems } = usePinnedItems();
   const { prefs: pinPrefs } = usePinDisplayPrefs();
+  const { isCollapsed, toggle: togglePinSection } = usePinSectionCollapse();
   useSyncExternalStore(
     subscribeWorkspaceCatalog,
     getWorkspaceCatalogSnapshot,
@@ -199,7 +203,9 @@ export function Sidebar() {
     workspaceCount >= 2;
 
   const settingsNav = visibleSettingsTabs(entitlements);
-  const chatActive = view === "chat" && !threadId && !spaceId;
+  // New stays active for detached home chat (newChat always assigns a threadId).
+  const chatActive =
+    view === "chat" && !spaceId && !projectId && !connectorId;
 
   const activePinnedProject =
     Boolean(projectId) &&
@@ -212,15 +218,22 @@ export function Sidebar() {
     // Pinned connector detail — highlight the pin, not the Connectors tab.
     if (id === "connectors" && connectorId) return false;
     // Pinned project — highlight the pin row, not the space.
-    if (activePinnedProject && (id === spaceId || (id === "studio" && spaceId === "build")))
+    if (
+      activePinnedProject &&
+      (id === spaceId ||
+        (id === "studio" &&
+          (spaceId === "build" ||
+            spaceId === "research" ||
+            spaceId === "home")))
+    )
       return false;
     return (
       navSpaceMatches(id, spaceId) && (view === "space" || view === "chat")
     );
   };
 
-  const visiblePins = useMemo(
-    () => organizePinnedItems(pinnedItems, pinPrefs),
+  const pinGroups = useMemo(
+    () => groupPinnedItemsByKind(pinnedItems, pinPrefs),
     [pinnedItems, pinPrefs],
   );
 
@@ -370,7 +383,7 @@ export function Sidebar() {
             aria-label="Back"
           >
             <ArrowLeft
-              className="h-4 w-4 shrink-0 text-muted-foreground"
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
               strokeWidth={2}
             />
             <span className="font-medium tracking-[-0.01em]">Back</span>
@@ -391,7 +404,7 @@ export function Sidebar() {
                 )}
               >
                 <Icon
-                  className="h-4 w-4 text-muted-foreground"
+                  className="h-3.5 w-3.5 text-muted-foreground"
                   strokeWidth={2}
                 />
                 {tab.label}
@@ -410,6 +423,22 @@ export function Sidebar() {
             aria-label="Main"
           >
             <div className="flex min-h-0 shrink flex-col gap-0 overflow-y-auto">
+              <button
+                type="button"
+                onClick={() => newChat()}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[15px] transition-colors duration-200",
+                  chatActive
+                    ? "bg-sidebar-accent font-medium"
+                    : "hover:bg-sidebar-accent",
+                )}
+              >
+                <SquarePen
+                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                  strokeWidth={2}
+                />
+                <span className="min-w-0 flex-1 truncate">New</span>
+              </button>
               {mainNavItems.map((item) => (
                 <SidebarNavButton
                   key={item.id}
@@ -425,17 +454,42 @@ export function Sidebar() {
 
             <div className="relative mt-2 min-h-0 flex-1 overflow-hidden">
               <div className="h-full overflow-y-auto">
-                {visiblePins.length > 0 ? (
-                  <div className="group/pins">
-                    <div className="mb-0.5 flex items-center gap-1 px-3">
-                      <p className="min-w-0 flex-1 text-[13px] text-muted-foreground">
-                        Pinned
-                      </p>
-                      <PinnedFilterMenu />
-                    </div>
-                    <div className="flex flex-col gap-0">
-                      {visiblePins.map(renderPinnedRow)}
-                    </div>
+                {pinGroups.length > 0 ? (
+                  <div className="group/pins flex flex-col gap-2">
+                    {pinGroups.map((group) => {
+                      const collapsed = isCollapsed(group.kind);
+                      return (
+                        <div key={group.kind}>
+                          <div className="mb-0.5 flex items-center gap-1 px-1">
+                            <button
+                              type="button"
+                              onClick={() => togglePinSection(group.kind)}
+                              aria-expanded={!collapsed}
+                              className="flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1 text-left text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+                            >
+                              <ChevronDown
+                                className={cn(
+                                  "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                                  collapsed && "-rotate-90",
+                                )}
+                                strokeWidth={2}
+                              />
+                              <span className="min-w-0 flex-1 truncate">
+                                {PIN_KIND_LABEL[group.kind]}
+                              </span>
+                            </button>
+                            {group.kind === pinGroups[0]?.kind ? (
+                              <PinnedFilterMenu />
+                            ) : null}
+                          </div>
+                          {!collapsed ? (
+                            <div className="flex flex-col gap-0">
+                              {group.items.map(renderPinnedRow)}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>
@@ -495,7 +549,7 @@ function SidebarNavButton({
     >
       <Icon
         className={cn(
-          "h-4 w-4 shrink-0",
+          "h-3.5 w-3.5 shrink-0",
           tinted ? spaceIconTint(id as SpaceId) : "text-muted-foreground",
         )}
         strokeWidth={2}
@@ -519,7 +573,7 @@ function PinnedLeading({
     spaceId?: SpaceId;
   };
 }) {
-  const iconClass = "h-4 w-4 shrink-0 text-muted-foreground";
+  const iconClass = "h-3.5 w-3.5 shrink-0 text-muted-foreground";
   if (item.kind === "connector") {
     return <ConnectorMark id={item.icon ?? "connector"} size="nav" />;
   }

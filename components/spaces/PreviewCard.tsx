@@ -489,17 +489,22 @@ function PreviewActions({
     clearPin,
     workspaceId,
     deleteChat,
+    renameChat,
     deleteProjectCompletely,
   } = useApp();
   const mobile = useMobileShell();
   const ctx = useWorkspaceCtx();
   const { updateProject } = useSpaceMutation();
-  const tier = pinTier("project", item.projectId);
-  const pinned = Boolean(tier);
   const isChat = item.indexKind === "thread";
   const isProject =
     item.indexKind === "project" ||
     (!item.indexKind && (kind === "product" || kind === "paper"));
+  const isProjectTiedChat = isChat && Boolean(item.linkedProjectId);
+  const chatThreadId = item.threadId ?? item.projectId;
+  const pinKind = isChat ? ("thread" as const) : ("project" as const);
+  const pinId = isChat ? chatThreadId : item.projectId;
+  const tier = pinTier(pinKind, pinId);
+  const pinned = Boolean(tier);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -527,7 +532,7 @@ function PreviewActions({
   const saveRename = async () => {
     const next = normalizeProjectTitle(renameValue);
     if (!next) {
-      setRenameError("Project name is required.");
+      setRenameError(isChat ? "Chat name is required." : "Project name is required.");
       return;
     }
     if (next === item.name) {
@@ -537,11 +542,22 @@ function PreviewActions({
     setRenameBusy(true);
     setRenameError(null);
     try {
-      await updateProject(ctx, item.projectId, { title: next });
+      if (isChat) {
+        if (!renameChat(chatThreadId, next)) {
+          setRenameError("Could not rename chat.");
+          return;
+        }
+      } else {
+        await updateProject(ctx, item.projectId, { title: next });
+      }
       setRenameOpen(false);
     } catch (err) {
       setRenameError(
-        err instanceof Error ? err.message : "Could not rename project.",
+        err instanceof Error
+          ? err.message
+          : isChat
+            ? "Could not rename chat."
+            : "Could not rename project.",
       );
     } finally {
       setRenameBusy(false);
@@ -610,9 +626,6 @@ function PreviewActions({
     fn();
     setMenuOpen(false);
   };
-
-  const isProjectTiedChat = isChat && Boolean(item.linkedProjectId);
-  const chatThreadId = item.threadId ?? item.projectId;
 
   const tryDeleteChat = () => {
     if (isProjectTiedChat) {
@@ -697,7 +710,38 @@ function PreviewActions({
 
   const menuBody = (
     <>
-      {kind === "product" || kind === "paper" ? (
+      {isChat ? (
+        <>
+          <SheetAction
+            icon={Pin}
+            label={pinned ? "Unpin" : "Pin"}
+            onClick={() =>
+              runAndClose(() => {
+                if (pinned) clearPin("thread", pinId);
+                else setPin("thread", pinId, "primary");
+              })
+            }
+          />
+          <SheetAction
+            icon={FolderOpen}
+            label="Open"
+            onClick={() =>
+              runAndClose(() => {
+                onOpen(item.projectId);
+              })
+            }
+          />
+          <SheetAction
+            icon={Pencil}
+            label="Rename chat"
+            onClick={() =>
+              runAndClose(() => {
+                setRenameOpen(true);
+              })
+            }
+          />
+        </>
+      ) : kind === "product" || kind === "paper" ? (
         <>
           <SheetAction
             icon={Pin}
@@ -814,7 +858,57 @@ function PreviewActions({
         >
           {(close) => (
             <>
-              {kind === "product" || kind === "paper" ? (
+              {isChat ? (
+                <>
+                  {!pinned ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setPin("thread", pinId, "primary");
+                        close();
+                      }}
+                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                    >
+                      Pin
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        clearPin("thread", pinId);
+                        close();
+                      }}
+                      className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                    >
+                      Unpin
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onOpen(item.projectId);
+                      close();
+                    }}
+                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                  >
+                    Open
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setRenameOpen(true);
+                      close();
+                    }}
+                    className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                  >
+                    Rename chat
+                  </button>
+                </>
+              ) : kind === "product" || kind === "paper" ? (
                 <>
                   {!pinned ? (
                     <button
@@ -1209,7 +1303,7 @@ function PreviewActions({
           >
             <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-2">
               <p className="text-[1.25rem] font-semibold tracking-[-0.02em]">
-                Rename project
+                {isChat ? "Rename chat" : "Rename project"}
               </p>
               <input
                 autoFocus
@@ -1228,7 +1322,9 @@ function PreviewActions({
                 <p className="mt-2 text-[12px] text-destructive">{renameError}</p>
               ) : (
                 <p className="mt-2 text-[12px] text-muted-foreground">
-                  Must be unique across this workspace.
+                  {isChat
+                    ? "Shown in Recents and pinned chats."
+                    : "Must be unique across this workspace."}
                 </p>
               )}
               <div className="mt-6 grid grid-cols-2 gap-2">
@@ -1263,7 +1359,7 @@ function PreviewActions({
               onClick={(event) => event.stopPropagation()}
             >
               <p className="text-[14px] font-medium tracking-[-0.01em]">
-                Rename project
+                {isChat ? "Rename chat" : "Rename project"}
               </p>
               <input
                 autoFocus
@@ -1283,7 +1379,9 @@ function PreviewActions({
                 <p className="mt-2 text-[12px] text-destructive">{renameError}</p>
               ) : (
                 <p className="mt-2 text-[12px] text-muted-foreground">
-                  Must be unique across this workspace.
+                  {isChat
+                    ? "Shown in Recents and pinned chats."
+                    : "Must be unique across this workspace."}
                 </p>
               )}
               <div className="mt-4 flex justify-end gap-2">

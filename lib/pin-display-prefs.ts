@@ -23,7 +23,7 @@ export type PinDisplayPrefs = {
 export const DEFAULT_PIN_DISPLAY_PREFS: PinDisplayPrefs = {
   visible: [...PIN_KIND_ORDER],
   order: [...PIN_KIND_ORDER],
-  organize: "session",
+  organize: "grouped",
 };
 
 const STORAGE_KEY = "cander:pin-display-prefs";
@@ -167,4 +167,93 @@ export function organizePinnedItems<T extends PinnableRow>(
     }
   }
   return out;
+}
+
+/** Group visible pins by kind for collapsible sidebar sections. */
+export function groupPinnedItemsByKind<T extends PinnableRow>(
+  items: T[],
+  pinPrefs: PinDisplayPrefs,
+): { kind: PinKind; items: T[] }[] {
+  const visible = new Set(pinPrefs.visible);
+  const filtered = items.filter((item) => visible.has(item.kind));
+  const groups: { kind: PinKind; items: T[] }[] = [];
+  for (const kind of pinPrefs.order) {
+    if (!visible.has(kind)) continue;
+    const kindItems = filtered.filter((item) => item.kind === kind);
+    if (kindItems.length) groups.push({ kind, items: kindItems });
+  }
+  return groups;
+}
+
+const COLLAPSE_STORAGE_KEY = "cander:pin-section-collapsed";
+
+type CollapseMap = Partial<Record<PinKind, boolean>>;
+
+let collapseMap: CollapseMap = {};
+let collapseHydrated = false;
+const collapseListeners = new Set<Listener>();
+
+function hydrateCollapse() {
+  if (collapseHydrated || typeof window === "undefined") return;
+  collapseHydrated = true;
+  try {
+    const raw = window.localStorage.getItem(COLLAPSE_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const next: CollapseMap = {};
+    for (const kind of PIN_KIND_ORDER) {
+      if (parsed[kind] === true) next[kind] = true;
+    }
+    collapseMap = next;
+  } catch {
+    collapseMap = {};
+  }
+}
+
+function emitCollapse() {
+  collapseListeners.forEach((listener) => listener());
+}
+
+export function subscribePinSectionCollapse(listener: Listener) {
+  hydrateCollapse();
+  collapseListeners.add(listener);
+  return () => {
+    collapseListeners.delete(listener);
+  };
+}
+
+export function getPinSectionCollapseSnapshot(): CollapseMap {
+  hydrateCollapse();
+  return collapseMap;
+}
+
+export function getPinSectionCollapseServerSnapshot(): CollapseMap {
+  return {};
+}
+
+export function togglePinSectionCollapsed(kind: PinKind) {
+  hydrateCollapse();
+  const next = { ...collapseMap, [kind]: !collapseMap[kind] };
+  collapseMap = next;
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
+  emitCollapse();
+}
+
+export function usePinSectionCollapse() {
+  const collapsed = useSyncExternalStore(
+    subscribePinSectionCollapse,
+    getPinSectionCollapseSnapshot,
+    getPinSectionCollapseServerSnapshot,
+  );
+  return {
+    collapsed,
+    isCollapsed: (kind: PinKind) => Boolean(collapsed[kind]),
+    toggle: togglePinSectionCollapsed,
+  };
 }

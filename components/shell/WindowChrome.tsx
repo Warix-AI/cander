@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Search, SquarePen } from "lucide-react";
+import { Search } from "lucide-react";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { useApp } from "@/components/app/AppProvider";
 import {
@@ -58,9 +58,8 @@ export function WindowChrome({
 }
 
 function DesktopHeaderActions({ dragSpacer }: { dragSpacer: ReactNode }) {
-  const { view, threadId, spaceId, newChat, openOverlay } = useApp();
+  const { openOverlay } = useApp();
   const desktop = useDesktopShell();
-  const chatActive = view === "chat" && !threadId && !spaceId;
 
   return (
     <div
@@ -75,18 +74,6 @@ function DesktopHeaderActions({ dragSpacer }: { dragSpacer: ReactNode }) {
         className={headerIconClass}
       >
         <Search className="h-4 w-4" strokeWidth={1.7} />
-      </button>
-      <button
-        type="button"
-        aria-label="New chat"
-        style={desktop ? DESKTOP_NO_DRAG : undefined}
-        onClick={() => newChat()}
-        className={cn(
-          headerIconClass,
-          chatActive && "bg-sidebar-accent text-foreground",
-        )}
-      >
-        <SquarePen className="h-4 w-4" strokeWidth={1.7} />
       </button>
       {dragSpacer}
     </div>

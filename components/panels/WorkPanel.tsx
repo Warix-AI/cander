@@ -37,7 +37,7 @@ export function WorkPanel() {
             ? "Explore"
             : tab === "build"
               ? item.kind === "automation"
-                ? "Create · Automation"
+                ? "Canvas · Agent"
                 : item.status === "published"
                   ? "Create · Published"
                   : "Create"

@@ -17,7 +17,7 @@ export type CreateStart = {
   title: string;
 };
 
-/** Unified Create menu — Image (Studio) + App / Website / Automation (Build). */
+/** Unified Create menu — Image (Studio) + App / Website / Agent (Build). */
 export const CREATE_MENU_OPTIONS: CreateStart[] = [
   {
     id: "image",

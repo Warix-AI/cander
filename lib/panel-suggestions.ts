@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
-import { Compass, Brush } from "lucide-react";
+import { Brush } from "lucide-react";
 import type { SpaceId } from "./types";
+import { canvasStartOptions } from "./canvas-start-options";
 
 export type PanelChoice = {
   id: string;
@@ -10,22 +11,20 @@ export type PanelChoice = {
   icon: LucideIcon;
 };
 
-/** Right-panel picks when a new chat has no space yet. */
+/**
+ * @deprecated Prefer canvasStartOptions() for New / Canvas starts.
+ * Kept for callers that still expect a space-dock choice.
+ */
 export function panelChoiceSuggestions(): PanelChoice[] {
   return [
     {
-      id: "explore",
-      label: "Explore",
-      hint: "Open Explore with this chat",
-      space: "research",
-      icon: Compass,
-    },
-    {
-      id: "create",
-      label: "Create",
-      hint: "Open Create with this chat",
+      id: "canvas",
+      label: "Canvas",
+      hint: "Add to canvas chat",
       space: "studio",
       icon: Brush,
     },
   ];
 }
+
+export { canvasStartOptions };

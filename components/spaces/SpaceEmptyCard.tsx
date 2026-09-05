@@ -33,18 +33,18 @@ const SPACE_VISUAL: Record<
   build: {
     gradient:
       "linear-gradient(270deg, oklch(0.55 0.19 262) 0%, oklch(0.64 0.16 256) 18%, oklch(0.74 0.1 255 / 0.7) 38%, oklch(0.86 0.05 255 / 0.32) 58%, oklch(0.94 0.02 255 / 0.1) 74%, transparent 92%)",
-    words: ["App", "Site", "Automation", "Preview"],
+    words: ["App", "Site", "Agent", "Preview"],
   },
   studio: {
     gradient:
       "linear-gradient(270deg, oklch(0.68 0.15 318) 0%, oklch(0.75 0.12 295) 18%, oklch(0.84 0.07 285 / 0.68) 38%, oklch(0.92 0.04 280 / 0.3) 58%, oklch(0.96 0.02 280 / 0.1) 74%, transparent 92%)",
-    words: ["Image", "App", "Website", "Automation", "Video"],
+    words: ["Image", "App", "Website", "Agent", "Video"],
     comingSoonWords: ["Video"],
   },
   work: {
     gradient:
       "linear-gradient(270deg, oklch(0.6 0.13 248) 0%, oklch(0.7 0.1 245) 18%, oklch(0.82 0.06 245 / 0.65) 38%, oklch(0.9 0.03 245 / 0.28) 58%, oklch(0.95 0.015 245 / 0.1) 74%, transparent 92%)",
-    words: ["Explore", "Create", "Pins", "Recents"],
+    words: ["Canvas", "Pins", "Recents"],
   },
 };
 
@@ -237,25 +237,25 @@ export function SpaceEmptyCard({
 /** Copy keyed by product space (right-panel empty cards). */
 export const SPACE_EMPTY_COPY = {
   studio: {
-    title: "Start creating",
+    title: "Start on Canvas",
     description:
-      "Make an image, app, website, or automation — all from Create.",
+      "Search, make an image, app, website, or agent — all from Canvas.",
     actionLabel: "New project",
   },
   build: {
-    title: "Start creating",
+    title: "Start on Canvas",
     description:
-      "Make an image, app, website, or automation — all from Create.",
+      "Search, make an image, app, website, or agent — all from Canvas.",
     actionLabel: "New project",
   },
   research: {
-    title: "Start exploring",
+    title: "Start on Canvas",
     description: "Open a search and collect what you find.",
     actionLabel: "New project",
   },
   work: {
     title: "Start organizing",
-    description: "Bring Explore and Create projects together.",
+    description: "Bring Canvas projects together.",
     actionLabel: "New project",
   },
 } as const;

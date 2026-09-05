@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { CONNECTOR_CATALOG } from "@/lib/api/connector-catalog";
@@ -8,6 +8,7 @@ import {
   getSpaceEntityStoreSnapshot,
   localSpaceEntityStore,
 } from "@/lib/api/space-entity-store";
+import { healMisclassifiedPins } from "@/lib/session";
 import type { PinKind, SpaceId } from "@/lib/types";
 
 export type PinnedItem = {
@@ -31,6 +32,14 @@ function pinConnectorTitle(id: string, catalogName?: string) {
   return PIN_CONNECTOR_TITLE[id] ?? catalogName ?? id;
 }
 
+function chatDisplayTitle(title: string | undefined, snippet?: string) {
+  const name = title?.trim();
+  if (name && name !== "Chat") return name;
+  const fromSnippet = snippet?.trim();
+  if (fromSnippet) return fromSnippet.slice(0, 48);
+  return "Pinned chat";
+}
+
 export function usePinnedItems() {
   const { pins, threads, workspaceId } = useApp();
   const { ctx } = useSpaceData();
@@ -40,8 +49,22 @@ export function usePinnedItems() {
     : [];
   const projectRevision = snap.revision;
 
+  useEffect(() => {
+    healMisclassifiedPins({
+      threadIds: threads.map((item) => item.id),
+      projectIds: projects.map((item) => item.id),
+    });
+  }, [pins, threads, projects, projectRevision]);
+
   const items = useMemo(() => {
     const resolved: PinnedItem[] = [];
+    const projectById = new Map(
+      projects
+        .filter((item) => item.workspaceId === workspaceId)
+        .map((item) => [item.id, item] as const),
+    );
+    const threadById = new Map(threads.map((item) => [item.id, item] as const));
+
     for (const pin of pins) {
       if (pin.kind === "connector") {
         const connector = CONNECTOR_CATALOG.find((item) => item.id === pin.id);
@@ -53,33 +76,37 @@ export function usePinnedItems() {
         });
         continue;
       }
-      if (pin.kind === "thread") {
-        const thread = threads.find(
-          (item) => item.id === pin.id && item.workspaceId === workspaceId,
-        );
-        if (thread) {
+
+      // Prefer thread resolution when a project pin id is actually a chat
+      // (legacy Recents pin bug), or when kind is already thread.
+      const thread = threadById.get(pin.id);
+      const project = projectById.get(pin.id);
+
+      if (pin.kind === "thread" || (pin.kind === "project" && thread && !project)) {
+        if (thread && thread.workspaceId === workspaceId) {
           resolved.push({
             kind: "thread",
             id: thread.id,
-            title: thread.title,
+            title: chatDisplayTitle(thread.title, thread.snippet),
             spaceId: thread.spaceId,
           });
-        } else {
-          // Keep the pin visible across workspace switches / late chat hydrate.
-          // Never auto-delete here — that was wiping saved pins on load.
-          const anyThread = threads.find((item) => item.id === pin.id);
+        } else if (thread) {
           resolved.push({
             kind: "thread",
             id: pin.id,
-            title: anyThread?.title ?? "Pinned chat",
-            spaceId: anyThread?.spaceId,
+            title: chatDisplayTitle(thread.title, thread.snippet),
+            spaceId: thread.spaceId,
+          });
+        } else {
+          resolved.push({
+            kind: "thread",
+            id: pin.id,
+            title: "Pinned chat",
           });
         }
         continue;
       }
-      const project = projects.find(
-        (item) => item.id === pin.id && item.workspaceId === workspaceId,
-      );
+
       if (project) {
         resolved.push({
           kind: "project",
@@ -88,7 +115,6 @@ export function usePinnedItems() {
           spaceId: project.space,
         });
       } else {
-        // Show immediately — title fills in when the entity store catches up.
         resolved.push({
           kind: "project",
           id: pin.id,

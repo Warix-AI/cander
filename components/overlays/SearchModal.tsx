@@ -88,7 +88,7 @@ export function SearchModal() {
     const actions: Hit[] = [
       {
         id: "action-new-chat",
-        title: "New chat",
+        title: "New",
         meta: "Start in Chat",
         group: "Actions",
         run: () => newChat(),
@@ -116,8 +116,8 @@ export function SearchModal() {
       },
       {
         id: "action-new-create",
-        title: "New Create chat",
-        meta: "Start creating with this chat",
+        title: "New Canvas chat",
+        meta: "Open Canvas with this chat",
         group: "Actions",
         run: () => newChat("studio"),
       },
@@ -125,7 +125,7 @@ export function SearchModal() {
         ? [
             {
               id: "action-new-research",
-              title: "New Explore project",
+              title: "New search project",
               meta: "Start a search with this chat",
               group: "Actions" as const,
               run: () => newChat("research"),

@@ -22,6 +22,7 @@ import {
   subscribeConnectorConnections,
 } from "@/lib/connector-connections-store";
 import { ConnectorToolPermissions } from "@/components/connectors/ConnectorToolPermissions";
+import { ComposioConsentModal } from "@/components/connectors/ComposioConsentModal";
 import {
   fetchConnectorConnections,
   initiateConnectorConnection,
@@ -44,6 +45,8 @@ export function ConnectorsPanel() {
   } = useApp();
   const [connectError, setConnectError] = useState("");
   const [disconnecting, setDisconnecting] = useState(false);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   useSyncExternalStore(
     subscribeConnectorConnections,
     getConnectorConnectionsSnapshot,
@@ -100,6 +103,7 @@ export function ConnectorsPanel() {
   }
 
   return (
+    <>
     <div className={SHELL_PANEL_BODY}>
       <PanelChrome kicker="Connector" title={selected.name} />
       <div className="min-h-0 flex-1 overflow-hidden">
@@ -218,7 +222,7 @@ export function ConnectorsPanel() {
               )}
             </div>
             <div className="mt-3">
-              <SectionLabel>Automations using this</SectionLabel>
+              <SectionLabel>Agents using this</SectionLabel>
               {relatedAutomations.length ? (
                 relatedAutomations.map((item) => (
                   <button
@@ -232,7 +236,7 @@ export function ConnectorsPanel() {
                 ))
               ) : (
                 <p className="px-3 py-2 text-[13px] text-muted-foreground">
-                  No automations linked yet.
+                  No agents linked yet.
                 </p>
               )}
             </div>
@@ -246,27 +250,12 @@ export function ConnectorsPanel() {
                   disabled={
                     !isOauthConnectorId(selected.id) ||
                     hasActiveConnection ||
-                    disconnecting
+                    disconnecting ||
+                    connecting
                   }
-                  onClick={async () => {
+                  onClick={() => {
                     setConnectError("");
-                    try {
-                      const { authorizationUrl } = await initiateConnectorConnection({
-                        workspaceId,
-                        connectorId: selected.id,
-                      });
-                      const connections = await fetchConnectorConnections(workspaceId);
-                      replaceConnectorConnectionsForWorkspace(workspaceId, connections);
-                      if (authorizationUrl) {
-                        window.location.assign(authorizationUrl);
-                      }
-                    } catch (err) {
-                      setConnectError(
-                        err instanceof Error
-                          ? err.message
-                          : "Could not start connection.",
-                      );
-                    }
+                    setConsentOpen(true);
                   }}
                   className="inline-flex h-10 items-center rounded-full border border-foreground/20 px-4 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -319,5 +308,36 @@ export function ConnectorsPanel() {
         </div>
       </div>
     </div>
+    <ComposioConsentModal
+      open={consentOpen}
+      connectorName={selected.name}
+      busy={connecting}
+      onClose={() => setConsentOpen(false)}
+      onProceed={async () => {
+        setConnecting(true);
+        try {
+          const { authorizationUrl } = await initiateConnectorConnection({
+            workspaceId,
+            connectorId: selected.id,
+          });
+          const connections = await fetchConnectorConnections(workspaceId);
+          replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+          if (authorizationUrl) {
+            window.location.assign(authorizationUrl);
+            return;
+          }
+          setConnectError(`Could not start ${selected.name} authorization.`);
+          setConsentOpen(false);
+        } catch (err) {
+          setConnectError(
+            err instanceof Error ? err.message : "Could not start connection.",
+          );
+          setConsentOpen(false);
+        } finally {
+          setConnecting(false);
+        }
+      }}
+    />
+    </>
   );
 }

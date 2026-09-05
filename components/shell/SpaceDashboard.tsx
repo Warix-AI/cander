@@ -2,7 +2,6 @@
 
 import { ConnectorsDashboard } from "@/components/spaces/ConnectorsDashboard";
 import { CreateDashboard } from "@/components/spaces/CreateDashboard";
-import { ResearchDashboard } from "@/components/spaces/ResearchDashboard";
 import { WorkDashboard } from "@/components/spaces/WorkDashboard";
 import { useApp } from "@/components/app/AppProvider";
 import { useMobileShell } from "@/lib/use-media-query";
@@ -19,21 +18,29 @@ export function SpaceDashboard({
 }) {
   const { spaceId } = useApp();
   const mobile = useMobileShell();
-  // Build projects keep spaceId "build"; dashboard is unified Create.
+  // research / studio / build share the unified Canvas dashboard.
   const body =
-    spaceId === "home" || spaceId === "research" ? (
-      <ResearchDashboard />
+    spaceId === "home" ||
+    spaceId === "research" ||
+    spaceId === "build" ||
+    spaceId === "studio" ? (
+      <CreateDashboard />
     ) : spaceId === "work" ? (
       <WorkDashboard />
-    ) : spaceId === "build" || spaceId === "studio" ? (
-      <CreateDashboard />
     ) : spaceId === "connectors" ? (
       <ConnectorsDashboard />
     ) : null;
   if (!body) return null;
+  const dashKey =
+    spaceId === "build" ||
+    spaceId === "research" ||
+    spaceId === "home" ||
+    spaceId === "studio"
+      ? "studio"
+      : (spaceId ?? "none");
   return (
     <div
-      key={spaceId === "build" ? "studio" : (spaceId ?? "none")}
+      key={dashKey}
       className={cn(
         "min-h-0 flex-1",
         mobile &&

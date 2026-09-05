@@ -66,6 +66,7 @@ export function CreateProjectModal({
       onClose={onClose}
       labelledBy="create-project-title"
       className="flex w-[min(24rem,calc(100vw-2rem))] flex-col"
+      backdropClassName="bg-black/30"
     >
       <div className="px-5 pt-5 pb-4">
         <h2

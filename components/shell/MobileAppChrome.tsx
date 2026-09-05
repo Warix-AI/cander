@@ -14,10 +14,7 @@ import {
   MobilePanelActionsCluster,
   useMobilePanelActionsState,
 } from "@/components/shell/mobile/MobilePanelActions";
-import { CREATE_MENU_OPTIONS } from "@/components/spaces/NewCreateMenu";
-import {
-  EXPLORE_CREATE_OPTIONS,
-} from "@/components/spaces/NewExploreMenu";
+import { canvasStartOptions } from "@/lib/canvas-start-options";
 import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flow";
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import { normalizeProjectTitle } from "@/lib/project-name";
@@ -409,13 +406,14 @@ export function MobileAppChrome({ className }: { className?: string }) {
     ) : null;
 
   const projectPanelLabel =
-    spaceId === "research"
-      ? "Explore"
-      : spaceId === "studio" || spaceId === "build"
-        ? "Create"
-        : spaceId === "work"
-          ? "Work"
-          : "Create";
+    spaceId === "research" ||
+    spaceId === "studio" ||
+    spaceId === "build" ||
+    spaceId === "home"
+      ? "Canvas"
+      : spaceId === "work"
+        ? "Work"
+        : "Canvas";
 
   return (
     <>
@@ -516,7 +514,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
             ) : (
               <button
                 type="button"
-                aria-label="New chat"
+                aria-label="New"
                 onClick={startNewChat}
                 className={mobileChromeButtonClass}
               >
@@ -576,83 +574,41 @@ export function MobileAppChrome({ className }: { className?: string }) {
       >
         <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-1">
           <p className="px-1 text-[17px] font-medium tracking-[-0.02em]">
-            {spaceId === "research" ? "New search" : "New project"}
+            New project
           </p>
           <p className="mt-1 px-1 text-[13px] text-muted-foreground">
-            {spaceId === "research"
-              ? "Create a tab group for browsing and research."
-              : "Choose what to create."}
+            Choose what to create on Canvas.
           </p>
           <div className="mt-4 space-y-0.5">
-            {spaceId === "research" ? (
-              <>
-                <button
-                  type="button"
-                  disabled={newProjectBusy}
-                  onClick={() => {
-                    setNewProjectOpen(false);
+            {canvasStartOptions().map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                disabled={newProjectBusy}
+                onClick={() => {
+                  setNewProjectOpen(false);
+                  if (item.action === "quick-search") {
                     openQuickSearchBrowser();
-                  }}
-                  className="flex w-full flex-col rounded-[12px] px-3 py-3 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
-                >
-                  <span className="text-[15px] font-medium tracking-[-0.01em]">
-                    Quick search
-                  </span>
-                  <span className="text-[13px] text-muted-foreground">
-                    Browse
-                  </span>
-                </button>
-                {EXPLORE_CREATE_OPTIONS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    disabled={newProjectBusy}
-                    onClick={() => {
-                      setNewProjectOpen(false);
-                      openCreate({
-                        space: "research",
-                        kind: item.kind,
-                        defaultTitle: item.title,
-                        summary: item.summary,
-                      });
-                    }}
-                    className="flex w-full flex-col rounded-[12px] px-3 py-3 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
-                  >
-                    <span className="text-[15px] font-medium tracking-[-0.01em]">
-                      {item.label}
-                    </span>
-                    <span className="text-[13px] text-muted-foreground">
-                      {item.summary}
-                    </span>
-                  </button>
-                ))}
-              </>
-            ) : (
-              CREATE_MENU_OPTIONS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  disabled={newProjectBusy}
-                  onClick={() => {
-                    setNewProjectOpen(false);
-                    openCreate({
-                      space: item.space,
-                      kind: item.kind,
-                      defaultTitle: item.title,
-                      summary: item.summary,
-                    });
-                  }}
-                  className="flex w-full flex-col rounded-[12px] px-3 py-3 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
-                >
-                  <span className="text-[15px] font-medium tracking-[-0.01em]">
-                    {item.label}
-                  </span>
-                  <span className="text-[13px] text-muted-foreground">
-                    {item.summary}
-                  </span>
-                </button>
-              ))
-            )}
+                    return;
+                  }
+                  if (!item.space || !item.kind || !item.title) return;
+                  openCreate({
+                    space: item.space,
+                    kind: item.kind,
+                    defaultTitle: item.title,
+                    summary: item.summary,
+                  });
+                }}
+                className="flex w-full flex-col rounded-[12px] px-3 py-3 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
+              >
+                <span className="text-[15px] font-medium tracking-[-0.01em]">
+                  {item.label}
+                </span>
+                <span className="text-[13px] text-muted-foreground">
+                  {item.summary}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
       </MobileBottomSheet>

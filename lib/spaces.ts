@@ -1,20 +1,21 @@
 import type { BillingPlan, NavDestinationId, SpaceId } from "./types";
 
 /**
- * Product spaces — Explore (`research`) and Create (`studio`).
- * Build projects keep internal id `build` but live under Create in the UI.
+ * Product spaces — Canvas (`studio`) is the primary nav.
+ * Explore projects keep internal id `research` but open under Canvas.
+ * Build projects keep internal id `build` but live under Canvas in the UI.
  * Legacy `home` remains on SpaceId for redirects only.
  * Work exists in data/chat but is hidden from the primary menu.
  */
-export const PRIMARY_NAV_SPACES: SpaceId[] = ["research", "studio"];
+export const PRIMARY_NAV_SPACES: SpaceId[] = ["studio"];
 
 /** Work space stays in the product model but is not shown in nav. */
 export const SHOW_WORK_NAV = false;
 
-/** Create (studio) stays in the primary menu. */
+/** Canvas (studio) stays in the primary menu. */
 export const SHOW_STUDIO_NAV = true;
 
-/** Map legacy dashboard Home → Explore (`research`). */
+/** Map legacy dashboard Home → Explore projects (`research`). */
 export function resolveProductSpaceId(
   id: SpaceId | NavDestinationId | null | undefined,
 ): SpaceId | null {
@@ -24,25 +25,28 @@ export function resolveProductSpaceId(
 }
 
 /**
- * Nav destinations only — Build opens Create so the sidebar stays Explore + Create.
+ * Nav destinations only — research/build open Canvas (studio).
  * Do not use when resolving a project's stored `space` for ProjectBrowserPanel.
  */
 export function resolveNavSpaceId(
   id: SpaceId | NavDestinationId | null | undefined,
 ): SpaceId | null {
   const resolved = resolveProductSpaceId(id);
-  if (resolved === "build") return "studio";
+  if (resolved === "build" || resolved === "research") return "studio";
   return resolved;
 }
 
-/** Sidebar highlight: Build projects light up Create. */
+/** Sidebar highlight: research + build projects light up Canvas. */
 export function navSpaceMatches(
   navId: SidebarNavId,
   spaceId: SpaceId | NavDestinationId | null | undefined,
 ): boolean {
   if (!spaceId || spaceId === "connectors") return false;
   if (navId === spaceId) return true;
-  return navId === "studio" && spaceId === "build";
+  return (
+    navId === "studio" &&
+    (spaceId === "build" || spaceId === "research" || spaceId === "home")
+  );
 }
 
 /** Nav-only for now — shown disabled with “Coming soon”. */
@@ -114,6 +118,8 @@ export function isExtraNavId(id: string): id is ExtraNavId {
 export function isNavVisible(id: SidebarNavId): boolean {
   if (id === "studio") return SHOW_STUDIO_NAV;
   if (id === "work") return SHOW_WORK_NAV;
+  // research / build / home open Canvas via studio — not separate nav slots.
+  if (id === "research" || id === "build" || id === "home") return false;
   return true;
 }
 
@@ -124,7 +130,7 @@ export function isSidebarNavId(id: string): id is SidebarNavId {
 /** Connectors nav visible for all plans — installs ship later. */
 export const SHOW_CONNECTORS_NAV = true;
 
-/** Default sidebar — Explore, Create, Connectors, Recents. */
+/** Default sidebar — Canvas, Connectors, Recents. */
 export const DEFAULT_SIDEBAR_MAIN: SidebarNavId[] = [
   ...PRIMARY_NAV_SPACES,
   ...(SHOW_CONNECTORS_NAV ? (["connectors"] as const) : []),
@@ -169,6 +175,8 @@ export function spaceAllowed(
   if (id === "studio") return true;
   // Legacy dashboard home is not a nav destination.
   if (id === "home") return false;
+  // Explore / Build fold into Canvas (studio) in the sidebar.
+  if (id === "research" || id === "build") return false;
   // Work is hidden from the menu on desktop and mobile.
   if (id === "work") return SHOW_WORK_NAV;
   return allowed.includes(id as SpaceId);
@@ -197,9 +205,11 @@ export function migrateSidebarId(id: string): SidebarNavId | null {
   ) {
     return null;
   }
-  // Old Home dashboard slot → Explore (research).
-  if (id === "home") return "research";
-  // Build merged into Create (studio).
+  // Old Home dashboard slot → research projects (Canvas nav).
+  if (id === "home") return "studio";
+  // Explore merged into Canvas (studio).
+  if (id === "research") return "studio";
+  // Build merged into Canvas (studio).
   if (id === "build") return "studio";
   // Work removed from primary nav.
   if (id === "work") return null;

@@ -2,7 +2,6 @@ import {
   Blocks,
   Briefcase,
   Brush,
-  Compass,
   Globe,
   Hammer,
   History,
@@ -11,11 +10,11 @@ import { isExtraNavId, type SidebarNavId } from "./spaces";
 import type { SpaceId } from "./types";
 
 export const spaceIcons: Record<SpaceId, typeof Hammer> = {
-  home: Compass, // legacy alias — same glyph as Explore
+  home: Brush, // legacy alias — same glyph as Canvas
   work: Briefcase,
   build: Hammer,
-  research: Compass,
-  /** Create — brush (not Sparkles; Turbopack must pick this up after cache clear). */
+  research: Brush,
+  /** Canvas — brush. */
   studio: Brush,
 };
 

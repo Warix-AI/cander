@@ -1,47 +1,37 @@
 "use client";
 
 import { ChevronDown, Plus } from "lucide-react";
+import { useApp } from "@/components/app/AppProvider";
 import { DashBtn } from "@/components/spaces/ItemSet";
 import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flow";
 import { Dropdown } from "@/components/ui/Controls";
-import type { ProjectKind } from "@/lib/space-entities";
+import { canvasStartOptions } from "@/lib/canvas-start-options";
 
-export const BUILD_CREATE_OPTIONS: {
-  kind: ProjectKind;
-  label: string;
-  summary: string;
-}[] = [
-  { kind: "app", label: "App", summary: "Interactive app or tool" },
-  { kind: "site", label: "Website", summary: "Marketing site or landing page" },
-  {
-    kind: "automation",
-    label: "Agent",
-    summary: "Scheduled or triggered workflow",
-  },
-];
-
-type NewBuildMenuProps = {
+type NewCanvasMenuProps = {
   onCreated: (projectId: string) => void;
   /** Icon-only plus trigger (toolbar). */
   icon?: boolean;
 };
 
-export function NewBuildMenu({ onCreated, icon = false }: NewBuildMenuProps) {
+/** Unified Canvas `+` menu — all Canvas project starts. */
+export function NewCanvasMenu({ onCreated, icon = true }: NewCanvasMenuProps) {
+  const { openQuickSearchBrowser } = useApp();
   const { openCreate, busy, modal } = useCreateProjectFlow(onCreated);
+  const options = canvasStartOptions();
 
   return (
     <>
       <Dropdown
         align="end"
         matchTrigger={false}
-        menuClassName="min-w-[11rem]"
+        menuClassName="min-w-[12rem]"
         trigger={({ open, toggle }) =>
           icon ? (
-            <DashBtn primary icon onClick={toggle} label="New build">
+            <DashBtn primary icon onClick={toggle} label="New in Canvas">
               <Plus className="h-3.5 w-3.5" strokeWidth={1.6} />
             </DashBtn>
           ) : (
-            <DashBtn primary onClick={toggle} label="New build">
+            <DashBtn primary onClick={toggle} label="New in Canvas">
               New
               <ChevronDown
                 className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
@@ -53,18 +43,23 @@ export function NewBuildMenu({ onCreated, icon = false }: NewBuildMenuProps) {
       >
         {(close) => (
           <>
-            {BUILD_CREATE_OPTIONS.map((item) => (
+            {options.map((item) => (
               <button
-                key={item.kind}
+                key={item.id}
                 type="button"
                 role="menuitem"
                 disabled={busy}
                 onClick={() => {
                   close();
+                  if (item.action === "quick-search") {
+                    openQuickSearchBrowser();
+                    return;
+                  }
+                  if (!item.space || !item.kind || !item.title) return;
                   openCreate({
-                    space: "build",
+                    space: item.space,
                     kind: item.kind,
-                    defaultTitle: `New ${item.label}`,
+                    defaultTitle: item.title,
                     summary: item.summary,
                   });
                 }}
