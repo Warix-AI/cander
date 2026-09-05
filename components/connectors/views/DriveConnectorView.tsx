@@ -1,14 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  File,
-  Folder,
-  Image as ImageIcon,
-  Loader2,
-  Presentation,
-  Video,
-} from "lucide-react";
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import {
@@ -21,6 +20,17 @@ import {
 import { runConnectorViewOperation } from "@/lib/api/connector-client";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
+
+const FILE_TYPE_ICON = {
+  csv: "/file-types/csv.png",
+  image: "/file-types/image.png",
+  pdf: "/file-types/pdf.png",
+  movie: "/file-types/movie.png",
+  earth: "/file-types/earth.png",
+  folder: "/file-types/folder.png",
+  txt: "/file-types/txt.png",
+  file: "/file-types/file.png",
+} as const;
 
 type Page = "browse" | "detail" | "create";
 
@@ -129,6 +139,48 @@ function brandMarkId(mime: string, kind: "file" | "folder"): string | null {
   return null;
 }
 
+function isCsvMime(mime: string) {
+  const lower = mime.toLowerCase();
+  if (lower.includes("spreadsheetml")) return false;
+  return (
+    lower === "text/csv" ||
+    lower === "application/csv" ||
+    lower.includes("csv")
+  );
+}
+
+function isEarthMime(mime: string) {
+  const lower = mime.toLowerCase();
+  return (
+    lower === "application/vnd.google-apps.map" ||
+    lower.includes("google-earth") ||
+    lower.includes("kml") ||
+    lower.includes("kmz") ||
+    lower === "application/geo+json" ||
+    lower === "application/vnd.geo+json"
+  );
+}
+
+function fileTypeIconSrc(mime: string, kind: "file" | "folder"): string {
+  if (kind === "folder") return FILE_TYPE_ICON.folder;
+  if (isCsvMime(mime)) return FILE_TYPE_ICON.csv;
+  if (isEarthMime(mime)) return FILE_TYPE_ICON.earth;
+  if (mime.startsWith("image/") || mime === "image/svg+xml") {
+    return FILE_TYPE_ICON.image;
+  }
+  if (mime === "application/pdf") return FILE_TYPE_ICON.pdf;
+  if (mime.startsWith("video/")) return FILE_TYPE_ICON.movie;
+  if (
+    mime.startsWith("text/") ||
+    mime === "application/json" ||
+    mime === "application/xml" ||
+    mime.includes("markdown")
+  ) {
+    return FILE_TYPE_ICON.txt;
+  }
+  return FILE_TYPE_ICON.file;
+}
+
 function typeLabel(mime: string, kind: "file" | "folder") {
   if (kind === "folder") return "Folder";
   if (mime === "application/vnd.google-apps.document") return "Google Doc";
@@ -136,52 +188,51 @@ function typeLabel(mime: string, kind: "file" | "folder") {
   if (mime === "application/vnd.google-apps.presentation") return "Google Slides";
   if (mime === "application/vnd.google-apps.drawing") return "Drawing";
   if (mime === "application/vnd.google-apps.form") return "Form";
+  if (mime === "application/vnd.google-apps.map" || isEarthMime(mime)) {
+    return "Map";
+  }
   if (mime.startsWith("image/")) return "Image";
   if (mime.startsWith("video/")) return "Video";
   if (mime.startsWith("audio/")) return "Audio";
   if (mime === "application/pdf") return "PDF";
-  if (mime.startsWith("text/") || mime.includes("csv")) return "Text";
+  if (isCsvMime(mime)) return "CSV";
+  if (mime.startsWith("text/")) return "Text";
   return "File";
+}
+
+function isVideoMimeClient(mime: string) {
+  return mime.startsWith("video/");
 }
 
 function DriveTypeIcon({
   mime,
   kind,
+  size = "sm",
 }: {
   mime: string;
   kind: "file" | "folder";
+  size?: "sm" | "md";
 }) {
   const brand = brandMarkId(mime, kind);
+  const dim = size === "md" ? "h-10 w-10" : "h-8 w-8";
   if (brand) {
     return (
       <ConnectorMark
         id={brand}
-        size="xs"
-        className="!h-5 !w-5"
+        size={size === "md" ? "md" : "sm"}
+        className={cn(dim, "!bg-transparent")}
       />
     );
   }
-  if (kind === "folder") {
-    return <Folder className="h-4 w-4 text-[#E37400]" strokeWidth={1.7} />;
-  }
-  if (mime.startsWith("image/")) {
-    return <ImageIcon className="h-4 w-4 text-[#1A73E8]" strokeWidth={1.7} />;
-  }
-  if (mime === "application/vnd.google-apps.presentation") {
-    return <Presentation className="h-4 w-4 text-[#F4B400]" strokeWidth={1.7} />;
-  }
-  if (mime.startsWith("video/")) {
-    return <Video className="h-4 w-4 text-[#1A73E8]" strokeWidth={1.7} />;
-  }
-  return <File className="h-4 w-4 text-muted-foreground" strokeWidth={1.7} />;
-}
-
-function iconWellClass(mime: string, kind: "file" | "folder") {
-  if (kind === "folder") return "bg-[#FBBC04]/15";
-  if (mime === "application/vnd.google-apps.spreadsheet") return "bg-[#0F9D58]/12";
-  if (mime === "application/vnd.google-apps.document") return "bg-[#1A73E8]/12";
-  if (mime === "application/vnd.google-apps.presentation") return "bg-[#F4B400]/15";
-  return "bg-muted";
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={fileTypeIconSrc(mime, kind)}
+      alt=""
+      draggable={false}
+      className={cn(dim, "shrink-0 object-contain")}
+    />
+  );
 }
 
 function clientEmbedUrl(file: DriveFile): string {
@@ -363,12 +414,14 @@ export function DriveConnectorView({
       setError(null);
       setStatus(null);
       setPage("detail");
-      // Instant Google embed so the panel never feels empty while Composio loads.
+      const video = isVideoMimeClient(file.mimeType);
+      // Videos: skip Drive iframe (spins forever). Everything else gets an
+      // instant Google embed while Composio download enriches the preview.
       setPreview({
-        previewKind: "embed",
+        previewKind: video ? "video" : "embed",
         mimeType: file.mimeType,
         displayUrl: null,
-        embedUrl: clientEmbedUrl(file),
+        embedUrl: video ? null : clientEmbedUrl(file),
         openUrl: clientOpenUrl(file),
         name: file.name,
         linkLabel: "Open in Drive",
@@ -386,9 +439,26 @@ export function DriveConnectorView({
             name: file.name,
           },
         });
-        setPreview(parsePreview(result.data, file));
+        const next = parsePreview(result.data, file);
+        if (video) {
+          // Never fall back to Drive video iframe — it can't replay cleanly.
+          setPreview({
+            ...next,
+            previewKind: next.displayUrl ? "video" : "unsupported",
+            embedUrl: null,
+          });
+        } else {
+          setPreview(next);
+        }
       } catch {
-        // Keep the embed preview already on screen.
+        if (video) {
+          setPreview((prev) =>
+            prev
+              ? { ...prev, previewKind: "unsupported", displayUrl: null, embedUrl: null }
+              : prev,
+          );
+        }
+        // Non-video: keep the embed preview already on screen.
       } finally {
         setPreviewLoading(false);
       }
@@ -536,11 +606,11 @@ export function DriveConnectorView({
     preview?.previewKind === "embed"
       ? preview.embedUrl
       : preview?.previewKind === "pdf" ||
-          preview?.previewKind === "image" ||
-          preview?.previewKind === "video" ||
-          preview?.previewKind === "audio"
+          preview?.previewKind === "image"
         ? preview.displayUrl
-        : preview?.embedUrl;
+        : preview?.previewKind === "video" || preview?.previewKind === "audio"
+          ? null
+          : preview?.embedUrl;
 
   return (
     <WorkspacePanelFrame status={status} error={error}>
@@ -604,7 +674,9 @@ export function DriveConnectorView({
 
       {page === "detail" && selected ? (
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-          {previewLoading ? (
+          {previewLoading &&
+          preview?.previewKind !== "video" &&
+          preview?.previewKind !== "unsupported" ? (
             <div className="pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/90 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur-sm">
               <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.7} />
               Loading…
@@ -631,17 +703,61 @@ export function DriveConnectorView({
                 />
               </div>
             </PreviewFrame>
-          ) : preview?.previewKind === "video" && preview.displayUrl ? (
-            <PreviewFrame title={preview.name}>
-              <video
-                controls
-                src={preview.displayUrl}
-                className="h-full w-full bg-black object-contain"
-              />
-            </PreviewFrame>
+          ) : preview?.previewKind === "video" ? (
+            preview.displayUrl ? (
+              <PreviewFrame title={preview.name}>
+                <video
+                  key={preview.displayUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  src={preview.displayUrl}
+                  className="h-full w-full bg-black object-contain"
+                  onError={() => {
+                    setPreview((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            previewKind: "unsupported",
+                            displayUrl: null,
+                          }
+                        : prev,
+                    );
+                  }}
+                />
+              </PreviewFrame>
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                {previewLoading ? (
+                  <>
+                    <Loader2
+                      className="h-5 w-5 animate-spin text-muted-foreground"
+                      strokeWidth={1.7}
+                    />
+                    <p className="text-[13px] text-muted-foreground">
+                      Loading video…
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <DriveTypeIcon
+                      mime={selected.mimeType}
+                      kind="file"
+                      size="md"
+                    />
+                    <p className="text-[13px] font-medium">
+                      Couldn’t play this video here
+                    </p>
+                    <p className="max-w-sm text-[12px] text-muted-foreground">
+                      Use Open in the bottom bar to watch it in Google Drive.
+                    </p>
+                  </>
+                )}
+              </div>
+            )
           ) : preview?.previewKind === "audio" && preview.displayUrl ? (
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6">
-              <DriveTypeIcon mime={selected.mimeType} kind="file" />
+              <DriveTypeIcon mime={selected.mimeType} kind="file" size="md" />
               <audio controls src={preview.displayUrl} className="w-full max-w-md" />
             </div>
           ) : previewSrc ? (
@@ -656,15 +772,11 @@ export function DriveConnectorView({
             </PreviewFrame>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-              <div
-                className={cn(
-                  "flex h-12 w-12 items-center justify-center",
-                  SHELL_G3_RADIUS,
-                  iconWellClass(selected.mimeType, selected.kind),
-                )}
-              >
-                <DriveTypeIcon mime={selected.mimeType} kind={selected.kind} />
-              </div>
+              <DriveTypeIcon
+                mime={selected.mimeType}
+                kind={selected.kind}
+                size="md"
+              />
               <p className="text-[13px] font-medium">Couldn’t load preview</p>
               <p className="max-w-sm text-[12px] text-muted-foreground">
                 Use Open in the bottom bar to view this{" "}
@@ -728,15 +840,9 @@ export function DriveConnectorView({
                     else void openFile(file);
                   }}
                   leading={
-                    <div
-                      className={cn(
-                        "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center",
-                        SHELL_G3_RADIUS,
-                        iconWellClass(file.mimeType, file.kind),
-                      )}
-                    >
+                    <span className="mt-0.5 shrink-0">
                       <DriveTypeIcon mime={file.mimeType} kind={file.kind} />
-                    </div>
+                    </span>
                   }
                 />
               ))

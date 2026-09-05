@@ -222,15 +222,16 @@ function normalizeDownloadPreview(input: {
   if (isTextishMime(mimeType) && displayUrl) previewKind = "text";
   else if (isImageMime(mimeType) && displayUrl) previewKind = "image";
   else if (isPdfMime(mimeType) && displayUrl) previewKind = "pdf";
-  else if (isVideoMime(mimeType) && displayUrl) previewKind = "video";
+  else if (isVideoMime(mimeType) || isVideoMime(sourceMime)) previewKind = "video";
   else if (isAudioMime(mimeType) && displayUrl) previewKind = "audio";
   else if (displayUrl && !sourceMime?.startsWith("application/vnd.google-apps.")) {
     // Native binary with a downloadable URL — still embed Drive preview as fallback UI.
     if (isImageMime(sourceMime)) previewKind = "image";
     else if (isPdfMime(sourceMime)) previewKind = "pdf";
-    else if (isVideoMime(sourceMime)) previewKind = "video";
     else previewKind = "embed";
   }
+
+  const isVideo = previewKind === "video";
 
   return {
     id: pickString(payload.id) ?? fileId,
@@ -238,7 +239,7 @@ function normalizeDownloadPreview(input: {
     mimeType,
     sourceMimeType: sourceMime ?? null,
     displayUrl,
-    embedUrl,
+    embedUrl: isVideo ? null : embedUrl,
     openUrl,
     previewKind,
     linkLabel: pickString(payload.link_label, payload.linkLabel) ?? "Open in Drive",
@@ -307,16 +308,18 @@ export const gdriveViewAdapter: ConnectorViewAdapter = {
             exportMimeForDriveFile(sourceMime);
 
           // Always return an embeddable Google preview so the UI can show something
-          // even when Composio download fails (access, size, format).
+          // even when Composio download fails (access, size, format). Videos skip
+          // Drive iframe embeds — they spin forever and don't allow clean replay.
+          const isVideo = isVideoMime(sourceMime);
           const fallback = {
             id: fileId,
             name: pickString(args.name) ?? "File",
             mimeType: sourceMime ?? "application/octet-stream",
             sourceMimeType: sourceMime ?? null,
             displayUrl: null as string | null,
-            embedUrl: embedUrlForDriveFile(fileId, sourceMime),
+            embedUrl: isVideo ? null : embedUrlForDriveFile(fileId, sourceMime),
             openUrl: openUrlForDriveFile(fileId, sourceMime, webViewLink),
-            previewKind: "embed" as const,
+            previewKind: (isVideo ? "video" : "embed") as "video" | "embed",
             linkLabel: "Open in Drive",
             exportApplied: false,
           };
