@@ -34,7 +34,12 @@ export type ConnectorMention = {
 /** Extra aliases beyond catalog `name` / `id`. Prefer product-specific terms. */
 const CONNECTOR_ALIASES: Record<string, string[]> = {
   gmail: ["gmail", "google mail", "googlemail"],
-  gcal: ["google calendar", "gcal", "g calendar"],
+  gcal: [
+    "google calendar",
+    "gcal",
+    "g calendar",
+    "google cal",
+  ],
   gdrive: ["google drive", "gdrive", "g drive"],
   gsheets: ["google sheets", "gsheets", "g sheets", "spreadsheet", "spreadsheets"],
   gdocs: ["google docs", "gdocs", "g docs", "google documents"],
@@ -64,6 +69,19 @@ const GENERIC_MAIL_ALIASES = [
   "mailbox",
 ];
 const MAIL_CONNECTOR_IDS = new Set(["gmail", "outlook"]);
+
+/**
+ * Generic calendar words — only when exactly one calendar connector is connected
+ * (today: Google Calendar; later Outlook Calendar, etc.).
+ */
+const GENERIC_CALENDAR_ALIASES = [
+  "calendar",
+  "calendars",
+  "agenda",
+  "schedule",
+  "schedules",
+];
+const CALENDAR_CONNECTOR_IDS = new Set(["gcal"]);
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -165,6 +183,27 @@ export function detectConnectorMentions(
     const only = mailConnected[0]!;
     if (!claimed.has(only.connectorId)) {
       for (const trigger of GENERIC_MAIL_ALIASES) {
+        const hit = firstMatchInText(text, trigger);
+        if (!hit) continue;
+        found.push({
+          connectionId: only.connectionId,
+          connectorId: only.connectorId,
+          label: only.label,
+          matched: hit.matched,
+          index: hit.index,
+        });
+        break;
+      }
+    }
+  }
+
+  const calendarConnected = [...byConnector.values()].filter((c) =>
+    CALENDAR_CONNECTOR_IDS.has(c.connectorId),
+  );
+  if (calendarConnected.length === 1) {
+    const only = calendarConnected[0]!;
+    if (!claimed.has(only.connectorId)) {
+      for (const trigger of GENERIC_CALENDAR_ALIASES) {
         const hit = firstMatchInText(text, trigger);
         if (!hit) continue;
         found.push({
@@ -325,6 +364,7 @@ export function dismissedMentionsStillPresent(
 /**
  * Connected apps the user can attach from a dismissed trigger word.
  * Mail triggers (product name or generic "email") offer every connected mail app.
+ * Calendar triggers offer every connected calendar app.
  */
 export function relatedCandidatesForTrigger(
   trigger: Pick<
@@ -348,6 +388,27 @@ export function relatedCandidatesForTrigger(
           (c) => c.connectorId === trigger.preferredConnectorId,
         ),
         ...mail.filter(
+          (c) => c.connectorId !== trigger.preferredConnectorId,
+        ),
+      ];
+    }
+  }
+
+  const isGenericCalendar = GENERIC_CALENDAR_ALIASES.includes(matchedNorm);
+  const isCalendarFamily =
+    isGenericCalendar ||
+    CALENDAR_CONNECTOR_IDS.has(trigger.preferredConnectorId);
+
+  if (isCalendarFamily) {
+    const calendars = candidates.filter((c) =>
+      CALENDAR_CONNECTOR_IDS.has(c.connectorId),
+    );
+    if (calendars.length) {
+      return [
+        ...calendars.filter(
+          (c) => c.connectorId === trigger.preferredConnectorId,
+        ),
+        ...calendars.filter(
           (c) => c.connectorId !== trigger.preferredConnectorId,
         ),
       ];

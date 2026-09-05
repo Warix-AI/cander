@@ -1116,13 +1116,39 @@ export function Composer({
     } catch {
       /* never block send */
     }
+    // Detect connectors from live text so trigger words still scope the turn
+    // even if the inline chip hasn't finished syncing (typed send / paste).
+    const liveMentions = detectConnectorMentions(value, detectCandidates).filter(
+      (m) => !dismissedConnectorIds.has(m.connectorId),
+    );
+    const liveScopes =
+      connectorScopes.length > 0
+        ? connectorScopes
+        : liveMentions.map((m) => ({
+            connectionId: m.connectionId,
+            connectorId: m.connectorId,
+            label: m.label,
+          }));
+    const liveConnectorPayload =
+      liveScopes.length > 0
+        ? {
+            selectedConnectionIds: liveScopes.map((c) => c.connectionId),
+            selectedConnectionId: liveScopes[0]!.connectionId,
+            scopedConnectorId: liveScopes[0]!.connectorId,
+            composerConnectors: liveScopes.map((c) => ({
+              connectionId: c.connectionId,
+              connectorId: c.connectorId,
+              label: c.label,
+            })),
+          }
+        : {};
     // Keep in-flight draft alive until Send consumes it.
     speculationRef.current?.prepareSend();
     onSend(body || "", {
       ...(usableImages.length ? { attachments: usableImages } : {}),
       ...(files.length ? { files } : {}),
       ...(sendAttachments.length ? { sendAttachments } : {}),
-      ...connectorScopePayload,
+      ...liveConnectorPayload,
     });
     clearComposerDraft(draftKeyRef.current);
     setValue("");

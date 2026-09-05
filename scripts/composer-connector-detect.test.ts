@@ -28,6 +28,11 @@ const gmail = {
   connectorId: "gmail",
   label: "Gmail",
 };
+const gcal = {
+  connectionId: "conn-gcal",
+  connectorId: "gcal",
+  label: "Google Calendar",
+};
 const slack = {
   connectionId: "conn-slack",
   connectorId: "slack",
@@ -77,6 +82,60 @@ describe("composer connector detect", () => {
       outlook,
     ]);
     assert.equal(ambiguous.length, 0);
+  });
+
+  it("uses generic calendar when Google Calendar is the only calendar connected", () => {
+    const hits = detectConnectorMentions(
+      "Cander, What's on my calendar this month?",
+      [gmail, gcal],
+    );
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0]?.connectorId, "gcal");
+    assert.match(hits[0]!.matched, /calendar/i);
+  });
+
+  it("matches Google Calendar product name", () => {
+    const hits = detectConnectorMentions(
+      "Check my Google Calendar for next week",
+      [gcal],
+    );
+    assert.equal(hits[0]?.connectorId, "gcal");
+    assert.match(hits[0]!.matched, /google calendar/i);
+  });
+
+  it("does not match calendar when that connector is not connected", () => {
+    const hits = detectConnectorMentions("what's on my calendar", [gmail]);
+    assert.equal(hits.length, 0);
+  });
+
+  it("replaces calendar inline with the Google Calendar chip", () => {
+    let blocks: ComposerBlock[] = blocksFromText(
+      "What's on my calendar this month?",
+    );
+    const mentions = detectConnectorMentions(textFromBlocks(blocks), [gcal]);
+    assert.equal(mentions[0]?.matched.toLowerCase(), "calendar");
+    blocks = syncDetectedConnectorBlocks(blocks, mentions, {
+      dismissedConnectorIds: new Set(),
+      manualConnectorIds: new Set(),
+    }).blocks;
+    assert.equal(connectorsFromBlocks(blocks).length, 1);
+    assert.equal(connectorsFromBlocks(blocks)[0]?.connectorId, "gcal");
+    assert.equal(textFromBlocks(blocks).toLowerCase().includes("calendar"), false);
+    assert.match(
+      serializeComposerBlocks(blocks),
+      /What's on my Google Calendar this month/i,
+    );
+  });
+
+  it("offers related calendar connectors for a dismissed calendar trigger", () => {
+    const related = relatedCandidatesForTrigger(
+      { matched: "calendar", preferredConnectorId: "gcal" },
+      [gcal, gmail, slack],
+    );
+    assert.deepEqual(
+      related.map((r) => r.connectorId),
+      ["gcal"],
+    );
   });
 
   it("does not match connector names that follow @ in an email address", () => {

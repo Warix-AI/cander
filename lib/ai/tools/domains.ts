@@ -53,7 +53,13 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "browser.current.capture_viewport",
     "browser.current.get_metadata",
   ],
-  scheduling: [],
+  scheduling: [
+    "gcal.listCalendars",
+    "gcal.listEvents",
+    "gcal.findEvents",
+    "gcal.createEvent",
+    "gcal.quickAdd",
+  ],
   comms: [
     "gmail.search",
     "gmail.read",
@@ -373,6 +379,18 @@ export function resolveAllowedToolsForTurn(opts: {
     ) {
       domains.add("comms");
     }
+    if (
+      /\b(google\s+calendar|gcal|g\s+calendar)\b/i.test(content) ||
+      /\b(calendar|calendars|agenda|schedule|schedules)\b/i.test(content) ||
+      /\b(what('?s| is)|whats)\b[\s\S]{0,40}\b(on my|on the)\b[\s\S]{0,24}\b(calendar|schedule|agenda)\b/i.test(
+        content,
+      ) ||
+      /\b(check|read|show|list|find|summarize)\b[\s\S]{0,40}\b(my )?(calendar|schedule|agenda|events?)\b/i.test(
+        content,
+      )
+    ) {
+      domains.add("scheduling");
+    }
   } else if (
     !taskActive &&
     !domains.size &&
@@ -401,6 +419,22 @@ export function isCommsConnectorIntent(content: string): boolean {
     /\b(gmail|inbox|e-?mail|emails?|mailbox)\b/i.test(text) ||
     /\b(unread|sent|drafts?)\b[\s\S]{0,32}\b(mail|email|message)/i.test(text) ||
     /\b(check|read|search|find|summarize|show|list)\b[\s\S]{0,40}\b(my )?(email|mail|inbox|gmail)\b/i.test(
+      text,
+    )
+  );
+}
+
+/** True when the user message should unlock calendar connector tools. */
+export function isCalendarConnectorIntent(content: string): boolean {
+  const text = (content || "").trim();
+  if (!text) return false;
+  return (
+    /\b(google\s+calendar|gcal|g\s+calendar)\b/i.test(text) ||
+    /\b(calendar|calendars|agenda)\b/i.test(text) ||
+    /\b(what('?s| is)|whats)\b[\s\S]{0,40}\b(on my|on the)\b[\s\S]{0,24}\b(calendar|schedule|agenda)\b/i.test(
+      text,
+    ) ||
+    /\b(check|read|show|list|find|summarize|add|create|book)\b[\s\S]{0,40}\b(my )?(calendar|schedule|agenda|events?)\b/i.test(
       text,
     )
   );

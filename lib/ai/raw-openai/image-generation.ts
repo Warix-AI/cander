@@ -97,8 +97,12 @@ export function detectImageGenerationIntent(
   }
 
   if (studio) {
+    // Studio projects: verb + visual deliverable (not any “make/create…” chat).
     if (
       /\b(generate|create|make|draw|render|paint|design|sketch|illustrate|imagine)\b/.test(
+        t,
+      ) &&
+      /\b(poster|logo|thumbnail|icon|wallpaper|banner|cover|flyer|mockup|album art|concept art|artwork|illustration|picture|photo|image|drawing|portrait|scene|character|landscape)\b/.test(
         t,
       )
     ) {

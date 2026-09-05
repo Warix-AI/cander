@@ -323,6 +323,18 @@ describe("Raw multimodal isolation", () => {
       true,
     );
     assert.equal(
+      detectImageGenerationIntent("make an app that tracks habits", {
+        space: "studio",
+      }),
+      false,
+    );
+    assert.equal(
+      detectImageGenerationIntent("create a better layout for this page", {
+        space: "studio",
+      }),
+      false,
+    );
+    assert.equal(
       detectImageGenerationIntent("What model do you use to generate images?"),
       false,
     );

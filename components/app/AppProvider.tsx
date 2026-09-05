@@ -2208,11 +2208,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Async image generation — placeholder card immediately; no chat lock.
+      // Studio-broad matching only inside an Image (studio) project — not Create home nav.
+      const imageIntentSpace =
+        project?.space === "studio" ||
+        chatSpaceId(space) === "studio" ||
+        space === "studio"
+          ? "studio"
+          : (chatSpaceId(space) ?? (typeof space === "string" ? space : null));
       const imageGenIntent =
         useLiveAi &&
         isRawOpenAIModeEnabled() &&
         detectImageGenerationIntent(trimmed, {
-          space: chatSpaceId(space) ?? space ?? spaceId,
+          space: imageIntentSpace,
         }) &&
         attachments.length === 0 &&
         fileAttachments.length === 0;

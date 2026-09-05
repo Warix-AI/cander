@@ -51,7 +51,13 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "browser.current.capture_viewport",
     "browser.current.get_metadata",
   ],
-  scheduling: [],
+  scheduling: [
+    "gcal.listCalendars",
+    "gcal.listEvents",
+    "gcal.findEvents",
+    "gcal.createEvent",
+    "gcal.quickAdd",
+  ],
   comms: ["gmail.search", "gmail.read"],
   cloud_work: [
     "create_work_task",
@@ -378,6 +384,18 @@ export function resolveAllowedToolsForTurn(opts: {
       )
     ) {
       domains.add("comms");
+    }
+    if (
+      /\b(google\s+calendar|gcal|g\s+calendar)\b/i.test(content) ||
+      /\b(calendar|calendars|agenda|schedule|schedules)\b/i.test(content) ||
+      /\b(what('?s| is)|whats)\b[\s\S]{0,40}\b(on my|on the)\b[\s\S]{0,24}\b(calendar|schedule|agenda)\b/i.test(
+        content,
+      ) ||
+      /\b(check|read|show|list|find|summarize)\b[\s\S]{0,40}\b(my )?(calendar|schedule|agenda|events?)\b/i.test(
+        content,
+      )
+    ) {
+      domains.add("scheduling");
     }
   } else if (
     !taskActive &&

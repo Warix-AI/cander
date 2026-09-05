@@ -85,6 +85,7 @@ import {
   BROWSER_CHROME_CHIP_HOVER,
 } from "@/lib/shell-chrome";
 import { decodeTextDataUrl } from "@/lib/chat-document-attach";
+import { chatAttachmentImageUrl } from "@/lib/chat-attachment-image-url";
 import { updateChatThreads } from "@/lib/api/chat-store";
 import {
   publishMarkdownShare,
@@ -792,7 +793,7 @@ export function ProjectBrowserPanel({
   const studioImageJobsSig = studioImageJobs
     .map(
       (job) =>
-        `${job.generationId}:${job.status}:${job.imageUrl?.trim() ?? ""}`,
+        `${job.generationId}:${job.status}:${job.imageUrl?.trim() ?? ""}:${job.attachmentId?.trim() ?? ""}`,
     )
     .join("|");
 
@@ -821,13 +822,17 @@ export function ProjectBrowserPanel({
 
       if (targetIndex < 0) {
         const imageUrl = job.imageUrl?.trim() ?? "";
+        const seedUrl =
+          job.attachmentId?.trim()
+            ? chatAttachmentImageUrl(job.attachmentId.trim())
+            : imageUrl;
         const matchByUrl =
-          imageUrl.length > 0
+          seedUrl.length > 0
             ? nextTabs.findIndex(
                 (tab) =>
                   tab.kind === "studio-image" &&
                   !tab.boundGenerationId &&
-                  tab.url?.trim() === imageUrl,
+                  (tab.url?.trim() === seedUrl || tab.url?.trim() === imageUrl),
               )
             : -1;
         if (matchByUrl >= 0) {
@@ -884,22 +889,31 @@ export function ProjectBrowserPanel({
       if (!target) return;
 
       const imageUrl = job.imageUrl?.trim();
-      if (job.status === "completed" && imageUrl) {
+      const seedUrl =
+        job.attachmentId?.trim()
+          ? chatAttachmentImageUrl(job.attachmentId.trim())
+          : imageUrl;
+      if (job.status === "completed" && seedUrl) {
         const existingUrl = target.url?.trim() ?? "";
         const hasCanvas =
           existingUrl.length > 0 && existingUrl !== "about:blank";
-        const sameImage = existingUrl === imageUrl;
+        const sameImage =
+          existingUrl === seedUrl || existingUrl === imageUrl;
         // Seed from chat when empty. Also replace a stale/wrong URL that isn't
         // a durable studio asset yet (attachment URLs / prior bind races).
+        // Prefer attachment URLs over inline data URLs so localStorage stays small.
         const shouldSeed =
           !hasCanvas ||
-          (!sameImage && !isStudioAssetUrl(existingUrl));
+          (!sameImage && !isStudioAssetUrl(existingUrl)) ||
+          (existingUrl.startsWith("data:") &&
+            seedUrl !== existingUrl &&
+            !seedUrl.startsWith("data:"));
         if (shouldSeed) {
           nextTabs[targetIndex] = {
             ...target,
             boundGenerationId: genId,
-            url: imageUrl,
-            history: [imageUrl],
+            url: seedUrl,
+            history: [seedUrl],
             historyIndex: 0,
             title:
               target.title === "Canvas" ||
@@ -2956,19 +2970,16 @@ function StudioMediaSurface({
   useEffect(() => {
     if (kind !== "studio-image") return;
     if (!imageJob || imageJob.status !== "completed") return;
+    const generationId = imageJob.generationId;
     const url = imageJob.imageUrl?.trim();
     if (!url) return;
-    if (appliedGenerationRef.current === imageJob.generationId) return;
+    if (appliedGenerationRef.current === generationId) return;
 
     // Durable canvas already exists (including edits) — do not re-seed from chat.
     if (isStudioAssetUrl(src)) {
-      appliedGenerationRef.current = imageJob.generationId;
+      appliedGenerationRef.current = generationId;
       return;
     }
-
-    appliedGenerationRef.current = imageJob.generationId;
-
-    let cancelled = false;
 
     // Persist into studio_project_assets even when chat already rewrote the URL
     // to a durable attachment path (so other clients can restore the canvas).
@@ -2978,7 +2989,12 @@ function StudioMediaSurface({
         url.includes("/api/ai/raw-openai/attachments/") ||
         (!isStudioAssetUrl(url) && url.startsWith("http")));
 
-    if (!shouldPersist) return;
+    if (!shouldPersist) {
+      appliedGenerationRef.current = generationId;
+      return;
+    }
+
+    let cancelled = false;
 
     void (async () => {
       try {
@@ -3003,6 +3019,9 @@ function StudioMediaSurface({
           "generate",
           lockedAspectRatio ?? null,
         );
+        if (!cancelled) {
+          appliedGenerationRef.current = generationId;
+        }
       } catch (err) {
         if (cancelled) return;
         setError(
@@ -3014,8 +3033,8 @@ function StudioMediaSurface({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- persist when job completes
-  }, [kind, imageJob?.generationId, imageJob?.status, imageJob?.imageUrl, src]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- persist once per completed generation
+  }, [kind, imageJob?.generationId, imageJob?.status, imageJob?.imageUrl]);
 
   const runEdit = async (
     action: "remove-bg" | "resize" | "suggest-edit",

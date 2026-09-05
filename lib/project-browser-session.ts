@@ -372,10 +372,27 @@ function persistKey(key: string, session: ProjectBrowserSession) {
     ...session,
     tabs: session.tabs
       .filter((tab) => tab.kind !== "agent-browser")
-      .map((tab) => ({
-        ...tab,
-        computerSessionId: undefined,
-      })),
+      .map((tab) => {
+        const next = {
+          ...tab,
+          computerSessionId: undefined,
+        };
+        // Never write multi-MB data URLs into localStorage (quota kills the write
+        // and can wipe the session key). Canvas rebinds via boundGenerationId.
+        if (
+          tab.kind === "studio-image" &&
+          typeof tab.url === "string" &&
+          tab.url.startsWith("data:")
+        ) {
+          return {
+            ...next,
+            url: "",
+            history: [""],
+            historyIndex: 0,
+          };
+        }
+        return next;
+      }),
   };
   if (
     !durable.tabs.some((tab) => tab.id === durable.activeTabId) &&
