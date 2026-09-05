@@ -151,6 +151,7 @@ const VIDEO_PIP_INSTALL_SCRIPT = `(() => {
     clearMarks();
     media.setAttribute(ATTR, '1');
     markAncestors(media);
+    // Blur often pauses before PiP starts — resume so the float keeps playing.
     if (media.tagName === 'VIDEO') {
       try { void media.play(); } catch (_) {}
     }

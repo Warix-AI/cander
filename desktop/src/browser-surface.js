@@ -501,6 +501,11 @@ async function hasPlayingVideo(tabId) {
   if (!entry) return false;
   const wc = entry.view.webContents;
   try {
+    // Audible is more reliable than DOM <video> for YouTube / SPA players,
+    // especially right as focus leaves the tab.
+    if (typeof wc.isCurrentlyAudible === "function" && wc.isCurrentlyAudible()) {
+      return true;
+    }
     await wc.executeJavaScript(VIDEO_PIP_INSTALL_SCRIPT, true);
     return Boolean(
       await wc.executeJavaScript(
@@ -573,8 +578,13 @@ function showTab(tabId, bounds) {
     if (!other.visible && other.lastBounds && other.lastBounds.width === 0) {
       continue;
     }
+    const wasVisible = other.visible;
     other.visible = false;
     other.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+    // Background tabs must stay paused (no surprise resume on return).
+    if (wasVisible) {
+      void pauseMedia(id);
+    }
   }
   if (chromeOverlay && tabId !== pipTabId) {
     entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
@@ -621,6 +631,8 @@ function hideTab(tabId) {
   if (!entry) return;
   entry.visible = false;
   entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+  // Keep background tabs paused — Chromium often auto-resumes when shown again.
+  void pauseMedia(tabId);
 }
 
 /** Collapse all views so React overlays receive clicks (dropdown menus, etc.). */

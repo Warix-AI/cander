@@ -708,7 +708,9 @@ export function ProjectBrowserPanel({
     };
   }, [surfaceActive, active?.id, active?.kind]);
 
-  // Visible panel focused on the PiP source tab → restore video into the panel.
+  // Returning to a project whose active tab is already the PiP source → restore
+  // into the panel. Do NOT depend on pipForActive: entering PiP while still on
+  // that tab (before selectTab commits the next tab) must not immediately dismiss.
   useEffect(() => {
     if (!surfaceActive) return;
     if (!active || active.kind !== "web") return;
@@ -725,7 +727,7 @@ export function ProjectBrowserPanel({
     return () => {
       cancelled = true;
     };
-  }, [surfaceActive, active?.id, pipForActive]);
+  }, [surfaceActive, active?.id]);
 
   // Leaving this browser session — promote playing tabs to PiP, destroy the rest.
   useEffect(() => {
