@@ -140,7 +140,9 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         prev.syncing === next.syncing &&
         prev.busy === next.busy &&
         prev.canGoBack === next.canGoBack &&
-        prev.primaryLabel === next.primaryLabel
+        prev.primaryLabel === next.primaryLabel &&
+        Boolean(prev.calendarNav) === Boolean(next.calendarNav) &&
+        prev.calendarNav?.viewLabel === next.calendarNav?.viewLabel
       ) {
         return prev;
       }
@@ -314,7 +316,7 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
       {/* Bottom header — connector tools or web URL nav */}
       <div
         className={cn(
-          "relative flex h-[45px] min-w-0 shrink-0 items-center gap-1 border-t border-black/5 px-2 dark:border-white/10",
+          "relative flex h-[45px] min-w-0 shrink-0 items-center gap-1 border-y border-black/5 px-2 dark:border-white/10",
           CONNECTOR_CHROME_BG,
         )}
       >
@@ -421,10 +423,44 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
                 <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
               </ChromeBtn>
             ) : null}
+            {workspaceToolbar?.calendarNav && !workspaceToolbar.canGoBack ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    workspaceToolbarRef.current?.calendarNav?.onToday()
+                  }
+                  className="inline-flex h-7 shrink-0 items-center rounded-full border border-border px-2.5 text-[11.5px] font-medium tracking-[-0.01em] text-foreground hover:bg-muted"
+                >
+                  Today
+                </button>
+                <ChromeBtn
+                  label="Previous month"
+                  onClick={() =>
+                    workspaceToolbarRef.current?.calendarNav?.onPrev()
+                  }
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </ChromeBtn>
+                <ChromeBtn
+                  label="Next month"
+                  onClick={() =>
+                    workspaceToolbarRef.current?.calendarNav?.onNext()
+                  }
+                >
+                  <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </ChromeBtn>
+              </>
+            ) : null}
             <span className="truncate px-1 text-[12.5px] font-medium text-foreground">
               {workspaceToolbar?.title ?? title}
             </span>
             <div className="ml-auto flex items-center gap-0.5">
+              {workspaceToolbar?.calendarNav?.viewLabel ? (
+                <span className="mr-0.5 hidden h-7 items-center rounded-full border border-border px-2 text-[11px] text-muted-foreground sm:inline-flex">
+                  {workspaceToolbar.calendarNav.viewLabel}
+                </span>
+              ) : null}
               <ChromeBtn
                 label="Refresh"
                 disabled={Boolean(workspaceToolbar?.syncing)}

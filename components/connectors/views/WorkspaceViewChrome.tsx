@@ -15,6 +15,13 @@ export type WorkspaceToolbarState = {
   onBack: () => void;
   onRefresh: () => void;
   onPrimary: (() => void) | null;
+  /** Calendar month chrome — Today / prev / next live in the panel header. */
+  calendarNav?: {
+    onToday: () => void;
+    onPrev: () => void;
+    onNext: () => void;
+    viewLabel?: string;
+  } | null;
 };
 
 export function WorkspacePanelFrame({
@@ -28,6 +35,7 @@ export function WorkspacePanelFrame({
 }) {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white dark:bg-space-canvas">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
       {error ? (
         <p className="shrink-0 border-b border-black/5 px-3 py-2 text-[12px] text-destructive dark:border-white/10">
           {error}
@@ -39,6 +47,7 @@ export function WorkspacePanelFrame({
         </p>
       ) : null}
       {children}
+      </div>
     </div>
   );
 }

@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import {
+  Loader2,
+  MapPin,
+  Plus,
+} from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import {
-  WorkspaceEmptyState,
-  WorkspaceField,
   WorkspacePanelFrame,
   type WorkspaceToolbarState,
 } from "@/components/connectors/views/WorkspaceViewChrome";
@@ -27,6 +29,9 @@ type CalendarEvent = {
   htmlLink?: string;
 };
 
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const ACCENT = "#1A73E8";
+
 function startOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
@@ -39,7 +44,23 @@ function formatMonthLabel(d: Date) {
   return d.toLocaleDateString([], { month: "long", year: "numeric" });
 }
 
-function formatEventWhen(startIso: string | null, endIso: string | null, allDay: boolean) {
+function dayKey(d: Date) {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function sameDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function formatEventWhen(
+  startIso: string | null,
+  endIso: string | null,
+  allDay: boolean,
+) {
   if (!startIso) return "";
   const start = new Date(startIso);
   if (Number.isNaN(start.getTime())) return startIso;
@@ -56,12 +77,25 @@ function formatEventWhen(startIso: string | null, endIso: string | null, allDay:
     month: "short",
     day: "numeric",
   });
-  const t0 = start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const t0 = start.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
   if (end && !Number.isNaN(end.getTime())) {
-    const t1 = end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const t1 = end.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
     return `${day} · ${t0} – ${t1}`;
   }
   return `${day} · ${t0}`;
+}
+
+function formatChipTime(startIso: string | null, allDay: boolean) {
+  if (!startIso || allDay) return "";
+  const start = new Date(startIso);
+  if (Number.isNaN(start.getTime())) return "";
+  return start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 function parseEvent(raw: unknown): CalendarEvent | null {
@@ -107,34 +141,45 @@ function parseEvent(raw: unknown): CalendarEvent | null {
   };
 }
 
+/** 6-week grid including adjacent-month days (Google Calendar style). */
 function monthGrid(anchor: Date) {
   const first = startOfMonth(anchor);
-  const startWeekday = first.getDay(); // 0 Sun
-  const daysInMonth = new Date(
-    anchor.getFullYear(),
-    anchor.getMonth() + 1,
-    0,
-  ).getDate();
-  const cells: Array<{ date: Date | null; key: string }> = [];
-  for (let i = 0; i < startWeekday; i++) {
-    cells.push({ date: null, key: `pad-${i}` });
-  }
-  for (let day = 1; day <= daysInMonth; day++) {
-    const date = new Date(anchor.getFullYear(), anchor.getMonth(), day);
-    cells.push({ date, key: `d-${day}` });
-  }
-  while (cells.length % 7 !== 0) {
-    cells.push({ date: null, key: `tail-${cells.length}` });
+  const start = new Date(first);
+  start.setDate(first.getDate() - first.getDay());
+  const cells: Array<{ date: Date; inMonth: boolean; key: string }> = [];
+  for (let i = 0; i < 42; i++) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + i);
+    cells.push({
+      date,
+      inMonth: date.getMonth() === anchor.getMonth(),
+      key: dayKey(date),
+    });
   }
   return cells;
 }
 
-function sameDay(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
+function toLocalInputValue(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function localInputToRfc3339(value: string) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  const offsetMin = -d.getTimezoneOffset();
+  const sign = offsetMin >= 0 ? "+" : "-";
+  const abs = Math.abs(offsetMin);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00${sign}${hh}:${mm}`;
+}
+
+function defaultCreateStart(day: Date | null) {
+  const base = day ? new Date(day) : new Date();
+  base.setHours(9, 0, 0, 0);
+  return toLocalInputValue(base);
 }
 
 export function CalendarConnectorView({
@@ -153,7 +198,7 @@ export function CalendarConnectorView({
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [summary, setSummary] = useState("");
-  const [start, setStart] = useState("");
+  const [startLocal, setStartLocal] = useState(() => defaultCreateStart(new Date()));
   const [attendees, setAttendees] = useState("");
 
   const loadEvents = useCallback(async () => {
@@ -174,7 +219,7 @@ export function CalendarConnectorView({
         workspaceId,
         connectorId: "gcal",
         operation: "listEvents",
-        input: { timeMin, timeMax, maxResults: 50, calendarId: "primary" },
+        input: { timeMin, timeMax, maxResults: 80, calendarId: "primary" },
       });
       const rawEvents = Array.isArray(result.data.events)
         ? result.data.events
@@ -188,11 +233,7 @@ export function CalendarConnectorView({
           return at - bt;
         });
       setEvents(parsed);
-      setStatus(
-        parsed.length
-          ? `${parsed.length} event${parsed.length === 1 ? "" : "s"} this month`
-          : null,
-      );
+      setStatus(null);
     } catch (err) {
       setError(
         err instanceof Error
@@ -209,29 +250,38 @@ export function CalendarConnectorView({
     void loadEvents();
   }, [loadEvents]);
 
-  const dayEvents = useMemo(() => {
-    if (!selectedDay) return events.slice(0, 8);
-    return events.filter((event) => {
-      if (!event.startIso) return false;
-      const d = new Date(event.startIso);
-      return sameDay(d, selectedDay);
-    });
-  }, [events, selectedDay]);
-
   const eventsByDay = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, CalendarEvent[]>();
     for (const event of events) {
       if (!event.startIso) continue;
       const d = new Date(event.startIso);
       if (Number.isNaN(d.getTime())) continue;
-      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-      map.set(key, (map.get(key) ?? 0) + 1);
+      const key = dayKey(d);
+      const list = map.get(key) ?? [];
+      list.push(event);
+      map.set(key, list);
     }
     return map;
   }, [events]);
 
+  const dayAgenda = useMemo(() => {
+    if (!selectedDay) return [];
+    return eventsByDay.get(dayKey(selectedDay)) ?? [];
+  }, [eventsByDay, selectedDay]);
+
+  const openCreate = useCallback((day?: Date | null) => {
+    const target = day ?? selectedDay ?? new Date();
+    setSelectedDay(target);
+    setStartLocal(defaultCreateStart(target));
+    setSummary("");
+    setAttendees("");
+    setError(null);
+    setStatus(null);
+    setPage("create");
+  }, [selectedDay]);
+
   const createEvent = useCallback(async () => {
-    if (!summary.trim() || !start.trim()) {
+    if (!summary.trim() || !startLocal.trim()) {
       setError("Add a title and start time.");
       return;
     }
@@ -244,14 +294,13 @@ export function CalendarConnectorView({
         operation: "createEvent",
         input: {
           summary: summary.trim(),
-          start: start.trim(),
+          start: localInputToRfc3339(startLocal),
           attendees: attendees.trim() || undefined,
           durationMinutes: 60,
         },
       });
       setStatus("Event created");
       setSummary("");
-      setStart("");
       setAttendees("");
       setPage("month");
       await loadEvents();
@@ -260,7 +309,14 @@ export function CalendarConnectorView({
     } finally {
       setBusy(false);
     }
-  }, [attendees, loadEvents, start, summary, workspaceId]);
+  }, [attendees, loadEvents, startLocal, summary, workspaceId]);
+
+  const goToday = useCallback(() => {
+    const now = new Date();
+    setMonth(startOfMonth(now));
+    setSelectedDay(now);
+    setPage("month");
+  }, []);
 
   useEffect(() => {
     onToolbarChange?.({
@@ -274,23 +330,22 @@ export function CalendarConnectorView({
       busy,
       canGoBack: page !== "month",
       backLabel: "Calendar",
-      primaryLabel:
-        page === "month" ? "New event" : page === "create" ? "Create" : null,
+      primaryLabel: page === "create" ? "Save" : null,
       onBack: () => {
         setPage("month");
         setSelected(null);
       },
       onRefresh: () => void loadEvents(),
-      onPrimary:
+      onPrimary: page === "create" ? () => void createEvent() : null,
+      calendarNav:
         page === "month"
-          ? () => {
-              setPage("create");
-              setError(null);
-              setStatus(null);
+          ? {
+              onToday: goToday,
+              onPrev: () => setMonth((m) => addMonths(m, -1)),
+              onNext: () => setMonth((m) => addMonths(m, 1)),
+              viewLabel: "Month",
             }
-          : page === "create"
-            ? () => void createEvent()
-            : null,
+          : null,
     });
   }, [
     page,
@@ -300,65 +355,88 @@ export function CalendarConnectorView({
     onToolbarChange,
     loadEvents,
     createEvent,
+    openCreate,
+    goToday,
   ]);
 
   const cells = monthGrid(month);
   const today = new Date();
+  const miniCells = monthGrid(month);
 
   return (
     <WorkspacePanelFrame status={status} error={error}>
+      {/* Create — uses panel header back + Save */}
       {page === "create" ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
-          <p className="text-[12px] font-medium text-muted-foreground">
-            New event
-          </p>
-          <WorkspaceField
-            label="Title"
-            value={summary}
-            onChange={setSummary}
-            placeholder="Team standup"
-          />
-          <WorkspaceField
-            label="Start"
-            value={start}
-            onChange={setStart}
-            placeholder="2026-09-05T09:00:00-06:00"
-          />
-          <WorkspaceField
-            label="Attendees"
-            value={attendees}
-            onChange={setAttendees}
-            placeholder="alex@company.com"
-          />
-          <p className="text-[11px] text-muted-foreground">
-            Use an RFC3339 time with timezone (e.g. 2026-09-05T09:00:00-06:00).
-          </p>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void createEvent()}
-            className="inline-flex h-9 w-fit items-center gap-1.5 rounded-full bg-primary px-4 text-[12.5px] font-medium text-primary-foreground disabled:opacity-50"
-          >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            Create event
-          </button>
+        <div className="absolute inset-0 z-20 flex flex-col bg-white dark:bg-space-canvas">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
+                Title
+              </span>
+              <input
+                value={summary}
+                onChange={(e) => setSummary(e.target.value)}
+                placeholder="Add title"
+                autoFocus
+                className="h-10 w-full rounded-[10px] border border-border bg-transparent px-3 text-[14px] outline-none focus:border-[#1A73E8]/50 focus:ring-2 focus:ring-[#1A73E8]/15"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
+                Start
+              </span>
+              <input
+                type="datetime-local"
+                value={startLocal}
+                onChange={(e) => setStartLocal(e.target.value)}
+                className="h-10 w-full rounded-[10px] border border-border bg-transparent px-3 text-[14px] outline-none focus:border-[#1A73E8]/50 focus:ring-2 focus:ring-[#1A73E8]/15"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
+                Guests
+              </span>
+              <input
+                value={attendees}
+                onChange={(e) => setAttendees(e.target.value)}
+                placeholder="name@email.com"
+                className="h-10 w-full rounded-[10px] border border-border bg-transparent px-3 text-[14px] outline-none focus:border-[#1A73E8]/50 focus:ring-2 focus:ring-[#1A73E8]/15"
+              />
+            </label>
+            <p className="text-[12px] text-muted-foreground">
+              Events are created on your primary Google Calendar (1 hour).
+            </p>
+          </div>
         </div>
       ) : null}
 
+      {/* Detail — uses panel header back */}
       {page === "detail" && selected ? (
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <h2 className="text-[17px] font-semibold tracking-[-0.02em]">
+        <div className="absolute inset-0 z-20 flex flex-col overflow-y-auto bg-white p-5 dark:bg-space-canvas">
+          <div
+            className="mb-4 h-1.5 w-12 rounded-full"
+            style={{ backgroundColor: ACCENT }}
+          />
+          <h2 className="text-[20px] font-semibold tracking-[-0.03em]">
             {selected.summary}
           </h2>
-          <p className="mt-2 text-[13px] text-muted-foreground">{selected.when}</p>
+          <p className="mt-2 text-[13.5px] text-muted-foreground">
+            {selected.when}
+          </p>
           <p className="mt-1 text-[12px] text-muted-foreground">
             {selected.calendar}
           </p>
           {selected.location ? (
-            <p className="mt-3 text-[13px]">{selected.location}</p>
+            <p className="mt-4 flex items-start gap-2 text-[13px]">
+              <MapPin
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                strokeWidth={1.7}
+              />
+              {selected.location}
+            </p>
           ) : null}
           {selected.description ? (
-            <p className="mt-3 whitespace-pre-wrap text-[13px] leading-relaxed">
+            <p className="mt-4 whitespace-pre-wrap text-[13px] leading-relaxed text-foreground/90">
               {selected.description}
             </p>
           ) : null}
@@ -367,7 +445,8 @@ export function CalendarConnectorView({
               href={selected.htmlLink}
               target="_blank"
               rel="noreferrer"
-              className="mt-4 inline-flex text-[12.5px] font-medium text-[#1A73E8] hover:underline"
+              className="mt-6 inline-flex text-[12.5px] font-medium hover:underline"
+              style={{ color: ACCENT }}
             >
               Open in Google Calendar
             </a>
@@ -375,131 +454,235 @@ export function CalendarConnectorView({
         </div>
       ) : null}
 
-      {page === "month" ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center gap-1 border-b border-black/5 px-2 py-2 dark:border-white/10">
-            <button
-              type="button"
-              aria-label="Previous month"
-              onClick={() => setMonth((m) => addMonths(m, -1))}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-black/[0.05] dark:hover:bg-white/[0.08]"
-            >
-              <ChevronLeft className="h-4 w-4" strokeWidth={1.7} />
-            </button>
-            <p className="min-w-0 flex-1 text-center text-[13.5px] font-semibold tracking-[-0.01em]">
-              {formatMonthLabel(month)}
-            </p>
-            <button
-              type="button"
-              aria-label="Next month"
-              onClick={() => setMonth((m) => addMonths(m, 1))}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-black/[0.05] dark:hover:bg-white/[0.08]"
-            >
-              <ChevronRight className="h-4 w-4" strokeWidth={1.7} />
-            </button>
-          </div>
-
-          <div className="grid shrink-0 grid-cols-7 border-b border-black/5 px-2 pt-2 dark:border-white/10">
-            {["S", "M", "T", "W", "T", "F", "S"].map((label, i) => (
+      {/* Month: grid + wider mini-cal on the right */}
+      <div className="@container relative flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="grid shrink-0 grid-cols-7 border-b border-black/[0.06] dark:border-white/10">
+            {WEEKDAYS.map((label) => (
               <div
-                key={`${label}-${i}`}
-                className="pb-1 text-center text-[10px] font-medium uppercase tracking-[0.06em] text-muted-foreground"
+                key={label}
+                className="px-1 py-2 text-center text-[11px] font-medium tracking-[-0.01em] text-muted-foreground"
               >
                 {label}
               </div>
             ))}
           </div>
 
-          <div className="grid shrink-0 grid-cols-7 gap-y-1 px-2 py-2">
+          <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 overflow-hidden">
             {cells.map((cell) => {
-              if (!cell.date) {
-                return <div key={cell.key} className="aspect-square" />;
-              }
-              const key = `${cell.date.getFullYear()}-${cell.date.getMonth()}-${cell.date.getDate()}`;
-              const count = eventsByDay.get(key) ?? 0;
+              const dayEvents = eventsByDay.get(cell.key) ?? [];
               const isToday = sameDay(cell.date, today);
               const isSelected =
                 selectedDay != null && sameDay(cell.date, selectedDay);
+              const visible = dayEvents.slice(0, 3);
+              const more = dayEvents.length - visible.length;
+
               return (
-                <button
+                <div
                   key={cell.key}
-                  type="button"
-                  onClick={() => setSelectedDay(cell.date)}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    setSelectedDay(cell.date);
+                    if (!cell.inMonth) setMonth(startOfMonth(cell.date));
+                  }}
+                  onDoubleClick={() => openCreate(cell.date)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      setSelectedDay(cell.date);
+                    }
+                  }}
                   className={cn(
-                    "relative flex aspect-square flex-col items-center justify-center rounded-[10px] text-[12.5px] transition-colors",
+                    "group flex min-h-0 flex-col gap-0.5 overflow-hidden border-b border-r border-black/[0.05] p-1 text-left transition-colors dark:border-white/[0.06]",
                     isSelected
-                      ? "bg-[#1A73E8] text-white"
-                      : isToday
-                        ? "bg-[#1A73E8]/12 font-semibold text-[#1A73E8]"
-                        : "text-foreground hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
+                      ? "bg-[#1A73E8]/[0.06]"
+                      : "hover:bg-black/[0.02] dark:hover:bg-white/[0.03]",
+                    !cell.inMonth && "bg-black/[0.015] dark:bg-white/[0.02]",
                   )}
                 >
-                  {cell.date.getDate()}
-                  {count > 0 ? (
+                  <div className="flex shrink-0 items-center justify-center">
                     <span
                       className={cn(
-                        "absolute bottom-1 h-1 w-1 rounded-full",
-                        isSelected ? "bg-white" : "bg-[#1A73E8]",
+                        "inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[12px] tabular-nums",
+                        !cell.inMonth && "text-muted-foreground/50",
+                        isToday && "font-semibold text-white",
+                        isSelected && !isToday && "font-semibold",
                       )}
-                    />
-                  ) : null}
-                </button>
+                      style={
+                        isToday
+                          ? { backgroundColor: ACCENT }
+                          : isSelected
+                            ? { color: ACCENT }
+                            : undefined
+                      }
+                    >
+                      {cell.date.getDate()}
+                    </span>
+                  </div>
+                  <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
+                    {visible.map((event) => (
+                      <button
+                        key={event.id}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelected(event);
+                          setSelectedDay(cell.date);
+                          setPage("detail");
+                        }}
+                        className="flex min-w-0 items-center gap-0.5 truncate rounded-[4px] px-1 py-0.5 text-left text-[10px] font-medium leading-tight text-white"
+                        style={{ backgroundColor: ACCENT }}
+                        title={event.summary}
+                      >
+                        {!event.allDay ? (
+                          <span className="shrink-0 opacity-90">
+                            {formatChipTime(event.startIso, false)}
+                          </span>
+                        ) : null}
+                        <span className="truncate">{event.summary}</span>
+                      </button>
+                    ))}
+                    {more > 0 ? (
+                      <span className="px-1 text-[10px] font-medium text-muted-foreground">
+                        +{more} more
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
               );
             })}
           </div>
+        </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto border-t border-black/5 dark:border-white/10">
-            <div className="flex items-center gap-2 px-4 py-2.5">
-              <CalendarDays className="h-3.5 w-3.5 text-[#1A73E8]" strokeWidth={1.7} />
-              <p className="text-[12px] font-medium text-muted-foreground">
-                {selectedDay
-                  ? selectedDay.toLocaleDateString([], {
-                      weekday: "long",
-                      month: "short",
-                      day: "numeric",
-                    })
-                  : "Upcoming"}
+        {/* Right rail — wider mini calendar for condensed desktop */}
+        <aside className="flex w-[min(16rem,42%)] shrink-0 flex-col gap-3 overflow-y-auto border-l border-black/[0.06] p-3 dark:border-white/10">
+          <button
+            type="button"
+            onClick={() => openCreate()}
+            className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full bg-white text-[13px] font-medium tracking-[-0.01em] text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.06] transition hover:shadow-[0_2px_8px_rgba(0,0,0,0.12)] dark:bg-zinc-900 dark:ring-white/10"
+          >
+            <Plus
+              className="h-4 w-4"
+              strokeWidth={2}
+              style={{ color: ACCENT }}
+            />
+            Create
+          </button>
+
+          <div>
+            <div className="mb-2 flex items-center justify-between px-0.5">
+              <p className="text-[12.5px] font-medium tracking-[-0.01em]">
+                {formatMonthLabel(month)}
               </p>
               {syncing ? (
-                <Loader2 className="ml-auto h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
               ) : null}
             </div>
-            {!dayEvents.length && !syncing ? (
-              <WorkspaceEmptyState
-                title="Nothing scheduled"
-                body="Events for this day will show up here once Calendar is connected and synced."
-                actionLabel="Refresh"
-                syncing={syncing}
-                onAction={() => void loadEvents()}
-              />
-            ) : (
-              dayEvents.map((event) => (
-                <button
-                  key={event.id}
-                  type="button"
-                  onClick={() => {
-                    setSelected(event);
-                    setPage("detail");
-                  }}
-                  className="flex w-full items-start gap-3 border-b border-black/5 px-4 py-3 text-left transition-colors hover:bg-black/[0.03] dark:border-white/10 dark:hover:bg-white/[0.04]"
+            <div className="grid grid-cols-7 gap-y-0.5">
+              {["S", "M", "T", "W", "T", "F", "S"].map((label, i) => (
+                <div
+                  key={`m-${label}-${i}`}
+                  className="pb-1 text-center text-[10px] font-medium text-muted-foreground"
                 >
-                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#1A73E8]/12 text-[#1A73E8]">
-                    <CalendarDays className="h-4 w-4" strokeWidth={1.7} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13.5px] font-medium tracking-[-0.01em]">
-                      {event.summary}
-                    </p>
-                    <p className="mt-0.5 text-[12px] text-muted-foreground">
-                      {event.when}
-                    </p>
-                  </div>
-                </button>
-              ))
-            )}
+                  {label}
+                </div>
+              ))}
+              {miniCells.map((cell) => {
+                const isToday = sameDay(cell.date, today);
+                const isSelected =
+                  selectedDay != null && sameDay(cell.date, selectedDay);
+                const hasEvents = (eventsByDay.get(cell.key)?.length ?? 0) > 0;
+                return (
+                  <button
+                    key={`mini-${cell.key}`}
+                    type="button"
+                    onClick={() => {
+                      setSelectedDay(cell.date);
+                      if (!cell.inMonth) {
+                        setMonth(startOfMonth(cell.date));
+                      }
+                    }}
+                    className={cn(
+                      "relative flex h-7 items-center justify-center rounded-full text-[11.5px] transition-colors",
+                      !cell.inMonth && "text-muted-foreground/45",
+                      isSelected && "text-white",
+                      isToday && !isSelected && "font-semibold",
+                    )}
+                    style={
+                      isSelected
+                        ? { backgroundColor: ACCENT }
+                        : isToday
+                          ? { color: ACCENT }
+                          : undefined
+                    }
+                  >
+                    {cell.date.getDate()}
+                    {hasEvents && !isSelected ? (
+                      <span
+                        className="absolute bottom-0.5 h-0.5 w-0.5 rounded-full"
+                        style={{ backgroundColor: ACCENT }}
+                      />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ) : null}
+
+          <div>
+            <p className="mb-1.5 px-0.5 text-[11px] font-medium text-muted-foreground">
+              My calendars
+            </p>
+            <div className="flex items-center gap-2 rounded-[8px] px-1.5 py-1.5">
+              <span
+                className="h-3 w-3 shrink-0 rounded-[3px]"
+                style={{ backgroundColor: ACCENT }}
+              />
+              <span className="truncate text-[12.5px]">Primary</span>
+            </div>
+          </div>
+
+          {selectedDay ? (
+            <div className="mt-auto border-t border-black/[0.06] pt-3 dark:border-white/10">
+              <p className="mb-2 px-0.5 text-[11px] font-medium text-muted-foreground">
+                {selectedDay.toLocaleDateString([], {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </p>
+              {dayAgenda.length === 0 ? (
+                <p className="px-0.5 text-[11.5px] text-muted-foreground">
+                  Nothing scheduled
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {dayAgenda.slice(0, 6).map((event) => (
+                    <li key={event.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelected(event);
+                          setPage("detail");
+                        }}
+                        className="w-full rounded-[8px] px-1.5 py-1 text-left hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                      >
+                        <p className="truncate text-[12px] font-medium">
+                          {event.summary}
+                        </p>
+                        <p className="truncate text-[10.5px] text-muted-foreground">
+                          {formatChipTime(event.startIso, event.allDay) ||
+                            "All day"}
+                        </p>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
+        </aside>
+      </div>
     </WorkspacePanelFrame>
   );
 }
