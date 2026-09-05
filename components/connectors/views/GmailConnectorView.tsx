@@ -11,6 +11,7 @@ import { Loader2, Paperclip, RefreshCw, Send } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { MailBody } from "@/components/connectors/views/MailBody";
 import { MailHtmlFrame } from "@/components/connectors/views/MailHtmlFrame";
+import { MailSenderAvatar } from "@/components/connectors/views/MailSenderAvatar";
 import {
   fetchSyncedMailDetail,
   fetchSyncedMailList,
@@ -657,9 +658,7 @@ export function GmailConnectorView({
                       className="border-b border-black/5 last:border-b-0 dark:border-white/10"
                     >
                       <div className="flex items-start gap-3 px-4 pb-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-[12px] font-semibold text-foreground">
-                          {senderLabel(msg.fromAddr).slice(0, 1).toUpperCase()}
-                        </div>
+                        <MailSenderAvatar fromAddr={msg.fromAddr} size={36} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline gap-2">
                             <p className="truncate text-[13.5px] font-medium text-foreground">
@@ -792,12 +791,12 @@ export function GmailConnectorView({
                   "bg-black/[0.04] dark:bg-white/[0.05]",
               )}
             >
-              <div
-                className={cn(
-                  "mt-1.5 h-2 w-2 shrink-0 rounded-full",
-                  item.isUnread ? "bg-sky-500" : "bg-transparent",
-                )}
-              />
+              <div className="relative mt-0.5 shrink-0">
+                <MailSenderAvatar fromAddr={item.fromAddr} size={36} />
+                {item.isUnread ? (
+                  <span className="absolute -left-1 top-0 h-2 w-2 rounded-full bg-sky-500 ring-2 ring-white dark:ring-space-canvas" />
+                ) : null}
+              </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   <span
