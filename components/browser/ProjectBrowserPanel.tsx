@@ -85,7 +85,7 @@ import {
   BROWSER_CHROME_CHIP_HOVER,
 } from "@/lib/shell-chrome";
 import { decodeTextDataUrl } from "@/lib/chat-document-attach";
-import { chatAttachmentImageUrl } from "@/lib/chat-attachment-image-url";
+import { resolveChatImageUrl } from "@/lib/chat-attachment-image-url";
 import { updateChatThreads } from "@/lib/api/chat-store";
 import {
   publishMarkdownShare,
@@ -821,11 +821,12 @@ export function ProjectBrowserPanel({
       );
 
       if (targetIndex < 0) {
-        const imageUrl = job.imageUrl?.trim() ?? "";
         const seedUrl =
-          job.attachmentId?.trim()
-            ? chatAttachmentImageUrl(job.attachmentId.trim())
-            : imageUrl;
+          resolveChatImageUrl({
+            attachmentId: job.attachmentId,
+            dataUrl: job.imageUrl,
+          }) ?? "";
+        const imageUrl = job.imageUrl?.trim() ?? "";
         const matchByUrl =
           seedUrl.length > 0
             ? nextTabs.findIndex(
@@ -889,10 +890,10 @@ export function ProjectBrowserPanel({
       if (!target) return;
 
       const imageUrl = job.imageUrl?.trim();
-      const seedUrl =
-        job.attachmentId?.trim()
-          ? chatAttachmentImageUrl(job.attachmentId.trim())
-          : imageUrl;
+      const seedUrl = resolveChatImageUrl({
+        attachmentId: job.attachmentId,
+        dataUrl: job.imageUrl,
+      });
       if (job.status === "completed" && seedUrl) {
         const existingUrl = target.url?.trim() ?? "";
         const hasCanvas =
@@ -938,8 +939,15 @@ export function ProjectBrowserPanel({
     const activeTabId = focusTabId ?? current.activeTabId;
     if (!changed && activeTabId === current.activeTabId) return;
     write({ tabs: nextTabs, activeTabId });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync on job set signature
-  }, [isStudioProject, key?.projectId, studioImageJobsSig]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync on job set + browser key
+  }, [
+    isStudioProject,
+    key?.projectId,
+    key?.spaceId,
+    key?.workspaceId,
+    key?.profileId,
+    studioImageJobsSig,
+  ]);
 
   // Selected tab only — chat browser-context tools read this pointer.
   // Keep it while chat is open (mobile) so the user can ask about the page
@@ -2833,31 +2841,60 @@ function StudioMediaSurface({
         : "document";
   const Icon =
     kind === "studio-image" ? Image : kind === "studio-video" ? Video : FileText;
-  const hasMedia = Boolean(src && src !== "about:blank");
-  const isUploading = activity?.type === "upload";
-  const isEditing = activity?.type === "edit";
 
   const imageJob = useMemo(() => {
-    if (kind !== "studio-image" || !thread || !boundGenerationId) return null;
+    if (kind !== "studio-image" || !thread) return null;
+    if (boundGenerationId) {
+      for (let i = thread.messages.length - 1; i >= 0; i--) {
+        const message = thread.messages[i]!;
+        const blocks = message.blocks;
+        if (!blocks) continue;
+        for (let j = blocks.length - 1; j >= 0; j--) {
+          const block = blocks[j]!;
+          if (block.type !== "image_generation") continue;
+          if (block.generationId !== boundGenerationId) continue;
+          return block;
+        }
+      }
+      return null;
+    }
+    // Unbound empty canvas: follow the latest chat generation so the panel
+    // never stays blank while bind/session sync catches up.
     for (let i = thread.messages.length - 1; i >= 0; i--) {
       const message = thread.messages[i]!;
-      const blocks = message.blocks;
-      if (!blocks) continue;
-      for (let j = blocks.length - 1; j >= 0; j--) {
-        const block = blocks[j]!;
+      for (let j = (message.blocks?.length ?? 0) - 1; j >= 0; j--) {
+        const block = message.blocks![j]!;
         if (block.type !== "image_generation") continue;
-        if (block.generationId !== boundGenerationId) continue;
-        return block;
+        if (block.status === "generating" || block.status === "completed") {
+          return block;
+        }
       }
     }
     return null;
   }, [kind, thread, boundGenerationId]);
 
+  const chatImageSrc = useMemo(() => {
+    if (!imageJob || imageJob.status !== "completed") return null;
+    return resolveChatImageUrl({
+      attachmentId: imageJob.attachmentId,
+      dataUrl: imageJob.imageUrl,
+    });
+  }, [imageJob]);
+
+  // Prefer persisted tab URL; fall back to chat job so the right panel paints
+  // even when session bind/localStorage stripped the canvas URL.
+  const displaySrc =
+    src && src !== "about:blank" ? src : chatImageSrc || "";
+  const hasMedia = Boolean(displaySrc);
+  const isUploading = activity?.type === "upload";
+  const isEditing = activity?.type === "edit";
+
   const isGenerating =
     kind === "studio-image" &&
-    Boolean(boundGenerationId) &&
-    imageJob?.generationId === boundGenerationId &&
-    imageJob?.status === "generating";
+    imageJob?.status === "generating" &&
+    (boundGenerationId
+      ? imageJob.generationId === boundGenerationId
+      : true);
   const showMesh = isGenerating || isEditing;
   const lockedParts = lockedAspectRatio
     ? studioAspectParts(lockedAspectRatio)
@@ -2912,16 +2949,25 @@ function StudioMediaSurface({
     setNaturalRatio(studioAspectParts(lockedAspectRatio));
   }, [lockedAspectRatio]);
 
+  // Mirror chat image onto the tab URL when the canvas is still empty.
+  useEffect(() => {
+    if (kind !== "studio-image") return;
+    if (!chatImageSrc) return;
+    if (src && src !== "about:blank") return;
+    onSrcChange(chatImageSrc);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once per chat URL
+  }, [kind, chatImageSrc, src]);
+
   // Restore empty canvases. Bound tabs use their chat generation URL — never
   // steal the project's newest asset onto the wrong tab. Unbound empty tabs
-  // wait for chat bind while image jobs are in flight / pending paint.
+  // wait only while a generation is still in flight.
   useEffect(() => {
     if (kind !== "studio-image" || !projectId) return;
     if (hasMedia || src === "about:blank") return;
     if (isGenerating || activity) return;
 
     if (boundGenerationId) {
-      const fromJob = imageJob?.imageUrl?.trim();
+      const fromJob = chatImageSrc || imageJob?.imageUrl?.trim();
       if (fromJob) {
         onSrcChange(fromJob);
         return;
@@ -2930,15 +2976,18 @@ function StudioMediaSurface({
       // Bound but job not ready yet — don't pull an unrelated project asset.
       if (!imageJob || imageJob.status !== "completed") return;
     } else if (thread) {
-      const pendingChatImage = thread.messages.some((message) =>
+      const generatingChatImage = thread.messages.some((message) =>
         (message.blocks ?? []).some(
           (block) =>
             block.type === "image_generation" &&
-            (block.status === "generating" ||
-              (block.status === "completed" && Boolean(block.imageUrl?.trim()))),
+            block.status === "generating",
         ),
       );
-      if (pendingChatImage) return;
+      if (generatingChatImage) return;
+      if (chatImageSrc) {
+        onSrcChange(chatImageSrc);
+        return;
+      }
     }
 
     let cancelled = false;
@@ -2964,6 +3013,7 @@ function StudioMediaSurface({
     boundGenerationId,
     imageJob?.status,
     imageJob?.imageUrl,
+    chatImageSrc,
     thread,
   ]);
 
@@ -2971,7 +3021,10 @@ function StudioMediaSurface({
     if (kind !== "studio-image") return;
     if (!imageJob || imageJob.status !== "completed") return;
     const generationId = imageJob.generationId;
-    const url = imageJob.imageUrl?.trim();
+    const url =
+      chatImageSrc ||
+      imageJob.imageUrl?.trim() ||
+      "";
     if (!url) return;
     if (appliedGenerationRef.current === generationId) return;
 
@@ -3034,13 +3087,13 @@ function StudioMediaSurface({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- persist once per completed generation
-  }, [kind, imageJob?.generationId, imageJob?.status, imageJob?.imageUrl]);
+  }, [kind, imageJob?.generationId, imageJob?.status, imageJob?.imageUrl, chatImageSrc]);
 
   const runEdit = async (
     action: "remove-bg" | "resize" | "suggest-edit",
     opts?: { resizePreset?: StudioResizePresetId; prompt?: string },
   ) => {
-    if (!projectId || !src || activity) return;
+    if (!projectId || !displaySrc || activity) return;
     const resizePreset = opts?.resizePreset;
     const ratio =
       action === "resize" && resizePreset
@@ -3055,7 +3108,7 @@ function StudioMediaSurface({
       const result = await editStudioProjectImage({
         workspaceId,
         projectId,
-        imageUrl: src,
+        imageUrl: displaySrc,
         action,
         resizePreset,
         prompt: opts?.prompt,
@@ -3128,12 +3181,12 @@ function StudioMediaSurface({
   };
 
   const downloadCurrent = () => {
-    if (!src || saving) return;
+    if (!displaySrc || saving) return;
     setSaving(true);
     setError(null);
     const name =
       kind === "studio-video" ? "studio-video.mp4" : "studio-image.png";
-    void saveGeneratedImage({ url: src, name })
+    void saveGeneratedImage({ url: displaySrc, name })
       .then((res) => {
         if (!res.ok) {
           setError(res.error || "Could not download.");
@@ -3197,7 +3250,7 @@ function StudioMediaSurface({
           >
             {hasMedia && !showMesh ? (
               <img
-                src={src}
+                src={displaySrc}
                 alt=""
                 className={cn(
                   "h-full w-full object-contain transition-opacity duration-200",
