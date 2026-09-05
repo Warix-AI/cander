@@ -95,6 +95,28 @@ const SELECTION_SCRIPT = `(() => {
 const VIDEO_PIP_INSTALL_SCRIPT = `(() => {
   if (window.__canderVideoPipInstalled) return true;
   window.__canderVideoPipInstalled = true;
+  // Capture logging before site scripts replace console (YouTube etc.).
+  try {
+    const nativeLog = console.log.bind(console);
+    window.__canderPipLog = (msg) => {
+      try { nativeLog(String(msg)); } catch (_) {}
+      try {
+        document.documentElement.setAttribute(
+          'data-cander-pip-cmd',
+          String(msg) + '|' + Date.now(),
+        );
+      } catch (_) {}
+    };
+  } catch (_) {
+    window.__canderPipLog = (msg) => {
+      try {
+        document.documentElement.setAttribute(
+          'data-cander-pip-cmd',
+          String(msg) + '|' + Date.now(),
+        );
+      } catch (_) {}
+    };
+  }
   const STYLE_ID = 'cander-video-pip-style';
   const ATTR = 'data-cander-pip-media';
   const ANC = 'data-cander-pip-ancestor';
@@ -203,6 +225,13 @@ const VIDEO_PIP_INSTALL_SCRIPT = `(() => {
   };
   window.__canderSetPipChrome = (show, title) => {
     const CHROME_ID = 'cander-pip-chrome-bar';
+    const pipLog = (msg) => {
+      try {
+        (window.__canderPipLog || console.log)(msg);
+      } catch (_) {
+        try { console.log(msg); } catch (_2) {}
+      }
+    };
     let bar = document.getElementById(CHROME_ID);
     if (!show) {
       document.documentElement.classList.remove('cander-pip-chrome-on');
@@ -219,24 +248,25 @@ const VIDEO_PIP_INSTALL_SCRIPT = `(() => {
         'padding:0 8px','background:#0a0a0a','color:#fff',
         'font:500 12px -apple-system,BlinkMacSystemFont,sans-serif',
         'cursor:grab','user-select:none','visibility:visible',
+        'pointer-events:auto',
       ].join(';');
       const titleEl = document.createElement('div');
       titleEl.id = 'cander-pip-chrome-title';
-      titleEl.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      titleEl.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none';
       const expandBtn = document.createElement('button');
       expandBtn.type = 'button';
       expandBtn.textContent = '\\u2197';
       expandBtn.title = 'Return to tab';
       expandBtn.style.cssText = 'border:0;background:transparent;color:#fff;cursor:pointer;width:28px;height:28px;font-size:14px';
       expandBtn.onmousedown = (e) => { e.stopPropagation(); };
-      expandBtn.onclick = (e) => { e.stopPropagation(); console.log('cander-pip:expand'); };
+      expandBtn.onclick = (e) => { e.stopPropagation(); pipLog('cander-pip:expand'); };
       const closeBtn = document.createElement('button');
       closeBtn.type = 'button';
       closeBtn.textContent = '\\u2715';
       closeBtn.title = 'Close';
       closeBtn.style.cssText = 'border:0;background:transparent;color:#fff;cursor:pointer;width:28px;height:28px;font-size:12px';
       closeBtn.onmousedown = (e) => { e.stopPropagation(); };
-      closeBtn.onclick = (e) => { e.stopPropagation(); console.log('cander-pip:close'); };
+      closeBtn.onclick = (e) => { e.stopPropagation(); pipLog('cander-pip:close'); };
       bar.appendChild(titleEl);
       bar.appendChild(expandBtn);
       bar.appendChild(closeBtn);
@@ -244,17 +274,8 @@ const VIDEO_PIP_INSTALL_SCRIPT = `(() => {
         if (e.button !== 0) return;
         if (e.target && e.target.closest && e.target.closest('button')) return;
         e.preventDefault();
-        console.log('cander-pip:drag-start:' + e.screenX + ',' + e.screenY);
-        const onMove = (ev) => {
-          console.log('cander-pip:drag:' + ev.screenX + ',' + ev.screenY);
-        };
-        const onUp = () => {
-          console.log('cander-pip:drag-end');
-          window.removeEventListener('mousemove', onMove, true);
-          window.removeEventListener('mouseup', onUp, true);
-        };
-        window.addEventListener('mousemove', onMove, true);
-        window.addEventListener('mouseup', onUp, true);
+        e.stopPropagation();
+        pipLog('cander-pip:drag-start:' + e.screenX + ',' + e.screenY);
       });
       (document.documentElement || document.body).appendChild(bar);
     }

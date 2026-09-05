@@ -36,6 +36,20 @@ let pipTabId = null;
 
 function setHostWindow(win) {
   hostWindow = win;
+  if (!win || win.isDestroyed()) return;
+  try {
+    win.webContents.on("console-message", (...args) => {
+      let message = "";
+      if (args[1] && typeof args[1] === "object" && args[1].message != null) {
+        message = String(args[1].message);
+      } else if (typeof args[2] === "string") {
+        message = args[2];
+      }
+      if (message === "cander-pip:drag-end") endPipDrag();
+    });
+  } catch {
+    // ignore
+  }
 }
 
 function emitToRenderer(channel, payload) {
@@ -564,9 +578,12 @@ async function setPipTab(tabId) {
   }
   pipTabId = next;
   if (!pipTabId) {
+    endPipDrag();
+    stopPipCmdPoll();
     setPipPointerPassthrough(false);
   }
   if (pipTabId) {
+    ensurePipCmdPoll();
     const entry = tabs.get(pipTabId);
     if (entry) {
       entry.visible = true;
@@ -608,6 +625,8 @@ function showTab(tabId, bounds) {
   // PiP paints must NEVER hide the active panel tab — that blanked the browser
   // whenever the floating video moved or hovered.
   if (tabId === pipTabId) {
+    // Main-process screen poll owns bounds while dragging.
+    if (pipDragState) return;
     if (!unchanged) {
       entry.view.setBounds(nextBounds);
       raiseView(entry);
@@ -659,6 +678,7 @@ function restoreActivePanelIfNeeded() {
 }
 
 function isCursorOverPip() {
+  if (pipDragState) return true;
   if (!pipTabId || !hostWindow || hostWindow.isDestroyed()) return false;
   const entry = tabs.get(pipTabId);
   if (!entry?.lastBounds || !entry.visible) return false;
@@ -686,16 +706,181 @@ function isCursorOverPip() {
 let pipPointerPassthrough = false;
 /** @type {{ tabId: string, startScreenX: number, startScreenY: number, origX: number, origY: number } | null} */
 let pipDragState = null;
+/** @type {ReturnType<typeof setInterval> | null} */
+let pipDragPoll = null;
+/** @type {ReturnType<typeof setInterval> | null} */
+let pipCmdPoll = null;
 
-function handlePipChromeConsole(tabId, message) {
-  if (tabId !== pipTabId) return;
+function stopPipCmdPoll() {
+  if (pipCmdPoll) {
+    clearInterval(pipCmdPoll);
+    pipCmdPoll = null;
+  }
+}
+
+async function pollPipGuestCommand() {
+  if (!pipTabId) return;
+  const entry = tabs.get(pipTabId);
+  if (!entry) return;
+  try {
+    const raw = await entry.view.webContents.executeJavaScript(
+      `(() => {
+        const v = document.documentElement.getAttribute('data-cander-pip-cmd');
+        if (v) document.documentElement.removeAttribute('data-cander-pip-cmd');
+        return v || '';
+      })()`,
+      true,
+    );
+    if (!raw || typeof raw !== "string") return;
+    const message = raw.split("|")[0] || "";
+    if (message.startsWith("cander-pip:")) {
+      handlePipChromeConsole(pipTabId, message);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function ensurePipCmdPoll() {
+  if (pipCmdPoll || !pipTabId) return;
+  pipCmdPoll = setInterval(() => {
+    void pollPipGuestCommand();
+  }, 50);
+}
+
+function chromePadPx() {
+  return pipPointerPassthrough || pipDragState ? 36 : 0;
+}
+
+function videoPosFromBounds(bounds) {
+  return {
+    x: bounds.x,
+    y: bounds.y + chromePadPx(),
+  };
+}
+
+function stopPipDragPoll() {
+  if (pipDragPoll) {
+    clearInterval(pipDragPoll);
+    pipDragPoll = null;
+  }
+}
+
+function applyPipDragAtScreen(screenX, screenY) {
+  if (!pipDragState || !pipTabId) return;
+  const entry = tabs.get(pipDragState.tabId);
+  if (!entry?.lastBounds) return;
+  const dx = screenX - pipDragState.startScreenX;
+  const dy = screenY - pipDragState.startScreenY;
+  const next = {
+    ...entry.lastBounds,
+    x: Math.max(0, Math.round(pipDragState.origX + dx)),
+    y: Math.max(0, Math.round(pipDragState.origY + dy)),
+  };
+  entry.lastBounds = next;
+  entry.view.setBounds(next);
+  const video = videoPosFromBounds(next);
+  emitToRenderer("cander:browser-event", {
+    type: "pipMove",
+    tabId: pipDragState.tabId,
+    x: video.x,
+    y: video.y,
+  });
+}
+
+function endPipDrag() {
+  if (!pipDragState) return;
+  const entry = tabs.get(pipDragState.tabId);
+  const tabId = pipDragState.tabId;
+  stopPipDragPoll();
+  pipDragState = null;
+  const video = entry?.lastBounds
+    ? videoPosFromBounds(entry.lastBounds)
+    : { x: 0, y: 0 };
+  emitToRenderer("cander:browser-event", {
+    type: "pipDragEnd",
+    tabId,
+    x: video.x,
+    y: video.y,
+  });
+}
+
+function armPipDragMouseUp() {
+  const script = `(() => {
+    const once = () => {
+      console.log('cander-pip:drag-end');
+      window.removeEventListener('mouseup', once, true);
+    };
+    window.addEventListener('mouseup', once, true);
+    return true;
+  })()`;
+  for (const [, entry] of tabs) {
+    try {
+      void entry.view.webContents.executeJavaScript(script, true).catch(() => {});
+    } catch {
+      // ignore
+    }
+  }
+  if (hostWindow && !hostWindow.isDestroyed()) {
+    try {
+      void hostWindow.webContents.executeJavaScript(script, true).catch(() => {});
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function startPipDrag(tabId, screenX, screenY) {
   const entry = tabs.get(tabId);
   if (!entry?.lastBounds) return;
+  stopPipDragPoll();
+  pipDragState = {
+    tabId,
+    startScreenX: screenX,
+    startScreenY: screenY,
+    origX: entry.lastBounds.x,
+    origY: entry.lastBounds.y,
+  };
+  emitToRenderer("cander:browser-event", { type: "pipDragStart", tabId });
+  // Keep guest chrome visible for the whole drag.
+  if (!pipPointerPassthrough) {
+    pipPointerPassthrough = true;
+    const title = entry.lastTitle || "Video";
+    void entry.view.webContents
+      .executeJavaScript(VIDEO_PIP_INSTALL_SCRIPT, true)
+      .then(() =>
+        entry.view.webContents.executeJavaScript(
+          VIDEO_PIP_CHROME_SCRIPT(true, title),
+          true,
+        ),
+      )
+      .catch(() => {});
+  }
+  armPipDragMouseUp();
+  const { screen } = require("electron");
+  pipDragPoll = setInterval(() => {
+    if (!pipDragState) {
+      stopPipDragPoll();
+      return;
+    }
+    const point = screen.getCursorScreenPoint();
+    applyPipDragAtScreen(point.x, point.y);
+  }, 16);
+}
+
+function handlePipChromeConsole(tabId, message) {
+  if (message === "cander-pip:drag-end") {
+    endPipDrag();
+    return;
+  }
+  if (tabId !== pipTabId) return;
   if (message === "cander-pip:close") {
+    endPipDrag();
     emitToRenderer("cander:browser-event", { type: "pipClose", tabId });
     return;
   }
   if (message === "cander-pip:expand") {
+    endPipDrag();
     emitToRenderer("cander:browser-event", { type: "pipReturn", tabId });
     return;
   }
@@ -704,46 +889,14 @@ function handlePipChromeConsole(tabId, message) {
     const sx = Number(coords[0]);
     const sy = Number(coords[1]);
     if (!Number.isFinite(sx) || !Number.isFinite(sy)) return;
-    pipDragState = {
-      tabId,
-      startScreenX: sx,
-      startScreenY: sy,
-      origX: entry.lastBounds.x,
-      origY: entry.lastBounds.y,
-    };
+    startPipDrag(tabId, sx, sy);
     return;
-  }
-  if (message.startsWith("cander-pip:drag:") && pipDragState?.tabId === tabId) {
-    const coords = message.slice("cander-pip:drag:".length).split(",");
-    const sx = Number(coords[0]);
-    const sy = Number(coords[1]);
-    if (!Number.isFinite(sx) || !Number.isFinite(sy)) return;
-    const dx = sx - pipDragState.startScreenX;
-    const dy = sy - pipDragState.startScreenY;
-    const next = {
-      ...entry.lastBounds,
-      x: Math.max(0, Math.round(pipDragState.origX + dx)),
-      y: Math.max(0, Math.round(pipDragState.origY + dy)),
-    };
-    entry.lastBounds = next;
-    entry.view.setBounds(next);
-    // React `pos` is the video top-left; when guest chrome is on the native
-    // view includes the header band above the video.
-    const chromePad = pipPointerPassthrough ? 36 : 0;
-    emitToRenderer("cander:browser-event", {
-      type: "pipMove",
-      tabId,
-      x: next.x,
-      y: next.y + chromePad,
-    });
-    return;
-  }
-  if (message === "cander-pip:drag-end") {
-    pipDragState = null;
   }
 }
 
 function setPipPointerPassthrough(active) {
+  // Keep chrome + drag alive while the user is dragging the PiP.
+  if (pipDragState && !active) return;
   const next = Boolean(active);
   if (pipPointerPassthrough === next) return;
   pipPointerPassthrough = next;
@@ -762,7 +915,8 @@ function setPipPointerPassthrough(active) {
         console.warn("[cander-desktop] pip guest chrome failed", err);
       });
   }
-  if (!next) pipDragState = null;
+  if (next) ensurePipCmdPoll();
+  else if (!pipDragState) stopPipCmdPoll();
   restoreActivePanelIfNeeded();
   ensurePipOnTop();
 }

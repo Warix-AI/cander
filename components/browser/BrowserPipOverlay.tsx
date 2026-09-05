@@ -128,6 +128,7 @@ export function BrowserPipOverlay() {
 
   const paintNative = useCallback(async () => {
     if (!pip || pip.webEmbed) return;
+    if (dragging) return;
     const el = hostRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -152,7 +153,7 @@ export function BrowserPipOverlay() {
     }
     lastPaintBounds.current = next;
     await adapter.showTab(pip.tabId, next);
-  }, [pip?.tabId, pip?.webEmbed]);
+  }, [pip?.tabId, pip?.webEmbed, dragging]);
 
   useEffect(() => {
     if (!pip || pip.webEmbed) return;
@@ -264,6 +265,17 @@ export function BrowserPipOverlay() {
       }
       if (event.type === "pipReturn") {
         void returnToProject();
+        return;
+      }
+      if (event.type === "pipDragStart") {
+        setDragging(true);
+        setHovered(true);
+        return;
+      }
+      if (event.type === "pipDragEnd" && "x" in event && "y" in event) {
+        setPos({ x: Number(event.x), y: Number(event.y) });
+        lastPaintBounds.current = null;
+        setDragging(false);
         return;
       }
       if (event.type === "pipMove" && "x" in event && "y" in event) {

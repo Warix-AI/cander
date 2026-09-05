@@ -41,6 +41,8 @@ export type BrowserSurfaceEventMap = {
   pipClose: { tabId: string };
   pipReturn: { tabId: string };
   pipMove: { tabId: string; x: number; y: number };
+  pipDragStart: { tabId: string };
+  pipDragEnd: { tabId: string; x: number; y: number };
 };
 
 export type BrowserSurfaceEvent =
