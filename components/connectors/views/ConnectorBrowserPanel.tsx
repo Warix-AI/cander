@@ -683,7 +683,10 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
             )}
             aria-hidden={!isConnectorTab}
           >
-            <DriveConnectorView onToolbarChange={onWorkspaceToolbarChange} />
+            <DriveConnectorView
+              onToolbarChange={onWorkspaceToolbarChange}
+              onOpenLink={openLink}
+            />
           </div>
         ) : connectorId === "gsheets" ? (
           <div

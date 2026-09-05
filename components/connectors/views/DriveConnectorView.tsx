@@ -1,17 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  ChevronRight,
-  ExternalLink,
   File,
-  FileSpreadsheet,
-  FileText,
   Folder,
   Image as ImageIcon,
   Loader2,
   Presentation,
+  Video,
 } from "lucide-react";
+import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import {
   WorkspaceEmptyState,
@@ -40,9 +38,19 @@ type DriveFile = {
 type FolderCrumb = { id: string; name: string };
 
 type FilePreview = {
-  previewKind: "text" | "image" | "pdf" | "link" | "unsupported";
+  previewKind:
+    | "text"
+    | "image"
+    | "pdf"
+    | "video"
+    | "audio"
+    | "embed"
+    | "link"
+    | "unsupported";
   mimeType: string;
   displayUrl: string | null;
+  embedUrl?: string | null;
+  openUrl?: string | null;
   textContent?: string;
   linkLabel?: string;
   name: string;
@@ -114,14 +122,11 @@ function parseDriveFile(raw: unknown): DriveFile | null {
   };
 }
 
-function fileIcon(mime: string, kind: "file" | "folder") {
-  if (kind === "folder") return Folder;
-  if (mime === "application/vnd.google-apps.document") return FileText;
-  if (mime === "application/vnd.google-apps.spreadsheet") return FileSpreadsheet;
-  if (mime === "application/vnd.google-apps.presentation") return Presentation;
-  if (mime.startsWith("image/")) return ImageIcon;
-  if (mime.includes("pdf") || mime.includes("text")) return FileText;
-  return File;
+function brandMarkId(mime: string, kind: "file" | "folder"): string | null {
+  if (kind === "folder") return null;
+  if (mime === "application/vnd.google-apps.document") return "gdocs";
+  if (mime === "application/vnd.google-apps.spreadsheet") return "gsheets";
+  return null;
 }
 
 function typeLabel(mime: string, kind: "file" | "folder") {
@@ -130,41 +135,139 @@ function typeLabel(mime: string, kind: "file" | "folder") {
   if (mime === "application/vnd.google-apps.spreadsheet") return "Google Sheet";
   if (mime === "application/vnd.google-apps.presentation") return "Google Slides";
   if (mime === "application/vnd.google-apps.drawing") return "Drawing";
+  if (mime === "application/vnd.google-apps.form") return "Form";
   if (mime.startsWith("image/")) return "Image";
+  if (mime.startsWith("video/")) return "Video";
+  if (mime.startsWith("audio/")) return "Audio";
   if (mime === "application/pdf") return "PDF";
   if (mime.startsWith("text/") || mime.includes("csv")) return "Text";
   return "File";
 }
 
-function parsePreview(data: Record<string, unknown>, fallbackName: string): FilePreview {
+function DriveTypeIcon({
+  mime,
+  kind,
+}: {
+  mime: string;
+  kind: "file" | "folder";
+}) {
+  const brand = brandMarkId(mime, kind);
+  if (brand) {
+    return (
+      <ConnectorMark
+        id={brand}
+        size="xs"
+        className="!h-5 !w-5"
+      />
+    );
+  }
+  if (kind === "folder") {
+    return <Folder className="h-4 w-4 text-[#E37400]" strokeWidth={1.7} />;
+  }
+  if (mime.startsWith("image/")) {
+    return <ImageIcon className="h-4 w-4 text-[#1A73E8]" strokeWidth={1.7} />;
+  }
+  if (mime === "application/vnd.google-apps.presentation") {
+    return <Presentation className="h-4 w-4 text-[#F4B400]" strokeWidth={1.7} />;
+  }
+  if (mime.startsWith("video/")) {
+    return <Video className="h-4 w-4 text-[#1A73E8]" strokeWidth={1.7} />;
+  }
+  return <File className="h-4 w-4 text-muted-foreground" strokeWidth={1.7} />;
+}
+
+function iconWellClass(mime: string, kind: "file" | "folder") {
+  if (kind === "folder") return "bg-[#FBBC04]/15";
+  if (mime === "application/vnd.google-apps.spreadsheet") return "bg-[#0F9D58]/12";
+  if (mime === "application/vnd.google-apps.document") return "bg-[#1A73E8]/12";
+  if (mime === "application/vnd.google-apps.presentation") return "bg-[#F4B400]/15";
+  return "bg-muted";
+}
+
+function clientEmbedUrl(file: DriveFile): string {
+  const id = encodeURIComponent(file.id);
+  switch (file.mimeType) {
+    case "application/vnd.google-apps.document":
+      return `https://docs.google.com/document/d/${id}/preview`;
+    case "application/vnd.google-apps.spreadsheet":
+      return `https://docs.google.com/spreadsheets/d/${id}/preview`;
+    case "application/vnd.google-apps.presentation":
+      return `https://docs.google.com/presentation/d/${id}/embed?start=false&loop=false&delayms=60000`;
+    case "application/vnd.google-apps.drawing":
+      return `https://docs.google.com/drawings/d/${id}/preview`;
+    default:
+      return `https://drive.google.com/file/d/${id}/preview`;
+  }
+}
+
+function clientOpenUrl(file: DriveFile): string {
+  if (file.webViewLink) return file.webViewLink;
+  const id = encodeURIComponent(file.id);
+  switch (file.mimeType) {
+    case "application/vnd.google-apps.document":
+      return `https://docs.google.com/document/d/${id}/edit`;
+    case "application/vnd.google-apps.spreadsheet":
+      return `https://docs.google.com/spreadsheets/d/${id}/edit`;
+    case "application/vnd.google-apps.presentation":
+      return `https://docs.google.com/presentation/d/${id}/edit`;
+    default:
+      return `https://drive.google.com/file/d/${id}/view`;
+  }
+}
+
+function parsePreview(data: Record<string, unknown>, file: DriveFile): FilePreview {
   const kind = data.previewKind;
   const previewKind =
     kind === "text" ||
     kind === "image" ||
     kind === "pdf" ||
+    kind === "video" ||
+    kind === "audio" ||
+    kind === "embed" ||
     kind === "link" ||
     kind === "unsupported"
       ? kind
-      : "unsupported";
+      : "embed";
   return {
     previewKind,
     mimeType:
-      (typeof data.mimeType === "string" && data.mimeType) ||
-      "application/octet-stream",
+      (typeof data.mimeType === "string" && data.mimeType) || file.mimeType,
     displayUrl: typeof data.displayUrl === "string" ? data.displayUrl : null,
+    embedUrl:
+      (typeof data.embedUrl === "string" && data.embedUrl) ||
+      clientEmbedUrl(file),
+    openUrl:
+      (typeof data.openUrl === "string" && data.openUrl) ||
+      clientOpenUrl(file),
     textContent:
       typeof data.textContent === "string" ? data.textContent : undefined,
     linkLabel:
-      typeof data.linkLabel === "string" ? data.linkLabel : "Open file",
-    name:
-      (typeof data.name === "string" && data.name) || fallbackName,
+      typeof data.linkLabel === "string" ? data.linkLabel : "Open in Drive",
+    name: (typeof data.name === "string" && data.name) || file.name,
   };
+}
+
+function PreviewFrame({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-black/[0.02] dark:bg-white/[0.03]">
+      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+      <p className="sr-only">{title}</p>
+    </div>
+  );
 }
 
 export function DriveConnectorView({
   onToolbarChange,
+  onOpenLink,
 }: {
   onToolbarChange?: (state: WorkspaceToolbarState) => void;
+  onOpenLink?: (url: string) => void;
 }) {
   const { workspaceId } = useApp();
   const [page, setPage] = useState<Page>("browse");
@@ -257,10 +360,19 @@ export function DriveConnectorView({
   const openFile = useCallback(
     async (file: DriveFile) => {
       setSelected(file);
-      setPreview(null);
       setError(null);
       setStatus(null);
       setPage("detail");
+      // Instant Google embed so the panel never feels empty while Composio loads.
+      setPreview({
+        previewKind: "embed",
+        mimeType: file.mimeType,
+        displayUrl: null,
+        embedUrl: clientEmbedUrl(file),
+        openUrl: clientOpenUrl(file),
+        name: file.name,
+        linkLabel: "Open in Drive",
+      });
       setPreviewLoading(true);
       try {
         const result = await runConnectorViewOperation({
@@ -270,22 +382,13 @@ export function DriveConnectorView({
           input: {
             fileId: file.id,
             sourceMimeType: file.mimeType,
+            webViewLink: file.webViewLink,
+            name: file.name,
           },
         });
-        setPreview(parsePreview(result.data, file.name));
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Could not load a preview for this file.",
-        );
-        setPreview({
-          previewKind: "unsupported",
-          mimeType: file.mimeType,
-          displayUrl: file.webViewLink ?? null,
-          name: file.name,
-          linkLabel: "Open in Drive",
-        });
+        setPreview(parsePreview(result.data, file));
+      } catch {
+        // Keep the embed preview already on screen.
       } finally {
         setPreviewLoading(false);
       }
@@ -293,15 +396,15 @@ export function DriveConnectorView({
     [workspaceId],
   );
 
-  const goToCrumb = useCallback((index: number) => {
-    setQuery("");
-    setSelected(null);
-    setPreview(null);
-    setError(null);
-    setStatus(null);
-    setFolderStack((stack) => (index < 0 ? [] : stack.slice(0, index + 1)));
-    setPage("browse");
-  }, []);
+  const openExternal = useCallback(() => {
+    const url =
+      preview?.openUrl ||
+      (selected ? clientOpenUrl(selected) : null) ||
+      preview?.embedUrl;
+    if (!url) return;
+    if (onOpenLink) onOpenLink(url);
+    else window.open(url, "_blank", "noopener,noreferrer");
+  }, [onOpenLink, preview, selected]);
 
   const createItem = useCallback(async () => {
     if (!name.trim()) {
@@ -351,14 +454,15 @@ export function DriveConnectorView({
   }, [content, createMode, currentFolderId, loadFiles, name, workspaceId]);
 
   useEffect(() => {
+    const onDetail = page === "detail" && Boolean(selected);
     onToolbarChange?.({
       title:
         page === "create"
           ? createMode === "folder"
             ? "New folder"
             : "New file"
-          : page === "detail"
-            ? selected?.name ?? "File"
+          : onDetail
+            ? selected!.name
             : locationTitle,
       syncing: syncing || previewLoading,
       busy,
@@ -369,8 +473,13 @@ export function DriveConnectorView({
           : folderStack.length > 1
             ? folderStack[folderStack.length - 2]!.name
             : "My Drive",
-      primaryLabel:
-        page === "browse" ? "New" : page === "create" ? "Create" : null,
+      primaryLabel: onDetail
+        ? "Open"
+        : page === "browse"
+          ? "New"
+          : page === "create"
+            ? "Create"
+            : null,
       onBack: () => {
         if (page === "detail" || page === "create") {
           setPage("browse");
@@ -390,8 +499,9 @@ export function DriveConnectorView({
         }
         void loadFiles();
       },
-      onPrimary:
-        page === "browse"
+      onPrimary: onDetail
+        ? () => openExternal()
+        : page === "browse"
           ? () => {
               setCreateMode("file");
               setName("");
@@ -414,12 +524,23 @@ export function DriveConnectorView({
     loadFiles,
     locationTitle,
     onToolbarChange,
+    openExternal,
     openFile,
     page,
     previewLoading,
     selected,
     syncing,
   ]);
+
+  const previewSrc =
+    preview?.previewKind === "embed"
+      ? preview.embedUrl
+      : preview?.previewKind === "pdf" ||
+          preview?.previewKind === "image" ||
+          preview?.previewKind === "video" ||
+          preview?.previewKind === "audio"
+        ? preview.displayUrl
+        : preview?.embedUrl;
 
   return (
     <WorkspacePanelFrame status={status} error={error}>
@@ -455,7 +576,8 @@ export function DriveConnectorView({
           </div>
           {currentFolderId ? (
             <p className="text-[12px] text-muted-foreground">
-              Creating in <span className="font-medium text-foreground">{locationTitle}</span>
+              Creating in{" "}
+              <span className="font-medium text-foreground">{locationTitle}</span>
             </p>
           ) : null}
           <WorkspaceField
@@ -481,64 +603,23 @@ export function DriveConnectorView({
       ) : null}
 
       {page === "detail" && selected ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="shrink-0 border-b border-black/5 px-4 py-3 dark:border-white/10">
-            <div className="flex items-start gap-3">
-              <div
-                className={cn(
-                  "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center bg-[#1A73E8]/10 text-[#1A73E8]",
-                  SHELL_G3_RADIUS,
-                )}
-              >
-                {(() => {
-                  const Icon = fileIcon(selected.mimeType, selected.kind);
-                  return <Icon className="h-5 w-5" strokeWidth={1.7} />;
-                })()}
-              </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="truncate text-[16px] font-semibold tracking-[-0.02em]">
-                  {selected.name}
-                </h2>
-                <p className="mt-0.5 text-[12px] text-muted-foreground">
-                  {typeLabel(selected.mimeType, selected.kind)}
-                  {selected.modified ? ` · ${selected.modified}` : ""}
-                  {selected.sizeLabel ? ` · ${selected.sizeLabel}` : ""}
-                </p>
-                {selected.owner ? (
-                  <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
-                    {selected.owner}
-                  </p>
-                ) : null}
-              </div>
-              {(selected.webViewLink || preview?.displayUrl) && (
-                <a
-                  href={selected.webViewLink || preview?.displayUrl || "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={cn(
-                    "inline-flex h-8 shrink-0 items-center gap-1.5 border border-border px-3 text-[12px] font-medium hover:bg-muted",
-                    SHELL_G3_RADIUS,
-                  )}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  Drive
-                </a>
-              )}
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+          {previewLoading ? (
+            <div className="pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/90 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur-sm">
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.7} />
+              Loading…
             </div>
-          </div>
+          ) : null}
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {previewLoading ? (
-              <div className="flex h-full min-h-[12rem] flex-col items-center justify-center gap-2 px-4 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" strokeWidth={1.7} />
-                <p className="text-[12px]">Loading preview…</p>
-              </div>
-            ) : preview?.previewKind === "text" && preview.textContent ? (
-              <pre className="whitespace-pre-wrap break-words px-4 py-4 font-mono text-[12.5px] leading-relaxed text-foreground/90">
+          {preview?.previewKind === "text" && preview.textContent ? (
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+              <pre className="whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed text-foreground/90">
                 {preview.textContent}
               </pre>
-            ) : preview?.previewKind === "image" && preview.displayUrl ? (
-              <div className="flex min-h-full items-center justify-center bg-black/[0.02] p-4 dark:bg-white/[0.03]">
+            </div>
+          ) : preview?.previewKind === "image" && preview.displayUrl ? (
+            <PreviewFrame title={preview.name}>
+              <div className="flex h-full items-center justify-center p-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={preview.displayUrl}
@@ -549,91 +630,55 @@ export function DriveConnectorView({
                   )}
                 />
               </div>
-            ) : preview?.previewKind === "pdf" && preview.displayUrl ? (
-              <iframe
-                title={preview.name}
+            </PreviewFrame>
+          ) : preview?.previewKind === "video" && preview.displayUrl ? (
+            <PreviewFrame title={preview.name}>
+              <video
+                controls
                 src={preview.displayUrl}
-                className="h-full min-h-[24rem] w-full border-0 bg-muted/20"
+                className="h-full w-full bg-black object-contain"
               />
-            ) : (
-              <div className="flex min-h-[12rem] flex-col items-center justify-center gap-3 px-6 py-10 text-center">
-                <div
-                  className={cn(
-                    "flex h-12 w-12 items-center justify-center bg-muted text-muted-foreground",
-                    SHELL_G3_RADIUS,
-                  )}
-                >
-                  <File className="h-5 w-5" strokeWidth={1.7} />
-                </div>
-                <div>
-                  <p className="text-[13px] font-medium">
-                    Preview isn’t available for this format
-                  </p>
-                  <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">
-                    Open it in Google Drive to view or edit. Docs, Sheets, text,
-                    images, and PDFs preview here when export is supported.
-                  </p>
-                </div>
-                {(selected.webViewLink || preview?.displayUrl) && (
-                  <a
-                    href={selected.webViewLink || preview?.displayUrl || "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={cn(
-                      "inline-flex h-9 items-center gap-1.5 bg-foreground px-4 text-[12px] font-medium text-background hover:opacity-90",
-                      SHELL_G3_RADIUS,
-                    )}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.6} />
-                    {preview?.linkLabel || "Open in Drive"}
-                  </a>
+            </PreviewFrame>
+          ) : preview?.previewKind === "audio" && preview.displayUrl ? (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6">
+              <DriveTypeIcon mime={selected.mimeType} kind="file" />
+              <audio controls src={preview.displayUrl} className="w-full max-w-md" />
+            </div>
+          ) : previewSrc ? (
+            <PreviewFrame title={selected.name}>
+              <iframe
+                title={selected.name}
+                src={previewSrc}
+                className="h-full w-full border-0 bg-white dark:bg-space-canvas"
+                allow="autoplay; encrypted-media"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </PreviewFrame>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+              <div
+                className={cn(
+                  "flex h-12 w-12 items-center justify-center",
+                  SHELL_G3_RADIUS,
+                  iconWellClass(selected.mimeType, selected.kind),
                 )}
+              >
+                <DriveTypeIcon mime={selected.mimeType} kind={selected.kind} />
               </div>
-            )}
-          </div>
+              <p className="text-[13px] font-medium">Couldn’t load preview</p>
+              <p className="max-w-sm text-[12px] text-muted-foreground">
+                Use Open in the bottom bar to view this{" "}
+                {typeLabel(selected.mimeType, selected.kind).toLowerCase()} in
+                Google.
+              </p>
+            </div>
+          )}
         </div>
       ) : null}
 
       {page === "browse" ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="shrink-0 space-y-2 border-b border-black/5 px-3 py-2 dark:border-white/10">
-            <nav
-              aria-label="Drive location"
-              className="flex min-w-0 items-center gap-0.5 overflow-x-auto text-[12px]"
-            >
-              <button
-                type="button"
-                onClick={() => goToCrumb(-1)}
-                className={cn(
-                  "shrink-0 rounded-md px-1.5 py-0.5 font-medium transition-colors",
-                  folderStack.length === 0
-                    ? "text-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                My Drive
-              </button>
-              {folderStack.map((crumb, index) => (
-                <span key={crumb.id} className="flex min-w-0 items-center gap-0.5">
-                  <ChevronRight
-                    className="h-3 w-3 shrink-0 text-muted-foreground/70"
-                    strokeWidth={1.8}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => goToCrumb(index)}
-                    className={cn(
-                      "max-w-[9rem] truncate rounded-md px-1.5 py-0.5 font-medium transition-colors",
-                      index === folderStack.length - 1
-                        ? "text-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    {crumb.name}
-                  </button>
-                </span>
-              ))}
-            </nav>
+          <div className="shrink-0 border-b border-black/5 px-3 py-2 dark:border-white/10">
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -641,7 +686,7 @@ export function DriveConnectorView({
                 if (event.key === "Enter") void loadFiles();
               }}
               placeholder={
-                currentFolderId ? "Search in this folder…" : "Search Drive…"
+                currentFolderId ? `Search in ${locationTitle}…` : "Search Drive…"
               }
               className={cn(
                 "h-8 w-full border border-border bg-transparent px-3 text-[13px] outline-none",
@@ -665,41 +710,36 @@ export function DriveConnectorView({
                 onAction={() => void loadFiles()}
               />
             ) : (
-              sortedFiles.map((file) => {
-                const Icon = fileIcon(file.mimeType, file.kind);
-                return (
-                  <WorkspaceListRow
-                    key={file.id}
-                    title={file.name}
-                    subtitle={[
-                      typeLabel(file.mimeType, file.kind),
-                      file.owner,
-                      file.sizeLabel,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                    meta={file.modified}
-                    active={selected?.id === file.id}
-                    onClick={() => {
-                      if (file.kind === "folder") openFolder(file);
-                      else void openFile(file);
-                    }}
-                    leading={
-                      <div
-                        className={cn(
-                          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center",
-                          SHELL_G3_RADIUS,
-                          file.kind === "folder"
-                            ? "bg-[#FBBC04]/15 text-[#E37400]"
-                            : "bg-[#1A73E8]/10 text-[#1A73E8]",
-                        )}
-                      >
-                        <Icon className="h-4 w-4" strokeWidth={1.7} />
-                      </div>
-                    }
-                  />
-                );
-              })
+              sortedFiles.map((file) => (
+                <WorkspaceListRow
+                  key={file.id}
+                  title={file.name}
+                  subtitle={[
+                    typeLabel(file.mimeType, file.kind),
+                    file.owner,
+                    file.sizeLabel,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  meta={file.modified}
+                  active={selected?.id === file.id}
+                  onClick={() => {
+                    if (file.kind === "folder") openFolder(file);
+                    else void openFile(file);
+                  }}
+                  leading={
+                    <div
+                      className={cn(
+                        "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center",
+                        SHELL_G3_RADIUS,
+                        iconWellClass(file.mimeType, file.kind),
+                      )}
+                    >
+                      <DriveTypeIcon mime={file.mimeType} kind={file.kind} />
+                    </div>
+                  }
+                />
+              ))
             )}
           </div>
         </div>

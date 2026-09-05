@@ -61,11 +61,50 @@ function extractFiles(payload: Record<string, unknown>): unknown[] {
   return [];
 }
 
-/** Export mime for Google Workspace types so previews are readable. */
+/** Browser-friendly Google preview URLs (same Google session as the user). */
+export function embedUrlForDriveFile(
+  fileId: string,
+  sourceMime: string | undefined,
+): string {
+  switch (sourceMime) {
+    case "application/vnd.google-apps.document":
+      return `https://docs.google.com/document/d/${encodeURIComponent(fileId)}/preview`;
+    case "application/vnd.google-apps.spreadsheet":
+      return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(fileId)}/preview`;
+    case "application/vnd.google-apps.presentation":
+      return `https://docs.google.com/presentation/d/${encodeURIComponent(fileId)}/embed?start=false&loop=false&delayms=60000`;
+    case "application/vnd.google-apps.drawing":
+      return `https://docs.google.com/drawings/d/${encodeURIComponent(fileId)}/preview`;
+    case "application/vnd.google-apps.form":
+      return `https://docs.google.com/forms/d/${encodeURIComponent(fileId)}/viewform`;
+    default:
+      return `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/preview`;
+  }
+}
+
+export function openUrlForDriveFile(
+  fileId: string,
+  sourceMime: string | undefined,
+  webViewLink?: string | null,
+): string {
+  if (webViewLink) return webViewLink;
+  switch (sourceMime) {
+    case "application/vnd.google-apps.document":
+      return `https://docs.google.com/document/d/${encodeURIComponent(fileId)}/edit`;
+    case "application/vnd.google-apps.spreadsheet":
+      return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(fileId)}/edit`;
+    case "application/vnd.google-apps.presentation":
+      return `https://docs.google.com/presentation/d/${encodeURIComponent(fileId)}/edit`;
+    default:
+      return `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
+  }
+}
+
+/** Export mime for Google Workspace types so text previews are readable. */
 export function exportMimeForDriveFile(sourceMime: string | undefined): string | undefined {
   switch (sourceMime) {
     case "application/vnd.google-apps.document":
-      return "text/plain";
+      return "text/html";
     case "application/vnd.google-apps.spreadsheet":
       return "text/csv";
     case "application/vnd.google-apps.presentation":
@@ -85,7 +124,8 @@ function isTextishMime(mime: string | undefined): boolean {
     mime === "application/xml" ||
     mime === "application/javascript" ||
     mime === "application/csv" ||
-    mime.includes("markdown")
+    mime.includes("markdown") ||
+    mime.includes("html")
   );
 }
 
@@ -97,7 +137,15 @@ function isPdfMime(mime: string | undefined): boolean {
   return mime === "application/pdf";
 }
 
-async function fetchTextPreview(url: string, maxChars = 48_000): Promise<string | null> {
+function isVideoMime(mime: string | undefined): boolean {
+  return Boolean(mime?.startsWith("video/"));
+}
+
+function isAudioMime(mime: string | undefined): boolean {
+  return Boolean(mime?.startsWith("audio/"));
+}
+
+async function fetchTextPreview(url: string, maxChars = 64_000): Promise<string | null> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
     if (!res.ok) return null;
@@ -109,7 +157,28 @@ async function fetchTextPreview(url: string, maxChars = 48_000): Promise<string 
   }
 }
 
-function normalizeDownloadPreview(payload: Record<string, unknown>): Record<string, unknown> {
+function htmlToPlainPreview(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normalizeDownloadPreview(input: {
+  payload: Record<string, unknown>;
+  fileId: string;
+  sourceMime?: string;
+  webViewLink?: string;
+}): Record<string, unknown> {
+  const { payload, fileId, sourceMime, webViewLink } = input;
   const downloaded =
     payload.downloaded_file_content &&
     typeof payload.downloaded_file_content === "object"
@@ -133,24 +202,46 @@ function normalizeDownloadPreview(payload: Record<string, unknown>): Record<stri
       downloaded?.mimeType,
       payload.mimeType,
       payload.mime_type,
+      sourceMime,
     ) ?? "application/octet-stream";
 
-  const name =
-    pickString(payload.name, downloaded?.name) ?? "File";
+  const name = pickString(payload.name, downloaded?.name) ?? "File";
+  const embedUrl = embedUrlForDriveFile(fileId, sourceMime);
+  const openUrl = openUrlForDriveFile(fileId, sourceMime, webViewLink);
 
-  let previewKind: "text" | "image" | "pdf" | "link" | "unsupported" = "unsupported";
-  if (isTextishMime(mimeType)) previewKind = "text";
-  else if (isImageMime(mimeType)) previewKind = "image";
-  else if (isPdfMime(mimeType)) previewKind = "pdf";
-  else if (displayUrl) previewKind = "link";
+  let previewKind:
+    | "text"
+    | "image"
+    | "pdf"
+    | "video"
+    | "audio"
+    | "embed"
+    | "link"
+    | "unsupported" = "embed";
+
+  if (isTextishMime(mimeType) && displayUrl) previewKind = "text";
+  else if (isImageMime(mimeType) && displayUrl) previewKind = "image";
+  else if (isPdfMime(mimeType) && displayUrl) previewKind = "pdf";
+  else if (isVideoMime(mimeType) && displayUrl) previewKind = "video";
+  else if (isAudioMime(mimeType) && displayUrl) previewKind = "audio";
+  else if (displayUrl && !sourceMime?.startsWith("application/vnd.google-apps.")) {
+    // Native binary with a downloadable URL — still embed Drive preview as fallback UI.
+    if (isImageMime(sourceMime)) previewKind = "image";
+    else if (isPdfMime(sourceMime)) previewKind = "pdf";
+    else if (isVideoMime(sourceMime)) previewKind = "video";
+    else previewKind = "embed";
+  }
 
   return {
-    id: pickString(payload.id) ?? null,
+    id: pickString(payload.id) ?? fileId,
     name,
     mimeType,
+    sourceMimeType: sourceMime ?? null,
     displayUrl,
+    embedUrl,
+    openUrl,
     previewKind,
-    linkLabel: pickString(payload.link_label, payload.linkLabel) ?? "Open file",
+    linkLabel: pickString(payload.link_label, payload.linkLabel) ?? "Open in Drive",
     exportApplied: Boolean(payload.export_applied ?? payload.exportApplied),
     raw: payload,
   };
@@ -210,9 +301,26 @@ export const gdriveViewAdapter: ConnectorViewAdapter = {
             args.mimeType,
             args.mime_type,
           );
+          const webViewLink = pickString(args.webViewLink, args.web_view_link);
           const exportMime =
             pickString(args.exportMimeType, args.export_mime_type) ||
             exportMimeForDriveFile(sourceMime);
+
+          // Always return an embeddable Google preview so the UI can show something
+          // even when Composio download fails (access, size, format).
+          const fallback = {
+            id: fileId,
+            name: pickString(args.name) ?? "File",
+            mimeType: sourceMime ?? "application/octet-stream",
+            sourceMimeType: sourceMime ?? null,
+            displayUrl: null as string | null,
+            embedUrl: embedUrlForDriveFile(fileId, sourceMime),
+            openUrl: openUrlForDriveFile(fileId, sourceMime, webViewLink),
+            previewKind: "embed" as const,
+            linkLabel: "Open in Drive",
+            exportApplied: false,
+          };
+
           const result = await runTool(
             ctx,
             "gdrive.download",
@@ -222,18 +330,33 @@ export const gdriveViewAdapter: ConnectorViewAdapter = {
             },
             false,
           );
-          if (!result.ok) return { ok: false, error: result.error };
+
+          if (!result.ok) {
+            return { ok: true, data: fallback };
+          }
+
           const payload = parseToolJson(result.output);
-          const preview = normalizeDownloadPreview(payload);
+          const preview = normalizeDownloadPreview({
+            payload,
+            fileId,
+            sourceMime,
+            webViewLink,
+          });
 
           if (
             preview.previewKind === "text" &&
             typeof preview.displayUrl === "string" &&
             preview.displayUrl
           ) {
-            const text = await fetchTextPreview(preview.displayUrl);
-            if (text != null) {
-              preview.textContent = text;
+            const rawText = await fetchTextPreview(preview.displayUrl);
+            if (rawText != null) {
+              const mime = String(preview.mimeType ?? "");
+              preview.textContent = mime.includes("html")
+                ? htmlToPlainPreview(rawText)
+                : rawText;
+            } else {
+              // Keep Google embed if text fetch failed.
+              preview.previewKind = "embed";
             }
           }
 

@@ -204,8 +204,8 @@ export function ComposerDictationButton({
 /**
  * Trailing actions for the normal (non-recording) composer.
  * Dictation only — no live / realtime voice control.
- * Empty draft → mic. Has payload → send. Active turn → stop.
- * Never show mic and send side by side.
+ * Empty draft → mic only (no send). Has payload → mic (if voice) + send.
+ * Active turn → stop.
  */
 export function ComposerTrailingActions({
   canSend,
@@ -228,15 +228,17 @@ export function ComposerTrailingActions({
   if (turnActive) {
     return <ComposerStopButton compact={compact} onClick={onStop} />;
   }
-  if (canSend) {
-    return <ComposerSendButton compact={compact} onClick={onSend} />;
-  }
-  if (hasVoice) {
-    return (
-      <ComposerDictationButton onClick={onStartDictation} compact={compact} />
-    );
-  }
-  return null;
+
+  return (
+    <>
+      {hasVoice ? (
+        <ComposerDictationButton onClick={onStartDictation} compact={compact} />
+      ) : null}
+      {canSend ? (
+        <ComposerSendButton compact={compact} onClick={onSend} />
+      ) : null}
+    </>
+  );
 }
 
 export function ComposerStopButton({
