@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { useApp } from "@/components/app/AppProvider";
 import {
@@ -12,7 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const headerIconClass =
-  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground/75 transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground";
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground/75 transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-35";
 
 export function WindowChrome({
   clearTrafficLights = false,
@@ -58,7 +58,7 @@ export function WindowChrome({
 }
 
 function DesktopHeaderActions({ dragSpacer }: { dragSpacer: ReactNode }) {
-  const { openOverlay } = useApp();
+  const { openOverlay, canGoBack, canGoForward, goBack, goForward } = useApp();
   const desktop = useDesktopShell();
 
   return (
@@ -76,6 +76,26 @@ function DesktopHeaderActions({ dragSpacer }: { dragSpacer: ReactNode }) {
         <Search className="h-4 w-4" strokeWidth={1.7} />
       </button>
       {dragSpacer}
+      <button
+        type="button"
+        aria-label="Back"
+        disabled={!canGoBack}
+        style={desktop ? DESKTOP_NO_DRAG : undefined}
+        onClick={goBack}
+        className={headerIconClass}
+      >
+        <ChevronLeft className="h-4 w-4" strokeWidth={1.7} />
+      </button>
+      <button
+        type="button"
+        aria-label="Forward"
+        disabled={!canGoForward}
+        style={desktop ? DESKTOP_NO_DRAG : undefined}
+        onClick={goForward}
+        className={headerIconClass}
+      >
+        <ChevronRight className="h-4 w-4" strokeWidth={1.7} />
+      </button>
     </div>
   );
 }
