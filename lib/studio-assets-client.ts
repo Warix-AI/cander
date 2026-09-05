@@ -177,3 +177,21 @@ export async function editStudioProjectImage(opts: {
     aspectRatio: data.aspectRatio,
   };
 }
+
+export async function deleteStudioProjectAsset(assetId: string): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/studio/assets/${encodeURIComponent(assetId)}/image`,
+    { method: "DELETE", headers },
+  );
+  if (!res.ok && res.status !== 404) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error || "Could not delete Studio image.");
+  }
+}
+
+export function studioAssetIdFromClientUrl(url: string | null | undefined) {
+  if (!url) return null;
+  const match = /\/api\/studio\/assets\/([^/]+)\/image/.exec(url.trim());
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}

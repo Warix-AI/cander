@@ -8,6 +8,8 @@ export type BrowserContextTabKind =
   | "project-preview"
   | "web"
   | "agent-browser"
+  | "agent-builder"
+  | "agent-overview"
   | "studio-image"
   | "studio-video"
   | "studio-document";

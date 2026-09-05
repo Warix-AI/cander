@@ -56,7 +56,12 @@ export function PinsSheet({
   const openItem = (item: PinnedItem) => {
     if (item.kind === "thread") openThread(item.id);
     else if (item.kind === "connector") openConnector(item.id);
-    else openProject(item.id);
+    else if (item.projectKind === "automation") {
+      openProject(item.id, {
+        agentSurface: "overview",
+        landOnPanel: true,
+      });
+    } else openProject(item.id);
     onSelect();
   };
 

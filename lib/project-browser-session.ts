@@ -18,6 +18,8 @@ export type ProjectBrowserTabKind =
   | "project-preview"
   | "web"
   | "agent-browser"
+  | "agent-builder"
+  | "agent-overview"
   | "studio-image"
   | "studio-video"
   | "studio-document";
@@ -34,6 +36,11 @@ export type ProjectBrowserTab = {
   computerSessionId?: string;
   /** Studio image tab bound to a chat image_generation job. */
   boundGenerationId?: string;
+  /**
+   * User explicitly removed the canvas image. Blocks chat/asset reseeding
+   * until they upload/replace or a new generation binds.
+   */
+  studioCleared?: boolean;
   /** Locked canvas aspect (e.g. "3:4") after resize — survives remounts. */
   aspectRatio?: string | null;
   /** Public share id for markdown document tabs → {id}.cander.app */
@@ -118,6 +125,8 @@ export function normalizeTabKind(
     raw === "project-preview" ||
     raw === "web" ||
     raw === "agent-browser" ||
+    raw === "agent-builder" ||
+    raw === "agent-overview" ||
     raw === "studio-image" ||
     raw === "studio-video" ||
     raw === "studio-document"
@@ -236,11 +245,43 @@ export function makeAgentBrowserTab(input: {
   };
 }
 
+export function makeAgentBuilderTab(input: {
+  projectId: string;
+  title: string;
+}): ProjectBrowserTab {
+  return {
+    id: pinnedProjectTabId(input.projectId),
+    kind: "agent-builder",
+    title: input.title,
+    url: "cander://agent-builder",
+    pinned: true,
+    projectId: input.projectId,
+    ...withHistory("cander://agent-builder"),
+  };
+}
+
+export function makeAgentOverviewTab(input: {
+  projectId: string;
+  title: string;
+}): ProjectBrowserTab {
+  return {
+    id: pinnedProjectTabId(input.projectId),
+    kind: "agent-overview",
+    title: input.title,
+    url: "cander://agent-overview",
+    pinned: true,
+    projectId: input.projectId,
+    ...withHistory("cander://agent-overview"),
+  };
+}
+
 export function defaultProjectBrowserSession(input: {
   projectId: string;
   title: string;
   publishedUrl?: string | null;
   spaceId?: SpaceId;
+  projectKind?: string | null;
+  agentSurface?: "builder" | "overview";
 }): ProjectBrowserSession {
   const url = previewUrlForProject(input.projectId, input.publishedUrl);
   const spaceId = input.spaceId ?? "build";
@@ -253,6 +294,20 @@ export function defaultProjectBrowserSession(input: {
   if (spaceId === "studio") {
     const image = makeStudioMediaTab("studio-image");
     return { tabs: [image], activeTabId: image.id };
+  }
+
+  if (spaceId === "build" && input.projectKind === "automation") {
+    const tab =
+      input.agentSurface === "overview"
+        ? makeAgentOverviewTab({
+            projectId: input.projectId,
+            title: input.title,
+          })
+        : makeAgentBuilderTab({
+            projectId: input.projectId,
+            title: input.title,
+          });
+    return { tabs: [tab], activeTabId: tab.id };
   }
 
   if (spaceId === "build") {
@@ -311,6 +366,7 @@ function parseTab(
     boundGenerationId: data.boundGenerationId
       ? String(data.boundGenerationId)
       : undefined,
+    studioCleared: Boolean(data.studioCleared) || undefined,
     aspectRatio:
       typeof data.aspectRatio === "string" && data.aspectRatio.trim()
         ? data.aspectRatio.trim()

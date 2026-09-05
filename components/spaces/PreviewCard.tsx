@@ -54,6 +54,57 @@ import { cn } from "@/lib/utils";
 
 export type PreviewKind = "product" | "paper" | "skill" | "schedule" | "file";
 
+function CoverBleedImage({
+  src,
+  compact,
+  badge,
+  onBroken,
+}: {
+  src: string;
+  compact?: boolean;
+  badge?: string;
+  onBroken?: () => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  const brokenOnce = useRef(false);
+  if (failed) {
+    return (
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-[10px] bg-muted",
+          compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
+        )}
+      />
+    );
+  }
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-[10px] bg-muted",
+        compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
+      )}
+    >
+      <img
+        src={src}
+        alt=""
+        className="h-full w-full object-cover object-top"
+        onError={() => {
+          setFailed(true);
+          if (!brokenOnce.current) {
+            brokenOnce.current = true;
+            onBroken?.();
+          }
+        }}
+      />
+      {badge ? (
+        <span className="absolute bottom-3 left-3 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium tracking-[-0.01em] text-foreground">
+          {badge}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export type PreviewEntry = {
   id: string;
   name: string;
@@ -178,6 +229,21 @@ function PreviewFace({
   kind: PreviewKind;
   compact?: boolean;
 }) {
+  const ctx = useWorkspaceCtx();
+  const { updateProject } = useSpaceMutation();
+  const refreshBrokenStudioCover = () => {
+    if (item.space !== "studio") return;
+    void fetchFirstStudioGeneratedAsset({
+      workspaceId: ctx.workspaceId,
+      projectId: item.projectId,
+    })
+      .then((asset) => {
+        if (!asset?.url) return;
+        return updateProject(ctx, item.projectId, { cover: asset.url });
+      })
+      .catch(() => {});
+  };
+
   // Explore cards: peach wash + wide paper; paper shows first-site cover when present.
   // Create (studio/build) uses full-bleed product covers — never the paper frame.
   if (
@@ -217,6 +283,9 @@ function PreviewFace({
               src={coverImage}
               alt=""
               className="h-full w-full object-cover object-top"
+              onError={(event) => {
+                event.currentTarget.style.display = "none";
+              }}
             />
           ) : preview ? (
             <>
@@ -273,23 +342,12 @@ function PreviewFace({
 
   if (coverImage) {
     return (
-      <div
-        className={cn(
-          "relative overflow-hidden rounded-[10px] bg-muted",
-          compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
-        )}
-      >
-        <img
-          src={coverImage}
-          alt=""
-          className="h-full w-full object-cover object-top"
-        />
-        {!compact && item.badge ? (
-          <span className="absolute bottom-3 left-3 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium tracking-[-0.01em] text-foreground">
-            {item.badge}
-          </span>
-        ) : null}
-      </div>
+      <CoverBleedImage
+        src={coverImage}
+        compact={compact}
+        badge={!compact ? item.badge : undefined}
+        onBroken={refreshBrokenStudioCover}
+      />
     );
   }
 

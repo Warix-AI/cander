@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from "react";
 import {
   AppWindow,
+  Bot,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -116,10 +117,12 @@ import {
 } from "@/lib/shared-markdown";
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import {
+  deleteStudioProjectAsset,
   editStudioProjectImage,
   fetchLatestStudioProjectAsset,
   isStudioAssetUrl,
   studioAspectParts,
+  studioAssetIdFromClientUrl,
   studioPresetById,
   uploadStudioProjectAsset,
   type StudioResizePresetId,
@@ -139,6 +142,7 @@ import {
   getProjectBrowserSessionRevision,
   isPreviewTabKind,
   isStudioMediaTabKind,
+  makeAgentBuilderTab,
   makeProjectPreviewTab,
   makeStudioMediaTab,
   makeWebTab,
@@ -150,6 +154,8 @@ import {
   type ProjectBrowserSession,
   type ProjectBrowserTab,
 } from "@/lib/project-browser-session";
+import { AgentBuilderPanel } from "@/components/agents/AgentBuilderPanel";
+import { AgentOverviewPanel } from "@/components/agents/AgentOverviewPanel";
 import {
   isGoogleUrl,
   isHttpUrl,
@@ -294,6 +300,7 @@ export function ProjectBrowserPanel({
       title: project?.name ?? entity?.title ?? "Project",
       publishedUrl: entity?.publishedUrl,
       spaceId: browserSpaceId,
+      projectKind: entity?.kind,
     });
   }, [
     standalone,
@@ -301,6 +308,7 @@ export function ProjectBrowserPanel({
     project?.name,
     entity?.title,
     entity?.publishedUrl,
+    entity?.kind,
     browserSpaceId,
   ]);
 
@@ -315,6 +323,35 @@ export function ProjectBrowserPanel({
         ? getStandaloneBrowserSession(key, fallback)
         : getProjectBrowserSession(key, fallback)
       : fallback;
+
+  // Upgrade legacy build-preview sessions for Agent projects to the builder surface.
+  useEffect(() => {
+    if (!key || standalone || !entity || entity.kind !== "automation") return;
+    const current = getProjectBrowserSession(key, fallback);
+    const hasAgentSurface = current.tabs.some(
+      (tab) =>
+        tab.kind === "agent-builder" || tab.kind === "agent-overview",
+    );
+    if (hasAgentSurface) return;
+    const next = defaultProjectBrowserSession({
+      projectId: entity.id,
+      title: entity.title,
+      publishedUrl: entity.publishedUrl,
+      spaceId: browserSpaceId,
+      projectKind: "automation",
+      agentSurface: "builder",
+    });
+    setProjectBrowserSession(key, next);
+  }, [
+    key,
+    standalone,
+    entity?.id,
+    entity?.kind,
+    entity?.title,
+    entity?.publishedUrl,
+    browserSpaceId,
+    fallback,
+  ]);
 
   const active =
     session.tabs.find((tab) => tab.id === session.activeTabId) ?? session.tabs[0];
@@ -668,11 +705,16 @@ export function ProjectBrowserPanel({
     (browserSpaceId === "studio" ||
       project?.space === "studio" ||
       entity?.space === "studio");
-  const showBrowserNavChrome = isMarkdownDocTab
-    ? true
-    : isStudioProject
-      ? active?.kind === "web"
-      : !isWorkItemBrowser || session.tabs.some((tab) => tab.kind === "web");
+  const isAgentProject = !standalone && entity?.kind === "automation";
+  const isAgentSurfaceTab =
+    active?.kind === "agent-builder" || active?.kind === "agent-overview";
+  const showBrowserNavChrome = isAgentSurfaceTab || isAgentProject
+    ? active?.kind === "web"
+    : isMarkdownDocTab
+      ? true
+      : isStudioProject
+        ? active?.kind === "web"
+        : !isWorkItemBrowser || session.tabs.some((tab) => tab.kind === "web");
 
   const pipGate = canEnterBrowserPip(
     active?.kind === "web" ? address || active.url || "" : "",
@@ -853,6 +895,7 @@ export function ProjectBrowserPanel({
     const isEmptyUnboundStudioTab = (tab: ProjectBrowserTab) =>
       tab.kind === "studio-image" &&
       !tab.boundGenerationId &&
+      !tab.studioCleared &&
       (!tab.url || tab.url === "" || tab.url === "about:blank");
 
     const current = getProjectBrowserSession(key, session);
@@ -970,16 +1013,19 @@ export function ProjectBrowserPanel({
         // Seed from chat when empty. Also replace a stale/wrong URL that isn't
         // a durable studio asset yet (attachment URLs / prior bind races).
         // Prefer attachment URLs over inline data URLs so localStorage stays small.
+        // Never reseed a tab the user explicitly cleared.
         const shouldSeed =
-          !hasCanvas ||
-          (!sameImage && !isStudioAssetUrl(existingUrl)) ||
-          (existingUrl.startsWith("data:") &&
-            seedUrl !== existingUrl &&
-            !seedUrl.startsWith("data:"));
+          !target.studioCleared &&
+          (!hasCanvas ||
+            (!sameImage && !isStudioAssetUrl(existingUrl)) ||
+            (existingUrl.startsWith("data:") &&
+              seedUrl !== existingUrl &&
+              !seedUrl.startsWith("data:")));
         if (shouldSeed) {
           nextTabs[targetIndex] = {
             ...target,
             boundGenerationId: genId,
+            studioCleared: undefined,
             url: seedUrl,
             history: [seedUrl],
             historyIndex: 0,
@@ -992,11 +1038,11 @@ export function ProjectBrowserPanel({
                 : target.title,
           };
           changed = true;
-        } else if (target.boundGenerationId !== genId) {
+        } else if (target.boundGenerationId !== genId && !target.studioCleared) {
           nextTabs[targetIndex] = { ...target, boundGenerationId: genId };
           changed = true;
         }
-      } else if (target.boundGenerationId !== genId) {
+      } else if (target.boundGenerationId !== genId && !target.studioCleared) {
         nextTabs[targetIndex] = { ...target, boundGenerationId: genId };
         changed = true;
       }
@@ -2042,6 +2088,7 @@ function ProjectBrowserBody({
     faviconUrl?: string | null;
     boundGenerationId?: string | null;
     aspectRatio?: string | null;
+    studioCleared?: boolean | null;
   }) => {
     const sessionFallback =
       browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID
@@ -2104,6 +2151,12 @@ function ProjectBrowserBody({
       if (patch.aspectRatio !== undefined) {
         next = { ...next, aspectRatio: patch.aspectRatio };
       }
+      if (patch.studioCleared !== undefined) {
+        next = {
+          ...next,
+          studioCleared: patch.studioCleared ? true : undefined,
+        };
+      }
       return next;
     });
     if (nextTabs.some((item, i) => item !== current.tabs[i])) {
@@ -2156,6 +2209,54 @@ function ProjectBrowserBody({
     );
   }
 
+  if (tab.kind === "agent-overview") {
+    const match =
+      projects.find((item) => item.id === (tab.projectId ?? projectId)) ?? null;
+    return (
+      <AgentOverviewPanel
+        workspaceId={workspaceId}
+        projectId={projectId ?? tab.projectId ?? ""}
+        projectTitle={match?.title ?? fallbackName}
+        onEditInProject={() => {
+          if (!projectId) return;
+          const builder = makeAgentBuilderTab({
+            projectId,
+            title: match?.title ?? fallbackName,
+          });
+          const sessionFallback =
+            browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID
+              ? defaultStandaloneBrowserSession()
+              : defaultProjectBrowserSession({
+                  projectId: browserKey.projectId,
+                  title: fallbackName,
+                  spaceId: browserKey.spaceId,
+                  projectKind: "automation",
+                  agentSurface: "builder",
+                });
+          const current = getProjectBrowserSession(browserKey, sessionFallback);
+          setProjectBrowserSession(browserKey, {
+            tabs: current.tabs.map((item) =>
+              item.id === tab.id ? { ...builder, id: tab.id } : item,
+            ),
+            activeTabId: tab.id,
+          });
+        }}
+      />
+    );
+  }
+
+  if (tab.kind === "agent-builder") {
+    const match =
+      projects.find((item) => item.id === (tab.projectId ?? projectId)) ?? null;
+    return (
+      <AgentBuilderPanel
+        workspaceId={workspaceId}
+        projectId={projectId ?? tab.projectId ?? ""}
+        projectTitle={match?.title ?? fallbackName}
+      />
+    );
+  }
+
   if (tab.kind === "build-preview" || tab.kind === "project-preview") {
     const match =
       projects.find((item) => item.id === tab.projectId) ?? null;
@@ -2201,19 +2302,25 @@ function ProjectBrowserBody({
         projectId={projectId}
         boundGenerationId={tab.boundGenerationId}
         lockedAspectRatio={tab.aspectRatio}
+        studioCleared={Boolean(tab.studioCleared)}
         chatImageFallbackSrc={chatImageFallbackSrc}
         chatImageGenerating={chatImageGenerating}
         onOpenUrl={openNewInAppTab}
-        onSrcChange={(nextUrl) =>
+        onSrcChange={(nextUrl, opts) =>
           syncSurfaceMeta(
-            nextUrl === "about:blank"
+            nextUrl === "about:blank" || opts?.cleared
               ? {
-                  url: nextUrl,
+                  url: "about:blank",
                   title: tab.title,
                   boundGenerationId: null,
                   aspectRatio: null,
+                  studioCleared: true,
                 }
-              : { url: nextUrl, title: tab.title },
+              : {
+                  url: nextUrl,
+                  title: tab.title,
+                  studioCleared: false,
+                },
           )
         }
         onAspectRatioChange={(aspectRatio) =>
@@ -2876,6 +2983,7 @@ function StudioMediaSurface({
   projectId,
   boundGenerationId,
   lockedAspectRatio,
+  studioCleared = false,
   chatImageFallbackSrc = null,
   chatImageGenerating = false,
   onSrcChange,
@@ -2888,9 +2996,10 @@ function StudioMediaSurface({
   projectId: string | null;
   boundGenerationId?: string;
   lockedAspectRatio?: string | null;
+  studioCleared?: boolean;
   chatImageFallbackSrc?: string | null;
   chatImageGenerating?: boolean;
-  onSrcChange: (next: string) => void;
+  onSrcChange: (next: string, opts?: { cleared?: boolean }) => void;
   onAspectRatioChange: (ratio: string | null) => void;
   onOpenUrl?: (url: string) => void;
 }) {
@@ -2900,6 +3009,7 @@ function StudioMediaSurface({
   const { thread } = useApp();
   const fileRef = useRef<HTMLInputElement>(null);
   const appliedGenerationRef = useRef<string | null>(null);
+  const optimisticObjectUrlRef = useRef<string | null>(null);
   const [activity, setActivity] = useState<StudioCanvasActivity | null>(null);
   const [naturalRatio, setNaturalRatio] = useState(() =>
     studioAspectParts(lockedAspectRatio),
@@ -2922,7 +3032,7 @@ function StudioMediaSurface({
     kind === "studio-image" ? Image : kind === "studio-video" ? Video : FileText;
 
   const imageJob = useMemo(() => {
-    if (kind !== "studio-image" || !thread) return null;
+    if (kind !== "studio-image" || !thread || studioCleared) return null;
     if (boundGenerationId) {
       for (let i = thread.messages.length - 1; i >= 0; i--) {
         const message = thread.messages[i]!;
@@ -2948,28 +3058,35 @@ function StudioMediaSurface({
       }
     }
     return null;
-  }, [kind, thread, boundGenerationId]);
+  }, [kind, thread, boundGenerationId, studioCleared]);
 
   const chatImageSrc = useMemo(() => {
+    if (studioCleared) return null;
     if (chatImageFallbackSrc?.trim()) return chatImageFallbackSrc.trim();
     if (!imageJob || imageJob.status !== "completed") return null;
     return canvasSrcFromImageJob(imageJob);
-  }, [chatImageFallbackSrc, imageJob]);
+  }, [chatImageFallbackSrc, imageJob, studioCleared]);
 
-  // Show chat output immediately. Prefer durable studio asset URLs once saved
-  // (edits/uploads); otherwise prefer the live chat generation URL over an
-  // empty/stripped tab.url that would leave the canvas on "Add image".
-  const displaySrc =
-    (src && isStudioAssetUrl(src) ? src : null) ||
-    chatImageSrc ||
-    (src && src !== "about:blank" ? src : "") ||
-    "";
+  // Prefer durable studio / optimistic preview URLs; otherwise live chat URL —
+  // unless the user explicitly cleared the canvas.
+  const displaySrc = studioCleared
+    ? src && src !== "about:blank"
+      ? src
+      : ""
+    : (src && isStudioAssetUrl(src) ? src : null) ||
+      (src && (src.startsWith("blob:") || src.startsWith("data:"))
+        ? src
+        : null) ||
+      chatImageSrc ||
+      (src && src !== "about:blank" ? src : "") ||
+      "";
   const hasMedia = Boolean(displaySrc);
   const isUploading = activity?.type === "upload";
   const isEditing = activity?.type === "edit";
 
   const isGenerating =
     kind === "studio-image" &&
+    !studioCleared &&
     (chatImageGenerating ||
       (imageJob?.status === "generating" &&
         (boundGenerationId
@@ -2987,6 +3104,13 @@ function StudioMediaSurface({
         : isGenerating
           ? { w: 1, h: 1 }
           : naturalRatio;
+
+  const revokeOptimisticUrl = () => {
+    if (optimisticObjectUrlRef.current) {
+      URL.revokeObjectURL(optimisticObjectUrlRef.current);
+      optimisticObjectUrlRef.current = null;
+    }
+  };
 
   const lockAspect = (ratio: string) => {
     const parts = studioAspectParts(ratio);
@@ -3011,7 +3135,9 @@ function StudioMediaSurface({
       aspectRatio,
     });
     onSrcChange(stored.url);
-    if (
+    if (source === "upload") {
+      void updateProject(ctx, projectId, { cover: stored.url }).catch(() => {});
+    } else if (
       source === "generate" &&
       project &&
       studioCoverAcceptsFirstGenerated(project.cover)
@@ -3029,20 +3155,24 @@ function StudioMediaSurface({
     setNaturalRatio(studioAspectParts(lockedAspectRatio));
   }, [lockedAspectRatio]);
 
+  useEffect(() => () => revokeOptimisticUrl(), []);
+
   // Mirror chat image onto the tab URL when the canvas is still empty.
   useEffect(() => {
     if (kind !== "studio-image") return;
+    if (studioCleared) return;
     if (!chatImageSrc) return;
     if (src && src !== "about:blank") return;
     onSrcChange(chatImageSrc);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once per chat URL
-  }, [kind, chatImageSrc, src]);
+  }, [kind, chatImageSrc, src, studioCleared]);
 
   // Restore empty canvases. Bound tabs use their chat generation URL — never
   // steal the project's newest asset onto the wrong tab. Unbound empty tabs
   // wait only while a generation is still in flight.
   useEffect(() => {
     if (kind !== "studio-image" || !projectId) return;
+    if (studioCleared) return;
     if (hasMedia || src === "about:blank") return;
     if (isGenerating || activity) return;
 
@@ -3070,6 +3200,8 @@ function StudioMediaSurface({
       }
     }
 
+    // Fast path: tab already has a studio asset URL (handled via hasMedia).
+    // Only fetch latest when the canvas is truly empty.
     let cancelled = false;
     void fetchLatestStudioProjectAsset({ workspaceId, projectId })
       .then((asset) => {
@@ -3095,10 +3227,12 @@ function StudioMediaSurface({
     imageJob?.imageUrl,
     chatImageSrc,
     thread,
+    studioCleared,
   ]);
 
   useEffect(() => {
     if (kind !== "studio-image") return;
+    if (studioCleared) return;
     if (!imageJob || imageJob.status !== "completed") return;
     const generationId = imageJob.generationId;
     const url =
@@ -3167,7 +3301,7 @@ function StudioMediaSurface({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- persist once per completed generation
-  }, [kind, imageJob?.generationId, imageJob?.status, imageJob?.imageUrl, chatImageSrc]);
+  }, [kind, imageJob?.generationId, imageJob?.status, imageJob?.imageUrl, chatImageSrc, studioCleared]);
 
   const runEdit = async (
     action: "remove-bg" | "resize" | "suggest-edit",
@@ -3230,6 +3364,55 @@ function StudioMediaSurface({
   const startUpload = (file: File) => {
     setActivity({ type: "upload" });
     setError(null);
+
+    // Optimistic preview for images — show immediately, upload in background.
+    if (kind === "studio-image") {
+      revokeOptimisticUrl();
+      const objectUrl = URL.createObjectURL(file);
+      optimisticObjectUrlRef.current = objectUrl;
+      onSrcChange(objectUrl);
+
+      void (async () => {
+        try {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () =>
+              typeof reader.result === "string"
+                ? resolve(reader.result)
+                : reject(new Error("Could not read image."));
+            reader.onerror = () => reject(new Error("Could not read image."));
+            reader.readAsDataURL(file);
+          });
+          if (!projectId) {
+            revokeOptimisticUrl();
+            onSrcChange(dataUrl);
+            return;
+          }
+          const stored = await uploadStudioProjectAsset({
+            workspaceId,
+            projectId,
+            dataUrl,
+            source: "upload",
+            aspectRatio: lockedAspectRatio ?? null,
+          });
+          revokeOptimisticUrl();
+          onSrcChange(stored.url);
+          void updateProject(ctx, projectId, { cover: stored.url }).catch(
+            () => {},
+          );
+        } catch (err) {
+          revokeOptimisticUrl();
+          setError(
+            err instanceof Error ? err.message : "Could not upload image.",
+          );
+          onSrcChange("about:blank", { cleared: true });
+        } finally {
+          setActivity(null);
+        }
+      })();
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result;
@@ -3237,27 +3420,28 @@ function StudioMediaSurface({
         setActivity(null);
         return;
       }
-      void (async () => {
-        try {
-          if (kind === "studio-image") {
-            await persistCanvasImage(result, "upload");
-          } else {
-            onSrcChange(result);
-          }
-        } catch (err) {
-          setError(
-            err instanceof Error ? err.message : "Could not upload image.",
-          );
-        } finally {
-          setActivity(null);
-        }
-      })();
+      onSrcChange(result);
+      setActivity(null);
     };
     reader.onerror = () => {
       setActivity(null);
       setError("Could not read that file.");
     };
     reader.readAsDataURL(file);
+  };
+
+  const clearCanvas = () => {
+    setError(null);
+    setNaturalRatio({ w: 1, h: 1 });
+    revokeOptimisticUrl();
+    const assetId = studioAssetIdFromClientUrl(src) || studioAssetIdFromClientUrl(displaySrc);
+    onSrcChange("about:blank", { cleared: true });
+    if (assetId) {
+      void deleteStudioProjectAsset(assetId).catch(() => {});
+    }
+    if (projectId) {
+      void updateProject(ctx, projectId, { cover: "" }).catch(() => {});
+    }
   };
 
   const downloadCurrent = () => {
@@ -3277,9 +3461,14 @@ function StudioMediaSurface({
 
   const canvasBusy = Boolean(activity) || isGenerating;
   const showImageArtboard =
-    kind === "studio-image" && (hasMedia || isGenerating || isEditing);
+    kind === "studio-image" &&
+    (hasMedia || isGenerating || isEditing || studioCleared);
   const showEmpty =
-    !hasMedia && !isGenerating && !isEditing && !isUploading;
+    !hasMedia &&
+    !isGenerating &&
+    !isEditing &&
+    !isUploading &&
+    !(kind === "studio-image" && studioCleared);
 
   return (
     <div
@@ -3350,6 +3539,32 @@ function StudioMediaSurface({
                   }
                 }}
               />
+            ) : null}
+            {!hasMedia && !showMesh ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                <span className="inline-flex h-12 w-12 items-center justify-center rounded-[14px] bg-background/80">
+                  <Icon
+                    className="h-5 w-5 text-muted-foreground"
+                    strokeWidth={1.5}
+                  />
+                </span>
+                <div>
+                  <p className="text-[14px] font-medium tracking-[-0.02em]">
+                    Add {label}
+                  </p>
+                  <p className="mt-1 text-[12.5px] text-muted-foreground">
+                    Upload a file or generate one in chat.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-primary px-3.5 text-[13px] font-medium text-primary-foreground hover:bg-foreground"
+                >
+                  <Upload className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  Upload {label}
+                </button>
+              </div>
             ) : null}
             {showMesh ? (
               <div
@@ -3453,11 +3668,7 @@ function StudioMediaSurface({
           <button
             type="button"
             disabled={canvasBusy}
-            onClick={() => {
-              setError(null);
-              setNaturalRatio({ w: 1, h: 1 });
-              onSrcChange("about:blank");
-            }}
+            onClick={clearCanvas}
             className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border bg-background/90 px-2.5 text-[12px] font-medium backdrop-blur hover:bg-muted disabled:opacity-50"
           >
             <Trash2 className="h-3 w-3" strokeWidth={1.6} />
@@ -3483,6 +3694,9 @@ function TabGlyph({
   kind?: ProjectKind;
   className?: string;
 }) {
+  if (tab.kind === "agent-builder" || tab.kind === "agent-overview") {
+    return <Bot className={cn("h-3.5 w-3.5 shrink-0", className)} strokeWidth={1.6} />;
+  }
   if (tab.kind === "agent-browser") {
     return <MousePointer2 className={cn("h-3.5 w-3.5 shrink-0", className)} strokeWidth={1.6} />;
   }

@@ -1,10 +1,15 @@
 /**
  * GET /api/studio/assets/[id]/image — stream a Studio canvas image.
+ * DELETE /api/studio/assets/[id]/image — remove a Studio canvas image.
  */
 
 import { NextResponse } from "next/server";
+import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import { resolveRequestUser } from "@/lib/usage/server/context";
-import { readStudioAssetBytes } from "@/lib/studio-assets-server";
+import {
+  deleteStudioAsset,
+  readStudioAssetBytes,
+} from "@/lib/studio-assets-server";
 
 export const runtime = "nodejs";
 
@@ -35,4 +40,26 @@ export async function GET(
       "Cache-Control": "private, max-age=3600",
     },
   });
+}
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  const { id } = await context.params;
+  const assetId = id?.trim();
+  if (!assetId) {
+    return NextResponse.json({ error: "Missing asset id." }, { status: 400 });
+  }
+
+  const auth = await requireBearerUser(request);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const ok = await deleteStudioAsset(assetId, auth.user.id);
+  if (!ok) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true });
 }

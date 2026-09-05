@@ -247,6 +247,7 @@ import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
 import { typewriterReveal } from "@/lib/ai/typewriter";
 import { patchMessageWithProgress } from "@/lib/ai/turn-activity";
 import { openProjectImageTab } from "@/lib/chat-image-attach";
+import { primeAutomationBrowserSession } from "@/lib/agents/prime-browser-session";
 import {
   getSupabaseUserServerSnapshot,
   getSupabaseUserSnapshot,
@@ -465,7 +466,12 @@ type AppContextValue = {
   setVoiceAnchor: (anchor: VoiceAnchor) => void;
   openProject: (
     id: string,
-    opts?: { migrateFromThreadId?: string | null; landOnPanel?: boolean },
+    opts?: {
+      migrateFromThreadId?: string | null;
+      landOnPanel?: boolean;
+      /** Automation pins open read-only overview; Create/edit uses builder. */
+      agentSurface?: "builder" | "overview";
+    },
   ) => string | null;
   /** Open a Work space collection item in the browser panel without switching chat. */
   openWorkItem: (item: WorkCollectionItem) => void;
@@ -3825,7 +3831,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const openProject = useCallback((
     id: string,
-    opts?: { migrateFromThreadId?: string | null; landOnPanel?: boolean },
+    opts?: {
+      migrateFromThreadId?: string | null;
+      landOnPanel?: boolean;
+      agentSurface?: "builder" | "overview";
+    },
   ): string | null => {
     const ctx = { workspaceId, actorId: actor.id };
     let match:
@@ -3848,6 +3858,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       match = getSpaceEntityStoreSnapshot().projects.find((item) => item.id === id);
     }
     if (!match) return null;
+    const automationKind =
+      "kind" in match && match.kind === "automation";
+    if (automationKind) {
+      const title =
+        "title" in match && typeof match.title === "string"
+          ? match.title
+          : "name" in match && typeof match.name === "string"
+            ? match.name
+            : "Agent";
+      const publishedUrl =
+        "publishedUrl" in match && typeof match.publishedUrl === "string"
+          ? match.publishedUrl
+          : null;
+      primeAutomationBrowserSession({
+        profileId: actor.id,
+        workspaceId: match.workspaceId,
+        spaceId: match.space,
+        projectId: match.id,
+        title,
+        publishedUrl,
+        agentSurface: opts?.agentSurface ?? "builder",
+      });
+    }
     if (isStandaloneBrowserEphemeral()) {
       endQuickSearchBrowserSession(standaloneBrowserKey(actor.id, workspaceId));
       setStandaloneBrowserEphemeral(false);

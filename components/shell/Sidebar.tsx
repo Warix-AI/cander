@@ -280,7 +280,12 @@ export function Sidebar() {
       onOpen={() => {
         if (item.kind === "thread") openThread(item.id);
         else if (item.kind === "connector") openConnector(item.id);
-        else openProject(item.id);
+        else if (item.projectKind === "automation") {
+          openProject(item.id, {
+            agentSurface: "overview",
+            landOnPanel: true,
+          });
+        } else openProject(item.id);
       }}
       onReorder={reorderPins}
       dragActiveKey={pinDragKey}
