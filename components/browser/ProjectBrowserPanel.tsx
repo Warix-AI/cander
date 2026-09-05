@@ -85,8 +85,27 @@ import {
   BROWSER_CHROME_CHIP_HOVER,
 } from "@/lib/shell-chrome";
 import { decodeTextDataUrl } from "@/lib/chat-document-attach";
-import { resolveChatImageUrl } from "@/lib/chat-attachment-image-url";
+import {
+  chatAttachmentImageUrl,
+  resolveChatImageUrl,
+} from "@/lib/chat-attachment-image-url";
 import { updateChatThreads } from "@/lib/api/chat-store";
+
+/** Match chat card pixels — keep inline data URLs when present. */
+function canvasSrcFromImageJob(job: {
+  imageUrl?: string | null;
+  attachmentId?: string | null;
+}): string | null {
+  const inline = job.imageUrl?.trim() ?? "";
+  if (inline) return inline;
+  if (job.attachmentId?.trim()) {
+    return chatAttachmentImageUrl(job.attachmentId.trim());
+  }
+  return resolveChatImageUrl({
+    attachmentId: job.attachmentId,
+    dataUrl: job.imageUrl,
+  });
+}
 import {
   publishMarkdownShare,
   renameMarkdownShare,
@@ -772,7 +791,7 @@ export function ProjectBrowserPanel({
   }, [key?.profileId, key?.workspaceId, key?.spaceId, key?.projectId, standalone]);
 
   const studioImageJobs = useMemo(() => {
-    if (!isStudioProject || !thread) return [];
+    if (!thread) return [];
     const jobs: Extract<
       NonNullable<typeof thread.messages[number]["blocks"]>[number],
       { type: "image_generation" }
@@ -788,7 +807,7 @@ export function ProjectBrowserPanel({
       }
     }
     return jobs;
-  }, [isStudioProject, thread]);
+  }, [thread]);
 
   const studioImageJobsSig = studioImageJobs
     .map(
@@ -797,10 +816,39 @@ export function ProjectBrowserPanel({
     )
     .join("|");
 
+  const activeStudioChatImage = useMemo(() => {
+    if (!studioImageJobs.length) {
+      return { src: null as string | null, generating: false };
+    }
+    const boundId = active?.boundGenerationId?.trim();
+    const boundJob = boundId
+      ? studioImageJobs.find((job) => job.generationId === boundId)
+      : undefined;
+    const preferred = boundJob ?? studioImageJobs[studioImageJobs.length - 1]!;
+    const generating = preferred.status === "generating";
+    let src =
+      preferred.status === "completed"
+        ? canvasSrcFromImageJob(preferred)
+        : null;
+    if (!src) {
+      for (let i = studioImageJobs.length - 1; i >= 0; i--) {
+        const job = studioImageJobs[i]!;
+        if (job.status !== "completed") continue;
+        src = canvasSrcFromImageJob(job);
+        if (src) break;
+      }
+    }
+    return { src, generating };
+  }, [studioImageJobs, active?.boundGenerationId, studioImageJobsSig]);
+
   // Every chat image generation gets its own Studio canvas tab.
   // Do NOT re-steal focus while another canvas generates.
   useEffect(() => {
-    if (!isStudioProject || !key || !studioImageJobs.length) return;
+    if (!key || !studioImageJobs.length) return;
+    const hasStudioImageTab = session.tabs.some(
+      (tab) => tab.kind === "studio-image",
+    );
+    if (!isStudioProject && !hasStudioImageTab) return;
 
     const isEmptyUnboundStudioTab = (tab: ProjectBrowserTab) =>
       tab.kind === "studio-image" &&
@@ -811,6 +859,22 @@ export function ProjectBrowserPanel({
     let nextTabs = current.tabs.slice();
     let changed = false;
     let focusTabId: string | null = null;
+
+    // Drop stale binds that no longer exist in this thread so fallbacks work.
+    const liveIds = new Set(
+      studioImageJobs.map((job) => job.generationId.trim()),
+    );
+    nextTabs = nextTabs.map((tab) => {
+      if (
+        tab.kind === "studio-image" &&
+        tab.boundGenerationId &&
+        !liveIds.has(tab.boundGenerationId)
+      ) {
+        changed = true;
+        return { ...tab, boundGenerationId: undefined };
+      }
+      return tab;
+    });
 
     studioImageJobs.forEach((job, index) => {
       const genId = job.generationId.trim();
@@ -825,7 +889,9 @@ export function ProjectBrowserPanel({
           resolveChatImageUrl({
             attachmentId: job.attachmentId,
             dataUrl: job.imageUrl,
-          }) ?? "";
+          }) ||
+          canvasSrcFromImageJob(job) ||
+          "";
         const imageUrl = job.imageUrl?.trim() ?? "";
         const matchByUrl =
           seedUrl.length > 0
@@ -890,10 +956,11 @@ export function ProjectBrowserPanel({
       if (!target) return;
 
       const imageUrl = job.imageUrl?.trim();
-      const seedUrl = resolveChatImageUrl({
-        attachmentId: job.attachmentId,
-        dataUrl: job.imageUrl,
-      });
+      const seedUrl =
+        resolveChatImageUrl({
+          attachmentId: job.attachmentId,
+          dataUrl: job.imageUrl,
+        }) || canvasSrcFromImageJob(job);
       if (job.status === "completed" && seedUrl) {
         const existingUrl = target.url?.trim() ?? "";
         const hasCanvas =
@@ -1690,6 +1757,8 @@ export function ProjectBrowserPanel({
           surfaceActive={surfaceActive}
           workspaceId={workspaceId}
           projectId={projectId}
+          chatImageFallbackSrc={activeStudioChatImage.src}
+          chatImageGenerating={activeStudioChatImage.generating}
           />
         </div>
         {mobile && mobileNavOpen ? (
@@ -1907,6 +1976,8 @@ function ProjectBrowserBody({
   surfaceActive,
   workspaceId,
   projectId,
+  chatImageFallbackSrc = null,
+  chatImageGenerating = false,
 }: {
   tab: ProjectBrowserTab;
   projects: SpaceProject[];
@@ -1918,6 +1989,8 @@ function ProjectBrowserBody({
   surfaceActive: boolean;
   workspaceId: string;
   projectId: string | null;
+  chatImageFallbackSrc?: string | null;
+  chatImageGenerating?: boolean;
 }) {
   const computerSession = useSyncExternalStore(
     subscribeActiveComputerSession,
@@ -2128,6 +2201,8 @@ function ProjectBrowserBody({
         projectId={projectId}
         boundGenerationId={tab.boundGenerationId}
         lockedAspectRatio={tab.aspectRatio}
+        chatImageFallbackSrc={chatImageFallbackSrc}
+        chatImageGenerating={chatImageGenerating}
         onOpenUrl={openNewInAppTab}
         onSrcChange={(nextUrl) =>
           syncSurfaceMeta(
@@ -2801,6 +2876,8 @@ function StudioMediaSurface({
   projectId,
   boundGenerationId,
   lockedAspectRatio,
+  chatImageFallbackSrc = null,
+  chatImageGenerating = false,
   onSrcChange,
   onAspectRatioChange,
   onOpenUrl,
@@ -2811,6 +2888,8 @@ function StudioMediaSurface({
   projectId: string | null;
   boundGenerationId?: string;
   lockedAspectRatio?: string | null;
+  chatImageFallbackSrc?: string | null;
+  chatImageGenerating?: boolean;
   onSrcChange: (next: string) => void;
   onAspectRatioChange: (ratio: string | null) => void;
   onOpenUrl?: (url: string) => void;
@@ -2856,10 +2935,8 @@ function StudioMediaSurface({
           return block;
         }
       }
-      return null;
+      // Stale bind — fall through to latest chat job.
     }
-    // Unbound empty canvas: follow the latest chat generation so the panel
-    // never stays blank while bind/session sync catches up.
     for (let i = thread.messages.length - 1; i >= 0; i--) {
       const message = thread.messages[i]!;
       for (let j = (message.blocks?.length ?? 0) - 1; j >= 0; j--) {
@@ -2874,27 +2951,30 @@ function StudioMediaSurface({
   }, [kind, thread, boundGenerationId]);
 
   const chatImageSrc = useMemo(() => {
+    if (chatImageFallbackSrc?.trim()) return chatImageFallbackSrc.trim();
     if (!imageJob || imageJob.status !== "completed") return null;
-    return resolveChatImageUrl({
-      attachmentId: imageJob.attachmentId,
-      dataUrl: imageJob.imageUrl,
-    });
-  }, [imageJob]);
+    return canvasSrcFromImageJob(imageJob);
+  }, [chatImageFallbackSrc, imageJob]);
 
-  // Prefer persisted tab URL; fall back to chat job so the right panel paints
-  // even when session bind/localStorage stripped the canvas URL.
+  // Show chat output immediately. Prefer durable studio asset URLs once saved
+  // (edits/uploads); otherwise prefer the live chat generation URL over an
+  // empty/stripped tab.url that would leave the canvas on "Add image".
   const displaySrc =
-    src && src !== "about:blank" ? src : chatImageSrc || "";
+    (src && isStudioAssetUrl(src) ? src : null) ||
+    chatImageSrc ||
+    (src && src !== "about:blank" ? src : "") ||
+    "";
   const hasMedia = Boolean(displaySrc);
   const isUploading = activity?.type === "upload";
   const isEditing = activity?.type === "edit";
 
   const isGenerating =
     kind === "studio-image" &&
-    imageJob?.status === "generating" &&
-    (boundGenerationId
-      ? imageJob.generationId === boundGenerationId
-      : true);
+    (chatImageGenerating ||
+      (imageJob?.status === "generating" &&
+        (boundGenerationId
+          ? imageJob.generationId === boundGenerationId
+          : true)));
   const showMesh = isGenerating || isEditing;
   const lockedParts = lockedAspectRatio
     ? studioAspectParts(lockedAspectRatio)
