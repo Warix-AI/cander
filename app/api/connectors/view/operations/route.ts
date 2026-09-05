@@ -20,6 +20,10 @@ const ALLOWED_OPS = new Set([
   "listCalendars",
   "createEvent",
   "quickAdd",
+  "findFiles",
+  "createFromText",
+  "createFolder",
+  "downloadFile",
 ]);
 
 /**

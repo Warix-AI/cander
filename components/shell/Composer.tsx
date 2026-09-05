@@ -327,7 +327,6 @@ export function Composer({
   const value = textFromBlocks(blocks);
   const serializedValue = serializeComposerBlocks(blocks);
   const connectorScopes = connectorsFromBlocks(blocks);
-  const inlineChips = connectorScopes.length > 0;
   const hasInlineAtoms = blocks.some(
     (b) => b.type === "connector" || b.type === "trigger",
   );
@@ -1318,8 +1317,6 @@ export function Composer({
       ? `Change the ${labelFor(selectedId)}…`
       : browsingFocusHint ?? APP_MESSAGE_PLACEHOLDER);
 
-  /** Split view / mobile: composer grows upward; controls stay on the bottom row. */
-  const growUpward = mobile || panelMode !== "collapsed";
   /** Mobile / dock: 6 lines; desktop new-chat & shell: 8 lines. */
   const composerMaxLines = mobile || compact ? 6 : 8;
 
@@ -1644,8 +1641,7 @@ export function Composer({
               ) : null}
               <div
                 className={cn(
-                  "flex min-h-9 items-end gap-0.5",
-                  !hasText && "items-center",
+                  "flex min-h-9 items-start gap-0.5",
                   dictatingActive && "invisible pointer-events-none",
                 )}
                 aria-hidden={dictatingActive || undefined}
@@ -1829,7 +1825,7 @@ export function Composer({
               ) : null}
             <div
               className={cn(
-                "flex min-h-8 items-end gap-1",
+                "flex min-h-8 items-start gap-1",
                 dictatingActive && "invisible pointer-events-none",
               )}
               aria-hidden={dictatingActive || undefined}
@@ -2055,14 +2051,7 @@ export function Composer({
                   }}
                 />
               )}
-              <div
-                className={cn(
-                  "flex shrink-0 items-center gap-0.5",
-                  inlineChips || !growUpward || !hasText
-                    ? "self-center"
-                    : "self-end",
-                )}
-              >
+              <div className="flex shrink-0 items-start gap-0.5 self-start">
                 <ComposerTrailingActions
                   canSend={hasPayload}
                   hasVoice={entitlements.hasVoice}
