@@ -156,14 +156,84 @@ function hardenSession(ses) {
     event.preventDefault();
   });
 }
+/**
+ * Default in-panel UA: desktop Chrome with Electron/Cander stripped.
+ * A global Firefox UA (for Google) broke LinkedIn redirects (e.g. blank cs.ns1p.net).
+ */
+function chromePanelUserAgent(wc) {
+  try {
+    const raw = wc.getUserAgent();
+    const cleaned = raw
+      .replace(/\sElectron\/[^\s]+/g, "")
+      .replace(/\sCander\/[^\s]+/g, "")
+      .trim();
+    if (cleaned) return cleaned;
+  } catch {
+    // fall through
+  }
+  return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
+}
 
 /**
- * Google blocks Electron when the UA claims to be Chrome (they fingerprint the
- * real Chromium build). Present as Firefox so accounts.google.com allows sign-in
- * inside the in-panel WebContentsView — login must stay in-app.
+ * Google still blocks Electron when the UA claims Chrome. Use Firefox only on
+ * Google account/OAuth hosts so LinkedIn and other sites keep a Chrome UA.
  */
-const PANEL_BROWSER_USER_AGENT =
+const GOOGLE_AUTH_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:128.0) Gecko/20100101 Firefox/128.0";
+
+function isGoogleAuthUrl(raw) {
+  try {
+    const url = new URL(String(raw || "").trim());
+    if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+    const host = url.hostname.toLowerCase();
+    const path = url.pathname.toLowerCase();
+    if (
+      host === "accounts.google.com" ||
+      host.endsWith(".accounts.google.com") ||
+      host === "accounts.youtube.com" ||
+      host === "oauth2.googleapis.com" ||
+      /^accounts\.google\.[a-z.]+$/.test(host)
+    ) {
+      return true;
+    }
+    if (
+      (host === "www.google.com" ||
+        host === "google.com" ||
+        host.endsWith(".google.com")) &&
+      (/\/o\/oauth2\//.test(path) ||
+        /\/signin\//.test(path) ||
+        /\/servicelogin/i.test(path) ||
+        /\/accountchooser/i.test(path) ||
+        path === "/signin" ||
+        path.startsWith("/signin/"))
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** Blank CDN/telemetry hops that should never be a stuck main-frame destination. */
+function isStuckTrackingUrl(raw) {
+  try {
+    const host = new URL(String(raw || "").trim()).hostname.toLowerCase();
+    return (
+      host === "cs.ns1p.net" ||
+      host.endsWith(".ns1p.net") ||
+      host === "ns1p.net"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function userAgentForUrl(wc, url) {
+  return isGoogleAuthUrl(url)
+    ? GOOGLE_AUTH_USER_AGENT
+    : chromePanelUserAgent(wc);
+}
 
 /** One shared Chromium profile per partition for the whole shell lifetime. */
 function sessionForPartition(partition) {
@@ -173,11 +243,6 @@ function sessionForPartition(partition) {
     retainedSessions.set(partition, ses);
   }
   hardenSession(ses);
-  try {
-    ses.setUserAgent(PANEL_BROWSER_USER_AGENT);
-  } catch {
-    // ignore
-  }
   return ses;
 }
 
@@ -204,12 +269,26 @@ async function flushAllBrowserCookies() {
   }
 }
 
-function applyBrowserUserAgent(wc) {
+function applyBrowserUserAgent(wc, url) {
   try {
-    wc.setUserAgent(PANEL_BROWSER_USER_AGENT);
+    wc.setUserAgent(userAgentForUrl(wc, url || "about:blank"));
   } catch {
     // ignore
   }
+}
+
+function leaveStuckTrackingPage(wc) {
+  try {
+    if (wc.canGoBack()) {
+      wc.goBack();
+      return;
+    }
+  } catch {
+    // ignore
+  }
+  void wc.loadURL("https://www.linkedin.com/", {
+    userAgent: chromePanelUserAgent(wc),
+  }).catch(() => {});
 }
 
 function attachViewListeners(tabId, view) {
@@ -227,6 +306,7 @@ function attachViewListeners(tabId, view) {
   });
 
   wc.on("will-navigate", (event, url) => {
+    applyBrowserUserAgent(wc, url);
     if (!isAllowedUrl(url)) {
       event.preventDefault();
       emitToRenderer("cander:browser-event", {
@@ -273,6 +353,11 @@ function attachViewListeners(tabId, view) {
   });
 
   wc.on("did-navigate", (_e, url) => {
+    if (isStuckTrackingUrl(url)) {
+      leaveStuckTrackingPage(wc);
+      return;
+    }
+    applyBrowserUserAgent(wc, url);
     const entry = tabs.get(tabId);
     if (entry) entry.lastUrl = url;
     emitToRenderer("cander:browser-event", { type: "url", tabId, url });
@@ -373,7 +458,7 @@ function createView(tabId, initialUrl, options) {
     },
   });
   attachViewListeners(tabId, view);
-  applyBrowserUserAgent(view.webContents);
+  applyBrowserUserAgent(view.webContents, initialUrl);
   try {
     view.webContents.setBackgroundThrottling(false);
   } catch {
@@ -395,7 +480,7 @@ function createView(tabId, initialUrl, options) {
   const url = initialUrl && isAllowedUrl(initialUrl) ? initialUrl : "about:blank";
   if (url) {
     void view.webContents.loadURL(url, {
-      userAgent: PANEL_BROWSER_USER_AGENT,
+      userAgent: userAgentForUrl(view.webContents, url),
     });
   }
   return { view, partition };
@@ -994,9 +1079,10 @@ function navigate(tabId, url) {
   }
   // Remounting a retained tab must not reload (YouTube / live media).
   if (urlsMatch(current, url)) return;
+  applyBrowserUserAgent(entry.view.webContents, url);
   entry.lastUrl = url;
   void entry.view.webContents.loadURL(url, {
-    userAgent: PANEL_BROWSER_USER_AGENT,
+    userAgent: userAgentForUrl(entry.view.webContents, url),
   });
 }
 
