@@ -75,11 +75,25 @@ function gdriveAuthConfigId(): string {
   return id;
 }
 
+function gsheetsAuthConfigId(): string {
+  const id = process.env.COMPOSIO_GSHEETS_AUTH_CONFIG_ID?.trim();
+  if (!id) throw new Error("COMPOSIO_GSHEETS_AUTH_CONFIG_ID is not configured");
+  return id;
+}
+
+function gdocsAuthConfigId(): string {
+  const id = process.env.COMPOSIO_GDOCS_AUTH_CONFIG_ID?.trim();
+  if (!id) throw new Error("COMPOSIO_GDOCS_AUTH_CONFIG_ID is not configured");
+  return id;
+}
+
 function authConfigIdForConnector(connectorId: string): string {
   if (connectorId === "gmail") return gmailAuthConfigId();
   if (connectorId === "slack") return slackAuthConfigId();
   if (connectorId === "gcal") return gcalAuthConfigId();
   if (connectorId === "gdrive") return gdriveAuthConfigId();
+  if (connectorId === "gsheets") return gsheetsAuthConfigId();
+  if (connectorId === "gdocs") return gdocsAuthConfigId();
   throw new Error(`No Composio auth config for connector: ${connectorId}`);
 }
 

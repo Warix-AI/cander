@@ -29,7 +29,8 @@ export const GSHEETS_COMPOSIO_SLUGS = {
   "gsheets.search": "GOOGLESHEETS_SEARCH_SPREADSHEETS",
   "gsheets.info": "GOOGLESHEETS_GET_SPREADSHEET_INFO",
   "gsheets.sheetNames": "GOOGLESHEETS_GET_SHEET_NAMES",
-  "gsheets.valuesGet": "GOOGLESHEETS_VALUES_GET",
+  // Composio has no VALUES_GET — single-range reads use BATCH_GET.
+  "gsheets.valuesGet": "GOOGLESHEETS_BATCH_GET",
   "gsheets.batchGet": "GOOGLESHEETS_BATCH_GET",
   "gsheets.create": "GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
 } as const;

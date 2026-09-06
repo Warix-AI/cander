@@ -6,12 +6,16 @@ import type { ConnectorAdapter } from "./types.ts";
 import { gmailAdapter } from "./gmail.ts";
 import { gcalAdapter } from "./gcal.ts";
 import { gdriveAdapter } from "./gdrive.ts";
+import { gsheetsAdapter } from "./gsheets.ts";
+import { gdocsAdapter } from "./gdocs.ts";
 import { slackAdapter } from "./slack.ts";
 
 const adapters = new Map<string, ConnectorAdapter>([
   [gmailAdapter.connectorId, gmailAdapter],
   [gcalAdapter.connectorId, gcalAdapter],
   [gdriveAdapter.connectorId, gdriveAdapter],
+  [gsheetsAdapter.connectorId, gsheetsAdapter],
+  [gdocsAdapter.connectorId, gdocsAdapter],
   [slackAdapter.connectorId, slackAdapter],
 ]);
 

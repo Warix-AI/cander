@@ -119,6 +119,8 @@ export function ConnectorsDashboard() {
       (connector !== "gmail" &&
         connector !== "gcal" &&
         connector !== "gdrive" &&
+        connector !== "gsheets" &&
+        connector !== "gdocs" &&
         connector !== "slack")
     ) {
       return;
@@ -131,11 +133,15 @@ export function ConnectorsDashboard() {
     const label =
       connector === "gdrive"
         ? "Google Drive"
-        : connector === "gcal"
-          ? "Google Calendar"
-          : connector === "slack"
-            ? "Slack"
-            : "Gmail";
+        : connector === "gsheets"
+          ? "Google Sheets"
+          : connector === "gdocs"
+            ? "Google Docs"
+            : connector === "gcal"
+              ? "Google Calendar"
+              : connector === "slack"
+                ? "Slack"
+                : "Gmail";
     if (result === "success") {
       setInfo(`${label} connection updated. Refresh if status looks stale.`);
     } else if (result === "error") {

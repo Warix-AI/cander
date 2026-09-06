@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
   AppWindow,
-  Globe,
   Image as ImageIcon,
   Layout,
   Search,
@@ -25,20 +24,13 @@ export type CanvasStartOption = {
 /**
  * Shared Canvas starts — right-panel “What would you like to do?”,
  * NewCanvasMenu, and orphan-recents Start in the composer +.
- * Agent create is hidden for now (still available via direct project kind).
+ * Agent create and Quick search are hidden for now.
  */
 export function canvasStartOptions(): CanvasStartOption[] {
   return [
     {
-      id: "quick-search",
-      label: "Quick search",
-      summary: "Browse the web",
-      action: "quick-search",
-      icon: Globe,
-    },
-    {
       id: "search",
-      label: "Search project",
+      label: "Search",
       summary: "Collect what you find",
       action: "create-project",
       icon: Search,

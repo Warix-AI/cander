@@ -17,6 +17,8 @@ Pinned SDK: `@composio/core@0.18.0` (see `package.json`).
 | `COMPOSIO_GMAIL_AUTH_CONFIG_ID` | Gmail auth config nanoid from Composio dashboard |
 | `COMPOSIO_GCAL_AUTH_CONFIG_ID` | Google Calendar auth config id (`ac_…`) from Composio |
 | `COMPOSIO_GDRIVE_AUTH_CONFIG_ID` | Google Drive auth config id (`ac_…`) from Composio |
+| `COMPOSIO_GSHEETS_AUTH_CONFIG_ID` | Google Sheets auth config id (`ac_…`) from Composio |
+| `COMPOSIO_GDOCS_AUTH_CONFIG_ID` | Google Docs auth config id (`ac_…`) from Composio |
 | `COMPOSIO_WEBHOOK_SECRET` | Webhook signature verification secret |
 | `COMPOSIO_CALLBACK_VERIFIER_URL` | Fixed HTTPS verifier URL registered in Composio dashboard |
 
@@ -139,6 +141,14 @@ Electron and Capacitor shells load hosted web. OAuth return depends on cookie se
 5. Connect from Cander → Connectors → Google Drive → Connect.
 
 Recommended Drive scopes (Composio usually sets these on the auth config): file metadata read, file content read/write, and sharing as needed for create/share skills.
+
+## Google Sheets / Docs enablement
+
+1. Create Composio auth configs for **Google Sheets** (`googlesheets`) and **Google Docs** (`googledocs`).
+2. Set `COMPOSIO_GSHEETS_AUTH_CONFIG_ID` and `COMPOSIO_GDOCS_AUTH_CONFIG_ID` on Vercel (server-only).
+3. Apply migration `20260906031443_gsheets_gdocs_composio.sql` (enables catalog rows + toolkit ids).
+4. Same callback verifier / webhook as other Google connectors.
+5. Connect from Cander → Connectors → Sheets or Docs → Connect.
 
 ## Gmail enablement
 

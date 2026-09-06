@@ -217,12 +217,12 @@ export function PinSectionFolder({
         <svg
           aria-hidden
           className={cn(
-            "pointer-events-none absolute inset-0 h-full w-full overflow-visible",
+            "pointer-events-none absolute inset-0 h-full w-full overflow-visible opacity-70",
             !animOpen && "opacity-0",
           )}
           style={{
             color:
-              "color-mix(in oklch, var(--sidebar-accent) 70%, var(--foreground) 30%)",
+              "color-mix(in oklch, var(--sidebar-accent) 88%, var(--foreground) 12%)",
           }}
         >
           <path
