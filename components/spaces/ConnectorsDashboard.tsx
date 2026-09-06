@@ -58,8 +58,6 @@ const SECTION_ORDER = [
   "Commerce",
 ] as const;
 
-const PREVIEW_ROWS = 6;
-
 const connectorScopeOptions = [
   { id: "connectors", label: "Connectors" },
   { id: "installed", label: "Installed" },
@@ -99,7 +97,6 @@ export function ConnectorsDashboard() {
   const [info, setInfo] = useState("");
   const [catalogView, setCatalogView] = useState<ConnectorsView>("connectors");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [workAttachFor, setWorkAttachFor] = useState<string | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const [connectingId, setConnectingId] = useState<string | null>(null);
@@ -485,11 +482,6 @@ export function ConnectorsDashboard() {
 
         {sections.length ? (
           sections.map((section) => {
-            const open = expanded[section.title] || Boolean(needle) || catalogView === "installed";
-            const visible = open
-              ? section.items
-              : section.items.slice(0, PREVIEW_ROWS);
-            const rest = section.items.slice(PREVIEW_ROWS);
             return (
               <section key={section.title} className="mt-10">
                 {catalogView === "connectors" ? (
@@ -503,7 +495,7 @@ export function ConnectorsDashboard() {
                     catalogView === "connectors" ? "mt-4" : "mt-0",
                   )}
                 >
-                  {visible.map((item) => (
+                  {section.items.map((item) => (
                     <DirectoryItem
                       key={item.id}
                       item={item}
@@ -516,17 +508,6 @@ export function ConnectorsDashboard() {
                     />
                   ))}
                 </div>
-                {rest.length && !open ? (
-                  <SeeMore
-                    rest={rest}
-                    onExpand={() =>
-                      setExpanded((current) => ({
-                        ...current,
-                        [section.title]: true,
-                      }))
-                    }
-                  />
-                ) : null}
               </section>
             );
           })
@@ -700,46 +681,5 @@ function DirectoryItem({
         )}
       </div>
     </div>
-  );
-}
-
-function SeeMore({
-  rest,
-  onExpand,
-}: {
-  rest: Connector[];
-  onExpand: () => void;
-}) {
-  const preview = rest.slice(0, 3);
-  const names = preview.map((item) => item.name);
-  const extra = rest.length - names.length;
-  const label =
-    extra > 0
-      ? `See ${names.slice(0, 2).join(", ")}, and ${rest.length} more.`
-      : `See ${names.join(" and ")}.`;
-
-  return (
-    <button
-      type="button"
-      onClick={onExpand}
-      className="mt-3 inline-flex items-center gap-2 text-[13px] text-muted-foreground transition-colors duration-200 hover:text-foreground"
-    >
-      <span className="flex items-center">
-        {preview.map((item, index) => (
-          <span
-            key={item.id}
-            className={cn("relative", index > 0 && "-ml-1.5")}
-            style={{ zIndex: preview.length - index }}
-          >
-            <ConnectorMark
-              id={item.icon}
-              size="xs"
-              className="ring-2 ring-background"
-            />
-          </span>
-        ))}
-      </span>
-      {label}
-    </button>
   );
 }
