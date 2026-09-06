@@ -30,6 +30,8 @@ import {
   getSidebarSnapshot,
   arePinsDirty,
   getPinsLocalEpoch,
+  getPinsProfileId,
+  getPinsScopeVersion,
   markPinsSynced,
   replacePinsState,
   replaceSidebarState,
@@ -47,14 +49,22 @@ const SYNC_DEBOUNCE_MS = 600;
 /** Pins must land remotely before hydrate can resurrect them. */
 const PINS_SYNC_DEBOUNCE_MS = 0;
 
-let skipRemoteSync = false;
-/** Last applied remote pins fingerprint — skip no-op replaces. */
-let lastRemotePinsFingerprint = "";
+let remoteSyncBlocks = 0;
 
-function pinsFingerprint(pins: ReturnType<typeof getPinsSnapshot>) {
-  return pins
-    .map((pin, index) => `${pin.kind}:${pin.id}:${pin.tier}:${index}`)
-    .join("|");
+function isRemoteSyncPaused() {
+  return remoteSyncBlocks > 0;
+}
+
+/** Nested/overlapping requests cannot release each other's sync guard. */
+function pauseRemoteSync() {
+  remoteSyncBlocks += 1;
+  return () => {
+    remoteSyncBlocks -= 1;
+  };
+}
+
+function isCurrentPinsScope(ctx: WorkspaceCtx, version: number) {
+  return getPinsProfileId() === ctx.actorId && getPinsScopeVersion() === version;
 }
 
 async function listMemberWorkspaceIds(profileId: string) {
@@ -113,25 +123,27 @@ async function fetchPolicyBundle(workspaceIds: string[]) {
 
 /** Pull remote org policy into local stores. */
 export async function hydrateOrgPolicyFromRemote(ctx: WorkspaceCtx) {
-  skipRemoteSync = true;
-  const workspaceIds = await listMemberWorkspaceIds(ctx.actorId);
-  const bundle = await fetchPolicyBundle(workspaceIds);
+  const release = pauseRemoteSync();
+  const scopeVersion = getPinsScopeVersion();
+  try {
+    const workspaceIds = await listMemberWorkspaceIds(ctx.actorId);
+    const bundle = await fetchPolicyBundle(workspaceIds);
+    if (!isCurrentPinsScope(ctx, scopeVersion)) return;
 
-  if (bundle.orgMemberRows.length) {
-    replacePolicyStoreState({
-      policies: rebuildPoliciesFromRows(bundle),
-      orgMembers: bundle.orgMemberRows.map(memberRowToMember),
-    });
-  } else if (bundle.policyRows.length || bundle.knowledgeBaseRows.length) {
-    replacePolicyStoreState({
-      policies: rebuildPoliciesFromRows(bundle),
-      orgMembers: getMembersSnapshot(),
-    });
+    if (bundle.orgMemberRows.length) {
+      replacePolicyStoreState({
+        policies: rebuildPoliciesFromRows(bundle),
+        orgMembers: bundle.orgMemberRows.map(memberRowToMember),
+      });
+    } else if (bundle.policyRows.length || bundle.knowledgeBaseRows.length) {
+      replacePolicyStoreState({
+        policies: rebuildPoliciesFromRows(bundle),
+        orgMembers: getMembersSnapshot(),
+      });
+    }
+  } finally {
+    release();
   }
-
-  window.setTimeout(() => {
-    skipRemoteSync = false;
-  }, 0);
 }
 
 async function syncWorkspacePolicy(
@@ -249,134 +261,141 @@ async function syncWorkspacesCatalog(ctx: WorkspaceCtx) {
   }
 }
 
-export async function syncUserPrefsToSupabase(ctx: WorkspaceCtx) {
-  const supabase = createSupabaseBrowserClient();
-  const epochAtStart = getPinsLocalEpoch();
-  const pins = getPinsSnapshot();
-  const sidebar = getSidebarSnapshot();
-  // Block realtime hydrate from wiping local pins during delete→insert.
-  skipRemoteSync = true;
-  try {
-    if (pins.length) {
-      const pinRows = pins.map((pin, index) => pinToRow(pin, ctx.actorId, index));
-      const { error: pinError } = await supabase
-        .from("user_pins")
-        .upsert(pinRows, { onConflict: "id" });
-      if (pinError) throw pinError;
+// Serialize bootstrap, realtime recovery, and live edits so an older prune
+// cannot run after a newer pin save.
+let prefsWriteQueue: Promise<void> = Promise.resolve();
 
-      // Remove pins that are no longer local — only after upsert succeeds.
-      const keepIds = pinRows.map((row) => row.id);
-      let pruneQuery = supabase
-        .from("user_pins")
-        .delete()
-        .eq("profile_id", ctx.actorId);
-      if (keepIds.length === 1) {
-        pruneQuery = pruneQuery.neq("id", keepIds[0]!);
+export function syncUserPrefsToSupabase(ctx: WorkspaceCtx): Promise<void> {
+  const scopeVersion = getPinsScopeVersion();
+  const run = prefsWriteQueue.then(async () => {
+    if (!isCurrentPinsScope(ctx, scopeVersion)) return;
+    await pushUserPrefs(ctx, scopeVersion);
+  });
+  prefsWriteQueue = run.catch(() => {});
+  return run;
+}
+
+async function pushUserPrefs(ctx: WorkspaceCtx, scopeVersion: number) {
+  const supabase = createSupabaseBrowserClient();
+  const pins = getPinsSnapshot();
+  const epochAtStart = getPinsLocalEpoch();
+  const pinsDirty = arePinsDirty();
+  const sidebar = getSidebarSnapshot();
+  const release = pauseRemoteSync();
+  try {
+    // Sidebar changes and empty startup caches must never overwrite pins.
+    // Only an explicit local pin/unpin/reorder authorizes a remote write.
+    if (pinsDirty) {
+      if (pins.length) {
+        const pinRows = pins.map((pin, index) => pinToRow(pin, ctx.actorId, index));
+        const { error: pinError } = await supabase
+          .from("user_pins")
+          .upsert(pinRows, { onConflict: "profile_id,kind,target_id" });
+        if (pinError) throw pinError;
+        if (!isCurrentPinsScope(ctx, scopeVersion)) return;
+
+        // This also removes legacy row IDs after they have been upgraded by
+        // the unique (profile_id, kind, target_id) upsert above.
+        const keepIds = pinRows.map((row) => row.id);
+        let pruneQuery = supabase
+          .from("user_pins")
+          .delete()
+          .eq("profile_id", ctx.actorId);
+        if (keepIds.length === 1) {
+          pruneQuery = pruneQuery.neq("id", keepIds[0]!);
+        } else {
+          pruneQuery = pruneQuery.not(
+            "id",
+            "in",
+            `(${keepIds.map((id) => `"${id.replace(/"/g, "")}"`).join(",")})`,
+          );
+        }
+        const { error: pruneError } = await pruneQuery;
+        if (pruneError) throw pruneError;
       } else {
-        pruneQuery = pruneQuery.not(
-          "id",
-          "in",
-          `(${keepIds.map((id) => `"${id.replace(/"/g, "")}"`).join(",")})`,
-        );
+        const { error: deletePinsError } = await supabase
+          .from("user_pins")
+          .delete()
+          .eq("profile_id", ctx.actorId);
+        if (deletePinsError) throw deletePinsError;
       }
-      const { error: pruneError } = await pruneQuery;
-      if (pruneError) throw pruneError;
-    } else {
-      const { error: deletePinsError } = await supabase
-        .from("user_pins")
-        .delete()
-        .eq("profile_id", ctx.actorId);
-      if (deletePinsError) throw deletePinsError;
+      if (!isCurrentPinsScope(ctx, scopeVersion)) return;
+      markPinsSynced(epochAtStart);
     }
 
+    if (!isCurrentPinsScope(ctx, scopeVersion)) return;
     const sidebarRow = sidebarToRow(sidebar, ctx.actorId, SIDEBAR_STORAGE_VERSION);
     const { error: sidebarError } = await supabase
       .from("sidebar_layouts")
       .upsert(sidebarRow, { onConflict: "profile_id" });
     if (sidebarError) throw sidebarError;
-
-    lastRemotePinsFingerprint = pinsFingerprint(pins);
-    markPinsSynced(epochAtStart);
   } finally {
-    window.setTimeout(() => {
-      skipRemoteSync = false;
-    }, 1500);
+    release();
   }
 }
 
 export async function hydrateUserPrefsFromRemote(ctx: WorkspaceCtx) {
-  skipRemoteSync = true;
+  const scopeVersion = getPinsScopeVersion();
+  if (!isCurrentPinsScope(ctx, scopeVersion)) return;
+  getPinsSnapshot();
+  const epochAtStart = getPinsLocalEpoch();
+  const dirtyAtStart = arePinsDirty();
+  const release = pauseRemoteSync();
   const supabase = createSupabaseBrowserClient();
+  let pushLocalPrefs = false;
+  try {
+    const [pinResult, sidebarResult] = await Promise.all([
+      supabase
+        .from("user_pins")
+        .select("*")
+        .eq("profile_id", ctx.actorId)
+        .order("sort_order", { ascending: true }),
+      supabase
+        .from("sidebar_layouts")
+        .select("*")
+        .eq("profile_id", ctx.actorId)
+        .maybeSingle(),
+    ]);
 
-  const [pinResult, sidebarResult] = await Promise.all([
-    supabase
-      .from("user_pins")
-      .select("*")
-      .eq("profile_id", ctx.actorId)
-      .order("sort_order", { ascending: true }),
-    supabase
-      .from("sidebar_layouts")
-      .select("*")
-      .eq("profile_id", ctx.actorId)
-      .maybeSingle(),
-  ]);
+    if (pinResult.error) throw pinResult.error;
+    if (sidebarResult.error) throw sidebarResult.error;
+    if (!isCurrentPinsScope(ctx, scopeVersion)) return;
 
-  if (pinResult.error) throw pinResult.error;
-  if (sidebarResult.error) throw sidebarResult.error;
-
-  const localPins = getPinsSnapshot();
-  // Local pin/unpin wins until we've successfully pushed that epoch.
-  let pushDirtyPins = false;
-  if (arePinsDirty()) {
-    console.log("[cander] skip remote pins hydrate — local pins dirty");
-    pushDirtyPins = true;
-  } else if (pinResult.data?.length) {
-    const remotePins = (pinResult.data as UserPinRow[]).map(pinRowToPin);
-    const fingerprint = pinsFingerprint(remotePins);
-    if (fingerprint !== lastRemotePinsFingerprint) {
-      lastRemotePinsFingerprint = fingerprint;
-      replacePinsState(remotePins);
+    // A read that started before a local edit/save is stale, even if that save
+    // has already cleared the dirty flag by the time the read finishes.
+    if (arePinsDirty()) {
+      pushLocalPrefs = true;
+    } else if (!dirtyAtStart && getPinsLocalEpoch() === epochAtStart) {
+      replacePinsState(((pinResult.data ?? []) as UserPinRow[]).map(pinRowToPin));
     }
-  } else if (localPins.length) {
-    // Remote empty but local still has pins — keep them and re-push so the
-    // account does not permanently lose pins after a failed prune/race.
-    pushDirtyPins = true;
-  } else {
-    lastRemotePinsFingerprint = "";
-    replacePinsState([]);
+
+    if (sidebarResult.data) {
+      replaceSidebarState(sidebarRowToLayout(sidebarResult.data as SidebarLayoutRow));
+    } else {
+      // Preserve the first-time sidebar import before legacy cleanup removes
+      // its local payload. The save still writes pins only when they are dirty.
+      pushLocalPrefs = true;
+    }
+  } finally {
+    release();
   }
 
-  if (sidebarResult.data) {
-    replaceSidebarState(sidebarRowToLayout(sidebarResult.data as SidebarLayoutRow));
+  if (pushLocalPrefs && isCurrentPinsScope(ctx, scopeVersion)) {
+    await syncUserPrefsToSupabase(ctx);
   }
-
-  window.setTimeout(() => {
-    skipRemoteSync = false;
-    if (pushDirtyPins) {
-      void syncUserPrefsToSupabase(ctx).catch((err) => {
-        console.warn("[cander] dirty pins push failed", err);
-      });
-    }
-  }, 0);
 }
 
-/** One-time import of localStorage policy + prefs → Supabase. */
+/** One-time import of localStorage policy → Supabase. Prefs hydrate first. */
 export async function importLocalOrgPolicyIfNeeded(ctx: WorkspaceCtx) {
   if (typeof window === "undefined") return;
 
   const policyImported =
     window.localStorage.getItem(POLICY_IMPORT_FLAG) === "1";
-  const prefsImported = window.localStorage.getItem(PREFS_IMPORT_FLAG) === "1";
 
   if (!policyImported) {
     await syncWorkspacesCatalog(ctx);
     await syncOrgPolicyToSupabase(ctx);
     window.localStorage.setItem(POLICY_IMPORT_FLAG, "1");
-  }
-
-  if (!prefsImported) {
-    await syncUserPrefsToSupabase(ctx);
-    window.localStorage.setItem(PREFS_IMPORT_FLAG, "1");
   }
 }
 
@@ -387,7 +406,7 @@ export function startOrgPolicyRemoteSync(ctx: WorkspaceCtx) {
   let syncing = false;
 
   const push = () => {
-    if (syncing || skipRemoteSync) return;
+    if (syncing || isRemoteSyncPaused()) return;
     syncing = true;
     void syncOrgPolicyToSupabase(ctx)
       .catch((err) => {
@@ -399,7 +418,7 @@ export function startOrgPolicyRemoteSync(ctx: WorkspaceCtx) {
   };
 
   const unsub = subscribePolicyStore(() => {
-    if (skipRemoteSync) return;
+    if (isRemoteSyncPaused()) return;
     const revision = getPolicyStoreRevision();
     if (revision === lastRevision) return;
     lastRevision = revision;
@@ -415,17 +434,22 @@ export function startOrgPolicyRemoteSync(ctx: WorkspaceCtx) {
 
 /** Debounced push for pins + sidebar. Pins flush immediately so unpin sticks. */
 export function startUserPrefsRemoteSync(ctx: WorkspaceCtx) {
+  const scopeVersion = getPinsScopeVersion();
   let pinsTimer: ReturnType<typeof setTimeout> | null = null;
   let sidebarTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let disposed = false;
   let syncing = false;
   let pinsQueued = false;
   let sidebarQueued = false;
 
   const push = () => {
-    if (syncing || skipRemoteSync) {
+    if (disposed || !isCurrentPinsScope(ctx, scopeVersion)) return;
+    if (syncing || isRemoteSyncPaused()) {
       // Retry shortly if we blocked ourselves mid-window.
       if (pinsQueued || sidebarQueued) {
-        window.setTimeout(push, 200);
+        if (retryTimer) clearTimeout(retryTimer);
+        retryTimer = setTimeout(push, 200);
       }
       return;
     }
@@ -443,13 +467,15 @@ export function startUserPrefsRemoteSync(ctx: WorkspaceCtx) {
   };
 
   const schedule = (which: "pins" | "sidebar") => {
-    if (skipRemoteSync && which !== "pins") return;
+    if (disposed || !isCurrentPinsScope(ctx, scopeVersion)) return;
+    if (which === "pins" && !arePinsDirty()) return;
+    if (isRemoteSyncPaused() && which !== "pins") return;
     if (which === "pins") {
       pinsQueued = true;
       if (pinsTimer) clearTimeout(pinsTimer);
       pinsTimer = setTimeout(push, PINS_SYNC_DEBOUNCE_MS);
     } else {
-      if (skipRemoteSync) return;
+      if (isRemoteSyncPaused()) return;
       sidebarQueued = true;
       if (sidebarTimer) clearTimeout(sidebarTimer);
       sidebarTimer = setTimeout(push, SYNC_DEBOUNCE_MS);
@@ -458,10 +484,15 @@ export function startUserPrefsRemoteSync(ctx: WorkspaceCtx) {
 
   const unsubPins = subscribePins(() => schedule("pins"));
   const unsubSidebar = subscribeSidebar(() => schedule("sidebar"));
+  // Edits may have been queued before a workspace navigation stopped the
+  // previous listener, or while the browser was offline.
+  if (arePinsDirty()) schedule("pins");
 
   return () => {
+    disposed = true;
     if (pinsTimer) clearTimeout(pinsTimer);
     if (sidebarTimer) clearTimeout(sidebarTimer);
+    if (retryTimer) clearTimeout(retryTimer);
     unsubPins();
     unsubSidebar();
   };
@@ -500,13 +531,16 @@ export function subscribeOrgPolicyRealtime(
 }
 
 export function startOrgPolicyRealtimePull(ctx: WorkspaceCtx) {
+  const scopeVersion = getPinsScopeVersion();
+  let disposed = false;
   let orgPulling = false;
   let prefsPulling = false;
   let orgTimer: ReturnType<typeof setTimeout> | null = null;
   let prefsTimer: ReturnType<typeof setTimeout> | null = null;
 
   const pullOrg = () => {
-    if (orgPulling || skipRemoteSync) return;
+    if (disposed || !isCurrentPinsScope(ctx, scopeVersion)) return;
+    if (orgPulling || isRemoteSyncPaused()) return;
     orgPulling = true;
     void hydrateOrgPolicyFromRemote(ctx)
       .catch((err) => {
@@ -518,7 +552,8 @@ export function startOrgPolicyRealtimePull(ctx: WorkspaceCtx) {
   };
 
   const pullPrefs = () => {
-    if (prefsPulling || skipRemoteSync) return;
+    if (disposed || !isCurrentPinsScope(ctx, scopeVersion)) return;
+    if (prefsPulling || isRemoteSyncPaused()) return;
     prefsPulling = true;
     void hydrateUserPrefsFromRemote(ctx)
       .catch((err) => {
@@ -536,13 +571,14 @@ export function startOrgPolicyRealtimePull(ctx: WorkspaceCtx) {
     },
     onPinsChange: () => {
       // Ignore echoes from our own delete→insert push window.
-      if (skipRemoteSync) return;
+      if (isRemoteSyncPaused()) return;
       if (prefsTimer) clearTimeout(prefsTimer);
       prefsTimer = setTimeout(pullPrefs, 1500);
     },
   });
 
   return () => {
+    disposed = true;
     if (orgTimer) clearTimeout(orgTimer);
     if (prefsTimer) clearTimeout(prefsTimer);
     stop();
@@ -550,11 +586,16 @@ export function startOrgPolicyRealtimePull(ctx: WorkspaceCtx) {
 }
 
 export async function bootstrapSupabaseOrgPolicy(ctx: WorkspaceCtx) {
-  const { bindPinsProfile } = await import("@/lib/session");
-  bindPinsProfile(ctx.actorId);
-  await importLocalOrgPolicyIfNeeded(ctx);
-  await hydrateOrgPolicyFromRemote(ctx);
+  // The provider binds the profile before starting bootstrap. An obsolete
+  // async bootstrap must not rebind the global store to an earlier account.
+  const scopeVersion = getPinsScopeVersion();
+  if (!isCurrentPinsScope(ctx, scopeVersion)) return;
   await hydrateUserPrefsFromRemote(ctx);
+  if (!isCurrentPinsScope(ctx, scopeVersion)) return;
+  window.localStorage.setItem(PREFS_IMPORT_FLAG, "1");
+  await importLocalOrgPolicyIfNeeded(ctx);
+  if (!isCurrentPinsScope(ctx, scopeVersion)) return;
+  await hydrateOrgPolicyFromRemote(ctx);
 }
 
 export function startSupabaseOrgPolicySync(ctx: WorkspaceCtx) {

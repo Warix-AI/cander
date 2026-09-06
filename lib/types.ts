@@ -170,9 +170,7 @@ export type MessageActivity = {
    * Primary shimmer line when `phase` is absent.
    */
   label?: string;
-  /**
-   * @deprecated Never show a second stacked status line.
-   */
+  /** Short user-facing description of the current live operation. */
   detail?: string;
   kind?: "idle" | "tool" | "work";
 };

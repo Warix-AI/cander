@@ -395,8 +395,10 @@ let pinsLocalEpoch = 0;
 let pinsDirty = false;
 /** Profile scope for local pin storage — avoids cross-account clobber. */
 let pinsProfileId: string | null = null;
+let pinsScopeVersion = 0;
 const PINS_LEGACY_KEY = "courier-pins";
 const PINS_SYNCED_LEGACY_KEY = "courier-pins-synced-fp";
+const PINS_DIRTY_LEGACY_KEY = "courier-pins-dirty";
 
 function pinsStorageKey(profileId: string) {
   return `courier-pins:${profileId}`;
@@ -404,6 +406,10 @@ function pinsStorageKey(profileId: string) {
 
 function pinsSyncedKey(profileId: string) {
   return `courier-pins-synced-fp:${profileId}`;
+}
+
+function pinsDirtyKey(profileId: string | null) {
+  return profileId ? `courier-pins-dirty:${profileId}` : PINS_DIRTY_LEGACY_KEY;
 }
 
 function pinsFingerprintLocal(list: Pin[]) {
@@ -448,6 +454,7 @@ function emitPins() {
 function readPinsForProfile(profileId: string | null): {
   pins: Pin[];
   synced: string;
+  dirty?: boolean;
 } {
   if (typeof window === "undefined") {
     return { pins: emptyPins, synced: "" };
@@ -458,6 +465,7 @@ function readPinsForProfile(profileId: string | null): {
       return {
         pins: parsePins(scoped),
         synced: window.localStorage.getItem(pinsSyncedKey(profileId)) ?? "",
+        dirty: window.localStorage.getItem(pinsDirtyKey(profileId)) === "1",
       };
     }
     // One-time migrate unscoped legacy key into this profile.
@@ -468,42 +476,53 @@ function readPinsForProfile(profileId: string | null): {
       const legacySynced =
         window.localStorage.getItem(PINS_SYNCED_LEGACY_KEY) ?? "";
       window.localStorage.setItem(pinsSyncedKey(profileId), legacySynced);
+      const dirty = window.localStorage.getItem(PINS_DIRTY_LEGACY_KEY) === "1";
+      window.localStorage.setItem(pinsDirtyKey(profileId), dirty ? "1" : "0");
       window.localStorage.removeItem(PINS_LEGACY_KEY);
       window.localStorage.removeItem(PINS_SYNCED_LEGACY_KEY);
-      return { pins: migrated, synced: legacySynced };
+      window.localStorage.removeItem(PINS_DIRTY_LEGACY_KEY);
+      return { pins: migrated, synced: legacySynced, dirty };
     }
     return { pins: emptyPins, synced: "" };
   }
   return {
     pins: parsePins(window.localStorage.getItem(PINS_LEGACY_KEY)),
     synced: window.localStorage.getItem(PINS_SYNCED_LEGACY_KEY) ?? "",
+    dirty: window.localStorage.getItem(PINS_DIRTY_LEGACY_KEY) === "1",
   };
 }
 
 function writePinsForProfile(profileId: string | null, list: Pin[], syncedFp?: string) {
   if (typeof window === "undefined") return;
   const raw = JSON.stringify(list);
+  // Returning to the last synced list is still an edit when an older save is
+  // in flight. A fingerprint alone cannot preserve that intent across reload.
+  if (syncedFp === undefined) {
+    window.localStorage.setItem(pinsDirtyKey(profileId), "1");
+  }
   if (profileId) {
     window.localStorage.setItem(pinsStorageKey(profileId), raw);
     if (syncedFp !== undefined) {
       window.localStorage.setItem(pinsSyncedKey(profileId), syncedFp);
+      window.localStorage.setItem(pinsDirtyKey(profileId), "0");
     }
     return;
   }
   window.localStorage.setItem(PINS_LEGACY_KEY, raw);
   if (syncedFp !== undefined) {
     window.localStorage.setItem(PINS_SYNCED_LEGACY_KEY, syncedFp);
+    window.localStorage.setItem(PINS_DIRTY_LEGACY_KEY, "0");
   }
 }
 
 function hydratePins() {
   if (pinsHydrated || typeof window === "undefined") return;
   pinsHydrated = true;
-  const { pins: loaded, synced } = readPinsForProfile(pinsProfileId);
+  const { pins: loaded, synced, dirty } = readPinsForProfile(pinsProfileId);
   pins = loaded;
   const current = pinsFingerprintLocal(pins);
   // Unsynced local edits survive reload — block remote resurrect until push.
-  if (synced !== current) {
+  if (dirty || synced !== current) {
     pinsDirty = true;
     pinsLocalEpoch = Math.max(pinsLocalEpoch, 1);
   }
@@ -517,8 +536,11 @@ export function bindPinsProfile(profileId: string | null) {
   const next = profileId?.trim() || null;
   if (pinsProfileId === next && pinsHydrated) return;
   pinsProfileId = next;
+  pinsScopeVersion += 1;
   pinsHydrated = false;
-  pinsLocalEpoch = 0;
+  // Never reuse an epoch: a save from an earlier login must not acknowledge
+  // edits made after switching accounts (even when switching back).
+  pinsLocalEpoch += 1;
   pinsDirty = false;
   pins = emptyPins;
   hydratePins();
@@ -546,12 +568,20 @@ export function getPinsLocalEpoch() {
   return pinsLocalEpoch;
 }
 
+export function getPinsProfileId() {
+  return pinsProfileId;
+}
+
+export function getPinsScopeVersion() {
+  return pinsScopeVersion;
+}
+
 export function arePinsDirty() {
   return pinsDirty;
 }
 
 export function markPinsSynced(epoch: number) {
-  if (epoch < pinsLocalEpoch) return;
+  if (epoch !== pinsLocalEpoch) return;
   pinsDirty = false;
   if (typeof window !== "undefined") {
     writePinsForProfile(pinsProfileId, pins, pinsFingerprintLocal(pins));

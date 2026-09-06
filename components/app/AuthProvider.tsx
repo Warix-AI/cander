@@ -23,7 +23,8 @@ async function reconcileSupabaseUser(user: User) {
   if (complete) {
     persistOnboardingPending(false);
     try {
-      clearLocalAuthState();
+      // Revalidating a signed-in session must not clear its saved preferences.
+      // Full cleanup belongs to sign-out; stores bind to the authenticated user.
       await hydrateMemberFromSupabase(user);
     } catch (err) {
       console.warn("[cander] member hydrate failed", err);

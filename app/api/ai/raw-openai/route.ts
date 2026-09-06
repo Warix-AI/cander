@@ -47,6 +47,7 @@ import {
   completedResponseFromOpenAIStreamEvent,
   encodeRawOpenAIStreamEvent,
   isOpenAIWebSearchStreamEvent,
+  statusDetailFromOpenAIStreamEvent,
   textDeltaFromOpenAIStreamEvent,
 } from "@/lib/ai/raw-openai/stream-events";
 
@@ -326,10 +327,15 @@ export async function POST(request: Request) {
             let webSearchUsed = false;
             let usage: OpenAI.Responses.Response["usage"] | undefined;
             let output: OpenAI.Responses.Response["output"] | undefined;
+            let lastStatus = "";
             for await (const event of openaiStream) {
+              const statusDetail = statusDetailFromOpenAIStreamEvent(event);
+              if (statusDetail && statusDetail !== lastStatus) {
+                lastStatus = statusDetail;
+                write({ type: "status", detail: statusDetail });
+              }
               if (isOpenAIWebSearchStreamEvent(event)) {
                 webSearchUsed = true;
-                write({ type: "status", detail: "Searching" });
               }
               const delta = textDeltaFromOpenAIStreamEvent(event);
               if (delta) {

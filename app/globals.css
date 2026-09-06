@@ -1249,6 +1249,31 @@ html:not(.dark) .shell-panel :is(.bg-sidebar, .bg-background) {
   }
 }
 
+/* Quiet breathing indicator for an in-flight assistant response. */
+@keyframes thinking-dot-breathe {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: scale(0.72);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.18);
+  }
+}
+
+.thinking-dot {
+  animation: thinking-dot-breathe 1.55s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-dot {
+    animation: none;
+    opacity: 0.65;
+  }
+}
+
 .cander-pinwheel {
   transform-origin: center center;
   animation: cander-pinwheel 1.85s cubic-bezier(0.33, 0.05, 0.2, 1) infinite;
@@ -1411,4 +1436,3 @@ html.dark .image-gen-card {
   width: 0;
   height: 0;
 }
-

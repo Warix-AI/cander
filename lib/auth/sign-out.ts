@@ -4,7 +4,7 @@ import { resetChatStore } from "@/lib/api/chat-store";
 import { resetSpaceEntityStore } from "@/lib/api/space-entity-store";
 import { clearAppearanceLocalState } from "@/lib/appearance";
 import { isSupabaseConfigured } from "@/lib/data-backend";
-import { persistOnboardingPending, persistSignedOut, resetWorkspaceSession } from "@/lib/session";
+import { bindPinsProfile, persistOnboardingPending, persistSignedOut, resetWorkspaceSession } from "@/lib/session";
 import { signOutSupabase } from "@/lib/supabase/auth-actions";
 import { clearSupabaseAuthState } from "@/lib/supabase/auth-store";
 import { resetPolicyStoreState } from "@/lib/workspace-policy";
@@ -29,6 +29,12 @@ function isAppearanceStorageKey(key: string) {
   return key === "courier-appearance-v2" || key.startsWith("courier-appearance-v2:");
 }
 
+function isProfilePinStorageKey(key: string) {
+  return key.startsWith("courier-pins:") ||
+    key.startsWith("courier-pins-synced-fp:") ||
+    key.startsWith("courier-pins-dirty:");
+}
+
 /** Clear sticky local prototype state after sign-out / delete. */
 export function clearLocalAuthState() {
   if (typeof window === "undefined") return;
@@ -40,10 +46,12 @@ export function clearLocalAuthState() {
   for (let i = 0; i < window.localStorage.length; i += 1) {
     const key = window.localStorage.key(i);
     if (!key?.startsWith("courier-")) continue;
-    if (isAppearanceStorageKey(key)) continue;
+    // Keep account-scoped preferences, including edits still waiting to sync.
+    if (isAppearanceStorageKey(key) || isProfilePinStorageKey(key)) continue;
     doomed.push(key);
   }
   for (const key of doomed) window.localStorage.removeItem(key);
+  bindPinsProfile(null);
 }
 
 /**

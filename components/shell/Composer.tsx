@@ -1825,7 +1825,7 @@ export function Composer({
               ) : null}
             <div
               className={cn(
-                "flex min-h-8 items-start gap-1",
+                "flex min-h-8 items-end gap-1",
                 dictatingActive && "invisible pointer-events-none",
               )}
               aria-hidden={dictatingActive || undefined}
@@ -2051,7 +2051,7 @@ export function Composer({
                   }}
                 />
               )}
-              <div className="flex shrink-0 items-start gap-0.5 self-start">
+              <div className="flex shrink-0 items-end gap-0.5 self-end">
                 <ComposerTrailingActions
                   canSend={hasPayload}
                   hasVoice={entitlements.hasVoice}

@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { CanderActivityMark } from "@/components/brand/CanderActivityMark";
+import { useEffect, useState } from "react";
 import type { TurnActivityPhase } from "@/lib/ai/turn-activity";
-import { labelForPhase } from "@/lib/ai/turn-activity";
+import { detailForPhase } from "@/lib/ai/turn-activity";
 import { cn } from "@/lib/utils";
 
-const STATUS_CYCLE = ["Thinking", "Searching", "Generating"] as const;
+const STATUS_CYCLE = [
+  "Understanding your request",
+  "Gathering what’s needed",
+  "Preparing a response",
+] as const;
 /** Time each status label stays visible before cycling to the next. */
 const STATUS_CYCLE_MS = 5000;
 
@@ -14,10 +17,7 @@ function useCyclingStatus(active: boolean, intervalMs = STATUS_CYCLE_MS) {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    if (!active) {
-      setIndex(0);
-      return;
-    }
+    if (!active) return;
     const id = window.setInterval(() => {
       setIndex((value) => (value + 1) % STATUS_CYCLE.length);
     }, intervalMs);
@@ -27,97 +27,52 @@ function useCyclingStatus(active: boolean, intervalMs = STATUS_CYCLE_MS) {
   return STATUS_CYCLE[index]!;
 }
 
-function useElapsedSeconds(startedAt: number | undefined, active: boolean) {
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-
-  useEffect(() => {
-    if (!active || !startedAt) {
-      setElapsedSeconds(0);
-      return;
-    }
-    const tick = () => {
-      setElapsedSeconds(
-        Math.max(0, Math.floor((Date.now() - startedAt) / 1000)),
-      );
-    };
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [active, startedAt]);
-
-  return elapsedSeconds;
-}
-
 /**
- * In-flight turn indicator — spinning Cander mark with live phase + elapsed time.
- * Fades out when `active` becomes false.
+ * In-flight turn indicator — quiet heading with a truthful live activity line.
  */
 export function ThinkingIndicator({
   className,
   phase,
-  startedAt,
+  detail,
   label,
   active = true,
 }: {
   className?: string;
   phase?: TurnActivityPhase;
-  startedAt?: number;
+  detail?: string;
   /** Legacy fallback when phase is missing. */
   label?: string;
   active?: boolean;
 }) {
-  const cyclingLabel = useCyclingStatus(active && !phase);
-  const elapsedSeconds = useElapsedSeconds(startedAt, active);
-  const phaseLabel = phase ? labelForPhase(phase) : null;
-  const visibleLabel = phaseLabel
-    ? `${phaseLabel} · ${elapsedSeconds}s`
-    : (label && !/^Thinking\b/i.test(label) ? label : cyclingLabel);
-
-  const accessible = phaseLabel || visibleLabel;
-
-  const [exiting, setExiting] = useState(false);
-  const [mounted, setMounted] = useState(active);
-  const exitTimer = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (exitTimer.current) {
-      window.clearTimeout(exitTimer.current);
-      exitTimer.current = null;
-    }
-    if (active) {
-      setMounted(true);
-      setExiting(false);
-      return;
-    }
-    setExiting(true);
-    exitTimer.current = window.setTimeout(() => {
-      setMounted(false);
-      setExiting(false);
-      exitTimer.current = null;
-    }, 180);
-    return () => {
-      if (exitTimer.current) window.clearTimeout(exitTimer.current);
-    };
-  }, [active]);
-
-  if (!mounted) return null;
+  const cyclingLabel = useCyclingStatus(active && !phase && !detail);
+  const visibleDetail =
+    detail?.trim() ||
+    (phase ? detailForPhase(phase) : null) ||
+    (label && !/^Thinking\b/i.test(label) ? label : cyclingLabel);
 
   return (
     <div
       className={cn(
-        "flex w-full items-center gap-2.5 transition-opacity duration-200 ease-out",
-        exiting ? "opacity-0" : "opacity-100",
+        "flex w-full items-start gap-3 transition-opacity duration-200",
+        active ? "opacity-100" : "opacity-0",
         className,
       )}
+      role="status"
+      aria-live="polite"
+      aria-label={`Working. ${visibleDetail}`}
     >
-      <CanderActivityMark label={accessible} />
-      <span
-        key={visibleLabel}
-        className="text-[14px] font-medium tracking-[-0.01em] text-muted-foreground"
-        aria-hidden
-      >
-        {visibleLabel}
-      </span>
+      <span className="thinking-dot mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500 dark:bg-sky-400" aria-hidden />
+      <div className="min-w-0" aria-hidden>
+        <div className="text-[14px] font-medium tracking-[-0.01em] text-foreground/80">
+          Working
+        </div>
+        <div
+          key={visibleDetail}
+          className="mt-0.5 animate-in fade-in slide-in-from-bottom-1 text-[13px] leading-5 text-muted-foreground duration-300"
+        >
+          {visibleDetail}
+        </div>
+      </div>
     </div>
   );
 }

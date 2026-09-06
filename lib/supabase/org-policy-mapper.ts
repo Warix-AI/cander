@@ -223,8 +223,9 @@ export function rebuildPoliciesFromRows(input: {
   return policies;
 }
 
-export function pinId(kind: PinKind, targetId: string) {
-  return `pin-${kind}-${targetId}`;
+export function pinId(profileId: string, kind: PinKind, targetId: string) {
+  // The row ID is a global primary key, even though pins belong to a profile.
+  return `pin-${profileId}-${kind}-${targetId}`;
 }
 
 export function pinToRow(
@@ -234,7 +235,7 @@ export function pinToRow(
 ): UserPinRow {
   const tier = pin.tier === "secondary" ? "secondary" : "primary";
   return {
-    id: pinId(pin.kind, pin.id),
+    id: pinId(profileId, pin.kind, pin.id),
     profile_id: profileId,
     kind: pin.kind,
     target_id: pin.id,

@@ -92,6 +92,36 @@ export function isOpenAIWebSearchStreamEvent(event: unknown): boolean {
   return type.includes("web_search");
 }
 
+/** Convert provider events into concise, truthful UI status copy. */
+export function statusDetailFromOpenAIStreamEvent(
+  event: unknown,
+): string | null {
+  if (!event || typeof event !== "object") return null;
+  const type = String((event as { type?: unknown }).type || "");
+  if (type.includes("web_search_call")) {
+    if (type.endsWith(".completed") || type.endsWith(".done")) {
+      return "Reading the sources I found";
+    }
+    return "Searching the web";
+  }
+  if (type.includes("file_search_call")) {
+    if (type.endsWith(".completed") || type.endsWith(".done")) {
+      return "Reading the matching files";
+    }
+    return "Searching your files";
+  }
+  if (type.includes("image_generation_call")) {
+    return "Creating your image";
+  }
+  if (type.includes("code_interpreter_call")) {
+    return "Running the analysis";
+  }
+  if (type === "response.in_progress" || type === "response.created") {
+    return "Understanding your request";
+  }
+  return null;
+}
+
 export function completedResponseFromOpenAIStreamEvent(
   event: unknown,
 ): { output?: unknown; usage?: { input_tokens?: number; output_tokens?: number } } | null {

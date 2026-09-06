@@ -67,7 +67,7 @@ export async function runRawOpenAITurn(
   report({
     phase: "thinking",
     label: "Thinking",
-    detail: "Sending to OpenAI",
+    detail: "Understanding your request",
   });
 
   const history = (request.messages ?? []).map((m) => ({

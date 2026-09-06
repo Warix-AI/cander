@@ -11,7 +11,6 @@ import {
   phaseForImageGenerationBlock,
 } from "@/components/chat/ImageGenerationCard";
 import { StructuredResponseBlock } from "@/components/chat/StructuredResponseBlock";
-import { AddReplyToProjectMenu } from "@/components/chat/AddReplyToProjectMenu";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
 import { formatClarificationAnswersForDisplay } from "@/lib/ai/clarification/schema";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
@@ -20,6 +19,34 @@ import { cn } from "@/lib/utils";
 import { faviconUrlForSite } from "@/lib/preview-url";
 import { isCdnCitationHost } from "@/lib/ai/orchestrator/citations";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
+
+function useReplyReveal(content: string, animate: boolean) {
+  const [revealed, setRevealed] = useState(animate ? "" : content);
+  const animatedContentRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!animate || !content || animatedContentRef.current === content) {
+      if (!animate) {
+        animatedContentRef.current = content;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setRevealed(content);
+      }
+      return;
+    }
+    animatedContentRef.current = content;
+    setRevealed("");
+    let index = 0;
+    const words = content.match(/\S+\s*/g) ?? [content];
+    const timer = window.setInterval(() => {
+      index += 1;
+      setRevealed(words.slice(0, index).join(""));
+      if (index >= words.length) window.clearInterval(timer);
+    }, 28);
+    return () => window.clearInterval(timer);
+  }, [animate, content]);
+
+  return revealed;
+}
 
 function blockKey(block: ChatBlock, index: number): string {
   switch (block.type) {
@@ -49,31 +76,38 @@ export function AssistantMessage({ message }: { message: Message }) {
     visibleContent !== "Thinking...";
 
   const inFlight = pending || streaming;
+  const replyContent = useReplyReveal(visibleContent, hasReply && !inFlight);
   const hasGeneratingImage = Boolean(
     message.blocks?.some(
       (block) =>
         block.type === "image_generation" && block.status === "generating",
     ),
   );
+  const activity = message.activity;
   const showActivityRow =
     inFlight &&
     !hasGeneratingImage &&
-    Boolean(message.activity?.phase || message.activity?.startedAt);
+    Boolean(activity?.phase || activity?.startedAt);
 
   return (
-    <div className="w-full space-y-2">
+    <div className="group/assistant w-full space-y-2">
       {showActivityRow ? (
         <ThinkingIndicator
           active
-          phase={message.activity?.phase}
-          startedAt={message.activity?.startedAt}
-          label={message.activity?.label}
+          phase={activity?.phase}
+          detail={activity?.detail}
+          label={activity?.label}
         />
       ) : null}
       {hasReply ? (
-        <div className="pb-0">
+        <div
+          className={cn(
+            "pb-0 transition-[opacity,transform] duration-200 ease-out",
+            "animate-in fade-in slide-in-from-bottom-1",
+          )}
+        >
           <MarkdownRenderer
-            content={visibleContent}
+            content={replyContent}
             onLinkClick={(href) => openInAppBrowser(href)}
           />
         </div>
@@ -321,14 +355,14 @@ function ActionSourcesRow({
         </div>
       ) : null}
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex min-h-7 items-center gap-1.5">
         {showCopy ? (
           <button
             type="button"
             title={copied ? "Copied" : "Copy"}
             aria-label={copied ? "Copied" : "Copy"}
             onClick={() => void copy()}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+            className="pointer-events-none inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-[color,background-color,opacity] duration-150 hover:bg-muted hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/assistant:pointer-events-auto group-hover/assistant:opacity-100 group-focus-within/assistant:pointer-events-auto group-focus-within/assistant:opacity-100"
           >
             {copied ? (
               <Check className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -338,12 +372,6 @@ function ActionSourcesRow({
           </button>
         ) : null}
 
-        {showCopy ? (
-          <AddReplyToProjectMenu
-            message={message}
-            visibleContent={visibleContent}
-          />
-        ) : null}
       </div>
     </div>
   );

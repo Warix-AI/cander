@@ -18,6 +18,7 @@ import { extractOpenAICitations } from "../lib/ai/raw-openai/citations.ts";
 import {
   encodeRawOpenAIStreamEvent,
   parseRawOpenAIStreamLine,
+  statusDetailFromOpenAIStreamEvent,
   textDeltaFromOpenAIStreamEvent,
 } from "../lib/ai/raw-openai/stream-events.ts";
 import {
@@ -123,6 +124,25 @@ describe("OpenAI web search flag", () => {
 });
 
 describe("Raw OpenAI stream events", () => {
+  it("maps provider events to truthful live activity", () => {
+    assert.equal(
+      statusDetailFromOpenAIStreamEvent({
+        type: "response.web_search_call.searching",
+      }),
+      "Searching the web",
+    );
+    assert.equal(
+      statusDetailFromOpenAIStreamEvent({
+        type: "response.web_search_call.completed",
+      }),
+      "Reading the sources I found",
+    );
+    assert.equal(
+      statusDetailFromOpenAIStreamEvent({ type: "response.output_text.delta" }),
+      null,
+    );
+  });
+
   it("round-trips NDJSON lines", () => {
     const line = encodeRawOpenAIStreamEvent({ type: "delta", text: "Hi" });
     const parsed = parseRawOpenAIStreamLine(line);

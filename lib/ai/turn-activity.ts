@@ -43,6 +43,38 @@ export function labelForPhase(phase: TurnActivityPhase): string {
   }
 }
 
+/** Default detail when a provider has not supplied a more specific event. */
+export function detailForPhase(phase: TurnActivityPhase): string {
+  switch (phase) {
+    case "generating":
+      return "Preparing a response";
+    case "searching":
+      return "Searching the web";
+    case "reading":
+      return "Reading relevant sources";
+    case "checking":
+      return "Checking the results";
+    case "building":
+      return "Building your request";
+    case "updating":
+      return "Applying the changes";
+  }
+}
+
+function friendlyProgressDetail(
+  progress: AgentTurnProgress,
+  phase: TurnActivityPhase,
+): string {
+  const detail = progress.detail?.trim();
+  if (
+    detail &&
+    !/^(thinking|generating|searching|reading|checking|building|updating)\.?\.?\.?$/i.test(detail)
+  ) {
+    return detail.replace(/\.{3}$/, "");
+  }
+  return detailForPhase(phase);
+}
+
 export function formatTurnActivityLine(
   state: Pick<TurnActivityState, "phase" | "elapsedSeconds">,
 ): string {
@@ -231,11 +263,14 @@ export function patchMessageWithProgress(
     ...(progress.contentDelta
       ? { content: progress.contentDelta, status: "streaming" as const }
       : {}),
-    activity: {
-      phase,
-      startedAt,
-      kind: progress.phase === "tool" ? ("tool" as const) : ("work" as const),
-    },
+    activity: progress.contentDelta
+      ? null
+      : {
+          phase,
+          startedAt,
+          detail: friendlyProgressDetail(progress, phase),
+          kind: progress.phase === "tool" ? ("tool" as const) : ("work" as const),
+        },
     blocks,
   };
 }

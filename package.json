@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:pins": "node --experimental-strip-types --test scripts/pin-mapper.test.ts scripts/pin-persistence.test.ts",
     "check:migrations": "bash scripts/check-migrations.sh",
     "test:security": "node --experimental-strip-types --test scripts/security-denial.test.ts",
     "test:connectors": "node --experimental-strip-types --test scripts/connector-security.test.ts scripts/composio-security.test.ts scripts/composio-oauth-resilience.test.ts scripts/composio-tools.test.ts scripts/connector-response.test.ts scripts/connector-api-security.test.ts scripts/tool-catalog.test.ts scripts/tool-permissions.test.ts scripts/agent-runtime.test.ts scripts/connector-scope-idor.test.ts",

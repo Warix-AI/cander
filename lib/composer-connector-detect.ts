@@ -85,8 +85,6 @@ const GENERIC_CALENDAR_ALIASES = [
   "calendar",
   "calendars",
   "agenda",
-  "schedule",
-  "schedules",
 ];
 const CALENDAR_CONNECTOR_IDS = new Set(["gcal"]);
 
