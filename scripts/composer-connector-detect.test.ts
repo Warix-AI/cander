@@ -359,4 +359,68 @@ describe("composer connector detect", () => {
     }).blocks;
     assert.equal(connectorsFromBlocks(next)[0]?.connectorId, "gmail");
   });
+
+  it("matches new app connectors by product name and aliases", () => {
+    const notion = {
+      connectionId: "conn-notion",
+      connectorId: "notion",
+      label: "Notion",
+    };
+    const hubspot = {
+      connectionId: "conn-hubspot",
+      connectorId: "hubspot",
+      label: "HubSpot",
+    };
+    const github = {
+      connectionId: "conn-github",
+      connectorId: "github",
+      label: "GitHub",
+    };
+    const teams = {
+      connectionId: "conn-teams",
+      connectorId: "teams",
+      label: "Microsoft Teams",
+    };
+    const linear = {
+      connectionId: "conn-linear",
+      connectorId: "linear",
+      label: "Linear",
+    };
+
+    assert.equal(
+      detectConnectorMentions("find that in Notion", [notion])[0]?.connectorId,
+      "notion",
+    );
+    assert.equal(
+      detectConnectorMentions("pull contacts from HubSpot", [hubspot])[0]
+        ?.connectorId,
+      "hubspot",
+    );
+    assert.equal(
+      detectConnectorMentions("open my GitHub repos", [github])[0]?.connectorId,
+      "github",
+    );
+    assert.equal(
+      detectConnectorMentions("post in Microsoft Teams", [teams])[0]
+        ?.connectorId,
+      "teams",
+    );
+    assert.equal(
+      detectConnectorMentions("list Linear issues", [linear])[0]?.connectorId,
+      "linear",
+    );
+    assert.equal(
+      detectConnectorMentions("check Outlook inbox", [outlook])[0]?.connectorId,
+      "outlook",
+    );
+    assert.equal(
+      detectConnectorMentions("search Slack channels", [slack])[0]?.connectorId,
+      "slack",
+    );
+  });
+
+  it("matches Outlook via generic email when it is the only mail connector", () => {
+    const hits = detectConnectorMentions("check my inbox", [outlook]);
+    assert.equal(hits[0]?.connectorId, "outlook");
+  });
 });
