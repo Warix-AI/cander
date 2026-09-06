@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
@@ -25,7 +25,7 @@ type DocItem = {
   title: string;
   modified: string;
   modifiedAt: string | null;
-  preview?: string;
+  embedUrl?: string;
   openUrl?: string;
 };
 
@@ -59,6 +59,13 @@ function formatSyncWhen(iso: string) {
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+function docUrls(id: string) {
+  return {
+    embedUrl: `https://docs.google.com/document/d/${encodeURIComponent(id)}/preview`,
+    openUrl: `https://docs.google.com/document/d/${encodeURIComponent(id)}/edit`,
+  };
+}
+
 function parseDocItem(raw: unknown): DocItem | null {
   if (!raw || typeof raw !== "object") return null;
   const row = raw as Record<string, unknown>;
@@ -76,18 +83,30 @@ function parseDocItem(raw: unknown): DocItem | null {
     (typeof row.modifiedTime === "string" && row.modifiedTime) ||
     (typeof row.modified_time === "string" && row.modified_time) ||
     null;
+  const urls = docUrls(id);
   return {
     id,
     title,
     modified: formatModified(modifiedRaw),
     modifiedAt: modifiedRaw,
-    preview:
-      (typeof row.snippet === "string" && row.snippet) ||
-      (typeof row.preview === "string" && row.preview) ||
-      (typeof row.bodyText === "string" && row.bodyText) ||
-      undefined,
-    openUrl: `https://docs.google.com/document/d/${encodeURIComponent(id)}/edit`,
+    embedUrl: urls.embedUrl,
+    openUrl: urls.openUrl,
   };
+}
+
+function PreviewFrame({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-black/[0.02] dark:bg-white/[0.03]">
+      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+      <p className="sr-only">{title}</p>
+    </div>
+  );
 }
 
 export function DocsConnectorView({
@@ -106,6 +125,7 @@ export function DocsConnectorView({
   );
   const [syncing, setSyncing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [selected, setSelected] = useState<DocItem | null>(
     () => cached?.data.selected ?? null,
   );
@@ -217,42 +237,22 @@ export function DocsConnectorView({
   );
 
   const openDocument = useCallback(
-    async (doc: DocItem) => {
-      setSelected(doc);
+    (doc: DocItem) => {
+      const urls = docUrls(doc.id);
+      const next = {
+        ...doc,
+        embedUrl: doc.embedUrl || urls.embedUrl,
+        openUrl: doc.openUrl || urls.openUrl,
+      };
+      setSelected(next);
       setPage("detail");
-      setBusy(true);
       setError(null);
-      try {
-        const result = await runConnectorViewOperation({
-          workspaceId,
-          connectorId: "gdocs",
-          operation: "getDocument",
-          input: { documentId: doc.id },
-        });
-        const next: DocItem = {
-          ...doc,
-          title:
-            (typeof result.data.title === "string" && result.data.title) ||
-            doc.title,
-          preview:
-            (typeof result.data.bodyText === "string" && result.data.bodyText) ||
-            doc.preview,
-          openUrl:
-            (typeof result.data.openUrl === "string" && result.data.openUrl) ||
-            doc.openUrl,
-        };
-        setSelected(next);
-        persist({ selected: next, page: "detail", error: null });
-      } catch (err) {
-        persist({ selected: doc, page: "detail" });
-        setError(
-          err instanceof Error ? err.message : "Could not open document.",
-        );
-      } finally {
-        setBusy(false);
-      }
+      setStatus(null);
+      setPreviewLoading(true);
+      persist({ selected: next, page: "detail", error: null });
+      window.setTimeout(() => setPreviewLoading(false), 400);
     },
-    [persist, workspaceId],
+    [persist],
   );
 
   const createDocument = useCallback(async () => {
@@ -279,7 +279,12 @@ export function DocsConnectorView({
         title: nextTitle,
         modified: "Just now",
         modifiedAt: new Date().toISOString(),
-        preview: markdown.slice(0, 120),
+        ...docUrls(
+          (typeof result.data.id === "string" && result.data.id) ||
+            (typeof result.data.documentId === "string" &&
+              result.data.documentId) ||
+            "",
+        ),
       };
       setTitle("");
       setMarkdown("");
@@ -292,7 +297,7 @@ export function DocsConnectorView({
         created,
         ...prev.filter((row) => row.id !== created.id),
       ]);
-      await openDocument(created);
+      openDocument(created);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not create document.",
@@ -348,7 +353,7 @@ export function DocsConnectorView({
           : page === "detail"
             ? selected?.title ?? "Document"
             : "Documents",
-      syncing: syncing || busy,
+      syncing: syncing || busy || previewLoading,
       busy,
       canGoBack: page !== "browse",
       backLabel: "Documents",
@@ -383,10 +388,11 @@ export function DocsConnectorView({
       onBack: () => {
         setPage("browse");
         setSelected(null);
+        setPreviewLoading(false);
       },
       onRefresh: () => {
         if (page === "detail" && selected) {
-          void openDocument(selected);
+          openDocument(selected);
           return;
         }
         void refresh({ force: true });
@@ -408,6 +414,7 @@ export function DocsConnectorView({
     openDocument,
     openExternal,
     page,
+    previewLoading,
     query,
     refresh,
     selected,
@@ -441,18 +448,22 @@ export function DocsConnectorView({
 
       {page === "detail" && selected ? (
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-          {busy ? (
+          {previewLoading ? (
             <div className="pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/90 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur-sm">
               <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.7} />
               Loading…
             </div>
           ) : null}
-          {selected.preview?.trim() ? (
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-              <pre className="whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed text-foreground/90">
-                {selected.preview}
-              </pre>
-            </div>
+          {selected.embedUrl ? (
+            <PreviewFrame title={selected.title}>
+              <iframe
+                title={selected.title}
+                src={selected.embedUrl}
+                className="h-full w-full border-0 bg-white dark:bg-space-canvas"
+                allow="autoplay; encrypted-media"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </PreviewFrame>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
               <ConnectorMark
@@ -460,9 +471,7 @@ export function DocsConnectorView({
                 size="md"
                 className="!h-10 !w-10 !bg-transparent"
               />
-              <p className="text-[13px] font-medium">
-                {busy ? "Loading document…" : "Preview unavailable here"}
-              </p>
+              <p className="text-[13px] font-medium">Couldn’t load preview</p>
               <p className="max-w-sm text-[12px] text-muted-foreground">
                 Use Open in the bottom bar to view this Google Doc.
               </p>
@@ -496,7 +505,7 @@ export function DocsConnectorView({
                   subtitle="Google Doc"
                   meta={doc.modified}
                   active={selected?.id === doc.id}
-                  onClick={() => void openDocument(doc)}
+                  onClick={() => openDocument(doc)}
                   leading={
                     <span className="mt-0.5 shrink-0">
                       <ConnectorMark

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
@@ -18,7 +18,7 @@ import {
   writeViewCache,
 } from "@/lib/connectors/view-session-cache";
 
-type Page = "browse" | "detail" | "range" | "create";
+type Page = "browse" | "detail" | "create";
 
 type SheetItem = {
   id: string;
@@ -26,6 +26,7 @@ type SheetItem = {
   modified: string;
   modifiedAt: string | null;
   webViewLink?: string;
+  embedUrl?: string;
 };
 
 type SheetsSessionCache = {
@@ -34,10 +35,6 @@ type SheetsSessionCache = {
   page: Page;
   sheets: SheetItem[];
   selected: SheetItem | null;
-  tabs: string[];
-  activeTab: string | null;
-  range: string;
-  grid: string[][];
   newTitle: string;
   query: string;
   lastSyncedAt: string | null;
@@ -61,6 +58,13 @@ function formatSyncWhen(iso: string) {
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+function sheetUrls(id: string) {
+  return {
+    embedUrl: `https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/preview`,
+    webViewLink: `https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/edit`,
+  };
+}
+
 function parseSheetItem(raw: unknown): SheetItem | null {
   if (!raw || typeof raw !== "object") return null;
   const row = raw as Record<string, unknown>;
@@ -78,43 +82,34 @@ function parseSheetItem(raw: unknown): SheetItem | null {
     (typeof row.modifiedTime === "string" && row.modifiedTime) ||
     (typeof row.modified_time === "string" && row.modified_time) ||
     null;
+  const urls = sheetUrls(id);
   const webViewLink =
     (typeof row.webViewLink === "string" && row.webViewLink) ||
     (typeof row.web_view_link === "string" && row.web_view_link) ||
-    `https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/edit`;
+    urls.webViewLink;
   return {
     id,
     name,
     modified: formatModified(modifiedRaw),
     modifiedAt: modifiedRaw,
     webViewLink,
+    embedUrl: urls.embedUrl,
   };
 }
 
-function extractValueGrid(payload: Record<string, unknown>): string[][] {
-  const valueRanges = Array.isArray(payload.valueRanges)
-    ? payload.valueRanges
-    : Array.isArray(payload.value_ranges)
-      ? payload.value_ranges
-      : null;
-  if (valueRanges?.[0] && typeof valueRanges[0] === "object") {
-    const values = (valueRanges[0] as Record<string, unknown>).values;
-    if (Array.isArray(values)) {
-      return values.map((row) =>
-        Array.isArray(row) ? row.map((cell) => String(cell ?? "")) : [String(row ?? "")],
-      );
-    }
-  }
-  if (Array.isArray(payload.values)) {
-    return payload.values.map((row) =>
-      Array.isArray(row) ? row.map((cell) => String(cell ?? "")) : [String(row ?? "")],
-    );
-  }
-  const data = payload.data;
-  if (data && typeof data === "object") {
-    return extractValueGrid(data as Record<string, unknown>);
-  }
-  return [];
+function PreviewFrame({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-black/[0.02] dark:bg-white/[0.03]">
+      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+      <p className="sr-only">{title}</p>
+    </div>
+  );
 }
 
 export function SheetsConnectorView({
@@ -133,12 +128,9 @@ export function SheetsConnectorView({
   );
   const [syncing, setSyncing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [selected, setSelected] = useState<SheetItem | null>(
     () => cached?.data.selected ?? null,
-  );
-  const [tabs, setTabs] = useState<string[]>(() => cached?.data.tabs ?? []);
-  const [activeTab, setActiveTab] = useState<string | null>(
-    () => cached?.data.activeTab ?? null,
   );
   const [status, setStatus] = useState<string | null>(
     () => cached?.data.status ?? null,
@@ -146,10 +138,6 @@ export function SheetsConnectorView({
   const [error, setError] = useState<string | null>(
     () => cached?.data.error ?? null,
   );
-  const [range, setRange] = useState(
-    () => cached?.data.range ?? "Sheet1!A1:D20",
-  );
-  const [grid, setGrid] = useState<string[][]>(() => cached?.data.grid ?? []);
   const [newTitle, setNewTitle] = useState(() => cached?.data.newTitle ?? "");
   const [query, setQuery] = useState(() => cached?.data.query ?? "");
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(
@@ -166,13 +154,6 @@ export function SheetsConnectorView({
         sheets: patch.sheets ?? prev?.sheets ?? sheets,
         selected:
           patch.selected !== undefined ? patch.selected : (prev?.selected ?? selected),
-        tabs: patch.tabs ?? prev?.tabs ?? tabs,
-        activeTab:
-          patch.activeTab !== undefined
-            ? patch.activeTab
-            : (prev?.activeTab ?? activeTab),
-        range: patch.range ?? prev?.range ?? range,
-        grid: patch.grid ?? prev?.grid ?? grid,
         newTitle: patch.newTitle ?? prev?.newTitle ?? newTitle,
         query: patch.query ?? prev?.query ?? query,
         lastSyncedAt:
@@ -181,21 +162,7 @@ export function SheetsConnectorView({
             : (prev?.lastSyncedAt ?? lastSyncedAt),
       });
     },
-    [
-      activeTab,
-      cacheKey,
-      error,
-      grid,
-      lastSyncedAt,
-      newTitle,
-      page,
-      query,
-      range,
-      selected,
-      sheets,
-      status,
-      tabs,
-    ],
+    [cacheKey, error, lastSyncedAt, newTitle, page, query, selected, sheets, status],
   );
 
   const refresh = useCallback(
@@ -259,79 +226,24 @@ export function SheetsConnectorView({
     [cacheKey, persist, query, sheets.length, workspaceId],
   );
 
-  const loadRange = useCallback(
-    async (sheet: SheetItem, a1: string) => {
-      setBusy(true);
-      setError(null);
-      try {
-        const result = await runConnectorViewOperation({
-          workspaceId,
-          connectorId: "gsheets",
-          operation: "getValues",
-          input: { spreadsheetId: sheet.id, range: a1 },
-        });
-        const nextGrid = extractValueGrid(result.data);
-        setGrid(nextGrid);
-        setStatus(
-          nextGrid.length ? null : "Range is empty — try a different A1 range.",
-        );
-        persist({ grid: nextGrid, range: a1, status: null, error: null });
-      } catch (err) {
-        setGrid([]);
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Could not read spreadsheet range.",
-        );
-      } finally {
-        setBusy(false);
-      }
-    },
-    [persist, workspaceId],
-  );
-
   const openWorkbook = useCallback(
-    async (sheet: SheetItem) => {
-      setSelected(sheet);
+    (sheet: SheetItem) => {
+      const urls = sheetUrls(sheet.id);
+      const next = {
+        ...sheet,
+        embedUrl: sheet.embedUrl || urls.embedUrl,
+        webViewLink: sheet.webViewLink || urls.webViewLink,
+      };
+      setSelected(next);
       setPage("detail");
-      setBusy(true);
       setError(null);
-      setGrid([]);
-      try {
-        const result = await runConnectorViewOperation({
-          workspaceId,
-          connectorId: "gsheets",
-          operation: "getSheetNames",
-          input: { spreadsheetId: sheet.id },
-        });
-        const names = Array.isArray(result.data.sheetNames)
-          ? result.data.sheetNames.map(String).filter(Boolean)
-          : ["Sheet1"];
-        const first = names[0] ?? "Sheet1";
-        const nextRange = `${first}!A1:D40`;
-        setTabs(names);
-        setActiveTab(first);
-        setRange(nextRange);
-        persist({
-          selected: sheet,
-          page: "detail",
-          tabs: names,
-          activeTab: first,
-          range: nextRange,
-          grid: [],
-        });
-        await loadRange(sheet, nextRange);
-      } catch (err) {
-        setTabs(["Sheet1"]);
-        setActiveTab("Sheet1");
-        setError(
-          err instanceof Error ? err.message : "Could not load workbook tabs.",
-        );
-      } finally {
-        setBusy(false);
-      }
+      setStatus(null);
+      setPreviewLoading(true);
+      persist({ selected: next, page: "detail", error: null });
+      // Brief loading chip like Drive; embed paints on its own.
+      window.setTimeout(() => setPreviewLoading(false), 400);
     },
-    [loadRange, persist, workspaceId],
+    [persist],
   );
 
   const createSpreadsheet = useCallback(async () => {
@@ -354,6 +266,12 @@ export function SheetsConnectorView({
         name: title,
         modified: "Just now",
         modifiedAt: new Date().toISOString(),
+        ...sheetUrls(
+          (typeof result.data.spreadsheetId === "string" &&
+            result.data.spreadsheetId) ||
+            (typeof result.data.id === "string" && result.data.id) ||
+            "",
+        ),
       };
       if (!created.id) {
         await refresh({ force: true });
@@ -363,7 +281,7 @@ export function SheetsConnectorView({
       }
       setNewTitle("");
       setSheets((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
-      await openWorkbook(created);
+      openWorkbook(created);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not create spreadsheet.",
@@ -389,10 +307,6 @@ export function SheetsConnectorView({
       page,
       sheets,
       selected,
-      tabs,
-      activeTab,
-      range,
-      grid,
       newTitle,
       query,
       status,
@@ -400,19 +314,15 @@ export function SheetsConnectorView({
       lastSyncedAt,
     });
   }, [
-    activeTab,
     error,
-    grid,
     lastSyncedAt,
     newTitle,
     page,
     persist,
     query,
-    range,
     selected,
     sheets,
     status,
-    tabs,
   ]);
 
   useEffect(() => {
@@ -421,15 +331,13 @@ export function SheetsConnectorView({
       title:
         page === "create"
           ? "New spreadsheet"
-          : page === "range"
-            ? "Read range"
-            : page === "detail"
-              ? selected?.name ?? "Workbook"
-              : "Sheets",
-      syncing: syncing || busy,
+          : page === "detail"
+            ? selected?.name ?? "Spreadsheet"
+            : "Sheets",
+      syncing: syncing || busy || previewLoading,
       busy,
       canGoBack: page !== "browse",
-      backLabel: page === "range" ? selected?.name ?? "Workbook" : "Sheets",
+      backLabel: "Sheets",
       primaryLabel:
         page === "detail"
           ? "Open"
@@ -437,9 +345,7 @@ export function SheetsConnectorView({
             ? "New"
             : page === "create"
               ? "Create"
-              : page === "range"
-                ? "Load"
-                : null,
+              : null,
       syncHint: onBrowse
         ? syncing && !lastSyncedAt
           ? "Sheets · Syncing…"
@@ -461,23 +367,13 @@ export function SheetsConnectorView({
           }
         : null,
       onBack: () => {
-        if (page === "range") {
-          setPage("detail");
-          return;
-        }
         setPage("browse");
         setSelected(null);
-        setActiveTab(null);
-        setTabs([]);
-        setGrid([]);
+        setPreviewLoading(false);
       },
       onRefresh: () => {
-        if (page === "range" && selected) {
-          void loadRange(selected, range);
-          return;
-        }
         if (page === "detail" && selected) {
-          void openWorkbook(selected);
+          openWorkbook(selected);
           return;
         }
         void refresh({ force: true });
@@ -489,21 +385,18 @@ export function SheetsConnectorView({
             ? () => setPage("create")
             : page === "create"
               ? () => void createSpreadsheet()
-              : page === "range" && selected
-                ? () => void loadRange(selected, range)
-                : null,
+              : null,
     });
   }, [
     busy,
     createSpreadsheet,
     lastSyncedAt,
-    loadRange,
     onToolbarChange,
     openExternal,
     openWorkbook,
     page,
+    previewLoading,
     query,
-    range,
     refresh,
     selected,
     syncing,
@@ -525,120 +418,37 @@ export function SheetsConnectorView({
         </div>
       ) : null}
 
-      {page === "range" && selected ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
-          <p className="text-[12px] font-medium text-muted-foreground">
-            Read values from {selected.name}
-          </p>
-          <WorkspaceField
-            label="Range (A1)"
-            value={range}
-            onChange={setRange}
-            placeholder="Sheet1!A1:D20"
-          />
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void loadRange(selected, range)}
-            className="inline-flex h-9 w-fit items-center gap-1.5 rounded-full bg-primary px-4 text-[12.5px] font-medium text-primary-foreground disabled:opacity-50"
-          >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            Load range
-          </button>
-          <div className="mt-2 overflow-auto rounded-[10px] border border-border">
-            {grid.length ? (
-              <table className="min-w-full border-collapse text-left text-[11px]">
-                <tbody>
-                  {grid.map((row, rowIndex) => (
-                    <tr key={rowIndex} className="border-b border-border/60">
-                      {row.map((cell, cellIndex) => (
-                        <td
-                          key={`${rowIndex}-${cellIndex}`}
-                          className="whitespace-pre-wrap px-2 py-1.5 align-top text-foreground/90"
-                        >
-                          {cell}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="px-3 py-4 text-center text-[12px] text-muted-foreground">
-                Load a range to preview cell values.
-              </p>
-            )}
-          </div>
-        </div>
-      ) : null}
-
       {page === "detail" && selected ? (
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-          {busy ? (
+          {previewLoading ? (
             <div className="pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/90 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur-sm">
               <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.7} />
               Loading…
             </div>
           ) : null}
-          <div className="flex gap-1 overflow-x-auto border-b border-black/5 px-2 py-2 dark:border-white/10">
-            {(tabs.length ? tabs : ["Sheet1"]).map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => {
-                  const nextRange = `${tab}!A1:D40`;
-                  setActiveTab(tab);
-                  setRange(nextRange);
-                  void loadRange(selected, nextRange);
-                }}
-                className={
-                  (activeTab ?? tabs[0] ?? "Sheet1") === tab
-                    ? "rounded-full bg-muted px-3 py-1 text-[12px] font-medium"
-                    : "rounded-full px-3 py-1 text-[12px] text-muted-foreground hover:bg-muted/70"
-                }
-              >
-                {tab}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setPage("range")}
-              className="ml-auto rounded-full px-3 py-1 text-[12px] text-muted-foreground hover:bg-muted/70"
-            >
-              Custom range
-            </button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto">
-            {grid.length ? (
-              <table className="min-w-full border-collapse text-left text-[11px]">
-                <tbody>
-                  {grid.map((row, rowIndex) => (
-                    <tr key={rowIndex} className="border-b border-black/5 dark:border-white/10">
-                      {row.map((cell, cellIndex) => (
-                        <td
-                          key={`${rowIndex}-${cellIndex}`}
-                          className="whitespace-pre-wrap px-3 py-2 align-top text-foreground/90"
-                        >
-                          {cell}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-                <ConnectorMark id="gsheets" size="md" className="!h-10 !w-10 !bg-transparent" />
-                <p className="text-[13px] font-medium">
-                  {busy ? "Loading sheet…" : "No values in this range"}
-                </p>
-                <p className="max-w-sm text-[12px] text-muted-foreground">
-                  Use Open in the bottom bar to view this spreadsheet in Google
-                  Sheets, or try a custom range.
-                </p>
-              </div>
-            )}
-          </div>
+          {selected.embedUrl ? (
+            <PreviewFrame title={selected.name}>
+              <iframe
+                title={selected.name}
+                src={selected.embedUrl}
+                className="h-full w-full border-0 bg-white dark:bg-space-canvas"
+                allow="autoplay; encrypted-media"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </PreviewFrame>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+              <ConnectorMark
+                id="gsheets"
+                size="md"
+                className="!h-10 !w-10 !bg-transparent"
+              />
+              <p className="text-[13px] font-medium">Couldn’t load preview</p>
+              <p className="max-w-sm text-[12px] text-muted-foreground">
+                Use Open in the bottom bar to view this spreadsheet in Google.
+              </p>
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -667,7 +477,7 @@ export function SheetsConnectorView({
                   subtitle="Google Sheet"
                   meta={sheet.modified}
                   active={selected?.id === sheet.id}
-                  onClick={() => void openWorkbook(sheet)}
+                  onClick={() => openWorkbook(sheet)}
                   leading={
                     <span className="mt-0.5 shrink-0">
                       <ConnectorMark
