@@ -66,7 +66,7 @@ const CONNECTOR_PROMPTS: Record<string, ConnectorPrompt[]> = {
   ],
   stripe: [
     { text: "List recent Stripe customers." },
-    { text: "Find a Stripe customer by email." },
+    { text: "What's my Stripe account balance?" },
   ],
   salesforce: [
     { text: "List Salesforce contacts." },

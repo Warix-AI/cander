@@ -48,6 +48,26 @@ export type AppConnectorDefinition = {
   getProvider?: string;
   getIdArg?: string;
   /**
+   * Extra agent tools beyond list/search/get (e.g. Stripe invoices, charges).
+   * Args are passed through to Composio with light cleanup.
+   */
+  extraTools?: Array<{
+    id: string;
+    label: string;
+    description: string;
+    providerTool: string;
+    risk?: "read" | "write" | "destructive";
+    confirmationPolicy?: "never" | "when_ambiguous" | "always";
+    inputSchema: {
+      type: "object";
+      required?: string[];
+      properties: Record<
+        string,
+        { type: string | string[]; description?: string; enum?: string[] }
+      >;
+    };
+  }>;
+  /**
    * When false, Connect OAuth is hidden until custom auth config is ready
    * (Shopify). Adapters/UI can still be wired.
    */
@@ -385,8 +405,16 @@ export const APP_CONNECTOR_DEFINITIONS: AppConnectorDefinition[] = [
     toolkit: "stripe",
     authConfigEnv: "COMPOSIO_STRIPE_AUTH_CONFIG_ID",
     category: "Commerce",
-    description: "Customers, invoices, and balance",
-    actions: ["Customers", "Invoices", "Subscriptions"],
+    description: "Customers, invoices, charges, and balance",
+    actions: [
+      "Customers",
+      "Invoices",
+      "Charges",
+      "Payments",
+      "Subscriptions",
+      "Products",
+      "Balance",
+    ],
     displayOrder: 26,
     itemNoun: "customers",
     listProvider: "STRIPE_LIST_CUSTOMERS",
@@ -398,6 +426,133 @@ export const APP_CONNECTOR_DEFINITIONS: AppConnectorDefinition[] = [
       if (!q.includes("@")) return {};
       return { email: q };
     },
+    getProvider: "STRIPE_RETRIEVE_CUSTOMER",
+    getIdArg: "customer_id",
+    extraTools: [
+      {
+        id: "createCustomer",
+        label: "Create customer",
+        description: "Create a Stripe customer (name, email, phone, description).",
+        providerTool: "STRIPE_CREATE_CUSTOMER",
+        risk: "write",
+        confirmationPolicy: "when_ambiguous",
+        inputSchema: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Customer name." },
+            email: { type: "string", description: "Customer email." },
+            phone: { type: "string", description: "Customer phone." },
+            description: {
+              type: "string",
+              description: "Optional description / notes.",
+            },
+          },
+        },
+      },
+      {
+        id: "listInvoices",
+        label: "List invoices",
+        description: "List Stripe invoices, optionally filtered by customer or status.",
+        providerTool: "STRIPE_LIST_INVOICES",
+        inputSchema: {
+          type: "object",
+          properties: {
+            customer: { type: "string", description: "Stripe customer id (cus_…)." },
+            status: {
+              type: "string",
+              description: "Invoice status filter (draft, open, paid, uncollectible, void).",
+            },
+            limit: { type: "number", description: "Max results (default 40)." },
+          },
+        },
+      },
+      {
+        id: "listCharges",
+        label: "List charges",
+        description: "List Stripe charges, optionally for a customer.",
+        providerTool: "STRIPE_LIST_CHARGES",
+        inputSchema: {
+          type: "object",
+          properties: {
+            customer: { type: "string", description: "Stripe customer id (cus_…)." },
+            limit: { type: "number", description: "Max results (default 40)." },
+          },
+        },
+      },
+      {
+        id: "listPaymentIntents",
+        label: "List payment intents",
+        description: "List Stripe PaymentIntents, optionally for a customer.",
+        providerTool: "STRIPE_LIST_PAYMENT_INTENTS",
+        inputSchema: {
+          type: "object",
+          properties: {
+            customer: { type: "string", description: "Stripe customer id (cus_…)." },
+            limit: { type: "number", description: "Max results (default 40)." },
+          },
+        },
+      },
+      {
+        id: "listSubscriptions",
+        label: "List customer subscriptions",
+        description: "List active subscriptions for a Stripe customer.",
+        providerTool: "STRIPE_LIST_CUSTOMER_SUBSCRIPTIONS",
+        inputSchema: {
+          type: "object",
+          required: ["customer"],
+          properties: {
+            customer: {
+              type: "string",
+              description: "Stripe customer id (cus_…).",
+            },
+            limit: { type: "number", description: "Max results (default 40)." },
+          },
+        },
+      },
+      {
+        id: "listProducts",
+        label: "List products",
+        description: "List Stripe products in the catalog.",
+        providerTool: "STRIPE_LIST_PRODUCTS",
+        inputSchema: {
+          type: "object",
+          properties: {
+            active: {
+              type: "boolean",
+              description: "If set, only active or inactive products.",
+            },
+            limit: { type: "number", description: "Max results (default 40)." },
+          },
+        },
+      },
+      {
+        id: "listPrices",
+        label: "List prices",
+        description: "List Stripe prices, optionally for a product.",
+        providerTool: "STRIPE_LIST_PRICES",
+        inputSchema: {
+          type: "object",
+          properties: {
+            product: { type: "string", description: "Stripe product id (prod_…)." },
+            active: {
+              type: "boolean",
+              description: "If set, only active or inactive prices.",
+            },
+            limit: { type: "number", description: "Max results (default 40)." },
+          },
+        },
+      },
+      {
+        id: "retrieveBalance",
+        label: "Retrieve balance",
+        description: "Get the current Stripe account balance.",
+        providerTool: "STRIPE_RETRIEVE_BALANCE",
+        inputSchema: {
+          type: "object",
+          properties: {},
+        },
+      },
+    ],
   },
   {
     id: "salesforce",

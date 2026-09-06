@@ -19,6 +19,9 @@ export function createAppConnectorAdapter(connectorId: string): ConnectorAdapter
   const listToolId = `${connectorId}.list`;
   const searchToolId = `${connectorId}.search`;
   const getToolId = `${connectorId}.get`;
+  const extraById = new Map(
+    (def.extraTools ?? []).map((tool) => [`${connectorId}.${tool.id}`, tool]),
+  );
 
   return {
     connectorId,
@@ -84,6 +87,34 @@ export function createAppConnectorAdapter(connectorId: string): ConnectorAdapter
         }
         return out;
       }
+
+      const extra = extraById.get(toolId);
+      if (extra) {
+        const out: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(args)) {
+          if (value !== undefined && value !== null && value !== "") {
+            out[key] = value;
+          }
+        }
+        for (const key of extra.inputSchema.required ?? []) {
+          if (out[key] === undefined || out[key] === null || out[key] === "") {
+            throw new Error(`Missing required argument: ${key}`);
+          }
+        }
+        if (
+          (toolId.endsWith(".listInvoices") ||
+            toolId.endsWith(".listCharges") ||
+            toolId.endsWith(".listPaymentIntents") ||
+            toolId.endsWith(".listProducts") ||
+            toolId.endsWith(".listPrices") ||
+            toolId.endsWith(".listSubscriptions")) &&
+          out.limit === undefined
+        ) {
+          out.limit = 40;
+        }
+        return out;
+      }
+
       throw new Error(`Unsupported ${connectorId} tool: ${toolId}`);
     },
 
@@ -91,6 +122,8 @@ export function createAppConnectorAdapter(connectorId: string): ConnectorAdapter
       if (toolId === listToolId) return def.listProvider;
       if (toolId === searchToolId && def.searchProvider) return def.searchProvider;
       if (toolId === getToolId && def.getProvider) return def.getProvider;
+      const extra = extraById.get(toolId);
+      if (extra) return extra.providerTool;
       throw new Error(`Unsupported ${connectorId} tool: ${toolId}`);
     },
 
