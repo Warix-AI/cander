@@ -24,6 +24,13 @@ const ALLOWED_OPS = new Set([
   "createFromText",
   "createFolder",
   "downloadFile",
+  "searchSpreadsheets",
+  "getSheetNames",
+  "getValues",
+  "createSpreadsheet",
+  "searchDocuments",
+  "getDocument",
+  "createDocument",
 ]);
 
 /**

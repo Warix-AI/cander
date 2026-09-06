@@ -8,7 +8,6 @@ import {
   type ConnectorInstallationRow,
 } from "@/lib/supabase/connector-mapper";
 import {
-  clearConnectorConnectionsCache,
   getConnectorConnectionsRevision,
   purgeLegacyConnectionStorage,
   replaceConnectorConnectionsForWorkspace,
@@ -49,7 +48,8 @@ async function listMemberWorkspaceIds(profileId: string) {
 export async function hydrateConnectorsFromRemote(ctx: WorkspaceCtx) {
   skipRemoteSync = true;
   purgeLegacyConnectionStorage();
-  clearConnectorConnectionsCache();
+  // Keep existing connections visible until the fresh fetch replaces them —
+  // clearing first made Installed / pins flash empty for ~1s on every pull.
 
   const supabase = createSupabaseBrowserClient();
   const workspaceIds = await listMemberWorkspaceIds(ctx.actorId);

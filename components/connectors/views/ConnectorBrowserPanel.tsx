@@ -162,6 +162,18 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
   const isDriveBrowse = Boolean(
     connectorId === "gdrive" && workspaceToolbar?.driveChrome,
   );
+  const isSheetsBrowse = Boolean(
+    connectorId === "gsheets" && workspaceToolbar?.driveChrome,
+  );
+  const isDocsBrowse = Boolean(
+    connectorId === "gdocs" && workspaceToolbar?.driveChrome,
+  );
+  const isWorkspaceBrowse = isDriveBrowse || isSheetsBrowse || isDocsBrowse;
+  const browseSearchPlaceholder = isSheetsBrowse
+    ? "Search Sheets"
+    : isDocsBrowse
+      ? "Search Docs"
+      : "Search Drive";
   const isWorkspaceConnector =
     connectorId === "gcal" ||
     connectorId === "gdrive" ||
@@ -468,7 +480,7 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
                 </ChromeBtn>
               </>
             ) : null}
-            {!isDriveBrowse ? (
+            {!isWorkspaceBrowse ? (
               <span className="truncate px-1 text-[12.5px] font-medium text-foreground">
                 {workspaceToolbar?.title ?? title}
               </span>
@@ -477,10 +489,15 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
                 className="z-[1] min-w-0 max-w-[12.5rem] truncate px-1 text-[11.5px] text-muted-foreground"
                 aria-live="polite"
               >
-                {workspaceToolbar?.syncHint ?? "My Drive"}
+                {workspaceToolbar?.syncHint ??
+                  (isSheetsBrowse
+                    ? "Sheets"
+                    : isDocsBrowse
+                      ? "Documents"
+                      : "My Drive")}
               </span>
             )}
-            {isDriveBrowse ? (
+            {isWorkspaceBrowse ? (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-[8.5rem]">
                 <div className="pointer-events-auto w-full max-w-[min(100%,20rem)]">
                   <input
@@ -495,7 +512,7 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
                         workspaceToolbarRef.current?.driveChrome?.onSearch();
                       }
                     }}
-                    placeholder="Search Drive"
+                    placeholder={browseSearchPlaceholder}
                     className={cn(
                       "h-8 w-full border border-border bg-black/[0.03] px-3 text-center text-[13px] outline-none placeholder:text-muted-foreground dark:bg-white/[0.04]",
                       SHELL_G3_RADIUS,
@@ -751,7 +768,10 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
             )}
             aria-hidden={!isConnectorTab}
           >
-            <SheetsConnectorView onToolbarChange={onWorkspaceToolbarChange} />
+            <SheetsConnectorView
+              onToolbarChange={onWorkspaceToolbarChange}
+              onOpenLink={openLink}
+            />
           </div>
         ) : connectorId === "gdocs" ? (
           <div
@@ -761,7 +781,10 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
             )}
             aria-hidden={!isConnectorTab}
           >
-            <DocsConnectorView onToolbarChange={onWorkspaceToolbarChange} />
+            <DocsConnectorView
+              onToolbarChange={onWorkspaceToolbarChange}
+              onOpenLink={openLink}
+            />
           </div>
         ) : isConnectorTab ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-muted-foreground">

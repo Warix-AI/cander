@@ -196,6 +196,7 @@ export function ConnectorsDashboard() {
     if (blockedIds.includes(id)) return;
     if (isOauthConnectorId(id)) {
       setInfo("");
+      setDetailConnectorId(null);
       setConsentConnectorId(id);
       return;
     }
@@ -209,12 +210,11 @@ export function ConnectorsDashboard() {
     if (!id) return;
     setConnectingId(id);
     try {
-      const { authorizationUrl } = await initiateConnectorConnection({
+      const { authorizationUrl, connection } = await initiateConnectorConnection({
         workspaceId,
         connectorId: id,
       });
-      const connections = await fetchConnectorConnections(workspaceId);
-      replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+      patchConnectorConnectionForWorkspace(workspaceId, connection);
       if (authorizationUrl) {
         window.location.assign(authorizationUrl);
         return;
@@ -523,7 +523,7 @@ export function ConnectorsDashboard() {
           </p>
         )}
     </DashFrame>
-    {detailItem ? (
+    {detailItem && !consentConnectorId ? (
       <ConnectorDetailModal
         open={Boolean(detailItem)}
         onClose={() => setDetailConnectorId(null)}

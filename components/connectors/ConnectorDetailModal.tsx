@@ -27,6 +27,18 @@ const CONNECTOR_PROMPTS: Record<string, ConnectorPrompt[]> = {
     { text: "What's on my calendar today?" },
     { text: "Create a meeting for tomorrow afternoon." },
   ],
+  gdrive: [
+    { text: "Find recent files in my Drive." },
+    { text: "Create a notes file in Drive." },
+  ],
+  gsheets: [
+    { text: "Find my latest spreadsheets." },
+    { text: "Create a new spreadsheet for this week’s tracker." },
+  ],
+  gdocs: [
+    { text: "Find my recent Google Docs." },
+    { text: "Create a project brief as a Google Doc." },
+  ],
   slack: [
     { text: "Search recent Slack messages about the launch." },
     { text: "Post a summary to the team channel." },
