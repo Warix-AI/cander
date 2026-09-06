@@ -28,7 +28,25 @@ type StatusBarPlugin = {
 type CapacitorBridge = {
   isNativePlatform?: () => boolean;
   getPlatform?: () => string;
-  Plugins?: { Keyboard?: KeyboardPlugin; StatusBar?: StatusBarPlugin };
+  Plugins?: {
+    Keyboard?: KeyboardPlugin;
+    StatusBar?: StatusBarPlugin;
+    Browser?: CapacitorBrowserPlugin;
+  };
+};
+
+type CapacitorBrowserPlugin = {
+  open: (opts: {
+    url: string;
+    windowName?: string;
+    toolbarColor?: string;
+    presentationStyle?: "fullscreen" | "popover";
+  }) => Promise<void>;
+  close?: () => Promise<void>;
+  addListener?: (
+    eventName: "browserFinished" | "browserPageLoaded",
+    listenerFunc: () => void,
+  ) => Promise<{ remove: () => void }> | { remove: () => void };
 };
 
 function getCapacitor(): CapacitorBridge | undefined {
@@ -54,6 +72,32 @@ export function getMobilePlatform(): "ios" | "android" | "web" {
 /** Open a billing or marketing URL outside the in-app WebView (Safari / Chrome). */
 export function openExternalUrl(url: string) {
   if (typeof window === "undefined") return;
+  void openOAuthAuthorizationUrl(url);
+}
+
+/**
+ * Open an OAuth / Connect Link URL in the best native browser surface.
+ * Capacitor WebViews cannot host nested provider popups (Stripe, etc.), so we
+ * use SFSafariViewController / Chrome Custom Tabs when available.
+ */
+export async function openOAuthAuthorizationUrl(url: string): Promise<{
+  mode: "capacitor_browser" | "anchor";
+}> {
+  if (typeof window === "undefined") return { mode: "anchor" };
+
+  const browser = getCapacitor()?.Plugins?.Browser;
+  if (isMobileShell() && browser?.open) {
+    try {
+      await browser.open({
+        url,
+        presentationStyle: "fullscreen",
+      });
+      return { mode: "capacitor_browser" };
+    } catch {
+      // fall through to anchor
+    }
+  }
+
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.target = "_blank";
@@ -61,6 +105,31 @@ export function openExternalUrl(url: string) {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
+  return { mode: "anchor" };
+}
+
+/** Close the Capacitor Browser sheet after OAuth finishes (best-effort). */
+export async function closeOAuthBrowser(): Promise<void> {
+  const browser = getCapacitor()?.Plugins?.Browser;
+  if (!browser?.close) return;
+  try {
+    await browser.close();
+  } catch {
+    // ignore
+  }
+}
+
+/** Notify when the user dismisses the Capacitor Browser OAuth sheet. */
+export function onOAuthBrowserFinished(handler: () => void): () => void {
+  const browser = getCapacitor()?.Plugins?.Browser;
+  if (!browser?.addListener) return () => undefined;
+  let remove: () => void = () => {};
+  void Promise.resolve(browser.addListener("browserFinished", handler)).then(
+    (handle) => {
+      if (handle?.remove) remove = () => handle.remove();
+    },
+  );
+  return () => remove();
 }
 
 /** Shared across duplicate lock calls so one listener can't zero out another. */

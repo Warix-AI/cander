@@ -48,6 +48,7 @@ import {
   appConnectorById,
 } from "@/lib/connectors/apps/definitions";
 import { invalidateConnectorViewCache } from "@/lib/connectors/view-session-cache";
+import { isMobileShell } from "@/lib/mobile-shell";
 import { setComposerPendingInput } from "@/lib/composer-seed";
 
 const SECTION_ORDER = [
@@ -220,6 +221,10 @@ export function ConnectorsDashboard() {
   const proceedComposioOAuth = async () => {
     const id = consentConnectorId;
     if (!id) return;
+    const { reserveOAuthWindow, openConnectorAuthorizationUrl } = await import(
+      "@/lib/open-connector-oauth"
+    );
+    const reserved = reserveOAuthWindow();
     setConnectingId(id);
     try {
       const { authorizationUrl, connection } = await initiateConnectorConnection({
@@ -228,15 +233,56 @@ export function ConnectorsDashboard() {
       });
       patchConnectorConnectionForWorkspace(workspaceId, connection);
       if (authorizationUrl) {
-        const { openConnectorAuthorizationUrl } = await import(
-          "@/lib/open-connector-oauth"
-        );
-        openConnectorAuthorizationUrl(authorizationUrl);
+        const opened = openConnectorAuthorizationUrl(authorizationUrl, {
+          reserved,
+          onExternalFinished: () => {
+            void fetchConnectorConnections(workspaceId)
+              .then((connections) => {
+                replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+              })
+              .catch(() => undefined);
+          },
+        });
+        if (opened.openedExternally) {
+          const label = appConnectorById(id)?.name ?? id;
+          try {
+            await navigator.clipboard.writeText(authorizationUrl);
+          } catch {
+            // ignore clipboard failures
+          }
+          setInfo(
+            isMobileShell()
+              ? `Continue in the browser sheet to connect ${label}. Return here when finished — status updates automatically.`
+              : `Finish connecting ${label} in Chrome or Safari (not inside Cursor). The link was copied if clipboard access is allowed. This screen updates when you finish.`,
+          );
+          setConsentConnectorId(null);
+          const started = Date.now();
+          const poll = window.setInterval(() => {
+            void fetchConnectorConnections(workspaceId)
+              .then((connections) => {
+                replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+                const active = connections.some(
+                  (row) =>
+                    row.connectorId === id && row.status === "active",
+                );
+                if (active || Date.now() - started > 180_000) {
+                  window.clearInterval(poll);
+                  if (active) {
+                    setInfo(`${label} connected.`);
+                    invalidateConnectorViewCache(id, workspaceId);
+                  }
+                }
+              })
+              .catch(() => undefined);
+          }, 2500);
+        }
         return;
       }
+      reserved?.close();
       setInfo(`Could not start ${id} authorization.`);
       setConsentConnectorId(null);
     } catch (err) {
+      reserved?.close();
       setInfo(
         err instanceof Error ? err.message : "Could not start connection.",
       );

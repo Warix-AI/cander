@@ -56,7 +56,11 @@ export async function GET(request: Request) {
 
   const auth = await resolveConnectorCallbackUser(request);
   if (!auth.ok) {
-    return NextResponse.redirect(new URL(safeRedirectPath(request, "error"), request.url));
+    // External Safari / Chrome Custom Tabs often lack the app session cookie.
+    // Send the user to the return page so they can finish in the Cander app.
+    const returnUrl = new URL("/connectors/oauth/return", request.url);
+    returnUrl.searchParams.set("session_uri", sessionUri);
+    return NextResponse.redirect(returnUrl);
   }
 
   try {

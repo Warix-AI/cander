@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld("canderDesktop", {
     showMainWindow: () => ipcRenderer.invoke("cander:shell-show-main"),
     setTheme: (theme) => ipcRenderer.invoke("cander:shell-set-theme", theme),
     getTheme: () => ipcRenderer.invoke("cander:shell-get-theme"),
+    openExternal: (url) => ipcRenderer.invoke("cander:shell-open-external", url),
     onEvent: (handler) => {
       const listener = (_event, payload) => handler(payload);
       ipcRenderer.on("cander:shell-event", listener);

@@ -18,6 +18,7 @@ import { PublishSheet } from "@/components/preview/PublishSheet";
 import { DomainsSheet } from "@/components/preview/DomainsSheet";
 import { SearchModal } from "@/components/overlays/SearchModal";
 import { ConfigureModal } from "@/components/overlays/ConfigureModal";
+import { ConnectorOAuthDeepLinkListener } from "@/components/connectors/ConnectorOAuthDeepLinkListener";
 import { SpaceSettingsModal } from "@/components/overlays/SpaceSettingsModal";
 import { WorkspaceModal } from "@/components/overlays/WorkspaceModal";
 import { InviteWall } from "@/components/overlays/InviteWall";
@@ -259,6 +260,7 @@ function AuthenticatedShell() {
   return (
     <AppearanceProvider>
       <MobilePanelActionsProvider>
+        <ConnectorOAuthDeepLinkListener />
         <div
           data-app-shell=""
           onTouchStart={swipe.onTouchStart}

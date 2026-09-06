@@ -84,11 +84,43 @@ export type ComposioLinkSession = {
  * (including access_denied / failed). With callback identity verification
  * enabled, successful OAuth still hits the verifier; failures use this URL.
  */
-export function composioOAuthReturnUrl(connectorId: string): string | null {
+export function composioOAuthReturnUrl(
+  connectorId: string,
+  originOverride?: string | null,
+): string | null {
+  let origin: string | null = null;
   const verifier = process.env.COMPOSIO_CALLBACK_VERIFIER_URL?.trim();
-  if (!verifier) return null;
+  if (verifier) {
+    try {
+      origin = new URL(verifier).origin;
+    } catch {
+      origin = null;
+    }
+  }
+  if (!origin && originOverride) {
+    try {
+      origin = new URL(originOverride).origin;
+    } catch {
+      origin = null;
+    }
+  }
+  if (!origin) {
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+      process.env.NEXT_PUBLIC_SITE_URL?.trim();
+    if (appUrl) {
+      try {
+        origin = new URL(appUrl).origin;
+      } catch {
+        origin = null;
+      }
+    }
+  }
+  if (!origin && process.env.VERCEL_URL?.trim()) {
+    origin = `https://${process.env.VERCEL_URL.trim()}`;
+  }
+  if (!origin) return null;
   try {
-    const origin = new URL(verifier).origin;
     const url = new URL("/connectors/oauth/return", origin);
     if (isOauthConnectorId(connectorId)) {
       url.searchParams.set("connector", connectorId);
@@ -102,11 +134,16 @@ export function composioOAuthReturnUrl(connectorId: string): string | null {
 export async function createConnectLink(input: {
   composioUserId: string;
   connectorId: string;
+  /** Absolute origin for callback_url when verifier env is unset (e.g. local). */
+  callbackOrigin?: string | null;
 }): Promise<ComposioLinkSession> {
   if (!isOauthConnectorId(input.connectorId)) {
     throw new Error(`Connector not available via Composio: ${input.connectorId}`);
   }
-  const callbackUrl = composioOAuthReturnUrl(input.connectorId);
+  const callbackUrl = composioOAuthReturnUrl(
+    input.connectorId,
+    input.callbackOrigin,
+  );
   const res = await fetch(`${COMPOSIO_API_BASE}/connected_accounts/link`, {
     method: "POST",
     headers: {

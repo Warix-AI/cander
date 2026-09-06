@@ -59,6 +59,8 @@ export type CanderDesktopBridge = {
     showMainWindow?: () => Promise<void>;
     setTheme?: (theme: "light" | "dark") => Promise<{ theme: string }>;
     getTheme?: () => Promise<{ theme: string }>;
+    /** Open https URL in the OS default browser (for OAuth Connect Links). */
+    openExternal?: (url: string) => Promise<void> | void;
     onEvent?: (
       handler: (event: Record<string, unknown>) => void,
     ) => () => void;

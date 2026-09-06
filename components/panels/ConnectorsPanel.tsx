@@ -315,6 +315,9 @@ export function ConnectorsPanel() {
       onClose={() => setConsentOpen(false)}
       onProceed={async () => {
         setConnecting(true);
+        const { reserveOAuthWindow, openConnectorAuthorizationUrl } =
+          await import("@/lib/open-connector-oauth");
+        const reserved = reserveOAuthWindow();
         try {
           const { authorizationUrl } = await initiateConnectorConnection({
             workspaceId,
@@ -323,15 +326,27 @@ export function ConnectorsPanel() {
           const connections = await fetchConnectorConnections(workspaceId);
           replaceConnectorConnectionsForWorkspace(workspaceId, connections);
           if (authorizationUrl) {
-            const { openConnectorAuthorizationUrl } = await import(
-              "@/lib/open-connector-oauth"
-            );
-            openConnectorAuthorizationUrl(authorizationUrl);
+            const opened = openConnectorAuthorizationUrl(authorizationUrl, {
+              reserved,
+            });
+            if (opened.openedExternally) {
+              setConsentOpen(false);
+              try {
+                await navigator.clipboard.writeText(authorizationUrl);
+              } catch {
+                // ignore
+              }
+              setConnectError(
+                `Finish connecting ${selected.name} in Chrome or Safari (not inside Cursor). Link copied if allowed.`,
+              );
+            }
             return;
           }
+          reserved?.close();
           setConnectError(`Could not start ${selected.name} authorization.`);
           setConsentOpen(false);
         } catch (err) {
+          reserved?.close();
           setConnectError(
             err instanceof Error ? err.message : "Could not start connection.",
           );

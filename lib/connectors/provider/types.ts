@@ -43,6 +43,8 @@ export type ConnectorProviderAdapter = {
     connectorId: string;
     workspaceId: string;
     ownerId: string;
+    /** Optional absolute origin for Composio callback_url. */
+    callbackOrigin?: string | null;
   }): Promise<ProviderAuthorizationBegin>;
   completeCallbackVerification(input: {
     sessionUri: string;

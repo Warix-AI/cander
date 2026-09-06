@@ -42,11 +42,21 @@ export async function POST(request: Request) {
   }
 
   try {
+    const originHeader = request.headers.get("origin")?.trim();
+    let callbackOrigin: string | null = originHeader || null;
+    if (!callbackOrigin) {
+      try {
+        callbackOrigin = new URL(request.url).origin;
+      } catch {
+        callbackOrigin = null;
+      }
+    }
     const result = await initiateConnection({
       client: ctx.client,
       workspaceId: ctx.workspaceId,
       ownerId: ctx.user.id,
       connectorId,
+      callbackOrigin,
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });

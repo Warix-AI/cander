@@ -601,6 +601,12 @@ app.whenReady().then(() => {
   ipcMain.handle("cander:shell-show-main", async () => {
     return desktopShell.showMainWindow();
   });
+  ipcMain.handle("cander:shell-open-external", async (_e, url) => {
+    if (typeof url !== "string" || !/^https?:\/\//i.test(url)) {
+      throw new Error("Invalid external URL");
+    }
+    await shell.openExternal(url);
+  });
   ipcMain.handle("cander:shell-set-theme", async (_e, theme) => {
     const next = theme === "dark" ? "dark" : "light";
     writeShellTheme(next);

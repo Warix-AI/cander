@@ -91,6 +91,7 @@ export async function initiateConnection(input: {
   workspaceId: string;
   ownerId: string;
   connectorId: string;
+  callbackOrigin?: string | null;
 }): Promise<
   | { ok: true; connection: ConnectorConnection; reused: boolean; authorizationUrl?: string }
   | { ok: false; status: number; error: string }
@@ -141,6 +142,7 @@ export async function initiateConnection(input: {
         workspaceId: input.workspaceId,
         ownerId: input.ownerId,
         connectorId: input.connectorId,
+        callbackOrigin: input.callbackOrigin,
       });
       if (!auth.ok) {
         return { ok: false, status: 502, error: auth.error };
@@ -197,6 +199,7 @@ export async function initiateConnection(input: {
           workspaceId: input.workspaceId,
           ownerId: input.ownerId,
           connectorId: input.connectorId,
+          callbackOrigin: input.callbackOrigin,
         });
         if (!auth.ok) {
           return { ok: false, status: 502, error: auth.error };
@@ -227,6 +230,7 @@ export async function initiateConnection(input: {
     workspaceId: input.workspaceId,
     ownerId: input.ownerId,
     connectorId: input.connectorId,
+    callbackOrigin: input.callbackOrigin,
   });
   if (!auth.ok) {
     return { ok: false, status: 502, error: auth.error };
@@ -245,6 +249,7 @@ async function beginProviderAuthorization(input: {
   workspaceId: string;
   ownerId: string;
   connectorId: string;
+  callbackOrigin?: string | null;
 }): Promise<
   | { ok: true; authorizationUrl: string }
   | { ok: false; error: string }
@@ -271,6 +276,7 @@ async function beginProviderAuthorization(input: {
     connectorId: input.connectorId,
     workspaceId: input.workspaceId,
     ownerId: input.ownerId,
+    callbackOrigin: input.callbackOrigin,
   });
   if (!begin.ok || !begin.authorizationUrl) {
     return {

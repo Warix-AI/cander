@@ -29,6 +29,7 @@ export const composioProviderAdapter: ConnectorProviderAdapter = {
       const link = await createConnectLink({
         composioUserId: userId,
         connectorId: input.connectorId,
+        callbackOrigin: input.callbackOrigin ?? null,
       });
       return {
         ok: true,
