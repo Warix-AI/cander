@@ -215,20 +215,6 @@ function isGoogleAuthUrl(raw) {
   }
 }
 
-/** Blank CDN/telemetry hops that should never be a stuck main-frame destination. */
-function isStuckTrackingUrl(raw) {
-  try {
-    const host = new URL(String(raw || "").trim()).hostname.toLowerCase();
-    return (
-      host === "cs.ns1p.net" ||
-      host.endsWith(".ns1p.net") ||
-      host === "ns1p.net"
-    );
-  } catch {
-    return false;
-  }
-}
-
 function userAgentForUrl(wc, url) {
   return isGoogleAuthUrl(url)
     ? GOOGLE_AUTH_USER_AGENT
@@ -275,20 +261,6 @@ function applyBrowserUserAgent(wc, url) {
   } catch {
     // ignore
   }
-}
-
-function leaveStuckTrackingPage(wc) {
-  try {
-    if (wc.canGoBack()) {
-      wc.goBack();
-      return;
-    }
-  } catch {
-    // ignore
-  }
-  void wc.loadURL("https://www.linkedin.com/", {
-    userAgent: chromePanelUserAgent(wc),
-  }).catch(() => {});
 }
 
 function attachViewListeners(tabId, view) {
@@ -353,10 +325,6 @@ function attachViewListeners(tabId, view) {
   });
 
   wc.on("did-navigate", (_e, url) => {
-    if (isStuckTrackingUrl(url)) {
-      leaveStuckTrackingPage(wc);
-      return;
-    }
     applyBrowserUserAgent(wc, url);
     const entry = tabs.get(tabId);
     if (entry) entry.lastUrl = url;
