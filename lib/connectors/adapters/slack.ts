@@ -16,6 +16,8 @@ const SLACK_SLUGS: Record<string, string> = {
   "slack.search": "SLACK_SEARCH_MESSAGES",
   "slack.read": "SLACK_FETCH_MESSAGE",
   "slack.send": "SLACK_SEND_MESSAGE",
+  "slack.list": "SLACK_LIST_ALL_CHANNELS",
+  "slack.get": "SLACK_FETCH_CONVERSATION_HISTORY",
 };
 
 export const slackAdapter: ConnectorAdapter = {
@@ -39,6 +41,27 @@ export const slackAdapter: ConnectorAdapter = {
       const text = String(args.text ?? "").trim();
       if (!channel || !text) throw new Error("Missing required arguments: channel, text");
       return { channel, text };
+    }
+    if (toolId === "slack.list") {
+      const out: Record<string, unknown> = {
+        limit: 100,
+        exclude_archived: true,
+      };
+      for (const [key, value] of Object.entries(args)) {
+        if (key === "query" || key === "q") continue;
+        if (value !== undefined && value !== null && value !== "") {
+          out[key] = value;
+        }
+      }
+      return out;
+    }
+    if (toolId === "slack.get") {
+      const channel =
+        (typeof args.id === "string" && args.id.trim()) ||
+        (typeof args.channel === "string" && args.channel.trim()) ||
+        "";
+      if (!channel) throw new Error("Missing required argument: channel");
+      return { channel, limit: 40 };
     }
     throw new Error(`Unsupported Slack tool: ${toolId}`);
   },

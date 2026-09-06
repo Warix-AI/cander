@@ -34,6 +34,7 @@ import { CalendarConnectorView } from "@/components/connectors/views/CalendarCon
 import { DriveConnectorView } from "@/components/connectors/views/DriveConnectorView";
 import { SheetsConnectorView } from "@/components/connectors/views/SheetsConnectorView";
 import { DocsConnectorView } from "@/components/connectors/views/DocsConnectorView";
+import { AppConnectorView } from "@/components/connectors/views/AppConnectorView";
 import type { WorkspaceToolbarState } from "@/components/connectors/views/WorkspaceViewChrome";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import {
@@ -42,6 +43,7 @@ import {
   clearBrowserChromeHovers,
 } from "@/components/shell/PanelToggle";
 import { CONNECTOR_CATALOG } from "@/lib/api/connector-catalog";
+import { appConnectorById } from "@/lib/connectors/apps/definitions";
 import {
   connectorBrowserStorageKey,
   getConnectorBrowserSession,
@@ -168,17 +170,24 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
   const isDocsBrowse = Boolean(
     connectorId === "gdocs" && workspaceToolbar?.driveChrome,
   );
-  const isWorkspaceBrowse = isDriveBrowse || isSheetsBrowse || isDocsBrowse;
+  const isAppBrowse = Boolean(
+    appConnectorById(connectorId) && workspaceToolbar?.driveChrome,
+  );
+  const isWorkspaceBrowse =
+    isDriveBrowse || isSheetsBrowse || isDocsBrowse || isAppBrowse;
   const browseSearchPlaceholder = isSheetsBrowse
     ? "Search Sheets"
     : isDocsBrowse
       ? "Search Docs"
-      : "Search Drive";
+      : isAppBrowse
+        ? `Search ${appConnectorById(connectorId)?.name ?? title}`
+        : "Search Drive";
   const isWorkspaceConnector =
     connectorId === "gcal" ||
     connectorId === "gdrive" ||
     connectorId === "gsheets" ||
-    connectorId === "gdocs";
+    connectorId === "gdocs" ||
+    Boolean(appConnectorById(connectorId));
   const [addressDraft, setAddressDraft] = useState(active.url);
   const [webReloadKey, setWebReloadKey] = useState(0);
 
@@ -782,6 +791,20 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
             aria-hidden={!isConnectorTab}
           >
             <DocsConnectorView
+              onToolbarChange={onWorkspaceToolbarChange}
+              onOpenLink={openLink}
+            />
+          </div>
+        ) : appConnectorById(connectorId) ? (
+          <div
+            className={cn(
+              "absolute inset-0 flex min-h-0 flex-col",
+              !isConnectorTab && "invisible pointer-events-none",
+            )}
+            aria-hidden={!isConnectorTab}
+          >
+            <AppConnectorView
+              connectorId={connectorId}
               onToolbarChange={onWorkspaceToolbarChange}
               onOpenLink={openLink}
             />

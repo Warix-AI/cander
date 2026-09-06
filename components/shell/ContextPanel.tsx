@@ -18,6 +18,7 @@ import { SplitHandle } from "@/components/shell/SplitHandle";
 import { showStandaloneBrowserPanel } from "@/lib/right-panel";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
+import { appConnectorById } from "@/lib/connectors/apps/definitions";
 import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
@@ -99,11 +100,13 @@ export function ContextPanel() {
         ) : spaceId === "connectors" && connectorId === "handshake" ? (
           <HandshakePanel />
         ) : spaceId === "connectors" &&
+          connectorId &&
           (connectorId === "gmail" ||
             connectorId === "gcal" ||
             connectorId === "gdrive" ||
             connectorId === "gsheets" ||
-            connectorId === "gdocs") ? (
+            connectorId === "gdocs" ||
+            Boolean(appConnectorById(connectorId))) ? (
           <ConnectorViewHost connectorId={connectorId} />
         ) : spaceId === "connectors" && connectorId === "apple-health" ? (
           <AppleHealthConnectorPanel />

@@ -43,9 +43,41 @@ const CONNECTOR_PROMPTS: Record<string, ConnectorPrompt[]> = {
     { text: "Search recent Slack messages about the launch." },
     { text: "Post a summary to the team channel." },
   ],
+  outlook: [
+    { text: "Show my unread Outlook messages from today." },
+    { text: "Find emails about the project kickoff." },
+  ],
+  notion: [
+    { text: "Search Notion for our product specs." },
+    { text: "Find the latest project notes in Notion." },
+  ],
+  hubspot: [
+    { text: "List recent HubSpot contacts." },
+    { text: "Find HubSpot contacts at Acme." },
+  ],
   github: [
     { text: "Find open pull requests assigned to me." },
     { text: "Summarize what changed in the repo this week." },
+  ],
+  teams: [
+    { text: "List my Microsoft Teams." },
+    { text: "Show channels in my primary team." },
+  ],
+  stripe: [
+    { text: "List recent Stripe customers." },
+    { text: "Find a Stripe customer by email." },
+  ],
+  salesforce: [
+    { text: "List Salesforce contacts." },
+    { text: "Find a Salesforce contact by name." },
+  ],
+  linear: [
+    { text: "Show my open Linear issues." },
+    { text: "Find Linear issues about onboarding." },
+  ],
+  jira: [
+    { text: "Show recently updated Jira issues." },
+    { text: "Find Jira issues assigned to me." },
   ],
 };
 

@@ -31,6 +31,8 @@ const ALLOWED_OPS = new Set([
   "searchDocuments",
   "getDocument",
   "createDocument",
+  "listItems",
+  "getItem",
 ]);
 
 /**

@@ -44,6 +44,7 @@ import { ConnectorDetailModal } from "@/components/connectors/ConnectorDetailMod
 import { ComposioConsentModal } from "@/components/connectors/ComposioConsentModal";
 import type { ConnectorConnection } from "@/lib/connectors/types";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
+import { appConnectorById } from "@/lib/connectors/apps/definitions";
 import { setComposerPendingInput } from "@/lib/composer-seed";
 
 const SECTION_ORDER = [
@@ -116,12 +117,13 @@ export function ConnectorsDashboard() {
     const result = params.get("result");
     if (
       !result ||
+      !connector ||
       (connector !== "gmail" &&
         connector !== "gcal" &&
         connector !== "gdrive" &&
         connector !== "gsheets" &&
         connector !== "gdocs" &&
-        connector !== "slack")
+        !isOauthConnectorId(connector))
     ) {
       return;
     }
@@ -139,9 +141,8 @@ export function ConnectorsDashboard() {
             ? "Google Docs"
             : connector === "gcal"
               ? "Google Calendar"
-              : connector === "slack"
-                ? "Slack"
-                : "Gmail";
+              : appConnectorById(connector)?.name ??
+                (connector === "gmail" ? "Gmail" : connector);
     if (result === "success") {
       setInfo(`${label} connection updated. Refresh if status looks stale.`);
     } else if (result === "error") {

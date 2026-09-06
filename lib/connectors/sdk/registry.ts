@@ -8,6 +8,7 @@ import { gcalViewAdapter } from "./gcal-adapter.ts";
 import { gdriveViewAdapter } from "./gdrive-adapter.ts";
 import { gsheetsViewAdapter } from "./gsheets-adapter.ts";
 import { gdocsViewAdapter } from "./gdocs-adapter.ts";
+import { APP_VIEW_ADAPTERS } from "./app-view-adapters.ts";
 
 const adapters = new Map<string, ConnectorViewAdapter>();
 
@@ -26,3 +27,6 @@ registerConnectorViewAdapter(gcalViewAdapter);
 registerConnectorViewAdapter(gdriveViewAdapter);
 registerConnectorViewAdapter(gsheetsViewAdapter);
 registerConnectorViewAdapter(gdocsViewAdapter);
+for (const adapter of APP_VIEW_ADAPTERS) {
+  registerConnectorViewAdapter(adapter);
+}
