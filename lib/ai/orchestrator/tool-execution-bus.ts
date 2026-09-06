@@ -89,9 +89,17 @@ function detailForToolName(name: string): string {
   if (name.startsWith("agent.")) {
     // Keep in sync with lib/ai/agents/labels.ts — avoid circular imports here.
     if (name === "agent.get") return "Inspecting agent";
-    if (name === "agent.step.add") return "Adding step";
-    if (name === "agent.step.delete") return "Removing step";
+    if (name === "agent.skill.create") return "Creating skill";
+    if (name === "agent.skill.update") return "Updating skill";
+    if (name === "agent.skill.attach") return "Attaching skill";
+    if (name === "agent.skill.remove") return "Removing skill";
+    if (name === "agent.tools.grant") return "Allowing connector tools";
+    if (name === "agent.tools.revoke") return "Revoking connector tools";
+    if (name === "agent.knowledge.attach") return "Attaching knowledge";
+    if (name === "agent.knowledge.remove") return "Removing knowledge";
+    if (name === "agent.trigger.set") return "Setting trigger";
     if (name === "agent.validate") return "Validating agent";
+    if (name === "agent.run") return "Running agent";
     return "Updating agent";
   }
   switch (name) {

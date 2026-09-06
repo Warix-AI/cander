@@ -70,6 +70,7 @@ export async function persistIdempotentExecution(input: {
   workspaceId: string;
   chatId?: string | null;
   turnId?: string | null;
+  agentRunId?: string | null;
   toolId: string;
   connectionId?: string | null;
   toolCallId: string;
@@ -84,6 +85,7 @@ export async function persistIdempotentExecution(input: {
       workspace_id: input.workspaceId,
       chat_id: input.chatId ?? null,
       turn_id: input.turnId ?? null,
+      agent_run_id: input.agentRunId ?? null,
       tool_id: input.toolId,
       connection_id: input.connectionId ?? null,
       tool_call_id: input.toolCallId,

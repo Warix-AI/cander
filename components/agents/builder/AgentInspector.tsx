@@ -12,7 +12,7 @@ import type { AgentConfigPatch, ProjectAgentBundle } from "@/lib/agents/types";
 import type { ConnectorConnection } from "@/lib/connectors/types";
 import { toolsForConnector } from "@/lib/connectors/tool-catalog";
 import { humanizeConnectorId } from "./humanize";
-import { Field, ListRow, TextArea } from "./fields";
+import { Field, ListRow } from "./fields";
 
 export function AgentInspector({
   tab,
@@ -25,6 +25,7 @@ export function AgentInspector({
   connectorEnabled,
   toolMap,
   busy,
+  hideTabs,
   onSaveIdentity,
   onPatch,
 }: {
@@ -38,6 +39,8 @@ export function AgentInspector({
   connectorEnabled: Map<string, boolean>;
   toolMap: Map<string, boolean>;
   busy: boolean;
+  /** When true, parent owns navigation (config-first builder). */
+  hideTabs?: boolean;
   onSaveIdentity: (
     patch: Partial<{
       name: string;
@@ -50,29 +53,31 @@ export function AgentInspector({
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-2 py-2 [scrollbar-width:none]">
-        {(
-          [
-            ["agent", "Agent"],
-            ["access", "Access"],
-            ["skills", "Skills"],
-            ["knowledge", "Knowledge"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => onTabChange(id)}
-            className={
-              tab === id
-                ? "shrink-0 rounded-full bg-foreground px-2.5 py-1 text-[11.5px] font-medium text-background"
-                : "shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-            }
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {hideTabs ? null : (
+        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-2 py-2 [scrollbar-width:none]">
+          {(
+            [
+              ["agent", "Agent"],
+              ["access", "Access"],
+              ["skills", "Skills"],
+              ["knowledge", "Knowledge"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onTabChange(id)}
+              className={
+                tab === id
+                  ? "shrink-0 rounded-full bg-foreground px-2.5 py-1 text-[11.5px] font-medium text-background"
+                  : "shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {tab === "agent" ? (
           <div className="space-y-3">
@@ -88,25 +93,10 @@ export function AgentInspector({
               disabled={busy}
               onCommit={(value) => onSaveIdentity({ description: value })}
             />
-            <TextArea
-              label="Instructions"
-              defaultValue={agent.instructions}
-              disabled={busy}
-              rows={8}
-              placeholder="How should this agent behave?"
-              onCommit={(value) => onSaveIdentity({ instructions: value })}
-            />
-            <label className="flex items-center justify-between gap-3 rounded-[10px] border border-border px-3 py-2.5">
-              <span className="text-[13px]">Enabled</span>
-              <input
-                type="checkbox"
-                checked={agent.enabled}
-                disabled={busy}
-                onChange={(event) =>
-                  onSaveIdentity({ enabled: event.target.checked })
-                }
-              />
-            </label>
+            <p className="text-[12.5px] text-muted-foreground">
+              Behavior lives in Skills. Use the Skills tab to write what this
+              agent should accomplish.
+            </p>
           </div>
         ) : null}
         {tab === "access" ? (

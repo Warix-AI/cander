@@ -7,6 +7,7 @@ import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import {
   assertProjectInWorkspace,
   assertWorkspaceMember,
+  countProjectAgentRunsSince,
   createProjectAgent,
   ensureDefaultAgent,
   listProjectAgents,
@@ -49,7 +50,19 @@ export async function GET(
     });
     agents = [created];
   }
-  return NextResponse.json({ agents });
+  const since = new Date();
+  since.setDate(since.getDate() - 7);
+  let runsLast7d = 0;
+  try {
+    runsLast7d = await countProjectAgentRunsSince({
+      workspaceId,
+      projectId,
+      sinceIso: since.toISOString(),
+    });
+  } catch {
+    runsLast7d = 0;
+  }
+  return NextResponse.json({ agents, runsLast7d });
 }
 
 export async function POST(

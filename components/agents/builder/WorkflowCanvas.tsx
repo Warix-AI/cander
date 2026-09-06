@@ -1,3 +1,7 @@
+/**
+ * Dormant Zapier-style route canvas — kept for a future deterministic-workflow
+ * escape hatch. V1 Agents use Skills + scoped tools + Trigger (see AgentBuilderPanel).
+ */
 "use client";
 
 import {

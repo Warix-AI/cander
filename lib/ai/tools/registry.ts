@@ -784,75 +784,71 @@ function registerAgentTools() {
     {
       name: "agent.get",
       description:
-        "Read the current Agent project's definition: name, instructions, workflow steps, connector access, skills, and knowledge.",
+        "Read the current Agent: status, skills markdown, connector/tool access, knowledge, trigger, recent runs.",
       properties: { agentId: { type: "string" } },
     },
     {
       name: "agent.update_metadata",
       description:
-        "Update agent name, description, instructions, or enabled status.",
+        "Update agent name, description, or status (draft|active|paused). Active means executable.",
       properties: {
         agentId: { type: "string" },
         name: { type: "string" },
         description: { type: "string" },
-        instructions: { type: "string" },
-        enabled: { type: "boolean" },
-      },
-    },
-    {
-      name: "agent.step.add",
-      description:
-        "Add a workflow step (trigger, condition, action, wait, or branch). Optionally place after afterStepId; omit to attach under the Agent node. Provide label/type/config to configure immediately.",
-      required: ["kind"],
-      properties: {
-        agentId: { type: "string" },
-        kind: {
+        status: {
           type: "string",
-          enum: ["trigger", "condition", "action", "wait", "branch"],
+          enum: ["draft", "active", "paused"],
         },
-        afterStepId: { type: "string" },
-        label: { type: "string", description: "Human-readable step title" },
-        type: { type: "string" },
-        config: { type: "object" },
-      },
-    },
-    {
-      name: "agent.step.update",
-      description:
-        "Update an existing workflow step by stepId (from agent.get). Set label, type, expression, and/or config.",
-      required: ["stepId"],
-      properties: {
-        agentId: { type: "string" },
-        stepId: { type: "string" },
-        label: { type: "string" },
-        type: { type: "string" },
-        expression: { type: "string" },
-        config: { type: "object" },
-      },
-    },
-    {
-      name: "agent.step.delete",
-      description: "Delete a workflow step by stepId.",
-      required: ["stepId"],
-      properties: {
-        agentId: { type: "string" },
-        stepId: { type: "string" },
-      },
-    },
-    {
-      name: "agent.step.set_enabled",
-      description: "Enable or disable a workflow step.",
-      required: ["stepId", "enabled"],
-      properties: {
-        agentId: { type: "string" },
-        stepId: { type: "string" },
         enabled: { type: "boolean" },
+      },
+    },
+    {
+      name: "agent.skill.create",
+      description:
+        "Create a workspace skill (markdown instructions) and attach it to this agent. Prefer this over inventing workflow steps.",
+      required: ["markdown"],
+      properties: {
+        agentId: { type: "string" },
+        name: { type: "string" },
+        description: { type: "string" },
+        markdown: { type: "string" },
+      },
+    },
+    {
+      name: "agent.skill.update",
+      description: "Update an attached skill's name or markdown body.",
+      required: ["skillId"],
+      properties: {
+        agentId: { type: "string" },
+        skillId: { type: "string" },
+        name: { type: "string" },
+        description: { type: "string" },
+        markdown: { type: "string" },
+      },
+    },
+    {
+      name: "agent.skill.attach",
+      description: "Attach an existing workspace skill by skillId.",
+      required: ["skillId"],
+      properties: {
+        agentId: { type: "string" },
+        skillId: { type: "string" },
+        skillLabel: { type: "string" },
+      },
+    },
+    {
+      name: "agent.skill.remove",
+      description: "Remove a skill from the agent.",
+      required: ["skillId"],
+      properties: {
+        agentId: { type: "string" },
+        skillId: { type: "string" },
       },
     },
     {
       name: "agent.tools.grant",
       description:
-        "Grant connector tools to this agent (connectionId + connectorId + toolIds).",
+        "Grant connector tools to this agent (connectionId + connectorId + toolIds). Write/send tools should be confirmed with the user first.",
       required: ["connectionId", "connectorId", "toolIds"],
       properties: {
         agentId: { type: "string" },
@@ -872,26 +868,6 @@ function registerAgentTools() {
         connectorId: { type: "string" },
         toolIds: { type: "array", items: { type: "string" } },
         toolId: { type: "string" },
-      },
-    },
-    {
-      name: "agent.skill.attach",
-      description: "Attach a skill package to the agent.",
-      required: ["skillLabel"],
-      properties: {
-        agentId: { type: "string" },
-        skillLabel: { type: "string" },
-        skillId: { type: "string" },
-        label: { type: "string" },
-      },
-    },
-    {
-      name: "agent.skill.remove",
-      description: "Remove a skill from the agent.",
-      required: ["skillId"],
-      properties: {
-        agentId: { type: "string" },
-        skillId: { type: "string" },
       },
     },
     {
@@ -918,10 +894,35 @@ function registerAgentTools() {
       },
     },
     {
+      name: "agent.trigger.set",
+      description:
+        "Set the agent trigger to manual or a schedule. Use preset hourly|daily|weekday|weekly with time HH:mm and timezone.",
+      properties: {
+        agentId: { type: "string" },
+        type: { type: "string", enum: ["manual", "schedule"] },
+        preset: {
+          type: "string",
+          enum: ["hourly", "daily", "weekday", "weekly", "custom"],
+        },
+        time: { type: "string" },
+        timezone: { type: "string" },
+        cron: { type: "string" },
+      },
+    },
+    {
       name: "agent.validate",
       description:
-        "Validate the agent workflow for incomplete steps and missing configuration.",
+        "Validate the agent has skills and sensible access before activating.",
       properties: { agentId: { type: "string" } },
+    },
+    {
+      name: "agent.run",
+      description:
+        "Manually start an Agent run now (skills + scoped tools). Prefer after configuring skill/access.",
+      properties: {
+        agentId: { type: "string" },
+        message: { type: "string" },
+      },
     },
   ];
 

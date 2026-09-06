@@ -4,16 +4,25 @@
  */
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { computeNextRunAt } from "@/lib/agents/schedule";
 import type {
   AgentConfigPatch,
   AgentConfigProposal,
   AgentConnectorScope,
   AgentKnowledgeAssignment,
   AgentRoute,
+  AgentRun,
+  AgentSkill,
   AgentSkillAssignment,
+  AgentStatus,
   AgentToolPermission,
+  AgentTrigger,
   ProjectAgent,
   ProjectAgentBundle,
+} from "@/lib/agents/types";
+import {
+  agentStatusFromRow,
+  parseAgentTrigger,
 } from "@/lib/agents/types";
 
 export function newProjectAgentId() {
@@ -22,6 +31,14 @@ export function newProjectAgentId() {
 
 export function newAgentChildId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+}
+
+export function newAgentSkillId() {
+  return `askill_${crypto.randomUUID().replace(/-/g, "")}`;
+}
+
+export function newAgentRunId() {
+  return `arun_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
 export async function assertWorkspaceMember(
@@ -54,6 +71,8 @@ export async function assertProjectInWorkspace(
 }
 
 function mapAgent(row: Record<string, unknown>): ProjectAgent {
+  const enabled = Boolean(row.enabled);
+  const status = agentStatusFromRow(row.status, enabled);
   return {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
@@ -61,19 +80,57 @@ function mapAgent(row: Record<string, unknown>): ProjectAgent {
     name: String(row.name ?? ""),
     description: String(row.description ?? ""),
     instructions: String(row.instructions ?? ""),
-    enabled: Boolean(row.enabled),
+    enabled: status === "active" ? true : enabled && status !== "paused",
+    status,
+    trigger: parseAgentTrigger(row.trigger),
+    nextRunAt: row.next_run_at ? String(row.next_run_at) : null,
+    lastTriggeredAt: row.last_triggered_at
+      ? String(row.last_triggered_at)
+      : null,
     sortOrder: Number(row.sort_order ?? 0),
     createdAt: String(row.created_at ?? ""),
     updatedAt: String(row.updated_at ?? ""),
   };
 }
 
-function mapSkill(row: Record<string, unknown>): AgentSkillAssignment {
+function mapSkillRow(row: Record<string, unknown>): AgentSkill {
+  return {
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    name: String(row.name ?? ""),
+    description: String(row.description ?? ""),
+    markdown: String(row.markdown ?? ""),
+    createdAt: String(row.created_at ?? ""),
+    updatedAt: String(row.updated_at ?? ""),
+  };
+}
+
+function mapSkillAssignment(
+  row: Record<string, unknown>,
+  skill?: AgentSkill | null,
+): AgentSkillAssignment {
+  const skillId = String(row.skill_ref_id ?? row.skill_id ?? "");
   return {
     id: String(row.id),
     agentId: String(row.agent_id),
-    skillId: String(row.skill_id),
-    skillLabel: String(row.skill_label ?? ""),
+    skillId,
+    skillLabel: String(row.skill_label ?? skill?.name ?? ""),
+    skill: skill ?? null,
+  };
+}
+
+function mapRun(row: Record<string, unknown>): AgentRun {
+  return {
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    projectId: String(row.project_id),
+    agentId: String(row.agent_id),
+    triggerType: String(row.trigger_type ?? "manual"),
+    status: row.status as AgentRun["status"],
+    startedAt: String(row.started_at ?? ""),
+    completedAt: row.completed_at ? String(row.completed_at) : null,
+    summary: row.summary != null ? String(row.summary) : null,
+    error: row.error != null ? String(row.error) : null,
   };
 }
 
@@ -183,13 +240,28 @@ export async function createProjectAgent(opts: {
       description: opts.description ?? "",
       instructions: opts.instructions ?? "",
       enabled: opts.enabled ?? true,
+      status: opts.enabled === false ? "paused" : "draft",
+      trigger: { type: "manual" },
       sort_order: existing.length,
       created_by: opts.userId,
     })
     .select("*")
     .single();
   if (error || !data) throw new Error(error?.message || "Could not create agent.");
-  return mapAgent(data as Record<string, unknown>);
+  const agent = mapAgent(data as Record<string, unknown>);
+  // Seed a primary workspace skill from instructions
+  const markdown =
+    (opts.instructions ?? "").trim() ||
+    `# ${agent.name}\n\nDescribe what this agent should do.`;
+  await createAndAttachSkill({
+    workspaceId: opts.workspaceId,
+    projectId: opts.projectId,
+    agentId: agent.id,
+    userId: opts.userId,
+    name: `${agent.name} skill`,
+    markdown,
+  });
+  return agent;
 }
 
 export async function getProjectAgent(
@@ -217,7 +289,11 @@ export async function updateProjectAgent(
     description: string;
     instructions: string;
     enabled: boolean;
+    status: AgentStatus;
+    trigger: AgentTrigger;
     sortOrder: number;
+    nextRunAt: string | null;
+    lastTriggeredAt: string | null;
   }>,
 ): Promise<ProjectAgent> {
   const admin = createSupabaseAdminClient();
@@ -225,7 +301,29 @@ export async function updateProjectAgent(
   if (patch.name !== undefined) row.name = patch.name.trim() || "Agent";
   if (patch.description !== undefined) row.description = patch.description;
   if (patch.instructions !== undefined) row.instructions = patch.instructions;
-  if (patch.enabled !== undefined) row.enabled = patch.enabled;
+  if (patch.enabled !== undefined) {
+    row.enabled = patch.enabled;
+    if (patch.status === undefined) {
+      row.status = patch.enabled ? "active" : "paused";
+    }
+  }
+  if (patch.status !== undefined) {
+    row.status = patch.status;
+    row.enabled = patch.status === "active";
+  }
+  if (patch.trigger !== undefined) {
+    row.trigger = patch.trigger;
+    if (patch.trigger.type === "manual") {
+      row.next_run_at = null;
+    } else if (patch.nextRunAt === undefined) {
+      const next = computeNextRunAt(patch.trigger);
+      row.next_run_at = next ? next.toISOString() : null;
+    }
+  }
+  if (patch.nextRunAt !== undefined) row.next_run_at = patch.nextRunAt;
+  if (patch.lastTriggeredAt !== undefined) {
+    row.last_triggered_at = patch.lastTriggeredAt;
+  }
   if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
   const { data, error } = await admin
     .from("project_agents")
@@ -321,37 +419,70 @@ export async function loadAgentBundle(
   const agent = await getProjectAgent(agentId, workspaceId, projectId);
   if (!agent) return null;
   const admin = createSupabaseAdminClient();
-  const [skills, knowledge, connectors, tools, routes] = await Promise.all([
-    admin
-      .from("agent_skill_assignments")
+  const [skillsRes, knowledge, connectors, tools, routes, runsRes] =
+    await Promise.all([
+      admin
+        .from("agent_skill_assignments")
+        .select("*")
+        .eq("agent_id", agentId)
+        .eq("workspace_id", workspaceId),
+      admin
+        .from("agent_knowledge_assignments")
+        .select("*")
+        .eq("agent_id", agentId)
+        .eq("workspace_id", workspaceId),
+      admin
+        .from("agent_connector_scopes")
+        .select("*")
+        .eq("agent_id", agentId)
+        .eq("workspace_id", workspaceId),
+      admin
+        .from("agent_tool_permissions")
+        .select("*")
+        .eq("agent_id", agentId)
+        .eq("workspace_id", workspaceId),
+      admin
+        .from("agent_routes")
+        .select("*")
+        .eq("agent_id", agentId)
+        .eq("workspace_id", workspaceId)
+        .order("sort_order", { ascending: true }),
+      admin
+        .from("agent_runs")
+        .select("*")
+        .eq("agent_id", agentId)
+        .eq("workspace_id", workspaceId)
+        .order("started_at", { ascending: false })
+        .limit(20),
+    ]);
+
+  const assignmentRows = (skillsRes.data ?? []) as Record<string, unknown>[];
+  const skillIds = [
+    ...new Set(
+      assignmentRows
+        .map((r) => String(r.skill_ref_id ?? r.skill_id ?? ""))
+        .filter(Boolean),
+    ),
+  ];
+  const skillMap = new Map<string, AgentSkill>();
+  if (skillIds.length) {
+    const { data: skillRows } = await admin
+      .from("agent_skills")
       .select("*")
-      .eq("agent_id", agentId)
-      .eq("workspace_id", workspaceId),
-    admin
-      .from("agent_knowledge_assignments")
-      .select("*")
-      .eq("agent_id", agentId)
-      .eq("workspace_id", workspaceId),
-    admin
-      .from("agent_connector_scopes")
-      .select("*")
-      .eq("agent_id", agentId)
-      .eq("workspace_id", workspaceId),
-    admin
-      .from("agent_tool_permissions")
-      .select("*")
-      .eq("agent_id", agentId)
-      .eq("workspace_id", workspaceId),
-    admin
-      .from("agent_routes")
-      .select("*")
-      .eq("agent_id", agentId)
       .eq("workspace_id", workspaceId)
-      .order("sort_order", { ascending: true }),
-  ]);
+      .in("id", skillIds);
+    for (const s of skillRows ?? []) {
+      const mapped = mapSkillRow(s as Record<string, unknown>);
+      skillMap.set(mapped.id, mapped);
+    }
+  }
+
   return {
     agent,
-    skills: (skills.data ?? []).map((r) => mapSkill(r as Record<string, unknown>)),
+    skills: assignmentRows.map((r) => {
+      const sid = String(r.skill_ref_id ?? r.skill_id ?? "");
+      return mapSkillAssignment(r, skillMap.get(sid) ?? null);
+    }),
     knowledge: (knowledge.data ?? []).map((r) =>
       mapKnowledge(r as Record<string, unknown>),
     ),
@@ -360,7 +491,202 @@ export async function loadAgentBundle(
     ),
     tools: (tools.data ?? []).map((r) => mapTool(r as Record<string, unknown>)),
     routes: (routes.data ?? []).map((r) => mapRoute(r as Record<string, unknown>)),
+    runs: (runsRes.data ?? []).map((r) => mapRun(r as Record<string, unknown>)),
   };
+}
+
+export async function listWorkspaceSkills(
+  workspaceId: string,
+): Promise<AgentSkill[]> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("agent_skills")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => mapSkillRow(r as Record<string, unknown>));
+}
+
+export async function createAndAttachSkill(opts: {
+  workspaceId: string;
+  projectId: string;
+  agentId: string;
+  userId?: string;
+  name: string;
+  description?: string;
+  markdown: string;
+}): Promise<{ skill: AgentSkill; assignment: AgentSkillAssignment }> {
+  const admin = createSupabaseAdminClient();
+  const skillId = newAgentSkillId();
+  const { data, error } = await admin
+    .from("agent_skills")
+    .insert({
+      id: skillId,
+      workspace_id: opts.workspaceId,
+      name: opts.name.trim() || "Skill",
+      description: opts.description ?? "",
+      markdown: opts.markdown,
+      created_by: opts.userId ?? null,
+    })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message || "Could not create skill.");
+  const skill = mapSkillRow(data as Record<string, unknown>);
+  const assignId = newAgentChildId("ask");
+  await admin.from("agent_skill_assignments").upsert(
+    {
+      id: assignId,
+      workspace_id: opts.workspaceId,
+      project_id: opts.projectId,
+      agent_id: opts.agentId,
+      skill_id: skill.id,
+      skill_label: skill.name,
+      skill_ref_id: skill.id,
+    },
+    { onConflict: "agent_id,skill_id" },
+  );
+  return {
+    skill,
+    assignment: {
+      id: assignId,
+      agentId: opts.agentId,
+      skillId: skill.id,
+      skillLabel: skill.name,
+      skill,
+    },
+  };
+}
+
+export async function updateWorkspaceSkill(opts: {
+  workspaceId: string;
+  skillId: string;
+  patch: Partial<{ name: string; description: string; markdown: string }>;
+}): Promise<AgentSkill> {
+  const admin = createSupabaseAdminClient();
+  const row: Record<string, unknown> = {};
+  if (opts.patch.name !== undefined) row.name = opts.patch.name.trim() || "Skill";
+  if (opts.patch.description !== undefined) {
+    row.description = opts.patch.description;
+  }
+  if (opts.patch.markdown !== undefined) row.markdown = opts.patch.markdown;
+  const { data, error } = await admin
+    .from("agent_skills")
+    .update(row)
+    .eq("id", opts.skillId)
+    .eq("workspace_id", opts.workspaceId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message || "Could not update skill.");
+  if (opts.patch.name !== undefined) {
+    await admin
+      .from("agent_skill_assignments")
+      .update({ skill_label: opts.patch.name.trim() || "Skill" })
+      .eq("skill_ref_id", opts.skillId)
+      .eq("workspace_id", opts.workspaceId);
+  }
+  return mapSkillRow(data as Record<string, unknown>);
+}
+
+export async function createAgentRun(opts: {
+  workspaceId: string;
+  projectId: string;
+  agentId: string;
+  triggerType: string;
+  userId?: string | null;
+}): Promise<AgentRun> {
+  const admin = createSupabaseAdminClient();
+  const id = newAgentRunId();
+  const { data, error } = await admin
+    .from("agent_runs")
+    .insert({
+      id,
+      workspace_id: opts.workspaceId,
+      project_id: opts.projectId,
+      agent_id: opts.agentId,
+      trigger_type: opts.triggerType,
+      status: "running",
+      created_by: opts.userId ?? null,
+    })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message || "Could not create run.");
+  return mapRun(data as Record<string, unknown>);
+}
+
+export async function completeAgentRun(opts: {
+  runId: string;
+  workspaceId: string;
+  status: "completed" | "failed" | "cancelled";
+  summary?: string;
+  error?: string;
+}): Promise<AgentRun> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("agent_runs")
+    .update({
+      status: opts.status,
+      completed_at: new Date().toISOString(),
+      summary: opts.summary ?? null,
+      error: opts.error ?? null,
+    })
+    .eq("id", opts.runId)
+    .eq("workspace_id", opts.workspaceId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message || "Could not complete run.");
+  return mapRun(data as Record<string, unknown>);
+}
+
+export async function getLatestSuccessfulRun(
+  agentId: string,
+  workspaceId: string,
+): Promise<AgentRun | null> {
+  const admin = createSupabaseAdminClient();
+  const { data } = await admin
+    .from("agent_runs")
+    .select("*")
+    .eq("agent_id", agentId)
+    .eq("workspace_id", workspaceId)
+    .eq("status", "completed")
+    .order("completed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ? mapRun(data as Record<string, unknown>) : null;
+}
+
+export async function listAgentRuns(opts: {
+  agentId: string;
+  workspaceId: string;
+  limit?: number;
+}): Promise<AgentRun[]> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("agent_runs")
+    .select("*")
+    .eq("agent_id", opts.agentId)
+    .eq("workspace_id", opts.workspaceId)
+    .order("started_at", { ascending: false })
+    .limit(opts.limit ?? 30);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => mapRun(r as Record<string, unknown>));
+}
+
+/** Count agent runs for a project since `sinceIso` (inclusive). */
+export async function countProjectAgentRunsSince(opts: {
+  workspaceId: string;
+  projectId: string;
+  sinceIso: string;
+}): Promise<number> {
+  const admin = createSupabaseAdminClient();
+  const { count, error } = await admin
+    .from("agent_runs")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", opts.workspaceId)
+    .eq("project_id", opts.projectId)
+    .gte("started_at", opts.sinceIso);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
 }
 
 export async function applyAgentConfigPatch(opts: {
@@ -376,13 +702,40 @@ export async function applyAgentConfigPatch(opts: {
     patch.name !== undefined ||
     patch.description !== undefined ||
     patch.instructions !== undefined ||
-    patch.enabled !== undefined
+    patch.enabled !== undefined ||
+    patch.status !== undefined ||
+    patch.trigger !== undefined
   ) {
     await updateProjectAgent(agentId, workspaceId, projectId, {
       name: patch.name,
       description: patch.description,
       instructions: patch.instructions,
       enabled: patch.enabled,
+      status: patch.status,
+      trigger: patch.trigger,
+    });
+  }
+
+  if (patch.createSkill) {
+    await createAndAttachSkill({
+      workspaceId,
+      projectId,
+      agentId,
+      name: patch.createSkill.name,
+      description: patch.createSkill.description,
+      markdown: patch.createSkill.markdown,
+    });
+  }
+
+  if (patch.updateSkill) {
+    await updateWorkspaceSkill({
+      workspaceId,
+      skillId: patch.updateSkill.skillId,
+      patch: {
+        name: patch.updateSkill.name,
+        description: patch.updateSkill.description,
+        markdown: patch.updateSkill.markdown,
+      },
     });
   }
 
@@ -395,6 +748,7 @@ export async function applyAgentConfigPatch(opts: {
         agent_id: agentId,
         skill_id: s.skillId,
         skill_label: s.skillLabel ?? s.skillId,
+        skill_ref_id: s.skillId,
       })),
       { onConflict: "agent_id,skill_id", ignoreDuplicates: false },
     );
@@ -541,9 +895,17 @@ export function proposeAgentConfigFromMessage(
     /(?:set|update|change)\s+instructions/i.test(text)
   ) {
     const after = text.split(/instructions?\s*[:=]/i)[1]?.trim();
-    if (after) patch.instructions = after;
+    if (after) {
+      patch.createSkill = {
+        name: "Primary skill",
+        markdown: `# Skill\n\n${after}`,
+      };
+    }
   } else if (/you (?:are|should)|always |never /i.test(text) && text.length > 40) {
-    patch.instructions = text;
+    patch.createSkill = {
+      name: "Primary skill",
+      markdown: `# Skill\n\n${text}`,
+    };
   }
 
   if (/\benable\b/.test(lower) && /\bagent\b/.test(lower)) {
@@ -553,15 +915,11 @@ export function proposeAgentConfigFromMessage(
     patch.enabled = false;
   }
 
-  const skillAdd = text.match(/add skill\s+["“]?([^"”\n.]+)["”]?/i);
-  if (skillAdd?.[1]) {
-    const label = skillAdd[1].trim();
-    patch.addSkills = [
-      {
-        skillId: `skill_${label.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
-        skillLabel: label,
-      },
-    ];
+  if (/\badd skill\b|\bcreate skill\b/i.test(lower) && text.length > 20) {
+    patch.createSkill = {
+      name: "Generated skill",
+      markdown: `# Skill\n\n${text}`,
+    };
   }
 
   const skillRemove = text.match(/remove skill\s+["“]?([^"”\n.]+)["”]?/i);
@@ -573,6 +931,28 @@ export function proposeAgentConfigFromMessage(
         s.skillId.toLowerCase() === label,
     );
     if (match) patch.removeSkillIds = [match.skillId];
+  }
+
+  if (/\bevery weekday\b|\bweekdays?\b.*\b(am|pm|morning)\b/i.test(lower)) {
+    patch.trigger = {
+      type: "schedule",
+      preset: "weekday",
+      cron: "0 9 * * 1-5",
+      timezone: "America/Denver",
+      time: "09:00",
+    };
+    patch.status = "active";
+  } else if (/\bevery day\b|\bdaily\b/i.test(lower)) {
+    patch.trigger = {
+      type: "schedule",
+      preset: "daily",
+      cron: "0 9 * * *",
+      timezone: "America/Denver",
+      time: "09:00",
+    };
+    patch.status = "active";
+  } else if (/\bmanual(ly)?\b.*\brun\b|\brun manually\b/i.test(lower)) {
+    patch.trigger = { type: "manual" };
   }
 
   if (/\ballow all tools?\b|\benable all tools?\b/i.test(text)) {
@@ -592,23 +972,11 @@ export function proposeAgentConfigFromMessage(
     }));
   }
 
-  if (/\badd route\b|\bwhen\b.+\bdo\b/i.test(lower)) {
-    patch.upsertRoutes = [
-      {
-        name: "New route",
-        enabled: true,
-        trigger: { type: "manual", label: "WHEN (configure)" },
-        condition: { type: "always", expression: "IF always" },
-        actions: [{ type: "notify", label: "DO (configure)" }],
-      },
-    ];
-  }
-
   const keys = Object.keys(patch);
   if (!keys.length) {
     return {
       summary:
-        "I could not map that to a config change. Try: rename, set instructions, add skill …, or add route.",
+        "I could not map that to a config change. Try describing the skill, schedule, or tool access you want.",
       patch: {},
       requiresConfirmation: false,
       confirmationReasons: [],
@@ -617,7 +985,7 @@ export function proposeAgentConfigFromMessage(
 
   const identityOnly =
     keys.every((k) =>
-      ["name", "description", "instructions", "enabled"].includes(k),
+      ["name", "description", "enabled", "status"].includes(k),
     ) && !confirmationReasons.length;
 
   return {

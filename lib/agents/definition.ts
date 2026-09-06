@@ -1,22 +1,11 @@
 /**
- * Compact agent definition shared by AI tools and the builder UI.
- * Maps onto ProjectAgentBundle / AgentRoute JSONB — no separate store.
+ * Compact agent definition for AI tools and the builder UI.
+ * Skills + scoped tools + trigger (no Zapier steps).
  */
 
 import type { ProjectAgentBundle } from "@/lib/agents/types";
-import { routesToSteps } from "@/components/agents/builder/workflow-model";
 
 export type AgentDefinitionStatus = "draft" | "active" | "paused";
-
-export type AgentDefinitionStep = {
-  id: string;
-  type: string;
-  title: string;
-  subtitle?: string;
-  status: string;
-  enabled: boolean;
-  routeId: string;
-};
 
 export type AgentDefinition = {
   id: string;
@@ -24,10 +13,14 @@ export type AgentDefinition = {
   workspaceId: string;
   name: string;
   description: string;
-  instructions: string;
-  enabled: boolean;
   status: AgentDefinitionStatus;
-  steps: AgentDefinitionStep[];
+  trigger: ProjectAgentBundle["agent"]["trigger"];
+  nextRunAt: string | null;
+  skills: Array<{
+    skillId: string;
+    name: string;
+    markdownPreview: string;
+  }>;
   connectorAccess: Array<{
     connectionId: string;
     connectorId: string;
@@ -38,38 +31,42 @@ export type AgentDefinition = {
     toolId: string;
     enabled: boolean;
   }>;
-  skills: Array<{ skillId: string; skillLabel: string }>;
   knowledge: Array<{
     id: string;
     sourceKind: string;
     sourceId: string;
     sourceLabel: string;
   }>;
+  recentRuns: Array<{
+    id: string;
+    status: string;
+    triggerType: string;
+    startedAt: string;
+    summary: string | null;
+  }>;
 };
 
 export function bundleToAgentDefinition(
   bundle: ProjectAgentBundle,
 ): AgentDefinition {
-  const steps = routesToSteps(bundle.routes).map((step) => ({
-    id: step.id,
-    type: step.type,
-    title: step.title,
-    subtitle: step.subtitle,
-    status: step.status,
-    enabled: step.enabled,
-    routeId: step.routeId,
-  }));
-
   return {
     id: bundle.agent.id,
     projectId: bundle.agent.projectId,
     workspaceId: bundle.agent.workspaceId,
     name: bundle.agent.name,
     description: bundle.agent.description,
-    instructions: bundle.agent.instructions,
-    enabled: bundle.agent.enabled,
-    status: bundle.agent.enabled ? "active" : "paused",
-    steps,
+    status: bundle.agent.status,
+    trigger: bundle.agent.trigger,
+    nextRunAt: bundle.agent.nextRunAt,
+    skills: bundle.skills.map((s) => {
+      const md = s.skill?.markdown ?? "";
+      return {
+        skillId: s.skillId,
+        name: s.skill?.name ?? s.skillLabel,
+        markdownPreview:
+          md.length > 280 ? `${md.slice(0, 280)}…` : md || "(empty skill)",
+      };
+    }),
     connectorAccess: bundle.connectors.map((c) => ({
       connectionId: c.connectionId,
       connectorId: c.connectorId,
@@ -82,43 +79,48 @@ export function bundleToAgentDefinition(
         toolId: t.toolId,
         enabled: t.enabled,
       })),
-    skills: bundle.skills.map((s) => ({
-      skillId: s.skillId,
-      skillLabel: s.skillLabel,
-    })),
     knowledge: bundle.knowledge.map((k) => ({
       id: k.id,
       sourceKind: k.sourceKind,
       sourceId: k.sourceId,
       sourceLabel: k.sourceLabel,
     })),
+    recentRuns: (bundle.runs ?? []).slice(0, 5).map((r) => ({
+      id: r.id,
+      status: r.status,
+      triggerType: r.triggerType,
+      startedAt: r.startedAt,
+      summary: r.summary,
+    })),
   };
 }
 
-/** Compact text the model can read without dumping full JSONB. */
 export function formatAgentDefinitionSummary(def: AgentDefinition): string {
   const lines: string[] = [
     `Agent: ${def.name} (${def.id})`,
-    `Status: ${def.status}${def.enabled ? "" : " (disabled)"}`,
+    `Status: ${def.status} (executable when active)`,
   ];
   if (def.description.trim()) lines.push(`Description: ${def.description}`);
-  if (def.instructions.trim()) {
-    const trimmed =
-      def.instructions.length > 400
-        ? `${def.instructions.slice(0, 400)}…`
-        : def.instructions;
-    lines.push(`Instructions: ${trimmed}`);
-  }
-  if (!def.steps.length) {
-    lines.push("Workflow: empty (Agent node only — no steps yet)");
+
+  if (def.trigger.type === "schedule") {
+    lines.push(
+      `Trigger: schedule cron=${def.trigger.cron} tz=${def.trigger.timezone}` +
+        (def.nextRunAt ? ` next=${def.nextRunAt}` : ""),
+    );
   } else {
-    lines.push("Workflow steps:");
-    for (const step of def.steps) {
-      lines.push(
-        `- [${step.type}] ${step.title}${step.subtitle ? ` · ${step.subtitle}` : ""} (${step.status}) id=${step.id}`,
-      );
+    lines.push("Trigger: manual");
+  }
+
+  if (!def.skills.length) {
+    lines.push("Skills: none — attach or create a skill that defines the job.");
+  } else {
+    lines.push("Skills:");
+    for (const s of def.skills) {
+      lines.push(`## ${s.name} (${s.skillId})`);
+      lines.push(s.markdownPreview);
     }
   }
+
   if (def.connectorAccess.length) {
     lines.push(
       `Connectors: ${def.connectorAccess
@@ -129,17 +131,22 @@ export function formatAgentDefinitionSummary(def: AgentDefinition): string {
     lines.push("Connectors: none granted");
   }
   if (def.tools.length) {
-    lines.push(
-      `Allowed tools: ${def.tools.map((t) => t.toolId).join(", ")}`,
-    );
-  }
-  if (def.skills.length) {
-    lines.push(`Skills: ${def.skills.map((s) => s.skillLabel).join(", ")}`);
+    lines.push(`Allowed tools: ${def.tools.map((t) => t.toolId).join(", ")}`);
+  } else {
+    lines.push("Allowed tools: none");
   }
   if (def.knowledge.length) {
     lines.push(
       `Knowledge: ${def.knowledge.map((k) => k.sourceLabel).join(", ")}`,
     );
+  }
+  if (def.recentRuns.length) {
+    lines.push("Recent runs:");
+    for (const r of def.recentRuns) {
+      lines.push(
+        `- ${r.startedAt} ${r.status} (${r.triggerType})${r.summary ? `: ${r.summary}` : ""}`,
+      );
+    }
   }
   return lines.join("\n");
 }
@@ -150,13 +157,21 @@ export function validateAgentDefinition(def: AgentDefinition): {
 } {
   const issues: string[] = [];
   if (!def.name.trim()) issues.push("Agent needs a name.");
-  if (!def.steps.length) {
-    issues.push("Workflow is empty — add a trigger or action.");
+  if (!def.skills.length) {
+    issues.push("Attach at least one skill that describes what the agent should do.");
+  } else if (
+    def.skills.every(
+      (s) =>
+        !s.markdownPreview.trim() ||
+        s.markdownPreview === "(empty skill)",
+    )
+  ) {
+    issues.push("Skills need markdown instructions.");
   }
-  for (const step of def.steps) {
-    if (step.status === "incomplete") {
-      issues.push(`Incomplete ${step.type}: ${step.title} (${step.id})`);
-    }
+  if (def.status === "active" && !def.tools.length) {
+    issues.push(
+      "Active agent has no allowed tools — grant connector tools under Access.",
+    );
   }
   return { ok: issues.length === 0, issues };
 }

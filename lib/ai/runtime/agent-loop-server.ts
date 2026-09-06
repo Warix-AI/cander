@@ -88,6 +88,15 @@ export type AgentLoopInput = {
   selectedConnectionId?: string | null;
   selectedConnectionIds?: string[] | null;
   maxIterations?: number;
+  /**
+   * When set (Agent runtime), ONLY these tool IDs may be exposed —
+   * intersects with connection authz. Empty array = no connector tools.
+   */
+  allowedToolIds?: string[] | null;
+  /** Extra system instructions (Agent skills + run context). */
+  systemExtra?: string | null;
+  /** Optional agent run id for tool event correlation. */
+  agentRunId?: string | null;
 };
 
 function maxIterations(): number {
@@ -262,6 +271,30 @@ export async function runAgentServerLoop(
     }
   }
 
+  // Agent runtime: fail-closed to explicitly granted tool IDs.
+  if (input.allowedToolIds) {
+    const allow = new Set(input.allowedToolIds);
+    if (allow.size === 0) {
+      exposedIds = [];
+    } else {
+      exposedIds = exposedIds.filter((id) => allow.has(id));
+      // Also include allowed tools that pass authz even if discovery missed them.
+      for (const toolId of allow) {
+        if (exposedIds.includes(toolId)) continue;
+        const tool = getCanderTool(toolId);
+        if (!tool?.connectorId) continue;
+        const conn = connectionForTool(tool.connectorId);
+        if (!conn) continue;
+        const authz = authorizeToolExposure(toolId, {
+          workspaceId: input.workspaceId,
+          profileId: input.profileId,
+          connection: conn,
+        });
+        if (authz.ok) exposedIds.push(toolId);
+      }
+    }
+  }
+
   const refsPrompt = formatReferencesForPrompt(
     collectReferencesFromEvents(recentEvents),
   );
@@ -275,9 +308,13 @@ export async function runAgentServerLoop(
         : "";
   const system = [
     SYSTEM_BASE,
+    input.systemExtra?.trim() || "",
     formatCapabilitySnapshotForPrompt(snapshot),
     scopePrompt,
     refsPrompt,
+    input.allowedToolIds
+      ? "You may ONLY use the tools provided in this turn. Do not invent access you were not granted."
+      : "",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -447,6 +484,7 @@ export async function runAgentServerLoop(
         toolCallId: callId,
         turnId,
         chatId: input.aiChatId,
+        agentRunId: input.agentRunId,
         confirmed,
       });
 

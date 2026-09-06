@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Bot, LoaderCircle, Pencil } from "lucide-react";
-import { listProjectAgentsClient } from "@/lib/agents/client";
+import { listProjectAgentsWithStatsClient } from "@/lib/agents/client";
 import { peekCachedProjectAgents } from "@/lib/agents/cache";
 import type { ProjectAgent } from "@/lib/agents/types";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,7 @@ export function AgentOverviewPanel({
   const [agents, setAgents] = useState<ProjectAgent[]>(
     () => peekCachedProjectAgents(workspaceId, projectId) ?? [],
   );
+  const [runsLast7d, setRunsLast7d] = useState(0);
   const [loading, setLoading] = useState(
     () => !peekCachedProjectAgents(workspaceId, projectId),
   );
@@ -36,9 +37,16 @@ export function AgentOverviewPanel({
     } else {
       setLoading(true);
     }
-    void listProjectAgentsClient({ workspaceId, projectId })
-      .then((list) => {
-        if (!cancelled) setAgents(list);
+    void listProjectAgentsWithStatsClient({
+      workspaceId,
+      projectId,
+      force: true,
+    })
+      .then((data) => {
+        if (!cancelled) {
+          setAgents(data.agents);
+          setRunsLast7d(data.runsLast7d);
+        }
       })
       .catch((err) => {
         if (!cancelled) {
@@ -53,7 +61,9 @@ export function AgentOverviewPanel({
     };
   }, [workspaceId, projectId]);
 
-  const enabledCount = agents.filter((a) => a.enabled).length;
+  const activeCount = agents.filter(
+    (a) => a.status === "active" || a.enabled,
+  ).length;
 
   return (
     <div
@@ -90,8 +100,8 @@ export function AgentOverviewPanel({
           <>
             <div className="mt-8 grid grid-cols-3 gap-3">
               <Stat label="Agents" value={String(agents.length)} />
-              <Stat label="Enabled" value={String(enabledCount)} />
-              <Stat label="Runs (7d)" value="—" />
+              <Stat label="Active" value={String(activeCount)} />
+              <Stat label="Runs (7d)" value={String(runsLast7d)} />
             </div>
 
             <div className="mt-6 space-y-2">
@@ -113,21 +123,21 @@ export function AgentOverviewPanel({
                   </div>
                   <span
                     className={cn(
-                      "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                      agent.enabled
+                      "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
+                      agent.status === "active" || agent.enabled
                         ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
                         : "bg-muted text-muted-foreground",
                     )}
                   >
-                    {agent.enabled ? "On" : "Off"}
+                    {agent.status ?? (agent.enabled ? "active" : "paused")}
                   </span>
                 </div>
               ))}
             </div>
 
             <p className="mt-6 text-[12.5px] text-muted-foreground">
-              This pin is read-only. Edit identity, skills, knowledge, access,
-              and routes in the project canvas.
+              Agents handle goals (Skills + tools + trigger). Configure them in
+              the builder — workflow routes stay dormant for later.
             </p>
 
             <button

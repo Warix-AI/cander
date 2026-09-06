@@ -40,6 +40,7 @@ export type ExecuteConnectorToolInput = {
   toolCallId?: string | null;
   turnId?: string | null;
   chatId?: string | null;
+  agentRunId?: string | null;
   /**
    * Trusted server confirmation (agent loop). Untrusted HTTP routes must pass
    * false / omit — never forward a client `confirmed` boolean.
@@ -236,6 +237,7 @@ export async function executeConnectorTool(
         workspaceId: input.workspaceId,
         chatId: input.chatId,
         turnId: input.turnId,
+        agentRunId: input.agentRunId,
         toolId: input.tool,
         connectionId: connection.connectionId,
         toolCallId,

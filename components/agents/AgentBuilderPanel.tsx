@@ -1,22 +1,32 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, LoaderCircle, Pencil, X, Zap } from "lucide-react";
+import {
+  Bot,
+  LoaderCircle,
+  Play,
+  Plus,
+  Sparkles,
+} from "lucide-react";
 import {
   applyAgentConfigPatchClient,
   loadAgentBundleClient,
-  proposeAgentConfigClient,
+  runAgentClient,
   updateProjectAgentClient,
 } from "@/lib/agents/client";
-import { peekCachedAgentBundle, subscribeAgentBundleCache } from "@/lib/agents/cache";
 import {
-  mutationAddStep,
-  mutationDeleteStep,
-  mutationSetStepEnabled,
-} from "@/lib/agents/mutations";
+  peekCachedAgentBundle,
+  subscribeAgentBundleCache,
+} from "@/lib/agents/cache";
+import {
+  buildScheduleTrigger,
+  type SchedulePreset,
+} from "@/lib/agents/schedule";
 import type {
   AgentConfigPatch,
-  AgentRoute,
+  AgentRun,
+  AgentStatus,
+  AgentTrigger,
   ProjectAgentBundle,
 } from "@/lib/agents/types";
 import { fetchConnectorConnections } from "@/lib/api/connector-client";
@@ -24,26 +34,17 @@ import type { ConnectorConnection } from "@/lib/connectors/types";
 import { policyFor } from "@/lib/workspace-policy";
 import { BROWSER_CHROME_BG } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
-import { ActionInspector, WaitInspector } from "./builder/ActionInspector";
 import { AgentInspector } from "./builder/AgentInspector";
-import {
-  BranchInspector,
-  ConditionInspector,
-} from "./builder/ConditionInspector";
-import { TriggerInspector } from "./builder/TriggerInspector";
-import { WorkflowCanvas } from "./builder/WorkflowCanvas";
-import {
-  duplicateStep,
-  findRouteForStep,
-  findStep,
-  parseStepId,
-  routesToSteps,
-  type AddStepKind,
-  type CanvasSelection,
-  type InsertPosition,
-} from "./builder/workflow-model";
+import { Field, TextArea } from "./builder/fields";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
+type ConfigTab =
+  | "skills"
+  | "access"
+  | "knowledge"
+  | "trigger"
+  | "runs"
+  | "agent";
 
 export function AgentBuilderPanel({
   workspaceId,
@@ -64,12 +65,9 @@ export function AgentBuilderPanel({
   const [loading, setLoading] = useState(() => !cachedBundle);
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [selection, setSelection] = useState<CanvasSelection>({
-    type: "agent",
-    tab: "agent",
-  });
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [describeBusy, setDescribeBusy] = useState(false);
+  const [tab, setTab] = useState<ConfigTab>("skills");
+  const [runBusy, setRunBusy] = useState(false);
+  const [runMessage, setRunMessage] = useState<string | null>(null);
   const savedClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const knowledgeBases = policyFor(workspaceId).knowledgeBases;
@@ -85,9 +83,9 @@ export function AgentBuilderPanel({
       setBundle(null);
     }
     setError(null);
-    setSelection({ type: "agent", tab: "agent" });
-    setPanelOpen(false);
+    setTab("skills");
     setSaveState("idle");
+    setRunMessage(null);
 
     void loadAgentBundleClient({ workspaceId, projectId, agentId })
       .then((next) => {
@@ -150,11 +148,6 @@ export function AgentBuilderPanel({
     return map;
   }, [bundle?.connectors]);
 
-  const steps = useMemo(
-    () => routesToSteps(bundle?.routes ?? []),
-    [bundle?.routes],
-  );
-
   const markSaved = () => {
     setSaveState("saved");
     if (savedClearTimer.current) clearTimeout(savedClearTimer.current);
@@ -169,7 +162,7 @@ export function AgentBuilderPanel({
       markSaved();
     } catch (err) {
       setSaveState("error");
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setError(err instanceof Error ? err.message : "Save failed.");
     }
   };
 
@@ -179,6 +172,7 @@ export function AgentBuilderPanel({
       description: string;
       instructions: string;
       enabled: boolean;
+      status: AgentStatus;
     }>,
   ) => {
     await runSave(async () => {
@@ -195,18 +189,6 @@ export function AgentBuilderPanel({
 
   const applyPatch = async (patch: AgentConfigPatch) => {
     await runSave(async () => {
-      const identityOnly = Object.keys(patch).every((k) =>
-        ["name", "description", "instructions", "enabled"].includes(k),
-      );
-      if (identityOnly) {
-        await saveIdentity({
-          name: patch.name,
-          description: patch.description,
-          instructions: patch.instructions,
-          enabled: patch.enabled,
-        });
-        return;
-      }
       const next = await applyAgentConfigPatchClient({
         workspaceId,
         projectId,
@@ -219,136 +201,46 @@ export function AgentBuilderPanel({
     });
   };
 
-  const select = (next: CanvasSelection) => {
-    setSelection(next);
-    setPanelOpen(true);
-  };
-
-  const handleAddStep = (position: InsertPosition, kind: AddStepKind) => {
-    if (!bundle) return;
-    const { patch } = mutationAddStep({
-      routes: bundle.routes,
-      kind,
-      afterStepId:
-        position.kind === "after-step" ? position.stepId : null,
-    });
-    if (!patch.upsertRoutes?.length) return;
-    void applyPatch(patch).then(() => {
-      if (position.kind === "after-agent" && kind === "trigger") {
-        setPanelOpen(true);
-      }
-    });
-  };
-
-  const handleDeleteStep = (stepId: string) => {
-    if (!bundle) return;
-    const { patch } = mutationDeleteStep({
-      routes: bundle.routes,
-      stepId,
-    });
-    void applyPatch(patch);
-    if (selection.type === "step" && selection.stepId === stepId) {
-      setSelection({ type: "agent", tab: "agent" });
-    }
-  };
-
-  const handleDuplicateStep = (stepId: string) => {
-    if (!bundle) return;
-    const { upsertRoutes } = duplicateStep(bundle.routes, stepId);
-    if (upsertRoutes.length) void applyPatch({ upsertRoutes });
-  };
-
-  const handleToggleStep = (stepId: string) => {
-    if (!bundle) return;
-    const step = findStep(steps, stepId);
-    if (!step) return;
-    const { patch } = mutationSetStepEnabled({
-      routes: bundle.routes,
-      stepId,
-      enabled: !step.enabled,
-    });
-    if (patch.upsertRoutes?.length) void applyPatch(patch);
-  };
-
-  const saveRoute = (route: AgentRoute) => {
-    void applyPatch({ upsertRoutes: [route] });
-  };
-
-  // Keyboard delete selected step
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Backspace" && event.key !== "Delete") return;
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-      if (selection.type !== "step") return;
-      event.preventDefault();
-      handleDeleteStep(selection.stepId);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- delete uses latest bundle via closure refresh
-  }, [selection, bundle?.routes]);
-
-  // After routes update from add, select newest incomplete step
-  const prevRouteCount = useRef(bundle?.routes.length ?? 0);
-  useEffect(() => {
-    const count = bundle?.routes.length ?? 0;
-    if (count > prevRouteCount.current) {
-      const nextSteps = routesToSteps(bundle?.routes ?? []);
-      const incomplete = nextSteps.find((s) => s.status === "incomplete");
-      if (incomplete) {
-        setSelection({ type: "step", stepId: incomplete.id });
-        setPanelOpen(true);
-      }
-    }
-    prevRouteCount.current = count;
-  }, [bundle?.routes]);
-
-  const onDescribe = async (message: string) => {
-    setDescribeBusy(true);
-    setError(null);
+  const handleRun = async () => {
+    if (!bundle || runBusy) return;
+    setRunBusy(true);
+    setRunMessage(null);
     try {
-      const proposal = await proposeAgentConfigClient({
+      const result = await runAgentClient({
         workspaceId,
         projectId,
         agentId,
-        message,
       });
-      if (proposal.patch) {
-        await applyPatch(proposal.patch);
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not draft workflow.",
+      setRunMessage(
+        result.run.status === "completed"
+          ? result.run.summary || "Run completed."
+          : result.run.error || "Run finished with issues.",
       );
+      const refreshed = await loadAgentBundleClient({
+        workspaceId,
+        projectId,
+        agentId,
+        force: true,
+      });
+      setBundle(refreshed);
+      setTab("runs");
+    } catch (err) {
+      setRunMessage(err instanceof Error ? err.message : "Run failed.");
     } finally {
-      setDescribeBusy(false);
+      setRunBusy(false);
     }
   };
 
   if (loading && !bundle) {
     return (
       <div
-        className={cn("relative h-full overflow-hidden", BROWSER_CHROME_BG)}
-        style={{
-          backgroundImage:
-            "radial-gradient(circle, color-mix(in oklab, var(--foreground) 12%, transparent) 1px, transparent 1px)",
-          backgroundSize: "18px 18px",
-        }}
+        className={cn(
+          "flex h-full items-center justify-center gap-2 text-[13px] text-muted-foreground",
+          BROWSER_CHROME_BG,
+        )}
       >
-        <div className="absolute inset-0 flex items-center justify-center">
-          <LoaderCircle
-            className="h-5 w-5 animate-spin text-muted-foreground/70"
-            strokeWidth={1.75}
-          />
-        </div>
+        <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={1.6} />
+        Loading agent…
       </div>
     );
   }
@@ -361,163 +253,432 @@ export function AgentBuilderPanel({
           BROWSER_CHROME_BG,
         )}
       >
-        {error || "Agent not found."}
+        {error ?? "Agent not found."}
       </div>
     );
   }
 
-  const agent = bundle.agent;
-  const selectedStep =
-    selection.type === "step" ? findStep(steps, selection.stepId) : null;
-  const selectedRoute =
-    selection.type === "step"
-      ? findRouteForStep(bundle.routes, selection.stepId)
-      : null;
-  const selectedParsed =
-    selection.type === "step" ? parseStepId(selection.stepId) : null;
-
-  const panelHeading =
-    selection.type === "agent"
-      ? agent.name || "Agent"
-      : selectedStep
-        ? selectedStep.title
-        : "Setup";
-  const panelSub =
-    selection.type === "agent"
-      ? "Setup"
-      : selectedStep
-        ? selectedStep.type.charAt(0).toUpperCase() + selectedStep.type.slice(1)
-        : "Setup";
+  const inspectorTab =
+    tab === "trigger" || tab === "runs"
+      ? "skills"
+      : tab === "agent"
+        ? "agent"
+        : tab;
 
   return (
-    <div className={cn("relative flex h-full min-h-0 overflow-hidden", BROWSER_CHROME_BG)}>
-      <WorkflowCanvas
-        agent={agent}
-        routes={bundle.routes}
-        steps={steps}
-        selection={selection}
-        onSelect={select}
-        onAddStep={handleAddStep}
-        onDuplicateStep={handleDuplicateStep}
-        onToggleStep={handleToggleStep}
-        onDeleteStep={handleDeleteStep}
-        onDescribe={onDescribe}
-        describeBusy={describeBusy}
-      />
-
-      {panelOpen ? (
-        <aside className="absolute inset-y-3 right-3 z-20 flex w-[min(100%,22.5rem)] flex-col overflow-hidden rounded-[14px] border border-border bg-background shadow-[0_12px_40px_rgba(0,0,0,0.12)] sm:inset-y-4 sm:right-4">
-          <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-muted">
-              {selection.type === "agent" ? (
-                <Bot className="h-4 w-4" strokeWidth={1.6} />
-              ) : (
-                <Zap className="h-4 w-4" strokeWidth={1.6} />
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13.5px] font-medium tracking-[-0.02em]">
-                {panelHeading}
-              </p>
-              <p className="truncate text-[11.5px] text-muted-foreground">
-                {panelSub}
-                {saveState === "saving" ? " · Saving…" : null}
-                {saveState === "saved" ? " · Saved" : null}
-                {saveState === "error" ? " · Error saving" : null}
-              </p>
-            </div>
-            <button
-              type="button"
-              aria-label="Close panel"
-              onClick={() => setPanelOpen(false)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <X className="h-4 w-4" strokeWidth={1.7} />
-            </button>
-          </div>
-
-          {error ? (
-            <p className="mx-3 mt-3 rounded-[10px] border border-border px-2.5 py-2 text-[12px] text-destructive">
-              {error}
-            </p>
-          ) : null}
-
-          {selection.type === "agent" ? (
-            <AgentInspector
-              tab={selection.tab ?? "agent"}
-              onTabChange={(tab) => setSelection({ type: "agent", tab })}
-              agent={agent}
-              skills={bundle.skills}
-              knowledge={bundle.knowledge}
-              knowledgeBases={knowledgeBases}
-              connections={connections}
-              connectorEnabled={connectorEnabled}
-              toolMap={toolMap}
+    <div className={cn("flex h-full min-h-0 flex-col", BROWSER_CHROME_BG)}>
+      <header className="flex shrink-0 items-start gap-3 border-b border-border px-4 py-3">
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-[12px] bg-muted">
+          <Bot className="h-5 w-5" strokeWidth={1.5} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-[1.05rem] font-semibold tracking-[-0.02em]">
+              {bundle.agent.name}
+            </h1>
+            <StatusSelect
+              status={bundle.agent.status}
               busy={saveState === "saving"}
-              onSaveIdentity={(patch) => void saveIdentity(patch)}
-              onPatch={(patch) => void applyPatch(patch)}
+              onChange={(status) => void saveIdentity({ status })}
             />
-          ) : selectedRoute && selectedStep && selectedParsed ? (
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-              {selectedStep.type === "trigger" ? (
-                <TriggerInspector
-                  route={selectedRoute}
-                  connections={connections}
-                  busy={saveState === "saving"}
-                  onSave={saveRoute}
-                />
-              ) : null}
-              {selectedStep.type === "condition" ? (
-                <ConditionInspector
-                  route={selectedRoute}
-                  busy={saveState === "saving"}
-                  onSave={saveRoute}
-                />
-              ) : null}
-              {selectedStep.type === "branch" ? (
-                <BranchInspector
-                  route={selectedRoute}
-                  busy={saveState === "saving"}
-                  onSave={saveRoute}
-                />
-              ) : null}
-              {selectedStep.type === "action" ? (
-                <ActionInspector
-                  route={selectedRoute}
-                  stepId={selectedStep.id}
-                  connections={connections}
-                  busy={saveState === "saving"}
-                  onSave={saveRoute}
-                />
-              ) : null}
-              {selectedStep.type === "wait" ? (
-                <WaitInspector
-                  route={selectedRoute}
-                  stepId={selectedStep.id}
-                  busy={saveState === "saving"}
-                  onSave={saveRoute}
-                />
-              ) : null}
-            </div>
-          ) : (
-            <p className="px-3 py-4 text-[12.5px] text-muted-foreground">
-              Select a step on the canvas.
-            </p>
-          )}
-        </aside>
-      ) : (
+            <span className="text-[11px] text-muted-foreground">
+              {saveState === "saving"
+                ? "Saving…"
+                : saveState === "saved"
+                  ? "Saved"
+                  : saveState === "error"
+                    ? "Error"
+                    : ""}
+            </span>
+          </div>
+          <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
+            {bundle.agent.description ||
+              "Skills define behavior · Tools define capability · Triggers wake the AI"}
+          </p>
+        </div>
         <button
           type="button"
-          onClick={() => {
-            setSelection({ type: "agent", tab: "agent" });
-            setPanelOpen(true);
-          }}
-          className="absolute top-4 right-4 z-20 inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-border bg-background px-3 text-[12.5px] font-medium shadow-sm hover:bg-muted"
+          disabled={runBusy || bundle.agent.status === "paused"}
+          onClick={() => void handleRun()}
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-foreground px-3.5 text-[12.5px] font-medium text-background disabled:opacity-50"
         >
-          <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
-          Setup
+          {runBusy ? (
+            <LoaderCircle className="h-3.5 w-3.5 animate-spin" strokeWidth={1.8} />
+          ) : (
+            <Play className="h-3.5 w-3.5" strokeWidth={1.8} />
+          )}
+          Run
         </button>
+      </header>
+
+      {error || runMessage ? (
+        <div className="shrink-0 border-b border-border px-4 py-2 text-[12.5px] text-muted-foreground">
+          {error ?? runMessage}
+        </div>
+      ) : null}
+
+      <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-3 py-2 [scrollbar-width:none]">
+        {(
+          [
+            ["skills", "Skills"],
+            ["access", "Access"],
+            ["knowledge", "Knowledge"],
+            ["trigger", "Trigger"],
+            ["runs", "Runs"],
+            ["agent", "Identity"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            className={
+              tab === id
+                ? "shrink-0 rounded-full bg-foreground px-2.5 py-1 text-[11.5px] font-medium text-background"
+                : "shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            }
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {tab === "trigger" ? (
+          <div className="h-full overflow-y-auto px-4 py-4">
+            <TriggerEditor
+              trigger={bundle.agent.trigger}
+              nextRunAt={bundle.agent.nextRunAt}
+              busy={saveState === "saving"}
+              onSave={(trigger) => void applyPatch({ trigger, status: "active" })}
+            />
+          </div>
+        ) : tab === "runs" ? (
+          <div className="h-full overflow-y-auto px-4 py-4">
+            <RunsList runs={bundle.runs ?? []} />
+          </div>
+        ) : tab === "skills" ? (
+          <div className="h-full overflow-y-auto px-4 py-4">
+            <SkillsConfig
+              skills={bundle.skills}
+              busy={saveState === "saving"}
+              onCreate={(name, markdown) =>
+                void applyPatch({ createSkill: { name, markdown } })
+              }
+              onUpdate={(skillId, markdown, name) =>
+                void applyPatch({
+                  updateSkill: { skillId, markdown, name },
+                })
+              }
+              onRemove={(skillId) =>
+                void applyPatch({ removeSkillIds: [skillId] })
+              }
+            />
+          </div>
+        ) : (
+          <AgentInspector
+            tab={inspectorTab as "agent" | "access" | "skills" | "knowledge"}
+            onTabChange={(next) => setTab(next)}
+            agent={bundle.agent}
+            skills={bundle.skills}
+            knowledge={bundle.knowledge}
+            knowledgeBases={knowledgeBases}
+            connections={connections}
+            connectorEnabled={connectorEnabled}
+            toolMap={toolMap}
+            busy={saveState === "saving"}
+            hideTabs
+            onSaveIdentity={(patch) => void saveIdentity(patch)}
+            onPatch={(patch) => void applyPatch(patch)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatusSelect({
+  status,
+  busy,
+  onChange,
+}: {
+  status: AgentStatus;
+  busy: boolean;
+  onChange: (status: AgentStatus) => void;
+}) {
+  return (
+    <select
+      value={status}
+      disabled={busy}
+      onChange={(e) => onChange(e.target.value as AgentStatus)}
+      className="h-7 rounded-full border border-border bg-background px-2 text-[11.5px] font-medium outline-none"
+    >
+      <option value="draft">Draft</option>
+      <option value="active">Active</option>
+      <option value="paused">Paused</option>
+    </select>
+  );
+}
+
+function SkillsConfig({
+  skills,
+  busy,
+  onCreate,
+  onUpdate,
+  onRemove,
+}: {
+  skills: ProjectAgentBundle["skills"];
+  busy: boolean;
+  onCreate: (name: string, markdown: string) => void;
+  onUpdate: (skillId: string, markdown: string, name?: string) => void;
+  onRemove: (skillId: string) => void;
+}) {
+  const primary = skills[0];
+  return (
+    <div className="mx-auto max-w-2xl space-y-4">
+      <div>
+        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Skills</h2>
+        <p className="mt-1 text-[12.5px] text-muted-foreground">
+          The skill is the program. It tells the AI what to do; Access decides
+          what it can do.
+        </p>
+      </div>
+
+      {primary?.skill ? (
+        <div className="space-y-3 rounded-[12px] border border-border p-3">
+          <Field
+            label="Skill name"
+            defaultValue={primary.skill.name}
+            disabled={busy}
+            onCommit={(name) =>
+              onUpdate(primary.skillId, primary.skill!.markdown, name)
+            }
+          />
+          <TextArea
+            label="Skill markdown"
+            defaultValue={primary.skill.markdown}
+            disabled={busy}
+            rows={14}
+            placeholder="# Lead Follow-up&#10;&#10;When this skill runs:…"
+            onCommit={(markdown) => onUpdate(primary.skillId, markdown)}
+          />
+          {skills.length > 1 ? (
+            <p className="text-[12px] text-muted-foreground">
+              +{skills.length - 1} more attached skill
+              {skills.length > 2 ? "s" : ""}.
+            </p>
+          ) : null}
+          <button
+            type="button"
+            disabled={busy}
+            className="text-[12px] text-destructive hover:underline disabled:opacity-50"
+            onClick={() => onRemove(primary.skillId)}
+          >
+            Remove skill
+          </button>
+        </div>
+      ) : (
+        <div className="rounded-[12px] border border-dashed border-border px-4 py-8 text-center">
+          <p className="text-[13px] text-muted-foreground">
+            No skills yet. Create one to define this agent’s job.
+          </p>
+          <button
+            type="button"
+            disabled={busy}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-[12.5px] font-medium text-background"
+            onClick={() =>
+              onCreate(
+                "Primary skill",
+                "# Skill\n\nWhen this skill runs:\n\n1. …\n",
+              )
+            }
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
+            Create skill
+          </button>
+        </div>
       )}
+
+      <button
+        type="button"
+        disabled={busy}
+        className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+        onClick={() => {
+          const draft = window.prompt(
+            "Describe what this agent should do (we'll turn it into a skill):",
+          );
+          if (!draft?.trim()) return;
+          onCreate(
+            "Generated skill",
+            `# Skill\n\nWhen this skill runs:\n\n${draft.trim()}`,
+          );
+        }}
+      >
+        <Sparkles className="h-3.5 w-3.5" strokeWidth={1.6} />
+        Generate skill from description
+      </button>
+    </div>
+  );
+}
+
+function TriggerEditor({
+  trigger,
+  nextRunAt,
+  busy,
+  onSave,
+}: {
+  trigger: AgentTrigger;
+  nextRunAt: string | null;
+  busy: boolean;
+  onSave: (trigger: AgentTrigger) => void;
+}) {
+  const [mode, setMode] = useState<"manual" | "schedule">(
+    trigger.type === "schedule" ? "schedule" : "manual",
+  );
+  const [preset, setPreset] = useState<SchedulePreset>(
+    trigger.type === "schedule"
+      ? ((trigger.preset as SchedulePreset) ?? "weekday")
+      : "weekday",
+  );
+  const [time, setTime] = useState(
+    trigger.type === "schedule" ? (trigger.time ?? "09:00") : "09:00",
+  );
+  const [timezone, setTimezone] = useState(
+    trigger.type === "schedule"
+      ? trigger.timezone
+      : Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Denver",
+  );
+
+  return (
+    <div className="mx-auto max-w-md space-y-4">
+      <div>
+        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Trigger</h2>
+        <p className="mt-1 text-[12.5px] text-muted-foreground">
+          When the agent wakes up. Active agents can always be run manually.
+        </p>
+      </div>
+
+      <div className="flex gap-2">
+        {(
+          [
+            ["manual", "Manual"],
+            ["schedule", "Schedule"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            disabled={busy}
+            onClick={() => setMode(id)}
+            className={
+              mode === id
+                ? "rounded-full bg-foreground px-3 py-1.5 text-[12.5px] font-medium text-background"
+                : "rounded-full border border-border px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground"
+            }
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === "schedule" ? (
+        <div className="space-y-3 rounded-[12px] border border-border p-3">
+          <label className="block">
+            <span className="font-mono text-[11px] text-muted-foreground">
+              Run
+            </span>
+            <select
+              value={preset}
+              disabled={busy}
+              onChange={(e) => setPreset(e.target.value as SchedulePreset)}
+              className="mt-1 h-9 w-full rounded-[10px] border border-border bg-background px-3 text-[13px]"
+            >
+              <option value="hourly">Every hour</option>
+              <option value="daily">Every day</option>
+              <option value="weekday">Every weekday</option>
+              <option value="weekly">Every week</option>
+            </select>
+          </label>
+          {preset !== "hourly" ? (
+            <Field
+              label="At"
+              value={time}
+              onChange={setTime}
+              disabled={busy}
+              placeholder="09:00"
+            />
+          ) : null}
+          <Field
+            label="Timezone"
+            value={timezone}
+            onChange={setTimezone}
+            disabled={busy}
+          />
+          {nextRunAt ? (
+            <p className="text-[12px] text-muted-foreground">
+              Next run: {new Date(nextRunAt).toLocaleString()}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-[12.5px] text-muted-foreground">
+          This agent only runs when you press Run (or ask in chat).
+        </p>
+      )}
+
+      <button
+        type="button"
+        disabled={busy}
+        className="rounded-full bg-foreground px-4 py-2 text-[12.5px] font-medium text-background disabled:opacity-50"
+        onClick={() => {
+          if (mode === "manual") {
+            onSave({ type: "manual" });
+            return;
+          }
+          onSave(buildScheduleTrigger({ preset, time, timezone }));
+        }}
+      >
+        Save trigger
+      </button>
+    </div>
+  );
+}
+
+function RunsList({ runs }: { runs: AgentRun[] }) {
+  if (!runs.length) {
+    return (
+      <div className="mx-auto max-w-md py-10 text-center text-[13px] text-muted-foreground">
+        No runs yet. Press Run or wait for a scheduled trigger.
+      </div>
+    );
+  }
+  return (
+    <div className="mx-auto max-w-lg space-y-2">
+      <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Runs</h2>
+      {runs.map((run) => (
+        <div
+          key={run.id}
+          className="rounded-[12px] border border-border px-3 py-2.5"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[13px] font-medium capitalize">
+              {run.status}
+            </span>
+            <span className="text-[11.5px] text-muted-foreground">
+              {new Date(run.startedAt).toLocaleString()}
+            </span>
+          </div>
+          <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+            {run.triggerType}
+          </p>
+          {run.summary ? (
+            <p className="mt-1.5 text-[12.5px] text-foreground/90">{run.summary}</p>
+          ) : null}
+          {run.error ? (
+            <p className="mt-1 text-[12.5px] text-destructive">{run.error}</p>
+          ) : null}
+        </div>
+      ))}
     </div>
   );
 }

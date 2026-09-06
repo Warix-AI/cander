@@ -258,11 +258,11 @@ describe("tools", () => {
     assert.equal(knowledge.call?.arguments?.query, "pricing");
 
     const agentStep = parseToolCallFromContent(
-      'Adding a trigger.\n{"tool":"agent.step.add","arguments":{"kind":"trigger","label":"Email received"}}',
+      'Creating a skill.\n{"tool":"agent.skill.create","arguments":{"name":"Lead Follow-up","markdown":"# Lead Follow-up"}}',
     );
-    assert.equal(agentStep.call?.name, "agent.step.add");
-    assert.equal(agentStep.call?.arguments?.kind, "trigger");
-    assert.doesNotMatch(agentStep.text, /agent\.step\.add/);
+    assert.equal(agentStep.call?.name, "agent.skill.create");
+    assert.equal(agentStep.call?.arguments?.name, "Lead Follow-up");
+    assert.doesNotMatch(agentStep.text, /agent\.skill\.create/);
   });
 
   it("parses trailing-comma tool JSON", () => {

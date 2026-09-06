@@ -1,6 +1,5 @@
 /**
- * Agent Builder chat turns — OpenAI decides tools; client executes agent.* mutations.
- * Same pattern as Gmail connector turns: tools never run on the server blindly.
+ * Agent Builder chat turns — configure Skills + Access + Trigger (not Zapier steps).
  */
 
 import type {
@@ -23,32 +22,30 @@ import { labelForAgentTool } from "@/lib/ai/agents/labels";
 
 const MAX_ROUNDS = 8;
 
-const AGENT_BUILDER_INSTRUCTIONS = `You are helping the user build and modify an Agent in Cander (automations / workflows).
+const AGENT_BUILDER_INSTRUCTIONS = `You are helping the user configure a Cander Agent.
 
-The right panel is the live Agent Builder for THIS agent. You construct and edit it ONLY through the agent.* tools listed below.
-Never invent raw workflow JSON for the user to paste.
+Architecture (do not invent workflow nodes):
+- Skills (markdown) define behavior — what the agent should do
+- Tools define capability — what connectors/MCP tools it may call
+- Triggers decide when the AI wakes up (manual or schedule)
+
+The right panel shows live Agent configuration. Mutate it ONLY through agent.* tools.
 Never claim you changed the agent unless a tool succeeded.
-Never stop at "I'll set up…" — emit the tool JSON on the same turn.
+Never build Zapier-style steps, branches, waits, or action graphs.
 
 How to work:
-1. Prefer mutating immediately with agent.step.add / update / delete, agent.update_metadata, agent.tools.*, agent.skill.*, agent.knowledge.*, agent.validate.
-2. Use agent.get only when you need IDs you don't have yet.
-3. Prefer small progressive edits so steps appear one at a time on the right.
-4. Keep the human sentence short; put exactly one tool JSON object on its own final line when acting.
-5. If a tool fails, explain the error and fix it with another tool or ask the user.
-6. Step kinds: trigger, condition, action, wait, branch.
+1. agent.get when you need current skills/access/trigger.
+2. Prefer agent.skill.create / agent.skill.update for the job description.
+3. Propose Access with agent.tools.grant — never silently grant send/delete without stating it.
+4. Set schedule with agent.trigger.set (weekday/daily/hourly + time + timezone) or manual.
+5. agent.validate before calling the setup complete. agent.run only when the user asks to run now.
 
-For "email me when someone emails me" / Gmail auto-reply style asks:
-- Add a trigger (kind=trigger, label like "Email received", type like "gmail.message_received")
-- Then add an action (kind=action, label like "Send Gmail reply", type like "gmail.send" or "gmail.reply")
-- Update agent instructions to match
-
-Examples you MUST handle with tools (not prose alone):
-- "Whenever the form is submitted, add them to HubSpot and email them"
-- "Gmail people when they email me"
-- "Wait 2 days then Slack me if they haven't replied"
-- "Delete the HubSpot step"
-- "Don't let it send emails anymore"`;
+Example user ask:
+"Every morning look through new leads and email ones nobody responded to"
+→ create skill markdown describing that goal
+→ propose CRM read + Gmail search/read/send tools (ask before granting send)
+→ trigger weekday 9:00 AM
+→ activate status`;
 
 function agentToolNames(): string[] {
   return [...TOOL_DOMAINS.agent];
@@ -56,20 +53,15 @@ function agentToolNames(): string[] {
 
 function formatToolResultsNote(results: AiToolCallResult[]): string {
   return results
-    .map(
-      (r) =>
-        `Tool ${r.name} (${r.ok ? "ok" : "failed"}):\n${r.output}`,
-    )
+    .map((r) => `Tool ${r.name} (${r.ok ? "ok" : "failed"}):\n${r.output}`)
     .join("\n\n");
 }
 
 function looksLikeAgentBuildIntent(text: string): boolean {
   const t = (text || "").trim();
   if (!t) return false;
-  return (
-    /\b(add|create|build|make|set\s*up|configure|update|change|edit|remove|delete|whenever|when|if|then|wait|email|gmail|slack|hubspot|trigger|action|workflow|agent)\b/i.test(
-      t,
-    )
+  return /\b(add|create|build|make|set\s*up|configure|update|change|edit|remove|delete|whenever|when|every|schedule|skill|gmail|slack|hubspot|crm|email|agent|follow.?up)\b/i.test(
+    t,
   );
 }
 
@@ -94,7 +86,6 @@ export async function runAgentBuilderTurn(
     detail: "Inspecting agent…",
   });
 
-  // Seed with live agent state so the model mutates the open builder agent.
   report({
     phase: "tool",
     label: "Thinking",
@@ -139,10 +130,10 @@ export async function runAgentBuilderTurn(
       formatToolsForPrompt(allowedTools),
       AGENT_BUILDER_INSTRUCTIONS,
       request.agentId
-        ? `Active agentId for this project (MUST use this agent): ${request.agentId}`
-        : "Use the project's primary agent (omit agentId).",
+        ? `Active agentId: ${request.agentId}`
+        : "Use the project's primary agent.",
       formatToolResultsNote(toolResults),
-      "Current agent state is above. Apply the user's request with mutation tools now.",
+      "Apply the user's request with skill / access / trigger tools now.",
     ].join("\n\n"),
   };
 
@@ -174,19 +165,8 @@ export async function runAgentBuilderTurn(
     const { text, call } = parseToolCallFromContent(generated.content);
 
     let toolCall = call;
-    if (toolCall && !allowedTools.includes(toolCall.name)) {
-      toolCall = null;
-    }
-    if (toolCall && !toolCall.name.startsWith("agent.")) {
-      toolCall = null;
-    }
-    // Ignore re-get unless we need it — prefer mutations after seed.
-    if (
-      toolCall?.name === "agent.get" &&
-      toolResults.some((r) => r.name === "agent.get" && r.ok)
-    ) {
-      // Allow get if model needs fresh IDs after mutations — keep it.
-    }
+    if (toolCall && !allowedTools.includes(toolCall.name)) toolCall = null;
+    if (toolCall && !toolCall.name.startsWith("agent.")) toolCall = null;
 
     if (!toolCall) {
       const visible =
@@ -208,13 +188,13 @@ export async function runAgentBuilderTurn(
             formatToolsForPrompt(allowedTools),
             AGENT_BUILDER_INSTRUCTIONS,
             formatToolResultsNote(toolResults),
-            "CRITICAL: You did not call a mutation tool. Do not apologize. End with exactly one JSON tool call now, e.g.",
-            '{"tool":"agent.step.add","arguments":{"kind":"trigger","label":"Email received","type":"gmail.message_received"}}',
+            "CRITICAL: Call a mutation tool now. Example:",
+            '{"tool":"agent.skill.create","arguments":{"name":"Lead Follow-up","markdown":"# Lead Follow-up\\n\\nWhen this skill runs:\\n1. ..."}}',
           ].join("\n\n"),
           content: [
             request.content,
             "",
-            "Call agent.step.add (or another agent.* mutation) now. No prose-only replies.",
+            "Call agent.skill.create or agent.trigger.set now. No prose-only replies.",
           ].join("\n"),
         };
         continue;
@@ -223,18 +203,16 @@ export async function runAgentBuilderTurn(
       const content =
         visible ||
         (mutationCount
-          ? "Done — check the Agent Builder on the right for the latest workflow."
+          ? "Done — check the Agent panel on the right."
           : generated.content);
 
-      if (round === 0 || mutationCount > 0) {
-        report({
-          phase: "generating",
-          label: "Thinking",
-          detail: "Building agent…",
-          contentDelta: content,
-          contentStreaming: true,
-        });
-      }
+      report({
+        phase: "generating",
+        label: "Thinking",
+        detail: "Updating agent…",
+        contentDelta: content,
+        contentStreaming: true,
+      });
 
       return {
         ...generated,
@@ -279,8 +257,8 @@ export async function runAgentBuilderTurn(
         AGENT_BUILDER_INSTRUCTIONS,
         formatToolResultsNote(toolResults),
         result.ok
-          ? "Continue with the next mutation if needed, or finish with a short plain-language summary. Do not repeat successful tool JSON."
-          : "The last tool failed — explain the problem and either fix it with another tool or ask the user.",
+          ? "Continue with the next config change if needed, or summarize."
+          : "The last tool failed — fix it or explain.",
       ].join("\n\n"),
       messages: [
         ...(request.messages ?? []),
@@ -292,7 +270,7 @@ export async function runAgentBuilderTurn(
       content: [
         request.content,
         "",
-        "Continue building or editing the agent using tools if more changes are needed. Otherwise summarize what changed for the user.",
+        "Continue configuring the agent with tools if needed; otherwise summarize.",
       ].join("\n"),
     };
   }
@@ -305,7 +283,7 @@ export async function runAgentBuilderTurn(
       content: [
         request.content,
         "",
-        "Summarize what you changed on the agent in plain language. Do not emit tool JSON.",
+        "Summarize the agent configuration changes in plain language. No tool JSON.",
       ].join("\n"),
     },
     { ...opts, suppressContentDelta: true },
@@ -313,12 +291,12 @@ export async function runAgentBuilderTurn(
 
   const finalContent =
     sanitizeAssistantVisibleText(summary.content).trim() ||
-    "Updated the agent — see the builder on the right.";
+    "Updated the agent — see the panel on the right.";
 
   report({
     phase: "generating",
     label: "Thinking",
-    detail: "Building agent…",
+    detail: "Updating agent…",
     contentDelta: finalContent,
     contentStreaming: true,
   });

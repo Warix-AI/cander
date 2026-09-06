@@ -19,6 +19,7 @@ export type ExecuteConnectorToolInput = {
   toolCallId?: string | null;
   turnId?: string | null;
   chatId?: string | null;
+  agentRunId?: string | null;
   confirmed?: boolean;
 };
 

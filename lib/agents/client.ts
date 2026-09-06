@@ -40,11 +40,25 @@ export async function listProjectAgentsClient(opts: {
   projectId: string;
   force?: boolean;
 }): Promise<ProjectAgent[]> {
+  const data = await listProjectAgentsWithStatsClient(opts);
+  return data.agents;
+}
+
+export async function listProjectAgentsWithStatsClient(opts: {
+  workspaceId: string;
+  projectId: string;
+  force?: boolean;
+}): Promise<{ agents: ProjectAgent[]; runsLast7d: number }> {
   if (!opts.force) {
     const cached = peekCachedProjectAgents(opts.workspaceId, opts.projectId);
-    if (cached) return cached;
+    if (cached) {
+      return { agents: cached, runsLast7d: 0 };
+    }
     const inflight = getAgentsInflight(opts.workspaceId, opts.projectId);
-    if (inflight) return inflight;
+    if (inflight) {
+      const agents = await inflight;
+      return { agents, runsLast7d: 0 };
+    }
   }
 
   const promise = (async () => {
@@ -56,13 +70,20 @@ export async function listProjectAgentsClient(opts: {
       `/api/projects/${encodeURIComponent(opts.projectId)}/agents?${params}`,
       { headers },
     );
-    const data = await parseJson<{ agents: ProjectAgent[] }>(res);
+    const data = await parseJson<{
+      agents: ProjectAgent[];
+      runsLast7d?: number;
+    }>(res);
     const agents = data.agents ?? [];
     setCachedProjectAgents(opts.workspaceId, opts.projectId, agents);
-    return agents;
+    return { agents, runsLast7d: data.runsLast7d ?? 0 };
   })();
 
-  rememberAgentsInflight(opts.workspaceId, opts.projectId, promise);
+  rememberAgentsInflight(
+    opts.workspaceId,
+    opts.projectId,
+    promise.then((d) => d.agents),
+  );
   return promise;
 }
 
@@ -147,6 +168,7 @@ export async function updateProjectAgentClient(opts: {
     description: string;
     instructions: string;
     enabled: boolean;
+    status: import("@/lib/agents/types").AgentStatus;
   }>;
 }): Promise<ProjectAgent> {
   const headers = await authHeaders();
@@ -267,4 +289,29 @@ export async function proposeAgentConfigClient(opts: {
     },
   );
   return parseJson<AgentConfigProposal>(res);
+}
+
+export async function runAgentClient(opts: {
+  workspaceId: string;
+  projectId: string;
+  agentId: string;
+  message?: string;
+}): Promise<{
+  run: import("@/lib/agents/types").AgentRun;
+  content: string;
+  toolCount: number;
+}> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(opts.projectId)}/agents/${encodeURIComponent(opts.agentId)}/run`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({
+        workspaceId: opts.workspaceId,
+        message: opts.message,
+      }),
+    },
+  );
+  return parseJson(res);
 }
