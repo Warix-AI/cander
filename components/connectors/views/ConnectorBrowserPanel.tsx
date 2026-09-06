@@ -180,7 +180,8 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
     : isDocsBrowse
       ? "Search Docs"
       : isAppBrowse
-        ? `Search ${appConnectorById(connectorId)?.name ?? title}`
+        ? appConnectorById(connectorId)?.searchPlaceholder ??
+          `Search ${appConnectorById(connectorId)?.name ?? title}`
         : "Search Drive";
   const isWorkspaceConnector =
     connectorId === "gcal" ||

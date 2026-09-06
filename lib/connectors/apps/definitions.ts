@@ -1,5 +1,6 @@
 /**
  * Non-Google app connectors (Composio) — shared definitions for OAuth, adapters, and panels.
+ * Tool slugs / args must match live Composio schemas (validated against API).
  */
 
 export type AppListItem = {
@@ -27,24 +28,56 @@ export type AppConnectorDefinition = {
   listProvider: string;
   /** Default args for listProvider. */
   listArgs?: Record<string, unknown>;
-  /** Optional query field name when searching. */
+  /**
+   * When set, non-empty UI search uses this tool instead of listProvider
+   * (e.g. Linear list vs search).
+   */
+  searchProvider?: string;
+  /** Optional query field name when searching via listProvider/searchProvider. */
   searchArg?: string;
+  /** Map free-text search into provider-safe args (JQL, SOQL, email-only, etc.). */
+  mapSearchQuery?: (query: string) => Record<string, unknown>;
+  /** Search field placeholder in the browse chrome. */
+  searchPlaceholder?: string;
+  /**
+   * When true and there is no searchProvider/searchArg, filter list results
+   * client-side by title/subtitle (Slack channels, Teams, etc.).
+   */
+  clientSearch?: boolean;
   /** Optional detail fetch tool. */
   getProvider?: string;
   getIdArg?: string;
-  /** Build deep-link when possible. */
-  openUrlFromItem?: (item: AppListItem) => string | undefined;
+  /**
+   * When false, Connect OAuth is hidden until custom auth config is ready
+   * (Shopify). Adapters/UI can still be wired.
+   */
+  oauthReady?: boolean;
 };
 
 function pickString(...values: unknown[]): string | undefined {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+    if (typeof value === "boolean") return value ? "Private" : "Public";
   }
   return undefined;
 }
 
-function formatMeta(value: string | null | undefined) {
-  if (!value) return undefined;
+function formatMeta(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === "") return undefined;
+  if (typeof value === "number") {
+    const ms = value > 1e12 ? value : value * 1000;
+    const d = new Date(ms);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleString([], {
@@ -81,7 +114,6 @@ function unwrapList(payload: Record<string, unknown>, keys: string[]): unknown[]
       if (Array.isArray(value)) return value;
     }
   }
-  // Linear-style { issues: { nodes: [...] } }
   for (const key of keys) {
     const nested = asRecord(payload[key]);
     if (nested && Array.isArray(nested.nodes)) return nested.nodes;
@@ -107,7 +139,6 @@ function digString(
   for (const source of nested) {
     const direct = pickString(...keys.map((k) => source[k]));
     if (direct) return direct;
-    // HubSpot / Graph nested objects (e.g. from.emailAddress.name)
     for (const key of keys) {
       const value = source[key];
       const obj = asRecord(value);
@@ -125,6 +156,74 @@ function digString(
     }
   }
   return undefined;
+}
+
+function digMeta(
+  row: Record<string, unknown>,
+  keys: string[],
+): string | undefined {
+  const nested = [row, asRecord(row.properties), asRecord(row.fields)].filter(
+    Boolean,
+  ) as Record<string, unknown>[];
+  for (const source of nested) {
+    for (const key of keys) {
+      const value = source[key];
+      if (typeof value === "number") return formatMeta(value);
+      if (typeof value === "string") return formatMeta(value);
+    }
+  }
+  return undefined;
+}
+
+function notionPageTitle(row: Record<string, unknown>): string | undefined {
+  const direct = pickString(row.title, row.name);
+  if (direct) return direct;
+  const props = asRecord(row.properties);
+  if (!props) return undefined;
+  for (const value of Object.values(props)) {
+    const prop = asRecord(value);
+    if (!prop) continue;
+    if (prop.type === "title" && Array.isArray(prop.title)) {
+      const parts = prop.title
+        .map((part) => {
+          const item = asRecord(part);
+          return pickString(item?.plain_text, asRecord(item?.text)?.content);
+        })
+        .filter(Boolean);
+      if (parts.length) return parts.join("");
+    }
+    if (Array.isArray(prop.title)) {
+      const parts = prop.title
+        .map((part) => {
+          const item = asRecord(part);
+          return pickString(item?.plain_text, asRecord(item?.text)?.content);
+        })
+        .filter(Boolean);
+      if (parts.length) return parts.join("");
+    }
+  }
+  return undefined;
+}
+
+function hubspotContactTitle(row: Record<string, unknown>): string | undefined {
+  const props = asRecord(row.properties) ?? row;
+  const email = pickString(props.email);
+  const first = pickString(props.firstname, props.firstName);
+  const last = pickString(props.lastname, props.lastName);
+  const name = [first, last].filter(Boolean).join(" ").trim();
+  return name || email || pickString(props.name);
+}
+
+function escapeSoqlLike(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+function escapeJqlPhrase(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function looksLikeJql(query: string) {
+  return /\b(order by|and|or|=|~|IN|WAS|CHANGED)\b/i.test(query);
 }
 
 export function normalizeGenericItem(
@@ -148,7 +247,7 @@ export function normalizeGenericItem(
   const subtitle = opts.subtitleKeys
     ? digString(row, opts.subtitleKeys)
     : undefined;
-  const metaRaw = opts.metaKeys ? digString(row, opts.metaKeys) : undefined;
+  const meta = opts.metaKeys ? digMeta(row, opts.metaKeys) : undefined;
   const openUrl = opts.openUrlKeys
     ? digString(row, opts.openUrlKeys)
     : undefined;
@@ -156,11 +255,25 @@ export function normalizeGenericItem(
     id,
     title,
     subtitle,
-    meta: formatMeta(metaRaw),
+    meta,
     openUrl,
     raw: row,
   };
 }
+
+const HUBSPOT_CONTACT_PROPERTIES = [
+  "email",
+  "firstname",
+  "lastname",
+  "company",
+  "jobtitle",
+  "phone",
+  "lastmodifieddate",
+  "createdate",
+];
+
+const SALESFORCE_CONTACT_SOQL =
+  "SELECT Id, Name, Email, Title, LastModifiedDate FROM Contact ORDER BY LastModifiedDate DESC LIMIT 40";
 
 export const APP_CONNECTOR_DEFINITIONS: AppConnectorDefinition[] = [
   {
@@ -176,6 +289,7 @@ export const APP_CONNECTOR_DEFINITIONS: AppConnectorDefinition[] = [
     listProvider: "OUTLOOK_LIST_MESSAGES",
     listArgs: { top: 40 },
     searchArg: "search",
+    searchPlaceholder: "Search mail",
     getProvider: "OUTLOOK_GET_MESSAGE",
     getIdArg: "message_id",
   },
@@ -190,7 +304,9 @@ export const APP_CONNECTOR_DEFINITIONS: AppConnectorDefinition[] = [
     displayOrder: 21,
     itemNoun: "channels",
     listProvider: "SLACK_LIST_ALL_CHANNELS",
-    listArgs: { limit: 100, exclude_archived: true },
+    listArgs: { limit: 100, exclude_archived: true, types: "public_channel,private_channel" },
+    clientSearch: true,
+    searchPlaceholder: "Filter channels",
     getProvider: "SLACK_FETCH_CONVERSATION_HISTORY",
     getIdArg: "channel",
   },
@@ -205,7 +321,11 @@ export const APP_CONNECTOR_DEFINITIONS: AppConnectorDefinition[] = [
     displayOrder: 22,
     itemNoun: "pages",
     listProvider: "NOTION_SEARCH_NOTION_PAGE",
+    listArgs: { page_size: 40 },
     searchArg: "query",
+    searchPlaceholder: "Search pages",
+    getProvider: "NOTION_GET_PAGE_MARKDOWN",
+    getIdArg: "page_id",
   },
   {
     id: "hubspot",
@@ -218,7 +338,12 @@ export const APP_CONNECTOR_DEFINITIONS: AppConnectorDefinition[] = [
     displayOrder: 23,
     itemNoun: "contacts",
     listProvider: "HUBSPOT_LIST_CONTACTS",
-    listArgs: { limit: 40 },
+    listArgs: {
+      limit: 40,
+      properties: HUBSPOT_CONTACT_PROPERTIES,
+    },
+    clientSearch: true,
+    searchPlaceholder: "Filter contacts",
     getProvider: "HUBSPOT_READ_CONTACT",
     getIdArg: "contactId",
   },
@@ -233,7 +358,9 @@ export const APP_CONNECTOR_DEFINITIONS: AppConnectorDefinition[] = [
     displayOrder: 24,
     itemNoun: "repositories",
     listProvider: "GITHUB_LIST_REPOSITORIES_FOR_THE_AUTHENTICATED_USER",
-    listArgs: { per_page: 40, sort: "updated" },
+    listArgs: { per_page: 40, sort: "updated", direction: "desc" },
+    clientSearch: true,
+    searchPlaceholder: "Filter repositories",
   },
   {
     id: "teams",
@@ -246,6 +373,9 @@ export const APP_CONNECTOR_DEFINITIONS: AppConnectorDefinition[] = [
     displayOrder: 25,
     itemNoun: "teams",
     listProvider: "MICROSOFT_TEAMS_TEAMS_LIST",
+    listArgs: { top: 40 },
+    clientSearch: true,
+    searchPlaceholder: "Filter teams",
     getProvider: "MICROSOFT_TEAMS_TEAMS_LIST_CHANNELS",
     getIdArg: "team_id",
   },
@@ -262,6 +392,12 @@ export const APP_CONNECTOR_DEFINITIONS: AppConnectorDefinition[] = [
     listProvider: "STRIPE_LIST_CUSTOMERS",
     listArgs: { limit: 40 },
     searchArg: "email",
+    searchPlaceholder: "Search by email",
+    mapSearchQuery: (query) => {
+      const q = query.trim();
+      if (!q.includes("@")) return {};
+      return { email: q };
+    },
   },
   {
     id: "salesforce",
@@ -274,6 +410,18 @@ export const APP_CONNECTOR_DEFINITIONS: AppConnectorDefinition[] = [
     displayOrder: 27,
     itemNoun: "contacts",
     listProvider: "SALESFORCE_LIST_CONTACTS",
+    listArgs: { query: SALESFORCE_CONTACT_SOQL },
+    searchArg: "query",
+    searchPlaceholder: "Search contacts",
+    mapSearchQuery: (query) => {
+      const q = query.trim();
+      if (!q) return { query: SALESFORCE_CONTACT_SOQL };
+      if (/^\s*select\b/i.test(q)) return { query: q };
+      const like = escapeSoqlLike(q);
+      return {
+        query: `SELECT Id, Name, Email, Title, LastModifiedDate FROM Contact WHERE Name LIKE '%${like}%' OR Email LIKE '%${like}%' ORDER BY LastModifiedDate DESC LIMIT 40`,
+      };
+    },
     getProvider: "SALESFORCE_GET_CONTACT",
     getIdArg: "contact_id",
   },
@@ -288,6 +436,10 @@ export const APP_CONNECTOR_DEFINITIONS: AppConnectorDefinition[] = [
     displayOrder: 28,
     itemNoun: "issues",
     listProvider: "LINEAR_LIST_LINEAR_ISSUES",
+    listArgs: { first: 40 },
+    searchProvider: "LINEAR_SEARCH_ISSUES",
+    searchArg: "query",
+    searchPlaceholder: "Search issues",
     getProvider: "LINEAR_GET_LINEAR_ISSUE",
     getIdArg: "issue_id",
   },
@@ -302,23 +454,42 @@ export const APP_CONNECTOR_DEFINITIONS: AppConnectorDefinition[] = [
     displayOrder: 29,
     itemNoun: "issues",
     listProvider: "JIRA_SEARCH_FOR_ISSUES_USING_JQL_GET",
-    listArgs: { max_results: 40, jql: "order by updated DESC" },
+    listArgs: {
+      max_results: 40,
+      jql: "order by updated DESC",
+      fields: ["summary", "status", "issuetype", "project", "updated", "created"],
+    },
     searchArg: "jql",
+    searchPlaceholder: "Search issues",
+    mapSearchQuery: (query) => {
+      const q = query.trim();
+      if (!q) return { jql: "order by updated DESC" };
+      if (looksLikeJql(q)) return { jql: q };
+      return {
+        jql: `text ~ "${escapeJqlPhrase(q)}" ORDER BY updated DESC`,
+      };
+    },
     getProvider: "JIRA_GET_ISSUE",
     getIdArg: "issue_key",
   },
+  {
+    id: "shopify",
+    name: "Shopify",
+    toolkit: "shopify",
+    authConfigEnv: "COMPOSIO_SHOPIFY_AUTH_CONFIG_ID",
+    category: "Commerce",
+    description: "Orders, products, and customers",
+    actions: ["Orders", "Products", "Customers"],
+    displayOrder: 30,
+    itemNoun: "products",
+    listProvider: "SHOPIFY_GET_PRODUCTS",
+    listArgs: { limit: 40 },
+    clientSearch: true,
+    searchPlaceholder: "Filter products",
+    /** Needs custom Composio OAuth client before Connect works. */
+    oauthReady: false,
+  },
 ];
-
-/** Shopify needs custom Composio OAuth credentials — catalog only until configured. */
-export const SHOPIFY_CONNECTOR_STUB = {
-  id: "shopify",
-  name: "Shopify",
-  toolkit: "shopify",
-  category: "Commerce",
-  description: "Orders, products, and customers",
-  actions: ["Orders", "Products", "Customers"],
-  displayOrder: 30,
-} as const;
 
 export function appConnectorById(
   id: string,
@@ -326,9 +497,9 @@ export function appConnectorById(
   return APP_CONNECTOR_DEFINITIONS.find((item) => item.id === id);
 }
 
-export const APP_OAUTH_CONNECTOR_IDS = APP_CONNECTOR_DEFINITIONS.map(
-  (item) => item.id,
-);
+export const APP_OAUTH_CONNECTOR_IDS = APP_CONNECTOR_DEFINITIONS.filter(
+  (item) => item.oauthReady !== false,
+).map((item) => item.id);
 
 export function normalizeItemsForConnector(
   connectorId: string,
@@ -365,6 +536,8 @@ export function normalizeItemsForConnector(
         return extractGenericItems(payload, ["issues", "nodes", "items"]);
       case "jira":
         return extractGenericItems(payload, ["issues", "values", "items"]);
+      case "shopify":
+        return extractGenericItems(payload, ["products", "orders", "items", "data"]);
       default:
         return extractGenericItems(payload, ["items", "data", "results"]);
     }
@@ -381,35 +554,66 @@ export function normalizeItemsForConnector(
             metaKeys: ["receivedDateTime", "sentDateTime"],
             openUrlKeys: ["webLink"],
           });
-        case "slack":
-          return normalizeGenericItem(raw, {
+        case "slack": {
+          const base = normalizeGenericItem(raw, {
             idKeys: ["id", "channel_id", "channel"],
             titleKeys: ["name", "name_normalized"],
-            subtitleKeys: ["topic", "purpose", "is_private"],
             metaKeys: ["updated", "created"],
           });
-        case "notion":
-          return normalizeGenericItem(raw, {
-            idKeys: ["id"],
-            titleKeys: ["title", "name"],
-            subtitleKeys: ["object", "url"],
-            metaKeys: ["last_edited_time", "created_time"],
-            openUrlKeys: ["url"],
-          });
-        case "hubspot":
-          return normalizeGenericItem(raw, {
-            idKeys: ["id", "contact_id"],
-            titleKeys: ["email", "firstname", "lastname", "name"],
-            subtitleKeys: ["company", "jobtitle", "phone"],
-            metaKeys: ["lastmodifieddate", "createdate"],
-          });
+          if (!base) return null;
+          const row = asRecord(raw);
+          const topic = asRecord(row?.topic);
+          const purpose = asRecord(row?.purpose);
+          return {
+            ...base,
+            title: base.title.startsWith("#") ? base.title : `#${base.title}`,
+            subtitle:
+              pickString(topic?.value, purpose?.value) ||
+              (row?.is_private ? "Private channel" : "Channel"),
+          };
+        }
+        case "notion": {
+          const row = asRecord(raw);
+          if (!row) return null;
+          const id = digString(row, ["id"]);
+          if (!id) return null;
+          return {
+            id,
+            title: notionPageTitle(row) || id,
+            subtitle: pickString(row.object) || "page",
+            meta: formatMeta(
+              pickString(
+                typeof row.last_edited_time === "string"
+                  ? row.last_edited_time
+                  : null,
+                typeof row.created_time === "string" ? row.created_time : null,
+              ),
+            ),
+            openUrl: pickString(row.url),
+            raw: row,
+          };
+        }
+        case "hubspot": {
+          const row = asRecord(raw);
+          if (!row) return null;
+          const id = digString(row, ["id", "contact_id"]);
+          if (!id) return null;
+          const props = asRecord(row.properties) ?? row;
+          return {
+            id,
+            title: hubspotContactTitle(row) || id,
+            subtitle: pickString(props.company, props.jobtitle, props.phone),
+            meta: digMeta(row, ["lastmodifieddate", "createdate"]),
+            raw: row,
+          };
+        }
         case "github":
           return normalizeGenericItem(raw, {
             idKeys: ["id", "full_name", "name"],
             titleKeys: ["full_name", "name"],
             subtitleKeys: ["description", "language"],
             metaKeys: ["updated_at", "pushed_at"],
-            openUrlKeys: ["html_url", "url"],
+            openUrlKeys: ["html_url"],
           });
         case "teams":
           return normalizeGenericItem(raw, {
@@ -432,45 +636,56 @@ export function normalizeItemsForConnector(
             subtitleKeys: ["Email", "Title", "AccountId"],
             metaKeys: ["LastModifiedDate", "CreatedDate"],
           });
-        case "linear":
-          return normalizeGenericItem(raw, {
+        case "linear": {
+          const base = normalizeGenericItem(raw, {
             idKeys: ["id", "identifier"],
             titleKeys: ["title", "name", "identifier"],
-            subtitleKeys: ["description", "state", "team"],
             metaKeys: ["updatedAt", "createdAt"],
             openUrlKeys: ["url"],
           });
+          if (!base) return null;
+          const row = asRecord(raw);
+          const state = asRecord(row?.state);
+          const team = asRecord(row?.team);
+          return {
+            ...base,
+            subtitle:
+              pickString(state?.name, team?.name, row?.identifier) ||
+              base.subtitle,
+          };
+        }
         case "jira": {
           const row = asRecord(raw);
           const fields = asRecord(row?.fields);
           const status = asRecord(fields?.status);
           const issuetype = asRecord(fields?.issuetype);
           const project = asRecord(fields?.project);
-          const base = normalizeGenericItem(raw, {
-            idKeys: ["key", "id"],
-            titleKeys: ["summary", "key", "name"],
-            subtitleKeys: ["status", "issuetype", "project"],
-            metaKeys: ["updated", "created"],
-          });
-          if (!base) return null;
+          const key = digString(row ?? {}, ["key", "id"]);
+          if (!key) return null;
+          const summary =
+            (typeof fields?.summary === "string" && fields.summary) ||
+            digString(row ?? {}, ["summary"]) ||
+            key;
           return {
-            ...base,
-            title:
-              digString(row ?? {}, ["summary"]) ||
-              (typeof fields?.summary === "string" ? fields.summary : null) ||
-              base.title,
-            subtitle:
-              pickString(status?.name, issuetype?.name, project?.name) ||
-              base.subtitle,
-            meta:
-              formatMeta(
-                pickString(
-                  typeof fields?.updated === "string" ? fields.updated : null,
-                  typeof fields?.created === "string" ? fields.created : null,
-                ),
-              ) || base.meta,
+            id: key,
+            title: summary,
+            subtitle: pickString(status?.name, issuetype?.name, project?.name),
+            meta: formatMeta(
+              pickString(
+                typeof fields?.updated === "string" ? fields.updated : null,
+                typeof fields?.created === "string" ? fields.created : null,
+              ),
+            ),
+            raw: row ?? undefined,
           };
         }
+        case "shopify":
+          return normalizeGenericItem(raw, {
+            idKeys: ["id"],
+            titleKeys: ["title", "name"],
+            subtitleKeys: ["vendor", "product_type", "status"],
+            metaKeys: ["updated_at", "created_at"],
+          });
         default:
           return normalizeGenericItem(raw, {
             idKeys: ["id"],

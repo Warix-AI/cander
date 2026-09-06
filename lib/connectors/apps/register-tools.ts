@@ -28,13 +28,35 @@ export function registerAppConnectorTools(
       },
     });
 
+    if (def.searchProvider) {
+      registerCanderTool({
+        id: `${def.id}.search`,
+        connectorId: def.id,
+        capabilityFamily: "files",
+        category: "productivity",
+        label: `Search ${def.itemNoun}`,
+        description: `Search ${def.itemNoun} in connected ${def.name}.`,
+        risk: "read",
+        confirmationPolicy: "never",
+        defaultEnabled: true,
+        providerTool: def.searchProvider,
+        inputSchema: {
+          type: "object",
+          required: ["query"],
+          properties: {
+            query: { type: "string", description: "Search query." },
+          },
+        },
+      });
+    }
+
     if (def.getProvider) {
       registerCanderTool({
         id: `${def.id}.get`,
         connectorId: def.id,
         capabilityFamily: "files",
         category: "productivity",
-        label: `Open ${def.itemNoun.slice(0, -1) || "item"}`,
+        label: `Open ${def.itemNoun.replace(/s$/, "") || "item"}`,
         description: `Fetch one ${def.name} item by id.`,
         risk: "read",
         confirmationPolicy: "never",

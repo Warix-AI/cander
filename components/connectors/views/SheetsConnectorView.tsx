@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
@@ -13,6 +13,12 @@ import {
 } from "@/components/connectors/views/WorkspaceViewChrome";
 import { runConnectorViewOperation } from "@/lib/api/connector-client";
 import {
+  connectionsForConnectorLive,
+  getConnectorConnectionsRevision,
+  subscribeConnectorConnections,
+} from "@/lib/connector-connections-store";
+import {
+  invalidateViewCache,
   peekViewCache,
   viewCacheKey,
   writeViewCache,
@@ -121,6 +127,11 @@ export function SheetsConnectorView({
 }) {
   const { workspaceId } = useApp();
   const cacheKey = viewCacheKey("gsheets", workspaceId);
+  const connectionRevision = useSyncExternalStore(
+    subscribeConnectorConnections,
+    getConnectorConnectionsRevision,
+    () => 0,
+  );
   const cached = peekViewCache<SheetsSessionCache>(cacheKey);
   const [page, setPage] = useState<Page>(() => cached?.data.page ?? "browse");
   const [sheets, setSheets] = useState<SheetItem[]>(
@@ -301,6 +312,16 @@ export function SheetsConnectorView({
     void refresh({ force: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / workspace only
   }, [workspaceId]);
+
+  // After OAuth activates, drop any failed first-open cache and reload.
+  useEffect(() => {
+    const connections = connectionsForConnectorLive(workspaceId, "gsheets");
+    const active = connections.some((row) => row.status === "active");
+    if (active && error) {
+      invalidateViewCache(cacheKey);
+      void refresh({ force: true });
+    }
+  }, [cacheKey, error, refresh, workspaceId, connectionRevision]);
 
   useEffect(() => {
     persist({

@@ -103,12 +103,19 @@ export async function initiateConnection(input: {
 
   const { data: catalog, error: catalogError } = await input.client
     .from("connector_catalog")
-    .select("id, enabled")
+    .select("id, enabled, coming_soon")
     .eq("id", input.connectorId)
     .maybeSingle();
   if (catalogError) throw catalogError;
   if (!catalog?.enabled) {
     return { ok: false, status: 404, error: "Connector not found." };
+  }
+  if (catalog.coming_soon) {
+    return {
+      ok: false,
+      status: 400,
+      error: "This connector is not ready to connect yet.",
+    };
   }
   if (!isOauthConnectorId(input.connectorId)) {
     return { ok: false, status: 404, error: "Connector not found." };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
@@ -12,6 +12,14 @@ import {
 } from "@/components/connectors/views/WorkspaceViewChrome";
 import { runConnectorViewOperation } from "@/lib/api/connector-client";
 import {
+  connectionsForConnectorLive,
+  getConnectorConnectionsRevision,
+  getConnectorConnectionsSnapshot,
+  getConnectorConnectionsServerSnapshot,
+  subscribeConnectorConnections,
+} from "@/lib/connector-connections-store";
+import {
+  invalidateViewCache,
   peekViewCache,
   viewCacheKey,
   writeViewCache,
@@ -49,6 +57,21 @@ function detailPreview(detail: Record<string, unknown> | null) {
   }
 }
 
+function filterItemsClientSide(items: AppListItem[], query: string) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return items;
+  return items.filter((item) => {
+    const hay = `${item.title} ${item.subtitle ?? ""} ${item.meta ?? ""}`.toLowerCase();
+    return hay.includes(needle);
+  });
+}
+
+function isNotConnectedError(message: string) {
+  return /not connected|no active connection|connect .+ and try|authorization/i.test(
+    message,
+  );
+}
+
 export function AppConnectorView({
   connectorId,
   onToolbarChange,
@@ -62,6 +85,19 @@ export function AppConnectorView({
   const { workspaceId } = useApp();
   const cacheKey = viewCacheKey(connectorId, workspaceId);
   const cached = peekViewCache<AppSessionCache>(cacheKey);
+  const connectionRevision = useSyncExternalStore(
+    subscribeConnectorConnections,
+    getConnectorConnectionsRevision,
+    () => 0,
+  );
+  void getConnectorConnectionsSnapshot;
+  void getConnectorConnectionsServerSnapshot;
+
+  const isConnected = connectionsForConnectorLive(workspaceId, connectorId).some(
+    (row) => row.status === "active",
+  );
+  const wasConnectedRef = useRef(isConnected);
+
   const [page, setPage] = useState<Page>(() => cached?.data.page ?? "browse");
   const [items, setItems] = useState<AppListItem[]>(
     () => cached?.data.items ?? [],
@@ -84,10 +120,12 @@ export function AppConnectorView({
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(
     () => cached?.data.lastSyncedAt ?? null,
   );
+  const retryTimerRef = useRef<number | null>(null);
 
   const name = def?.name ?? connectorId;
   const itemNoun = def?.itemNoun ?? "items";
-  const searchPlaceholder = `Search ${name}`;
+  const searchPlaceholder = def?.searchPlaceholder ?? `Search ${name}`;
+  const oauthPending = def?.oauthReady === false;
 
   const persist = useCallback(
     (patch: Partial<AppSessionCache>) => {
@@ -111,16 +149,28 @@ export function AppConnectorView({
   );
 
   const refresh = useCallback(
-    async (opts?: { force?: boolean; searchQuery?: string }) => {
+    async (opts?: { force?: boolean; searchQuery?: string; attempt?: number }) => {
+      if (!def) return;
+      if (oauthPending && !isConnected) {
+        setItems([]);
+        setStatus(null);
+        setError(
+          `${name} needs a custom Composio OAuth app before Connect works. Catalog is ready.`,
+        );
+        return;
+      }
+
       const needle = (opts?.searchQuery ?? query).trim();
       if (
         !opts?.force &&
+        !error &&
         peekViewCache<AppSessionCache>(cacheKey)?.fresh &&
         items.length > 0 &&
         !needle
       ) {
         return;
       }
+
       setSyncing(true);
       setError(null);
       try {
@@ -129,14 +179,23 @@ export function AppConnectorView({
           connectorId,
           operation: "listItems",
           input: {
-            query: needle || undefined,
+            // Only send query to the API when the provider can search,
+            // otherwise we fetch the full list and filter client-side.
+            query:
+              needle && (def.searchProvider || def.searchArg || def.mapSearchQuery)
+                ? needle
+                : def.clientSearch
+                  ? undefined
+                  : needle || undefined,
           },
         });
-        const raw = Array.isArray(result.data.items) ? result.data.items : [];
-        const parsed = raw.filter(
+        let parsed = (Array.isArray(result.data.items) ? result.data.items : []).filter(
           (row): row is AppListItem =>
             Boolean(row && typeof row === "object" && typeof row.id === "string"),
         );
+        if (def.clientSearch && needle) {
+          parsed = filterItemsClientSide(parsed, needle);
+        }
         setItems(parsed);
         const syncedAt = new Date().toISOString();
         setLastSyncedAt(syncedAt);
@@ -155,18 +214,41 @@ export function AppConnectorView({
           lastSyncedAt: syncedAt,
         });
       } catch (err) {
-        setItems([]);
-        setStatus(null);
-        setError(
+        const message =
           err instanceof Error
             ? err.message
-            : `Could not load ${name}. Connect ${name} and try again.`,
-        );
+            : `Could not load ${name}. Connect ${name} and try again.`;
+        setItems([]);
+        setStatus(null);
+        setError(message);
+        // Don't keep a "fresh" success cache after failure — force next open to retry.
+        invalidateViewCache(cacheKey);
+
+        const attempt = opts?.attempt ?? 0;
+        if (attempt < 2 && isNotConnectedError(message)) {
+          if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = window.setTimeout(() => {
+            void refresh({ force: true, searchQuery: needle, attempt: attempt + 1 });
+          }, 1200 * (attempt + 1));
+        }
       } finally {
         setSyncing(false);
       }
     },
-    [cacheKey, connectorId, itemNoun, items.length, name, persist, query, workspaceId],
+    [
+      cacheKey,
+      connectorId,
+      def,
+      error,
+      isConnected,
+      itemNoun,
+      items.length,
+      name,
+      oauthPending,
+      persist,
+      query,
+      workspaceId,
+    ],
   );
 
   const openItem = useCallback(
@@ -198,7 +280,9 @@ export function AppConnectorView({
         persist({ detail: nextDetail });
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : `Could not open this ${itemNoun.slice(0, -1) || "item"}.`,
+          err instanceof Error
+            ? err.message
+            : `Could not open this ${itemNoun.replace(/s$/, "") || "item"}.`,
         );
       } finally {
         setBusy(false);
@@ -215,9 +299,25 @@ export function AppConnectorView({
   }, [onOpenLink, selected]);
 
   useEffect(() => {
-    void refresh({ force: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / workspace only
+    void refresh({ force: Boolean(isConnected) });
+    return () => {
+      if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / connector / workspace
   }, [workspaceId, connectorId]);
+
+  // After OAuth completes, connection flips pending → active. Force a fresh pull
+  // so the panel doesn't keep a failed first-open cache (Sheets/Docs issue).
+  useEffect(() => {
+    const was = wasConnectedRef.current;
+    wasConnectedRef.current = isConnected;
+    if (!was && isConnected) {
+      invalidateViewCache(cacheKey);
+      void refresh({ force: true });
+    }
+    // connectionRevision ensures we notice store patches after OAuth return.
+    void connectionRevision;
+  }, [cacheKey, connectionRevision, isConnected, refresh]);
 
   useEffect(() => {
     persist({
@@ -235,8 +335,7 @@ export function AppConnectorView({
   useEffect(() => {
     const onBrowse = page === "browse";
     onToolbarChange?.({
-      title:
-        page === "detail" ? selected?.title ?? name : name,
+      title: page === "detail" ? selected?.title ?? name : name,
       syncing: syncing || busy,
       busy,
       canGoBack: page !== "browse",
@@ -287,6 +386,10 @@ export function AppConnectorView({
     selected,
     syncing,
   ]);
+
+  // Keep placeholder text in browser chrome via search — ConnectorBrowserPanel
+  // already reads app name; searchPlaceholder is used in empty-state copy below.
+  void searchPlaceholder;
 
   if (!def) {
     return (
@@ -341,7 +444,7 @@ export function AppConnectorView({
                   ? "Select refresh if details did not load."
                   : selected.openUrl
                     ? "Use Open in the bottom bar to view this in the provider."
-                    : `No extra detail for this ${itemNoun.slice(0, -1) || "item"}.`}
+                    : `No extra detail for this ${itemNoun.replace(/s$/, "") || "item"}.`}
               </p>
             )}
           </div>
@@ -353,11 +456,23 @@ export function AppConnectorView({
           <div className="min-h-0 flex-1 overflow-y-auto">
             {!items.length ? (
               <WorkspaceEmptyState
-                title={syncing ? `Loading ${itemNoun}…` : `No ${itemNoun} yet`}
+                title={
+                  oauthPending && !isConnected
+                    ? `${name} coming soon`
+                    : syncing
+                      ? `Loading ${itemNoun}…`
+                      : `No ${itemNoun} yet`
+                }
                 body={
-                  syncing
-                    ? `Fetching from ${name}.`
-                    : `Connect ${name} and refresh to see ${itemNoun} here.`
+                  oauthPending && !isConnected
+                    ? "Connect will unlock once Cander registers a Shopify OAuth app with Composio."
+                    : syncing
+                      ? `Fetching from ${name}.`
+                      : isConnected
+                        ? query.trim()
+                          ? `No ${itemNoun} match “${query.trim()}”.`
+                          : `Connected — refresh to load ${itemNoun}.`
+                        : `Connect ${name} in Connectors, then open this panel again.`
                 }
                 actionLabel="Refresh"
                 syncing={syncing}

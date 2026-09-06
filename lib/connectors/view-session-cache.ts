@@ -47,6 +47,25 @@ export function writeViewCache<T>(key: string, data: T) {
   store.set(key, { fetchedAt: Date.now(), data });
 }
 
+export function invalidateViewCache(key: string) {
+  store.delete(key);
+}
+
+export function invalidateConnectorViewCache(
+  connectorId: string,
+  workspaceId: string,
+) {
+  const prefix = `${connectorId}|${workspaceId}|`;
+  for (const key of store.keys()) {
+    if (key.startsWith(prefix) || key === `${connectorId}|${workspaceId}|default`) {
+      store.delete(key);
+    }
+  }
+  // Also clear exact default key variants.
+  store.delete(viewCacheKey(connectorId, workspaceId));
+  store.delete(viewCacheKey(connectorId, workspaceId, "list"));
+}
+
 export function touchViewCache<T>(key: string, data: T, fetchedAt?: number) {
   store.set(key, {
     fetchedAt: fetchedAt ?? Date.now(),

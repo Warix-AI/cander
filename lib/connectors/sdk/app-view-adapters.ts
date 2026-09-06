@@ -74,7 +74,13 @@ export function createAppViewAdapter(connectorId: string): ConnectorViewAdapter 
 
       try {
         if (action === "listItems") {
-          const result = await runTool(ctx, `${connectorId}.list`, args);
+          const query =
+            typeof args.query === "string" ? args.query.trim() : "";
+          const tool =
+            query && def.searchProvider
+              ? `${connectorId}.search`
+              : `${connectorId}.list`;
+          const result = await runTool(ctx, tool, args);
           if (!result.ok) return { ok: false, error: result.error };
           const payload = parseToolJson(result.output);
           return {

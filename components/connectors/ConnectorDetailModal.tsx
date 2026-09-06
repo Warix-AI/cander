@@ -12,6 +12,7 @@ import type { ConnectorConnection } from "@/lib/connectors/types";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import type { Connector, PinTier } from "@/lib/types";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
+import { appConnectorById } from "@/lib/connectors/apps/definitions";
 import { cn } from "@/lib/utils";
 
 type ConnectorPrompt = {
@@ -144,8 +145,12 @@ export function ConnectorDetailModal({
   const skills = toolsForConnector(item.id);
   const prompts = promptsForConnector(item);
   const canManageServerConnection = isOauthConnectorId(item.id);
+  const oauthPending = appConnectorById(item.id)?.oauthReady === false;
   const localInstallOnly =
-    !canManageServerConnection && Boolean(item.installed) && !isConnected;
+    !canManageServerConnection &&
+    !oauthPending &&
+    Boolean(item.installed) &&
+    !isConnected;
   const canDisconnectOrUninstall =
     isConnected || Boolean(pendingConnection) || localInstallOnly;
 
@@ -155,9 +160,11 @@ export function ConnectorDetailModal({
       ? "Connected"
       : pendingConnection
         ? "Connecting"
-        : localInstallOnly
-          ? "Installed"
-          : "Not connected";
+        : oauthPending
+          ? "Coming soon"
+          : localInstallOnly
+            ? "Installed"
+            : "Not connected";
 
   const statusTone = blocked
     ? "border-destructive/30 bg-destructive/10 text-destructive"
@@ -169,13 +176,15 @@ export function ConnectorDetailModal({
 
   const primaryLabel = blocked
     ? "Unavailable"
-    : workAttach
-      ? "Add to Work"
-      : pendingConnection
-        ? "Continue connecting"
-        : canManageServerConnection
-          ? "Connect"
-          : "Install";
+    : oauthPending
+      ? "Coming soon"
+      : workAttach
+        ? "Add to Work"
+        : pendingConnection
+          ? "Continue connecting"
+          : canManageServerConnection
+            ? "Connect"
+            : "Install";
 
   const showActionsMenu = !blocked;
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
@@ -188,6 +197,7 @@ export function ConnectorDetailModal({
   // Pending OAuth still shows Continue connecting.
   const showConnectFooter =
     !blocked &&
+    !oauthPending &&
     (Boolean(workAttach) ||
       Boolean(pendingConnection) ||
       (!isConnected && !localInstallOnly));

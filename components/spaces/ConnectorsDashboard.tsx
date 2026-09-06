@@ -44,7 +44,10 @@ import { ConnectorDetailModal } from "@/components/connectors/ConnectorDetailMod
 import { ComposioConsentModal } from "@/components/connectors/ComposioConsentModal";
 import type { ConnectorConnection } from "@/lib/connectors/types";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
-import { appConnectorById } from "@/lib/connectors/apps/definitions";
+import {
+  appConnectorById,
+} from "@/lib/connectors/apps/definitions";
+import { invalidateConnectorViewCache } from "@/lib/connectors/view-session-cache";
 import { setComposerPendingInput } from "@/lib/composer-seed";
 
 const SECTION_ORDER = [
@@ -130,6 +133,9 @@ export function ConnectorsDashboard() {
     void fetchConnectorConnections(workspaceId)
       .then((connections) => {
         replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+        if (connector) {
+          invalidateConnectorViewCache(connector, workspaceId);
+        }
       })
       .catch(() => undefined);
     const label =
@@ -195,6 +201,14 @@ export function ConnectorsDashboard() {
 
   const connectConnector = async (id: string) => {
     if (blockedIds.includes(id)) return;
+    const pendingOauth = appConnectorById(id)?.oauthReady === false;
+    if (pendingOauth) {
+      setInfo(
+        `${appConnectorById(id)?.name ?? id} needs a custom Composio OAuth app before Connect works.`,
+      );
+      openConnectorDetail(id);
+      return;
+    }
     if (isOauthConnectorId(id)) {
       setInfo("");
       setDetailConnectorId(null);
@@ -596,14 +610,17 @@ function DirectoryItem({
 }) {
   const isConnected = item.liveConnections?.some((row) => row.status === "active");
   const isOauth = isOauthConnectorId(item.id);
+  const oauthPending = appConnectorById(item.id)?.oauthReady === false;
 
   const statusLabel = item.pending
     ? "Connecting"
     : isConnected
       ? "Connected"
-      : !isOauth && item.installed
-        ? "Installed"
-        : null;
+      : oauthPending
+        ? "Coming soon"
+        : !isOauth && item.installed
+          ? "Installed"
+          : null;
 
   return (
     <div
@@ -650,13 +667,16 @@ function DirectoryItem({
           <p className="mt-0.5 truncate text-[12px] leading-snug text-muted-foreground">
             {item.pending
               ? "Authorization in progress — finish connecting to activate."
-              : item.description}
+              : oauthPending
+                ? "Custom OAuth setup required before Connect works."
+                : item.description}
           </p>
         </div>
       </button>
       <div className="flex shrink-0 items-center self-center">
         {isConnected ||
         item.pending ||
+        oauthPending ||
         (!isOauth && item.installed) ? null : (
           <button
             type="button"
