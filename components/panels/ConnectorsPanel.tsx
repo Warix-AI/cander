@@ -315,9 +315,9 @@ export function ConnectorsPanel() {
       onClose={() => setConsentOpen(false)}
       onProceed={async () => {
         setConnecting(true);
-        const { reserveOAuthWindow, openConnectorAuthorizationUrl } =
-          await import("@/lib/open-connector-oauth");
-        const reserved = reserveOAuthWindow();
+        const { openConnectorAuthorizationUrl } = await import(
+          "@/lib/open-connector-oauth"
+        );
         try {
           const { authorizationUrl } = await initiateConnectorConnection({
             workspaceId,
@@ -326,27 +326,21 @@ export function ConnectorsPanel() {
           const connections = await fetchConnectorConnections(workspaceId);
           replaceConnectorConnectionsForWorkspace(workspaceId, connections);
           if (authorizationUrl) {
-            const opened = openConnectorAuthorizationUrl(authorizationUrl, {
-              reserved,
-            });
-            if (opened.openedExternally) {
-              setConsentOpen(false);
-              try {
-                await navigator.clipboard.writeText(authorizationUrl);
-              } catch {
-                // ignore
-              }
-              setConnectError(
-                `Finish connecting ${selected.name} in Chrome or Safari (not inside Cursor). Link copied if allowed.`,
-              );
+            openConnectorAuthorizationUrl(authorizationUrl);
+            setConsentOpen(false);
+            try {
+              await navigator.clipboard.writeText(authorizationUrl);
+            } catch {
+              // ignore
             }
+            setConnectError(
+              `Finish connecting ${selected.name} in the browser that opened. If nothing opened, paste the copied link into Chrome or Safari.`,
+            );
             return;
           }
-          reserved?.close();
           setConnectError(`Could not start ${selected.name} authorization.`);
           setConsentOpen(false);
         } catch (err) {
-          reserved?.close();
           setConnectError(
             err instanceof Error ? err.message : "Could not start connection.",
           );

@@ -76,12 +76,11 @@ export function openExternalUrl(url: string) {
 }
 
 /**
- * Open an OAuth / Connect Link URL in the best native browser surface.
- * Capacitor WebViews cannot host nested provider popups (Stripe, etc.), so we
- * use SFSafariViewController / Chrome Custom Tabs when available.
+ * Open an OAuth / Connect Link URL in the best available external surface.
+ * Never navigates the current Cander window (avoids Composio "wait for popup").
  */
 export async function openOAuthAuthorizationUrl(url: string): Promise<{
-  mode: "capacitor_browser" | "anchor";
+  mode: "capacitor_browser" | "window_open" | "anchor";
 }> {
   if (typeof window === "undefined") return { mode: "anchor" };
 
@@ -94,8 +93,15 @@ export async function openOAuthAuthorizationUrl(url: string): Promise<{
       });
       return { mode: "capacitor_browser" };
     } catch {
-      // fall through to anchor
+      // fall through
     }
+  }
+
+  try {
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (opened) return { mode: "window_open" };
+  } catch {
+    // fall through
   }
 
   const anchor = document.createElement("a");

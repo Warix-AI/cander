@@ -79,7 +79,10 @@ export function createSupabaseConnectorApi(
       replaceConnectorConnectionsForWorkspace(ctx.workspaceId, all);
       attachWorkConnector(ctx.workspaceId, connectorId);
       if (authorizationUrl) {
-        window.location.assign(authorizationUrl);
+        const { openConnectorAuthorizationUrl } = await import(
+          "@/lib/open-connector-oauth"
+        );
+        openConnectorAuthorizationUrl(authorizationUrl);
       }
       return connection;
     },

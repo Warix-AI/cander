@@ -105,6 +105,7 @@ export function ConnectorsDashboard() {
   const [consentConnectorId, setConsentConnectorId] = useState<string | null>(
     null,
   );
+  const [pendingAuthUrl, setPendingAuthUrl] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -221,10 +222,9 @@ export function ConnectorsDashboard() {
   const proceedComposioOAuth = async () => {
     const id = consentConnectorId;
     if (!id) return;
-    const { reserveOAuthWindow, openConnectorAuthorizationUrl } = await import(
+    const { openConnectorAuthorizationUrl } = await import(
       "@/lib/open-connector-oauth"
     );
-    const reserved = reserveOAuthWindow();
     setConnectingId(id);
     try {
       const { authorizationUrl, connection } = await initiateConnectorConnection({
@@ -233,8 +233,7 @@ export function ConnectorsDashboard() {
       });
       patchConnectorConnectionForWorkspace(workspaceId, connection);
       if (authorizationUrl) {
-        const opened = openConnectorAuthorizationUrl(authorizationUrl, {
-          reserved,
+        openConnectorAuthorizationUrl(authorizationUrl, {
           onExternalFinished: () => {
             void fetchConnectorConnections(workspaceId)
               .then((connections) => {
@@ -243,46 +242,43 @@ export function ConnectorsDashboard() {
               .catch(() => undefined);
           },
         });
-        if (opened.openedExternally) {
-          const label = appConnectorById(id)?.name ?? id;
-          try {
-            await navigator.clipboard.writeText(authorizationUrl);
-          } catch {
-            // ignore clipboard failures
-          }
-          setInfo(
-            isMobileShell()
-              ? `Continue in the browser sheet to connect ${label}. Return here when finished — status updates automatically.`
-              : `Finish connecting ${label} in Chrome or Safari (not inside Cursor). The link was copied if clipboard access is allowed. This screen updates when you finish.`,
-          );
-          setConsentConnectorId(null);
-          const started = Date.now();
-          const poll = window.setInterval(() => {
-            void fetchConnectorConnections(workspaceId)
-              .then((connections) => {
-                replaceConnectorConnectionsForWorkspace(workspaceId, connections);
-                const active = connections.some(
-                  (row) =>
-                    row.connectorId === id && row.status === "active",
-                );
-                if (active || Date.now() - started > 180_000) {
-                  window.clearInterval(poll);
-                  if (active) {
-                    setInfo(`${label} connected.`);
-                    invalidateConnectorViewCache(id, workspaceId);
-                  }
-                }
-              })
-              .catch(() => undefined);
-          }, 2500);
+        const label = appConnectorById(id)?.name ?? id;
+        setPendingAuthUrl(authorizationUrl);
+        try {
+          await navigator.clipboard.writeText(authorizationUrl);
+        } catch {
+          // ignore clipboard failures
         }
+        setInfo(
+          isMobileShell()
+            ? `Continue in the browser sheet to connect ${label}. Return here when finished — status updates automatically.`
+            : `Finish connecting ${label} in the browser window that opened. If nothing opened, use Open authorization below (or paste from clipboard into Chrome/Safari).`,
+        );
+        setConsentConnectorId(null);
+        const started = Date.now();
+        const poll = window.setInterval(() => {
+          void fetchConnectorConnections(workspaceId)
+            .then((connections) => {
+              replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+              const active = connections.some(
+                (row) => row.connectorId === id && row.status === "active",
+              );
+              if (active || Date.now() - started > 180_000) {
+                window.clearInterval(poll);
+                if (active) {
+                  setPendingAuthUrl(null);
+                  setInfo(`${label} connected.`);
+                  invalidateConnectorViewCache(id, workspaceId);
+                }
+              }
+            })
+            .catch(() => undefined);
+        }, 2500);
         return;
       }
-      reserved?.close();
       setInfo(`Could not start ${id} authorization.`);
       setConsentConnectorId(null);
     } catch (err) {
-      reserved?.close();
       setInfo(
         err instanceof Error ? err.message : "Could not start connection.",
       );
@@ -403,9 +399,51 @@ export function ConnectorsDashboard() {
       subtitle="Connect apps to your workspace."
     >
         {info ? (
-          <p className="mb-4 rounded-[10px] border border-border bg-muted/40 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
-            {info}
-          </p>
+          <div className="mb-4 rounded-[10px] border border-border bg-muted/40 px-4 py-3">
+            <p className="text-[13px] leading-relaxed text-muted-foreground">
+              {info}
+            </p>
+            {pendingAuthUrl ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void import("@/lib/open-connector-oauth").then(
+                      ({ openConnectorAuthorizationUrl }) => {
+                        openConnectorAuthorizationUrl(pendingAuthUrl);
+                      },
+                    );
+                  }}
+                  className="inline-flex h-8 items-center rounded-full bg-foreground px-3.5 text-[12.5px] font-medium text-background transition-opacity hover:opacity-90"
+                >
+                  Open authorization
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard
+                      .writeText(pendingAuthUrl)
+                      .then(() =>
+                        setInfo(
+                          "Authorization link copied. Paste it into Chrome or Safari to continue.",
+                        ),
+                      )
+                      .catch(() => undefined);
+                  }}
+                  className="inline-flex h-8 items-center rounded-full border border-border bg-background px-3.5 text-[12.5px] font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                  Copy link
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingAuthUrl(null)}
+                  className="text-[12px] text-muted-foreground hover:text-foreground"
+                >
+                  Dismiss
+                </button>
+              </div>
+            ) : null}
+          </div>
         ) : null}
         {workAttachFor ? (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-border bg-muted/50 px-4 py-3">
