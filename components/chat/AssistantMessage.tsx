@@ -20,34 +20,6 @@ import { faviconUrlForSite } from "@/lib/preview-url";
 import { isCdnCitationHost } from "@/lib/ai/orchestrator/citations";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 
-function useReplyReveal(content: string, animate: boolean) {
-  const [revealed, setRevealed] = useState(animate ? "" : content);
-  const animatedContentRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!animate || !content || animatedContentRef.current === content) {
-      if (!animate) {
-        animatedContentRef.current = content;
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setRevealed(content);
-      }
-      return;
-    }
-    animatedContentRef.current = content;
-    setRevealed("");
-    let index = 0;
-    const words = content.match(/\S+\s*/g) ?? [content];
-    const timer = window.setInterval(() => {
-      index += 1;
-      setRevealed(words.slice(0, index).join(""));
-      if (index >= words.length) window.clearInterval(timer);
-    }, 28);
-    return () => window.clearInterval(timer);
-  }, [animate, content]);
-
-  return revealed;
-}
-
 function blockKey(block: ChatBlock, index: number): string {
   switch (block.type) {
     case "image_generation":
@@ -76,7 +48,6 @@ export function AssistantMessage({ message }: { message: Message }) {
     visibleContent !== "Thinking...";
 
   const inFlight = pending || streaming;
-  const replyContent = useReplyReveal(visibleContent, hasReply && !inFlight);
   const hasGeneratingImage = Boolean(
     message.blocks?.some(
       (block) =>
@@ -107,7 +78,7 @@ export function AssistantMessage({ message }: { message: Message }) {
           )}
         >
           <MarkdownRenderer
-            content={replyContent}
+            content={visibleContent}
             onLinkClick={(href) => openInAppBrowser(href)}
           />
         </div>

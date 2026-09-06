@@ -141,7 +141,7 @@ export function UserMessage({
         </div>
       ) : null}
       {content ? (
-        <div className="light-surface rounded-2xl px-3.5 py-2.5 dark:bg-input dark:shadow-none">
+        <div className="rounded-2xl border-0 bg-white px-3.5 py-2.5 shadow-none dark:bg-input">
           <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed tracking-[-0.01em]">
             {parts.map((part, index) =>
               part.kind === "text" ? (
