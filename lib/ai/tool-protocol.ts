@@ -11,10 +11,10 @@ export type ParsedToolCall = {
 };
 
 const KNOWN_TOOLS =
-  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|knowledge\\.search|web\\.(?:search|open)|ui\\.(?:ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval|gmail\\.(?:search|read|send)";
+  "nav\\.open|project\\.(?:create|open)|panel\\.(?:open|close)|workspace\\.search|knowledge\\.search|web\\.(?:search|open)|ui\\.(?:ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval|gmail\\.(?:search|read|send|draft|reply)|agent\\.(?:get|update_metadata|step\\.(?:add|update|delete|set_enabled)|tools\\.(?:grant|revoke)|skill\\.(?:attach|remove)|knowledge\\.(?:attach|remove)|validate)";
 
 const KNOWN_TOOL_NAME_RE =
-  /^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|knowledge\.search|web\.(search|open)|ui\.(ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval|gmail\.(search|read|send))$/;
+  /^(nav\.open|project\.(create|open)|panel\.(open|close)|workspace\.search|knowledge\.search|web\.(search|open)|ui\.(ask_clarification|confirm)|create_work_task|check_work_task|request_publish_approval|gmail\.(search|read|send|draft|reply)|agent\.(get|update_metadata|step\.(add|update|delete|set_enabled)|tools\.(grant|revoke)|skill\.(attach|remove)|knowledge\.(attach|remove)|validate))$/;
 
 /** Soft-repair common model JSON mistakes (trailing commas). */
 export function repairJson(raw: string): string {

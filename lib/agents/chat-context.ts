@@ -19,6 +19,42 @@ export type AgentChatContext = {
   agentId: string | null;
 };
 
+function agentIdFromSession(opts: {
+  profileId: string;
+  workspaceId: string;
+  spaceId: SpaceId;
+  projectId: string;
+}): string | null {
+  const key: ProjectBrowserKey = {
+    profileId: opts.profileId,
+    workspaceId: opts.workspaceId,
+    spaceId: opts.spaceId,
+    projectId: opts.projectId,
+  };
+  const session = getProjectBrowserSession(
+    key,
+    defaultProjectBrowserSession({
+      projectId: opts.projectId,
+      title: "Agent",
+      spaceId: opts.spaceId,
+      projectKind: "automation",
+      agentSurface: "builder",
+    }),
+  );
+
+  const active = session.tabs.find((tab) => tab.id === session.activeTabId);
+  if (active?.kind === "agent-builder") {
+    const id =
+      active.agentId?.trim() || agentIdFromBuilderUrl(active.url) || null;
+    if (id) return id;
+  }
+
+  const first = session.tabs.find(
+    (tab) => tab.kind === "agent-builder" && tab.agentId,
+  );
+  return first?.agentId?.trim() || null;
+}
+
 /** Active agent-builder tab (or first bound agent) when the project is an automation. */
 export function resolveAgentChatContext(opts: {
   profileId: string;
@@ -55,39 +91,36 @@ export function resolveAgentChatContext(opts: {
     }
   }
 
-  if (projectKind !== "automation" || !spaceId) {
+  // Agent Builder tabs live on the build space for automation projects.
+  const spacesToTry: SpaceId[] = spaceId
+    ? [spaceId, ...(spaceId !== "build" ? (["build"] as SpaceId[]) : [])]
+    : (["build"] as SpaceId[]);
+
+  let agentId: string | null = null;
+  for (const sid of spacesToTry) {
+    agentId = agentIdFromSession({
+      profileId: opts.profileId,
+      workspaceId: opts.workspaceId,
+      spaceId: sid,
+      projectId,
+    });
+    if (agentId) {
+      spaceId = sid;
+      break;
+    }
+  }
+
+  // Live builder tab wins — unlock agent tools even if kind metadata drifted.
+  if (agentId) {
+    return {
+      projectKind: projectKind === "automation" ? projectKind : "automation",
+      agentId,
+    };
+  }
+
+  if (projectKind === "automation") {
     return { projectKind, agentId: null };
   }
 
-  const key: ProjectBrowserKey = {
-    profileId: opts.profileId,
-    workspaceId: opts.workspaceId,
-    spaceId,
-    projectId,
-  };
-  const session = getProjectBrowserSession(
-    key,
-    defaultProjectBrowserSession({
-      projectId,
-      title: "Agent",
-      spaceId,
-      projectKind: "automation",
-      agentSurface: "builder",
-    }),
-  );
-
-  const active = session.tabs.find((tab) => tab.id === session.activeTabId);
-  if (active?.kind === "agent-builder") {
-    const id =
-      active.agentId?.trim() || agentIdFromBuilderUrl(active.url) || null;
-    if (id) return { projectKind, agentId: id };
-  }
-
-  const first = session.tabs.find(
-    (tab) => tab.kind === "agent-builder" && tab.agentId,
-  );
-  return {
-    projectKind,
-    agentId: first?.agentId?.trim() || null,
-  };
+  return { projectKind, agentId: null };
 }

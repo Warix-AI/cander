@@ -7,6 +7,7 @@ import {
   deleteStep,
   insertStep,
   parseStepId,
+  routesToSteps,
   setStepEnabled,
   updateAction,
   updateCondition,
@@ -52,9 +53,18 @@ export function mutationAddStep(opts: {
   kind: AddStepKind;
   afterStepId?: string | null;
 }): AgentMutationResult {
-  const position: InsertPosition = opts.afterStepId
-    ? { kind: "after-step", stepId: opts.afterStepId }
-    : { kind: "after-agent" };
+  let position: InsertPosition;
+  if (opts.afterStepId) {
+    position = { kind: "after-step", stepId: opts.afterStepId };
+  } else if (!opts.routes.length || opts.kind === "trigger") {
+    position = { kind: "after-agent" };
+  } else {
+    const steps = routesToSteps(opts.routes);
+    const last = steps.at(-1);
+    position = last
+      ? { kind: "after-step", stepId: last.id }
+      : { kind: "after-agent" };
+  }
   const { upsertRoutes } = insertStep(opts.routes, position, opts.kind);
   return {
     patch: { upsertRoutes },

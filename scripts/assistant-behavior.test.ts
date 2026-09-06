@@ -256,6 +256,13 @@ describe("tools", () => {
     );
     assert.equal(knowledge.call?.name, "knowledge.search");
     assert.equal(knowledge.call?.arguments?.query, "pricing");
+
+    const agentStep = parseToolCallFromContent(
+      'Adding a trigger.\n{"tool":"agent.step.add","arguments":{"kind":"trigger","label":"Email received"}}',
+    );
+    assert.equal(agentStep.call?.name, "agent.step.add");
+    assert.equal(agentStep.call?.arguments?.kind, "trigger");
+    assert.doesNotMatch(agentStep.text, /agent\.step\.add/);
   });
 
   it("parses trailing-comma tool JSON", () => {
