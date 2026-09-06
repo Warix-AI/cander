@@ -13,11 +13,7 @@ export const BUILD_CREATE_OPTIONS: {
 }[] = [
   { kind: "app", label: "App", summary: "Interactive app or tool" },
   { kind: "site", label: "Website", summary: "Marketing site or landing page" },
-  {
-    kind: "automation",
-    label: "Agent",
-    summary: "Scheduled or triggered workflow",
-  },
+  // Agent create hidden for now — keep automation kind for existing projects.
 ];
 
 type NewBuildMenuProps = {

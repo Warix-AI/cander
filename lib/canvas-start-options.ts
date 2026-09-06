@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
   AppWindow,
-  Bot,
   Globe,
   Image as ImageIcon,
   Layout,
@@ -26,6 +25,7 @@ export type CanvasStartOption = {
 /**
  * Shared Canvas starts — right-panel “What would you like to do?”,
  * NewCanvasMenu, and orphan-recents Start in the composer +.
+ * Agent create is hidden for now (still available via direct project kind).
  */
 export function canvasStartOptions(): CanvasStartOption[] {
   return [
@@ -75,16 +75,6 @@ export function canvasStartOptions(): CanvasStartOption[] {
       kind: "site",
       space: "build",
       title: "New Website",
-    },
-    {
-      id: "agent",
-      label: "Agent",
-      summary: "Scheduled or triggered workflow",
-      action: "create-project",
-      icon: Bot,
-      kind: "automation",
-      space: "build",
-      title: "New Agent",
     },
   ];
 }

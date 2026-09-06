@@ -157,6 +157,14 @@ function hardenSession(ses) {
   });
 }
 
+/**
+ * Google blocks Electron when the UA claims to be Chrome (they fingerprint the
+ * real Chromium build). Present as Firefox so accounts.google.com allows sign-in
+ * inside the in-panel WebContentsView — login must stay in-app.
+ */
+const PANEL_BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:128.0) Gecko/20100101 Firefox/128.0";
+
 /** One shared Chromium profile per partition for the whole shell lifetime. */
 function sessionForPartition(partition) {
   let ses = retainedSessions.get(partition);
@@ -165,6 +173,11 @@ function sessionForPartition(partition) {
     retainedSessions.set(partition, ses);
   }
   hardenSession(ses);
+  try {
+    ses.setUserAgent(PANEL_BROWSER_USER_AGENT);
+  } catch {
+    // ignore
+  }
   return ses;
 }
 
@@ -191,15 +204,11 @@ async function flushAllBrowserCookies() {
   }
 }
 
-/** Sites flag Electron's default UA as automation — present as desktop Chrome. */
 function applyBrowserUserAgent(wc) {
-  const raw = wc.getUserAgent();
-  const cleaned = raw
-    .replace(/\sElectron\/[^\s]+/g, "")
-    .replace(/\sCander\/[^\s]+/g, "")
-    .trim();
-  if (cleaned && cleaned !== raw) {
-    wc.setUserAgent(cleaned);
+  try {
+    wc.setUserAgent(PANEL_BROWSER_USER_AGENT);
+  } catch {
+    // ignore
   }
 }
 
@@ -302,6 +311,12 @@ function attachViewListeners(tabId, view) {
   });
 
   wc.on("did-finish-load", () => {
+    void wc
+      .executeJavaScript(
+        `try{Object.defineProperty(navigator,'webdriver',{get:()=>undefined})}catch(e){}`,
+        true,
+      )
+      .catch(() => {});
     void wc.executeJavaScript(VIDEO_PIP_INSTALL_SCRIPT, true).catch(() => {});
     if (tabId === pipTabId) {
       void applyVideoPipMode(tabId, true);
@@ -379,7 +394,9 @@ function createView(tabId, initialUrl, options) {
   }
   const url = initialUrl && isAllowedUrl(initialUrl) ? initialUrl : "about:blank";
   if (url) {
-    void view.webContents.loadURL(url);
+    void view.webContents.loadURL(url, {
+      userAgent: PANEL_BROWSER_USER_AGENT,
+    });
   }
   return { view, partition };
 }
@@ -978,7 +995,9 @@ function navigate(tabId, url) {
   // Remounting a retained tab must not reload (YouTube / live media).
   if (urlsMatch(current, url)) return;
   entry.lastUrl = url;
-  void entry.view.webContents.loadURL(url);
+  void entry.view.webContents.loadURL(url, {
+    userAgent: PANEL_BROWSER_USER_AGENT,
+  });
 }
 
 function back(tabId) {

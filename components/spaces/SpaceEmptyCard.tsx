@@ -33,12 +33,12 @@ const SPACE_VISUAL: Record<
   build: {
     gradient:
       "linear-gradient(270deg, oklch(0.55 0.19 262) 0%, oklch(0.64 0.16 256) 18%, oklch(0.74 0.1 255 / 0.7) 38%, oklch(0.86 0.05 255 / 0.32) 58%, oklch(0.94 0.02 255 / 0.1) 74%, transparent 92%)",
-    words: ["App", "Site", "Agent", "Preview"],
+    words: ["App", "Site", "Preview"],
   },
   studio: {
     gradient:
       "linear-gradient(270deg, oklch(0.68 0.15 318) 0%, oklch(0.75 0.12 295) 18%, oklch(0.84 0.07 285 / 0.68) 38%, oklch(0.92 0.04 280 / 0.3) 58%, oklch(0.96 0.02 280 / 0.1) 74%, transparent 92%)",
-    words: ["Image", "App", "Website", "Agent", "Video"],
+    words: ["Image", "App", "Website", "Video"],
     comingSoonWords: ["Video"],
   },
   work: {

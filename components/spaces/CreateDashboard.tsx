@@ -101,7 +101,7 @@ export function CreateDashboard() {
       <DashFrame
         banner={false}
         title="Canvas"
-        subtitle="Search, apps, sites, agents, and images."
+        subtitle="Search, apps, sites, and images."
       >
         <DashToolbar
           active={hoistFilters}
