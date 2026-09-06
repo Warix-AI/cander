@@ -39,6 +39,7 @@ import {
   disconnectConnectorConnection,
   fetchConnectorConnections,
   initiateConnectorConnection,
+  claimConnectorOAuthSession,
 } from "@/lib/api/connector-client";
 import { ConnectorDetailModal } from "@/components/connectors/ConnectorDetailModal";
 import { ComposioConsentModal } from "@/components/connectors/ComposioConsentModal";
@@ -235,8 +236,23 @@ export function ConnectorsDashboard() {
       if (authorizationUrl) {
         openConnectorAuthorizationUrl(authorizationUrl, {
           onExternalFinished: () => {
-            void fetchConnectorConnections(workspaceId)
-              .then((connections) => {
+            void claimConnectorOAuthSession({ workspaceId })
+              .then(async (claimed) => {
+                if (claimed.claimed && claimed.connection) {
+                  patchConnectorConnectionForWorkspace(
+                    workspaceId,
+                    claimed.connection,
+                  );
+                  setPendingAuthUrl(null);
+                  setInfo(
+                    `${appConnectorById(claimed.connectorId ?? id)?.name ?? "Connector"} connected.`,
+                  );
+                  if (claimed.connectorId) {
+                    invalidateConnectorViewCache(claimed.connectorId, workspaceId);
+                  }
+                  return;
+                }
+                const connections = await fetchConnectorConnections(workspaceId);
                 replaceConnectorConnectionsForWorkspace(workspaceId, connections);
               })
               .catch(() => undefined);
@@ -251,14 +267,35 @@ export function ConnectorsDashboard() {
         }
         setInfo(
           isMobileShell()
-            ? `Continue in the browser sheet to connect ${label}. Return here when finished — status updates automatically.`
-            : `Finish connecting ${label} in the browser window that opened. If nothing opened, use Open authorization below (or paste from clipboard into Chrome/Safari).`,
+            ? `Continue in the browser sheet to connect ${label}. Return here when finished — this window finishes automatically.`
+            : `Finish ${label} in the browser that opened, then return here — this window completes the connection automatically.`,
         );
         setConsentConnectorId(null);
         const started = Date.now();
         const poll = window.setInterval(() => {
-          void fetchConnectorConnections(workspaceId)
-            .then((connections) => {
+          void (async () => {
+            try {
+              const claimed = await claimConnectorOAuthSession({ workspaceId });
+              if (claimed.claimed && claimed.connection) {
+                window.clearInterval(poll);
+                patchConnectorConnectionForWorkspace(
+                  workspaceId,
+                  claimed.connection,
+                );
+                setPendingAuthUrl(null);
+                setInfo(
+                  `${appConnectorById(claimed.connectorId ?? id)?.name ?? label} connected.`,
+                );
+                if (claimed.connectorId) {
+                  invalidateConnectorViewCache(claimed.connectorId, workspaceId);
+                }
+                return;
+              }
+            } catch {
+              // keep polling
+            }
+            try {
+              const connections = await fetchConnectorConnections(workspaceId);
               replaceConnectorConnectionsForWorkspace(workspaceId, connections);
               const active = connections.some(
                 (row) => row.connectorId === id && row.status === "active",
@@ -271,9 +308,19 @@ export function ConnectorsDashboard() {
                   invalidateConnectorViewCache(id, workspaceId);
                 }
               }
-            })
-            .catch(() => undefined);
-        }, 2500);
+            } catch {
+              // ignore
+            }
+          })();
+        }, 2000);
+        const onVisible = () => {
+          if (document.visibilityState !== "visible") return;
+          void claimConnectorOAuthSession({ workspaceId }).catch(() => undefined);
+        };
+        document.addEventListener("visibilitychange", onVisible);
+        window.setTimeout(() => {
+          document.removeEventListener("visibilitychange", onVisible);
+        }, 180_000);
         return;
       }
       setInfo(`Could not start ${id} authorization.`);

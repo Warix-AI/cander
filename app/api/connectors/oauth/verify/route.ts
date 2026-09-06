@@ -56,10 +56,20 @@ export async function GET(request: Request) {
 
   const auth = await resolveConnectorCallbackUser(request);
   if (!auth.ok) {
-    // External Safari / Chrome Custom Tabs often lack the app session cookie.
-    // Send the user to the return page so they can finish in the Cander app.
+    // External Safari lacks the app session. Park session_uri for the signed-in
+    // Cander window to claim, then show a handoff page (do not loop login here).
+    try {
+      const admin = (await import("@/lib/supabase/admin")).createSupabaseAdminClient();
+      const { parkOAuthSessionDrop } = await import(
+        "@/lib/connectors/oauth-session-drop"
+      );
+      await parkOAuthSessionDrop(admin, sessionUri);
+    } catch {
+      // non-fatal
+    }
     const returnUrl = new URL("/connectors/oauth/return", request.url);
     returnUrl.searchParams.set("session_uri", sessionUri);
+    returnUrl.searchParams.set("pending", "1");
     return NextResponse.redirect(returnUrl);
   }
 

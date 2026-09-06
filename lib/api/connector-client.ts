@@ -68,6 +68,32 @@ export async function initiateConnectorConnection(input: {
   };
 }
 
+/** Claim a session_uri parked after external-browser OAuth (Safari). */
+export async function claimConnectorOAuthSession(input: {
+  workspaceId: string;
+}): Promise<{
+  claimed: boolean;
+  connectorId?: string;
+  connection?: ConnectorConnection;
+}> {
+  const headers = await authHeaders();
+  const response = await fetch("/api/connectors/oauth/claim", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ workspaceId: input.workspaceId }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error ?? "Could not finish authorization.");
+  }
+  return {
+    claimed: Boolean(data.claimed),
+    connectorId:
+      typeof data.connectorId === "string" ? data.connectorId : undefined,
+    connection: data.connection as ConnectorConnection | undefined,
+  };
+}
+
 export async function disconnectConnectorConnection(input: {
   workspaceId: string;
   connectionId: string;
