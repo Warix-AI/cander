@@ -4,6 +4,7 @@ import {
   allowedPostVerifyRedirectPaths,
   composioCallbackVerifierPath,
 } from "@/lib/connectors/composio-http";
+import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import { verifyOAuthCallback } from "@/lib/connectors/lifecycle";
 import { checkConnectorRateLimitAsync } from "@/lib/connectors/rate-limit";
 import {
@@ -13,7 +14,11 @@ import {
 
 export const runtime = "nodejs";
 
-function safeRedirectPath(request: Request, result: "success" | "error"): string {
+function safeRedirectPath(
+  request: Request,
+  result: "success" | "error",
+  connectorId?: string | null,
+): string {
   const url = new URL(request.url);
   const next = url.searchParams.get("next")?.trim();
   const allowed = allowedPostVerifyRedirectPaths();
@@ -21,8 +26,10 @@ function safeRedirectPath(request: Request, result: "success" | "error"): string
     next && allowed.some((prefix) => next === prefix || next.startsWith(`${prefix}?`))
       ? next
       : "/";
+  const connector =
+    connectorId && isOauthConnectorId(connectorId) ? connectorId : "gmail";
   const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}connectors=gmail&result=${result}`;
+  return `${path}${separator}connectors=${encodeURIComponent(connector)}&result=${result}`;
 }
 
 export async function GET(request: Request) {
@@ -63,6 +70,8 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL(safeRedirectPath(request, "error"), request.url));
     }
 
+    const connectorId = stateResult.state.connector_id;
+
     const rate = await checkConnectorRateLimitAsync({
       key: `callback:${auth.user.id}`,
       category: "connector_callback",
@@ -70,7 +79,9 @@ export async function GET(request: Request) {
       profileId: auth.user.id,
     });
     if (!rate.ok) {
-      return NextResponse.redirect(new URL(safeRedirectPath(request, "error"), request.url));
+      return NextResponse.redirect(
+        new URL(safeRedirectPath(request, "error", connectorId), request.url),
+      );
     }
 
     const member = await assertWorkspaceMember(
@@ -78,7 +89,9 @@ export async function GET(request: Request) {
       stateResult.state.workspace_id,
     );
     if (!member) {
-      return NextResponse.redirect(new URL(safeRedirectPath(request, "error"), request.url));
+      return NextResponse.redirect(
+        new URL(safeRedirectPath(request, "error", connectorId), request.url),
+      );
     }
 
     const { recoverOAuthStateForOwner } = await import("@/lib/connectors/oauth-recovery");
@@ -89,10 +102,14 @@ export async function GET(request: Request) {
       sessionUri,
     });
     if (!result.ok) {
-      return NextResponse.redirect(new URL(safeRedirectPath(request, "error"), request.url));
+      return NextResponse.redirect(
+        new URL(safeRedirectPath(request, "error", connectorId), request.url),
+      );
     }
 
-    return NextResponse.redirect(new URL(safeRedirectPath(request, "success"), request.url));
+    return NextResponse.redirect(
+      new URL(safeRedirectPath(request, "success", connectorId), request.url),
+    );
   } catch {
     return NextResponse.redirect(new URL(safeRedirectPath(request, "error"), request.url));
   }

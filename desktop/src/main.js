@@ -340,6 +340,47 @@ async function createWindow() {
       if (allowed.has(target.origin)) {
         return { action: "allow" };
       }
+      // Composio Connect Link opens provider OAuth (Stripe, etc.) via
+      // window.open. Denying that and routing to shell.openExternal breaks
+      // the opener handshake and leaves the "waiting for popup" screen stuck.
+      // Allow https auth popups as real BrowserWindows instead.
+      if (
+        target.protocol === "https:" &&
+        (target.hostname === "connect.composio.dev" ||
+          target.hostname.endsWith(".composio.dev") ||
+          target.hostname === "accounts.google.com" ||
+          target.hostname.endsWith(".google.com") ||
+          target.hostname === "login.microsoftonline.com" ||
+          target.hostname.endsWith(".microsoftonline.com") ||
+          target.hostname === "github.com" ||
+          target.hostname === "connect.stripe.com" ||
+          target.hostname.endsWith(".stripe.com") ||
+          target.hostname.endsWith(".salesforce.com") ||
+          target.hostname === "app.hubspot.com" ||
+          target.hostname.endsWith(".hubspot.com") ||
+          target.hostname === "api.notion.com" ||
+          target.hostname.endsWith(".notion.so") ||
+          target.hostname === "slack.com" ||
+          target.hostname.endsWith(".slack.com") ||
+          target.hostname === "linear.app" ||
+          target.hostname.endsWith(".linear.app") ||
+          target.hostname === "auth.atlassian.com" ||
+          target.hostname.endsWith(".atlassian.com"))
+      ) {
+        return {
+          action: "allow",
+          overrideBrowserWindowOptions: {
+            autoHideMenuBar: true,
+            width: 560,
+            height: 780,
+            webPreferences: {
+              nodeIntegration: false,
+              contextIsolation: true,
+              sandbox: true,
+            },
+          },
+        };
+      }
     } catch {
       // fall through
     }

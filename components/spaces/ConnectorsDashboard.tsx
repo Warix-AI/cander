@@ -228,7 +228,10 @@ export function ConnectorsDashboard() {
       });
       patchConnectorConnectionForWorkspace(workspaceId, connection);
       if (authorizationUrl) {
-        window.location.assign(authorizationUrl);
+        const { openConnectorAuthorizationUrl } = await import(
+          "@/lib/open-connector-oauth"
+        );
+        openConnectorAuthorizationUrl(authorizationUrl);
         return;
       }
       setInfo(`Could not start ${id} authorization.`);

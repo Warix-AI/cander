@@ -95,7 +95,9 @@ Register the exact verifier URL per environment in Composio dashboard (Settings 
 
 `COMPOSIO_CALLBACK_VERIFIER_URL` must match the dashboard value exactly.
 
-Post-verification redirects default to `/` (signed-in app) with `connectors=gmail&result=…`. Allowlisted paths: `/`, `/work`, `/spaces` — no open redirects.
+Post-verification redirects default to `/` (signed-in app) with `connectors=<id>&result=…` for the connector that started OAuth. Allowlisted paths: `/`, `/work`, `/spaces` — no open redirects.
+
+Per-link `callback_url` points at `/connectors/oauth/return?connector=<id>` (same origin as the verifier). With identity verification enabled, successful OAuth still hits the verifier; failed / `access_denied` flows land on the return page with a **Back to account** CTA.
 
 ## Link-session binding
 

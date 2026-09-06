@@ -188,7 +188,7 @@ function Root() {
     const params = new URLSearchParams(window.location.search);
     const connector = params.get("connectors");
     const result = params.get("result");
-    if (connector !== "gmail" || !result) return;
+    if (!connector || !result) return;
     openSpace("connectors");
   }, [signedIn, openSpace]);
 

@@ -323,7 +323,10 @@ export function ConnectorsPanel() {
           const connections = await fetchConnectorConnections(workspaceId);
           replaceConnectorConnectionsForWorkspace(workspaceId, connections);
           if (authorizationUrl) {
-            window.location.assign(authorizationUrl);
+            const { openConnectorAuthorizationUrl } = await import(
+              "@/lib/open-connector-oauth"
+            );
+            openConnectorAuthorizationUrl(authorizationUrl);
             return;
           }
           setConnectError(`Could not start ${selected.name} authorization.`);

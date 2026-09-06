@@ -79,6 +79,26 @@ export type ComposioLinkSession = {
   expiresAt: string;
 };
 
+/**
+ * Absolute HTTPS URL Composio redirects to after Connect Link finishes
+ * (including access_denied / failed). With callback identity verification
+ * enabled, successful OAuth still hits the verifier; failures use this URL.
+ */
+export function composioOAuthReturnUrl(connectorId: string): string | null {
+  const verifier = process.env.COMPOSIO_CALLBACK_VERIFIER_URL?.trim();
+  if (!verifier) return null;
+  try {
+    const origin = new URL(verifier).origin;
+    const url = new URL("/connectors/oauth/return", origin);
+    if (isOauthConnectorId(connectorId)) {
+      url.searchParams.set("connector", connectorId);
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 export async function createConnectLink(input: {
   composioUserId: string;
   connectorId: string;
@@ -86,6 +106,7 @@ export async function createConnectLink(input: {
   if (!isOauthConnectorId(input.connectorId)) {
     throw new Error(`Connector not available via Composio: ${input.connectorId}`);
   }
+  const callbackUrl = composioOAuthReturnUrl(input.connectorId);
   const res = await fetch(`${COMPOSIO_API_BASE}/connected_accounts/link`, {
     method: "POST",
     headers: {
@@ -96,6 +117,7 @@ export async function createConnectLink(input: {
       user_id: input.composioUserId,
       auth_config_id: authConfigIdForConnector(input.connectorId),
       allow_multiple: false,
+      ...(callbackUrl ? { callback_url: callbackUrl } : {}),
     }),
   });
   if (!res.ok) {
