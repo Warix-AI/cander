@@ -483,7 +483,92 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+const PROTOCOL = "cander";
+
+function appOrigin() {
+  try {
+    return new URL(activeUrl || START_URL).origin;
+  } catch {
+    return DEFAULT_URL;
+  }
+}
+
+/** Handle cander://oauth/return?session_uri=… from Safari after external OAuth. */
+function handleCanderProtocolUrl(raw) {
+  if (typeof raw !== "string" || !raw.startsWith(`${PROTOCOL}:`)) return false;
+  try {
+    const parsed = new URL(raw);
+    const isOauth =
+      parsed.hostname === "oauth" ||
+      parsed.pathname.includes("oauth") ||
+      /oauth\/return/i.test(raw);
+    if (!isOauth) return false;
+    const sessionUri = parsed.searchParams.get("session_uri")?.trim();
+    if (!sessionUri) return false;
+    const connector = parsed.searchParams.get("connector")?.trim();
+    const next = new URL("/connectors/oauth/return", appOrigin());
+    next.searchParams.set("session_uri", sessionUri);
+    if (connector) next.searchParams.set("connector", connector);
+
+    const openInMain = () => {
+      const load = () => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+        void mainWindow.loadURL(next.toString());
+      };
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        load();
+        return;
+      }
+      void createWindow().then(load);
+    };
+
+    if (app.isReady()) openInMain();
+    else void app.whenReady().then(openInMain);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, argv) => {
+    const deep = argv.find(
+      (arg) => typeof arg === "string" && arg.startsWith(`${PROTOCOL}:`),
+    );
+    if (deep) handleCanderProtocolUrl(deep);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  handleCanderProtocolUrl(url);
+});
+
 app.whenReady().then(() => {
+  if (process.defaultApp) {
+    if (process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [
+        path.resolve(process.argv[1]),
+      ]);
+    }
+  } else {
+    app.setAsDefaultProtocolClient(PROTOCOL);
+  }
+  const coldStartDeepLink = process.argv.find(
+    (arg) => typeof arg === "string" && arg.startsWith(`${PROTOCOL}:`),
+  );
+  if (coldStartDeepLink) handleCanderProtocolUrl(coldStartDeepLink);
+
   app.setName(APP_NAME);
   nativeTheme.on("updated", () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;

@@ -5,6 +5,10 @@ import Link from "next/link";
 import { CanderMark } from "@/components/brand/CanderMark";
 import { appConnectorById } from "@/lib/connectors/apps/definitions";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
+import {
+  oauthReturnPath,
+  publishOAuthHandoff,
+} from "@/lib/connectors/oauth-handoff";
 import { closeOAuthBrowser, isMobileShell } from "@/lib/mobile-shell";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
@@ -52,7 +56,6 @@ async function completeVerifyWithSession(sessionUri: string): Promise<boolean> {
       },
       credentials: "include",
     });
-    // 302 to result=success, or opaque redirect
     if (res.status >= 300 && res.status < 400) {
       const location = res.headers.get("Location") || "";
       return location.includes("result=success") || res.type === "opaqueredirect";
@@ -61,6 +64,11 @@ async function completeVerifyWithSession(sessionUri: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function isIosOrAndroidUa() {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 }
 
 export default function ConnectorOAuthReturnPage() {
@@ -80,8 +88,6 @@ export default function ConnectorOAuthReturnPage() {
 
     void (async () => {
       if (nextSessionUri) {
-        // Prefer in-app Bearer verify (Capacitor WebView has the session;
-        // SFSafariViewController / external browser often does not).
         const ok = await completeVerifyWithSession(nextSessionUri);
         if (ok) {
           await closeOAuthBrowser();
@@ -93,7 +99,6 @@ export default function ConnectorOAuthReturnPage() {
         }
 
         if (isMobileShell()) {
-          // Already in the app WebView but verify failed — fall back to cookie redirect.
           const next = new URL("/api/connectors/oauth/verify", window.location.origin);
           next.searchParams.set("session_uri", nextSessionUri);
           next.searchParams.set("next", "/");
@@ -101,7 +106,12 @@ export default function ConnectorOAuthReturnPage() {
           return;
         }
 
-        // External browser without app session — ask user to return to Cander.
+        // External browser (Safari/Chrome) without Cander session — hand off
+        // to the opener / other Cander tab, and show a web continue link.
+        publishOAuthHandoff({
+          sessionUri: nextSessionUri,
+          connectorId,
+        });
         setPhase("open_app");
         return;
       }
@@ -126,8 +136,12 @@ export default function ConnectorOAuthReturnPage() {
 
   const label = useMemo(() => connectorLabel(connector), [connector]);
   const backHref = useMemo(() => accountHref(connector, "error"), [connector]);
-  const deepLink = useMemo(() => {
-    if (!sessionUri) return "cander://";
+  const webContinueHref = useMemo(() => {
+    if (!sessionUri) return "/";
+    return oauthReturnPath({ sessionUri, connectorId: connector });
+  }, [sessionUri, connector]);
+  const nativeDeepLink = useMemo(() => {
+    if (!sessionUri) return null;
     const url = new URL("cander://oauth/return");
     url.searchParams.set("session_uri", sessionUri);
     if (connector) url.searchParams.set("connector", connector);
@@ -145,7 +159,9 @@ export default function ConnectorOAuthReturnPage() {
         >
           <CanderMark className="mx-auto h-8 w-8" />
           <p className="mt-6 text-[14px] text-muted-foreground">
-            {phase === "success" ? "Connected. Returning to Cander…" : "Finishing connection…"}
+            {phase === "success"
+              ? "Connected. Returning to Cander…"
+              : "Finishing connection…"}
           </p>
         </div>
       </main>
@@ -163,17 +179,47 @@ export default function ConnectorOAuthReturnPage() {
         >
           <CanderMark className="mx-auto h-8 w-8" />
           <h1 className="mt-6 text-[17px] font-medium tracking-[-0.02em]">
-            Return to Cander to finish
+            Authorization succeeded
           </h1>
           <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-            Authorization succeeded. Open Cander to complete connecting {label}.
+            Finish connecting {label} in your Cander window (desktop or browser
+            tab where you&apos;re signed in). This Safari page can&apos;t
+            complete it alone.
           </p>
           <a
-            href={deepLink}
+            href={webContinueHref}
             className="mt-8 inline-flex h-10 items-center justify-center rounded-full bg-foreground px-5 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
           >
-            Open Cander
+            Continue in Cander
           </a>
+          <p className="mt-3 text-[12px] text-muted-foreground">
+            Prefer this if you&apos;re signed in here. For the desktop app,
+            use Open in Cander app below (requires the latest desktop build).
+          </p>
+          {nativeDeepLink ? (
+            <a
+              href={nativeDeepLink}
+              className="mt-4 inline-flex text-[12.5px] font-medium text-foreground underline-offset-2 hover:underline"
+            >
+              {isIosOrAndroidUa()
+                ? "Open in Cander app"
+                : "Open in Cander desktop"}
+            </a>
+          ) : null}
+          <button
+            type="button"
+            className="mt-6 block w-full text-[12.5px] text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              if (!sessionUri) return;
+              const absolute = new URL(
+                webContinueHref,
+                window.location.origin,
+              ).toString();
+              void navigator.clipboard.writeText(absolute).catch(() => undefined);
+            }}
+          >
+            Copy finish link
+          </button>
         </div>
       </main>
     );
