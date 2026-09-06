@@ -1,6 +1,11 @@
 /**
  * In-memory session cache for connector panel views.
  * Survives remount when switching connectors / collapsing the panel.
+ *
+ * Multi-section apps (Stripe) should use a scope per section so switching
+ * tabs does not overwrite sibling lists. Use writeViewCache only after a
+ * successful fetch; use patchViewCache for UI-only updates so TTL stays tied
+ * to the last network load.
  */
 
 export const CONNECTOR_VIEW_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -43,8 +48,21 @@ export function peekViewCache<T>(
   };
 }
 
+/** Record a successful fetch — resets TTL. */
 export function writeViewCache<T>(key: string, data: T) {
   store.set(key, { fetchedAt: Date.now(), data });
+}
+
+/**
+ * Update cached payload without resetting TTL (page/selection/query chrome).
+ * Creates an entry if missing (fetchedAt = now).
+ */
+export function patchViewCache<T>(key: string, data: T) {
+  const hit = store.get(key) as Entry<T> | undefined;
+  store.set(key, {
+    fetchedAt: hit?.fetchedAt ?? Date.now(),
+    data,
+  });
 }
 
 export function invalidateViewCache(key: string) {
@@ -67,8 +85,9 @@ export function invalidateConnectorViewCache(
 }
 
 export function touchViewCache<T>(key: string, data: T, fetchedAt?: number) {
+  const hit = store.get(key) as Entry<T> | undefined;
   store.set(key, {
-    fetchedAt: fetchedAt ?? Date.now(),
+    fetchedAt: fetchedAt ?? hit?.fetchedAt ?? Date.now(),
     data,
   });
 }

@@ -33,6 +33,8 @@ const ALLOWED_OPS = new Set([
   "createDocument",
   "listItems",
   "getItem",
+  "retrieveBalance",
+  "createCustomer",
 ]);
 
 /**

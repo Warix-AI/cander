@@ -112,6 +112,7 @@ export function createAppViewAdapter(connectorId: string): ConnectorViewAdapter 
   };
 }
 
-export const APP_VIEW_ADAPTERS = APP_CONNECTOR_DEFINITIONS.map((def) =>
-  createAppViewAdapter(def.id),
-);
+/** Stripe uses a dedicated multi-resource adapter — skip the generic one. */
+export const APP_VIEW_ADAPTERS = APP_CONNECTOR_DEFINITIONS.filter(
+  (def) => def.id !== "stripe",
+).map((def) => createAppViewAdapter(def.id));

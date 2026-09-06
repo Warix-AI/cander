@@ -20,6 +20,7 @@ import {
 } from "@/lib/connector-connections-store";
 import {
   invalidateViewCache,
+  patchViewCache,
   peekViewCache,
   viewCacheKey,
   writeViewCache,
@@ -128,22 +129,24 @@ export function AppConnectorView({
   const oauthPending = def?.oauthReady === false;
 
   const persist = useCallback(
-    (patch: Partial<AppSessionCache>) => {
-      const prev = peekViewCache<AppSessionCache>(cacheKey)?.data;
-      writeViewCache(cacheKey, {
-        status: patch.status !== undefined ? patch.status : (prev?.status ?? status),
-        error: patch.error !== undefined ? patch.error : (prev?.error ?? error),
-        page: patch.page ?? prev?.page ?? page,
-        items: patch.items ?? prev?.items ?? items,
+    (patch: Partial<AppSessionCache>, opts?: { markFetched?: boolean }) => {
+      const prev = peekViewCache<AppSessionCache>(cacheKey);
+      const next = {
+        status: patch.status !== undefined ? patch.status : (prev?.data.status ?? status),
+        error: patch.error !== undefined ? patch.error : (prev?.data.error ?? error),
+        page: patch.page ?? prev?.data.page ?? page,
+        items: patch.items ?? prev?.data.items ?? items,
         selected:
-          patch.selected !== undefined ? patch.selected : (prev?.selected ?? selected),
-        detail: patch.detail !== undefined ? patch.detail : (prev?.detail ?? detail),
-        query: patch.query ?? prev?.query ?? query,
+          patch.selected !== undefined ? patch.selected : (prev?.data.selected ?? selected),
+        detail: patch.detail !== undefined ? patch.detail : (prev?.data.detail ?? detail),
+        query: patch.query ?? prev?.data.query ?? query,
         lastSyncedAt:
           patch.lastSyncedAt !== undefined
             ? patch.lastSyncedAt
-            : (prev?.lastSyncedAt ?? lastSyncedAt),
-      });
+            : (prev?.data.lastSyncedAt ?? lastSyncedAt),
+      };
+      if (opts?.markFetched) writeViewCache(cacheKey, next);
+      else patchViewCache(cacheKey, next);
     },
     [cacheKey, detail, error, items, lastSyncedAt, page, query, selected, status],
   );
@@ -165,7 +168,7 @@ export function AppConnectorView({
         !opts?.force &&
         !error &&
         peekViewCache<AppSessionCache>(cacheKey)?.fresh &&
-        items.length > 0 &&
+        peekViewCache<AppSessionCache>(cacheKey)?.data.lastSyncedAt &&
         !needle
       ) {
         return;
@@ -205,14 +208,17 @@ export function AppConnectorView({
             ? `No matching ${itemNoun}.`
             : null;
         setStatus(nextStatus);
-        persist({
-          items: parsed,
-          status: nextStatus,
-          error: null,
-          page: "browse",
-          query: needle,
-          lastSyncedAt: syncedAt,
-        });
+        persist(
+          {
+            items: parsed,
+            status: nextStatus,
+            error: null,
+            page: "browse",
+            query: needle,
+            lastSyncedAt: syncedAt,
+          },
+          { markFetched: true },
+        );
       } catch (err) {
         const message =
           err instanceof Error
@@ -242,7 +248,6 @@ export function AppConnectorView({
       error,
       isConnected,
       itemNoun,
-      items.length,
       name,
       oauthPending,
       persist,
@@ -299,7 +304,7 @@ export function AppConnectorView({
   }, [onOpenLink, selected]);
 
   useEffect(() => {
-    void refresh({ force: Boolean(isConnected) });
+    void refresh({ force: false });
     return () => {
       if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
     };

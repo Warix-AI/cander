@@ -19,6 +19,7 @@ import {
 } from "@/lib/connector-connections-store";
 import {
   invalidateViewCache,
+  patchViewCache,
   peekViewCache,
   viewCacheKey,
   writeViewCache,
@@ -156,22 +157,24 @@ export function SheetsConnectorView({
   );
 
   const persist = useCallback(
-    (patch: Partial<SheetsSessionCache>) => {
-      const prev = peekViewCache<SheetsSessionCache>(cacheKey)?.data;
-      writeViewCache(cacheKey, {
-        status: patch.status !== undefined ? patch.status : (prev?.status ?? status),
-        error: patch.error !== undefined ? patch.error : (prev?.error ?? error),
-        page: patch.page ?? prev?.page ?? page,
-        sheets: patch.sheets ?? prev?.sheets ?? sheets,
+    (patch: Partial<SheetsSessionCache>, opts?: { markFetched?: boolean }) => {
+      const prev = peekViewCache<SheetsSessionCache>(cacheKey);
+      const next = {
+        status: patch.status !== undefined ? patch.status : (prev?.data.status ?? status),
+        error: patch.error !== undefined ? patch.error : (prev?.data.error ?? error),
+        page: patch.page ?? prev?.data.page ?? page,
+        sheets: patch.sheets ?? prev?.data.sheets ?? sheets,
         selected:
-          patch.selected !== undefined ? patch.selected : (prev?.selected ?? selected),
-        newTitle: patch.newTitle ?? prev?.newTitle ?? newTitle,
-        query: patch.query ?? prev?.query ?? query,
+          patch.selected !== undefined ? patch.selected : (prev?.data.selected ?? selected),
+        newTitle: patch.newTitle ?? prev?.data.newTitle ?? newTitle,
+        query: patch.query ?? prev?.data.query ?? query,
         lastSyncedAt:
           patch.lastSyncedAt !== undefined
             ? patch.lastSyncedAt
-            : (prev?.lastSyncedAt ?? lastSyncedAt),
-      });
+            : (prev?.data.lastSyncedAt ?? lastSyncedAt),
+      };
+      if (opts?.markFetched) writeViewCache(cacheKey, next);
+      else patchViewCache(cacheKey, next);
     },
     [cacheKey, error, lastSyncedAt, newTitle, page, query, selected, sheets, status],
   );
@@ -182,7 +185,7 @@ export function SheetsConnectorView({
       if (
         !opts?.force &&
         peekViewCache<SheetsSessionCache>(cacheKey)?.fresh &&
-        sheets.length > 0 &&
+        peekViewCache<SheetsSessionCache>(cacheKey)?.data.lastSyncedAt &&
         !needle
       ) {
         return;
@@ -214,14 +217,17 @@ export function SheetsConnectorView({
             ? "No matching spreadsheets."
             : null;
         setStatus(nextStatus);
-        persist({
-          sheets: parsed,
-          status: nextStatus,
-          error: null,
-          page: "browse",
-          query: needle,
-          lastSyncedAt: syncedAt,
-        });
+        persist(
+          {
+            sheets: parsed,
+            status: nextStatus,
+            error: null,
+            page: "browse",
+            query: needle,
+            lastSyncedAt: syncedAt,
+          },
+          { markFetched: true },
+        );
       } catch (err) {
         setSheets([]);
         setStatus(null);
@@ -234,7 +240,7 @@ export function SheetsConnectorView({
         setSyncing(false);
       }
     },
-    [cacheKey, persist, query, sheets.length, workspaceId],
+    [cacheKey, persist, query, workspaceId],
   );
 
   const openWorkbook = useCallback(

@@ -26,6 +26,7 @@ import {
 } from "@/lib/mail-body-sanitize";
 import {
   peekViewCache,
+  patchViewCache,
   viewCacheKey,
   writeViewCache,
 } from "@/lib/connectors/view-session-cache";
@@ -161,7 +162,7 @@ export function GmailConnectorView({
   const persistListCache = useCallback(
     (patch: Partial<GmailListCache>) => {
       const prev = peekViewCache<GmailListCache>(cacheKey)?.data;
-      writeViewCache(cacheKey, {
+      patchViewCache(cacheKey, {
         messages: patch.messages ?? prev?.messages ?? messages,
         connectionId:
           patch.connectionId !== undefined

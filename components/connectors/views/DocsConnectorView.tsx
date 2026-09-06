@@ -19,6 +19,7 @@ import {
 } from "@/lib/connector-connections-store";
 import {
   invalidateViewCache,
+  patchViewCache,
   peekViewCache,
   viewCacheKey,
   writeViewCache,
@@ -154,36 +155,27 @@ export function DocsConnectorView({
   );
 
   const persist = useCallback(
-    (patch: Partial<DocsSessionCache>) => {
-      const prev = peekViewCache<DocsSessionCache>(cacheKey)?.data;
-      writeViewCache(cacheKey, {
-        status: patch.status !== undefined ? patch.status : (prev?.status ?? status),
-        error: patch.error !== undefined ? patch.error : (prev?.error ?? error),
-        page: patch.page ?? prev?.page ?? page,
-        documents: patch.documents ?? prev?.documents ?? documents,
+    (patch: Partial<DocsSessionCache>, opts?: { markFetched?: boolean }) => {
+      const prev = peekViewCache<DocsSessionCache>(cacheKey);
+      const next = {
+        status: patch.status !== undefined ? patch.status : (prev?.data.status ?? status),
+        error: patch.error !== undefined ? patch.error : (prev?.data.error ?? error),
+        page: patch.page ?? prev?.data.page ?? page,
+        documents: patch.documents ?? prev?.data.documents ?? documents,
         selected:
-          patch.selected !== undefined ? patch.selected : (prev?.selected ?? selected),
-        title: patch.title ?? prev?.title ?? title,
-        markdown: patch.markdown ?? prev?.markdown ?? markdown,
-        query: patch.query ?? prev?.query ?? query,
+          patch.selected !== undefined ? patch.selected : (prev?.data.selected ?? selected),
+        title: patch.title ?? prev?.data.title ?? title,
+        markdown: patch.markdown ?? prev?.data.markdown ?? markdown,
+        query: patch.query ?? prev?.data.query ?? query,
         lastSyncedAt:
           patch.lastSyncedAt !== undefined
             ? patch.lastSyncedAt
-            : (prev?.lastSyncedAt ?? lastSyncedAt),
-      });
+            : (prev?.data.lastSyncedAt ?? lastSyncedAt),
+      };
+      if (opts?.markFetched) writeViewCache(cacheKey, next);
+      else patchViewCache(cacheKey, next);
     },
-    [
-      cacheKey,
-      documents,
-      error,
-      lastSyncedAt,
-      markdown,
-      page,
-      query,
-      selected,
-      status,
-      title,
-    ],
+    [cacheKey, documents, error, lastSyncedAt, markdown, page, query, selected, status, title],
   );
 
   const refresh = useCallback(
@@ -192,7 +184,7 @@ export function DocsConnectorView({
       if (
         !opts?.force &&
         peekViewCache<DocsSessionCache>(cacheKey)?.fresh &&
-        documents.length > 0 &&
+        peekViewCache<DocsSessionCache>(cacheKey)?.data.lastSyncedAt &&
         !needle
       ) {
         return;
@@ -224,14 +216,17 @@ export function DocsConnectorView({
             ? "No matching documents."
             : null;
         setStatus(nextStatus);
-        persist({
-          documents: parsed,
-          status: nextStatus,
-          error: null,
-          page: "browse",
-          query: needle,
-          lastSyncedAt: syncedAt,
-        });
+        persist(
+          {
+            documents: parsed,
+            status: nextStatus,
+            error: null,
+            page: "browse",
+            query: needle,
+            lastSyncedAt: syncedAt,
+          },
+          { markFetched: true },
+        );
       } catch (err) {
         setDocuments([]);
         setStatus(null);
@@ -244,7 +239,7 @@ export function DocsConnectorView({
         setSyncing(false);
       }
     },
-    [cacheKey, documents.length, persist, query, workspaceId],
+    [cacheKey, persist, query, workspaceId],
   );
 
   const openDocument = useCallback(

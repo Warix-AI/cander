@@ -35,6 +35,7 @@ import { DriveConnectorView } from "@/components/connectors/views/DriveConnector
 import { SheetsConnectorView } from "@/components/connectors/views/SheetsConnectorView";
 import { DocsConnectorView } from "@/components/connectors/views/DocsConnectorView";
 import { AppConnectorView } from "@/components/connectors/views/AppConnectorView";
+import { StripeConnectorView } from "@/components/connectors/views/StripeConnectorView";
 import type { WorkspaceToolbarState } from "@/components/connectors/views/WorkspaceViewChrome";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import {
@@ -795,6 +796,16 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
               onToolbarChange={onWorkspaceToolbarChange}
               onOpenLink={openLink}
             />
+          </div>
+        ) : connectorId === "stripe" ? (
+          <div
+            className={cn(
+              "absolute inset-0 flex min-h-0 flex-col",
+              !isConnectorTab && "invisible pointer-events-none",
+            )}
+            aria-hidden={!isConnectorTab}
+          >
+            <StripeConnectorView onToolbarChange={onWorkspaceToolbarChange} />
           </div>
         ) : appConnectorById(connectorId) ? (
           <div
