@@ -9,6 +9,8 @@ export type AppListItem = {
   subtitle?: string;
   meta?: string;
   openUrl?: string;
+  /** Optional thumbnail (product images, avatars, etc.). */
+  imageUrl?: string;
   raw?: Record<string, unknown>;
 };
 

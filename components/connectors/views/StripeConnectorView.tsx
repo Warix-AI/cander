@@ -9,6 +9,10 @@ import {
 } from "react";
 import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
+import {
+  StripeEntityAvatar,
+  emailFromStripeRaw,
+} from "@/components/connectors/views/StripeEntityAvatar";
 import { useApp } from "@/components/app/AppProvider";
 import {
   WorkspaceEmptyState,
@@ -36,6 +40,7 @@ import {
 import type { AppListItem } from "@/lib/connectors/apps/definitions";
 import {
   detailFieldsForResource,
+  pickStripeImageUrl,
   type StripeBalanceLine,
   type StripeDetailField,
   type StripeResource,
@@ -831,6 +836,40 @@ export function StripeConnectorView({
 
   const empty = emptyCopy(tab, paymentSegment);
 
+  const detailEmail =
+    tab === "customers"
+      ? emailFromStripeRaw(detailRaw) ??
+        emailFromStripeRaw(selected?.raw ?? null)
+      : undefined;
+  const detailImage =
+    selected?.imageUrl ??
+    (detailRaw ? pickStripeImageUrl(detailRaw) : undefined);
+
+  function listLeading(item: AppListItem) {
+    if (tab === "customers" || tab === "products") {
+      return (
+        <StripeEntityAvatar
+          title={item.title}
+          email={
+            tab === "customers"
+              ? emailFromStripeRaw(item.raw ?? null)
+              : undefined
+          }
+          imageUrl={item.imageUrl}
+          size={28}
+          rounded={tab === "products" ? "soft" : "full"}
+        />
+      );
+    }
+    return (
+      <ConnectorMark
+        id="stripe"
+        size="sm"
+        className="!h-7 !w-7 !bg-transparent"
+      />
+    );
+  }
+
   return (
     <WorkspacePanelFrame status={status} error={error}>
       {page === "browse" ? (
@@ -999,13 +1038,7 @@ export function StripeConnectorView({
                         onClick={() => {
                           void openItem(item);
                         }}
-                        leading={
-                          <ConnectorMark
-                            id="stripe"
-                            size="sm"
-                            className="!h-7 !w-7 !bg-transparent"
-                          />
-                        }
+                        leading={listLeading(item)}
                       />
                     ))}
                   </div>
@@ -1026,11 +1059,21 @@ export function StripeConnectorView({
           ) : null}
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             <div className="mb-4 flex items-start gap-3">
-              <ConnectorMark
-                id="stripe"
-                size="md"
-                className="!h-10 !w-10 shrink-0 !bg-transparent"
-              />
+              {tab === "customers" || tab === "products" ? (
+                <StripeEntityAvatar
+                  title={selected.title}
+                  email={detailEmail}
+                  imageUrl={detailImage}
+                  size={40}
+                  rounded={tab === "products" ? "soft" : "full"}
+                />
+              ) : (
+                <ConnectorMark
+                  id="stripe"
+                  size="md"
+                  className="!h-10 !w-10 shrink-0 !bg-transparent"
+                />
+              )}
               <div className="min-w-0 flex-1">
                 <h2 className="truncate text-[15px] font-medium tracking-tight">
                   {selected.title}
@@ -1042,6 +1085,22 @@ export function StripeConnectorView({
                 ) : null}
               </div>
             </div>
+            {tab === "products" && detailImage ? (
+              <div
+                className={cn(
+                  "mb-4 overflow-hidden border border-black/5 dark:border-white/10",
+                  SHELL_G3_RADIUS,
+                )}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={detailImage}
+                  alt=""
+                  className="max-h-48 w-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            ) : null}
             <DetailRows fields={detailFields} />
 
             {tab === "customers" ? (

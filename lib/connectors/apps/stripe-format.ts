@@ -27,6 +27,36 @@ function pickString(...values: unknown[]): string | undefined {
   return undefined;
 }
 
+function isHttpUrl(value: string) {
+  return /^https?:\/\//i.test(value);
+}
+
+/** First usable image URL from Stripe product `images` or metadata. */
+export function pickStripeImageUrl(row: Record<string, unknown>): string | undefined {
+  if (Array.isArray(row.images)) {
+    for (const item of row.images) {
+      if (typeof item === "string" && isHttpUrl(item)) return item.trim();
+    }
+  }
+  const meta = asRecord(row.metadata);
+  if (meta) {
+    for (const key of [
+      "image",
+      "image_url",
+      "imageUrl",
+      "avatar",
+      "avatar_url",
+      "photo",
+      "photo_url",
+      "picture",
+    ]) {
+      const value = pickString(meta[key]);
+      if (value && isHttpUrl(value)) return value;
+    }
+  }
+  return undefined;
+}
+
 function unwrapList(payload: Record<string, unknown>): unknown[] {
   if (Array.isArray(payload.data)) return payload.data;
   if (Array.isArray(payload.items)) return payload.items;
@@ -168,6 +198,7 @@ function normalizeCustomer(raw: unknown): AppListItem | null {
     title: customerTitle(row),
     subtitle: email && name ? email : pickString(row.description, email, name),
     meta: formatStripeDate(row.created),
+    imageUrl: pickStripeImageUrl(row),
     raw: row,
   };
 }
@@ -251,6 +282,7 @@ function normalizeProduct(raw: unknown): AppListItem | null {
     title: pickString(row.name, row.id) ?? "Product",
     subtitle: pickString(row.description, active),
     meta: formatStripeDate(row.created) ?? active,
+    imageUrl: pickStripeImageUrl(row),
     raw: row,
   };
 }
