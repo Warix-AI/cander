@@ -221,6 +221,7 @@ import {
 import { deleteAiChat } from "@/lib/api/ai-chat-api";
 import { deleteThreadsFromSupabase, replaceUniversalDefaultOnSupabase } from "@/lib/api/chat-api.supabase";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
+import { resolveAgentChatContext } from "@/lib/agents/chat-context";
 import {
   provisionalCohortFromInput,
   startLiveTurnLatency,
@@ -2677,6 +2678,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           project?.space ??
           (isChatSpace(space) ? space : null) ??
           null;
+        const agentChat = resolveAgentChatContext({
+          profileId: actor.id,
+          workspaceId: matched?.workspaceId ?? workspaceId,
+          projectId: replyProjectId,
+        });
         const turnVision = collectTurnVisionImages(attachments.map((a) => a.url));
         const imageUrls = turnVision.ok ? turnVision.urls : [];
         const rawMode = isRawOpenAIModeEnabled();
@@ -2905,6 +2911,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             workspaceId: matched?.workspaceId ?? workspaceId,
             projectId: replyProjectId,
             projectSpace: replyProjectSpace,
+            projectKind: agentChat.projectKind,
+            agentId: agentChat.agentId,
             messages: historyMessages,
             signal: ac.signal,
             latency,
@@ -3414,6 +3422,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           workspaceId,
           projectId,
           projectSpace: (spaceId as SpaceId | null) ?? null,
+          ...(() => {
+            const agentChat = resolveAgentChatContext({
+              profileId: actor.id,
+              workspaceId,
+              projectId,
+            });
+            return {
+              projectKind: agentChat.projectKind,
+              agentId: agentChat.agentId,
+            };
+          })(),
           messages: historyMessages,
           onProgress: (progress) => {
             setThreads((current) =>

@@ -51,7 +51,12 @@ export function emitToolExecution(event: ToolExecutionEvent) {
 
 export function mapToolEventToProgressLabel(
   event: ToolExecutionEvent,
-): { detail: string; toolName?: string; phase: "tool" | "generating" | "follow_up" } | null {
+): {
+  detail: string;
+  toolName?: string;
+  phase: "tool" | "generating" | "follow_up";
+  toolOk?: boolean;
+} | null {
   switch (event.type) {
     case "tool_start":
       return {
@@ -64,6 +69,14 @@ export function mapToolEventToProgressLabel(
     case "model_generate_end":
       return null;
     case "tool_end":
+      if (event.name.startsWith("agent.")) {
+        return {
+          phase: "follow_up",
+          detail: detailForToolName(event.name),
+          toolName: event.name,
+          toolOk: event.ok,
+        };
+      }
       return event.ok
         ? { phase: "follow_up", detail: "Reading", toolName: event.name }
         : null;
@@ -73,6 +86,14 @@ export function mapToolEventToProgressLabel(
 }
 
 function detailForToolName(name: string): string {
+  if (name.startsWith("agent.")) {
+    // Keep in sync with lib/ai/agents/labels.ts — avoid circular imports here.
+    if (name === "agent.get") return "Inspecting agent";
+    if (name === "agent.step.add") return "Adding step";
+    if (name === "agent.step.delete") return "Removing step";
+    if (name === "agent.validate") return "Validating agent";
+    return "Updating agent";
+  }
   switch (name) {
     case "web.search":
     case "web.research":

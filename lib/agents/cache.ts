@@ -74,6 +74,16 @@ export function setCachedAgentBundle(
       ),
     });
   }
+  emitBundleChange({ workspaceId, projectId, agentId, bundle });
+}
+
+export function invalidateCachedAgentBundle(
+  workspaceId: string,
+  projectId: string,
+  agentId: string,
+) {
+  bundleCache.delete(bundleKey(workspaceId, projectId, agentId));
+  emitBundleChange({ workspaceId, projectId, agentId, bundle: null });
 }
 
 export function invalidateCachedProjectAgents(
@@ -81,6 +91,38 @@ export function invalidateCachedProjectAgents(
   projectId: string,
 ) {
   agentsCache.delete(agentsKey(workspaceId, projectId));
+}
+
+type BundleListener = (event: {
+  workspaceId: string;
+  projectId: string;
+  agentId: string;
+  bundle: ProjectAgentBundle | null;
+}) => void;
+
+const bundleListeners = new Set<BundleListener>();
+
+function emitBundleChange(event: {
+  workspaceId: string;
+  projectId: string;
+  agentId: string;
+  bundle: ProjectAgentBundle | null;
+}) {
+  bundleListeners.forEach((listener) => {
+    try {
+      listener(event);
+    } catch {
+      // ignore subscriber errors
+    }
+  });
+}
+
+/** Live-refresh Agent Builder when AI or UI mutates the same bundle. */
+export function subscribeAgentBundleCache(listener: BundleListener) {
+  bundleListeners.add(listener);
+  return () => {
+    bundleListeners.delete(listener);
+  };
 }
 
 export function rememberAgentsInflight(

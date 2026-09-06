@@ -23,6 +23,7 @@ import {
 } from "@/lib/ai/runtime/tools";
 import { tryIntentShortcut } from "@/lib/ai/runtime/intent-actions";
 import { clearTurnContext, setTurnContext } from "@/lib/ai/runtime/turn-context";
+import { labelForAgentTool } from "@/lib/ai/agents/labels";
 import { generateFmTurn } from "@/lib/ai/runtime/native/fm-generate";
 import {
   renderNarrowEvidenceFallback,
@@ -210,6 +211,9 @@ export const LOCAL_ORCHESTRATOR_TOOLS = [
 ] as const;
 
 function detailForTool(name: string): string {
+  if (name.startsWith("agent.")) {
+    return labelForAgentTool(name);
+  }
   switch (name) {
     case "web.search":
     case "web.research":
@@ -957,6 +961,8 @@ export async function runLocalTurnOrchestrator(
     threadId: request.threadId,
     workspaceId: request.workspaceId,
     projectId: request.projectId,
+    agentId: request.agentId,
+    projectKind: request.projectKind,
     userMessage: request.content,
   });
   try {
@@ -1015,6 +1021,9 @@ async function runLocalTurnOrchestratorInner(
         label: "Thinking",
         detail: mapped.detail,
         toolName: mapped.toolName,
+        ...(typeof mapped.toolOk === "boolean"
+          ? { toolOk: mapped.toolOk }
+          : {}),
       });
     }
   });
@@ -1163,6 +1172,14 @@ async function runLocalTurnOrchestratorInner(
                 readOnlyPreRun: true,
                 needsClarification: buildCtx.projectResolve.status === "clarify",
                 clarificationReason: buildCtx.projectResolve.reason,
+              },
+            }
+          : {}),
+        ...(request.projectKind === "automation" || request.agentId
+          ? {
+              agent: {
+                requiresAgentCapabilities: true,
+                forceDomains: ["agent"],
               },
             }
           : {}),

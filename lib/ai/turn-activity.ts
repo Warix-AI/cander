@@ -5,6 +5,7 @@
 
 import type { AgentTurnProgress } from "./runtime/agent-turn.ts";
 import type { Message } from "@/lib/types";
+import { labelForAgentTool } from "@/lib/ai/agents/labels";
 
 export const TURN_ACTIVITY_PHASES = [
   "generating",
@@ -92,6 +93,11 @@ export function withTurnActivityPhase(
 function phaseFromToolName(toolName?: string): TurnActivityPhase | null {
   if (!toolName) return null;
   const n = toolName.toLowerCase();
+  if (n.startsWith("agent.")) {
+    if (n.includes("get") || n.includes("validate")) return "checking";
+    if (n.includes("add") || n.includes("step")) return "building";
+    return "updating";
+  }
   if (
     n.includes("search") ||
     n.includes("research") ||
@@ -160,27 +166,66 @@ export type MessageTurnActivity = {
   startedAt: number;
 };
 
-/** Patch assistant message activity + optional research checklist blocks. */
+/** Patch assistant message activity + optional research checklist / agent tool blocks. */
 export function patchMessageWithProgress(
   message: Message,
   progress: AgentTurnProgress,
 ): Message {
   const phase = phaseFromProgress(progress);
   const startedAt = message.activity?.startedAt ?? Date.now();
-  const blocks =
-    progress.researchTasks && progress.researchTasks.length >= 2
-      ? [
-          {
-            type: "build" as const,
-            title: "Researching",
-            items: progress.researchTasks.map((t) => ({
-              id: t.id,
-              label: t.label,
-              status: t.status,
-            })),
-          },
-        ]
-      : message.blocks;
+  let blocks = message.blocks;
+
+  if (progress.researchTasks && progress.researchTasks.length >= 2) {
+    blocks = [
+      {
+        type: "build" as const,
+        title: "Researching",
+        items: progress.researchTasks.map((t) => ({
+          id: t.id,
+          label: t.label,
+          status: t.status,
+        })),
+      },
+    ];
+  } else if (
+    progress.toolName?.startsWith("agent.") &&
+    (progress.phase === "tool" || progress.phase === "follow_up")
+  ) {
+    const toolName = progress.toolName;
+    const existing = Array.isArray(blocks) ? [...blocks] : [];
+    const idx = existing.findIndex(
+      (b) => b.type === "tool" && b.detail === toolName,
+    );
+    const prevLabel =
+      idx >= 0 && existing[idx]?.type === "tool"
+        ? existing[idx].label
+        : labelForAgentTool(toolName);
+    const label =
+      progress.phase === "tool"
+        ? progress.detail && progress.detail !== "Reading"
+          ? progress.detail
+          : labelForAgentTool(toolName)
+        : prevLabel;
+    const status =
+      progress.phase === "tool"
+        ? ("running" as const)
+        : progress.toolOk === false
+          ? ("error" as const)
+          : ("done" as const);
+    const toolBlock = {
+      type: "tool" as const,
+      label,
+      status,
+      detail: toolName,
+    };
+    if (idx >= 0) {
+      existing[idx] = toolBlock;
+    } else {
+      existing.push(toolBlock);
+    }
+    blocks = existing;
+  }
+
   return {
     ...message,
     ...(progress.contentDelta

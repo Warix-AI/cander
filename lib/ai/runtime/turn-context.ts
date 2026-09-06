@@ -5,17 +5,23 @@
 let turnThreadId: string | null = null;
 let turnWorkspaceId: string | null = null;
 let turnProjectId: string | null = null;
+let turnAgentId: string | null = null;
+let turnProjectKind: string | null = null;
 let turnUserMessage: string | null = null;
 
 export function setTurnContext(opts: {
   threadId?: string | null;
   workspaceId?: string | null;
   projectId?: string | null;
+  agentId?: string | null;
   userMessage?: string | null;
+  projectKind?: string | null;
 }) {
   turnThreadId = opts.threadId?.trim() || null;
   turnWorkspaceId = opts.workspaceId?.trim() || null;
   turnProjectId = opts.projectId?.trim() || null;
+  turnAgentId = opts.agentId?.trim() || null;
+  turnProjectKind = opts.projectKind?.trim() || null;
   turnUserMessage =
     typeof opts.userMessage === "string" ? opts.userMessage : null;
 }
@@ -37,6 +43,14 @@ export function getTurnProjectId(): string | null {
   return turnProjectId;
 }
 
+export function getTurnAgentId(): string | null {
+  return turnAgentId;
+}
+
+export function getTurnProjectKind(): string | null {
+  return turnProjectKind;
+}
+
 export function getTurnUserMessage(): string | null {
   return turnUserMessage;
 }
@@ -45,6 +59,8 @@ export function clearTurnContext() {
   turnThreadId = null;
   turnWorkspaceId = null;
   turnProjectId = null;
+  turnAgentId = null;
+  turnProjectKind = null;
   turnUserMessage = null;
 }
 

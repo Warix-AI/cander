@@ -22,6 +22,7 @@ export type ToolDomain =
   | "cloud_work"
   | "review"
   | "build"
+  | "agent"
   | "health";
 
 export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
@@ -77,6 +78,21 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "build.validate",
     "build.preview.inspect",
     "build.publish",
+  ],
+  agent: [
+    "agent.get",
+    "agent.update_metadata",
+    "agent.step.add",
+    "agent.step.update",
+    "agent.step.delete",
+    "agent.step.set_enabled",
+    "agent.tools.grant",
+    "agent.tools.revoke",
+    "agent.skill.attach",
+    "agent.skill.remove",
+    "agent.knowledge.attach",
+    "agent.knowledge.remove",
+    "agent.validate",
   ],
   health: ["health.query", "health.compare", "health.workouts"],
 };
@@ -199,6 +215,24 @@ function refersToActiveBrowserSurface(content: string): boolean {
   );
 }
 
+/** Agent Builder / automation construction intent. */
+export function isAgentBuilderIntent(text: string): boolean {
+  const t = (text || "").trim();
+  if (!t) return false;
+  return (
+    (/\b(agent|automation|workflow|trigger|zap)\b/i.test(t) &&
+      /\b(add|create|build|make|set\s*up|configure|update|change|edit|remove|delete|grant|allow|revoke|wait|email|slack|hubspot|gmail|when|whenever|if|then)\b/i.test(
+        t,
+      )) ||
+    /\b(add|create|build)\b[\s\S]{0,40}\b(trigger|action|condition|step|route|workflow)\b/i.test(
+      t,
+    ) ||
+    /\b(what\s+does\s+this\s+agent|agent\s+currently|validate\s+(the\s+)?(agent|workflow))\b/i.test(
+      t,
+    )
+  );
+}
+
 /** Complex coding / research / multi-step work → cloud_work only. */
 export function isComplexWorkIntent(text: string): boolean {
   const t = (text || "").trim();
@@ -232,6 +266,7 @@ export function isComplexWorkIntent(text: string): boolean {
 function domainsForResumeTool(resumeTool?: string): ToolDomain[] {
   if (!resumeTool) return ["clarification"];
   if (resumeTool.startsWith("project.")) return ["projects", "clarification"];
+  if (resumeTool.startsWith("agent.")) return ["agent", "clarification"];
   if (resumeTool.startsWith("nav.") || resumeTool.startsWith("panel.")) {
     return ["navigation", "clarification"];
   }
@@ -260,6 +295,11 @@ export function resolveAllowedToolsForTurn(opts: {
 
   if (opts.forceDomains?.length) {
     for (const d of opts.forceDomains) domains.add(d);
+  }
+
+  if (isAgentBuilderIntent(content)) {
+    domains.add("agent");
+    domains.add("clarification");
   }
 
   if (refersToActiveBrowserSurface(content)) {

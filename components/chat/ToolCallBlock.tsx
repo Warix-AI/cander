@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, ChevronDown, Circle, LoaderCircle } from "lucide-react";
+import { isAgentBuilderTool, labelForAgentTool } from "@/lib/ai/agents/labels";
 import { cn } from "@/lib/utils";
 
 const TOOL_LABELS: Record<string, string> = {
@@ -17,6 +18,7 @@ const TOOL_LABELS: Record<string, string> = {
 
 function humanToolLabel(label: string): string {
   const key = label.trim();
+  if (isAgentBuilderTool(key)) return labelForAgentTool(key);
   return TOOL_LABELS[key] ?? key.replace(/\./g, " ");
 }
 

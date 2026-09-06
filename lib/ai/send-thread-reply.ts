@@ -48,6 +48,10 @@ export async function fetchPrivateAiReply(opts: {
   workspaceId: string;
   projectId?: string | null;
   projectSpace?: SpaceId | null;
+  /** Automation projects unlock Agent Builder tools. */
+  projectKind?: string | null;
+  /** Active agent id for Agent Builder tools. */
+  agentId?: string | null;
   messages?: Array<{
     role: "user" | "assistant" | "system";
     content: string;
@@ -84,6 +88,8 @@ export async function fetchPrivateAiReply(opts: {
         workspaceId: opts.workspaceId,
         projectId: opts.projectId,
         projectSpace: opts.projectSpace,
+        projectKind: opts.projectKind,
+        agentId: opts.agentId,
         messages: opts.messages,
         images: opts.images,
         attachmentIds: opts.attachmentIds,

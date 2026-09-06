@@ -99,6 +99,13 @@ export type CompileTurnOptions = {
     requiresHealthCapabilities: boolean;
     forceDomains?: string[];
   };
+  /**
+   * Agent Builder gate — unlock agent.* tools for automation projects.
+   */
+  agent?: {
+    requiresAgentCapabilities: boolean;
+    forceDomains?: string[];
+  };
 };
 
 function buildPreRunTasks(content: string): PreRunTask[] {
@@ -297,6 +304,11 @@ export function compileTurnProfile(opts: CompileTurnOptions): TurnProfile {
   }
   if (opts.health?.requiresHealthCapabilities && opts.health.forceDomains) {
     for (const d of opts.health.forceDomains) {
+      forceDomains.push(d as import("../tools/domains.ts").ToolDomain);
+    }
+  }
+  if (opts.agent?.requiresAgentCapabilities && opts.agent.forceDomains) {
+    for (const d of opts.agent.forceDomains) {
       forceDomains.push(d as import("../tools/domains.ts").ToolDomain);
     }
   }

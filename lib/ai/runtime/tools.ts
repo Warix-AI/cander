@@ -111,6 +111,14 @@ export async function executeAuthorizedTool(
     if (built) return built;
   }
 
+  if (tool.name.startsWith("agent.")) {
+    const { executeAgentTool } = await import(
+      "@/lib/ai/agents/tool-executors"
+    );
+    const agent = await executeAgentTool({ name: tool.name, args });
+    if (agent) return agent;
+  }
+
   if (tool.name.startsWith("health.")) {
     const { executeHealthTool } = await import(
       "@/lib/ai/health/tool-executors"

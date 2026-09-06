@@ -33,6 +33,10 @@ export type AiGenerateRequest = {
   workspaceId: string;
   projectId?: string | null;
   projectSpace?: string | null;
+  /** Project kind when known (e.g. automation for Agent Builder tools). */
+  projectKind?: string | null;
+  /** Active agent id for Agent Builder tools. */
+  agentId?: string | null;
   /** Existing private ai_chats id when cloud path is used. */
   aiChatId?: string | null;
   /** UI thread id — used by on-device context (Recents / “this chat”). */

@@ -120,7 +120,6 @@ export function resolveBuildCapabilities(
     Boolean(input.projectId) &&
     (input.projectKind === "app" ||
       input.projectKind === "site" ||
-      input.projectKind === "automation" ||
       input.hasBuildSpec === true);
 
   const refineOnProject =

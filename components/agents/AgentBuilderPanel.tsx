@@ -8,7 +8,12 @@ import {
   proposeAgentConfigClient,
   updateProjectAgentClient,
 } from "@/lib/agents/client";
-import { peekCachedAgentBundle } from "@/lib/agents/cache";
+import { peekCachedAgentBundle, subscribeAgentBundleCache } from "@/lib/agents/cache";
+import {
+  mutationAddStep,
+  mutationDeleteStep,
+  mutationSetStepEnabled,
+} from "@/lib/agents/mutations";
 import type {
   AgentConfigPatch,
   AgentRoute,
@@ -28,14 +33,11 @@ import {
 import { TriggerInspector } from "./builder/TriggerInspector";
 import { WorkflowCanvas } from "./builder/WorkflowCanvas";
 import {
-  deleteStep,
   duplicateStep,
   findRouteForStep,
   findStep,
-  insertStep,
   parseStepId,
   routesToSteps,
-  setStepEnabled,
   type AddStepKind,
   type CanvasSelection,
   type InsertPosition,
@@ -113,6 +115,23 @@ export function AgentBuilderPanel({
       cancelled = true;
       if (savedClearTimer.current) clearTimeout(savedClearTimer.current);
     };
+  }, [workspaceId, projectId, agentId]);
+
+  useEffect(() => {
+    return subscribeAgentBundleCache((event) => {
+      if (
+        event.workspaceId !== workspaceId ||
+        event.projectId !== projectId ||
+        event.agentId !== agentId
+      ) {
+        return;
+      }
+      if (event.bundle) {
+        setBundle(event.bundle);
+        setLoading(false);
+        setError(null);
+      }
+    });
   }, [workspaceId, projectId, agentId]);
 
   const toolMap = useMemo(() => {
@@ -207,12 +226,14 @@ export function AgentBuilderPanel({
 
   const handleAddStep = (position: InsertPosition, kind: AddStepKind) => {
     if (!bundle) return;
-    const { upsertRoutes } = insertStep(bundle.routes, position, kind);
-    if (!upsertRoutes.length) return;
-    void applyPatch({ upsertRoutes }).then(() => {
-      // After create, select the new incomplete step once bundle refreshes —
-      // applyPatch updates bundle; selection refined in effect below is heavy.
-      // Best-effort: open panel on agent if trigger from agent.
+    const { patch } = mutationAddStep({
+      routes: bundle.routes,
+      kind,
+      afterStepId:
+        position.kind === "after-step" ? position.stepId : null,
+    });
+    if (!patch.upsertRoutes?.length) return;
+    void applyPatch(patch).then(() => {
       if (position.kind === "after-agent" && kind === "trigger") {
         setPanelOpen(true);
       }
@@ -221,11 +242,11 @@ export function AgentBuilderPanel({
 
   const handleDeleteStep = (stepId: string) => {
     if (!bundle) return;
-    const { upsertRoutes, deleteRouteIds } = deleteStep(bundle.routes, stepId);
-    void applyPatch({
-      ...(upsertRoutes.length ? { upsertRoutes } : {}),
-      ...(deleteRouteIds.length ? { deleteRouteIds } : {}),
+    const { patch } = mutationDeleteStep({
+      routes: bundle.routes,
+      stepId,
     });
+    void applyPatch(patch);
     if (selection.type === "step" && selection.stepId === stepId) {
       setSelection({ type: "agent", tab: "agent" });
     }
@@ -241,12 +262,12 @@ export function AgentBuilderPanel({
     if (!bundle) return;
     const step = findStep(steps, stepId);
     if (!step) return;
-    const { upsertRoutes } = setStepEnabled(
-      bundle.routes,
+    const { patch } = mutationSetStepEnabled({
+      routes: bundle.routes,
       stepId,
-      !step.enabled,
-    );
-    if (upsertRoutes.length) void applyPatch({ upsertRoutes });
+      enabled: !step.enabled,
+    });
+    if (patch.upsertRoutes?.length) void applyPatch(patch);
   };
 
   const saveRoute = (route: AgentRoute) => {

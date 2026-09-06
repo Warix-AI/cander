@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Circle, Copy } from "lucide-react";
+import { ToolCallBlock } from "@/components/chat/ToolCallBlock";
+import { isAgentBuilderTool } from "@/lib/ai/agents/labels";
 import { useApp } from "@/components/app/AppProvider";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 import {
@@ -77,7 +79,12 @@ export function AssistantMessage({ message }: { message: Message }) {
         </div>
       ) : null}
       {message.blocks
-        ?.filter((b) => b.type !== "tool")
+        ?.filter(
+          (b) =>
+            b.type !== "tool" ||
+            (typeof b.detail === "string" && isAgentBuilderTool(b.detail)) ||
+            isAgentBuilderTool(b.label),
+        )
         .map((block, index) => (
           <BlockView
             key={blockKey(block, index)}
@@ -373,8 +380,23 @@ function BlockView({
     case "deploy":
       return <DeployBlock block={block} />;
     case "tool":
-      // Hard UI rule: never render tool chrome in the transcript.
-      return null;
+      // Only Agent Builder tools render as compact activity rows.
+      if (
+        !(
+          (typeof block.detail === "string" &&
+            isAgentBuilderTool(block.detail)) ||
+          isAgentBuilderTool(block.label)
+        )
+      ) {
+        return null;
+      }
+      return (
+        <ToolCallBlock
+          label={block.label}
+          status={block.status}
+          detail={undefined}
+        />
+      );
     case "clarification":
       return (
         <div className="my-1 rounded-[10px] border border-border/80 bg-muted/30 px-3 py-2 text-[13px]">

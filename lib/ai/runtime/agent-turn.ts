@@ -21,6 +21,8 @@ export type AgentTurnProgress = {
   label: string;
   detail?: string;
   toolName?: string;
+  /** When set, marks agent-builder tool rows as done/error. */
+  toolOk?: boolean;
   researchTasks?: Array<{
     id: string;
     label: string;
@@ -74,6 +76,8 @@ export async function runAssistantTurn(
     threadId: request.threadId,
     workspaceId: request.workspaceId,
     projectId: request.projectId,
+    agentId: request.agentId,
+    projectKind: request.projectKind,
     userMessage: request.content,
   });
   try {
@@ -89,6 +93,21 @@ export async function runAssistantTurn(
       opts?.selectedConnectionId ||
         (opts?.selectedConnectionIds && opts.selectedConnectionIds.length > 0),
     );
+
+    // Agent projects: client-executed builder tools (same mutation layer as the UI).
+    if (
+      request.projectKind === "automation" ||
+      Boolean(request.agentId?.trim())
+    ) {
+      latency?.mark("agent_probe_end");
+      latency?.setTransport("agent");
+      latency?.setSignals({ agentV2: false });
+      const { runAgentBuilderTurn } = await import(
+        "@/lib/ai/agents/builder-turn"
+      );
+      return runAgentBuilderTurn(request, opts);
+    }
+
     // Default chat uses streamed raw OpenAI (ChatGPT-style tokens).
     // Connector-scoped turns still use the agent loop.
     const preferRawChat = isRawOpenAIModeEnabled() && !connectorScoped;

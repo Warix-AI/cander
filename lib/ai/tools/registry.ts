@@ -30,6 +30,7 @@ export type AiToolDefinition = {
     | "cloud_work"
     | "review"
     | "build"
+    | "agent"
     | "health";
   parameters: {
     type: "object";
@@ -772,6 +773,175 @@ function registerBuildTools() {
 }
 
 registerBuildTools();
+
+function registerAgentTools() {
+  const agentTools: Array<{
+    name: string;
+    description: string;
+    required?: string[];
+    properties: AiToolDefinition["parameters"]["properties"];
+  }> = [
+    {
+      name: "agent.get",
+      description:
+        "Read the current Agent project's definition: name, instructions, workflow steps, connector access, skills, and knowledge.",
+      properties: { agentId: { type: "string" } },
+    },
+    {
+      name: "agent.update_metadata",
+      description:
+        "Update agent name, description, instructions, or enabled status.",
+      properties: {
+        agentId: { type: "string" },
+        name: { type: "string" },
+        description: { type: "string" },
+        instructions: { type: "string" },
+        enabled: { type: "boolean" },
+      },
+    },
+    {
+      name: "agent.step.add",
+      description:
+        "Add a workflow step (trigger, condition, action, wait, or branch). Optionally place after afterStepId; omit to attach under the Agent node. Provide label/type/config to configure immediately.",
+      required: ["kind"],
+      properties: {
+        agentId: { type: "string" },
+        kind: {
+          type: "string",
+          enum: ["trigger", "condition", "action", "wait", "branch"],
+        },
+        afterStepId: { type: "string" },
+        label: { type: "string", description: "Human-readable step title" },
+        type: { type: "string" },
+        config: { type: "object" },
+      },
+    },
+    {
+      name: "agent.step.update",
+      description:
+        "Update an existing workflow step by stepId (from agent.get). Set label, type, expression, and/or config.",
+      required: ["stepId"],
+      properties: {
+        agentId: { type: "string" },
+        stepId: { type: "string" },
+        label: { type: "string" },
+        type: { type: "string" },
+        expression: { type: "string" },
+        config: { type: "object" },
+      },
+    },
+    {
+      name: "agent.step.delete",
+      description: "Delete a workflow step by stepId.",
+      required: ["stepId"],
+      properties: {
+        agentId: { type: "string" },
+        stepId: { type: "string" },
+      },
+    },
+    {
+      name: "agent.step.set_enabled",
+      description: "Enable or disable a workflow step.",
+      required: ["stepId", "enabled"],
+      properties: {
+        agentId: { type: "string" },
+        stepId: { type: "string" },
+        enabled: { type: "boolean" },
+      },
+    },
+    {
+      name: "agent.tools.grant",
+      description:
+        "Grant connector tools to this agent (connectionId + connectorId + toolIds).",
+      required: ["connectionId", "connectorId", "toolIds"],
+      properties: {
+        agentId: { type: "string" },
+        connectionId: { type: "string" },
+        connectorId: { type: "string" },
+        toolIds: { type: "array", items: { type: "string" } },
+        toolId: { type: "string" },
+      },
+    },
+    {
+      name: "agent.tools.revoke",
+      description: "Revoke connector tool permissions from this agent.",
+      required: ["connectionId", "connectorId", "toolIds"],
+      properties: {
+        agentId: { type: "string" },
+        connectionId: { type: "string" },
+        connectorId: { type: "string" },
+        toolIds: { type: "array", items: { type: "string" } },
+        toolId: { type: "string" },
+      },
+    },
+    {
+      name: "agent.skill.attach",
+      description: "Attach a skill package to the agent.",
+      required: ["skillLabel"],
+      properties: {
+        agentId: { type: "string" },
+        skillLabel: { type: "string" },
+        skillId: { type: "string" },
+        label: { type: "string" },
+      },
+    },
+    {
+      name: "agent.skill.remove",
+      description: "Remove a skill from the agent.",
+      required: ["skillId"],
+      properties: {
+        agentId: { type: "string" },
+        skillId: { type: "string" },
+      },
+    },
+    {
+      name: "agent.knowledge.attach",
+      description: "Attach a knowledge source the agent may use.",
+      required: ["sourceId"],
+      properties: {
+        agentId: { type: "string" },
+        sourceId: { type: "string" },
+        sourceLabel: { type: "string" },
+        sourceKind: {
+          type: "string",
+          enum: ["knowledge_base", "file", "project_resource"],
+        },
+      },
+    },
+    {
+      name: "agent.knowledge.remove",
+      description: "Remove a knowledge assignment by knowledgeId.",
+      required: ["knowledgeId"],
+      properties: {
+        agentId: { type: "string" },
+        knowledgeId: { type: "string" },
+      },
+    },
+    {
+      name: "agent.validate",
+      description:
+        "Validate the agent workflow for incomplete steps and missing configuration.",
+      properties: { agentId: { type: "string" } },
+    },
+  ];
+
+  for (const t of agentTools) {
+    registerAiTool({
+      name: t.name,
+      description: t.description,
+      permission: { requireWorkspaceMember: true },
+      domain: "agent",
+      enabled: true,
+      parameters: {
+        type: "object",
+        required: t.required,
+        properties: t.properties,
+      },
+    });
+  }
+}
+
+registerAgentTools();
 
 function registerHealthTools() {
   const healthTools: Array<{
