@@ -180,7 +180,7 @@ export function Dropdown({
                 "fixed z-[200] isolate rounded-[10px] p-1.5 text-popover-foreground",
                 mobile
                   ? "mobile-dropdown-menu"
-                  : "light-surface bg-popover shadow-[0_12px_40px_oklch(0_0_0/0.12)] dark:bg-transparent dark:shadow-[0_12px_40px_oklch(0_0_0/0.22)]",
+                  : "bg-popover/95 shadow-[0_12px_40px_oklch(0_0_0/0.12)] backdrop-blur-xl dark:bg-popover/95 dark:shadow-[0_12px_40px_oklch(0_0_0/0.22)]",
                 menuClassName,
               )}
             >

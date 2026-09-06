@@ -11,10 +11,11 @@ type NewCanvasMenuProps = {
   onCreated: (projectId: string) => void;
   /** Icon-only plus trigger (toolbar). */
   icon?: boolean;
+  buttonLabel?: string;
 };
 
 /** Unified Canvas `+` menu — all Canvas project starts. */
-export function NewCanvasMenu({ onCreated, icon = true }: NewCanvasMenuProps) {
+export function NewCanvasMenu({ onCreated, icon = true, buttonLabel = "New" }: NewCanvasMenuProps) {
   const { openQuickSearchBrowser } = useApp();
   const { openCreate, busy, modal } = useCreateProjectFlow(onCreated);
   const options = canvasStartOptions();
@@ -32,7 +33,7 @@ export function NewCanvasMenu({ onCreated, icon = true }: NewCanvasMenuProps) {
             </DashBtn>
           ) : (
             <DashBtn primary onClick={toggle} label="New in Canvas">
-              New
+              {buttonLabel}
               <ChevronDown
                 className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
                 strokeWidth={1.8}

@@ -77,6 +77,16 @@ export function CreateDashboard() {
         item.updatedAt,
         showCreator ? creatorLabel(item.createdBy, actor.id) : null,
       ),
+      detail:
+        item.kind === "app"
+          ? "App"
+          : item.kind === "site"
+            ? "Website"
+            : item.space === "research"
+              ? "Search"
+              : item.space === "studio"
+                ? "Image"
+                : undefined,
       image: projectCoverImageSrc(item.cover) ?? item.cover,
       cover: item.cover,
       space: item.space,
@@ -101,7 +111,7 @@ export function CreateDashboard() {
       <DashFrame
         banner={false}
         title="Canvas"
-        subtitle="Search, apps, sites, and images."
+        subtitle="Search, apps, websites, and images."
       >
         <DashToolbar
           active={hoistFilters}
@@ -124,7 +134,7 @@ export function CreateDashboard() {
           {projectsLoading && !projectItems.length ? (
             <QuerySkeleton rows={2} />
           ) : (
-            <PreviewGrid
+          <PreviewGrid
               layout={spaceLayout}
               kind="product"
               items={projectItems}
@@ -137,6 +147,13 @@ export function CreateDashboard() {
                   actionLabel={copy.actionLabel}
                   busy={busy}
                   onAction={startCreate}
+                  actionContent={
+                    <NewCanvasMenu
+                      onCreated={openProject}
+                      icon={false}
+                      buttonLabel="New project"
+                    />
+                  }
                 />
               }
             />

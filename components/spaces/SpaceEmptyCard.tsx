@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +14,7 @@ export type SpaceEmptyCardProps = {
   actionLabel: string;
   onAction: () => void;
   busy?: boolean;
+  actionContent?: ReactNode;
   className?: string;
 };
 
@@ -37,7 +39,7 @@ const SPACE_VISUAL: Record<
   },
   studio: {
     gradient:
-      "linear-gradient(270deg, oklch(0.68 0.15 318) 0%, oklch(0.75 0.12 295) 18%, oklch(0.84 0.07 285 / 0.68) 38%, oklch(0.92 0.04 280 / 0.3) 58%, oklch(0.96 0.02 280 / 0.1) 74%, transparent 92%)",
+      "linear-gradient(270deg, oklch(0.62 0.16 270) 0%, oklch(0.7 0.14 255) 18%, oklch(0.82 0.08 245 / 0.68) 38%, oklch(0.92 0.04 245 / 0.3) 58%, oklch(0.96 0.02 245 / 0.1) 74%, transparent 92%)",
     words: ["Image", "App", "Website", "Video"],
     comingSoonWords: ["Video"],
   },
@@ -182,6 +184,7 @@ export function SpaceEmptyCard({
   actionLabel,
   onAction,
   busy = false,
+  actionContent,
   className,
 }: SpaceEmptyCardProps) {
   const visual = SPACE_VISUAL[space];
@@ -213,14 +216,16 @@ export function SpaceEmptyCard({
             {description}
           </p>
         </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onAction}
-          className="mt-4 inline-flex h-8 w-fit items-center justify-center rounded-[8px] bg-foreground px-3.5 text-[13px] font-medium tracking-[-0.01em] text-background transition-opacity duration-200 hover:opacity-90 disabled:opacity-60"
-        >
-          {actionLabel}
-        </button>
+        {actionContent ?? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onAction}
+            className="mt-4 inline-flex h-8 w-fit items-center justify-center rounded-[8px] bg-foreground px-3.5 text-[13px] font-medium tracking-[-0.01em] text-background transition-opacity duration-200 hover:opacity-90 disabled:opacity-60"
+          >
+            {actionLabel}
+          </button>
+        )}
       </div>
 
       <div className="relative z-10 hidden min-w-0 flex-1 items-center justify-end px-5 py-5 sm:flex sm:px-6 sm:py-6">
@@ -239,13 +244,13 @@ export const SPACE_EMPTY_COPY = {
   studio: {
     title: "Start on Canvas",
     description:
-      "Search, make an image, app, website, or agent — all from Canvas.",
+      "Search, make an image, app, or website — all from Canvas.",
     actionLabel: "New project",
   },
   build: {
     title: "Start on Canvas",
     description:
-      "Search, make an image, app, website, or agent — all from Canvas.",
+      "Search, make an image, app, or website — all from Canvas.",
     actionLabel: "New project",
   },
   research: {

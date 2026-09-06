@@ -508,6 +508,7 @@ function PreviewMeta({
   onOpen: (projectId: string) => void;
 }) {
   const mark = item.initial ?? item.name.trim().charAt(0).toUpperCase();
+  const projectType = item.detail ?? (item.space === "research" ? "Search" : item.space === "build" ? "Website" : item.space === "studio" ? "Image" : null);
   return (
     <div className="mt-2.5 flex items-center gap-2.5">
       <button
@@ -515,7 +516,7 @@ function PreviewMeta({
         onClick={() => onOpen(item.projectId)}
         className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
       >
-        <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium">
+        <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] bg-muted text-[11px] font-medium">
           {mark}
         </span>
         <span className="min-w-0">
@@ -523,7 +524,7 @@ function PreviewMeta({
             {item.name}
           </span>
           <span className="block truncate text-[12px] text-muted-foreground">
-            {item.meta}
+            {projectType ? `${projectType} · ${item.meta}` : item.meta}
           </span>
         </span>
       </button>

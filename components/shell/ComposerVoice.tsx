@@ -191,7 +191,7 @@ export function ComposerDictationButton({
       }}
       onClick={onClick}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:text-foreground",
+        "inline-flex shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-foreground/5 hover:text-foreground dark:hover:bg-white/5",
         compact ? "h-7 w-7" : "h-8 w-8",
         className,
       )}

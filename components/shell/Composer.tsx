@@ -1836,7 +1836,7 @@ export function Composer({
                 emphasize
                 onClick={() => toggleMenu("plus")}
               >
-                <Plus className="h-5 w-5" strokeWidth={2.25} />
+                <Plus className="h-5 w-5 text-muted-foreground" strokeWidth={2.25} />
               </ToolBtn>
               {!hasInlineAtoms ? (
                 <textarea
@@ -2292,7 +2292,7 @@ function ToolBtn({
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
         emphasize
-          ? "text-foreground hover:bg-foreground/10 dark:text-white dark:hover:bg-white/10"
+          ? "text-muted-foreground hover:bg-foreground/5 hover:text-foreground dark:text-muted-foreground dark:hover:bg-white/5 dark:hover:text-foreground"
           : "text-muted-foreground hover:bg-muted hover:text-foreground dark:hover:bg-background",
         // Keep plus on the same h-8 axis as mic/send; icon can still read larger.
         size === "sm" ? "h-7 w-7" : "h-8 w-8",

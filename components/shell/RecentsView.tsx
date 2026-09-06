@@ -25,13 +25,18 @@ export function RecentsView() {
   const mobile = useMobileShell();
   const [scope, setScope] = useState<string>("all");
 
-  const scopeOptions = [
-    { id: "all", label: "All" },
-    ...CHAT_SPACES.map((id) => ({
-      id,
-      label: navLabel(id as SpaceId) ?? id,
-    })),
-  ];
+  const scopeOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return [
+      { id: "all", label: "All" },
+      ...CHAT_SPACES.flatMap((id) => {
+        const label = navLabel(id as SpaceId) ?? id;
+        if (seen.has(label)) return [];
+        seen.add(label);
+        return [{ id, label }];
+      }),
+    ];
+  }, []);
 
   const { entries, loading, error } = useSpaceIndex({
     space: scope === "all" ? "all" : (scope as SpaceId),

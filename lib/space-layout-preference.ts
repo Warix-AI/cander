@@ -4,9 +4,9 @@ import { safeLocalStorageSetItem } from "@/lib/safe-local-storage";
 const STORAGE_KEY = "courier-space-layout";
 
 export function readSpaceLayoutPreference(): SpaceLayout {
-  if (typeof window === "undefined") return "list";
+  if (typeof window === "undefined") return "cards";
   const raw = window.localStorage.getItem(STORAGE_KEY);
-  return raw === "cards" ? "cards" : "list";
+  return raw === "list" ? "list" : "cards";
 }
 
 export function writeSpaceLayoutPreference(layout: SpaceLayout) {
