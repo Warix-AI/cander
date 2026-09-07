@@ -11,7 +11,7 @@ import {
 } from "react";
 import { Check, Ellipsis, LayoutGrid, List, SquarePen } from "lucide-react";
 import {
-  MobileBottomSheet,
+  MobileGlassActionsMenu,
   SheetAction,
 } from "@/components/browser/ProjectMobileSheets";
 import { mobileChromeButtonClass } from "@/lib/mobile-menu-styles";
@@ -164,8 +164,8 @@ export function MobileFilterBar({
 }
 
 /**
- * Single ⋯ control on space panels — New build/explore + filters/layout live
- * in one bottom sheet (replaces the old pen + ellipsis cluster).
+ * Header ⋯ / filter — opens a full-screen glass menu (not a bottom sheet
+ * or tiny popover). Covers the chrome so choices stay simple and readable.
  */
 export function MobilePanelActionsCluster({
   config,
@@ -179,6 +179,8 @@ export function MobilePanelActionsCluster({
   const layout = config.layout;
   const extras = config.extras ?? [];
   const composeLabel = config.newChatLabel ?? "New";
+  const title = config.connector?.title ?? "Actions";
+  const subtitle = config.connector?.syncHint ?? null;
 
   return (
     <>
@@ -192,40 +194,50 @@ export function MobilePanelActionsCluster({
         <Ellipsis className="h-5 w-5" strokeWidth={1.8} />
       </button>
 
-      <MobileBottomSheet
+      <MobileGlassActionsMenu
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
-        mode="space"
-        className="mobile-glass-segment mobile-actions-sheet"
+        title={title}
+        subtitle={subtitle}
       >
-        <div className="max-h-[min(85vh,720px)] overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
+        <div className="space-y-4">
           {config.connector ? (
-            <div className="mb-4">
-              <p className="px-3 text-[15px] font-medium">{config.connector.title}</p>
-              <p className="px-3 pb-3 pt-1 text-[13px] text-muted-foreground" aria-live="polite">{config.connector.syncHint}</p>
+            <div className="space-y-0.5">
               {config.connector.actions.map(({ label, icon: Icon, disabled, onClick }) => (
-                <button key={label} type="button" disabled={disabled}
-                  className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[15px] hover:bg-muted disabled:opacity-40"
-                  onClick={() => { setMenuOpen(false); onClick(); }}>
-                  <Icon className="h-4 w-4" />{label}
+                <button
+                  key={label}
+                  type="button"
+                  disabled={disabled}
+                  className={cn(
+                    "flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[16px] font-medium tracking-[-0.02em] hover:bg-muted disabled:opacity-40",
+                    /disconnect|uninstall|remove|delete/i.test(label) &&
+                      "text-destructive",
+                  )}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onClick();
+                  }}
+                >
+                  <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+                  {label}
                 </button>
               ))}
               {config.connector.controls}
             </div>
           ) : config.onNewChat ? (
-            <div className="mb-4 space-y-0.5">
-            <SheetAction
-              icon={SquarePen}
-              label={composeLabel}
-              onClick={() => {
-                setMenuOpen(false);
-                onCompose();
-              }}
-            />
-          </div>
+            <div className="space-y-0.5">
+              <SheetAction
+                icon={SquarePen}
+                label={composeLabel}
+                onClick={() => {
+                  setMenuOpen(false);
+                  onCompose();
+                }}
+              />
+            </div>
           ) : null}
           {scope ? (
-            <div className="mb-4">
+            <div>
               <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
                 {scope.label ?? "Filter"}
               </p>
@@ -242,7 +254,7 @@ export function MobilePanelActionsCluster({
             </div>
           ) : null}
           {scope?.value === "space" && extras.length ? (
-            <div className="mb-4">
+            <div>
               <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
                 Category
               </p>
@@ -262,7 +274,7 @@ export function MobilePanelActionsCluster({
             </div>
           ) : null}
           {layout ? (
-            <div className="mb-2">
+            <div>
               <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
                 Layout
               </p>
@@ -298,7 +310,7 @@ export function MobilePanelActionsCluster({
             </div>
           ) : null}
         </div>
-      </MobileBottomSheet>
+      </MobileGlassActionsMenu>
     </>
   );
 }

@@ -7,6 +7,7 @@ import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import {
   MobileBottomSheet,
+  MobileGlassActionsMenu,
   ProjectActionsSheetBody,
   ProjectMediaActionsSheetBody,
   ProjectRenameSheetBody,
@@ -557,11 +558,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
         </div>
       </header>
 
-      <MobileBottomSheet
+      <MobileGlassActionsMenu
         open={actionsOpen}
         onClose={() => setActionsOpen(false)}
-        mode="actions"
-        className="mobile-glass-segment mobile-actions-sheet"
+        title={mediaProjectActions ? "Image" : projectTitle}
       >
         {mediaProjectActions ? (
           <ProjectMediaActionsSheetBody
@@ -601,7 +601,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
             }}
           />
         )}
-      </MobileBottomSheet>
+      </MobileGlassActionsMenu>
 
       <MobileBottomSheet
         open={renameOpen}

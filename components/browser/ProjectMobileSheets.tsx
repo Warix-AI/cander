@@ -181,6 +181,103 @@ export function MobileBottomSheet({
   );
 }
 
+/**
+ * Full-screen glass actions menu for mobile header icons (⋯ / filter).
+ * Covers the chrome so the header “goes away”; simplified action list.
+ * Prefer this over bottom sheets and tiny anchored popovers.
+ */
+export function MobileGlassActionsMenu({
+  open,
+  onClose,
+  title,
+  subtitle,
+  children,
+  className,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title?: string;
+  subtitle?: string | null;
+  children: ReactNode;
+  className?: string;
+}) {
+  const titleId = useId();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  const panel = (
+    <div
+      className="fixed inset-0 z-[85] flex max-w-[100vw] flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+    >
+      <div
+        className={cn(
+          "mobile-glass-panel mobile-actions-sheet flex min-h-0 flex-1 flex-col overflow-hidden text-foreground",
+          "bg-[oklch(0.98_0.003_265/0.92)] dark:bg-[oklch(0.14_0.01_265/0.96)]",
+          className,
+        )}
+      >
+        <div className="flex shrink-0 items-center gap-2 px-3 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] pb-2">
+          <div className="min-w-0 flex-1 px-2">
+            {title ? (
+              <p
+                id={titleId}
+                className="truncate text-[17px] font-medium tracking-[-0.02em]"
+              >
+                {title}
+              </p>
+            ) : (
+              <span id={titleId} className="sr-only">
+                Actions
+              </span>
+            )}
+            {subtitle ? (
+              <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
+                {subtitle}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className={cn(
+              "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
+              "bg-muted/70 text-foreground transition-colors hover:bg-muted",
+            )}
+          >
+            <X className="h-5 w-5" strokeWidth={1.8} />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <NativeOverlayGate open={open && mounted} />
+      {open && mounted ? createPortal(panel, document.body) : null}
+    </>
+  );
+}
+
 type ActionsPane = "main" | "publish" | "domains";
 
 export function ProjectActionsSheetBody({

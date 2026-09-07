@@ -191,7 +191,7 @@ export function ConnectorDetailModal({
             ? "Connect"
             : "Install";
 
-  const showActionsMenu = !blocked && !(dedicated && mobile);
+  const showActionsMenu = !blocked && !dedicated;
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   useEffect(() => {
