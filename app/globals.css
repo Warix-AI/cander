@@ -263,6 +263,18 @@ html.dark.cander-narrow .mobile-glass-segment-active {
     inset 0 0 0 0.5px oklch(1 0 0 / 0.14);
 }
 
+html.dark.cander-mobile .mobile-actions-sheet,
+html.dark.cander-narrow .mobile-actions-sheet {
+  background: oklch(0.17 0.01 265 / 0.97);
+  color: oklch(0.98 0 0);
+  border-color: oklch(1 0 0 / 0.14);
+}
+
+html.dark.cander-mobile .mobile-actions-sheet button,
+html.dark.cander-narrow .mobile-actions-sheet button {
+  color: oklch(0.98 0 0);
+}
+
 html:not(.dark).cander-mobile .mobile-glass-card,
 html:not(.dark).cander-narrow .mobile-glass-card {
   background: oklch(1 0 0 / 0.68);

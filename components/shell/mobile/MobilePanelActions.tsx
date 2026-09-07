@@ -193,7 +193,7 @@ export function MobilePanelActionsCluster({
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         mode="space"
-        className="mobile-glass-segment"
+        className="mobile-glass-segment mobile-actions-sheet"
       >
         <div className="max-h-[min(85vh,720px)] overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
           {config.connector ? (
