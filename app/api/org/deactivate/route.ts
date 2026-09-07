@@ -145,27 +145,33 @@ export async function POST(request: Request) {
   }
 
   // Durable deactivation — keep membership + org_id so reactivate can restore.
+  // Update every Owner row for this profile so a duplicate membership cannot
+  // leave kind=org behind and revive the Organization UI.
   const { error: memberError } = await admin
     .from("org_members")
     .update({ kind: "personal" })
-    .eq("org_id", orgId)
-    .eq("profile_id", user.id);
+    .eq("profile_id", user.id)
+    .eq("role", "Owner");
   if (memberError) {
     return NextResponse.json({ error: memberError.message }, { status: 500 });
   }
 
-  const { data: verify } = await admin
+  const { data: verifyRows } = await admin
     .from("org_members")
-    .select("kind")
-    .eq("org_id", orgId)
+    .select("kind, org_id")
     .eq("profile_id", user.id)
-    .maybeSingle();
-  if (verify?.kind !== "personal") {
+    .eq("role", "Owner");
+  const stillActive = (verifyRows ?? []).some((row) => row.kind === "org");
+  if (stillActive || !(verifyRows ?? []).length) {
     return NextResponse.json(
       { error: "Could not persist organization deactivation." },
       { status: 500 },
     );
   }
 
-  return NextResponse.json({ ok: true, orgId, kind: "personal" });
+  return NextResponse.json({
+    ok: true,
+    orgId,
+    kind: "personal",
+  });
 }

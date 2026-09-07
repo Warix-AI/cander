@@ -103,8 +103,10 @@ export function memberToRow(member: Member): OrgMemberRow {
 }
 
 export function memberRowToMember(row: OrgMemberRow): Member {
+  // Prefer profile_id so the actor (auth user id) always matches the roster row.
+  const id = row.profile_id || row.id;
   return {
-    id: row.id,
+    id,
     name: row.name,
     email: row.email,
     short: row.short_name,

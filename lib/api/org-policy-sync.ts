@@ -131,24 +131,54 @@ export async function hydrateOrgPolicyFromRemote(ctx: WorkspaceCtx) {
     const bundle = await fetchPolicyBundle(workspaceIds);
     if (!isCurrentPinsScope(ctx, scopeVersion)) return;
 
-    if (bundle.orgMemberRows.length) {
-      const orgMembers = bundle.orgMemberRows.map((row) => {
-        const parsed = memberRowToMember(row);
-        if (parsed.id !== ctx.actorId) return parsed;
-        return applyOrgMembershipClientState(parsed);
-      });
+    const supabase = createSupabaseBrowserClient();
+    const { data: selfRows } = await supabase
+      .from("org_members")
+      .select("*")
+      .eq("profile_id", ctx.actorId)
+      .order("updated_at", { ascending: false });
+    const selfRow = ((selfRows ?? [])[0] ?? null) as OrgMemberRow | null;
+
+    let orgMembers =
+      bundle.orgMemberRows.length > 0
+        ? bundle.orgMemberRows.map((row) => {
+            const parsed = memberRowToMember(row);
+            const isSelf =
+              parsed.id === ctx.actorId ||
+              row.profile_id === ctx.actorId ||
+              row.id === ctx.actorId;
+            return isSelf ? applyOrgMembershipClientState(parsed) : parsed;
+          })
+        : getMembersSnapshot().map((member) =>
+            member.id === ctx.actorId
+              ? applyOrgMembershipClientState(member)
+              : member,
+          );
+
+    // Authoritative self row — never leave a stale kind=org from localStorage.
+    if (selfRow) {
+      const selfMember = applyOrgMembershipClientState(memberRowToMember(selfRow));
+      orgMembers = [
+        selfMember,
+        ...orgMembers.filter((member) => member.id !== selfMember.id),
+      ];
+    } else {
+      orgMembers = orgMembers.map((member) =>
+        member.id === ctx.actorId
+          ? applyOrgMembershipClientState({ ...member, kind: "personal", orgId: undefined })
+          : member,
+      );
+    }
+
+    if (
+      bundle.orgMemberRows.length ||
+      bundle.policyRows.length ||
+      bundle.knowledgeBaseRows.length ||
+      selfRow
+    ) {
       replacePolicyStoreState({
         policies: rebuildPoliciesFromRows(bundle),
         orgMembers,
-      });
-    } else if (bundle.policyRows.length || bundle.knowledgeBaseRows.length) {
-      replacePolicyStoreState({
-        policies: rebuildPoliciesFromRows(bundle),
-        orgMembers: getMembersSnapshot().map((member) =>
-          member.id === ctx.actorId
-            ? applyOrgMembershipClientState(member)
-            : member,
-        ),
       });
     }
   } finally {

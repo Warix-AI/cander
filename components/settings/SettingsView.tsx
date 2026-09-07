@@ -53,7 +53,7 @@ import { webAppOrgSettingsUrl } from "@/lib/plans";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { isMobileShell, openExternalUrl } from "@/lib/mobile-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { SettingsTab } from "@/lib/types";
+import type { Member, SettingsTab } from "@/lib/types";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 import { workspaceKindOf } from "@/lib/workspace-kind";
@@ -343,6 +343,67 @@ function OrganizationSettings({
     if (!inviteWarning) return;
     window.sessionStorage.removeItem("cander-invite-send-warning");
   }, [inviteWarning]);
+
+  // Reconcile roster with Supabase so a stale local kind=org cannot keep the
+  // Organization admin UI visible after deactivation.
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.access_token || cancelled) return;
+        const response = await fetch("/api/org/membership", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (!response.ok || cancelled) return;
+        const data = (await response.json()) as {
+          membership?: {
+            id: string;
+            orgId: string | null;
+            kind: "org" | "personal";
+            role: Member["role"];
+            seatStatus: Member["seatStatus"];
+            orgName: string | null;
+          } | null;
+        };
+        const membership = data.membership;
+        if (!membership) {
+          upsertOrgMember({
+            ...actor,
+            kind: "personal",
+            orgId: undefined,
+            orgSetupDeferred: actor.orgSetupDeferred,
+          });
+          return;
+        }
+        if (membership.orgId) persistOrgId(membership.orgId);
+        if (membership.orgName) persistOrgName(membership.orgName);
+        if (membership.kind === "personal") persistOrgSetupDeferred(false);
+        upsertOrgMember({
+          ...actor,
+          id: membership.id || actor.id,
+          kind: membership.kind,
+          orgId: membership.orgId || undefined,
+          role: membership.role || actor.role,
+          seatStatus: membership.seatStatus || actor.seatStatus,
+          managedByOrgName: membership.orgName || actor.managedByOrgName,
+          orgSetupDeferred:
+            membership.kind === "personal" ? false : actor.orgSetupDeferred,
+        });
+      } catch {
+        // non-fatal — hydrate path still applies
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only on mount / actor id change — avoid loops from upsertOrgMember.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reconcile once per session actor
+  }, [actor.id]);
 
   const activateOrganization = async () => {
     const name = activateName.trim() || actor.managedByOrgName?.trim() || orgDisplayName.trim();
@@ -860,6 +921,15 @@ function GeneralSettings({
                 onClick={() => {
                   clearProfilePhoto(actor.id);
                   setPhotoError(null);
+                  if (isSupabaseConfigured()) {
+                    void createSupabaseBrowserClient()
+                      .from("profiles")
+                      .update({ avatar_url: null })
+                      .eq("id", actor.id)
+                      .then(({ error }) => {
+                        if (error) setPhotoError(error.message);
+                      });
+                  }
                 }}
                 className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
               >
@@ -884,8 +954,20 @@ function GeneralSettings({
             .then((dataUrl) => {
               setProfilePhoto(actor.id, dataUrl);
               setPhotoError(null);
+              if (isSupabaseConfigured()) {
+                return createSupabaseBrowserClient()
+                  .from("profiles")
+                  .update({ avatar_url: dataUrl })
+                  .eq("id", actor.id)
+                  .then(({ error }) => {
+                    if (error) throw error;
+                  });
+              }
+              return undefined;
             })
             .catch((err: unknown) => {
+              if (photo) setProfilePhoto(actor.id, photo);
+              else clearProfilePhoto(actor.id);
               setPhotoError(
                 err instanceof Error ? err.message : "Could not upload image.",
               );
