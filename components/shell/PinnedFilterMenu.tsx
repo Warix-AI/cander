@@ -24,6 +24,7 @@ export function PinnedFilterMenu({
       placement="bottom"
       align="end"
       matchTrigger={false}
+      keepSidebarPeek
       menuClassName="!w-[13.5rem] !p-1"
       trigger={({ open, toggle }) => (
         <button

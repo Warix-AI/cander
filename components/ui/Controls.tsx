@@ -29,6 +29,7 @@ export function Dropdown({
   align = "start",
   matchTrigger = true,
   submenu = false,
+  keepSidebarPeek = false,
   onOpenChange,
 }: {
   trigger: (props: { open: boolean; toggle: () => void }) => ReactNode;
@@ -40,6 +41,11 @@ export function Dropdown({
   matchTrigger?: boolean;
   /** Nested flyout — parent menus ignore outside clicks into this portal. */
   submenu?: boolean;
+  /**
+   * Keep an already-open left-nav hover peek while this portaled menu is hovered
+   * (sidebar menus only). Must not open peek from unrelated project menus.
+   */
+  keepSidebarPeek?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -142,9 +148,9 @@ export function Dropdown({
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", onReposition);
       window.removeEventListener("scroll", onReposition, true);
-      releaseSidebarPeek();
+      if (keepSidebarPeek) releaseSidebarPeek();
     };
-  }, [open]);
+  }, [open, keepSidebarPeek]);
 
   useEffect(() => {
     onOpenChange?.(open);
@@ -163,10 +169,10 @@ export function Dropdown({
             <div
               ref={menuRef}
               role="menu"
-              data-sidebar-flyout=""
+              data-sidebar-flyout={keepSidebarPeek ? "" : undefined}
               data-dropdown-submenu={submenu ? "true" : undefined}
-              onMouseEnter={holdSidebarPeek}
-              onMouseLeave={releaseSidebarPeek}
+              onMouseEnter={keepSidebarPeek ? holdSidebarPeek : undefined}
+              onMouseLeave={keepSidebarPeek ? releaseSidebarPeek : undefined}
               style={
                 pos
                   ? {

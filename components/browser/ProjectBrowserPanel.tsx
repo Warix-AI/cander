@@ -466,9 +466,13 @@ export function ProjectBrowserPanel({
   };
 
   const selectTab = (id: string) => {
-    if (id === session.activeTabId) return;
+    if (!key) return;
+    const current = standalone
+      ? getStandaloneBrowserSession(key, session)
+      : getProjectBrowserSession(key, session);
+    if (id === current.activeTabId) return;
     const leaving =
-      session.tabs.find((item) => item.id === session.activeTabId) ?? null;
+      current.tabs.find((item) => item.id === current.activeTabId) ?? null;
     const adapter = getBrowserSurfaceAdapter();
     const pip = getBrowserPipSnapshot();
 
@@ -479,7 +483,10 @@ export function ProjectBrowserPanel({
         if (!pip.webEmbed) {
           await adapter.setPipTab?.(null);
         }
-        write({ ...session, activeTabId: id });
+        const latest = standalone
+          ? getStandaloneBrowserSession(key, current)
+          : getProjectBrowserSession(key, current);
+        write({ ...latest, activeTabId: id });
       })();
       return;
     }
@@ -509,12 +516,15 @@ export function ProjectBrowserPanel({
             sourceProjectId: projectId ?? null,
           });
         }
-        write({ ...session, activeTabId: id });
+        const latest = standalone
+          ? getStandaloneBrowserSession(key, current)
+          : getProjectBrowserSession(key, current);
+        write({ ...latest, activeTabId: id });
       })();
       return;
     }
 
-    write({ ...session, activeTabId: id });
+    write({ ...current, activeTabId: id });
   };
 
   const closeTab = (id: string) => {
@@ -667,7 +677,17 @@ export function ProjectBrowserPanel({
   const addStudioMediaTab = (
     kind: "studio-image" | "studio-document",
   ) => {
-    const tab = makeStudioMediaTab(kind);
+    const existingImages = session.tabs.filter(
+      (tab) => tab.kind === "studio-image",
+    ).length;
+    const title =
+      kind === "studio-image" && existingImages > 0
+        ? `Image ${existingImages + 1}`
+        : undefined;
+    const tab: ProjectBrowserTab = {
+      ...makeStudioMediaTab(kind, title),
+      ...(kind === "studio-image" ? { studioFresh: true } : {}),
+    };
     write({
       tabs: [...session.tabs, tab],
       activeTabId: tab.id,
@@ -968,6 +988,51 @@ export function ProjectBrowserPanel({
     return jobs;
   }, [thread]);
 
+  /** Stream path: model is creating an image before an image_generation block exists. */
+  const chatCreatingImage = useMemo(() => {
+    if (!thread) return false;
+    for (let i = thread.messages.length - 1; i >= 0; i--) {
+      const message = thread.messages[i]!;
+      if (message.role !== "assistant") continue;
+      if (message.status !== "pending" && message.status !== "streaming") {
+        break;
+      }
+      if (
+        (message.blocks ?? []).some(
+          (block) =>
+            block.type === "image_generation" &&
+            block.status === "generating",
+        )
+      ) {
+        return true;
+      }
+      const detail = message.activity?.detail?.trim().toLowerCase() ?? "";
+      if (
+        detail.includes("creating your image") ||
+        detail.includes("generating your image") ||
+        detail.includes("generating image")
+      ) {
+        return true;
+      }
+      break;
+    }
+    return false;
+  }, [thread]);
+
+  const latestChatImageSrc = useMemo(() => {
+    if (!thread) return null as string | null;
+    for (let i = thread.messages.length - 1; i >= 0; i--) {
+      const message = thread.messages[i]!;
+      for (let j = (message.blocks?.length ?? 0) - 1; j >= 0; j--) {
+        const block = message.blocks![j]!;
+        if (block.type === "image" && block.url?.trim()) {
+          return block.url.trim();
+        }
+      }
+    }
+    return null;
+  }, [thread]);
+
   const studioImageJobsSig = studioImageJobs
     .map(
       (job) =>
@@ -977,14 +1042,19 @@ export function ProjectBrowserPanel({
 
   const activeStudioChatImage = useMemo(() => {
     if (!studioImageJobs.length) {
-      return { src: null as string | null, generating: false };
+      return {
+        src: latestChatImageSrc,
+        generating: chatCreatingImage,
+      };
     }
     const boundId = active?.boundGenerationId?.trim();
     const boundJob = boundId
       ? studioImageJobs.find((job) => job.generationId === boundId)
       : undefined;
     const preferred = boundJob ?? studioImageJobs[studioImageJobs.length - 1]!;
-    const generating = preferred.status === "generating";
+    const generating =
+      preferred.status === "generating" ||
+      (chatCreatingImage && preferred.status !== "completed");
     let src =
       preferred.status === "completed"
         ? canvasSrcFromImageJob(preferred)
@@ -997,8 +1067,56 @@ export function ProjectBrowserPanel({
         if (src) break;
       }
     }
-    return { src, generating };
-  }, [studioImageJobs, active?.boundGenerationId, studioImageJobsSig]);
+    return { src: src ?? latestChatImageSrc, generating };
+  }, [
+    studioImageJobs,
+    active?.boundGenerationId,
+    studioImageJobsSig,
+    chatCreatingImage,
+    latestChatImageSrc,
+  ]);
+
+  const tabGeneratingIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const tab of session.tabs) {
+      if (tab.kind !== "studio-image" || tab.studioCleared) continue;
+      const boundId = tab.boundGenerationId?.trim();
+      if (boundId) {
+        const job = studioImageJobs.find((row) => row.generationId === boundId);
+        if (job?.status === "generating") {
+          ids.add(tab.id);
+          continue;
+        }
+      }
+      const empty =
+        !tab.url || tab.url === "" || tab.url === "about:blank";
+      if (
+        chatCreatingImage &&
+        empty &&
+        !boundId &&
+        (tab.id === session.activeTabId ||
+          tab.studioFresh ||
+          !session.tabs.some(
+            (other) =>
+              other.kind === "studio-image" &&
+              other.boundGenerationId &&
+              studioImageJobs.some(
+                (job) =>
+                  job.generationId === other.boundGenerationId &&
+                  job.status === "generating",
+              ),
+          ))
+      ) {
+        ids.add(tab.id);
+      }
+    }
+    return ids;
+  }, [
+    session.tabs,
+    session.activeTabId,
+    studioImageJobs,
+    chatCreatingImage,
+  ]);
 
   // Every chat image generation gets its own Studio canvas tab.
   // Do NOT re-steal focus while another canvas generates.
@@ -1036,13 +1154,58 @@ export function ProjectBrowserPanel({
       return tab;
     });
 
+    const preferEmptyUnboundIndex = (jobIndex: number) => {
+      const activeIdx = nextTabs.findIndex(
+        (tab) =>
+          tab.id === current.activeTabId && isEmptyUnboundStudioTab(tab),
+      );
+      if (activeIdx >= 0) return activeIdx;
+      // First generation belongs on the original first Image tab when empty.
+      if (jobIndex === 0) {
+        const firstStudio = nextTabs.findIndex(
+          (tab) => tab.kind === "studio-image",
+        );
+        if (
+          firstStudio >= 0 &&
+          isEmptyUnboundStudioTab(nextTabs[firstStudio]!)
+        ) {
+          return firstStudio;
+        }
+      }
+      // Prefer an intentional + Image tab over an older empty canvas.
+      const freshIdx = nextTabs.findIndex(
+        (tab) => isEmptyUnboundStudioTab(tab) && tab.studioFresh,
+      );
+      if (freshIdx >= 0) return freshIdx;
+      return nextTabs.findIndex(isEmptyUnboundStudioTab);
+    };
+
     studioImageJobs.forEach((job, index) => {
       const genId = job.generationId.trim();
-      const label = index === 0 ? "Image" : `Image ${index + 1}`;
       let targetIndex = nextTabs.findIndex(
         (tab) =>
           tab.kind === "studio-image" && tab.boundGenerationId === genId,
       );
+      let newlyBound = false;
+
+      const labelForTarget = (tabIndex: number) => {
+        const studioOrdinal = nextTabs
+          .filter((tab) => tab.kind === "studio-image")
+          .findIndex((tab) => tab.id === nextTabs[tabIndex]?.id);
+        return studioImageTabLabel(studioOrdinal >= 0 ? studioOrdinal : index);
+      };
+
+      const maybeRetitle = (tab: ProjectBrowserTab, tabIndex: number) => {
+        if (
+          tab.title === "Canvas" ||
+          tab.title === "Document" ||
+          tab.title === "Image" ||
+          /^Image \d+$/.test(tab.title)
+        ) {
+          return labelForTarget(tabIndex);
+        }
+        return tab.title;
+      };
 
       if (targetIndex < 0) {
         const seedUrl =
@@ -1067,48 +1230,49 @@ export function ProjectBrowserPanel({
           nextTabs[matchByUrl] = {
             ...matched,
             boundGenerationId: genId,
-            title:
-              matched.title === "Canvas" || matched.title === "Image"
-                ? label
-                : matched.title,
+            studioFresh: undefined,
+            title: maybeRetitle(matched, matchByUrl),
           };
           targetIndex = matchByUrl;
+          newlyBound = true;
           changed = true;
         } else {
-          const emptyIndex = nextTabs.findIndex(isEmptyUnboundStudioTab);
+          const emptyIndex = preferEmptyUnboundIndex(index);
           if (emptyIndex >= 0) {
             const empty = nextTabs[emptyIndex]!;
             nextTabs[emptyIndex] = {
               ...empty,
               boundGenerationId: genId,
-              title:
-                empty.title === "Canvas" || empty.title === "Image"
-                  ? label
-                  : empty.title,
+              studioFresh: undefined,
+              title: maybeRetitle(empty, emptyIndex),
             };
             targetIndex = emptyIndex;
+            newlyBound = true;
             changed = true;
-            if (
-              job.status === "generating" ||
-              index === studioImageJobs.length - 1
-            ) {
+            if (job.status === "generating") {
               focusTabId = empty.id;
             }
           } else {
             const tab: ProjectBrowserTab = {
-              ...makeStudioMediaTab("studio-image", label),
+              ...makeStudioMediaTab(
+                "studio-image",
+                studioImageTabLabel(
+                  nextTabs.filter((row) => row.kind === "studio-image").length,
+                ),
+              ),
               boundGenerationId: genId,
             };
             nextTabs = [...nextTabs, tab];
             targetIndex = nextTabs.length - 1;
+            newlyBound = true;
             changed = true;
-            if (
-              job.status === "generating" ||
-              index === studioImageJobs.length - 1
-            ) {
+            if (job.status === "generating") {
               focusTabId = tab.id;
             }
           }
+        }
+        if (newlyBound && job.status === "generating" && focusTabId == null) {
+          focusTabId = nextTabs[targetIndex]?.id ?? null;
         }
       }
 
@@ -1127,10 +1291,6 @@ export function ProjectBrowserPanel({
           existingUrl.length > 0 && existingUrl !== "about:blank";
         const sameImage =
           existingUrl === seedUrl || existingUrl === imageUrl;
-        // Seed from chat when empty. Also replace a stale/wrong URL that isn't
-        // a durable studio asset yet (attachment URLs / prior bind races).
-        // Prefer attachment URLs over inline data URLs so localStorage stays small.
-        // Never reseed a tab the user explicitly cleared.
         const shouldSeed =
           !target.studioCleared &&
           (!hasCanvas ||
@@ -1143,31 +1303,50 @@ export function ProjectBrowserPanel({
             ...target,
             boundGenerationId: genId,
             studioCleared: undefined,
+            studioFresh: undefined,
             url: seedUrl,
+            faviconUrl: seedUrl,
             history: [seedUrl],
             historyIndex: 0,
-            title:
-              target.title === "Canvas" ||
-              target.title === "Document" ||
-              target.title === "Image" ||
-              /^Image \d+$/.test(target.title)
-                ? label
-                : target.title,
+            title: maybeRetitle(target, targetIndex),
           };
           changed = true;
-        } else if (target.boundGenerationId !== genId && !target.studioCleared) {
-          nextTabs[targetIndex] = { ...target, boundGenerationId: genId };
-          changed = true;
+        } else {
+          const favicon =
+            target.faviconUrl?.trim() ||
+            (hasCanvas ? existingUrl : "") ||
+            seedUrl;
+          const needsFavicon =
+            Boolean(favicon) &&
+            favicon !== "about:blank" &&
+            target.faviconUrl !== favicon;
+          if (
+            (target.boundGenerationId !== genId && !target.studioCleared) ||
+            needsFavicon
+          ) {
+            nextTabs[targetIndex] = {
+              ...target,
+              boundGenerationId: genId,
+              studioFresh: undefined,
+              ...(needsFavicon ? { faviconUrl: favicon } : {}),
+            };
+            changed = true;
+          }
         }
       } else if (target.boundGenerationId !== genId && !target.studioCleared) {
-        nextTabs[targetIndex] = { ...target, boundGenerationId: genId };
+        nextTabs[targetIndex] = {
+          ...target,
+          boundGenerationId: genId,
+          studioFresh: undefined,
+        };
         changed = true;
       }
     });
 
-    // Only jump focus when creating/binding the newest job onto a fresh tab.
-    const activeTabId = focusTabId ?? current.activeTabId;
-    if (!changed && activeTabId === current.activeTabId) return;
+    // Never steal focus on URL/favicon sync — only when binding a generating job.
+    const latest = getProjectBrowserSession(key, current);
+    const activeTabId = focusTabId ?? latest.activeTabId;
+    if (!changed && activeTabId === latest.activeTabId) return;
     write({ tabs: nextTabs, activeTabId });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sync on job set + browser key
   }, [
@@ -1549,6 +1728,7 @@ export function ProjectBrowserPanel({
               onAddUrl={() => addUrlTab()}
               onAddProject={addProjectTab}
               extraProjects={extraProjects}
+              generatingTabIds={tabGeneratingIds}
               webOnly
             />
             {panelMode !== "collapsed" ? (
@@ -1646,6 +1826,7 @@ export function ProjectBrowserPanel({
             extraProjects={extraProjects}
             studioMode={isStudioProject}
             agentMode={isAgentProject}
+            generatingTabIds={tabGeneratingIds}
           />
           {readingPage ? (
             <span
@@ -1988,6 +2169,7 @@ export function ProjectBrowserPanel({
           onSelect={selectTab}
           onClose={closeTab}
           onAdd={openAddSheet}
+          generatingTabIds={tabGeneratingIds}
         />
       ) : null}
 
@@ -2248,6 +2430,7 @@ function ProjectBrowserBody({
     boundGenerationId?: string | null;
     aspectRatio?: string | null;
     studioCleared?: boolean | null;
+    studioFresh?: boolean | null;
   }) => {
     const sessionFallback =
       browserKey.projectId === STANDALONE_BROWSER_PROJECT_ID
@@ -2281,6 +2464,9 @@ function ProjectBrowserBody({
             url: patch.url,
             history: [patch.url],
             historyIndex: 0,
+            faviconUrl:
+              patch.url !== "about:blank" ? patch.url : next.faviconUrl,
+            studioFresh: undefined,
             ...(patch.title ? { title: patch.title } : {}),
           };
         } else {
@@ -2305,6 +2491,7 @@ function ProjectBrowserBody({
         next = {
           ...next,
           boundGenerationId: patch.boundGenerationId || undefined,
+          ...(patch.boundGenerationId ? { studioFresh: undefined } : {}),
         };
       }
       if (patch.aspectRatio !== undefined) {
@@ -2314,6 +2501,12 @@ function ProjectBrowserBody({
         next = {
           ...next,
           studioCleared: patch.studioCleared ? true : undefined,
+        };
+      }
+      if (patch.studioFresh !== undefined) {
+        next = {
+          ...next,
+          studioFresh: patch.studioFresh ? true : undefined,
         };
       }
       return repairAgentSurfaceTab(next);
@@ -2467,7 +2660,12 @@ function ProjectBrowserBody({
         boundGenerationId={tab.boundGenerationId}
         lockedAspectRatio={tab.aspectRatio}
         studioCleared={Boolean(tab.studioCleared)}
-        chatImageFallbackSrc={chatImageFallbackSrc}
+        studioFresh={Boolean(tab.studioFresh)}
+        chatImageFallbackSrc={
+          tab.studioFresh && !tab.boundGenerationId
+            ? null
+            : chatImageFallbackSrc
+        }
         chatImageGenerating={chatImageGenerating}
         onOpenUrl={openNewInAppTab}
         onSrcChange={(nextUrl, opts) =>
@@ -2479,11 +2677,14 @@ function ProjectBrowserBody({
                   boundGenerationId: null,
                   aspectRatio: null,
                   studioCleared: true,
+                  studioFresh: false,
                 }
               : {
                   url: nextUrl,
                   title: tab.title,
                   studioCleared: false,
+                  studioFresh: false,
+                  faviconUrl: nextUrl,
                 },
           )
         }
@@ -2534,6 +2735,7 @@ function ProjectTabStrip({
   studioMode = false,
   agentMode = false,
   webOnly = false,
+  generatingTabIds,
 }: {
   tabs: ProjectBrowserTab[];
   activeId: string;
@@ -2550,26 +2752,39 @@ function ProjectTabStrip({
   studioMode?: boolean;
   agentMode?: boolean;
   webOnly?: boolean;
+  generatingTabIds?: Set<string>;
 }) {
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {tabs.map((tab) => (
-        <ProjectTabButton
-          key={tab.id}
-          tab={tab}
-          active={tab.id === activeId}
-          project={projects.find((item) => item.id === tab.projectId)}
-          onSelect={() => onSelect(tab.id)}
-          onClose={() => onClose(tab.id)}
-          canClose={
-            !tab.pinned &&
-            !(
-              tab.kind === "agent-builder" &&
-              tabs.filter((item) => item.kind === "agent-builder").length <= 1
-            )
-          }
-        />
-      ))}
+    <div className="relative z-20 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {tabs.map((tab) => {
+        const studioIndex =
+          tab.kind === "studio-image"
+            ? tabs
+                .filter((item) => item.kind === "studio-image")
+                .findIndex((item) => item.id === tab.id)
+            : -1;
+        const label =
+          studioIndex >= 0 ? studioImageTabLabel(studioIndex) : undefined;
+        return (
+          <ProjectTabButton
+            key={tab.id}
+            tab={tab}
+            active={tab.id === activeId}
+            project={projects.find((item) => item.id === tab.projectId)}
+            generating={generatingTabIds?.has(tab.id) ?? false}
+            label={label}
+            onSelect={() => onSelect(tab.id)}
+            onClose={() => onClose(tab.id)}
+            canClose={
+              !tab.pinned &&
+              !(
+                tab.kind === "agent-builder" &&
+                tabs.filter((item) => item.kind === "agent-builder").length <= 1
+              )
+            }
+          />
+        );
+      })}
       {webOnly ? (
         <BrowserChromeTooltip label="New tab">
           <button
@@ -2604,6 +2819,7 @@ function ProjectMobileTabBar({
   onSelect,
   onClose,
   onAdd,
+  generatingTabIds,
 }: {
   tabs: ProjectBrowserTab[];
   activeId: string;
@@ -2612,8 +2828,15 @@ function ProjectMobileTabBar({
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onAdd: () => void;
+  generatingTabIds?: Set<string>;
 }) {
   const labelFor = (tab: ProjectBrowserTab) => {
+    if (tab.kind === "studio-image") {
+      const studioIndex = tabs
+        .filter((item) => item.kind === "studio-image")
+        .findIndex((item) => item.id === tab.id);
+      if (studioIndex >= 0) return studioImageTabLabel(studioIndex);
+    }
     if (!isPreviewTabKind(tab.kind)) return tab.title;
     if (tab.id === activeId && projectTitle) return projectTitle;
     const match = projects.find((item) => item.id === tab.projectId);
@@ -2631,10 +2854,12 @@ function ProjectMobileTabBar({
         const active = tab.id === activeId;
         const label = labelFor(tab);
         const canClose = !tab.pinned;
+        const generating = generatingTabIds?.has(tab.id) ?? false;
         return (
           <button
             key={tab.id}
             type="button"
+            aria-busy={generating || undefined}
             onClick={() => {
               if (!active) onSelect(tab.id);
             }}
@@ -2645,8 +2870,17 @@ function ProjectMobileTabBar({
                 : "text-muted-foreground hover:bg-muted/50",
             )}
           >
-            <TabGlyph tab={tab} className="h-3.5 w-3.5" />
-            <span className="truncate">{label}</span>
+            {generating ? (
+              <span
+                className="thinking-dot h-1.5 w-1.5 shrink-0 rounded-full bg-[#0b4fc4]"
+                aria-hidden
+              />
+            ) : (
+              <TabGlyph tab={tab} className="h-3.5 w-3.5" />
+            )}
+            <span className="truncate">
+              {generating ? "Generating…" : label}
+            </span>
             {canClose ? (
               <span
                 role="button"
@@ -2963,10 +3197,16 @@ function MobileBrowserNavSheet({
   );
 }
 
+function studioImageTabLabel(index: number) {
+  return index === 0 ? "Image" : `Image ${index + 1}`;
+}
+
 function ProjectTabButton({
   tab,
   active,
   project,
+  generating = false,
+  label,
   onSelect,
   onClose,
   canClose = true,
@@ -2974,37 +3214,53 @@ function ProjectTabButton({
   tab: ProjectBrowserTab;
   active: boolean;
   project?: SpaceProject;
+  generating?: boolean;
+  /** Override title (e.g. Image 2). */
+  label?: string;
   onSelect: () => void;
   onClose: () => void;
   canClose?: boolean;
 }) {
+  const title =
+    label ||
+    tab.title ||
+    (tab.url !== "about:blank" ? tab.url : "");
   return (
     <button
       type="button"
-      onClick={onSelect}
+      aria-busy={generating || undefined}
+      aria-pressed={active}
+      onClick={() => onSelect()}
       className={cn(
-        "group inline-flex h-7 max-w-[14rem] shrink-0 items-center gap-1.5 rounded-lg px-2 text-[12px] tracking-[-0.01em] transition-colors duration-200",
+        "group relative z-10 inline-flex h-7 max-w-[14rem] shrink-0 items-center gap-1.5 rounded-lg px-2 text-[12px] tracking-[-0.01em] transition-colors duration-200",
         active
           ? cn(BROWSER_CHROME_CHIP, "text-foreground")
           : cn("text-muted-foreground", BROWSER_CHROME_CHIP_HOVER, "hover:text-foreground"),
       )}
     >
-      <TabGlyph tab={tab} kind={project?.kind} />
+      {generating ? (
+        <span
+          className="thinking-dot h-1.5 w-1.5 shrink-0 rounded-full bg-[#0b4fc4]"
+          aria-hidden
+        />
+      ) : (
+        <TabGlyph tab={tab} kind={project?.kind} />
+      )}
       <span
         className={cn(
           "truncate",
-          !tab.title && tab.url === "about:blank" && "min-w-[2rem]",
+          !title && tab.url === "about:blank" && "min-w-[2rem]",
         )}
       >
-        {tab.title ||
-          (tab.url !== "about:blank" ? tab.url : "")}
+        {generating ? "Generating…" : title}
       </span>
       {canClose ? (
         <span
           role="button"
-          tabIndex={0}
-          aria-label={`Close ${tab.title || "tab"}`}
+          tabIndex={-1}
+          aria-label={`Close ${title || "tab"}`}
           onClick={(event) => {
+            event.preventDefault();
             event.stopPropagation();
             onClose();
           }}
@@ -3015,7 +3271,7 @@ function ProjectTabButton({
               onClose();
             }
           }}
-          className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 hover:bg-muted"
+          className="pointer-events-none inline-flex h-4 w-4 shrink-0 items-center justify-center rounded opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-muted"
         >
           <X className="h-2.5 w-2.5" strokeWidth={2} />
         </span>
@@ -3240,6 +3496,7 @@ function StudioMediaSurface({
   boundGenerationId,
   lockedAspectRatio,
   studioCleared = false,
+  studioFresh = false,
   chatImageFallbackSrc = null,
   chatImageGenerating = false,
   onSrcChange,
@@ -3253,6 +3510,8 @@ function StudioMediaSurface({
   boundGenerationId?: string;
   lockedAspectRatio?: string | null;
   studioCleared?: boolean;
+  /** + Image tab — do not inherit another canvas until bound/upload. */
+  studioFresh?: boolean;
   chatImageFallbackSrc?: string | null;
   chatImageGenerating?: boolean;
   onSrcChange: (next: string, opts?: { cleared?: boolean }) => void;
@@ -3301,8 +3560,10 @@ function StudioMediaSurface({
           return block;
         }
       }
-      // Stale bind — fall through to latest chat job.
+      return null;
     }
+    // Fresh + Image tabs stay empty until a job binds — don't claim the latest.
+    if (studioFresh) return null;
     for (let i = thread.messages.length - 1; i >= 0; i--) {
       const message = thread.messages[i]!;
       for (let j = (message.blocks?.length ?? 0) - 1; j >= 0; j--) {
@@ -3314,14 +3575,21 @@ function StudioMediaSurface({
       }
     }
     return null;
-  }, [kind, thread, boundGenerationId, studioCleared]);
+  }, [kind, thread, boundGenerationId, studioCleared, studioFresh]);
 
   const chatImageSrc = useMemo(() => {
     if (studioCleared) return null;
+    if (studioFresh && !boundGenerationId) return null;
     if (chatImageFallbackSrc?.trim()) return chatImageFallbackSrc.trim();
     if (!imageJob || imageJob.status !== "completed") return null;
     return canvasSrcFromImageJob(imageJob);
-  }, [chatImageFallbackSrc, imageJob, studioCleared]);
+  }, [
+    chatImageFallbackSrc,
+    imageJob,
+    studioCleared,
+    studioFresh,
+    boundGenerationId,
+  ]);
 
   // Prefer durable studio / optimistic preview URLs; otherwise live chat URL —
   // unless the user explicitly cleared the canvas.
@@ -3391,12 +3659,9 @@ function StudioMediaSurface({
       aspectRatio,
     });
     onSrcChange(stored.url);
-    if (source === "upload") {
-      void updateProject(ctx, projectId, { cover: stored.url }).catch(() => {});
-    } else if (
-      source === "generate" &&
-      project &&
-      studioCoverAcceptsFirstGenerated(project.cover)
+    if (
+      (source === "upload" || source === "generate") &&
+      (!project?.cover || studioCoverAcceptsFirstGenerated(project.cover))
     ) {
       void updateProject(ctx, projectId, { cover: stored.url }).catch(() => {});
     }
@@ -3417,20 +3682,22 @@ function StudioMediaSurface({
   useEffect(() => {
     if (kind !== "studio-image") return;
     if (studioCleared) return;
+    if (studioFresh && !boundGenerationId) return;
     if (!chatImageSrc) return;
     if (src && src !== "about:blank") return;
     onSrcChange(chatImageSrc);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once per chat URL
-  }, [kind, chatImageSrc, src, studioCleared]);
+  }, [kind, chatImageSrc, src, studioCleared, studioFresh, boundGenerationId]);
 
   // Restore empty canvases. Bound tabs use their chat generation URL — never
-  // steal the project's newest asset onto the wrong tab. Unbound empty tabs
-  // wait only while a generation is still in flight.
+  // steal the project's newest asset onto the wrong tab. Fresh + Image tabs
+  // stay empty until a generation binds or the user uploads.
   useEffect(() => {
     if (kind !== "studio-image" || !projectId) return;
     if (studioCleared) return;
     if (hasMedia || src === "about:blank") return;
     if (isGenerating || activity) return;
+    if (studioFresh && !boundGenerationId) return;
 
     if (boundGenerationId) {
       const fromJob = chatImageSrc || imageJob?.imageUrl?.trim();
@@ -3439,7 +3706,6 @@ function StudioMediaSurface({
         return;
       }
       if (imageJob?.status === "generating") return;
-      // Bound but job not ready yet — don't pull an unrelated project asset.
       if (!imageJob || imageJob.status !== "completed") return;
     } else if (thread) {
       const generatingChatImage = thread.messages.some((message) =>
@@ -3456,8 +3722,6 @@ function StudioMediaSurface({
       }
     }
 
-    // Fast path: tab already has a studio asset URL (handled via hasMedia).
-    // Only fetch latest when the canvas is truly empty.
     let cancelled = false;
     void fetchLatestStudioProjectAsset({ workspaceId, projectId })
       .then((asset) => {
@@ -3484,6 +3748,7 @@ function StudioMediaSurface({
     chatImageSrc,
     thread,
     studioCleared,
+    studioFresh,
   ]);
 
   useEffect(() => {
@@ -3653,9 +3918,14 @@ function StudioMediaSurface({
           });
           revokeOptimisticUrl();
           onSrcChange(stored.url);
-          void updateProject(ctx, projectId, { cover: stored.url }).catch(
-            () => {},
-          );
+          if (
+            !project?.cover ||
+            studioCoverAcceptsFirstGenerated(project.cover)
+          ) {
+            void updateProject(ctx, projectId, { cover: stored.url }).catch(
+              () => {},
+            );
+          }
         } catch (err) {
           revokeOptimisticUrl();
           setError(
@@ -3690,12 +3960,19 @@ function StudioMediaSurface({
     setError(null);
     setNaturalRatio({ w: 1, h: 1 });
     revokeOptimisticUrl();
-    const assetId = studioAssetIdFromClientUrl(src) || studioAssetIdFromClientUrl(displaySrc);
+    const assetId =
+      studioAssetIdFromClientUrl(src) || studioAssetIdFromClientUrl(displaySrc);
+    const wasCover =
+      Boolean(project?.cover) &&
+      (project?.cover === src ||
+        project?.cover === displaySrc ||
+        project?.cover === chatImageSrc);
     onSrcChange("about:blank", { cleared: true });
     if (assetId) {
       void deleteStudioProjectAsset(assetId).catch(() => {});
     }
-    if (projectId) {
+    // Only clear the project card cover when this tab's image was the cover.
+    if (projectId && wasCover) {
       void updateProject(ctx, projectId, { cover: "" }).catch(() => {});
     }
   };
@@ -3958,6 +4235,32 @@ function TabGlyph({
     return <MousePointer2 className={cn("h-3.5 w-3.5 shrink-0", className)} strokeWidth={1.6} />;
   }
   if (tab.kind === "studio-image") {
+    const thumb =
+      (tab.faviconUrl && tab.faviconUrl !== "about:blank"
+        ? tab.faviconUrl
+        : null) ||
+      (tab.url &&
+      tab.url !== "about:blank" &&
+      tab.url.trim() &&
+      (tab.url.startsWith("http") ||
+        tab.url.startsWith("data:image") ||
+        tab.url.startsWith("blob:") ||
+        isStudioAssetUrl(tab.url))
+        ? tab.url
+        : null);
+    if (thumb) {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element -- tiny tab favicon from canvas URL
+        <img
+          src={thumb}
+          alt=""
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 rounded-[3px] object-cover",
+            className,
+          )}
+        />
+      );
+    }
     return <Image className={cn("h-3.5 w-3.5 shrink-0", className)} strokeWidth={1.6} />;
   }
   if (tab.kind === "studio-video") {

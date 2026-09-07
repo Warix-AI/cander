@@ -102,6 +102,7 @@ export function RecentsView() {
         >
           <ScopeToggle
             wrap
+            glass
             value={scope}
             onChange={setScope}
             options={scopeOptions}

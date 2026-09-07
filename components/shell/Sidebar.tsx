@@ -116,6 +116,7 @@ export function Sidebar() {
   const peekExitTimer = useRef<number | null>(null);
   const edgeRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const peekRef = useRef(false);
 
   useEffect(() => {
     if (sidebarOpen) {
@@ -135,6 +136,7 @@ export function Sidebar() {
   }, []);
 
   const peeking = peek && !sidebarOpen;
+  peekRef.current = peek;
 
   useEffect(() => {
     setSidebarPeeking(peeking);
@@ -186,6 +188,8 @@ export function Sidebar() {
   useEffect(() => {
     return subscribeSidebarPeekHold(() => {
       if (sidebarOpen) return;
+      // Only keep an already-open peek — never open from project / content menus.
+      if (!peekRef.current) return;
       clearPeekClose();
       clearPeekExit();
       setPeek(true);

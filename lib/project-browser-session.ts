@@ -41,6 +41,11 @@ export type ProjectBrowserTab = {
    * until they upload/replace or a new generation binds.
    */
   studioCleared?: boolean;
+  /**
+   * Created via + Image — stay empty until this tab binds a generation or
+   * the user uploads. Prevents inheriting another tab’s canvas.
+   */
+  studioFresh?: boolean;
   /** Locked canvas aspect (e.g. "3:4") after resize — survives remounts. */
   aspectRatio?: string | null;
   /** Public share id for markdown document tabs → {id}.cander.app */
@@ -506,7 +511,18 @@ function persistKey(key: string, session: ProjectBrowserSession) {
             url: "",
             history: [""],
             historyIndex: 0,
+            faviconUrl:
+              typeof tab.faviconUrl === "string" &&
+              tab.faviconUrl.startsWith("data:")
+                ? undefined
+                : tab.faviconUrl,
           };
+        }
+        if (
+          typeof tab.faviconUrl === "string" &&
+          tab.faviconUrl.startsWith("data:")
+        ) {
+          return { ...next, faviconUrl: undefined };
         }
         return next;
       }),

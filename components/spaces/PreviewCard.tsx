@@ -42,9 +42,11 @@ import {
   GENERATED_FIRST_COVER,
   projectCoverGradientClass,
   projectCoverImageSrc,
+  studioCoverNeedsAssetResolve,
 } from "@/lib/project-cover";
 import {
   fetchFirstStudioGeneratedAsset,
+  fetchLatestStudioProjectAsset,
   uploadStudioProjectAsset,
 } from "@/lib/studio-assets-client";
 import type { SpaceId, SpaceLayout } from "@/lib/types";
@@ -244,6 +246,50 @@ function PreviewFace({
       .catch(() => {});
   };
 
+  const staticCover =
+    projectCoverImageSrc(item.cover) ??
+    (item.image &&
+    !item.image.startsWith("gradient:") &&
+    item.image !== GENERATED_FIRST_COVER
+      ? item.image
+      : undefined);
+  const [resolvedStudioCover, setResolvedStudioCover] = useState<
+    string | undefined
+  >(staticCover);
+
+  useEffect(() => {
+    setResolvedStudioCover(staticCover);
+    if (staticCover) return;
+    if (item.space !== "studio") return;
+    if (!studioCoverNeedsAssetResolve(item.cover)) return;
+    let cancelled = false;
+    const preferFirst = item.cover === GENERATED_FIRST_COVER;
+    void (async () => {
+      try {
+        const first = await fetchFirstStudioGeneratedAsset({
+          workspaceId: ctx.workspaceId,
+          projectId: item.projectId,
+        });
+        if (cancelled) return;
+        if (first?.url) {
+          setResolvedStudioCover(first.url);
+          return;
+        }
+        if (preferFirst) return;
+        const latest = await fetchLatestStudioProjectAsset({
+          workspaceId: ctx.workspaceId,
+          projectId: item.projectId,
+        });
+        if (!cancelled && latest?.url) setResolvedStudioCover(latest.url);
+      } catch {
+        // Keep empty preview.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [staticCover, item.cover, item.projectId, item.space, ctx.workspaceId]);
+
   // Explore cards: peach wash + wide paper; paper shows first-site cover when present.
   // Create (studio/build) uses full-bleed product covers — never the paper frame.
   if (
@@ -317,10 +363,8 @@ function PreviewFace({
   }
 
   // Build / product: full-bleed live preview cover (no paper frame).
-  const coverImage =
-    projectCoverImageSrc(item.cover) ??
-    (item.image && !item.image.startsWith("gradient:") ? item.image : undefined);
   const coverGradient = projectCoverGradientClass(item.cover ?? item.image);
+  const coverImage = resolvedStudioCover ?? staticCover;
 
   if (coverGradient && !coverImage) {
     return (
@@ -628,7 +672,31 @@ function PreviewActions({
   };
 
   const useLivePreview = () => {
-    void applyCover("");
+    void (async () => {
+      if (isStudio) {
+        try {
+          const first = await fetchFirstStudioGeneratedAsset({
+            workspaceId,
+            projectId: item.projectId,
+          });
+          if (first?.url) {
+            await applyCover(first.url);
+            return;
+          }
+          const latest = await fetchLatestStudioProjectAsset({
+            workspaceId,
+            projectId: item.projectId,
+          });
+          if (latest?.url) {
+            await applyCover(latest.url);
+            return;
+          }
+        } catch {
+          // Fall through to first-tab sentinel.
+        }
+      }
+      await applyCover("");
+    })();
   };
 
   const choosePreviewPhoto = () => {
@@ -899,7 +967,7 @@ function PreviewActions({
       ) : (
         <Dropdown
           align="end"
-          menuClassName="min-w-[9.5rem]"
+          menuClassName="menu-glass-surface min-w-[9.5rem] !p-1.5"
           matchTrigger={false}
           trigger={({ toggle }) => (
             <button

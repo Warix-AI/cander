@@ -79,6 +79,7 @@ export function AccountMenu() {
       placement="top"
       align="start"
       matchTrigger
+      keepSidebarPeek
       menuClassName="!p-1 menu-glass-surface"
       trigger={({ open, toggle }) => (
         <button

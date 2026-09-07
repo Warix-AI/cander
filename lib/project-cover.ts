@@ -42,6 +42,14 @@ export function projectCoverImageSrc(cover: string | undefined | null): string |
   return undefined;
 }
 
+/** True when the card should resolve a Studio asset for live / first-generated preview. */
+export function studioCoverNeedsAssetResolve(
+  cover: string | undefined | null,
+): boolean {
+  const parsed = parseProjectCover(cover);
+  return parsed.mode === "first-tab" || parsed.mode === "generated-first";
+}
+
 export function projectCoverGradientClass(
   cover: string | undefined | null,
 ): string | undefined {

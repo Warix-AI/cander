@@ -6,7 +6,8 @@ const peekListeners = new Set<Listener>();
 
 let peeking = false;
 
-/** Keep a hover-peeked sidebar open (e.g. while a portaled menu is hovered). */
+/** Keep a hover-peeked sidebar open (e.g. while a sidebar portaled menu is hovered).
+ * Does not open peek from a closed state — see Sidebar subscribeSidebarPeekHold. */
 export function holdSidebarPeek() {
   holdListeners.forEach((listener) => listener());
 }

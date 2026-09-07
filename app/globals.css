@@ -661,33 +661,25 @@ html.dark .courier-app-appearance[data-palette="mono"] {
   -electron-corner-smoothing: system-ui;
 }
 
-html:not(.dark) .menu-glass-surface {
+html:not(.dark) .menu-glass-surface,
+html:not(.dark) .light-surface.menu-glass-surface {
   border-color: oklch(0 0 0 / 0.07);
   background: oklch(0.985 0.003 265 / 0.72) !important;
+  background-color: oklch(0.985 0.003 265 / 0.72) !important;
   box-shadow:
     inset 0 0 0 0.5px oklch(1 0 0 / 0.58),
     0 14px 38px oklch(0 0 0 / 0.08);
 }
 
-/* The command search is a floating glass sheet: keep the page visible through
-   the surface while preserving enough contrast for the result list. */
-.search-modal-glass {
-  -webkit-backdrop-filter: blur(22px) saturate(135%);
-  backdrop-filter: blur(22px) saturate(135%);
-  border: 0 !important;
-  border-radius: 20px !important;
-  background: oklch(1 0 0 / 0.45) !important;
+html.dark .menu-glass-surface,
+html.dark .light-surface.menu-glass-surface {
+  border-color: oklch(1 0 0 / 0.08);
+  background: oklch(0.14 0.01 265 / 0.78) !important;
+  background-color: oklch(0.14 0.01 265 / 0.78) !important;
+  background-image: none !important;
   box-shadow:
-    inset 0 1px 0 oklch(1 0 0 / 0.56),
-    0 12px 32px oklch(0.06 0.02 265 / 0.08);
-  -electron-corner-smoothing: system-ui;
-}
-
-.dark .search-modal-glass {
-  background: oklch(1 0 0 / 0.06) !important;
-  box-shadow:
-    inset 0 1px 0 oklch(1 0 0 / 0.08),
-    0 12px 32px oklch(0 0 0 / 0.16);
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.05),
+    0 14px 38px oklch(0 0 0 / 0.16);
 }
 
 /* Settings content surfaces — glass panels are limited to the screen body;

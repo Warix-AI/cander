@@ -353,7 +353,7 @@ function WorkRowActions({
       ) : (
         <Dropdown
           align="end"
-          menuClassName="min-w-[10rem]"
+          menuClassName="menu-glass-surface min-w-[10rem] !p-1.5"
           matchTrigger={false}
           trigger={({ toggle }) => (
             <button

@@ -108,6 +108,17 @@ export function detectImageGenerationIntent(
     ) {
       return true;
     }
+    // “Make me a car with mountains…” — imperative visual ask without saying “image”.
+    if (
+      /\b(generate|create|make|draw|render|paint|design|sketch|illustrate|imagine)\b[\s\S]{0,28}\b(me |us )?(an? |a |the )/.test(
+        t,
+      ) &&
+      !/\b(app|website|site|webpage|landing page|document|spreadsheet|email|message|plan|list|summary|code|script|agent|workflow|automation|layout|page)\b/.test(
+        t,
+      )
+    ) {
+      return true;
+    }
   }
 
   return false;
