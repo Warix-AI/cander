@@ -827,6 +827,10 @@ export function Composer({
   // Sticky keyboard on mobile new chat until the first send.
   // Focus once when chat owns the screen — never fight blur/hide (that flicker
   // glitches the menu swipe). Hold focus by canceling outside taps instead.
+  // Keep autoFocus prop stable across menu/panel so we can detect panel→chat
+  // and reopen after the pager finishes; only raise while chat is visible.
+  const raiseKeyboard =
+    autoFocus && (!mobile || mobileSurface === "chat");
   const prevSurfaceRef = useRef(mobileSurface);
   useEffect(() => {
     const fromMenu = prevSurfaceRef.current === "menu";
@@ -841,7 +845,7 @@ export function Composer({
 
     const focusComposer = () => {
       if (suppressAutoFocusRef.current) return;
-      if (mobileSurface !== "chat") return;
+      if (prevSurfaceRef.current !== "chat") return;
       const el =
         textRef.current ??
         (document.querySelector(
@@ -855,9 +859,11 @@ export function Composer({
       }
     };
 
-    // Wait for menu/panel slide to finish before raising the keyboard.
-    const delay = fromMenu || fromPanel ? 520 : 0;
-    const openId = window.setTimeout(focusComposer, delay);
+    // Menu overlays; panel slides the chat pane back on-screen. Retry so iOS
+    // raises the keyboard after pointer-events / transform settle.
+    const delays =
+      fromMenu || fromPanel ? [560, 720, 920] : [0, 80];
+    const openIds = delays.map((ms) => window.setTimeout(focusComposer, ms));
 
     const holdKeyboard = (event: TouchEvent) => {
       if (suppressAutoFocusRef.current) return;
@@ -876,7 +882,7 @@ export function Composer({
     });
 
     return () => {
-      window.clearTimeout(openId);
+      for (const id of openIds) window.clearTimeout(id);
       document.removeEventListener("touchstart", holdKeyboard, true);
     };
   }, [autoFocus, mobile, mobileSurface, overlay, view, thread?.id]);
@@ -1709,7 +1715,7 @@ export function Composer({
                   value={value}
                   rows={1}
                   placeholder={hint}
-                  autoFocus={autoFocus}
+                  autoFocus={raiseKeyboard}
                   onFocus={() => {
                     suppressAutoFocusRef.current = false;
                     onFocus?.();
@@ -1907,7 +1913,7 @@ export function Composer({
                   value={value}
                   rows={1}
                   placeholder={hint}
-                  autoFocus={autoFocus}
+                  autoFocus={raiseKeyboard}
                   enterKeyHint="send"
                   autoComplete="off"
                   onFocus={() => {
@@ -1965,7 +1971,7 @@ export function Composer({
                 <ComposerEditableSurface
                   blocks={blocks}
                   placeholder={hint}
-                  autoFocus={autoFocus}
+                  autoFocus={raiseKeyboard}
                   disabled={dictatingActive}
                   style={{ maxHeight: `${composerMaxLines * 1.25}rem` }}
                   className="min-h-8 overflow-y-auto py-[6px] text-[16px] leading-5 sm:text-[14px]"

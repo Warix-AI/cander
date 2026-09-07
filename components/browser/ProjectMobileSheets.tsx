@@ -139,7 +139,10 @@ export function MobileBottomSheet({
         aria-modal="true"
         aria-labelledby={titleId}
         className={cn(
-          "mobile-glass-panel relative z-10 flex w-full max-w-[100vw] flex-col overflow-hidden border border-border shadow-[0_-12px_40px_rgba(0,0,0,0.18)]",
+          "mobile-glass-panel relative z-10 flex w-full max-w-[100vw] flex-col overflow-hidden border border-border text-foreground shadow-[0_-12px_40px_rgba(0,0,0,0.18)]",
+          // Dark material must win even if glass CSS fails to match — light
+          // frosted + dark tokens made titles nearly invisible.
+          "dark:border-white/10 dark:bg-[oklch(0.17_0.01_265/0.94)] dark:text-[oklch(0.98_0_0)] dark:shadow-[0_-12px_40px_rgba(0,0,0,0.45)]",
           "rounded-t-[22px]",
           heightClass,
           className,

@@ -107,13 +107,9 @@ export function ChatColumn() {
   hasChatTurnsRef.current = hasChatTurns;
   // Empty new chat → autofocus composer on mobile. Reading an existing
   // thread or any overlay/browser surface must not steal focus.
-  const autofocusComposer =
-    !browserMode &&
-    !hasChatTurns &&
-    !overlay &&
-    // Chat stays mounted under menu/panel — only raise the keyboard when chat
-    // actually owns the screen (not menu peek or a pinned panel).
-    (!mobile || mobileSurface === "chat");
+  // Keep this stable across menu/panel swipes — Composer only focuses while
+  // chat owns the screen, so gating here was breaking panel→chat reopen.
+  const autofocusComposer = !browserMode && !hasChatTurns && !overlay;
   const showSpaceNewPrompt =
     drafting && Boolean(spaceId) && !hasChatTurns && !browserMode;
   const showLanding =
@@ -151,25 +147,35 @@ export function ChatColumn() {
     scrollUnsubRef.current = null;
     scrollParentRef.current = node;
     if (!node) return;
-    let lastScrollTop = node.scrollTop;
+    let touchStartY = 0;
+    let dismissedThisGesture = false;
     const onScroll = () => {
       const distanceFromBottom =
         node.scrollHeight - node.scrollTop - node.clientHeight;
       userPinnedScroll.current = distanceFromBottom > 80;
-      // Active thread: only a downward finger swipe (scrollTop increases —
-      // toward newer / bottom) dismisses the keyboard. Swiping up through
-      // older turns must keep it open.
-      if (mobile && hasChatTurnsRef.current) {
-        const delta = node.scrollTop - lastScrollTop;
-        lastScrollTop = node.scrollTop;
-        if (delta > 28) dismissNativeKeyboard();
-      } else {
-        lastScrollTop = node.scrollTop;
+    };
+    // Dismiss keyboard only when the finger moves down. Swiping up through
+    // older turns (or bouncing at the bottom) must keep the keyboard open.
+    const onTouchStart = (event: TouchEvent) => {
+      touchStartY = event.touches[0]?.clientY ?? 0;
+      dismissedThisGesture = false;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (!mobile || !hasChatTurnsRef.current || dismissedThisGesture) return;
+      const y = event.touches[0]?.clientY ?? touchStartY;
+      if (y - touchStartY > 36) {
+        dismissedThisGesture = true;
+        dismissNativeKeyboard();
       }
     };
     node.addEventListener("scroll", onScroll, { passive: true });
-    scrollUnsubRef.current = () =>
+    node.addEventListener("touchstart", onTouchStart, { passive: true });
+    node.addEventListener("touchmove", onTouchMove, { passive: true });
+    scrollUnsubRef.current = () => {
       node.removeEventListener("scroll", onScroll);
+      node.removeEventListener("touchstart", onTouchStart);
+      node.removeEventListener("touchmove", onTouchMove);
+    };
   };
 
   useEffect(() => () => scrollUnsubRef.current?.(), []);

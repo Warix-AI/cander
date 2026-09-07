@@ -409,15 +409,22 @@ html.dark.cander-narrow .mobile-glass-bar {
 
 /* Match light-mode frosted sheet opacity; dark fill so foreground text stays readable. */
 html.dark.cander-mobile .mobile-glass-panel,
-html.dark.cander-narrow .mobile-glass-panel {
-  background: oklch(0.18 0.01 265 / 0.9);
-  color: var(--foreground);
-  border-color: oklch(1 0 0 / 0.1);
+html.dark.cander-narrow .mobile-glass-panel,
+html.dark .mobile-glass-panel {
+  background: oklch(0.17 0.01 265 / 0.94) !important;
+  color: oklch(0.98 0 0) !important;
+  border-color: oklch(1 0 0 / 0.12) !important;
   -webkit-backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
   backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
   box-shadow:
-    -6px 0 28px oklch(0 0 0 / 0.4),
-    inset 0 0 0 0.5px oklch(1 0 0 / 0.1);
+    -6px 0 28px oklch(0 0 0 / 0.45),
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.12);
+}
+
+html.dark.cander-mobile .mobile-glass-panel .text-muted-foreground,
+html.dark.cander-narrow .mobile-glass-panel .text-muted-foreground,
+html.dark .mobile-glass-panel .text-muted-foreground {
+  color: oklch(0.72 0 0) !important;
 }
 
 html.dark.cander-mobile .mobile-glass-segment,

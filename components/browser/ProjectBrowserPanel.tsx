@@ -2210,19 +2210,19 @@ export function ProjectBrowserPanel({
         mode="info"
       >
         <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
-          <p className="px-1 text-[17px] font-medium tracking-[-0.02em]">
+          <p className="px-1 text-[17px] font-medium tracking-[-0.02em] text-foreground">
             Delete image?
           </p>
           <p className="mt-1 px-1 text-[13px] text-muted-foreground">
             This removes the tab from the project. You can’t undo this.
           </p>
-          <div className="mt-4 flex items-center gap-3 rounded-[14px] bg-muted/50 px-3 py-3 dark:bg-white/[0.06]">
+          <div className="mt-4 flex items-center gap-3 rounded-[14px] bg-muted/50 px-3 py-3 dark:bg-white/[0.08]">
             {closeConfirmTab ? (
               <TabGlyph tab={closeConfirmTab} className="h-8 w-8 rounded-[8px]" />
             ) : (
               <Image className="h-8 w-8 text-muted-foreground" strokeWidth={1.6} />
             )}
-            <span className="min-w-0 flex-1 truncate text-[15px] font-medium tracking-[-0.01em]">
+            <span className="min-w-0 flex-1 truncate text-[15px] font-medium tracking-[-0.01em] text-foreground">
               {closeConfirmLabel}
             </span>
           </div>
