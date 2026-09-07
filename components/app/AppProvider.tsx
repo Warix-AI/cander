@@ -205,7 +205,6 @@ import {
   upsertPersistentProjectThread,
   upsertPersistentConnectorThread,
 } from "@/lib/persistent-chat";
-import { MOBILE_PAGER_MS } from "@/lib/mobile-menu-styles";
 import { dismissNativeKeyboard } from "@/lib/mobile-shell";
 import {
   requestMobileSurfaceEnter,

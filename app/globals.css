@@ -258,11 +258,14 @@ html.cander-narrow .mobile-glass-dock::before {
 
 html:not(.dark).cander-mobile .composer-shell,
 html:not(.dark).cander-narrow .composer-shell {
-  background-color: oklch(1 0 0) !important;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  border: none !important;
-  box-shadow: none !important;
+  background-color: oklch(1 0 0 / 0.78) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(145%);
+  backdrop-filter: blur(20px) saturate(145%);
+  border: 1px solid oklch(0 0 0 / 0.1) !important;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.04),
+    0 8px 24px oklch(0 0 0 / 0.08),
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.7) !important;
 }
 
 html:not(.dark).cander-mobile .composer-dock,
@@ -1190,17 +1193,24 @@ select:focus-visible {
 }
 
 html:not(.dark) .composer-shell {
-  /* White fill, flat — no stroke / elevation in light mode. */
-  background-color: oklch(1 0 0) !important;
-  border: none !important;
-  box-shadow: none !important;
+  background-color: oklch(1 0 0 / 0.82) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(145%);
+  backdrop-filter: blur(20px) saturate(145%);
+  border: 1px solid oklch(0 0 0 / 0.1) !important;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.04),
+    0 8px 24px oklch(0 0 0 / 0.08),
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.7) !important;
   outline: none;
 }
 
 html:not(.dark) .composer-shell:hover,
 html:not(.dark) .composer-shell:focus-within {
-  border: none !important;
-  box-shadow: none !important;
+  border-color: oklch(0 0 0 / 0.14) !important;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.05),
+    0 10px 28px oklch(0 0 0 / 0.1),
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.75) !important;
 }
 
 html:not(.dark) .light-surface {
