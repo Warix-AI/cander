@@ -217,6 +217,16 @@ html.cander-narrow .mobile-glass-pill {
     0 1px 3px oklch(0 0 0 / 0.05);
 }
 
+html.dark.cander-mobile .mobile-glass-pill,
+html.dark.cander-narrow .mobile-glass-pill {
+  background: oklch(0.2 0.012 265 / 0.94);
+  color: oklch(0.94 0.01 265);
+  border: 1px solid oklch(1 0 0 / 0.1);
+  box-shadow:
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.1),
+    0 2px 8px oklch(0 0 0 / 0.28);
+}
+
 html.cander-mobile .mobile-glass-segment,
 html.cander-narrow .mobile-glass-segment {
   background: oklch(0 0 0 / 0.05);
