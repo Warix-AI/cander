@@ -146,35 +146,37 @@ export function SettingsView() {
   const stackDirection = useMobileStackDirection(stackDepth);
 
   const settingsBody = settingsMobileHub ? (
-    <div className={cn("min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-2 lg:hidden", MOBILE_APP_BG)}>
-      <SettingsGroup dividerInset="icon" glass={false}>
-        {settingsNav.map((tab) => {
-          const Icon = settingsIcons[tab.id];
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                setSettingsTab(tab.id);
-                setSettingsMobileHub(false);
-              }}
-              className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-muted/50"
-            >
-              <Icon
-                className="h-5 w-5 shrink-0 text-muted-foreground"
-                strokeWidth={1.9}
-              />
-              <span className="min-w-0 flex-1 text-[15px] font-medium tracking-[-0.01em]">
-                {tab.label}
-              </span>
-              <ChevronRight
-                className="h-4 w-4 shrink-0 text-muted-foreground/70"
-                strokeWidth={1.8}
-              />
-            </button>
-          );
-        })}
-      </SettingsGroup>
+    <div className={cn("min-h-0 flex-1 overflow-y-auto", MOBILE_APP_BG)}>
+      <SettingsPage className="pt-2">
+        <SettingsGroup dividerInset="icon">
+          {settingsNav.map((tab) => {
+            const Icon = settingsIcons[tab.id];
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setSettingsTab(tab.id);
+                  setSettingsMobileHub(false);
+                }}
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
+              >
+                <Icon
+                  className="h-5 w-5 shrink-0 text-muted-foreground"
+                  strokeWidth={1.9}
+                />
+                <span className="min-w-0 flex-1 text-[15px] font-medium tracking-[-0.01em]">
+                  {tab.label}
+                </span>
+                <ChevronRight
+                  className="h-4 w-4 shrink-0 text-muted-foreground/70"
+                  strokeWidth={1.8}
+                />
+              </button>
+            );
+          })}
+        </SettingsGroup>
+      </SettingsPage>
     </div>
   ) : (
     <div className={cn("settings-screen-canvas min-h-0 flex-1 overflow-y-auto", MOBILE_APP_BG)}>
@@ -217,13 +219,17 @@ export function SettingsView() {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {mobile ? (
-        <MobileSlideStack
-          activeKey={stackKey}
-          direction={stackDirection}
-          frameClassName={MOBILE_APP_BG}
-        >
-          {settingsBody}
-        </MobileSlideStack>
+        settingsMobileHub ? (
+          settingsBody
+        ) : (
+          <MobileSlideStack
+            activeKey={stackKey}
+            direction={stackDirection}
+            frameClassName={MOBILE_APP_BG}
+          >
+            {settingsBody}
+          </MobileSlideStack>
+        )
       ) : (
         <div className="settings-screen-canvas min-h-0 flex-1 overflow-y-auto">
           {settingsTab === "organization" ? (

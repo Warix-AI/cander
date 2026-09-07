@@ -52,7 +52,12 @@ export type PanelIntent = "browse" | "execute";
 export type MobileSurface = "menu" | "chat" | "panel";
 
 /** Nested screens inside the mobile menu pane. */
-export type MobileMenuScreen = "main" | "pinned" | "workspace";
+export type MobileMenuScreen =
+  | "main"
+  | "general"
+  | "pinned"
+  | "workspace"
+  | "workspace-general";
 
 export type PageReference = {
   url: string;

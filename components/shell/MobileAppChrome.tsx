@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore, type TouchEventHandler } fro
 import { ChevronLeft, ChevronRight, Ellipsis, Menu, Plus, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
+import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import {
   MobileBottomSheet,
   ProjectActionsSheetBody,
@@ -125,7 +126,11 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const entityOpen =
     (Boolean(projectId) && !isWorkItemBrowser) || inConnector;
   const showEntityBack =
-    entityOpen && !inChromeSub && !onMenuMain && mobileSurface !== "menu";
+    Boolean(projectId) &&
+    !isWorkItemBrowser &&
+    !inChromeSub &&
+    !onMenuMain &&
+    mobileSurface !== "menu";
   const showProjectTools =
     !inChromeSub &&
     !onMenuMain &&
@@ -145,6 +150,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     !onMenuMain &&
     !showProjectTools &&
     (showWorkItemToggle ||
+      inConnector ||
       (!isDashboardOnlySpace(spaceId) &&
         (((inPrimarySpace || inConnector) &&
           (view === "space" || (view === "chat" && Boolean(spaceId)))) ||
@@ -165,16 +171,15 @@ export function MobileAppChrome({ className }: { className?: string }) {
     ? settingsTitle
     : mobileMenuScreen === "pinned"
       ? "Pinned"
-      : mobileMenuScreen === "workspace"
+      : mobileMenuScreen === "workspace" ||
+          mobileMenuScreen === "workspace-general"
         ? "Workspace"
-        : "";
+        : mobileMenuScreen === "general"
+          ? "General"
+          : "";
 
   const spaceLabel = spaceId ? navLabel(spaceId as SpaceId) ?? "Space" : "Space";
-  const panelTabLabel = showHomeChatPanelToggle
-    ? "Panel"
-    : inConnector
-      ? "Connector"
-      : spaceLabel;
+  const panelTabLabel = showHomeChatPanelToggle ? "Panel" : spaceLabel;
   const headerBg =
     view === "space" && mobileSurface === "panel"
       ? SPACE_CANVAS_BG
@@ -391,15 +396,24 @@ export function MobileAppChrome({ className }: { className?: string }) {
             type="button"
             role="tab"
             aria-selected={surface === "panel"}
+            aria-label={inConnector ? "Connector panel" : panelTabLabel}
             onClick={() => setChatOrPanel("panel")}
             className={cn(
-              "max-w-[9rem] truncate rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
+              "inline-flex min-w-11 items-center justify-center rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
               surface === "panel"
                 ? "bg-white text-foreground shadow-sm dark:bg-neutral-900"
                 : "text-muted-foreground",
             )}
           >
-            {panelTabLabel}
+            {inConnector && connectorId ? (
+              <ConnectorMark
+                id={connectorId}
+                size="nav"
+                className="!h-4 !w-4"
+              />
+            ) : (
+              <span className="max-w-[9rem] truncate">{panelTabLabel}</span>
+            )}
           </button>
         </div>
       ) : null

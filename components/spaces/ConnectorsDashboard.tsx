@@ -388,6 +388,13 @@ export function ConnectorsDashboard() {
   };
 
   const selectConnector = (id: string) => {
+    // On mobile, a connector is a destination in the right pane. Opening its
+    // catalog detail first leaves the user in a dead-end modal instead of the
+    // Chat ↔ connector pager.
+    if (mobile) {
+      openConnector(id);
+      return;
+    }
     openConnectorDetail(id);
   };
 
@@ -645,7 +652,7 @@ export function ConnectorsDashboard() {
                 ) : null}
                 <div
                   className={cn(
-                    "grid grid-cols-1 gap-x-6 gap-y-0.5 @min-[440px]:grid-cols-2",
+                    "grid grid-cols-1 gap-y-0.5",
                     catalogView === "connectors" ? "mt-4" : "mt-0",
                   )}
                 >

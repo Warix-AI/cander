@@ -27,7 +27,7 @@ export function PinsSheet({
   onSelect,
   hideHeading = false,
 }: {
-  onSelect: () => void;
+  onSelect: (options?: { landOnPanel?: boolean }) => void;
   hideHeading?: boolean;
 }) {
   const {
@@ -61,8 +61,12 @@ export function PinsSheet({
         agentSurface: "overview",
         landOnPanel: true,
       });
-    } else openProject(item.id);
-    onSelect();
+    } else {
+      openProject(item.id, { landOnPanel: true });
+    }
+    // A pin represents the item itself, so open it at its destination panel.
+    // The chat remains immediately available with the normal left swipe.
+    onSelect({ landOnPanel: true });
   };
 
   const isActive = (item: PinnedItem) => {

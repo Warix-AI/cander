@@ -2,7 +2,14 @@
 
 import { useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ChevronLeft, LayoutGrid, Pin, Settings, SquarePen } from "lucide-react";
+import {
+  ChevronLeft,
+  LayoutGrid,
+  PanelsTopLeft,
+  Pin,
+  Settings,
+  SquarePen,
+} from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { CanderWordmark } from "@/components/brand/CanderWordmark";
 import {
@@ -15,10 +22,6 @@ import {
   MOBILE_MENU_BG,
   MOBILE_MENU_ICON_SIZE,
   MOBILE_MENU_ICON_STROKE,
-  PRIMARY_NAV_CARD_ACTIVE,
-  PRIMARY_NAV_CARD_HOVER,
-  PRIMARY_NAV_CARD_RADIUS_FIRST_MOBILE,
-  PRIMARY_NAV_CARD_RADIUS_LAST_MOBILE,
   mobileMenuRowActiveClass,
   mobileMenuRowClass,
 } from "@/lib/mobile-menu-styles";
@@ -26,7 +29,7 @@ import { closeAllPinSections } from "@/lib/pin-display-prefs";
 import { navLabel, useMainNavItems } from "@/lib/use-main-nav-items";
 import { isComingSoonNav, isExtraNavId, navSpaceMatches, type SidebarNavId } from "@/lib/spaces";
 import { navIcon } from "@/lib/space-icons";
-import type { MobileMenuScreen, NavDestinationId, SpaceId } from "@/lib/types";
+import type { MobileMenuScreen, NavDestinationId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const MOBILE_SECONDARY_NAV: SidebarNavId[] = ["connectors", "recents"];
@@ -38,7 +41,6 @@ export function MobileMenuPane() {
   const {
     view,
     spaceId,
-    threadId,
     projectId,
     connectorId,
     mobileSurface,
@@ -50,21 +52,43 @@ export function MobileMenuPane() {
     openRecents,
     openBrowser,
     openSettings,
-    entitlements,
   } = useApp();
 
   useEffect(() => {
     if (mobileSurface !== "menu") setMobileMenuScreen("main");
   }, [mobileSurface, setMobileMenuScreen]);
 
-  useEffect(() => {
-    if (!entitlements.hasWorkspaces && mobileMenuScreen === "workspace") {
-      setMobileMenuScreen("main");
-    }
-  }, [entitlements.hasWorkspaces, mobileMenuScreen, setMobileMenuScreen]);
-
-  const stackDepth = mobileMenuScreen === "main" ? 0 : 1;
+  const stackDepth =
+    mobileMenuScreen === "main"
+      ? 0
+      : mobileMenuScreen === "workspace-general"
+        ? 2
+        : 1;
   const direction = useMobileStackDirection(stackDepth);
+
+  const openNav = (id: SidebarNavId) => {
+    if (isComingSoonNav(id)) return;
+    closeAllPinSections();
+    const opensPanel = id === "connectors";
+    if (id === "browser") {
+      openBrowser();
+    } else if (id === "recents") {
+      openRecents();
+    } else if (id === "connectors") {
+      openSpace("connectors");
+    } else if (!isExtraNavId(id)) {
+      openSpace(id);
+    }
+    setMobileMenuScreen("main");
+    setMobileSurface(opensPanel ? "panel" : "chat");
+  };
+
+  const openSettingsFromMenu = () => {
+    closeAllPinSections();
+    openSettings(undefined, { hub: true });
+    setMobileMenuScreen("main");
+    setMobileSurface("chat");
+  };
 
   return (
     <aside
@@ -82,45 +106,31 @@ export function MobileMenuPane() {
           <MenuMain
             view={view}
             spaceId={spaceId}
-            threadId={threadId}
             projectId={projectId}
             connectorId={connectorId}
-            showWorkspaces={entitlements.hasWorkspaces}
             onNewChat={() => {
               closeAllPinSections();
               newChat();
               setMobileSurface("chat");
             }}
             onOpenScreen={setMobileMenuScreen}
-            onOpenNav={(id) => {
-              if (isComingSoonNav(id)) return;
-              closeAllPinSections();
-              if (id === "browser") {
-                openBrowser();
-              } else if (id === "recents") {
-                openRecents();
-              } else if (id === "connectors") {
-                openSpace("connectors");
-              } else if (!isExtraNavId(id)) {
-                openSpace(id);
-              }
-              setMobileMenuScreen("main");
-            }}
-            onOpenSettings={() => {
-              closeAllPinSections();
-              openSettings(undefined, { hub: true });
-              setMobileMenuScreen("main");
-              setMobileSurface("chat");
-            }}
+            onOpenNav={openNav}
           />
         ) : (
           <MenuSub
             screen={mobileMenuScreen}
-            onBack={() => setMobileMenuScreen("main")}
-            onSelect={() => {
+            onBack={() =>
+              setMobileMenuScreen(
+                mobileMenuScreen === "workspace-general" ? "general" : "main",
+              )
+            }
+            onSelect={(options) => {
               setMobileMenuScreen("main");
-              setMobileSurface("chat");
+              setMobileSurface(options?.landOnPanel ? "panel" : "chat");
             }}
+            onOpenScreen={setMobileMenuScreen}
+            onOpenNav={openNav}
+            onOpenSettings={openSettingsFromMenu}
           />
         )}
       </MobileSlideStack>
@@ -131,25 +141,19 @@ export function MobileMenuPane() {
 function MenuMain({
   view,
   spaceId,
-  threadId,
   projectId,
   connectorId,
-  showWorkspaces,
   onNewChat,
   onOpenScreen,
   onOpenNav,
-  onOpenSettings,
 }: {
   view: string;
   spaceId: NavDestinationId | null;
-  threadId: string | null;
   projectId: string | null;
   connectorId: string | null;
-  showWorkspaces: boolean;
   onNewChat: () => void;
   onOpenScreen: (screen: MobileMenuScreen) => void;
   onOpenNav: (id: SidebarNavId) => void;
-  onOpenSettings: () => void;
 }) {
   const spaceItems = useMainNavItems({ spacesOnly: true });
   const newActive =
@@ -168,46 +172,38 @@ function MenuMain({
         <CanderWordmark />
       </div>
 
-        <div className="mt-[30px] flex min-h-0 flex-1 flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="mt-[30px] flex min-h-0 flex-1 flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="flex flex-col gap-[0.1rem]">
-          <div className="rounded-[12px] bg-black/[0.03] p-[3px] dark:bg-white/[0.045]">
-            <button
-              type="button"
-              onClick={onNewChat}
-              className={cn(
-                "flex w-full items-center gap-3 px-5 py-[0.95rem] text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200",
-                PRIMARY_NAV_CARD_RADIUS_FIRST_MOBILE,
-                newActive ? PRIMARY_NAV_CARD_ACTIVE : PRIMARY_NAV_CARD_HOVER,
-              )}
-              aria-label="New"
-            >
-              <SquarePen
-                className={cn(MOBILE_MENU_ICON_SIZE, "text-muted-foreground")}
-                strokeWidth={MOBILE_MENU_ICON_STROKE}
-              />
-              <span className="min-w-0 flex-1 truncate">New</span>
-            </button>
-            {spaceItems.map((item, index) => (
-              <MobileNavRow
-                key={item.id}
-                id={item.id}
-                label={item.label}
-                Icon={item.Icon}
-                active={navActive(item.id)}
-                comingSoon={item.comingSoon}
-                onOpen={onOpenNav}
-                cardSurface
-                cardEdge={
-                  index === spaceItems.length - 1 ? "last" : "middle"
-                }
-              />
-            ))}
-          </div>
-
+          <button
+            type="button"
+            onClick={onNewChat}
+            className={cn(
+              mobileMenuRowClass,
+              newActive && mobileMenuRowActiveClass,
+            )}
+            aria-label="New"
+          >
+            <SquarePen
+              className={cn(MOBILE_MENU_ICON_SIZE, "text-muted-foreground")}
+              strokeWidth={MOBILE_MENU_ICON_STROKE}
+            />
+            <span className="min-w-0 flex-1 truncate">New</span>
+          </button>
+          {spaceItems.map((item) => (
+            <MobileNavRow
+              key={item.id}
+              id={item.id}
+              label={item.label}
+              Icon={item.Icon}
+              active={navActive(item.id)}
+              comingSoon={item.comingSoon}
+              onOpen={onOpenNav}
+            />
+          ))}
           <button
             type="button"
             onClick={() => onOpenScreen("pinned")}
-            className={cn(mobileMenuRowClass, "mt-2")}
+            className={mobileMenuRowClass}
           >
             <Pin
               className={cn(
@@ -220,51 +216,20 @@ function MenuMain({
           </button>
         </div>
 
-        <div className="mt-auto flex flex-col gap-[0.1rem] pt-3">
-          {MOBILE_SECONDARY_NAV.map((id) => {
-            const Icon = navIcon(id);
-            const label = navLabel(id);
-            if (!label) return null;
-            return (
-              <MobileNavRow
-                key={id}
-                id={id}
-                label={label}
-                Icon={Icon}
-                active={navActive(id)}
-                onOpen={onOpenNav}
-              />
-            );
-          })}
-          {showWorkspaces ? (
-            <button
-              type="button"
-              onClick={() => onOpenScreen("workspace")}
-              className={mobileMenuRowClass}
-            >
-              <LayoutGrid
-                className={cn(
-                  MOBILE_MENU_ICON_SIZE,
-                  "shrink-0 text-muted-foreground",
-                )}
-                strokeWidth={MOBILE_MENU_ICON_STROKE}
-              />
-              Workspace
-            </button>
-          ) : null}
+        <div className="mt-auto pt-3">
           <button
             type="button"
-            onClick={onOpenSettings}
+            onClick={() => onOpenScreen("general")}
             className={mobileMenuRowClass}
           >
-            <Settings
+            <PanelsTopLeft
               className={cn(
                 MOBILE_MENU_ICON_SIZE,
                 "shrink-0 text-muted-foreground",
               )}
               strokeWidth={MOBILE_MENU_ICON_STROKE}
             />
-            Settings
+            General
           </button>
         </div>
       </div>
@@ -279,8 +244,6 @@ function MobileNavRow({
   active,
   comingSoon,
   onOpen,
-  cardSurface = false,
-  cardEdge = "middle",
 }: {
   id: SidebarNavId;
   label: string;
@@ -288,8 +251,6 @@ function MobileNavRow({
   active: boolean;
   comingSoon?: boolean;
   onOpen: (id: SidebarNavId) => void;
-  cardSurface?: boolean;
-  cardEdge?: "first" | "middle" | "last";
 }) {
   const tinted =
     id === "home" ||
@@ -298,13 +259,6 @@ function MobileNavRow({
     id === "research" ||
     id === "studio";
 
-  const cardRadius =
-    cardEdge === "first"
-      ? PRIMARY_NAV_CARD_RADIUS_FIRST_MOBILE
-      : cardEdge === "last"
-        ? PRIMARY_NAV_CARD_RADIUS_LAST_MOBILE
-        : "rounded-none";
-
   return (
     <button
       type="button"
@@ -312,19 +266,12 @@ function MobileNavRow({
       aria-disabled={comingSoon || undefined}
       onClick={() => onOpen(id)}
       className={cn(
-        cardSurface
-          ? "flex w-full items-center gap-3 px-5 py-[0.95rem] text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200"
-          : mobileMenuRowClass,
-        cardSurface && cardRadius,
+        mobileMenuRowClass,
         comingSoon
           ? "cursor-default opacity-70"
           : active
-            ? cardSurface
-              ? PRIMARY_NAV_CARD_ACTIVE
-              : mobileMenuRowActiveClass
-            : cardSurface
-              ? PRIMARY_NAV_CARD_HOVER
-              : undefined,
+            ? mobileMenuRowActiveClass
+            : undefined,
       )}
     >
       <Icon
@@ -349,12 +296,23 @@ function MenuSub({
   screen,
   onBack,
   onSelect,
+  onOpenScreen,
+  onOpenNav,
+  onOpenSettings,
 }: {
   screen: MobileMenuScreen;
   onBack: () => void;
-  onSelect: () => void;
+  onSelect: (options?: { landOnPanel?: boolean }) => void;
+  onOpenScreen: (screen: MobileMenuScreen) => void;
+  onOpenNav: (id: SidebarNavId) => void;
+  onOpenSettings: () => void;
 }) {
-  const title = screen === "pinned" ? "Pinned" : "Workspace";
+  const title =
+    screen === "pinned"
+      ? "Pinned"
+      : screen === "workspace" || screen === "workspace-general"
+        ? "Workspace"
+        : "General";
 
   return (
     <>
@@ -374,10 +332,81 @@ function MenuSub({
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1">
         {screen === "pinned" ? (
           <PinsSheet onSelect={onSelect} hideHeading />
-        ) : (
+        ) : screen === "workspace" || screen === "workspace-general" ? (
           <WorkspaceSheet onSelect={onSelect} />
+        ) : (
+          <GeneralSheet
+            onOpenWorkspace={() => onOpenScreen("workspace-general")}
+            onOpenNav={onOpenNav}
+            onOpenSettings={onOpenSettings}
+          />
         )}
       </div>
     </>
+  );
+}
+
+function GeneralSheet({
+  onOpenWorkspace,
+  onOpenNav,
+  onOpenSettings,
+}: {
+  onOpenWorkspace: () => void;
+  onOpenNav: (id: SidebarNavId) => void;
+  onOpenSettings: () => void;
+}) {
+  return (
+    <div className="space-y-px">
+      <button
+        type="button"
+        onClick={onOpenWorkspace}
+        className={mobileMenuRowClass}
+      >
+        <LayoutGrid
+          className={cn(
+            MOBILE_MENU_ICON_SIZE,
+            "shrink-0 text-muted-foreground",
+          )}
+          strokeWidth={MOBILE_MENU_ICON_STROKE}
+        />
+        Workspace
+      </button>
+      {MOBILE_SECONDARY_NAV.map((id) => {
+        const Icon = navIcon(id);
+        const label = navLabel(id);
+        if (!label) return null;
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onOpenNav(id)}
+            className={mobileMenuRowClass}
+          >
+            <Icon
+              className={cn(
+                MOBILE_MENU_ICON_SIZE,
+                "shrink-0 text-muted-foreground",
+              )}
+              strokeWidth={MOBILE_MENU_ICON_STROKE}
+            />
+            {label}
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        onClick={onOpenSettings}
+        className={mobileMenuRowClass}
+      >
+        <Settings
+          className={cn(
+            MOBILE_MENU_ICON_SIZE,
+            "shrink-0 text-muted-foreground",
+          )}
+          strokeWidth={MOBILE_MENU_ICON_STROKE}
+        />
+        Settings
+      </button>
+    </div>
   );
 }
