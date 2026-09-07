@@ -509,10 +509,6 @@ function OrganizationSettings({
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? "Could not deactivate organization.");
-        const deactivatedOrgId = data.orgId ? String(data.orgId) : "";
-        if (!deactivatedOrgId) {
-          throw new Error("Could not deactivate organization.");
-        }
         getWorkspaceCatalogSnapshot()
           .filter((workspace) => workspaceKindOf(workspace) === "business")
           .forEach((workspace) =>
@@ -521,11 +517,13 @@ function OrganizationSettings({
         persistOrgName(orgDisplayName);
         // Durable flag is org_members.kind = personal — do not rely on deferred.
         persistOrgSetupDeferred(false);
-        persistOrgId(deactivatedOrgId);
+        const deactivatedOrgId = data.orgId ? String(data.orgId) : "";
+        if (deactivatedOrgId) persistOrgId(deactivatedOrgId);
+        else persistOrgId("");
         upsertOrgMember({
           ...actor,
           kind: "personal",
-          orgId: deactivatedOrgId,
+          orgId: deactivatedOrgId || undefined,
           managedByOrgName: orgDisplayName,
           orgSetupDeferred: false,
         });
