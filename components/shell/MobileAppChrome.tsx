@@ -40,7 +40,8 @@ import {
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
 import {
-  MOBILE_GLASS_PILL,
+  MOBILE_GLASS_SEGMENT,
+  MOBILE_GLASS_SEGMENT_ACTIVE,
   mobileChromeButtonClass,
 } from "@/lib/mobile-menu-styles";
 import type { MobileSurface, SpaceId } from "@/lib/types";
@@ -386,7 +387,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
         <div
           role="tablist"
           aria-label={`${projectTitle} view`}
-          className="inline-flex max-w-full items-center rounded-full bg-muted p-1"
+          className={cn("inline-flex max-w-full items-center rounded-full p-1", MOBILE_GLASS_SEGMENT)}
         >
           <button
             type="button"
@@ -396,7 +397,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
             className={cn(
               "rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
               surface === "chat"
-                ? "bg-white text-foreground shadow-sm dark:bg-neutral-900"
+                ? MOBILE_GLASS_SEGMENT_ACTIVE
                 : "text-muted-foreground",
             )}
           >
@@ -411,7 +412,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
             className={cn(
               "inline-flex min-w-11 items-center justify-center rounded-full px-3 py-2 transition-colors",
               surface === "panel"
-                ? "bg-white text-foreground shadow-sm dark:bg-neutral-900"
+                ? MOBILE_GLASS_SEGMENT_ACTIVE
                 : "text-muted-foreground",
             )}
           >
@@ -426,7 +427,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
         <div
           role="tablist"
           aria-label="Surface"
-          className="inline-flex max-w-full items-center rounded-full bg-muted p-1"
+          className={cn("inline-flex max-w-full items-center rounded-full p-1", MOBILE_GLASS_SEGMENT)}
         >
           <button
             type="button"
@@ -436,7 +437,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
             className={cn(
               "rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
               surface === "chat"
-                ? "bg-white text-foreground shadow-sm dark:bg-neutral-900"
+                ? MOBILE_GLASS_SEGMENT_ACTIVE
                 : "text-muted-foreground",
             )}
           >
@@ -451,7 +452,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
             className={cn(
               "inline-flex min-w-11 items-center justify-center rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
               surface === "panel"
-                ? "bg-white text-foreground shadow-sm dark:bg-neutral-900"
+                ? MOBILE_GLASS_SEGMENT_ACTIVE
                 : "text-muted-foreground",
             )}
           >
