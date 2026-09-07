@@ -613,6 +613,23 @@ html.cander-narrow .mobile-header-content {
   background-color: var(--mobile-app-surface);
 }
 
+/* Mobile dark mode uses a true black canvas across every app surface. */
+html.dark.cander-mobile .mobile-app-surface,
+html.dark.cander-narrow .mobile-app-surface,
+html.dark.cander-mobile .bg-space-canvas,
+html.dark.cander-narrow .bg-space-canvas,
+html.dark.cander-mobile .bg-neutral-950,
+html.dark.cander-narrow .bg-neutral-950 {
+  background-color: #000 !important;
+}
+
+html:not(.dark).cander-mobile .bg-space-canvas,
+html:not(.dark).cander-narrow .bg-space-canvas,
+html:not(.dark).cander-mobile .bg-neutral-50,
+html:not(.dark).cander-narrow .bg-neutral-50 {
+  background-color: #fff !important;
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);
