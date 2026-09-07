@@ -46,6 +46,7 @@ import {
 } from "@/lib/mobile-shell";
 import { setShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
+import { useMobileSwipeGestures } from "@/lib/use-mobile-swipe";
 import { MOBILE_APP_BG, MOBILE_MENU_BG } from "@/lib/mobile-menu-styles";
 import { syncNativeShellTheme } from "@/lib/native-shell-theme";
 import { cn } from "@/lib/utils";
