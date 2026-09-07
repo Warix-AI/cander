@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore, type TouchEventHandler } from "react";
-import { ChevronLeft, ChevronRight, Ellipsis, Menu, Plus, SquarePen } from "lucide-react";
+import { ChevronLeft, ChevronRight, Ellipsis, Plus, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
@@ -40,7 +40,7 @@ import {
 } from "@/lib/workspace-catalog";
 import {
   MOBILE_APP_BG,
-  SPACE_CANVAS_BG,
+  MOBILE_GLASS_PILL,
   mobileChromeButtonClass,
 } from "@/lib/mobile-menu-styles";
 import type { MobileSurface, SpaceId } from "@/lib/types";
@@ -180,10 +180,9 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
   const spaceLabel = spaceId ? navLabel(spaceId as SpaceId) ?? "Space" : "Space";
   const panelTabLabel = showHomeChatPanelToggle ? "Panel" : spaceLabel;
-  const headerBg =
-    view === "space" && mobileSurface === "panel"
-      ? SPACE_CANVAS_BG
-      : MOBILE_APP_BG;
+  // Mobile chrome shares its content surface. A second tinted strip makes
+  // otherwise white connector and canvas screens look visually split.
+  const headerBg = MOBILE_APP_BG;
   const surface: MobileSurface =
     mobileSurface === "menu"
       ? "menu"
@@ -459,7 +458,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
                 type="button"
                 aria-label="Back to chat"
                 onClick={onLeadingClick}
-                className="inline-flex h-11 shrink-0 items-center gap-0.5 rounded-full bg-[var(--mobile-chrome-surface)] pl-2.5 pr-3.5 text-[14px] font-medium tracking-[-0.01em] text-foreground transition-colors duration-200 hover:bg-muted"
+                className={cn("inline-flex h-11 shrink-0 items-center gap-0.5 rounded-full pl-2.5 pr-3.5 text-[14px] font-medium tracking-[-0.01em] text-foreground transition-colors duration-200 hover:bg-muted", MOBILE_GLASS_PILL)}
               >
                 <ChevronLeft className="h-5 w-5 shrink-0" strokeWidth={1.8} />
                 <span>Chat</span>
@@ -482,7 +481,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
                 {connectorBack || showEntityBack || inChromeSub ? (
                   <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
                 ) : (
-                  <Menu className="h-5 w-5" strokeWidth={1.8} />
+                  <TwoLineMenuIcon />
                 )}
               </button>
             )}
@@ -499,7 +498,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
                   type="button"
                   aria-label={`Open ${projectPanelLabel}`}
                   onClick={() => setChatOrPanel("panel")}
-                  className="inline-flex h-11 shrink-0 items-center gap-0.5 rounded-full bg-[var(--mobile-chrome-surface)] pl-3.5 pr-2.5 text-[14px] font-medium tracking-[-0.01em] text-foreground transition-colors duration-200 hover:bg-muted"
+                  className={cn("inline-flex h-11 shrink-0 items-center gap-0.5 rounded-full pl-3.5 pr-2.5 text-[14px] font-medium tracking-[-0.01em] text-foreground transition-colors duration-200 hover:bg-muted", MOBILE_GLASS_PILL)}
                 >
                   <span>{projectPanelLabel}</span>
                   <ChevronRight className="h-5 w-5 shrink-0" strokeWidth={1.8} />
@@ -634,5 +633,23 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
       {createProjectModal}
     </>
+  );
+}
+
+function TwoLineMenuIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M4 8h16M4 16h16"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2.1"
+      />
+    </svg>
   );
 }

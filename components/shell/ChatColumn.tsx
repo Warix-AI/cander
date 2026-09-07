@@ -82,7 +82,16 @@ function ComposerDock({
 }
 
 export function ChatColumn() {
-  const { thread, spaceId, sendMessage, drafting, view, projectId, overlay } =
+  const {
+    thread,
+    spaceId,
+    sendMessage,
+    drafting,
+    view,
+    projectId,
+    overlay,
+    mobileContentSurface,
+  } =
     useApp();
   const api = useSpaceApi();
   const ctx = useWorkspaceCtx();
@@ -95,7 +104,13 @@ export function ChatColumn() {
   );
   // Empty new chat → autofocus composer (Capacitor). Reading an existing
   // thread or any overlay/browser surface must not steal focus.
-  const autofocusComposer = !browserMode && !hasChatTurns && !overlay;
+  const autofocusComposer =
+    !browserMode &&
+    !hasChatTurns &&
+    !overlay &&
+    // The chat pane remains mounted alongside pinned panels on iOS. Never let
+    // its empty composer raise the keyboard while a panel owns the screen.
+    (!mobile || mobileContentSurface === "chat");
   const showSpaceNewPrompt =
     drafting && Boolean(spaceId) && !hasChatTurns && !browserMode;
   const showLanding =

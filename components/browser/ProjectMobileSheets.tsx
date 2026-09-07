@@ -138,7 +138,7 @@ export function MobileBottomSheet({
         aria-modal="true"
         aria-labelledby={titleId}
         className={cn(
-          "relative z-10 flex w-full max-w-[100vw] flex-col overflow-hidden border border-border bg-background shadow-[0_-12px_40px_rgba(0,0,0,0.18)]",
+          "mobile-glass-panel relative z-10 flex w-full max-w-[100vw] flex-col overflow-hidden border border-border shadow-[0_-12px_40px_rgba(0,0,0,0.18)]",
           "rounded-t-[22px]",
           heightClass,
           className,

@@ -143,6 +143,14 @@ html.cander-narrow {
   background-color: var(--app-canvas);
 }
 
+/* Mobile uses one white canvas so headers and every content surface meet cleanly. */
+html:not(.dark).cander-mobile,
+html:not(.dark).cander-narrow {
+  --app-canvas: oklch(1 0 0);
+  --space-canvas: oklch(1 0 0);
+  --background: oklch(1 0 0);
+}
+
 .dark html.cander-mobile,
 .dark html.cander-narrow {
   background-color: var(--mobile-menu-canvas);
@@ -193,7 +201,7 @@ html.cander-narrow .mobile-glass-bar {
 
 html.cander-mobile .mobile-glass-panel,
 html.cander-narrow .mobile-glass-panel {
-  background: oklch(0.965 0.004 265 / 0.82);
+  background: oklch(1 0 0 / 0.88);
   -webkit-backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
   backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
   box-shadow:
@@ -299,10 +307,12 @@ html.dark.cander-mobile .mobile-dropdown-menu,
 html.dark.cander-narrow .mobile-dropdown-menu,
 .dark html.cander-mobile .mobile-dropdown-menu,
 .dark html.cander-narrow .mobile-dropdown-menu {
-  background-color: var(--mobile-chrome-surface);
+  background-color: oklch(1 0 0 / 0.82);
   color: var(--foreground);
   border: 0.75px solid var(--border);
   box-shadow: 0 12px 40px oklch(0 0 0 / 0.12);
+  -webkit-backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
+  backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
 }
 
 html.dark.cander-mobile .mobile-dropdown-menu,
@@ -310,8 +320,8 @@ html.dark.cander-narrow .mobile-dropdown-menu,
 .dark html.cander-mobile .mobile-dropdown-menu,
 .dark html.cander-narrow .mobile-dropdown-menu {
   box-shadow: 0 12px 40px oklch(0 0 0 / 0.45);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  -webkit-backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
+  backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
 }
 
 .dark html.cander-mobile .mobile-glass-bar,
@@ -543,11 +553,16 @@ html.dark {
 
 /* Mobile menu drawer + peek backdrop — one exact canvas color everywhere. */
 .mobile-menu-canvas {
-  background-color: var(--app-canvas);
+  background-color: oklch(1 0 0);
 }
 
 .dark .mobile-menu-canvas {
   background-color: var(--mobile-menu-canvas);
+}
+
+/* The shadow follows the rounded shifted screen itself, preventing a straight seam. */
+.mobile-menu-peek {
+  filter: drop-shadow(-8px 0 18px oklch(0 0 0 / 0.1));
 }
 
 /* Chat peek / app column — dark gray in dark mode. */

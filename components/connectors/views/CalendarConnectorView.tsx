@@ -504,9 +504,9 @@ export function CalendarConnectorView({
         </div>
       ) : null}
 
-      {/* Month: grid + wider mini-cal on the right */}
-      <div className="@container relative flex min-h-0 flex-1 overflow-hidden">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {/* Month first on phones; the compact calendar and selected-day agenda stack beneath it. */}
+      <div className="@container relative flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+        <div className="flex h-[46svh] min-h-[20rem] min-w-0 shrink-0 flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1">
           <div className="grid shrink-0 grid-cols-7 border-b border-black/[0.06] dark:border-white/10">
             {WEEKDAYS.map((label) => (
               <div
@@ -582,7 +582,7 @@ export function CalendarConnectorView({
                           setPage("detail");
                         }}
                         className={cn(
-                          "flex min-w-0 items-center gap-0.5 truncate px-1 py-0.5 text-left text-[10px] font-medium leading-tight text-white",
+                          "hidden min-w-0 items-center gap-0.5 truncate px-1 py-0.5 text-left text-[10px] font-medium leading-tight text-white lg:flex",
                           SHELL_G3_RADIUS,
                         )}
                         style={{ backgroundColor: ACCENT }}
@@ -596,8 +596,11 @@ export function CalendarConnectorView({
                         <span className="truncate">{event.summary}</span>
                       </button>
                     ))}
+                    {dayEvents.length > 0 ? (
+                      <span className="mx-auto mt-0.5 h-1 w-1 shrink-0 rounded-full lg:hidden" style={{ backgroundColor: ACCENT }} />
+                    ) : null}
                     {more > 0 ? (
-                      <span className="px-1 text-[10px] font-medium text-muted-foreground">
+                      <span className="hidden px-1 text-[10px] font-medium text-muted-foreground lg:block">
                         +{more} more
                       </span>
                     ) : null}
@@ -608,8 +611,8 @@ export function CalendarConnectorView({
           </div>
         </div>
 
-        {/* Right rail — mini calendar top-aligned */}
-        <aside className="flex w-[min(16rem,42%)] shrink-0 flex-col gap-3 overflow-y-auto border-l border-black/[0.06] p-3 dark:border-white/10">
+        {/* Desktop right rail; vertically stacked context beneath the month on mobile. */}
+        <aside className="flex w-full shrink-0 flex-col gap-4 border-t border-black/[0.06] p-4 dark:border-white/10 lg:w-[min(16rem,42%)] lg:overflow-y-auto lg:border-t-0 lg:border-l lg:p-3">
           <div>
             <div className="mb-2 flex items-center justify-between px-0.5">
               <p className="text-[12.5px] font-medium tracking-[-0.01em]">
@@ -690,7 +693,7 @@ export function CalendarConnectorView({
           </div>
 
           {selectedDay ? (
-            <div className="mt-auto border-t border-black/[0.06] pt-3 dark:border-white/10">
+            <div className="border-t border-black/[0.06] pt-3 dark:border-white/10 lg:mt-auto">
               <p className="mb-2 px-0.5 text-[11px] font-medium text-muted-foreground">
                 {selectedDay.toLocaleDateString([], {
                   weekday: "short",
@@ -704,7 +707,7 @@ export function CalendarConnectorView({
                 </p>
               ) : (
                 <ul className="space-y-1.5">
-                  {dayAgenda.slice(0, 6).map((event) => (
+                  {dayAgenda.map((event) => (
                     <li key={event.id}>
                       <button
                         type="button"
@@ -713,7 +716,7 @@ export function CalendarConnectorView({
                           setPage("detail");
                         }}
                         className={cn(
-                          "w-full px-1.5 py-1 text-left hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
+                          "w-full px-2 py-2 text-left hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
                           SHELL_G3_RADIUS,
                         )}
                       >

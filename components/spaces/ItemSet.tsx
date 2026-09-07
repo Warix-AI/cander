@@ -16,7 +16,7 @@ import {
   type MobilePanelExtraItem,
   type MobilePanelScopeConfig,
 } from "@/components/shell/mobile/MobilePanelActions";
-import { SPACE_CANVAS_BG } from "@/lib/mobile-menu-styles";
+import { MOBILE_APP_BG, SPACE_CANVAS_BG } from "@/lib/mobile-menu-styles";
 import { isDashboardOnlySpace } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import {
@@ -495,7 +495,7 @@ export function DashFrame({
     <div
       className={cn(
         "@container relative flex min-h-0 flex-1 flex-col overflow-y-auto",
-        surfaceClassName ?? SPACE_CANVAS_BG,
+        surfaceClassName ?? (mobile ? MOBILE_APP_BG : SPACE_CANVAS_BG),
       )}
     >
       {view === "space" && !bannerSpace && !inPanel && !desktop ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
@@ -34,6 +34,8 @@ type SheetItem = {
   modifiedAt: string | null;
   webViewLink?: string;
   embedUrl?: string;
+  sheetNames?: string[];
+  values?: string[][];
 };
 
 type SheetsSessionCache = {
@@ -102,21 +104,6 @@ function parseSheetItem(raw: unknown): SheetItem | null {
     webViewLink,
     embedUrl: urls.embedUrl,
   };
-}
-
-function PreviewFrame({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-black/[0.02] dark:bg-white/[0.03]">
-      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
-      <p className="sr-only">{title}</p>
-    </div>
-  );
 }
 
 export function SheetsConnectorView({
@@ -244,7 +231,7 @@ export function SheetsConnectorView({
   );
 
   const openWorkbook = useCallback(
-    (sheet: SheetItem) => {
+    async (sheet: SheetItem) => {
       const urls = sheetUrls(sheet.id);
       const next = {
         ...sheet,
@@ -257,10 +244,44 @@ export function SheetsConnectorView({
       setStatus(null);
       setPreviewLoading(true);
       persist({ selected: next, page: "detail", error: null });
-      // Brief loading chip like Drive; embed paints on its own.
-      window.setTimeout(() => setPreviewLoading(false), 400);
+      try {
+        const namesResult = await runConnectorViewOperation({
+          workspaceId,
+          connectorId: "gsheets",
+          operation: "getSheetNames",
+          input: { spreadsheetId: sheet.id },
+        });
+        const sheetNames = Array.isArray(namesResult.data.sheetNames)
+          ? namesResult.data.sheetNames.filter((name): name is string => typeof name === "string")
+          : [];
+        const valuesResult = await runConnectorViewOperation({
+          workspaceId,
+          connectorId: "gsheets",
+          operation: "getValues",
+          input: {
+            spreadsheetId: sheet.id,
+            range: `${sheetNames[0] ?? "Sheet1"}!A1:Z100`,
+          },
+        });
+        const rawValues = Array.isArray(valuesResult.data.values)
+          ? valuesResult.data.values
+          : [];
+        const loaded = {
+          ...next,
+          sheetNames,
+          values: rawValues.map((row) =>
+            Array.isArray(row) ? row.map(String) : [String(row)],
+          ),
+        };
+        setSelected(loaded);
+        persist({ selected: loaded, page: "detail", error: null });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not load this spreadsheet.");
+      } finally {
+        setPreviewLoading(false);
+      }
     },
-    [persist],
+    [persist, workspaceId],
   );
 
   const createSpreadsheet = useCallback(async () => {
@@ -400,7 +421,7 @@ export function SheetsConnectorView({
       },
       onRefresh: () => {
         if (page === "detail" && selected) {
-          openWorkbook(selected);
+          void openWorkbook(selected);
           return;
         }
         void refresh({ force: true });
@@ -453,16 +474,21 @@ export function SheetsConnectorView({
               Loading…
             </div>
           ) : null}
-          {selected.embedUrl ? (
-            <PreviewFrame title={selected.name}>
-              <iframe
-                title={selected.name}
-                src={selected.embedUrl}
-                className="h-full w-full border-0 bg-white dark:bg-space-canvas"
-                allow="autoplay; encrypted-media"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-            </PreviewFrame>
+          {selected.values ? (
+            <div className="min-h-0 flex-1 overflow-auto p-4">
+              <p className="mb-3 text-[13px] font-medium">{selected.sheetNames?.[0] ?? "Sheet1"}</p>
+              <table className="min-w-full border-collapse text-left text-[12px]">
+                <tbody>
+                  {selected.values.map((row, rowIndex) => (
+                    <tr key={rowIndex} className="border-b border-border/60">
+                      {row.map((value, columnIndex) => (
+                        <td key={columnIndex} className="max-w-56 border-r border-border/60 px-2 py-1.5 align-top break-words">{value}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
               <ConnectorMark
@@ -470,9 +496,9 @@ export function SheetsConnectorView({
                 size="md"
                 className="!h-10 !w-10 !bg-transparent"
               />
-              <p className="text-[13px] font-medium">Couldn’t load preview</p>
+              <p className="text-[13px] font-medium">Spreadsheet content is unavailable</p>
               <p className="max-w-sm text-[12px] text-muted-foreground">
-                Use Open in the bottom bar to view this spreadsheet in Google.
+                This spreadsheet is being read through the connected Google Sheets account.
               </p>
             </div>
           )}
@@ -504,7 +530,7 @@ export function SheetsConnectorView({
                   subtitle="Google Sheet"
                   meta={sheet.modified}
                   active={selected?.id === sheet.id}
-                  onClick={() => openWorkbook(sheet)}
+                  onClick={() => void openWorkbook(sheet)}
                   leading={
                     <span className="mt-0.5 shrink-0">
                       <ConnectorMark

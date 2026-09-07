@@ -231,12 +231,6 @@ function normalizeDownloadPreview(input: {
     else previewKind = "embed";
   }
 
-  // Workspace files must stay on Google embeds. Export/download often returns the
-  // Docs app shell (`docs_flag_initialData`) instead of readable content.
-  if (sourceMime?.startsWith("application/vnd.google-apps.")) {
-    previewKind = "embed";
-  }
-
   return {
     id: pickString(payload.id) ?? fileId,
     name,
@@ -315,9 +309,6 @@ export const gdriveViewAdapter: ConnectorViewAdapter = {
           // Always return an embeddable Google preview so the UI can show something
           // even when Composio download fails (access, size, format).
           const isVideo = isVideoMime(sourceMime);
-          const isWorkspace = Boolean(
-            sourceMime?.startsWith("application/vnd.google-apps."),
-          );
           const fallback = {
             id: fileId,
             name: pickString(args.name) ?? "File",
@@ -330,12 +321,6 @@ export const gdriveViewAdapter: ConnectorViewAdapter = {
             linkLabel: "Open in Drive",
             exportApplied: false,
           };
-
-          // Docs/Sheets/Slides: skip download — text/html export often returns the
-          // Docs bootstrap (`docs_flag_initialData`) instead of document body.
-          if (isWorkspace) {
-            return { ok: true, data: { ...fallback, previewKind: "embed" as const } };
-          }
 
           const result = await runTool(
             ctx,

@@ -42,10 +42,11 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
       />
       <div
         className={cn(
-          "relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden will-change-transform",
+          "relative z-20 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden will-change-transform",
           MOBILE_APP_BG,
           "transition-[transform,border-radius] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]",
           menuOpen && MOBILE_PEEK_RADIUS,
+          menuOpen && "mobile-menu-peek",
         )}
         style={{
           transform: menuOpen ? `translate3d(${menuWidth}, 0, 0)` : undefined,
@@ -57,7 +58,7 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
       <div
         aria-hidden={!menuOpen}
         className={cn(
-          "absolute inset-y-0 left-0 z-20 flex flex-col overflow-hidden",
+          "absolute inset-y-0 left-0 z-10 flex flex-col overflow-hidden",
           MOBILE_MENU_BG,
           "transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform",
           menuOpen ? "translate-x-0" : "-translate-x-full pointer-events-none",

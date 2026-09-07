@@ -159,7 +159,7 @@ export function SpaceChatLayout() {
           </div>
         }
         panelPane={
-          <div className={cn("flex h-full min-h-0 flex-col overflow-hidden", SPACE_CANVAS_BG)}>
+          <div className={cn("flex h-full min-h-0 flex-col overflow-hidden", MOBILE_APP_BG)}>
             {projectId ? (
               <div
                 key={projectId}

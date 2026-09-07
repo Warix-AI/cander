@@ -660,8 +660,9 @@ export function DriveConnectorView({
       setPage("detail");
       const video = isVideoMimeClient(file.mimeType);
       const workspace = file.mimeType.startsWith("application/vnd.google-apps.");
-      // Instant Google embed for Docs/Sheets/etc. Videos try native first.
-      setPreview({
+      // Google web embeds require the browser's separate Google session. Load
+      // every file through the connected Drive operation instead.
+      setPreview(workspace ? null : {
         previewKind: video ? "video" : "embed",
         mimeType: file.mimeType,
         displayUrl: null,
@@ -670,10 +671,6 @@ export function DriveConnectorView({
         name: file.name,
         linkLabel: "Open in Drive",
       });
-      if (workspace) {
-        setPreviewLoading(false);
-        return;
-      }
       setPreviewLoading(true);
       try {
         const result = await runConnectorViewOperation({
@@ -697,7 +694,14 @@ export function DriveConnectorView({
         } else {
           setPreview({
             ...next,
-            embedUrl: next.embedUrl || clientEmbedUrl(file),
+            previewKind:
+              workspace && next.previewKind === "embed"
+                ? "unsupported"
+                : next.previewKind,
+            embedUrl:
+              workspace && next.previewKind === "embed"
+                ? null
+                : next.embedUrl || clientEmbedUrl(file),
           });
         }
       } catch {
@@ -713,7 +717,16 @@ export function DriveConnectorView({
               : prev,
           );
         }
-        // Non-video: keep the embed preview already on screen.
+        if (workspace) {
+          setPreview({
+            previewKind: "unsupported",
+            mimeType: file.mimeType,
+            displayUrl: null,
+            openUrl: clientOpenUrl(file),
+            name: file.name,
+            linkLabel: "Open in Drive",
+          });
+        }
       } finally {
         setPreviewLoading(false);
       }

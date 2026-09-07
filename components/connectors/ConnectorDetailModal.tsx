@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRight, Settings2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Settings2, X } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { ConnectorInfoSection } from "@/components/connectors/ConnectorInfoSection";
 import { ConnectorSkillsToggles } from "@/components/connectors/ConnectorSkillsToggles";
@@ -13,7 +13,7 @@ import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import type { Connector, PinTier } from "@/lib/types";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import { appConnectorById } from "@/lib/connectors/apps/definitions";
-import { SPACE_CANVAS_BG } from "@/lib/mobile-menu-styles";
+import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 
 type ConnectorPrompt = {
@@ -237,7 +237,7 @@ export function ConnectorDetailModal({
       className={cn(
         "flex flex-col",
         dedicated
-          ? cn("h-full w-full", SPACE_CANVAS_BG)
+          ? cn("h-full w-full", MOBILE_APP_BG)
           : cn(MODAL_WIDTH, MODAL_HEIGHT, SHELL_G3_RADIUS),
       )}
       backdropClassName="bg-black/30"
@@ -253,6 +253,7 @@ export function ConnectorDetailModal({
                 SHELL_G3_RADIUS,
               )}
             >
+              <ArrowLeft className="h-4 w-4" strokeWidth={1.8} />
               <span>Connectors</span>
             </button>
             <span className="text-muted-foreground/50" aria-hidden="true">

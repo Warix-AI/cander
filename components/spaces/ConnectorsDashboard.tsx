@@ -388,11 +388,10 @@ export function ConnectorsDashboard() {
   };
 
   const selectConnector = (id: string) => {
-    // On mobile, a connector is a destination in the right pane. Opening its
-    // catalog detail first leaves the user in a dead-end modal instead of the
-    // Chat ↔ connector pager.
+    // The General catalog opens its own connector detail. Pinned connector
+    // surfaces are separate destinations and should not intercept this flow.
     if (mobile) {
-      openConnector(id);
+      openConnectorDetail(id);
       return;
     }
     openConnectorDetail(id);

@@ -69,15 +69,17 @@ export function MobileMenuPane() {
   const openNav = (id: SidebarNavId) => {
     if (isComingSoonNav(id)) return;
     closeAllPinSections();
-    const opensPanel = id === "connectors";
+    let opensPanel = false;
     if (id === "browser") {
       openBrowser();
     } else if (id === "recents") {
       openRecents();
     } else if (id === "connectors") {
       openSpace("connectors");
+      opensPanel = true;
     } else if (!isExtraNavId(id)) {
       openSpace(id);
+      opensPanel = id === "studio";
     }
     setMobileMenuScreen("main");
     setMobileSurface(opensPanel ? "panel" : "chat");
@@ -203,7 +205,7 @@ function MenuMain({
           <button
             type="button"
             onClick={() => onOpenScreen("pinned")}
-            className={mobileMenuRowClass}
+            className={cn(mobileMenuRowClass, "-mt-0.5")}
           >
             <Pin
               className={cn(
