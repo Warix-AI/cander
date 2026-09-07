@@ -48,6 +48,7 @@ export function ComposerRecordingView({
       )}
       role="status"
       aria-live="polite"
+      data-composer-keep-keyboard=""
       aria-label={
         isTranscribing
           ? "Transcribing"
@@ -55,6 +56,10 @@ export function ComposerRecordingView({
             ? "Live dictation"
             : "Recording"
       }
+      onPointerDown={(event) => {
+        if ((event.target as HTMLElement).closest("button")) return;
+        event.preventDefault();
+      }}
     >
       <CircleIconBtn
         label="Cancel recording"

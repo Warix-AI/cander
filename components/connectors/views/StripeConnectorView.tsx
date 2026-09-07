@@ -207,7 +207,7 @@ export function StripeConnectorView({
   const { workspaceId } = useApp();
   const chromeKey = viewCacheKey(connectorId, workspaceId, "chrome");
   const chromeHit = peekViewCache<StripeChromeCache>(chromeKey);
-  const initialTab = chromeHit?.data.tab ?? "customers";
+  const initialTab = TABS[0]!.id;
   const initialSegment = chromeHit?.data.paymentSegment ?? "charges";
   const initialSectionKey = viewCacheKey(
     connectorId,

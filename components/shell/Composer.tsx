@@ -869,9 +869,10 @@ export function Composer({
       if (suppressAutoFocusRef.current) return;
       const target = event.target;
       if (!(target instanceof Element)) return;
-      // Composer (+ attach/send) and header chrome must stay interactive.
+      // Composer (+ attach/send/dictation/plus) and header chrome must stay interactive.
       if (wrapRef.current?.contains(target)) return;
-      if (target.closest("header, [data-allow-keyboard-dismiss]")) return;
+      if (target.closest("header, [data-allow-keyboard-dismiss], [data-composer-keep-keyboard]"))
+        return;
       // Keep the soft keyboard up — don't let the tap steal focus.
       event.preventDefault();
     };
@@ -935,9 +936,9 @@ export function Composer({
       const next = current === id ? null : id;
       if (next) {
         // Opening + must not dismiss the soft keyboard.
-        queueMicrotask(() => {
-          textRef.current?.focus({ preventScroll: true });
-        });
+        queueMicrotask(() => keepComposerKeyboard());
+        window.setTimeout(keepComposerKeyboard, 50);
+        window.setTimeout(keepComposerKeyboard, 200);
       }
       return next;
     });
@@ -1355,11 +1356,18 @@ export function Composer({
   }, []);
 
   // Soft keyboard must stay up for the whole dictation / transcribing session.
+  // Keep the focused field in-DOM (opacity-0, not visibility:hidden) so iOS
+  // doesn't drop the keyboard when the recording chrome overlays it.
   useEffect(() => {
     if (!dictatingActive) return;
     keepComposerKeyboard();
-    const id = window.setInterval(keepComposerKeyboard, 350);
-    return () => window.clearInterval(id);
+    const id = window.setInterval(keepComposerKeyboard, 200);
+    const onVis = () => keepComposerKeyboard();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [dictatingActive]);
   const browsingFocus = useSyncExternalStore(
     subscribeBrowsingFocus,
@@ -1701,7 +1709,7 @@ export function Composer({
               <div
                 className={cn(
                   "flex min-h-9 items-start gap-0.5",
-                  dictatingActive && "invisible pointer-events-none",
+                  dictatingActive && "opacity-0",
                 )}
                 aria-hidden={dictatingActive || undefined}
               >
@@ -1720,6 +1728,9 @@ export function Composer({
                     suppressAutoFocusRef.current = false;
                     onFocus?.();
                   }}
+                  // Keep receiving focus while dictating (opacity-0 overlay).
+                  readOnly={dictatingActive}
+                  tabIndex={dictatingActive ? 0 : undefined}
                   onChange={(event) => {
                     setValue(event.target.value);
                     syncComposerFieldHeight(
@@ -1885,7 +1896,7 @@ export function Composer({
             <div
               className={cn(
                 "flex min-h-8 items-end gap-1",
-                dictatingActive && "invisible pointer-events-none",
+                dictatingActive && "opacity-0",
               )}
               aria-hidden={dictatingActive || undefined}
             >
@@ -1916,6 +1927,7 @@ export function Composer({
                   autoFocus={raiseKeyboard}
                   enterKeyHint="send"
                   autoComplete="off"
+                  readOnly={dictatingActive}
                   onFocus={() => {
                     const key =
                       blocks.find((b) => b.type === "text")?.key ?? null;
@@ -1972,9 +1984,9 @@ export function Composer({
                   blocks={blocks}
                   placeholder={hint}
                   autoFocus={raiseKeyboard}
-                  disabled={dictatingActive}
                   style={{ maxHeight: `${composerMaxLines * 1.25}rem` }}
                   className="min-h-8 overflow-y-auto py-[6px] text-[16px] leading-5 sm:text-[14px]"
+                  // Stay focusable under the dictation overlay so the keyboard stays up.
                   renderConnector={(block) => {
                     const iconId =
                       connectors.find((c) => c.id === block.scope.connectorId)
@@ -2244,6 +2256,11 @@ function ComposerMenu({
   return (
     <div
       role="menu"
+      data-composer-keep-keyboard=""
+      onPointerDown={(event) => {
+        // Don't steal focus from the composer field.
+        event.preventDefault();
+      }}
       className={cn(
         "absolute z-50 flex flex-col gap-1 overflow-y-auto overscroll-contain px-1.5 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.28)]",
         openAbove

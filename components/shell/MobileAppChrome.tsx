@@ -128,6 +128,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     Boolean(spaceId) &&
     (PRIMARY_NAV_SPACES as readonly string[]).includes(spaceId as string);
   const inConnector = spaceId === "connectors" && Boolean(connectorId);
+  const inConnectorsSpace = spaceId === "connectors";
   const isWorkItemBrowser = isWorkItemBrowserProjectId(projectId);
   const entityOpen =
     (Boolean(projectId) && !isWorkItemBrowser) || inConnector;
@@ -150,13 +151,17 @@ export function MobileAppChrome({ className }: { className?: string }) {
     !spaceId &&
     !projectId;
   const showWorkItemToggle = isWorkItemBrowser && spaceId === "work";
-  // Space-level Chat|{Space} toggle — not used inside a build/explore project chrome.
+  // Space-level Chat|{Space} toggle — includes Connectors catalog (General →
+  // Connectors) so users can switch Chat|Connectors instead of only swiping
+  // into the wrong surface.
   const showSpaceToggle =
     !inChromeSub &&
     !onMenuMain &&
     !showProjectTools &&
     (showWorkItemToggle ||
       inConnector ||
+      (inConnectorsSpace &&
+        (view === "space" || (view === "chat" && Boolean(spaceId)))) ||
       (!isDashboardOnlySpace(spaceId) &&
         (((inPrimarySpace || inConnector) &&
           (view === "space" || (view === "chat" && Boolean(spaceId)))) ||
