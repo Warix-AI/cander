@@ -9,6 +9,7 @@ import {
 } from "@/lib/stripe/subscription";
 import { isStripeConfigured } from "@/lib/stripe/config";
 import type { BillingPlan } from "@/lib/types";
+import { trustedRequestOrigin } from "@/lib/security/server-origin";
 
 async function authedProfile(request: Request) {
   const authHeader = request.headers.get("Authorization");
@@ -84,7 +85,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ bypass: true });
   }
 
-  const origin = new URL(request.url).origin;
+  const origin = trustedRequestOrigin(request);
+  if (!origin) {
+    return NextResponse.json({ error: "Untrusted application origin." }, { status: 400 });
+  }
   const returnTo = body.returnTo === "settings" ? "settings" : "onboarding";
   const successUrl =
     returnTo === "settings"

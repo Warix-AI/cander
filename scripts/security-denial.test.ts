@@ -21,6 +21,8 @@ import {
   resolveChatWorkspaceId,
 } from "../lib/ai/authz.ts";
 import { resolveAuthorizedToolNames } from "../lib/ai/tools/registry.ts";
+import { trustedApplicationOrigin } from "../lib/security/server-origin.ts";
+import { isManagedWorkspaceIconUrl } from "../lib/security/storage-url.ts";
 
 test("safeAuthNextPath rejects open redirects", () => {
   assert.equal(safeAuthNextPath("/settings"), "/settings");
@@ -30,6 +32,62 @@ test("safeAuthNextPath rejects open redirects", () => {
   assert.equal(safeAuthNextPath("https://evil.com"), "/");
   assert.equal(safeAuthNextPath("/%2F%2Fevil.com"), "/");
   assert.equal(safeAuthNextPath(null), "/");
+});
+
+test("server return origins reject untrusted production hosts", () => {
+  assert.equal(
+    trustedApplicationOrigin({
+      requestUrl: "https://evil.example/api/stripe/checkout",
+      configuredUrls: ["https://app.cander.example"],
+      production: true,
+    }),
+    null,
+  );
+  assert.equal(
+    trustedApplicationOrigin({
+      requestUrl: "https://app.cander.example/api/stripe/checkout",
+      configuredUrls: ["https://app.cander.example"],
+      production: true,
+    }),
+    "https://app.cander.example",
+  );
+  assert.equal(
+    trustedApplicationOrigin({
+      requestUrl: "http://localhost:3000/api/stripe/checkout",
+      production: true,
+    }),
+    "http://localhost:3000",
+  );
+});
+
+test("workspace icon URLs must come from the owning storage path", () => {
+  const base = "https://project.supabase.co";
+  assert.equal(
+    isManagedWorkspaceIconUrl({
+      iconUrl:
+        "https://project.supabase.co/storage/v1/object/public/workspace-icons/ws-a/icon.png?v=1",
+      workspaceId: "ws-a",
+      storageOrigin: base,
+    }),
+    true,
+  );
+  assert.equal(
+    isManagedWorkspaceIconUrl({
+      iconUrl:
+        "https://project.supabase.co/storage/v1/object/public/workspace-icons/ws-other/icon.png",
+      workspaceId: "ws-a",
+      storageOrigin: base,
+    }),
+    false,
+  );
+  assert.equal(
+    isManagedWorkspaceIconUrl({
+      iconUrl: "https://tracker.example/icon.png",
+      workspaceId: "ws-a",
+      storageOrigin: base,
+    }),
+    false,
+  );
 });
 
 test("filterOrgWorkspaceIds denies cross-tenant ids", () => {

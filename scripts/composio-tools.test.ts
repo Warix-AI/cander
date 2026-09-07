@@ -297,7 +297,7 @@ test("formatGmailToolOutput summarizes send results", () => {
   assert.equal("connected_account_id" in parsed, false);
 });
 
-test("connector tool seam allows gmail.read and blocks send by default", () => {
+test("connector tool seam allows default Gmail skills and honors disabled send", () => {
   const allowed = authorizeConnectorToolAction({
     workspaceId: "ws",
     profileId: "11111111-1111-1111-1111-111111111111",
@@ -307,11 +307,21 @@ test("connector tool seam allows gmail.read and blocks send by default", () => {
   });
   assert.equal(allowed.ok, true);
 
+  const sendAllowed = authorizeConnectorToolAction({
+    workspaceId: "ws",
+    profileId: "11111111-1111-1111-1111-111111111111",
+    connectorId: "gmail",
+    toolName: "gmail.send",
+    connectionId: "conn_1",
+  });
+  assert.equal(sendAllowed.ok, true);
+
   const denied = authorizeConnectorToolAction({
     workspaceId: "ws",
     profileId: "11111111-1111-1111-1111-111111111111",
     connectorId: "gmail",
     toolName: "gmail.send",
+    toolPermissions: { "gmail.send": false },
     connectionId: "conn_1",
   });
   assert.equal(denied.ok, false);

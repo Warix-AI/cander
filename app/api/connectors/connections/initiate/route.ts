@@ -3,6 +3,7 @@ import { isSupabaseConfigured } from "@/lib/data-backend";
 import { initiateConnection } from "@/lib/connectors/lifecycle";
 import { resolveConnectorRequest } from "@/lib/connectors/server-context";
 import { checkConnectorRateLimitAsync } from "@/lib/connectors/rate-limit";
+import { trustedRequestOrigin } from "@/lib/security/server-origin";
 
 export const runtime = "nodejs";
 
@@ -42,15 +43,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const originHeader = request.headers.get("origin")?.trim();
-    let callbackOrigin: string | null = originHeader || null;
-    if (!callbackOrigin) {
-      try {
-        callbackOrigin = new URL(request.url).origin;
-      } catch {
-        callbackOrigin = null;
-      }
-    }
+    const callbackOrigin = trustedRequestOrigin(request);
     const result = await initiateConnection({
       client: ctx.client,
       workspaceId: ctx.workspaceId,

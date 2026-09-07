@@ -4,6 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
 import { createBillingPortalSession } from "@/lib/stripe/subscription";
 import { isStripeConfigured } from "@/lib/stripe/config";
+import { trustedRequestOrigin } from "@/lib/security/server-origin";
 
 export async function POST(request: Request) {
   if (!isStripeConfigured()) {
@@ -41,7 +42,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No billing customer." }, { status: 400 });
   }
 
-  const origin = new URL(request.url).origin;
+  const origin = trustedRequestOrigin(request);
+  if (!origin) {
+    return NextResponse.json({ error: "Untrusted application origin." }, { status: 400 });
+  }
   const url = await createBillingPortalSession({
     customerId: profile.stripe_customer_id,
     origin,

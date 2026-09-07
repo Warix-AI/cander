@@ -329,25 +329,25 @@ test("capability snapshot prompt lists connected apps", () => {
   assert.match(text, /send:off/);
 });
 
-test("slack tools authorize when permissions enabled", () => {
+test("slack tools honor default and explicit permissions", () => {
+  const allowedByDefault = authorizeConnectorToolAction({
+    workspaceId: "ws",
+    profileId: "p",
+    connectorId: "slack",
+    toolName: "slack.send",
+    connectionId: "c1",
+  });
+  assert.equal(allowedByDefault.ok, true);
+
   const denied = authorizeConnectorToolAction({
     workspaceId: "ws",
     profileId: "p",
     connectorId: "slack",
     toolName: "slack.send",
+    toolPermissions: { "slack.send": false },
     connectionId: "c1",
   });
   assert.equal(denied.ok, false);
-
-  const allowed = authorizeConnectorToolAction({
-    workspaceId: "ws",
-    profileId: "p",
-    connectorId: "slack",
-    toolName: "slack.send",
-    toolPermissions: { "slack.send": true },
-    connectionId: "c1",
-  });
-  assert.equal(allowed.ok, true);
 });
 
 test("confirmation policy requires confirm when ambiguous send", () => {

@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
 import { isSupabaseConfigured } from "@/lib/data-backend";
+import { isManagedWorkspaceIconUrl } from "@/lib/security/storage-url";
 
 /** Persist a workspace icon URL for the workspace owner. */
 export async function POST(request: Request) {
@@ -25,19 +26,35 @@ export async function POST(request: Request) {
   } = await userClient.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-  let body: { workspaceId?: string; iconUrl?: string | null };
+  let body: { workspaceId?: unknown; iconUrl?: unknown };
   try {
-    body = await request.json();
+    const parsed: unknown = await request.json();
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    }
+    body = parsed as { workspaceId?: unknown; iconUrl?: unknown };
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  const workspaceId = body.workspaceId?.trim() ?? "";
-  const iconUrl = body.iconUrl?.trim() || null;
+  const workspaceId =
+    typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
+  const iconUrl =
+    typeof body.iconUrl === "string" ? body.iconUrl.trim() || null : null;
+  if (body.iconUrl !== undefined && body.iconUrl !== null && !iconUrl) {
+    return NextResponse.json({ error: "Workspace icon URL is invalid." }, { status: 400 });
+  }
   if (!workspaceId) {
     return NextResponse.json({ error: "Workspace id is required." }, { status: 400 });
   }
-  if (iconUrl && !/^https?:\/\//i.test(iconUrl)) {
+  if (
+    iconUrl &&
+    !isManagedWorkspaceIconUrl({
+      iconUrl,
+      workspaceId,
+      storageOrigin: supabaseUrl(),
+    })
+  ) {
     return NextResponse.json({ error: "Workspace icon URL is invalid." }, { status: 400 });
   }
 

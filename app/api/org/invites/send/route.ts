@@ -6,6 +6,7 @@ import { isSupabaseConfigured } from "@/lib/data-backend";
 import { sendOrgInviteEmail } from "@/lib/email/send-org-invite";
 import type { OrgInviteDraft } from "@/lib/org-onboarding";
 import { filterOrgWorkspaceIds } from "@/lib/security";
+import { trustedRequestOrigin } from "@/lib/security/server-origin";
 import { assertOrgManager } from "@/lib/supabase/org-auth";
 
 export async function POST(request: Request) {
@@ -78,7 +79,10 @@ export async function POST(request: Request) {
     (orgWorkspaces ?? []).map((row) => String(row.id)),
   );
 
-  const origin = new URL(request.url).origin;
+  const origin = trustedRequestOrigin(request);
+  if (!origin) {
+    return NextResponse.json({ error: "Untrusted application origin." }, { status: 400 });
+  }
   const results: { email: string; inviteUrl: string; sent: boolean }[] = [];
 
   for (const invite of body.invites) {
