@@ -258,14 +258,14 @@ html.cander-narrow .mobile-glass-dock::before {
 
 html:not(.dark).cander-mobile .composer-shell,
 html:not(.dark).cander-narrow .composer-shell {
-  background-color: oklch(1 0 0 / 0.78) !important;
+  background: linear-gradient(145deg, oklch(1 0 0 / 0.9), oklch(0.97 0.006 265 / 0.72)) !important;
   -webkit-backdrop-filter: blur(20px) saturate(145%);
   backdrop-filter: blur(20px) saturate(145%);
   border: 1px solid oklch(0 0 0 / 0.1) !important;
   box-shadow:
     0 1px 2px oklch(0 0 0 / 0.04),
-    0 8px 24px oklch(0 0 0 / 0.08),
-    inset 0 0 0 0.5px oklch(1 0 0 / 0.7) !important;
+    0 10px 28px oklch(0 0 0 / 0.1),
+    inset 0 0 0 0.75px oklch(1 0 0 / 0.85) !important;
 }
 
 html:not(.dark).cander-mobile .composer-dock,
@@ -377,9 +377,13 @@ html.dark.cander-narrow .mobile-dropdown-menu,
 
 html.dark.cander-mobile .composer-shell,
 html.dark.cander-narrow .composer-shell {
-  background-color: var(--input) !important;
-  border: 1px solid oklch(1 0 0 / 0.06) !important;
-  box-shadow: none !important;
+  background: linear-gradient(145deg, oklch(0.2 0.012 265 / 0.92), oklch(0.14 0.01 265 / 0.82)) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid oklch(1 0 0 / 0.14) !important;
+  box-shadow:
+    0 10px 28px oklch(0 0 0 / 0.35),
+    inset 0 0 0 0.75px oklch(1 0 0 / 0.12) !important;
 }
 
 html.dark.cander-mobile .composer-dock,
@@ -1277,11 +1281,13 @@ html:not(.dark) .menu-row-hover[data-active="true"] {
 }
 
 html.dark .composer-shell {
-  background-color: var(--input) !important;
-  background-image: none !important;
-  /* Extremely dark stroke — barely there */
-  border: 1px solid oklch(1 0 0 / 0.06) !important;
-  box-shadow: none !important;
+  background: linear-gradient(145deg, oklch(0.2 0.012 265 / 0.92), oklch(0.14 0.01 265 / 0.82)) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid oklch(1 0 0 / 0.14) !important;
+  box-shadow:
+    0 10px 28px oklch(0 0 0 / 0.35),
+    inset 0 0 0 0.75px oklch(1 0 0 / 0.12) !important;
 }
 
 html.dark .light-surface {
