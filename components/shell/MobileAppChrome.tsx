@@ -7,11 +7,12 @@ import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import {
   MobileBottomSheet,
-  MobileGlassActionsMenu,
+  MobileHeaderActionsPopover,
   ProjectActionsSheetBody,
   ProjectMediaActionsSheetBody,
   ProjectRenameSheetBody,
 } from "@/components/browser/ProjectMobileSheets";
+import { getNativeCapabilities } from "@/lib/native";
 import { previewAddress } from "@/components/panels/PreviewChrome";
 import {
   MobilePanelActionsCluster,
@@ -103,6 +104,8 @@ export function MobileAppChrome({ className }: { className?: string }) {
     getWorkspaceCatalogServerSnapshot,
   );
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [panelMenuOpen, setPanelMenuOpen] = useState(false);
+  const headerMenuOpen = actionsOpen || panelMenuOpen;
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -234,6 +237,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
           mobileSurface === "panel" &&
           (!entityOpen || inConnector))),
   );
+  useEffect(() => {
+    if (!showPanelActions) setPanelMenuOpen(false);
+  }, [showPanelActions]);
+
   const connectorBack = showPanelActions ? panelActions?.connector?.back : undefined;
 
   const startNewChat = () => {
@@ -345,10 +352,20 @@ export function MobileAppChrome({ className }: { className?: string }) {
     }
     if (mobileSurface === "menu") {
       setMobileSurface(mobileContentSurface);
+      try {
+        getNativeCapabilities().haptics.impact("navigation");
+      } catch {
+        /* never block */
+      }
       return;
     }
     dismissNativeKeyboard();
     setMobileSurface("menu");
+    try {
+      getNativeCapabilities().haptics.impact("navigation");
+    } catch {
+      /* never block */
+    }
   };
 
   const setChatOrPanel = (next: "chat" | "panel") => {
@@ -356,10 +373,20 @@ export function MobileAppChrome({ className }: { className?: string }) {
       dismissNativeKeyboard();
       setPanelMode("split");
       setMobileSurface("panel");
+      try {
+        getNativeCapabilities().haptics.impact("navigation");
+      } catch {
+        /* never block */
+      }
       return;
     }
     if (projectId) {
       setMobileSurface("chat");
+      try {
+        getNativeCapabilities().haptics.impact("navigation");
+      } catch {
+        /* never block */
+      }
       return;
     }
     if (!showSpaceToggle) return;
@@ -368,16 +395,36 @@ export function MobileAppChrome({ className }: { className?: string }) {
         keepProject: Boolean(projectId),
         landOnPanel: false,
       });
+      try {
+        getNativeCapabilities().haptics.impact("navigation");
+      } catch {
+        /* never block */
+      }
       return;
     }
     setMobileSurface("chat");
+    try {
+      getNativeCapabilities().haptics.impact("navigation");
+    } catch {
+      /* never block */
+    }
   };
 
   const stopSwipe: TouchEventHandler = (event) => {
     event.stopPropagation();
   };
 
+  const openProjectActions = () => {
+    setActionsOpen(true);
+    try {
+      getNativeCapabilities().haptics.impact("select");
+    } catch {
+      /* never block */
+    }
+  };
+
   const centerChrome =
+    !headerMenuOpen &&
     !onMenuMain &&
     (inChromeSub || showProjectTools || showSpaceToggle) ? (
       inChromeSub ? (
@@ -520,14 +567,18 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
           <div className="relative z-10 flex items-center justify-self-end gap-0.5">
             {showProjectTools ? (
-              <button
-                type="button"
-                aria-label="Project tools"
-                onClick={() => setActionsOpen(true)}
-                className={mobileChromeButtonClass}
-              >
-                <Ellipsis className="h-5 w-5" strokeWidth={1.8} />
-              </button>
+              actionsOpen ? (
+                <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
+              ) : (
+                <button
+                  type="button"
+                  aria-label="Project tools"
+                  onClick={openProjectActions}
+                  className={mobileChromeButtonClass}
+                >
+                  <Ellipsis className="h-5 w-5" strokeWidth={1.8} />
+                </button>
+              )
             ) : showCreateWorkspace ? (
               <button
                 type="button"
@@ -541,6 +592,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
               <MobilePanelActionsCluster
                 config={panelActions}
                 onCompose={handlePanelCompose}
+                onOpenChange={setPanelMenuOpen}
               />
             ) : hideNewChat ? (
               <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
@@ -558,13 +610,13 @@ export function MobileAppChrome({ className }: { className?: string }) {
         </div>
       </header>
 
-      <MobileGlassActionsMenu
+      <MobileHeaderActionsPopover
         open={actionsOpen}
         onClose={() => setActionsOpen(false)}
-        title={mediaProjectActions ? "Image" : projectTitle}
       >
         {mediaProjectActions ? (
           <ProjectMediaActionsSheetBody
+            compact
             onDownload={() => {
               mediaProjectActions.onDownload();
               setActionsOpen(false);
@@ -580,28 +632,31 @@ export function MobileAppChrome({ className }: { className?: string }) {
             disabled={mediaProjectActions.disabled}
           />
         ) : (
-          <ProjectActionsSheetBody
-            key={actionsOpen ? "open" : "closed"}
-            published={published}
-            selectMode={selectMode}
-            canRename={canRename}
-            onRename={() => {
-              setActionsOpen(false);
-              setRenameOpen(true);
-            }}
-            onOpenExternal={() => {
-              openInAppBrowser(address);
-              setActionsOpen(false);
-            }}
-            onSelectElement={() => {
-              setSelectMode(!selectMode);
-              setPanelMode("split");
-              setMobileSurface("panel");
-              setActionsOpen(false);
-            }}
-          />
+          <div className="px-1 pb-1 pt-0.5">
+            <ProjectActionsSheetBody
+              key={actionsOpen ? "open" : "closed"}
+              compact
+              published={published}
+              selectMode={selectMode}
+              canRename={canRename}
+              onRename={() => {
+                setActionsOpen(false);
+                setRenameOpen(true);
+              }}
+              onOpenExternal={() => {
+                openInAppBrowser(address);
+                setActionsOpen(false);
+              }}
+              onSelectElement={() => {
+                setSelectMode(!selectMode);
+                setPanelMode("split");
+                setMobileSurface("panel");
+                setActionsOpen(false);
+              }}
+            />
+          </div>
         )}
-      </MobileGlassActionsMenu>
+      </MobileHeaderActionsPopover>
 
       <MobileBottomSheet
         open={renameOpen}

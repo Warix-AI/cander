@@ -11,9 +11,10 @@ import {
 } from "react";
 import { Check, Ellipsis, LayoutGrid, List, SquarePen } from "lucide-react";
 import {
-  MobileGlassActionsMenu,
+  MobileHeaderActionsPopover,
   SheetAction,
 } from "@/components/browser/ProjectMobileSheets";
+import { getNativeCapabilities } from "@/lib/native";
 import { mobileChromeButtonClass } from "@/lib/mobile-menu-styles";
 import type { SpaceLayout } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -164,179 +165,178 @@ export function MobileFilterBar({
 }
 
 /**
- * Header ⋯ / filter — opens a full-screen glass menu (not a bottom sheet
- * or tiny popover). Covers the chrome so choices stay simple and readable.
+ * Header ⋯ — opens an Apple-style frosted popover in the top-right.
+ * While open the ⋯ is hidden; parent should also hide the surface toggle.
  */
 export function MobilePanelActionsCluster({
   config,
   onCompose,
+  onOpenChange,
 }: {
   config: MobilePanelActionsConfig;
   onCompose: () => void;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const scope = config.scope;
   const layout = config.layout;
   const extras = config.extras ?? [];
   const composeLabel = config.newChatLabel ?? "New";
-  const title = config.connector?.title ?? "Actions";
-  const subtitle = config.connector?.syncHint ?? null;
+
+  const setOpen = (open: boolean) => {
+    setMenuOpen(open);
+    onOpenChange?.(open);
+    if (open) {
+      try {
+        getNativeCapabilities().haptics.impact("select");
+      } catch {
+        /* never block */
+      }
+    }
+  };
+
+  const close = () => setOpen(false);
 
   return (
     <>
-      <button
-        type="button"
-        aria-label={config.connector ? "Connector actions" : "Space actions"}
-        aria-expanded={menuOpen}
-        onClick={() => setMenuOpen(true)}
-        className={cn(mobileChromeButtonClass, menuOpen && "bg-muted")}
-      >
-        <Ellipsis className="h-5 w-5" strokeWidth={1.8} />
-      </button>
+      {!menuOpen ? (
+        <button
+          type="button"
+          aria-label={config.connector ? "Connector actions" : "Space actions"}
+          aria-expanded={false}
+          onClick={() => setOpen(true)}
+          className={mobileChromeButtonClass}
+        >
+          <Ellipsis className="h-5 w-5" strokeWidth={1.8} />
+        </button>
+      ) : (
+        <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
+      )}
 
-      <MobileGlassActionsMenu
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        title={title}
-        subtitle={subtitle}
-      >
-        <div className="space-y-4">
+      <MobileHeaderActionsPopover open={menuOpen} onClose={close}>
+        <div className="flex flex-col">
           {config.connector ? (
-            <div className="space-y-0.5">
+            <PopoverGroup>
               {config.connector.actions.map(({ label, icon: Icon, disabled, onClick }) => (
-                <button
+                <PopoverRow
                   key={label}
-                  type="button"
+                  icon={Icon}
+                  label={label}
                   disabled={disabled}
-                  className={cn(
-                    "flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[16px] font-medium tracking-[-0.02em] hover:bg-muted disabled:opacity-40",
-                    /disconnect|uninstall|remove|delete/i.test(label) &&
-                      "text-destructive",
-                  )}
+                  destructive={/disconnect|uninstall|remove|delete/i.test(label)}
                   onClick={() => {
-                    setMenuOpen(false);
+                    close();
                     onClick();
                   }}
-                >
-                  <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-                  {label}
-                </button>
+                />
               ))}
               {config.connector.controls}
-            </div>
+            </PopoverGroup>
           ) : config.onNewChat ? (
-            <div className="space-y-0.5">
+            <PopoverGroup>
               <SheetAction
                 icon={SquarePen}
                 label={composeLabel}
                 onClick={() => {
-                  setMenuOpen(false);
+                  close();
                   onCompose();
                 }}
               />
-            </div>
-          ) : null}
-          {scope ? (
-            <div>
-              <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-                {scope.label ?? "Filter"}
-              </p>
-              <div className="space-y-0.5">
-                {scope.options.map((item) => (
-                  <SheetRow
-                    key={item.id}
-                    label={item.label}
-                    selected={scope.value === item.id}
-                    onClick={() => scope.onChange(item.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {scope?.value === "space" && extras.length ? (
-            <div>
-              <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-                Category
-              </p>
-              <div className="space-y-0.5">
-                {extras.map((item) => (
-                  <SheetRow
-                    key={item.id}
-                    label={item.label}
-                    selected={item.active}
-                    onClick={() => {
-                      item.onClick();
-                      setMenuOpen(false);
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
+            </PopoverGroup>
           ) : null}
           {layout ? (
-            <div>
-              <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-                Layout
-              </p>
-              <div className="space-y-0.5">
-                <SheetAction
-                  icon={LayoutGrid}
-                  label="Cards"
-                  active={layout.value === "cards"}
-                  onClick={() => layout.onChange("cards")}
-                />
-                <SheetAction
-                  icon={List}
-                  label="List"
-                  active={layout.value === "list"}
-                  onClick={() => layout.onChange("list")}
-                />
-              </div>
-            </div>
+            <PopoverGroup>
+              <PopoverRow
+                icon={LayoutGrid}
+                label="Cards"
+                selected={layout.value === "cards"}
+                onClick={() => layout.onChange("cards")}
+              />
+              <PopoverRow
+                icon={List}
+                label="List"
+                selected={layout.value === "list"}
+                onClick={() => layout.onChange("list")}
+              />
+            </PopoverGroup>
           ) : null}
-          {scope?.value !== "space" && extras.length ? (
-            <div className="space-y-0.5">
+          {scope ? (
+            <PopoverGroup>
+              {scope.options.map((item) => (
+                <PopoverRow
+                  key={item.id}
+                  label={item.label}
+                  selected={scope.value === item.id}
+                  onClick={() => scope.onChange(item.id)}
+                />
+              ))}
+            </PopoverGroup>
+          ) : null}
+          {extras.length ? (
+            <PopoverGroup>
               {extras.map((item) => (
-                <SheetRow
+                <PopoverRow
                   key={item.id}
                   label={item.label}
                   selected={item.active}
                   onClick={() => {
                     item.onClick();
-                    setMenuOpen(false);
+                    close();
                   }}
                 />
               ))}
-            </div>
+            </PopoverGroup>
           ) : null}
         </div>
-      </MobileGlassActionsMenu>
+      </MobileHeaderActionsPopover>
     </>
   );
 }
 
-function SheetRow({
+function PopoverGroup({ children }: { children: ReactNode }) {
+  return (
+    <div className="border-b border-black/8 py-1 last:border-b-0 dark:border-white/10">
+      {children}
+    </div>
+  );
+}
+
+function PopoverRow({
+  icon: Icon,
   label,
   selected,
+  destructive,
+  disabled,
   onClick,
 }: {
+  icon?: typeof SquarePen;
   label: string;
   selected?: boolean;
+  destructive?: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
+      role="menuitem"
+      disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-[12px] px-3 py-3.5 text-left text-[15px] tracking-[-0.01em] transition-colors",
-        selected ? "bg-muted font-medium" : "hover:bg-muted/70",
+        "flex w-full items-center gap-2.5 rounded-[12px] px-2.5 py-2.5 text-left text-[15px] tracking-[-0.01em] transition-colors",
+        destructive
+          ? "text-destructive hover:bg-destructive/10"
+          : selected
+            ? "bg-muted/80 font-medium"
+            : "hover:bg-muted/60",
+        disabled && "opacity-40",
       )}
     >
+      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+        {selected ? <Check className="h-3.5 w-3.5" strokeWidth={2.2} /> : null}
+      </span>
+      {Icon ? <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} /> : null}
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {selected ? (
-        <Check className="h-4 w-4 shrink-0" strokeWidth={2} />
-      ) : null}
     </button>
   );
 }

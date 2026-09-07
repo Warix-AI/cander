@@ -182,27 +182,24 @@ export function MobileBottomSheet({
 }
 
 /**
- * Full-screen glass actions menu for mobile header icons (⋯ / filter).
- * Covers the chrome so the header “goes away”; simplified action list.
- * Prefer this over bottom sheets and tiny anchored popovers.
+ * Apple Photos–style header actions popover for mobile ⋯ / filter.
+ * Anchors top-right; tap outside or choose an action to dismiss.
+ * Replaces the header ⋯ (and surface toggle) while open — not full-screen.
  */
-export function MobileGlassActionsMenu({
+export function MobileHeaderActionsPopover({
   open,
   onClose,
-  title,
-  subtitle,
   children,
   className,
 }: {
   open: boolean;
   onClose: () => void;
-  title?: string;
-  subtitle?: string | null;
   children: ReactNode;
   className?: string;
 }) {
   const titleId = useId();
   const [mounted, setMounted] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -218,52 +215,30 @@ export function MobileGlassActionsMenu({
   }, [open, onClose]);
 
   const panel = (
-    <div
-      className="fixed inset-0 z-[85] flex max-w-[100vw] flex-col"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-    >
+    <div className="fixed inset-0 z-[85] max-w-[100vw]" role="presentation">
+      <button
+        type="button"
+        aria-label="Dismiss"
+        className="absolute inset-0 cursor-default bg-transparent"
+        onClick={onClose}
+      />
       <div
+        ref={panelRef}
+        role="menu"
+        aria-labelledby={titleId}
         className={cn(
-          "mobile-glass-panel mobile-actions-sheet flex min-h-0 flex-1 flex-col overflow-hidden text-foreground",
-          "bg-[oklch(0.98_0.003_265/0.92)] dark:bg-[oklch(0.14_0.01_265/0.96)]",
+          "mobile-glass-panel absolute right-3 top-[calc(env(safe-area-inset-top,0px)+0.65rem)]",
+          "flex max-h-[min(70vh,28rem)] w-[min(17.5rem,calc(100vw-1.5rem))] flex-col overflow-hidden",
+          "rounded-[18px] border border-black/8 text-foreground shadow-[0_18px_48px_rgba(0,0,0,0.28)]",
+          "bg-[oklch(0.98_0.003_265/0.82)] dark:border-white/12 dark:bg-[oklch(0.22_0.01_265/0.72)]",
           className,
         )}
+        onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex shrink-0 items-center gap-2 px-3 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] pb-2">
-          <div className="min-w-0 flex-1 px-2">
-            {title ? (
-              <p
-                id={titleId}
-                className="truncate text-[17px] font-medium tracking-[-0.02em]"
-              >
-                {title}
-              </p>
-            ) : (
-              <span id={titleId} className="sr-only">
-                Actions
-              </span>
-            )}
-            {subtitle ? (
-              <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
-                {subtitle}
-              </p>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-            className={cn(
-              "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
-              "bg-muted/70 text-foreground transition-colors hover:bg-muted",
-            )}
-          >
-            <X className="h-5 w-5" strokeWidth={1.8} />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
+        <span id={titleId} className="sr-only">
+          Actions
+        </span>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 py-1.5">
           {children}
         </div>
       </div>
@@ -278,6 +253,9 @@ export function MobileGlassActionsMenu({
   );
 }
 
+/** @deprecated Prefer MobileHeaderActionsPopover */
+export const MobileGlassActionsMenu = MobileHeaderActionsPopover;
+
 type ActionsPane = "main" | "publish" | "domains";
 
 export function ProjectActionsSheetBody({
@@ -288,6 +266,7 @@ export function ProjectActionsSheetBody({
   onSelectElement,
   onRename,
   onDelete,
+  compact = false,
 }: {
   published?: boolean;
   selectMode?: boolean;
@@ -296,6 +275,8 @@ export function ProjectActionsSheetBody({
   onSelectElement: () => void;
   onRename?: () => void;
   onDelete?: () => void;
+  /** Tighter padding when embedded in the header popover. */
+  compact?: boolean;
 }) {
   const [pane, setPane] = useState<ActionsPane>("main");
   const publishLabel = published ? "Republish" : "Publish";
@@ -303,6 +284,10 @@ export function ProjectActionsSheetBody({
   useEffect(() => {
     setPane("main");
   }, [published]);
+
+  const bodyPad = compact
+    ? "px-1 pb-1 pt-0"
+    : "px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2.25rem)] pt-1";
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -312,22 +297,24 @@ export function ProjectActionsSheetBody({
           pane === "main" ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex min-h-0 flex-1 flex-col px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2.25rem)] pt-1">
-          <div className="flex items-center gap-3 px-3 py-1">
-            <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
-              <span
-                className={cn(
-                  "h-2 w-2 rounded-full",
-                  published ? "bg-emerald-500" : "bg-muted-foreground/50",
-                )}
-              />
-            </span>
-            <p className="text-[15px] font-medium tracking-[-0.01em]">
-              {published ? "Published" : "Draft"}
-            </p>
-          </div>
+        <div className={cn("flex min-h-0 flex-1 flex-col", bodyPad)}>
+          {!compact ? (
+            <div className="flex items-center gap-3 px-3 py-1">
+              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+                <span
+                  className={cn(
+                    "h-2 w-2 rounded-full",
+                    published ? "bg-emerald-500" : "bg-muted-foreground/50",
+                  )}
+                />
+              </span>
+              <p className="text-[15px] font-medium tracking-[-0.01em]">
+                {published ? "Published" : "Draft"}
+              </p>
+            </div>
+          ) : null}
 
-          <div className="mt-3 space-y-0.5">
+          <div className={cn("space-y-0.5", !compact && "mt-3")}>
             <SheetAction
               icon={Upload}
               label={publishLabel}
@@ -401,14 +388,22 @@ export function ProjectMediaActionsSheetBody({
   onReplace,
   onRemove,
   disabled = false,
+  compact = false,
 }: {
   onDownload: () => void;
   onReplace: () => void;
   onRemove: () => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   return (
-    <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2.25rem)] pt-1">
+    <div
+      className={
+        compact
+          ? "px-1 pb-1 pt-0"
+          : "px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2.25rem)] pt-1"
+      }
+    >
       <div className="space-y-0.5">
         <SheetAction icon={Download} label="Download" disabled={disabled} onClick={onDownload} />
         <SheetAction icon={Upload} label="Replace" disabled={disabled} onClick={onReplace} />

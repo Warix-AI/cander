@@ -358,7 +358,13 @@ export function syncNativeShellChrome(theme?: "light" | "dark") {
 }
 
 /** Dismiss the native keyboard (Capacitor). Safe no-op on web. */
-export function dismissNativeKeyboard() {
+export function dismissNativeKeyboard(opts?: {
+  /** Tell the composer not to immediately steal focus back. */
+  suppressComposer?: boolean;
+}) {
+  if (opts?.suppressComposer && typeof window !== "undefined") {
+    window.dispatchEvent(new Event("cander:suppress-composer-keyboard"));
+  }
   pluginHeight = 0;
   writeKeyboardInset(0);
   if (typeof document !== "undefined") {

@@ -55,7 +55,12 @@ export type CapImagePickResult =
   | { ok: true; image: import("../types.ts").ChatImageAttachment }
   | { ok: false; message: string; cancelled?: boolean };
 
-export type HapticEvent = "send" | "select" | "success" | "warning";
+export type HapticEvent =
+  | "send"
+  | "select"
+  | "navigation"
+  | "success"
+  | "warning";
 
 export type HealthQueryOutcome =
   | "unavailable"

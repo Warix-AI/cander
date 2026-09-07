@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { canUseRightPanel } from "@/lib/right-panel";
 import { dismissNativeKeyboard } from "@/lib/mobile-shell";
+import { getNativeCapabilities } from "@/lib/native";
 import { useMobileShell } from "@/lib/use-media-query";
 import type { MobileSurface } from "@/lib/types";
 
@@ -179,6 +180,11 @@ export function useMobileSwipeGestures() {
         setPanelModeRef.current("split");
       }
       if (next !== "chat") dismissNativeKeyboard();
+      try {
+        getNativeCapabilities().haptics.impact("navigation");
+      } catch {
+        /* never block */
+      }
       setMobileSurfaceRef.current(next);
     };
 

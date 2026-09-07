@@ -824,45 +824,44 @@ export function Composer({
     suppressAutoFocusRef.current = false;
   }, [thread?.id]);
 
-  // Sticky keyboard on mobile new chat until the first send.
-  // Focus once when chat owns the screen — never fight blur/hide (that flicker
-  // glitches the menu swipe). Hold focus by canceling outside taps instead.
-  // Keep autoFocus prop stable across menu/panel so we can detect panel→chat
-  // and reopen after the pager finishes; only raise while chat is visible.
+  useEffect(() => {
+    const onSuppress = () => {
+      suppressAutoFocusRef.current = true;
+    };
+    window.addEventListener("cander:suppress-composer-keyboard", onSuppress);
+    return () =>
+      window.removeEventListener("cander:suppress-composer-keyboard", onSuppress);
+  }, []);
+
+  // Sticky keyboard on mobile chat: stay up for dictation, +, and send unless
+  // the user scrolls the transcript down (or leaves chat). Don't fight blur on
+  // the scroll surface — ChatColumn dismisses on finger-down scroll.
   const raiseKeyboard =
     autoFocus && (!mobile || mobileSurface === "chat");
+  const stickyKeyboard =
+    mobile &&
+    mobileSurface === "chat" &&
+    !overlay &&
+    view !== "browser";
   const prevSurfaceRef = useRef(mobileSurface);
   useEffect(() => {
     const fromMenu = prevSurfaceRef.current === "menu";
     const fromPanel = prevSurfaceRef.current === "panel";
     prevSurfaceRef.current = mobileSurface;
 
-    if (!autoFocus || !mobile) return;
+    if (!stickyKeyboard) return;
     if (suppressAutoFocusRef.current) return;
-    if (overlay) return;
-    if (view === "browser") return;
-    if (mobileSurface !== "chat") return;
 
     const focusComposer = () => {
       if (suppressAutoFocusRef.current) return;
       if (prevSurfaceRef.current !== "chat") return;
-      const el =
-        textRef.current ??
-        (document.querySelector(
-          ".composer-shell [role='textbox'][contenteditable='true'], .composer-shell textarea",
-        ) as HTMLElement | null);
-      try {
-        el?.focus({ preventScroll: true });
-        if (el) textRef.current = el;
-      } catch {
-        /* ignore */
-      }
+      keepComposerKeyboard();
     };
 
     // Menu overlays; panel slides the chat pane back on-screen. Retry so iOS
     // raises the keyboard after pointer-events / transform settle.
     const delays =
-      fromMenu || fromPanel ? [560, 720, 920] : [0, 80];
+      fromMenu || fromPanel ? [560, 720, 920] : raiseKeyboard ? [0, 80] : [];
     const openIds = delays.map((ms) => window.setTimeout(focusComposer, ms));
 
     const holdKeyboard = (event: TouchEvent) => {
@@ -871,7 +870,11 @@ export function Composer({
       if (!(target instanceof Element)) return;
       // Composer (+ attach/send/dictation/plus) and header chrome must stay interactive.
       if (wrapRef.current?.contains(target)) return;
-      if (target.closest("header, [data-allow-keyboard-dismiss], [data-composer-keep-keyboard]"))
+      if (
+        target.closest(
+          "header, .chat-scroll, [data-allow-keyboard-dismiss], [data-composer-keep-keyboard]",
+        )
+      )
         return;
       // Keep the soft keyboard up — don't let the tap steal focus.
       event.preventDefault();
@@ -886,7 +889,7 @@ export function Composer({
       for (const id of openIds) window.clearTimeout(id);
       document.removeEventListener("touchstart", holdKeyboard, true);
     };
-  }, [autoFocus, mobile, mobileSurface, overlay, view, thread?.id]);
+  }, [stickyKeyboard, raiseKeyboard, mobileSurface, overlay, view, thread?.id]);
 
   useEffect(() => {
     if (!menu) return;
@@ -935,6 +938,11 @@ export function Composer({
     setMenu((current) => {
       const next = current === id ? null : id;
       if (next) {
+        try {
+          getNativeCapabilities().haptics.impact("select");
+        } catch {
+          /* never block */
+        }
         // Opening + must not dismiss the soft keyboard.
         queueMicrotask(() => keepComposerKeyboard());
         window.setTimeout(keepComposerKeyboard, 50);
@@ -985,6 +993,11 @@ export function Composer({
   const pinned = pinTarget ? Boolean(pinTier(pinTarget.kind, pinTarget.id)) : false;
 
   const cancelDictation = () => {
+    try {
+      getNativeCapabilities().haptics.impact("select");
+    } catch {
+      /* never block */
+    }
     dictationRef.current?.cancel();
     dictationRef.current = null;
     speechRef.current?.stop();
@@ -1001,6 +1014,7 @@ export function Composer({
     if (valueBaseRef.current) {
       setValue(valueBaseRef.current.trimEnd());
     }
+    queueMicrotask(() => keepComposerKeyboard());
   };
 
   const finishTranscription = (text: string) => {
@@ -1053,11 +1067,10 @@ export function Composer({
       if (!body && !usableImages.length && !files.length) {
         setValue(next);
         setDictateError(null);
+        queueMicrotask(() => keepComposerKeyboard());
         return;
       }
-      suppressAutoFocusRef.current = true;
       try {
-        getNativeCapabilities().keyboard.dismiss();
         getNativeCapabilities().haptics.impact("send");
       } catch {
         /* never block send */
@@ -1080,6 +1093,9 @@ export function Composer({
       setAttachError(null);
       clearPageReference();
       clearEntityReference();
+      // Keep keyboard up after send — only scroll dismisses it in chat.
+      queueMicrotask(() => keepComposerKeyboard());
+      window.setTimeout(keepComposerKeyboard, 80);
       return;
     }
 
@@ -1090,11 +1106,18 @@ export function Composer({
       setTranscriptReveal(false);
       const el = textRef.current;
       if (el) focusComposerTextEnd(el);
+      keepComposerKeyboard();
     }, 180);
+    window.setTimeout(keepComposerKeyboard, 320);
   };
 
   const stopDictationAndTranscribe = (intent: "insert" | "send" = "insert") => {
     afterTranscriptionRef.current = intent;
+    try {
+      getNativeCapabilities().haptics.impact(intent === "send" ? "send" : "select");
+    } catch {
+      /* never block */
+    }
 
     const session = dictationRef.current;
     if (session) {
@@ -1195,10 +1218,8 @@ export function Composer({
       );
       return;
     }
-    // Give the reply the screen: dismiss keyboard immediately on Capacitor.
-    suppressAutoFocusRef.current = true;
+    // Keep keyboard up after send — only scroll dismisses it in chat.
     try {
-      getNativeCapabilities().keyboard.dismiss();
       getNativeCapabilities().haptics.impact("send");
     } catch {
       /* never block send */
@@ -1250,6 +1271,8 @@ export function Composer({
     setAttachError(null);
     clearPageReference();
     clearEntityReference();
+    queueMicrotask(() => keepComposerKeyboard());
+    window.setTimeout(keepComposerKeyboard, 80);
   };
 
   const startDictation = () => {
@@ -1258,6 +1281,11 @@ export function Composer({
     setTranscribing(false);
     afterTranscriptionRef.current = "insert";
     valueBaseRef.current = value.trim() ? `${value.trim()} ` : "";
+    try {
+      getNativeCapabilities().haptics.impact("select");
+    } catch {
+      /* never block */
+    }
 
     // OpenAI realtime streaming (silent accumulate → instant paste on stop).
     // Speech-to-text is last resort when MediaRecorder isn't available.

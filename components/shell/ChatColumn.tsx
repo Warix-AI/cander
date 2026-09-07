@@ -165,7 +165,7 @@ export function ChatColumn() {
       const y = event.touches[0]?.clientY ?? touchStartY;
       if (y - touchStartY > 36) {
         dismissedThisGesture = true;
-        dismissNativeKeyboard();
+        dismissNativeKeyboard({ suppressComposer: true });
       }
     };
     node.addEventListener("scroll", onScroll, { passive: true });

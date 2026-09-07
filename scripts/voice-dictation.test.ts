@@ -79,7 +79,7 @@ describe("Dictation isolation", () => {
 
   it("composer keeps textarea mounted during dictation (keyboard stays open)", () => {
     const composer = fs.readFileSync("components/shell/Composer.tsx", "utf8");
-    assert.ok(composer.includes("invisible pointer-events-none"));
+    assert.ok(composer.includes("opacity-0"));
     assert.ok(composer.includes("preventScroll: true"));
     assert.ok(
       composer.includes('status={transcribing ? "transcribing" : "recording"}'),

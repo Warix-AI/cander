@@ -27,9 +27,16 @@ describe("native capabilities facade (P0A)", () => {
 
   it("Composer routes camera/keyboard through the facade", () => {
     const composer = readRepo("components/shell/Composer.tsx");
-    assert.match(composer, /getNativeCapabilities\(\)\.media\.pickCameraPhoto/);
-    assert.match(composer, /getNativeCapabilities\(\)\.keyboard\.dismiss/);
+    assert.match(composer, /getNativeCapabilities\(\)\.media\.pickLibraryImages/);
+    assert.match(composer, /getNativeCapabilities\(\)\.haptics\.impact/);
     assert.doesNotMatch(composer, /pickWithCapacitorCamera/);
+    // Soft keyboard stays up after send; scroll dismiss uses mobile-shell.
+    assert.doesNotMatch(
+      composer,
+      /getNativeCapabilities\(\)\.keyboard\.dismiss/,
+    );
+    const chrome = readRepo("lib/mobile-shell.ts");
+    assert.match(chrome, /export function dismissNativeKeyboard/);
   });
 });
 
@@ -181,7 +188,13 @@ describe("P0 non-regression surface checks", () => {
   it("haptics never block send", () => {
     const haptics = readRepo("lib/native/haptics.ts");
     assert.match(haptics, /never block/i);
+    assert.match(haptics, /registerPlugin/);
     const composer = readRepo("components/shell/Composer.tsx");
     assert.match(composer, /haptics\.impact\("send"\)/);
+  });
+
+  it("mobile swipe fires navigation haptic", () => {
+    const swipe = readRepo("lib/use-mobile-swipe.ts");
+    assert.match(swipe, /haptics\.impact\("navigation"\)/);
   });
 });
