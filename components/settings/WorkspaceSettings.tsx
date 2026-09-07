@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   ChevronRight,
+  ImagePlus,
   Plus,
   Upload,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import {
 import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
 import { workspacesFor } from "@/lib/entitlements";
 import { connectors } from "@/lib/data";
+import { isSupabaseConfigured } from "@/lib/data-backend";
 import type { KnowledgeBase, Workspace } from "@/lib/types";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -36,7 +38,12 @@ import {
   upsertCatalogWorkspace,
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
+import {
+  readWorkspaceIconFile,
+  setWorkspaceIcon,
+} from "@/lib/workspace-icons";
 import { updateWorkspaceKindRemote } from "@/lib/api/workspace-kind";
+import { uploadWorkspaceIcon } from "@/lib/api/workspace-icon";
 import { deleteWorkspaceRemote } from "@/lib/supabase/workspace-actions";
 import {
   workspaceKindOf,
@@ -293,7 +300,9 @@ function WorkspacePage({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [workspaceKindBusy, setWorkspaceKindBusy] = useState(false);
   const [workspaceKindError, setWorkspaceKindError] = useState<string | null>(null);
+  const [workspaceIconError, setWorkspaceIconError] = useState<string | null>(null);
   const knowledgeInput = useRef<HTMLInputElement>(null);
+  const workspaceIconInput = useRef<HTMLInputElement>(null);
   const canDelete =
     isCustomWorkspace(workspace.id) &&
     (workspaceKindOf(workspace) === "personal" ||
@@ -309,6 +318,22 @@ function WorkspacePage({
       actor.role === "Owner" &&
       actor.workspaceIds.includes(workspace.id));
   const canChangeWorkspaceKind = isWorkspaceOwner;
+
+  const handleWorkspaceIcon = async (file: File) => {
+    setWorkspaceIconError(null);
+    try {
+      if (isSupabaseConfigured()) {
+        await uploadWorkspaceIcon({ workspaceId: workspace.id, file });
+      } else {
+        const dataUrl = await readWorkspaceIconFile(file);
+        setWorkspaceIcon(workspace.id, dataUrl);
+      }
+    } catch (error) {
+      setWorkspaceIconError(
+        error instanceof Error ? error.message : "Could not upload workspace icon.",
+      );
+    }
+  };
 
   const handleWorkspaceKindChange = async (kind: "personal" | "business") => {
     if (!canChangeWorkspaceKind || kind === workspaceKind || workspaceKindBusy) return;
@@ -434,21 +459,119 @@ function WorkspacePage({
     }
   };
 
+  const workspaceActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      {canChangeWorkspaceKind ? (
+        <div
+          aria-label="Workspace access"
+          className="settings-glass-toggle inline-flex items-center p-0.5"
+          role="group"
+        >
+          <button
+            type="button"
+            aria-pressed={workspaceKind === "personal"}
+            disabled={workspaceKindBusy}
+            onClick={() => void handleWorkspaceKindChange("personal")}
+            className={cn(
+              "settings-glass-toggle-option inline-flex h-8 items-center px-3 text-[12px] font-medium transition-colors disabled:opacity-50",
+              workspaceKind === "personal"
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Personal
+          </button>
+          <button
+            type="button"
+            aria-pressed={workspaceKind === "business"}
+            disabled={workspaceKindBusy || !entitlements.orgActive}
+            title={
+              entitlements.orgActive
+                ? "Use this workspace for your organization"
+                : "Activate an organization to enable this workspace type"
+            }
+            onClick={() => void handleWorkspaceKindChange("business")}
+            className={cn(
+              "settings-glass-toggle-option inline-flex h-8 items-center px-3 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+              workspaceKind === "business"
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Organization
+          </button>
+        </div>
+      ) : null}
+      {entitlements.hasKnowledgeBases ? (
+        <button
+          type="button"
+          aria-label="Add files to knowledge base"
+          title="Add files to knowledge base"
+          onClick={() => knowledgeInput.current?.click()}
+          className={cn(
+            "inline-flex h-9 w-9 items-center justify-center bg-black text-white transition-colors hover:bg-black/85 dark:bg-black dark:text-white dark:hover:bg-black/85",
+            CONNECTOR_CONTROL_RADIUS,
+          )}
+        >
+          <Plus className="h-4 w-4" strokeWidth={1.8} />
+        </button>
+      ) : null}
+    </div>
+  );
+
   return (
     <SettingsPage>
       <SettingsHeader
         title={workspace.name}
         titleContent={
           <span className="inline-flex items-center gap-3">
-            <WorkspaceMark id={workspace.id} name={workspace.name} size="lg" />
+            {isWorkspaceOwner ? (
+              <span className="group relative inline-flex">
+                <button
+                  type="button"
+                  aria-label={`${workspace.name} logo`}
+                  title="Add or replace workspace logo"
+                  onClick={() => {
+                    setWorkspaceIconError(null);
+                    workspaceIconInput.current?.click();
+                  }}
+                  className="relative inline-flex rounded-[12px] outline-none focus-visible:ring-2 focus-visible:ring-foreground/30"
+                >
+                  <WorkspaceMark id={workspace.id} name={workspace.name} size="lg" />
+                  <span className="pointer-events-none absolute inset-0 inline-flex items-center justify-center rounded-[12px] bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                    <ImagePlus className="h-4 w-4" strokeWidth={1.7} />
+                  </span>
+                </button>
+                <input
+                  ref={workspaceIconInput}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void handleWorkspaceIcon(file);
+                  }}
+                />
+              </span>
+            ) : (
+              <WorkspaceMark id={workspace.id} name={workspace.name} size="lg" />
+            )}
             <span>{workspace.name}</span>
           </span>
         }
+        actions={workspaceActions}
         breadcrumbs={[
           { label: "Workspaces", onClick: onBack },
           { label: workspace.name },
         ]}
       />
+
+      {workspaceKindError || workspaceIconError ? (
+        <p className="mt-3 text-[12.5px] text-destructive">
+          {workspaceKindError ?? workspaceIconError}
+        </p>
+      ) : null}
 
       {canManage ? (
         <SettingsSection title="Members" className="mt-8">
@@ -489,65 +612,6 @@ function WorkspacePage({
       <SettingsSection
         title="Knowledge base"
         className={cn(mobile ? "mt-4" : "mt-8 max-lg:mt-4")}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {canChangeWorkspaceKind ? (
-              <div
-                aria-label="Workspace access"
-                className="inline-flex items-center rounded-full border border-foreground/10 bg-muted/40 p-0.5"
-                role="group"
-              >
-                <button
-                  type="button"
-                  aria-pressed={workspaceKind === "personal"}
-                  disabled={workspaceKindBusy}
-                  onClick={() => void handleWorkspaceKindChange("personal")}
-                  className={cn(
-                    "inline-flex h-8 items-center rounded-full px-3 text-[12px] font-medium transition-colors disabled:opacity-50",
-                    workspaceKind === "personal"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Personal
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={workspaceKind === "business"}
-                  disabled={workspaceKindBusy || !entitlements.orgActive}
-                  title={
-                    entitlements.orgActive
-                      ? "Use this workspace for your organization"
-                      : "Activate an organization to enable this workspace type"
-                  }
-                  onClick={() => void handleWorkspaceKindChange("business")}
-                  className={cn(
-                    "inline-flex h-8 items-center rounded-full px-3 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-                    workspaceKind === "business"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Organization
-                </button>
-              </div>
-            ) : null}
-            {entitlements.hasKnowledgeBases ? (
-              <button
-                type="button"
-                aria-label="Add files to knowledge base"
-                title="Add files to knowledge base"
-                onClick={() => knowledgeInput.current?.click()}
-                className={cn(
-                  "inline-flex h-9 w-9 items-center justify-center bg-black text-white transition-colors hover:bg-black/85 dark:bg-black dark:text-white dark:hover:bg-black/85",
-                  CONNECTOR_CONTROL_RADIUS,
-                )}
-              >
-                <Plus className="h-4 w-4" strokeWidth={1.8} />
-              </button>
-            ) : null}
-          </div>
-        }
       >
         <input
           ref={knowledgeInput}
@@ -563,9 +627,6 @@ function WorkspacePage({
         />
         {uploadError ? (
           <p className="mb-3 text-[12.5px] text-destructive">{uploadError}</p>
-        ) : null}
-        {workspaceKindError ? (
-          <p className="mb-3 text-[12.5px] text-destructive">{workspaceKindError}</p>
         ) : null}
         {entitlements.hasKnowledgeBases ? (
           mobile ? (

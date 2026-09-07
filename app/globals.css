@@ -669,6 +669,27 @@ html:not(.dark) .menu-glass-surface {
     0 14px 38px oklch(0 0 0 / 0.08);
 }
 
+/* The command search is a floating glass sheet: keep the page visible through
+   the surface while preserving enough contrast for the result list. */
+.search-modal-glass {
+  -webkit-backdrop-filter: blur(22px) saturate(135%);
+  backdrop-filter: blur(22px) saturate(135%);
+  border: 0 !important;
+  border-radius: 20px !important;
+  background: oklch(1 0 0 / 0.45) !important;
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.56),
+    0 12px 32px oklch(0.06 0.02 265 / 0.08);
+  -electron-corner-smoothing: system-ui;
+}
+
+.dark .search-modal-glass {
+  background: oklch(1 0 0 / 0.06) !important;
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.08),
+    0 12px 32px oklch(0 0 0 / 0.16);
+}
+
 /* Settings content surfaces — glass panels are limited to the screen body;
    the settings navigation keeps its existing menu treatment. */
 .settings-screen-canvas {
@@ -735,6 +756,55 @@ html:not(.dark) .menu-glass-surface {
 
 .dark .settings-glass-row:hover {
   background: oklch(1 0 0 / 0.08);
+}
+
+/* Compact segmented controls use the same translucent glass treatment as panels. */
+.settings-glass-toggle {
+  -webkit-backdrop-filter: blur(22px) saturate(135%);
+  backdrop-filter: blur(22px) saturate(135%);
+  border: 0;
+  border-radius: 999px !important;
+  background: oklch(1 0 0 / 0.34);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.55), 0 8px 20px oklch(0.06 0.02 265 / 0.06);
+}
+
+.dark .settings-glass-toggle {
+  background: oklch(1 0 0 / 0.08);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.1), 0 8px 20px oklch(0 0 0 / 0.14);
+}
+
+.settings-glass-toggle-option {
+  border-radius: 999px !important;
+}
+
+.settings-glass-toggle-option[aria-pressed="true"] {
+  background: oklch(1 0 0 / 0.7);
+  box-shadow: 0 2px 8px oklch(0.06 0.02 265 / 0.1), inset 0 1px 0 oklch(1 0 0 / 0.8);
+}
+
+.dark .settings-glass-toggle-option[aria-pressed="true"] {
+  background: oklch(1 0 0 / 0.16);
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.2), inset 0 1px 0 oklch(1 0 0 / 0.12);
+}
+
+/* Search results use a softer inner glass highlight so the active command
+   reads as a focused option without making the entire dialog opaque. */
+.search-modal-row-active {
+  background: oklch(0 0 0 / 0.055);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.22);
+}
+
+.search-modal-row-hover:hover {
+  background: oklch(0 0 0 / 0.035);
+}
+
+.dark .search-modal-row-active {
+  background: oklch(1 0 0 / 0.09);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.08);
+}
+
+.dark .search-modal-row-hover:hover {
+  background: oklch(1 0 0 / 0.055);
 }
 
 .settings-glass-input {

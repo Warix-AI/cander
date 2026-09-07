@@ -17,7 +17,12 @@ function parse(raw: string | null): Record<string, string> {
     if (!data || typeof data !== "object") return {};
     const next: Record<string, string> = {};
     for (const [id, value] of Object.entries(data as Record<string, unknown>)) {
-      if (typeof value === "string" && value.startsWith("data:image/")) {
+      if (
+        typeof value === "string" &&
+        (value.startsWith("data:image/") ||
+          value.startsWith("https://") ||
+          value.startsWith("http://"))
+      ) {
         next[id] = value;
       }
     }

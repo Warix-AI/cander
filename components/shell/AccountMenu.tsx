@@ -1,17 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Blocks, CircleUser, Gauge, History, Settings } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { ColorModeToggle } from "@/components/shell/ColorModeToggle";
 import { Dropdown } from "@/components/ui/Controls";
 import { signOutAccount } from "@/lib/auth/sign-out";
-import { hourlyUsageFor } from "@/lib/hourly-usage";
 import { closeAllPinSections } from "@/lib/pin-display-prefs";
-import {
-  USAGE_METER_TONES,
-  type UsageMeterId,
-} from "@/lib/usage-meters";
+import { USAGE_METER_TONES } from "@/lib/usage-meters";
+import { useUsageStatusPercent } from "@/lib/use-usage-status";
 import { cn } from "@/lib/utils";
 
 /** Shared footer row chrome for AccountMenu — matches SidebarNavButton. */
@@ -25,37 +22,10 @@ const flyoutRowClass =
 
 const flyoutIconClass = "h-4 w-4 shrink-0 text-muted-foreground";
 
-const USAGE_CYCLE: {
-  id: UsageMeterId;
-  label: string;
-  key: string;
-}[] = [
-  { id: "chat", label: "Chat", key: "ai_chat" },
-  { id: "images", label: "Image", key: "image_generation" },
-  { id: "build", label: "Building", key: "sandbox_build" },
-];
-
-const USAGE_CYCLE_MS = 2000;
-
-function UsageFlyoutRow() {
+function UsageFlyoutRow({ onOpen }: { onOpen: () => void }) {
   const [hovered, setHovered] = useState(false);
-  const [index, setIndex] = useState(0);
-  const [cycleEpoch, setCycleEpoch] = useState(0);
-
-  useEffect(() => {
-    if (!hovered) {
-      setIndex(0);
-      return;
-    }
-    const id = window.setInterval(() => {
-      setIndex((i) => (i + 1) % USAGE_CYCLE.length);
-    }, USAGE_CYCLE_MS);
-    return () => window.clearInterval(id);
-  }, [hovered, cycleEpoch]);
-
-  const meter = USAGE_CYCLE[index]!;
-  const percent = hourlyUsageFor(meter.key).percent;
-  const tone = USAGE_METER_TONES[meter.id];
+  const { percent, label } = useUsageStatusPercent();
+  const tone = USAGE_METER_TONES.chat;
 
   return (
     <button
@@ -65,17 +35,10 @@ function UsageFlyoutRow() {
       onMouseLeave={() => setHovered(false)}
       onFocus={() => setHovered(true)}
       onBlur={() => setHovered(false)}
-      onClick={() => {
-        setHovered(true);
-        setIndex((i) => (i + 1) % USAGE_CYCLE.length);
-        setCycleEpoch((n) => n + 1);
-      }}
-      aria-label={`Usage · ${meter.label} ${percent}% this hour`}
+      onClick={onOpen}
+      aria-label={`Usage · ${label}`}
     >
-      <Gauge
-        className={flyoutIconClass}
-        strokeWidth={2}
-      />
+      <Gauge className={flyoutIconClass} strokeWidth={2} />
       <span className="shrink-0">Usage</span>
       {hovered ? (
         <>
@@ -88,7 +51,7 @@ function UsageFlyoutRow() {
             aria-valuenow={percent}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label={`${meter.label} hourly usage`}
+            aria-label="Account usage"
           >
             <span
               className={cn(
@@ -156,7 +119,13 @@ export function AccountMenu() {
             />
             Connectors
           </button>
-          <UsageFlyoutRow />
+          <UsageFlyoutRow
+            onOpen={() => {
+              closeAllPinSections();
+              openSettings("usage");
+              close();
+            }}
+          />
           <button
             type="button"
             className={flyoutRowClass}

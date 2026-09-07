@@ -29,13 +29,14 @@ export function UsageSettings() {
     [billingPlan, snapshot?.features, snapshot?.plan, workspaceId],
   );
 
-  const enabledMeters = meters.filter((meter) => meter.enabled);
-  const overallPercent = enabledMeters.length
-    ? Math.max(...enabledMeters.map((meter) => meter.percent))
-    : 0;
+  // Single main meter (AI chat); fall back to highest enabled if chat is off.
+  const mainMeter =
+    meters.find((meter) => meter.id === "chat" && meter.enabled) ??
+    meters.find((meter) => meter.enabled);
+  const overallPercent = mainMeter?.percent ?? 0;
   const usageLabel = !loaded
     ? "Loading…"
-    : enabledMeters.length
+    : mainMeter
       ? `${overallPercent}%`
       : "No usage yet";
 

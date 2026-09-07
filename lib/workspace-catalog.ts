@@ -35,6 +35,9 @@ function normalizeWorkspace(row: Record<string, unknown>): Workspace | null {
   return {
     id,
     name,
+    ...(typeof row.iconUrl === "string" && row.iconUrl.trim()
+      ? { iconUrl: row.iconUrl.trim() }
+      : {}),
     spaces: Array.isArray(row.spaces)
       ? (row.spaces.map(String) as Workspace["spaces"])
       : [...NAV_SPACES],

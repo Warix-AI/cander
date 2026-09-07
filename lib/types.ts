@@ -476,6 +476,8 @@ export type AssetFile = {
 export type Workspace = {
   id: string;
   name: string;
+  /** Public Supabase Storage URL for the workspace logo, when set. */
+  iconUrl?: string;
   spaces: SpaceId[];
   members: number;
   budget: string;

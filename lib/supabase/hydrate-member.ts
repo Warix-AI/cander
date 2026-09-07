@@ -16,6 +16,7 @@ import {
 import { memberRowToMember, type OrgMemberRow } from "@/lib/supabase/org-policy-mapper";
 import { applyOrgMembershipClientState } from "@/lib/org-membership-state";
 import { setProfilePhoto } from "@/lib/profile-photos";
+import { setWorkspaceIcon } from "@/lib/workspace-icons";
 import {
   persistOrgId,
   persistOrgName,
@@ -126,10 +127,21 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
   const plan = asPlan(profile?.plan);
 
   if (workspaceIds.length) {
-    const { data: workspaces, error: wsError } = await supabase
+    let { data: workspaces, error: wsError } = await supabase
       .from("workspaces")
-      .select("id, name, kind, personal, spaces, budget, spend")
+      .select("id, name, kind, personal, icon_url, spaces, budget, spend")
       .in("id", workspaceIds);
+    if (wsError && /icon_url|42703|column/i.test(wsError.message)) {
+      const fallback = await supabase
+        .from("workspaces")
+        .select("id, name, kind, personal, spaces, budget, spend")
+        .in("id", workspaceIds);
+      workspaces = (fallback.data ?? []).map((row) => ({
+        ...row,
+        icon_url: null,
+      }));
+      wsError = fallback.error;
+    }
     if (wsError) throw wsError;
 
     for (const row of workspaces ?? []) {
@@ -137,6 +149,9 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
       upsertCatalogWorkspace({
         id: String(row.id),
         name: String(row.name),
+        ...(typeof row.icon_url === "string" && row.icon_url.trim()
+          ? { iconUrl: row.icon_url.trim() }
+          : {}),
         spaces: asSpaces(row.spaces),
         members: 1,
         budget: typeof row.budget === "string" ? row.budget : "$0",
@@ -144,6 +159,9 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
         kind,
         ...(kind === "personal" ? { personal: true } : {}),
       });
+      if (typeof row.icon_url === "string" && row.icon_url.trim()) {
+        setWorkspaceIcon(String(row.id), row.icon_url.trim());
+      }
     }
   }
 

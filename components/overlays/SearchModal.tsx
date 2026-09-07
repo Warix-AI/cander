@@ -261,9 +261,9 @@ export function SearchModal() {
         onClose={closeOverlay}
         labelledBy="search-title"
         backdropClassName="bg-black/25"
-        className="flex w-[min(40rem,calc(100vw-2rem))] flex-col"
+        className="search-modal-glass flex w-[min(40rem,calc(100vw-2rem))] flex-col"
       >
-      <div className="relative border-b border-border">
+      <div className="relative border-b border-foreground/10 bg-transparent">
         <Search
           className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted-foreground"
           strokeWidth={1.6}
@@ -313,7 +313,9 @@ export function SearchModal() {
                   onClick={() => choose(hit)}
                   className={cn(
                     "flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left",
-                    index === active ? "bg-muted" : "hover:bg-muted/70",
+                    index === active
+                      ? "search-modal-row-active"
+                      : "search-modal-row-hover",
                   )}
                 >
                   <HitIcon group={hit.group} />
