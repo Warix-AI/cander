@@ -448,34 +448,26 @@ function OrganizationSettings({
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? "Could not deactivate organization.");
+        const deactivatedOrgId = data.orgId ? String(data.orgId) : "";
+        if (!deactivatedOrgId) {
+          throw new Error("Could not deactivate organization.");
+        }
         getWorkspaceCatalogSnapshot()
           .filter((workspace) => workspaceKindOf(workspace) === "business")
           .forEach((workspace) =>
             upsertCatalogWorkspace({ ...workspace, kind: "personal", personal: true }),
           );
         persistOrgName(orgDisplayName);
-        persistOrgSetupDeferred(true);
-        if (data.orgId) persistOrgId(String(data.orgId));
+        // Durable flag is org_members.kind = personal — do not rely on deferred.
+        persistOrgSetupDeferred(false);
+        persistOrgId(deactivatedOrgId);
         upsertOrgMember({
           ...actor,
           kind: "personal",
-          orgId: (data.orgId ?? actor.orgId ?? getOrgIdSnapshot()) || undefined,
+          orgId: deactivatedOrgId,
           managedByOrgName: orgDisplayName,
-          orgSetupDeferred: true,
+          orgSetupDeferred: false,
         });
-        if (!data.orgId) {
-          persistOrgId("");
-          upsertOrgMember({
-            ...actor,
-            kind: "personal",
-            orgId: undefined,
-            managedByOrgName: orgDisplayName,
-            orgSetupDeferred: true,
-          });
-          setDeactivateConfirm("");
-          setDeactivateOpen(false);
-          return;
-        }
         window.location.reload();
         return;
       }
@@ -491,16 +483,15 @@ function OrganizationSettings({
         .forEach((workspace) =>
           upsertCatalogWorkspace({ ...workspace, kind: "personal", personal: true }),
         );
-      // Keep the organization identity so the owner can activate it again later.
       persistOrgName(orgDisplayName);
       persistOrgId(orgId || actor.orgId || `local-org-${actor.id}`);
-      persistOrgSetupDeferred(true);
+      persistOrgSetupDeferred(false);
       upsertOrgMember({
         ...actor,
         kind: "personal",
         orgId: orgId || actor.orgId || `local-org-${actor.id}`,
         managedByOrgName: orgDisplayName,
-        orgSetupDeferred: true,
+        orgSetupDeferred: false,
       });
       setDeactivateConfirm("");
       setDeactivateOpen(false);

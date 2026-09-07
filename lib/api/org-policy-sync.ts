@@ -18,6 +18,7 @@ import {
   type WorkspaceMemberSpaceRow,
   type WorkspacePolicyRow,
 } from "@/lib/supabase/org-policy-mapper";
+import { applyOrgMembershipClientState } from "@/lib/org-membership-state";
 import {
   getMembersSnapshot,
   getPoliciesSnapshot,
@@ -131,14 +132,23 @@ export async function hydrateOrgPolicyFromRemote(ctx: WorkspaceCtx) {
     if (!isCurrentPinsScope(ctx, scopeVersion)) return;
 
     if (bundle.orgMemberRows.length) {
+      const orgMembers = bundle.orgMemberRows.map((row) => {
+        const parsed = memberRowToMember(row);
+        if (parsed.id !== ctx.actorId) return parsed;
+        return applyOrgMembershipClientState(parsed);
+      });
       replacePolicyStoreState({
         policies: rebuildPoliciesFromRows(bundle),
-        orgMembers: bundle.orgMemberRows.map(memberRowToMember),
+        orgMembers,
       });
     } else if (bundle.policyRows.length || bundle.knowledgeBaseRows.length) {
       replacePolicyStoreState({
         policies: rebuildPoliciesFromRows(bundle),
-        orgMembers: getMembersSnapshot(),
+        orgMembers: getMembersSnapshot().map((member) =>
+          member.id === ctx.actorId
+            ? applyOrgMembershipClientState(member)
+            : member,
+        ),
       });
     }
   } finally {

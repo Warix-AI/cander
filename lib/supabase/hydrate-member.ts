@@ -14,8 +14,8 @@ import {
   upsertOrgMember,
 } from "@/lib/workspace-policy";
 import { memberRowToMember, type OrgMemberRow } from "@/lib/supabase/org-policy-mapper";
+import { applyOrgMembershipClientState } from "@/lib/org-membership-state";
 import {
-  getOrgSetupDeferredSnapshot,
   persistOrgId,
   persistOrgName,
 } from "@/lib/org-onboarding";
@@ -62,7 +62,6 @@ function asSubscriptionStatus(value: unknown): SubscriptionStatus {
 export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
   const supabase = createSupabaseBrowserClient();
   const base = memberFromSupabaseUser(user);
-  const organizationDeferred = getOrgSetupDeferredSnapshot();
 
   const [profileResult, membershipResult] = await Promise.all([
     supabase
@@ -159,7 +158,6 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
         ? profile.subscription_period_end
         : undefined,
     cancelAtPeriodEnd: profile?.cancel_at_period_end === true,
-    ...(organizationDeferred ? { orgSetupDeferred: true } : {}),
   };
 
   for (const row of memberships) {
@@ -167,6 +165,7 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
     ensurePolicy(wsId, member.id, asSpaces(row.spaces));
   }
 
+  // Provisional upsert; org membership merge below is authoritative.
   upsertOrgMember(member);
   // Keep on-device Apple AI identity warm even if members snapshot is cold later.
   try {
@@ -184,8 +183,10 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
 
   const { data: selfOrg } = await supabase
     .from("org_members")
-    .select("org_id")
+    .select("org_id, kind")
     .eq("profile_id", user.id)
+    .order("updated_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
   const orgId = selfOrg?.org_id ? String(selfOrg.org_id) : undefined;
   if (orgId) {
@@ -202,12 +203,9 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
       .find((item) => item.id === member.id);
 
     if (selfOrgRow) {
-      member = {
+      member = applyOrgMembershipClientState({
         ...member,
         ...selfOrgRow,
-        ...(organizationDeferred
-          ? { kind: "personal" as const, orgSetupDeferred: true }
-          : {}),
         id: member.id,
         orgId,
         email: member.email,
@@ -216,7 +214,14 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
           new Set([...member.workspaceIds, ...selfOrgRow.workspaceIds]),
         ),
         workspaceRoles: member.workspaceRoles,
-      };
+      });
+      upsertOrgMember(member);
+    } else {
+      member = applyOrgMembershipClientState({
+        ...member,
+        orgId,
+        managedByOrgName: orgName,
+      });
       upsertOrgMember(member);
     }
 
@@ -224,16 +229,13 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
       const merged = remoteMembers.map((row) => {
         const parsed = memberRowToMember(row);
         if (parsed.id === member.id) {
-          return {
+          return applyOrgMembershipClientState({
             ...parsed,
             ...member,
-            ...(organizationDeferred
-              ? { kind: "personal" as const, orgSetupDeferred: true }
-              : {}),
             orgId,
             managedByOrgName: orgName,
             workspaceRoles: member.workspaceRoles,
-          };
+          });
         }
         return { ...parsed, orgId, managedByOrgName: orgName };
       });
@@ -247,6 +249,9 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
     } else {
       upsertOrgMember({ ...member, orgId, managedByOrgName: orgName });
     }
+  } else {
+    member = applyOrgMembershipClientState(member);
+    upsertOrgMember(member);
   }
 
   if (workspaceIds.length) {
