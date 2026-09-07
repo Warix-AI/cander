@@ -151,8 +151,8 @@ html:not(.dark).cander-narrow {
   --background: oklch(1 0 0);
 }
 
-.dark html.cander-mobile,
-.dark html.cander-narrow {
+html.dark.cander-mobile,
+html.dark.cander-narrow {
   background-color: var(--mobile-menu-canvas);
 }
 
@@ -382,11 +382,7 @@ html.dark.cander-narrow {
 }
 
 html:not(.dark).cander-mobile .mobile-dropdown-menu,
-html:not(.dark).cander-narrow .mobile-dropdown-menu,
-html.dark.cander-mobile .mobile-dropdown-menu,
-html.dark.cander-narrow .mobile-dropdown-menu,
-.dark html.cander-mobile .mobile-dropdown-menu,
-.dark html.cander-narrow .mobile-dropdown-menu {
+html:not(.dark).cander-narrow .mobile-dropdown-menu {
   background-color: oklch(1 0 0 / 0.82);
   color: var(--foreground);
   border: 0.75px solid var(--border);
@@ -396,52 +392,50 @@ html.dark.cander-narrow .mobile-dropdown-menu,
 }
 
 html.dark.cander-mobile .mobile-dropdown-menu,
-html.dark.cander-narrow .mobile-dropdown-menu,
-.dark html.cander-mobile .mobile-dropdown-menu,
-.dark html.cander-narrow .mobile-dropdown-menu {
+html.dark.cander-narrow .mobile-dropdown-menu {
+  background-color: oklch(0.2 0.01 265 / 0.88);
+  color: var(--foreground);
+  border: 0.75px solid oklch(1 0 0 / 0.1);
   box-shadow: 0 12px 40px oklch(0 0 0 / 0.45);
   -webkit-backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
   backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
 }
 
-.dark html.cander-mobile .mobile-glass-bar,
-.dark html.cander-narrow .mobile-glass-bar {
+html.dark.cander-mobile .mobile-glass-bar,
+html.dark.cander-narrow .mobile-glass-bar {
   background: oklch(0.17 0.008 265 / 0.78);
   border-bottom-color: oklch(1 0 0 / 0.07);
 }
 
-.dark html.cander-mobile .mobile-glass-panel,
-.dark html.cander-narrow .mobile-glass-panel {
-  background: oklch(0.2 0.01 265 / 0.84);
+/* Match light-mode frosted sheet opacity; dark fill so foreground text stays readable. */
+html.dark.cander-mobile .mobile-glass-panel,
+html.dark.cander-narrow .mobile-glass-panel {
+  background: oklch(0.18 0.01 265 / 0.9);
+  color: var(--foreground);
+  border-color: oklch(1 0 0 / 0.1);
+  -webkit-backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
+  backdrop-filter: blur(var(--mobile-glass-blur-strong)) saturate(var(--mobile-glass-saturate));
   box-shadow:
-    -6px 0 28px oklch(0 0 0 / 0.28),
-    inset 0 0 0 0.5px oklch(1 0 0 / 0.08);
+    -6px 0 28px oklch(0 0 0 / 0.4),
+    inset 0 0 0 0.5px oklch(1 0 0 / 0.1);
 }
 
-.dark html.cander-mobile .mobile-glass-pill,
-.dark html.cander-narrow .mobile-glass-pill {
-  background: oklch(0.22 0.01 265 / 0.98);
-  box-shadow:
-    inset 0 0 0 0.5px oklch(1 0 0 / 0.12),
-    0 1px 3px oklch(0 0 0 / 0.2);
-}
-
-.dark html.cander-mobile .mobile-glass-segment,
-.dark html.cander-narrow .mobile-glass-segment {
+html.dark.cander-mobile .mobile-glass-segment,
+html.dark.cander-narrow .mobile-glass-segment {
   background: oklch(1 0 0 / 0.08);
   box-shadow: inset 0 0 0 0.5px oklch(1 0 0 / 0.06);
 }
 
-.dark html.cander-mobile .mobile-glass-segment-active,
-.dark html.cander-narrow .mobile-glass-segment-active {
+html.dark.cander-mobile .mobile-glass-segment-active,
+html.dark.cander-narrow .mobile-glass-segment-active {
   background: oklch(0.28 0.012 265 / 0.92);
   box-shadow:
     0 1px 3px oklch(0 0 0 / 0.22),
     inset 0 0 0 0.5px oklch(1 0 0 / 0.1);
 }
 
-.dark html.cander-mobile .mobile-glass-card,
-.dark html.cander-narrow .mobile-glass-card {
+html.dark.cander-mobile .mobile-glass-card,
+html.dark.cander-narrow .mobile-glass-card {
   background: oklch(0.24 0.012 265 / 0.72);
   border-color: oklch(1 0 0 / 0.08) !important;
   box-shadow:
@@ -449,8 +443,8 @@ html.dark.cander-narrow .mobile-dropdown-menu,
     inset 0 0 0 0.5px oklch(1 0 0 / 0.08);
 }
 
-.dark html.cander-mobile .mobile-glass-inset,
-.dark html.cander-narrow .mobile-glass-inset {
+html.dark.cander-mobile .mobile-glass-inset,
+html.dark.cander-narrow .mobile-glass-inset {
   background: oklch(1 0 0 / 0.05);
 }
 
@@ -497,8 +491,8 @@ html.cander-narrow body {
   background-color: var(--app-canvas);
 }
 
-.dark html.cander-mobile body,
-.dark html.cander-narrow body {
+html.dark.cander-mobile body,
+html.dark.cander-narrow body {
   background-color: var(--mobile-menu-canvas);
 }
 

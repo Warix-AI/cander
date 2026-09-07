@@ -411,6 +411,11 @@ export function DocsConnectorView({
         setPage("browse");
         setSelected(null);
         setPreviewLoading(false);
+        if (query.trim()) {
+          setQuery("");
+          setMobileSearchOpen(false);
+          void refresh({ force: true, searchQuery: "" });
+        }
       },
       onRefresh: () => {
         if (page === "detail" && selected) {

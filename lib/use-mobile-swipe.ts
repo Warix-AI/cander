@@ -6,19 +6,29 @@ import { canUseRightPanel } from "@/lib/right-panel";
 import { dismissNativeKeyboard } from "@/lib/mobile-shell";
 import { useMobileShell } from "@/lib/use-media-query";
 
-const SWIPE_MIN = 56;
+/** Distance to count as a horizontal surface change. */
+const SWIPE_MIN = 40;
+/** Require horizontal travel to beat vertical by this ratio (more forgiving). */
+const SWIPE_BIAS = 0.85;
 
-function isChromeTarget(target: EventTarget | null) {
+function isChromeTarget(
+  target: EventTarget | null,
+  surface: "menu" | "chat" | "panel",
+) {
   if (!(target instanceof Element)) return false;
-  // Inputs always block; when the menu is open we still want edge swipes over rows.
   if (target.closest("[data-allow-swipe]")) return false;
-  // Composer text is swipeable so LTR can open the menu over the keyboard.
-  // Header / buttons still block so taps don't start a swipe.
-  return Boolean(
+  // Always block the app chrome / explicit no-swipe zones.
+  if (
     target.closest(
-      "header, button, a, [role='tab'], [role='tablist'], [data-no-swipe]",
-    ),
-  );
+      "header, [data-no-swipe], [role='tab'], [role='tablist']",
+    )
+  ) {
+    return true;
+  }
+  // Panel content is full of cards/buttons — still allow mid-screen swipes
+  // so Canvas → chat feels as easy as chat → menu.
+  if (surface === "panel" || surface === "menu") return false;
+  return Boolean(target.closest("button, a"));
 }
 
 /**
@@ -63,8 +73,10 @@ export function useMobileSwipeGestures() {
   const onTouchStart = useCallback(
     (event: TouchEvent) => {
       if (!mobile) return;
-      // Menu → chat swipes must work over menu rows / peek strip.
-      if (mobileSurface !== "menu" && isChromeTarget(event.target)) {
+      if (
+        mobileSurface !== "menu" &&
+        isChromeTarget(event.target, mobileSurface)
+      ) {
         tracking.current = false;
         return;
       }
@@ -93,12 +105,11 @@ export function useMobileSwipeGestures() {
       if (!touch) return;
       const dx = touch.clientX - startX.current;
       const dy = touch.clientY - startY.current;
-      if (Math.abs(dx) < SWIPE_MIN || Math.abs(dx) < Math.abs(dy) * 1.15) {
+      if (Math.abs(dx) < SWIPE_MIN || Math.abs(dx) < Math.abs(dy) * SWIPE_BIAS) {
         return;
       }
 
       const goSurface = (next: "menu" | "chat" | "panel") => {
-        // Dismiss before the surface slide so the keyboard never rides along.
         if (next !== "chat") dismissNativeKeyboard();
         setMobileSurface(next);
       };

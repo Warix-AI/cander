@@ -809,6 +809,11 @@ export function StripeConnectorView({
           subscriptions: [],
           prices: [],
         });
+        if (query.trim()) {
+          setQuery("");
+          setMobileSearchOpen(false);
+          void refresh({ force: true, searchQuery: "" });
+        }
       },
       onRefresh: () => {
         void refresh({ force: true });
@@ -973,16 +978,9 @@ export function StripeConnectorView({
                   }}
                 />
               )}
-              <div className="mt-6 space-y-2 text-[12px] text-muted-foreground">
-                <p className="font-medium text-foreground">What's in this app</p>
-                <p>Customers — people and companies you bill.</p>
-                <p>Invoices — bills you’ve sent.</p>
-                <p>Payments — charges and payment attempts.</p>
-                <p>Products — what you sell and their prices.</p>
-              </div>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col">
+            <div className="mobile-header-content flex min-h-0 flex-1 flex-col overflow-hidden">
               {tab === "payments" ? (
                 <div className="flex shrink-0 gap-1 border-b border-black/5 px-3 py-2 dark:border-white/10">
                   {(
@@ -1015,7 +1013,7 @@ export function StripeConnectorView({
                   ))}
                 </div>
               ) : null}
-              <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                 <ConnectorMobileSearchBar
                   open={mobileSearchOpen}
                   placeholder="Search Stripe"

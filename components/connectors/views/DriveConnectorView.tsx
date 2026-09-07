@@ -828,11 +828,17 @@ export function DriveConnectorView({
           setSelected(null);
           setPreview(null);
           setError(null);
+          if (query.trim()) {
+            setQuery("");
+            setMobileSearchOpen(false);
+            void loadFiles({ force: true, searchQuery: "" });
+          }
           return;
         }
         listScrollTopRef.current = 0;
         setFolderStack((stack) => stack.slice(0, -1));
         setQuery("");
+        setMobileSearchOpen(false);
         setError(null);
       },
       onRefresh: () => {

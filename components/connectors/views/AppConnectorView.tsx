@@ -374,6 +374,11 @@ export function AppConnectorView({
         setSelected(null);
         setDetail(null);
         persist({ page: "browse", selected: null, detail: null });
+        if (query.trim()) {
+          setQuery("");
+          setMobileSearchOpen(false);
+          void refresh({ force: true, searchQuery: "" });
+        }
       },
       onRefresh: () => {
         void refresh({ force: true });

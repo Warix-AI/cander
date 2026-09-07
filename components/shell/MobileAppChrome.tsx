@@ -221,7 +221,8 @@ export function MobileAppChrome({ className }: { className?: string }) {
       !inChromeSub &&
       !showProjectTools &&
       !showCreateWorkspace &&
-      (inConnector ||
+      // Connector ⋯ only on the panel — opening it from chat freezes the shell.
+      ((inConnector && mobileSurface === "panel") ||
         view === "recents" ||
         (view === "space" &&
           mobileSurface === "panel" &&
@@ -257,13 +258,13 @@ export function MobileAppChrome({ className }: { className?: string }) {
     startPanelNewChat();
   };
 
-  // Pinned connectors keep menu · Chat|App · ⋯ — no New-chat pencil on chat.
+  // Pinned connectors keep menu · Chat|App · ⋯ on the panel only.
   const hideNewChat =
     onMenuMain ||
     inChromeSub ||
     showProjectTools ||
     showCreateWorkspace ||
-    inConnector;
+    (inConnector && mobileSurface === "panel");
   const preview = previewAddress(project?.name);
   const address = liveUrl ?? previewUrlForProject(projectId ?? "project") ?? preview.url;
   const published = Boolean(

@@ -393,6 +393,8 @@ export function CalendarConnectorView({
       onBack: () => {
         setPage("month");
         setSelected(null);
+        setQuery("");
+        setMobileSearchOpen(false);
       },
       onRefresh: () => void loadEvents({ force: true }),
       onPrimary: page === "create" ? () => void createEvent() : null,

@@ -830,6 +830,7 @@ export function Composer({
   const prevSurfaceRef = useRef(mobileSurface);
   useEffect(() => {
     const fromMenu = prevSurfaceRef.current === "menu";
+    const fromPanel = prevSurfaceRef.current === "panel";
     prevSurfaceRef.current = mobileSurface;
 
     if (!autoFocus || !mobile) return;
@@ -854,9 +855,8 @@ export function Composer({
       }
     };
 
-    // Wait for the menu slide to finish before raising the keyboard — focusing
-    // mid-transform leaves WKWebView with a stuck horizontal offset.
-    const delay = fromMenu ? 520 : 0;
+    // Wait for menu/panel slide to finish before raising the keyboard.
+    const delay = fromMenu || fromPanel ? 520 : 0;
     const openId = window.setTimeout(focusComposer, delay);
 
     const holdKeyboard = (event: TouchEvent) => {

@@ -130,7 +130,7 @@ export function MobileBottomSheet({
       <button
         type="button"
         aria-label="Dismiss"
-        className="absolute inset-0 bg-black/35"
+        className="absolute inset-0 bg-black/35 dark:bg-black/55"
         style={{ opacity: Math.max(0.15, 1 - dragY / 320) }}
         onClick={onClose}
       />

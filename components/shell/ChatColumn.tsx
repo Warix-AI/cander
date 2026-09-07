@@ -156,12 +156,13 @@ export function ChatColumn() {
       const distanceFromBottom =
         node.scrollHeight - node.scrollTop - node.clientHeight;
       userPinnedScroll.current = distanceFromBottom > 80;
-      // Active thread: a firm scroll dismisses the keyboard (swipe through the
-      // transcript). New-chat sticky keyboard is handled separately.
+      // Active thread: only a downward finger swipe (scrollTop increases —
+      // toward newer / bottom) dismisses the keyboard. Swiping up through
+      // older turns must keep it open.
       if (mobile && hasChatTurnsRef.current) {
-        const delta = Math.abs(node.scrollTop - lastScrollTop);
+        const delta = node.scrollTop - lastScrollTop;
         lastScrollTop = node.scrollTop;
-        if (delta >= 28) dismissNativeKeyboard();
+        if (delta > 28) dismissNativeKeyboard();
       } else {
         lastScrollTop = node.scrollTop;
       }

@@ -237,6 +237,8 @@ export function GmailConnectorView({
     setReplyOpen(false);
     setStatus(null);
     setError(null);
+    setQuery("");
+    setMobileSearchOpen(false);
   }, []);
 
   const goCompose = useCallback(() => {
