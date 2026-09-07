@@ -57,6 +57,10 @@ import {
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
 import type { PinKind, SettingsTab, SpaceId } from "@/lib/types";
+import {
+  skipMobilePagerTransitionOnce,
+  skipMobileSpaceEnterOnce,
+} from "@/lib/mobile-nav-transition";
 import { cn } from "@/lib/utils";
 import { useDesktopShell } from "@/lib/desktop-shell";
 import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
@@ -542,7 +546,13 @@ export function Sidebar() {
                             const ownsView = Boolean(activeChild);
                             togglePinSection(group.id);
                             // Closing the folder that owns the current view → New.
-                            if (closing && ownsView) newChat();
+                            if (closing && ownsView) {
+                              skipMobilePagerTransitionOnce();
+                              skipMobileSpaceEnterOnce();
+                              window.setTimeout(() => {
+                                newChat();
+                              }, 200);
+                            }
                           }}
                           activeKey={treeActiveKey}
                           deps={group.items

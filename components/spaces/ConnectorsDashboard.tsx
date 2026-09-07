@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Plus, Search, X } from "lucide-react";
+import { ExternalLink, Pin, PinOff, Plus, Search, Unplug, X } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import { DashFrame, ScopeToggle } from "@/components/spaces/ItemSet";
@@ -20,7 +20,7 @@ import {
 import { connectors as seed } from "@/lib/data";
 import type { Connector } from "@/lib/types";
 import { blockedConnectorIds } from "@/lib/workspace-policy";
-import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
+import { MobileFilterBar, useMobilePanelActionsState, type MobilePanelActionsConfig } from "@/components/shell/mobile/MobilePanelActions";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
   attachWorkConnector,
@@ -437,6 +437,80 @@ export function ConnectorsDashboard() {
     ? apps.find((entry) => entry.id === detailConnectorId) ?? null
     : null;
 
+  const setPanelActions = useMobilePanelActionsState()?.setActions;
+  const detailId = detailItem?.id ?? null;
+  const detailName = detailItem?.name ?? "";
+  const detailTier = detailId ? pinTier("connector", detailId) : null;
+  const detailConnected = Boolean(
+    detailItem?.liveConnections?.some((row) => row.status === "active"),
+  );
+  const detailBlocked = detailId ? blockedIds.includes(detailId) : false;
+
+  useEffect(() => {
+    if (!setPanelActions || !mobile || !detailId) return;
+
+    const actions: NonNullable<
+      MobilePanelActionsConfig["connector"]
+    >["actions"] = [];
+    if (detailTier) {
+      actions.push({
+        label: "Unpin",
+        icon: PinOff,
+        onClick: () => clearPin("connector", detailId),
+      });
+    } else {
+      actions.push({
+        label: "Pin",
+        icon: Pin,
+        onClick: () => setPin("connector", detailId, "primary"),
+      });
+    }
+    actions.push({
+      label: "Open",
+      icon: ExternalLink,
+      onClick: () => {
+        openConnector(detailId);
+        setDetailConnectorId(null);
+      },
+    });
+    if (!detailBlocked) {
+      actions.push({
+        label: detailConnected ? "Disconnect" : "Uninstall",
+        icon: Unplug,
+        disabled:
+          connectingId === detailId || disconnectingId === detailId,
+        onClick: () => {
+          void disconnectConnector(detailId);
+        },
+      });
+    }
+    setPanelActions({
+      connector: {
+        title: detailName,
+        back: {
+          label: "Connectors",
+          onClick: () => setDetailConnectorId(null),
+        },
+        actions,
+      },
+    });
+    return () => setPanelActions(null);
+    // disconnectConnector is stable enough for click handlers; avoid re-binding every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- detail fields listed explicitly
+  }, [
+    setPanelActions,
+    mobile,
+    detailId,
+    detailName,
+    detailTier,
+    detailConnected,
+    detailBlocked,
+    clearPin,
+    setPin,
+    openConnector,
+    connectingId,
+    disconnectingId,
+  ]);
 
   const installed = apps.filter(
     (item) => item.accountInstalled && !blockedIds.includes(item.id),

@@ -14,6 +14,7 @@ import type { Connector, PinTier } from "@/lib/types";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import { appConnectorById } from "@/lib/connectors/apps/definitions";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 type ConnectorPrompt = {
@@ -22,64 +23,64 @@ type ConnectorPrompt = {
 
 const CONNECTOR_PROMPTS: Record<string, ConnectorPrompt[]> = {
   gmail: [
-    { text: "Search my inbox for unread emails from this week." },
-    { text: "Send a quick reply to the latest admissions thread." },
+    { text: "Find unread mail." },
+    { text: "Reply to the latest email." },
   ],
   gcal: [
-    { text: "What's on my calendar today?" },
-    { text: "Create a meeting for tomorrow afternoon." },
+    { text: "What's on today?" },
+    { text: "Schedule a meeting." },
   ],
   gdrive: [
-    { text: "Find recent files in my Drive." },
-    { text: "Create a notes file in Drive." },
+    { text: "Find recent files." },
+    { text: "Create a notes file." },
   ],
   gsheets: [
-    { text: "Find my latest spreadsheets." },
-    { text: "Create a new spreadsheet for this week’s tracker." },
+    { text: "Find recent sheets." },
+    { text: "Create a new spreadsheet." },
   ],
   gdocs: [
-    { text: "Find my recent Google Docs." },
-    { text: "Create a project brief as a Google Doc." },
+    { text: "Find recent docs." },
+    { text: "Create a new doc." },
   ],
   slack: [
-    { text: "Search recent Slack messages about the launch." },
-    { text: "Post a summary to the team channel." },
+    { text: "Search recent messages." },
+    { text: "Post a channel update." },
   ],
   outlook: [
-    { text: "Show my unread Outlook messages from today." },
-    { text: "Find emails about the project kickoff." },
+    { text: "Show unread mail." },
+    { text: "Find a recent email." },
   ],
   notion: [
-    { text: "Search Notion for our product specs." },
-    { text: "Find the latest project notes in Notion." },
+    { text: "Search Notion pages." },
+    { text: "Find project notes." },
   ],
   hubspot: [
-    { text: "List recent HubSpot contacts." },
-    { text: "Find HubSpot contacts at Acme." },
+    { text: "List recent contacts." },
+    { text: "Find a contact." },
   ],
   github: [
-    { text: "Find open pull requests assigned to me." },
-    { text: "Summarize what changed in the repo this week." },
+    { text: "Show my open PRs." },
+    { text: "Summarize recent changes." },
   ],
   teams: [
-    { text: "List my Microsoft Teams." },
-    { text: "Show channels in my primary team." },
+    { text: "List my teams." },
+    { text: "Show team channels." },
   ],
   stripe: [
-    { text: "List recent Stripe customers." },
-    { text: "What's my Stripe account balance?" },
+    { text: "List recent customers." },
+    { text: "Show account balance." },
   ],
   salesforce: [
-    { text: "List Salesforce contacts." },
-    { text: "Find a Salesforce contact by name." },
+    { text: "List contacts." },
+    { text: "Find a contact." },
   ],
   linear: [
-    { text: "Show my open Linear issues." },
-    { text: "Find Linear issues about onboarding." },
+    { text: "Show open issues." },
+    { text: "Find an issue." },
   ],
   jira: [
-    { text: "Show recently updated Jira issues." },
-    { text: "Find Jira issues assigned to me." },
+    { text: "Show recent issues." },
+    { text: "Find my issues." },
   ],
 };
 
@@ -88,8 +89,8 @@ function promptsForConnector(item: Connector): ConnectorPrompt[] {
     return CONNECTOR_PROMPTS[item.id]!;
   }
   return [
-    { text: `Search my recent ${item.name} activity.` },
-    { text: `Help me get something done in ${item.name}.` },
+    { text: `Search ${item.name}.` },
+    { text: `Help with ${item.name}.` },
   ];
 }
 
@@ -138,6 +139,7 @@ export function ConnectorDetailModal({
   onClearPin: () => void;
   onPromptSelect: (text: string) => void;
 }) {
+  const mobile = useMobileShell();
   const activeConnection = item.liveConnections?.find(
     (row) => row.status === "active",
   );
@@ -189,7 +191,7 @@ export function ConnectorDetailModal({
             ? "Connect"
             : "Install";
 
-  const showActionsMenu = !blocked;
+  const showActionsMenu = !blocked && !(dedicated && mobile);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   useEffect(() => {
@@ -243,7 +245,7 @@ export function ConnectorDetailModal({
       backdropClassName="bg-black/30"
     >
       <div className="relative flex min-h-0 flex-1 flex-col">
-        {dedicated ? (
+        {dedicated && !mobile ? (
           <div className="flex h-12 shrink-0 items-center gap-2 px-5">
             <button
               type="button"
@@ -330,7 +332,13 @@ export function ConnectorDetailModal({
         <div
           className={cn(
             dedicated
-              ? "mx-auto w-full max-w-[42rem] px-5 pt-[75px]"
+              ? cn(
+                  "mx-auto w-full max-w-[42rem] px-5",
+                  // Clear mobile chrome + ~20px breathing room under the header.
+                  mobile
+                    ? "pt-[calc(env(safe-area-inset-top,0px)+5.75rem)]"
+                    : "pt-[75px]",
+                )
               : "contents",
           )}
         >

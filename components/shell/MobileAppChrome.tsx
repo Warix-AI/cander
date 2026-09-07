@@ -258,13 +258,14 @@ export function MobileAppChrome({ className }: { className?: string }) {
     startPanelNewChat();
   };
 
-  // Pinned connectors keep menu · Chat|App · ⋯ on the panel only.
+  // Catalog connector detail uses chrome back + ⋯ (not New).
   const hideNewChat =
     onMenuMain ||
     inChromeSub ||
     showProjectTools ||
     showCreateWorkspace ||
-    (inConnector && mobileSurface === "panel");
+    (inConnector && mobileSurface === "panel") ||
+    Boolean(panelActions?.connector?.back);
   const preview = previewAddress(project?.name);
   const address = liveUrl ?? previewUrlForProject(projectId ?? "project") ?? preview.url;
   const published = Boolean(

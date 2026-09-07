@@ -21,6 +21,10 @@ import {
   PIN_SECTION_LABEL,
 } from "@/lib/pin-sections";
 import { usePinnedItems, type PinnedItem } from "@/lib/use-pinned-items";
+import {
+  skipMobilePagerTransitionOnce,
+  skipMobileSpaceEnterOnce,
+} from "@/lib/mobile-nav-transition";
 import { cn } from "@/lib/utils";
 
 export function PinsSheet({
@@ -134,7 +138,14 @@ export function PinsSheet({
               const closing = !collapsed;
               const ownsView = Boolean(activeChild);
               togglePinSection(group.id);
-              if (closing && ownsView) newChat();
+              if (closing && ownsView) {
+                // Avoid stacking menu-close + pager + surface-enter (rebound jolt).
+                skipMobilePagerTransitionOnce();
+                skipMobileSpaceEnterOnce();
+                window.setTimeout(() => {
+                  newChat();
+                }, 200);
+              }
             }}
             activeKey={treeActiveKey}
             deps={group.items
