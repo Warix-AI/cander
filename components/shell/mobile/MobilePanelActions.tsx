@@ -182,6 +182,9 @@ export function MobilePanelActionsCluster({
   const layout = config.layout;
   const extras = config.extras ?? [];
   const composeLabel = config.newChatLabel ?? "New";
+  /** Catalog-style menus (Connectors): flat list, no New chat, no dividers. */
+  const flatCatalog =
+    !config.connector && !config.onNewChat && !layout && Boolean(scope);
 
   const setOpen = (open: boolean) => {
     setMenuOpen(open);
@@ -214,7 +217,7 @@ export function MobilePanelActionsCluster({
       )}
 
       <MobileHeaderActionsPopover open={menuOpen} onClose={close}>
-        <div className="flex flex-col">
+        <div className="flex flex-col py-0.5">
           {config.connector ? (
             <PopoverGroup>
               {config.connector.actions.map(({ label, icon: Icon, disabled, onClick }) => (
@@ -260,8 +263,8 @@ export function MobilePanelActionsCluster({
               />
             </PopoverGroup>
           ) : null}
-          {scope ? (
-            <PopoverGroup>
+          {flatCatalog && scope ? (
+            <>
               {scope.options.map((item) => (
                 <PopoverRow
                   key={item.id}
@@ -270,10 +273,6 @@ export function MobilePanelActionsCluster({
                   onClick={() => scope.onChange(item.id)}
                 />
               ))}
-            </PopoverGroup>
-          ) : null}
-          {extras.length ? (
-            <PopoverGroup>
               {extras.map((item) => (
                 <PopoverRow
                   key={item.id}
@@ -285,8 +284,38 @@ export function MobilePanelActionsCluster({
                   }}
                 />
               ))}
-            </PopoverGroup>
-          ) : null}
+            </>
+          ) : (
+            <>
+              {scope ? (
+                <PopoverGroup>
+                  {scope.options.map((item) => (
+                    <PopoverRow
+                      key={item.id}
+                      label={item.label}
+                      selected={scope.value === item.id}
+                      onClick={() => scope.onChange(item.id)}
+                    />
+                  ))}
+                </PopoverGroup>
+              ) : null}
+              {extras.length ? (
+                <PopoverGroup>
+                  {extras.map((item) => (
+                    <PopoverRow
+                      key={item.id}
+                      label={item.label}
+                      selected={item.active}
+                      onClick={() => {
+                        item.onClick();
+                        close();
+                      }}
+                    />
+                  ))}
+                </PopoverGroup>
+              ) : null}
+            </>
+          )}
         </div>
       </MobileHeaderActionsPopover>
     </>
@@ -294,11 +323,7 @@ export function MobilePanelActionsCluster({
 }
 
 function PopoverGroup({ children }: { children: ReactNode }) {
-  return (
-    <div className="border-b border-black/8 py-1 last:border-b-0 dark:border-white/10">
-      {children}
-    </div>
-  );
+  return <div className="py-0.5">{children}</div>;
 }
 
 function PopoverRow({
@@ -323,18 +348,20 @@ function PopoverRow({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-[12px] px-2.5 py-2.5 text-left text-[15px] tracking-[-0.01em] transition-colors",
+        "flex w-full items-center gap-2.5 rounded-full px-3 py-2.5 text-left text-[15px] tracking-[-0.01em] transition-colors",
         destructive
           ? "text-destructive hover:bg-destructive/10"
           : selected
-            ? "bg-muted/80 font-medium"
-            : "hover:bg-muted/60",
+            ? "mobile-glass-segment-active font-medium"
+            : "hover:bg-black/[0.04] dark:hover:bg-white/[0.08]",
         disabled && "opacity-40",
       )}
     >
-      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
-        {selected ? <Check className="h-3.5 w-3.5" strokeWidth={2.2} /> : null}
-      </span>
+      {selected ? (
+        <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} />
+      ) : (
+        <span className="inline-flex h-3.5 w-3.5 shrink-0" aria-hidden />
+      )}
       {Icon ? <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} /> : null}
       <span className="min-w-0 flex-1 truncate">{label}</span>
     </button>

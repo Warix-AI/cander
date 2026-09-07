@@ -229,8 +229,7 @@ export function MobileHeaderActionsPopover({
         className={cn(
           "mobile-glass-panel absolute right-3 top-[calc(env(safe-area-inset-top,0px)+0.65rem)]",
           "flex max-h-[min(70vh,28rem)] w-[min(17.5rem,calc(100vw-1.5rem))] flex-col overflow-hidden",
-          "rounded-[18px] border border-black/8 text-foreground shadow-[0_18px_48px_rgba(0,0,0,0.28)]",
-          "bg-[oklch(0.98_0.003_265/0.82)] dark:border-white/12 dark:bg-[oklch(0.22_0.01_265/0.72)]",
+          "rounded-[18px] text-foreground",
           className,
         )}
         onClick={(event) => event.stopPropagation()}

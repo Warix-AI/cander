@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore, type TouchEventHandler } from "react";
-import { ChevronLeft, Ellipsis, Image as ImageIcon, PanelsTopLeft, Plus, SquarePen } from "lucide-react";
+import { Blocks, ChevronLeft, Ellipsis, Image as ImageIcon, PanelsTopLeft, Plus, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
@@ -495,7 +495,13 @@ export function MobileAppChrome({ className }: { className?: string }) {
             type="button"
             role="tab"
             aria-selected={surface === "panel"}
-            aria-label={inConnector ? "Connector panel" : panelTabLabel}
+            aria-label={
+              inConnector
+                ? "Connector panel"
+                : inConnectorsSpace
+                  ? "Connectors"
+                  : panelTabLabel
+            }
             onClick={() => setChatOrPanel("panel")}
             className={cn(
               "inline-flex min-w-11 items-center justify-center rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
@@ -510,6 +516,8 @@ export function MobileAppChrome({ className }: { className?: string }) {
                 size="nav"
                 className="!h-4 !w-4"
               />
+            ) : inConnectorsSpace ? (
+              <Blocks className="h-4 w-4" strokeWidth={1.8} />
             ) : (
               <span className="max-w-[9rem] truncate">{panelTabLabel}</span>
             )}

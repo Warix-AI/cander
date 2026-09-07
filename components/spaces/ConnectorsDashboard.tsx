@@ -540,7 +540,10 @@ export function ConnectorsDashboard() {
     const featuredIds = new Set(featured.map((item) => item.id));
     const groups: { title: string; items: Connector[] }[] = [];
     if (featured.length) {
-      groups.push({ title: "Featured", items: featured });
+      // Mobile: lead with the first featured connector’s name instead of “Featured”.
+      const featuredTitle =
+        mobile && featured[0]?.name ? featured[0].name : "Featured";
+      groups.push({ title: featuredTitle, items: featured });
     }
     for (const title of SECTION_ORDER) {
       if (title === "Featured") continue;
@@ -559,7 +562,7 @@ export function ConnectorsDashboard() {
     );
     if (leftover.length) groups.push({ title: "More", items: leftover });
     return groups;
-  }, [directory, catalogView]);
+  }, [directory, catalogView, mobile]);
 
   return (
     <>
@@ -591,12 +594,11 @@ export function ConnectorsDashboard() {
 
         <MobileFilterBar
           active={hoistFilters}
-          onNewChat={() => newChat()}
-          newChatLabel="New chat"
           scope={{
             value: catalogView,
             onChange: (value) => setCatalogView(value as ConnectorsView),
             options: [...connectorScopeOptions],
+            label: "Catalog",
           }}
           extras={[
             {
