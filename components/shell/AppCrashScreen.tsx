@@ -37,7 +37,7 @@ export function AppCrashScreen({ reset, detail }: AppCrashScreenProps) {
         }}
       >
         <Image
-          src="/cander-mark.png?v=7"
+          src="/cander-mark.png"
           alt={APP_NAME}
           width={40}
           height={40}

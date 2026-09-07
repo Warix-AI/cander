@@ -7,9 +7,7 @@ import {
   useAppearance,
 } from "@/lib/appearance";
 import {
-  SettingsFootnote,
-  SettingsGroup,
-  SettingsSection,
+  SettingsPanel,
 } from "@/components/settings/SettingsChrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
@@ -26,71 +24,48 @@ export function AppearanceControls({
   const mobile = useMobileShell();
   const curve = compact ? SHELL_G3_RADIUS : undefined;
 
-  return (
-    <div className={cn(compact ? "space-y-8" : mobile ? "space-y-6" : "space-y-10", className)}>
-      {mobile ? (
-        <SettingsSection title="Color mode">
-          <SettingsGroup>
-            <div className="grid grid-cols-3 gap-2 p-2">
-              {COLOR_MODE_PRESETS.map((preset) => (
-                <AppearanceOptionCard
-                  key={preset.id}
-                  label={preset.label}
-                  active={appearance.colorMode === preset.id}
-                  onSelect={() => setColorMode(preset.id)}
-                  mobile
-                  curve={curve}
-                  preview={
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "block h-9 w-full border border-black/5",
-                        curve ?? "rounded-[8px]",
-                      )}
-                      style={{ background: swatchForMode(preset.id) }}
-                    />
-                  }
-                />
-              ))}
-            </div>
-          </SettingsGroup>
-          <SettingsFootnote>
-            Matches system, light, or dark across the app.
-          </SettingsFootnote>
-        </SettingsSection>
-      ) : (
+  const options = (
+    <div className="grid grid-cols-3 gap-2">
+      {COLOR_MODE_PRESETS.map((preset) => (
+        <AppearanceOptionCard
+          key={preset.id}
+          label={preset.label}
+          active={appearance.colorMode === preset.id}
+          onSelect={() => setColorMode(preset.id)}
+          mobile={mobile}
+          curve={curve}
+          preview={
+            <span
+              aria-hidden
+              className={cn(
+                "block w-full border border-foreground/10",
+                compact ? "h-9" : "h-12",
+                curve ?? SHELL_G3_RADIUS,
+              )}
+              style={{ background: swatchForMode(preset.id) }}
+            />
+          }
+        />
+      ))}
+    </div>
+  );
+
+  if (compact) {
+    return (
+      <div className={cn("space-y-8", className)}>
         <section>
-          <h3 className="text-[14px] font-medium tracking-[-0.01em]">
-            Color mode
-          </h3>
-          <div
-            className={cn(
-              "grid gap-2",
-              compact ? "mt-4 grid-cols-3" : "mt-5 grid-cols-3",
-            )}
-          >
-            {COLOR_MODE_PRESETS.map((preset) => (
-              <AppearanceOptionCard
-                key={preset.id}
-                label={preset.label}
-                active={appearance.colorMode === preset.id}
-                onSelect={() => setColorMode(preset.id)}
-                curve={curve}
-                preview={
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "block h-9 w-full border border-black/5",
-                      curve ?? "rounded-[8px]",
-                    )}
-                    style={{ background: swatchForMode(preset.id) }}
-                  />
-                }
-              />
-            ))}
-          </div>
+          <h3 className="text-[14px] font-medium tracking-[-0.01em]">Color mode</h3>
+          <div className="mt-4">{options}</div>
         </section>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn(className)}>
+      <SettingsPanel className="p-2">
+        {options}
+      </SettingsPanel>
     </div>
   );
 }
@@ -114,13 +89,14 @@ function AppearanceOptionCard({
     <button
       type="button"
       onClick={onSelect}
+      aria-pressed={active}
       className={cn(
-        "settings-glass-row flex flex-col gap-2 border p-2 text-left transition-colors",
-        curve ?? "rounded-[12px]",
+        "settings-glass-row flex flex-col gap-2 border border-transparent p-2.5 text-left transition-colors",
+        curve ?? SHELL_G3_RADIUS,
         active
-          ? "border-foreground/25 bg-muted/40"
-          : "border-border/60 hover:border-foreground/15",
-        mobile && "p-2.5",
+          ? "border-foreground/20 bg-muted/45 shadow-[inset_0_0_0_1px_oklch(0_0_0/0.04)]"
+          : "hover:bg-muted/30",
+        mobile && "p-2",
       )}
     >
       {preview}

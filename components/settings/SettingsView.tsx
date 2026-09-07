@@ -66,6 +66,10 @@ import {
   setProfilePhoto,
   subscribeProfilePhotos,
 } from "@/lib/profile-photos";
+import {
+  removeProfileAvatar,
+  uploadProfileAvatar,
+} from "@/lib/profile-avatar";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
@@ -917,16 +921,17 @@ function GeneralSettings({
               <button
                 type="button"
                 onClick={() => {
-                  clearProfilePhoto(actor.id);
                   setPhotoError(null);
                   if (isSupabaseConfigured()) {
-                    void createSupabaseBrowserClient()
-                      .from("profiles")
-                      .update({ avatar_url: null })
-                      .eq("id", actor.id)
-                      .then(({ error }) => {
-                        if (error) setPhotoError(error.message);
-                      });
+                    void removeProfileAvatar(actor.id).catch((err: unknown) => {
+                      setPhotoError(
+                        err instanceof Error
+                          ? err.message
+                          : "Could not remove image.",
+                      );
+                    });
+                  } else {
+                    clearProfilePhoto(actor.id);
                   }
                 }}
                 className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -942,34 +947,27 @@ function GeneralSettings({
       <input
         ref={photoInput}
         type="file"
-        accept="image/*"
+        accept="image/png,image/jpeg,image/webp,image/gif"
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
           if (!file) return;
-          void readProfilePhotoFile(file)
-            .then((dataUrl) => {
-              setProfilePhoto(actor.id, dataUrl);
-              setPhotoError(null);
+          setPhotoError(null);
+          void (async () => {
+            try {
               if (isSupabaseConfigured()) {
-                return createSupabaseBrowserClient()
-                  .from("profiles")
-                  .update({ avatar_url: dataUrl })
-                  .eq("id", actor.id)
-                  .then(({ error }) => {
-                    if (error) throw error;
-                  });
+                await uploadProfileAvatar({ userId: actor.id, file });
+                return;
               }
-              return undefined;
-            })
-            .catch((err: unknown) => {
-              if (photo) setProfilePhoto(actor.id, photo);
-              else clearProfilePhoto(actor.id);
+              const dataUrl = await readProfilePhotoFile(file);
+              setProfilePhoto(actor.id, dataUrl);
+            } catch (err: unknown) {
               setPhotoError(
                 err instanceof Error ? err.message : "Could not upload image.",
               );
-            });
+            }
+          })();
         }}
       />
     </div>

@@ -15,6 +15,7 @@ import {
 } from "@/lib/workspace-policy";
 import { memberRowToMember, type OrgMemberRow } from "@/lib/supabase/org-policy-mapper";
 import { applyOrgMembershipClientState } from "@/lib/org-membership-state";
+import { setProfilePhoto } from "@/lib/profile-photos";
 import {
   persistOrgId,
   persistOrgName,
@@ -79,7 +80,7 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
   if (membershipResult.error) throw membershipResult.error;
 
   // Optional columns (010+ / 013+) — ignore if migrations not applied yet.
-  const [{ data: billing }, { data: shortRow }] = await Promise.all([
+  const [{ data: billing }, { data: shortRow }, { data: avatarRow }] = await Promise.all([
     supabase
       .from("profiles")
       .select(
@@ -92,7 +93,21 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
       .select("short_name")
       .eq("id", user.id)
       .maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("avatar_url")
+      .eq("id", user.id)
+      .maybeSingle(),
   ]);
+
+  if (
+    typeof avatarRow?.avatar_url === "string" &&
+    (avatarRow.avatar_url.startsWith("data:image/") ||
+      avatarRow.avatar_url.startsWith("https://") ||
+      avatarRow.avatar_url.startsWith("http://"))
+  ) {
+    setProfilePhoto(user.id, avatarRow.avatar_url);
+  }
 
   const profile = profileResult.data
     ? {

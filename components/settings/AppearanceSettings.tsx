@@ -11,7 +11,7 @@ export function AppearanceSettings() {
     <SettingsPage>
       <SettingsHeader title="Appearance" />
 
-      <div className="mt-2 lg:mt-10">
+      <div className="mt-2 lg:mt-8">
         <AppearanceControls />
       </div>
     </SettingsPage>

@@ -186,35 +186,37 @@ export function AccountSecuritySettings({ onAfterSignOut }: Props) {
                   </p>
                 ) : null}
               </div>
-              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="Current password"
-                  value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                  className="settings-glass-input h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25"
-                />
+              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-start">
                 <input
                   type="password"
                   autoComplete="new-password"
-                  placeholder="New password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  className="settings-glass-input h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25"
+                  placeholder="Current password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  className="settings-glass-input h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25 sm:row-span-2"
                 />
+                <div className="grid gap-2">
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="New password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className="settings-glass-input h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25"
+                  />
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Confirm new password"
+                    value={passwordConfirm}
+                    onChange={(event) => setPasswordConfirm(event.target.value)}
+                    className="settings-glass-input h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25"
+                  />
+                </div>
                 <DashBtn onClick={() => void savePassword()}>
                   {busy === "password" ? "Saving…" : "Update password"}
                 </DashBtn>
               </div>
-              <input
-                type="password"
-                autoComplete="new-password"
-                placeholder="Confirm new password"
-                value={passwordConfirm}
-                onChange={(event) => setPasswordConfirm(event.target.value)}
-                className="settings-glass-input h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25 sm:max-w-[calc(50%-0.25rem)]"
-              />
           </div>
         ) : null}
 

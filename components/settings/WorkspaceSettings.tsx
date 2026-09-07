@@ -33,11 +33,11 @@ import {
   getWorkspaceCatalogServerSnapshot,
   getWorkspaceCatalogSnapshot,
   isCustomWorkspace,
+  upsertCatalogWorkspace,
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
-import {
-  deleteWorkspaceRemote,
-} from "@/lib/supabase/workspace-actions";
+import { updateWorkspaceKindRemote } from "@/lib/api/workspace-kind";
+import { deleteWorkspaceRemote } from "@/lib/supabase/workspace-actions";
 import {
   workspaceKindOf,
 } from "@/lib/workspace-kind";
@@ -291,6 +291,8 @@ function WorkspacePage({
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSent, setInviteSent] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [workspaceKindBusy, setWorkspaceKindBusy] = useState(false);
+  const [workspaceKindError, setWorkspaceKindError] = useState<string | null>(null);
   const knowledgeInput = useRef<HTMLInputElement>(null);
   const canDelete =
     isCustomWorkspace(workspace.id) &&
@@ -299,6 +301,35 @@ function WorkspacePage({
   const deleteBlocked = policy.members.length > 1;
   const deleteConfirmOk =
     deleteConfirmName.trim() === workspace.name.trim();
+  const workspaceKind = workspaceKindOf(workspace);
+  const isWorkspaceOwner =
+    actor.workspaceRoles?.[workspace.id] === "Owner" ||
+    (policy.members.length === 1 && policy.members[0]?.memberId === actor.id) ||
+    (!actor.workspaceRoles?.[workspace.id] &&
+      actor.role === "Owner" &&
+      actor.workspaceIds.includes(workspace.id));
+  const canChangeWorkspaceKind = isWorkspaceOwner;
+
+  const handleWorkspaceKindChange = async (kind: "personal" | "business") => {
+    if (!canChangeWorkspaceKind || kind === workspaceKind || workspaceKindBusy) return;
+    setWorkspaceKindBusy(true);
+    setWorkspaceKindError(null);
+    try {
+      const remote = await updateWorkspaceKindRemote(workspace.id, kind);
+      upsertCatalogWorkspace({
+        ...workspace,
+        ...(remote ?? {}),
+        kind,
+        ...(kind === "personal" ? { personal: true } : { personal: false }),
+      });
+    } catch (error) {
+      setWorkspaceKindError(
+        error instanceof Error ? error.message : "Could not update workspace type.",
+      );
+    } finally {
+      setWorkspaceKindBusy(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!deleteConfirmOk) return;
@@ -459,20 +490,63 @@ function WorkspacePage({
         title="Knowledge base"
         className={cn(mobile ? "mt-4" : "mt-8 max-lg:mt-4")}
         actions={
-          entitlements.hasKnowledgeBases ? (
-            <button
-              type="button"
-              aria-label="Add files to knowledge base"
-              title="Add files to knowledge base"
-              onClick={() => knowledgeInput.current?.click()}
-              className={cn(
-                "inline-flex h-9 w-9 items-center justify-center bg-black text-white transition-colors hover:bg-black/85 dark:bg-black dark:text-white dark:hover:bg-black/85",
-                CONNECTOR_CONTROL_RADIUS,
-              )}
-            >
-              <Plus className="h-4 w-4" strokeWidth={1.8} />
-            </button>
-          ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            {canChangeWorkspaceKind ? (
+              <div
+                aria-label="Workspace access"
+                className="inline-flex items-center rounded-full border border-foreground/10 bg-muted/40 p-0.5"
+                role="group"
+              >
+                <button
+                  type="button"
+                  aria-pressed={workspaceKind === "personal"}
+                  disabled={workspaceKindBusy}
+                  onClick={() => void handleWorkspaceKindChange("personal")}
+                  className={cn(
+                    "inline-flex h-8 items-center rounded-full px-3 text-[12px] font-medium transition-colors disabled:opacity-50",
+                    workspaceKind === "personal"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Personal
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={workspaceKind === "business"}
+                  disabled={workspaceKindBusy || !entitlements.orgActive}
+                  title={
+                    entitlements.orgActive
+                      ? "Use this workspace for your organization"
+                      : "Activate an organization to enable this workspace type"
+                  }
+                  onClick={() => void handleWorkspaceKindChange("business")}
+                  className={cn(
+                    "inline-flex h-8 items-center rounded-full px-3 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                    workspaceKind === "business"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Organization
+                </button>
+              </div>
+            ) : null}
+            {entitlements.hasKnowledgeBases ? (
+              <button
+                type="button"
+                aria-label="Add files to knowledge base"
+                title="Add files to knowledge base"
+                onClick={() => knowledgeInput.current?.click()}
+                className={cn(
+                  "inline-flex h-9 w-9 items-center justify-center bg-black text-white transition-colors hover:bg-black/85 dark:bg-black dark:text-white dark:hover:bg-black/85",
+                  CONNECTOR_CONTROL_RADIUS,
+                )}
+              >
+                <Plus className="h-4 w-4" strokeWidth={1.8} />
+              </button>
+            ) : null}
+          </div>
         }
       >
         <input
@@ -489,6 +563,9 @@ function WorkspacePage({
         />
         {uploadError ? (
           <p className="mb-3 text-[12.5px] text-destructive">{uploadError}</p>
+        ) : null}
+        {workspaceKindError ? (
+          <p className="mb-3 text-[12.5px] text-destructive">{workspaceKindError}</p>
         ) : null}
         {entitlements.hasKnowledgeBases ? (
           mobile ? (

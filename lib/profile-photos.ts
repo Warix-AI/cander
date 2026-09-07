@@ -17,7 +17,12 @@ function parse(raw: string | null): Record<string, string> {
     if (!data || typeof data !== "object") return EMPTY_PHOTOS;
     const next: Record<string, string> = {};
     for (const [id, value] of Object.entries(data as Record<string, unknown>)) {
-      if (typeof value === "string" && value.startsWith("data:image/")) {
+      if (typeof value !== "string" || !value.trim()) continue;
+      if (
+        value.startsWith("data:image/") ||
+        value.startsWith("https://") ||
+        value.startsWith("http://")
+      ) {
         next[id] = value;
       }
     }
@@ -59,6 +64,13 @@ export function profilePhotoFor(
 
 export function setProfilePhoto(memberId: string, dataUrl: string) {
   hydrate();
+  if (
+    !dataUrl.startsWith("data:image/") &&
+    !dataUrl.startsWith("https://") &&
+    !dataUrl.startsWith("http://")
+  ) {
+    return;
+  }
   photos = { ...photos, [memberId]: dataUrl };
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(photos));
   emit();

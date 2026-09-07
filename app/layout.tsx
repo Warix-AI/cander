@@ -70,7 +70,7 @@ export const metadata: Metadata = {
     icon: [
       { url: "/favicon-32.png?v=7", sizes: "32x32", type: "image/png" },
       { url: "/favicon-16.png?v=7", sizes: "16x16", type: "image/png" },
-      { url: "/cander-mark.png?v=7", type: "image/png" },
+      { url: "/cander-mark.png", type: "image/png" },
     ],
     apple: [{ url: "/apple-touch-icon.png?v=7", sizes: "180x180", type: "image/png" }],
     shortcut: "/favicon-32.png?v=7",
