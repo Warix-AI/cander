@@ -678,7 +678,7 @@ export function GmailConnectorView({
       ) : null}
 
       {page === "compose" || page === "forward" ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+        <div className="mobile-header-content flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
           <p className="text-[12px] font-medium text-muted-foreground">
             {page === "forward" ? "Forward" : "New message"}
           </p>
@@ -713,7 +713,7 @@ export function GmailConnectorView({
 
       {page === "detail" && detail ? (
         <div className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
+          <div className="mobile-header-content min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
             <div className="px-4 pb-3 pt-4">
               <h2 className="break-words text-[17px] font-semibold tracking-[-0.02em] text-foreground">
                 {detail.subject || "(no subject)"}
@@ -832,7 +832,7 @@ export function GmailConnectorView({
       {page === "inbox" ? (
         <div
           ref={listRef}
-          className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+          className="mobile-header-content min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
           onScroll={(event) => {
             listScrollTopRef.current = event.currentTarget.scrollTop;
           }}

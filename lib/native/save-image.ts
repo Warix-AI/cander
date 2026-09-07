@@ -112,7 +112,7 @@ async function shareImageFile(
 
 /**
  * Save a generated image:
- * - Capacitor iOS: Photos library (permission on demand), then share fallback
+ * - Capacitor iOS: system share sheet, then Photos library fallback
  * - Electron: native save dialog when available, else download
  * - Mobile/desktop web: download + share when supported
  */
@@ -145,8 +145,12 @@ export async function saveGeneratedImage(opts: {
     }
   }
 
-  // Capacitor iOS — prefer Photos
+  // Capacitor iOS — opening the system share sheet lets people choose Photos,
+  // Files, AirDrop, or a recipient instead of silently saving to Photos.
   if (isMobileShell()) {
+    if (resolved.startsWith("data:") && (await shareImageFile(resolved, filename))) {
+      return { ok: true, method: "share" };
+    }
     const photos = getCapPhotos();
     if (photos && resolved.startsWith("data:")) {
       try {
@@ -155,9 +159,6 @@ export async function saveGeneratedImage(opts: {
       } catch {
         // Fall through to share / download
       }
-    }
-    if (resolved.startsWith("data:") && (await shareImageFile(resolved, filename))) {
-      return { ok: true, method: "share" };
     }
     try {
       triggerBrowserDownload(resolved, filename);

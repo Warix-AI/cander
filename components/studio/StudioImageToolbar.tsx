@@ -177,7 +177,7 @@ export function StudioImageToolbar({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute inset-x-0 top-8 z-20 flex justify-center px-3",
+        "pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top,0px)+7rem)] z-20 flex justify-center px-3 lg:top-8",
         className,
       )}
     >

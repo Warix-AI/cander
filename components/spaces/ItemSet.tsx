@@ -496,6 +496,7 @@ export function DashFrame({
       className={cn(
         "@container relative flex min-h-0 flex-1 flex-col overflow-y-auto",
         surfaceClassName ?? (mobile ? MOBILE_APP_BG : SPACE_CANVAS_BG),
+        mobile && "mobile-header-content",
       )}
     >
       {view === "space" && !bannerSpace && !inPanel && !desktop ? (

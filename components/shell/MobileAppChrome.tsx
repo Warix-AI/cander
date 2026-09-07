@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore, type TouchEventHandler } from "react";
-import { ChevronLeft, ChevronRight, Ellipsis, Plus, SquarePen } from "lucide-react";
+import { ChevronLeft, Ellipsis, Image as ImageIcon, PanelsTopLeft, Plus, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import {
   MobileBottomSheet,
   ProjectActionsSheetBody,
+  ProjectMediaActionsSheetBody,
   ProjectRenameSheetBody,
 } from "@/components/browser/ProjectMobileSheets";
 import { previewAddress } from "@/components/panels/PreviewChrome";
@@ -39,13 +40,19 @@ import {
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
 import {
-  MOBILE_APP_BG,
   MOBILE_GLASS_PILL,
   mobileChromeButtonClass,
 } from "@/lib/mobile-menu-styles";
 import type { MobileSurface, SpaceId } from "@/lib/types";
 import { isNewChatScreen } from "@/lib/right-panel";
 import { cn } from "@/lib/utils";
+
+type MediaProjectActions = {
+  onDownload: () => void;
+  onReplace: () => void;
+  onRemove: () => void;
+  disabled?: boolean;
+};
 
 /**
  * ChatGPT-style mobile top bar.
@@ -103,6 +110,8 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameBusy, setRenameBusy] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [mediaProjectActions, setMediaProjectActions] =
+    useState<MediaProjectActions | null>(null);
   const { updateProject } = useSpaceMutation();
   const { ctx } = useSpaceData();
   const { project: entityProject } = useSpaceProject(projectId);
@@ -180,15 +189,13 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
   const spaceLabel = spaceId ? navLabel(spaceId as SpaceId) ?? "Space" : "Space";
   const panelTabLabel = showHomeChatPanelToggle ? "Panel" : spaceLabel;
-  // Mobile chrome shares its content surface. A second tinted strip makes
-  // otherwise white connector and canvas screens look visually split.
-  const headerBg = MOBILE_APP_BG;
   const surface: MobileSurface =
     mobileSurface === "menu"
       ? "menu"
       : mobileSurface === "panel"
         ? "panel"
         : "chat";
+  const headerBg = "bg-transparent";
 
   const showCreateWorkspace =
     inSettings &&
@@ -202,6 +209,17 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
   const panelActionsCtx = useMobilePanelActionsState();
   const panelActions = panelActionsCtx?.actions;
+
+  useEffect(() => {
+    const onMediaActions = (event: Event) => {
+      setMediaProjectActions(
+        (event as CustomEvent<MediaProjectActions | null>).detail,
+      );
+    };
+    window.addEventListener("mobile-project-media-actions", onMediaActions);
+    return () =>
+      window.removeEventListener("mobile-project-media-actions", onMediaActions);
+  }, []);
   const showPanelActions = Boolean(
     panelActions &&
       !onMenuMain &&
@@ -300,12 +318,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
       connectorBack.onClick();
       return;
     }
-    // In-project panel: left arrow returns to chat (does not leave the project).
-    if (showProjectTools && surface === "panel") {
-      setMobileSurface("chat");
-      return;
-    }
-    // In-project chat: leave project → space screen.
+    // Project back always returns to the Canvas project list.
     if (showEntityBack) {
       popEntityNavigation();
       return;
@@ -371,16 +384,49 @@ export function MobileAppChrome({ className }: { className?: string }) {
         </p>
       ) : showProjectTools ? (
         <div
-          className="inline-flex h-11 max-w-[15rem] items-center justify-center rounded-full bg-muted/70 px-5 text-[14px] font-medium tracking-[-0.01em] text-foreground"
-          aria-label={projectTitle}
+          role="tablist"
+          aria-label={`${projectTitle} view`}
+          className="inline-flex max-w-full items-center rounded-full bg-muted p-1"
         >
-          <span className="truncate">{projectTitle}</span>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={surface === "chat"}
+            onClick={() => setChatOrPanel("chat")}
+            className={cn(
+              "rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
+              surface === "chat"
+                ? "bg-white text-foreground shadow-sm dark:bg-neutral-900"
+                : "text-muted-foreground",
+            )}
+          >
+            Chat
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={surface === "panel"}
+            aria-label={mediaProjectActions ? "Image preview" : "Project preview"}
+            onClick={() => setChatOrPanel("panel")}
+            className={cn(
+              "inline-flex min-w-11 items-center justify-center rounded-full px-3 py-2 transition-colors",
+              surface === "panel"
+                ? "bg-white text-foreground shadow-sm dark:bg-neutral-900"
+                : "text-muted-foreground",
+            )}
+          >
+            {mediaProjectActions ? (
+              <ImageIcon className="h-4 w-4" strokeWidth={1.8} />
+            ) : (
+              <PanelsTopLeft className="h-4 w-4" strokeWidth={1.8} />
+            )}
+          </button>
         </div>
       ) : showSpaceToggle ? (
         <div
           role="tablist"
           aria-label="Surface"
-          className="inline-flex max-w-full items-center rounded-full bg-muted/70 p-1"
+          className="inline-flex max-w-full items-center rounded-full bg-muted p-1"
         >
           <button
             type="button"
@@ -423,24 +469,15 @@ export function MobileAppChrome({ className }: { className?: string }) {
       ) : null
     ) : null;
 
-  const projectPanelLabel =
-    spaceId === "research" ||
-    spaceId === "studio" ||
-    spaceId === "build" ||
-    spaceId === "home"
-      ? "Canvas"
-      : spaceId === "work"
-        ? "Work"
-        : "Canvas";
-
   return (
     <>
       <header
         data-no-swipe=""
+        style={{ backgroundColor: "transparent" }}
         onTouchStart={stopSwipe}
         onTouchEnd={stopSwipe}
         className={cn(
-          "shrink-0",
+          "absolute inset-x-0 top-0 z-30 shrink-0",
           headerBg,
           "pt-[calc(env(safe-area-inset-top,0px)+6px)]",
           className,
@@ -453,38 +490,26 @@ export function MobileAppChrome({ className }: { className?: string }) {
               mobileSurface === "menu" && "ml-2.5",
             )}
           >
-            {showProjectTools && surface === "panel" ? (
-              <button
-                type="button"
-                aria-label="Back to chat"
-                onClick={onLeadingClick}
-                className={cn("inline-flex h-11 shrink-0 items-center gap-0.5 rounded-full pl-2.5 pr-3.5 text-[14px] font-medium tracking-[-0.01em] text-foreground transition-colors duration-200 hover:bg-muted", MOBILE_GLASS_PILL)}
-              >
-                <ChevronLeft className="h-5 w-5 shrink-0" strokeWidth={1.8} />
-                <span>Chat</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                aria-label={
-                  connectorBack ? connectorBack.label : showEntityBack
+            <button
+              type="button"
+              aria-label={
+                connectorBack ? connectorBack.label : showEntityBack
+                  ? "Back"
+                  : inChromeSub
                     ? "Back"
-                    : inChromeSub
-                      ? "Back"
-                      : mobileSurface === "menu"
-                        ? "Close menu"
-                        : "Open menu"
-                }
-                onClick={onLeadingClick}
-                className={mobileChromeButtonClass}
-              >
-                {connectorBack || showEntityBack || inChromeSub ? (
-                  <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
-                ) : (
-                  <TwoLineMenuIcon />
-                )}
-              </button>
-            )}
+                    : mobileSurface === "menu"
+                      ? "Close menu"
+                      : "Open menu"
+              }
+              onClick={onLeadingClick}
+              className={mobileChromeButtonClass}
+            >
+              {connectorBack || showEntityBack || inChromeSub ? (
+                <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
+              ) : (
+                <TwoLineMenuIcon />
+              )}
+            </button>
           </div>
 
           <div className="relative z-0 flex min-w-0 max-w-full justify-center justify-self-center px-2">
@@ -493,26 +518,14 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
           <div className="relative z-10 flex items-center justify-self-end gap-0.5">
             {showProjectTools ? (
-              surface === "chat" ? (
-                <button
-                  type="button"
-                  aria-label={`Open ${projectPanelLabel}`}
-                  onClick={() => setChatOrPanel("panel")}
-                  className={cn("inline-flex h-11 shrink-0 items-center gap-0.5 rounded-full pl-3.5 pr-2.5 text-[14px] font-medium tracking-[-0.01em] text-foreground transition-colors duration-200 hover:bg-muted", MOBILE_GLASS_PILL)}
-                >
-                  <span>{projectPanelLabel}</span>
-                  <ChevronRight className="h-5 w-5 shrink-0" strokeWidth={1.8} />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  aria-label="Project tools"
-                  onClick={() => setActionsOpen(true)}
-                  className={mobileChromeButtonClass}
-                >
-                  <Ellipsis className="h-5 w-5" strokeWidth={1.8} />
-                </button>
-              )
+              <button
+                type="button"
+                aria-label="Project tools"
+                onClick={() => setActionsOpen(true)}
+                className={mobileChromeButtonClass}
+              >
+                <Ellipsis className="h-5 w-5" strokeWidth={1.8} />
+              </button>
             ) : showCreateWorkspace ? (
               <button
                 type="button"
@@ -548,26 +561,44 @@ export function MobileAppChrome({ className }: { className?: string }) {
         onClose={() => setActionsOpen(false)}
         mode="actions"
       >
-        <ProjectActionsSheetBody
-          key={actionsOpen ? "open" : "closed"}
-          published={published}
-          selectMode={selectMode}
-          canRename={canRename}
-          onRename={() => {
-            setActionsOpen(false);
-            setRenameOpen(true);
-          }}
-          onOpenExternal={() => {
-            openInAppBrowser(address);
-            setActionsOpen(false);
-          }}
-          onSelectElement={() => {
-            setSelectMode(!selectMode);
-            setPanelMode("split");
-            setMobileSurface("panel");
-            setActionsOpen(false);
-          }}
-        />
+        {mediaProjectActions ? (
+          <ProjectMediaActionsSheetBody
+            onDownload={() => {
+              mediaProjectActions.onDownload();
+              setActionsOpen(false);
+            }}
+            onReplace={() => {
+              mediaProjectActions.onReplace();
+              setActionsOpen(false);
+            }}
+            onRemove={() => {
+              mediaProjectActions.onRemove();
+              setActionsOpen(false);
+            }}
+            disabled={mediaProjectActions.disabled}
+          />
+        ) : (
+          <ProjectActionsSheetBody
+            key={actionsOpen ? "open" : "closed"}
+            published={published}
+            selectMode={selectMode}
+            canRename={canRename}
+            onRename={() => {
+              setActionsOpen(false);
+              setRenameOpen(true);
+            }}
+            onOpenExternal={() => {
+              openInAppBrowser(address);
+              setActionsOpen(false);
+            }}
+            onSelectElement={() => {
+              setSelectMode(!selectMode);
+              setPanelMode("split");
+              setMobileSurface("panel");
+              setActionsOpen(false);
+            }}
+          />
+        )}
       </MobileBottomSheet>
 
       <MobileBottomSheet

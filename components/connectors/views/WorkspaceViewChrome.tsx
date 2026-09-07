@@ -49,7 +49,7 @@ export function WorkspacePanelFrame({
   error?: string | null;
 }) {
   return (
-    <div className="flex h-full min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-white dark:bg-space-canvas">
+    <div className="mobile-header-content flex h-full min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-white dark:bg-space-canvas">
       <div className="relative flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden">
       {error ? (
         <p className="shrink-0 border-b border-black/5 px-3 py-2 text-[12px] text-destructive dark:border-white/10">

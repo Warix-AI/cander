@@ -13,6 +13,7 @@ import {
 import { createPortal } from "react-dom";
 import {
   ChevronLeft,
+  Download,
   ExternalLink,
   Globe,
   MousePointer2,
@@ -294,6 +295,29 @@ export function ProjectActionsSheetBody({
   );
 }
 
+/** Actions for media projects. These intentionally omit website-only publishing controls. */
+export function ProjectMediaActionsSheetBody({
+  onDownload,
+  onReplace,
+  onRemove,
+  disabled = false,
+}: {
+  onDownload: () => void;
+  onReplace: () => void;
+  onRemove: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2.25rem)] pt-1">
+      <div className="space-y-0.5">
+        <SheetAction icon={Download} label="Download" disabled={disabled} onClick={onDownload} />
+        <SheetAction icon={Upload} label="Replace" disabled={disabled} onClick={onReplace} />
+        <SheetAction icon={Trash2} label="Remove" disabled={disabled} destructive onClick={onRemove} />
+      </div>
+    </div>
+  );
+}
+
 function SheetSubHeader({
   title,
   onBack,
@@ -531,6 +555,7 @@ export function SheetAction({
   primary,
   destructive,
   description,
+  disabled = false,
 }: {
   icon?: typeof Upload;
   label: string;
@@ -539,10 +564,12 @@ export function SheetAction({
   primary?: boolean;
   destructive?: boolean;
   description?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
       className={cn(
         "flex w-full items-center gap-3 rounded-[12px] px-3 py-3 text-left transition-colors",
@@ -553,6 +580,7 @@ export function SheetAction({
           : active
             ? "bg-muted text-foreground"
             : "text-foreground hover:bg-muted/70",
+        disabled && "cursor-not-allowed opacity-45",
       )}
     >
       {Icon ? <Icon className="h-4 w-4 shrink-0" strokeWidth={1.7} /> : null}

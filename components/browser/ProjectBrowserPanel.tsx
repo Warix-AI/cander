@@ -3521,9 +3521,15 @@ function StudioMediaSurface({
   const { updateProject } = useSpaceMutation();
   const { project } = useSpaceProject(projectId);
   const { thread } = useApp();
+  const mobile = useMobileShell();
   const fileRef = useRef<HTMLInputElement>(null);
   const appliedGenerationRef = useRef<string | null>(null);
   const optimisticObjectUrlRef = useRef<string | null>(null);
+  const mobileMediaActionsRef = useRef({
+    onDownload: () => {},
+    onReplace: () => {},
+    onRemove: () => {},
+  });
   const [activity, setActivity] = useState<StudioCanvasActivity | null>(null);
   const [naturalRatio, setNaturalRatio] = useState(() =>
     studioAspectParts(lockedAspectRatio),
@@ -3992,6 +3998,33 @@ function StudioMediaSurface({
   };
 
   const canvasBusy = Boolean(activity) || isGenerating;
+
+  mobileMediaActionsRef.current = {
+    onDownload: downloadCurrent,
+    onReplace: () => fileRef.current?.click(),
+    onRemove: clearCanvas,
+  };
+
+  useEffect(() => {
+    if (kind !== "studio-image") return;
+    const publish = () =>
+      window.dispatchEvent(
+        new CustomEvent("mobile-project-media-actions", {
+          detail: {
+            onDownload: () => mobileMediaActionsRef.current.onDownload(),
+            onReplace: () => mobileMediaActionsRef.current.onReplace(),
+            onRemove: () => mobileMediaActionsRef.current.onRemove(),
+          },
+        }),
+      );
+    publish();
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent("mobile-project-media-actions", { detail: null }),
+      );
+    };
+  }, [kind]);
+
   const showImageArtboard =
     kind === "studio-image" &&
     (hasMedia || isGenerating || isEditing || studioCleared);
@@ -4006,7 +4039,8 @@ function StudioMediaSurface({
     <div
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden",
-        BROWSER_CHROME_BG,
+        mobile ? "bg-white" : BROWSER_CHROME_BG,
+        mobile && "-mt-[calc(env(safe-area-inset-top,0px)+3.375rem)]",
       )}
     >
       <input
@@ -4177,7 +4211,8 @@ function StudioMediaSurface({
         </div>
       ) : null}
 
-      {hasMedia && (kind === "studio-image" || kind === "studio-video") ? (
+      {hasMedia &&
+      (kind === "studio-video" || (kind === "studio-image" && !mobile)) ? (
         <div className="absolute right-3 bottom-3 z-20 flex items-center gap-1.5">
           <button
             type="button"

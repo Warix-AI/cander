@@ -146,7 +146,7 @@ export function SettingsView() {
   const stackDirection = useMobileStackDirection(stackDepth);
 
   const settingsBody = settingsMobileHub ? (
-    <div className={cn("min-h-0 flex-1 overflow-y-auto", MOBILE_APP_BG)}>
+    <div className={cn("min-h-0 flex-1 overflow-y-auto mobile-header-content", MOBILE_APP_BG)}>
       <SettingsPage className="pt-2">
         <SettingsGroup dividerInset="icon">
           {settingsNav.map((tab) => {
@@ -179,7 +179,7 @@ export function SettingsView() {
       </SettingsPage>
     </div>
   ) : (
-    <div className={cn("settings-screen-canvas min-h-0 flex-1 overflow-y-auto", MOBILE_APP_BG)}>
+    <div className={cn("settings-screen-canvas min-h-0 flex-1 overflow-y-auto mobile-header-content", MOBILE_APP_BG)}>
       {settingsTab === "organization" ? (
         entitlements.showOrgManaged ? (
           <ManagedOrganizationSettings />

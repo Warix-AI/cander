@@ -163,7 +163,7 @@ export function SpaceChatLayout() {
             {projectId ? (
               <div
                 key={projectId}
-                className="flex h-full min-h-0 flex-col"
+                className="mobile-header-content flex h-full min-h-0 flex-col"
               >
                 <ProjectBrowserPanel />
               </div>

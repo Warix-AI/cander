@@ -326,7 +326,7 @@ export function ChatColumn() {
       >
         <div
           ref={bindScrollParent}
-          className="chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-4 pb-4 touch-pan-y [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          className="chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-[calc(env(safe-area-inset-top,0px)+4.375rem)] pb-4 touch-pan-y [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
           {hasChatTurns || thread ? (
             <div className="mx-auto flex w-full max-w-none flex-col gap-5">
