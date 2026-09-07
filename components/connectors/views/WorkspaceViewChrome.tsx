@@ -1,5 +1,6 @@
 "use client";
 
+import { PanelLoadingState } from "@/components/shell/PanelLoadingState";
 import type { ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
@@ -48,8 +49,8 @@ export function WorkspacePanelFrame({
   error?: string | null;
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white dark:bg-space-canvas">
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-white dark:bg-space-canvas">
+      <div className="relative flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden">
       {error ? (
         <p className="shrink-0 border-b border-black/5 px-3 py-2 text-[12px] text-destructive dark:border-white/10">
           {error}
@@ -79,6 +80,7 @@ export function WorkspaceEmptyState({
   syncing?: boolean;
   onAction: () => void;
 }) {
+  if (syncing) return <PanelLoadingState />;
   return (
     <div className="px-4 py-10 text-center">
       <p className="text-[13px] font-medium text-foreground">{title}</p>

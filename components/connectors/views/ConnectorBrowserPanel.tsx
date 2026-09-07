@@ -21,6 +21,7 @@ import {
   RotateCw,
   X,
 } from "lucide-react";
+import { useMobilePanelActionsState, type MobilePanelActionsConfig } from "@/components/shell/mobile/MobilePanelActions";
 import { useApp } from "@/components/app/AppProvider";
 import { BrowserSurfaceHost } from "@/components/browser/BrowserSurfaceHost";
 import { BrowserChromeTooltip } from "@/components/browser/BrowserChromeTooltip";
@@ -283,12 +284,72 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
 
   const isConnectorTab = active.kind === "connector";
 
+  const setMobileActions = useMobilePanelActionsState()?.setActions;
+  useEffect(() => {
+    if (!setMobileActions) return;
+    const actions: NonNullable<MobilePanelActionsConfig["connector"]>["actions"] = [];
+    const gmail = connectorId === "gmail" ? gmailToolbar : null;
+    const workspace = connectorId === "gmail" ? null : workspaceToolbar;
+    if (!isConnectorTab) actions.push({ label: `Back to ${title}`, icon: ArrowLeft, onClick: () => {
+      const connectorTab = session.tabs.find((tab) => tab.kind === "connector");
+      if (connectorTab) updateSession({ ...session, activeTabId: connectorTab.id });
+    } });
+    if (gmail) {
+      if (gmail.canGoInbox) actions.push({ label: "Inbox", icon: ArrowLeft, onClick: () => gmailToolbarRef.current?.onInbox() });
+      actions.push({ label: "Compose", icon: Pencil, disabled: gmail.busy, onClick: () => gmailToolbarRef.current?.onCompose() });
+      if (gmail.page === "detail") {
+        actions.push(
+          { label: "Reply", icon: Reply, disabled: gmail.busy, onClick: () => gmailToolbarRef.current?.onFocusReply() },
+          { label: "Archive", icon: Archive, disabled: gmail.busy, onClick: () => gmailToolbarRef.current?.onArchive() },
+          { label: gmail.isUnread ? "Mark read" : "Mark unread", icon: Mail, disabled: gmail.busy, onClick: () => gmailToolbarRef.current?.onToggleRead() },
+          { label: "Forward", icon: Forward, disabled: gmail.busy, onClick: () => gmailToolbarRef.current?.onForward() },
+        );
+      }
+      actions.push({ label: gmail.syncing ? "Refreshing…" : "Refresh", icon: RefreshCw, disabled: gmail.syncing, onClick: () => gmailToolbarRef.current?.onRefresh() });
+    }
+    if (workspace) {
+      if (workspace.canGoBack) actions.push({ label: workspace.backLabel ?? "Back", icon: ArrowLeft, onClick: () => workspaceToolbarRef.current?.onBack() });
+      if (workspace.primaryLabel && workspace.onPrimary) actions.push({ label: workspace.primaryLabel, icon: Pencil, disabled: workspace.busy, onClick: () => workspaceToolbarRef.current?.onPrimary?.() });
+      if (workspace.calendarNav && !workspace.canGoBack) {
+        if (workspace.calendarNav.onCreate) actions.push({ label: "Create event", icon: Plus, disabled: workspace.busy, onClick: () => workspaceToolbarRef.current?.calendarNav?.onCreate?.() });
+        actions.push(
+          { label: "Today", icon: RotateCw, onClick: () => workspaceToolbarRef.current?.calendarNav?.onToday() },
+          { label: "Previous month", icon: ChevronLeft, onClick: () => workspaceToolbarRef.current?.calendarNav?.onPrev() },
+          { label: "Next month", icon: ChevronRight, onClick: () => workspaceToolbarRef.current?.calendarNav?.onNext() },
+        );
+      }
+      actions.push({ label: workspace.syncing ? "Refreshing…" : "Refresh", icon: RefreshCw, disabled: workspace.syncing, onClick: () => workspaceToolbarRef.current?.onRefresh() });
+    }
+    setMobileActions({ connector: {
+      title: gmail ? "Inbox" : workspace?.title ?? title,
+      back: !isConnectorTab ? { label: `Back to ${title}`, onClick: actions[0].onClick }
+        : gmail?.canGoInbox ? { label: "Back to inbox", onClick: () => gmailToolbarRef.current?.onInbox() }
+        : workspace?.canGoBack ? { label: workspace.backLabel ?? `Back to ${title}`, onClick: () => workspaceToolbarRef.current?.onBack() }
+        : undefined,
+      syncHint: gmail?.syncHint ?? workspace?.syncHint,
+      actions,
+      controls: workspace?.driveChrome ? (
+        <div className="mt-3 flex items-center gap-2">
+          <input aria-label={browseSearchPlaceholder} placeholder={browseSearchPlaceholder}
+            defaultValue={workspace.driveChrome.query}
+            onChange={(event) => workspaceToolbarRef.current?.driveChrome?.onQueryChange(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") workspaceToolbarRef.current?.driveChrome?.onSearch(); }}
+            className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-transparent px-3 text-[16px]" />
+          {isDriveBrowse ? <DriveFilterMenu typeFilter={workspace.driveChrome.typeFilter} sortMode={workspace.driveChrome.sortMode}
+            onTypeFilter={(value) => workspaceToolbarRef.current?.driveChrome?.onTypeFilter(value)}
+            onSortMode={(value) => workspaceToolbarRef.current?.driveChrome?.onSortMode(value)} /> : null}
+        </div>
+      ) : undefined,
+    } });
+  }, [setMobileActions, connectorId, gmailToolbar, workspaceToolbar, title, browseSearchPlaceholder, isDriveBrowse, isConnectorTab, session, updateSession]);
+  useEffect(() => () => setMobileActions?.(null), [setMobileActions]);
+
   return (
     <div className={cn(SHELL_PANEL_BODY, CONNECTOR_CHROME_BG)}>
       {/* Top header — tabs + expand + panel only */}
       <div
         className={cn(
-          "flex h-[45px] min-w-0 shrink-0 items-center gap-1 px-2",
+          "hidden h-[45px] min-w-0 shrink-0 items-center gap-1 px-2 lg:flex",
           CONNECTOR_CHROME_BG,
         )}
         onPointerLeave={clearBrowserChromeHovers}
@@ -352,7 +413,8 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
       {/* Bottom header — connector tools or web URL nav */}
       <div
         className={cn(
-          "relative flex h-[45px] min-w-0 shrink-0 items-center gap-1 border-y border-black/5 px-2 dark:border-white/10",
+          "relative h-[45px] min-w-0 shrink-0 items-center gap-1 border-y border-black/5 px-2 dark:border-white/10",
+          isConnectorTab ? "hidden lg:flex" : "flex",
           CONNECTOR_CHROME_BG,
         )}
       >

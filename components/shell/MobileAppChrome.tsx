@@ -209,9 +209,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
       !inChromeSub &&
       !showProjectTools &&
       !showCreateWorkspace &&
-      (view === "recents" ||
-        (view === "space" && mobileSurface === "panel" && !entityOpen)),
+      ((inConnector && surface === "panel") || view === "recents" ||
+        (view === "space" && mobileSurface === "panel" && (!entityOpen || inConnector))),
   );
+  const connectorBack = showPanelActions ? panelActions?.connector?.back : undefined;
   const onNewChatScreen =
     !inChromeSub &&
     !onMenuMain &&
@@ -296,6 +297,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
   };
 
   const onLeadingClick = () => {
+    if (connectorBack) {
+      connectorBack.onClick();
+      return;
+    }
     // In-project panel: left arrow returns to chat (does not leave the project).
     if (showProjectTools && surface === "panel") {
       setMobileSurface("chat");
@@ -463,7 +468,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
               <button
                 type="button"
                 aria-label={
-                  showEntityBack
+                  connectorBack ? connectorBack.label : showEntityBack
                     ? "Back"
                     : inChromeSub
                       ? "Back"
@@ -474,7 +479,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
                 onClick={onLeadingClick}
                 className={mobileChromeButtonClass}
               >
-                {showEntityBack || inChromeSub ? (
+                {connectorBack || showEntityBack || inChromeSub ? (
                   <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
                 ) : (
                   <Menu className="h-5 w-5" strokeWidth={1.8} />

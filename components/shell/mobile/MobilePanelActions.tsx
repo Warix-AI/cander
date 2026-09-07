@@ -34,6 +34,13 @@ export type MobilePanelExtraItem = {
 };
 
 export type MobilePanelActionsConfig = {
+  connector?: {
+    title: string;
+    back?: { label: string; onClick: () => void };
+    syncHint?: string | null;
+    controls?: ReactNode;
+    actions: { label: string; icon: typeof SquarePen; disabled?: boolean; onClick: () => void }[];
+  };
   onNewChat?: () => void;
   newChatLabel?: string;
   scope?: MobilePanelScopeConfig;
@@ -174,7 +181,7 @@ export function MobilePanelActionsCluster({
     <>
       <button
         type="button"
-        aria-label="Space actions"
+        aria-label={config.connector ? "Connector actions" : "Space actions"}
         aria-expanded={menuOpen}
         onClick={() => setMenuOpen(true)}
         className={cn(mobileChromeButtonClass, menuOpen && "bg-muted")}
@@ -188,7 +195,20 @@ export function MobilePanelActionsCluster({
         mode="space"
       >
         <div className="max-h-[min(85vh,720px)] overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
-          <div className="mb-4 space-y-0.5">
+          {config.connector ? (
+            <div className="mb-4">
+              <p className="px-3 text-[15px] font-medium">{config.connector.title}</p>
+              <p className="px-3 pb-3 pt-1 text-[13px] text-muted-foreground" aria-live="polite">{config.connector.syncHint}</p>
+              {config.connector.actions.map(({ label, icon: Icon, disabled, onClick }) => (
+                <button key={label} type="button" disabled={disabled}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[15px] hover:bg-muted disabled:opacity-40"
+                  onClick={() => { setMenuOpen(false); onClick(); }}>
+                  <Icon className="h-4 w-4" />{label}
+                </button>
+              ))}
+              {config.connector.controls}
+            </div>
+          ) : <div className="mb-4 space-y-0.5">
             <SheetAction
               icon={SquarePen}
               label={composeLabel}
@@ -197,7 +217,7 @@ export function MobilePanelActionsCluster({
                 onCompose();
               }}
             />
-          </div>
+          </div>}
           {scope ? (
             <div className="mb-4">
               <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">

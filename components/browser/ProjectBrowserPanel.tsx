@@ -1,5 +1,7 @@
 "use client";
 
+import { MobileFloatingNav } from "@/components/shell/mobile/MobileFloatingNav";
+
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from "react";
 import {
   AppWindow,
@@ -1707,6 +1709,7 @@ export function ProjectBrowserPanel({
     <div
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden",
+        mobile && session.tabs.length > 1 && "pb-[calc(5rem+env(safe-area-inset-bottom,0px))]",
         BROWSER_CHROME_BG,
       )}
     >
@@ -2160,7 +2163,7 @@ export function ProjectBrowserPanel({
           </span>
         </button>
       ) : null}
-      {mobile ? (
+      {mobile && session.tabs.length > 1 ? (
         <ProjectMobileTabBar
           tabs={session.tabs}
           activeId={active.id}
@@ -2844,12 +2847,7 @@ function ProjectMobileTabBar({
   };
 
   return (
-    <div
-      className={cn(
-        "relative z-10 flex shrink-0 items-center gap-1.5 overflow-hidden border-t border-black/5 px-2 py-1.5 pb-[calc(env(safe-area-inset-bottom,0px)+0.375rem)] dark:border-white/5",
-        BROWSER_CHROME_BG,
-      )}
-    >
+    <MobileFloatingNav activeId={activeId} label="Project tabs">
       {tabs.map((tab) => {
         const active = tab.id === activeId;
         const label = labelFor(tab);
@@ -2860,11 +2858,12 @@ function ProjectMobileTabBar({
             key={tab.id}
             type="button"
             aria-busy={generating || undefined}
+            aria-current={active ? "page" : undefined}
             onClick={() => {
               if (!active) onSelect(tab.id);
             }}
             className={cn(
-              "inline-flex h-9 max-w-[10rem] shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] tracking-[-0.01em] transition-colors",
+              "inline-flex h-10 max-w-[10rem] shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] tracking-[-0.01em] transition-colors",
               active
                 ? "bg-muted/70 text-foreground"
                 : "text-muted-foreground hover:bg-muted/50",
@@ -2914,7 +2913,7 @@ function ProjectMobileTabBar({
       >
         <Plus className="h-4 w-4" strokeWidth={1.8} />
       </button>
-    </div>
+    </MobileFloatingNav>
   );
 }
 

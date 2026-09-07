@@ -47,6 +47,17 @@ export function buildMailSrcDoc(html: string): string {
 </head>
 <body>
 ${safe}
+<style>
+  @media (max-width: 640px) {
+    html, body { width: 100% !important; min-width: 0 !important; }
+    body * { box-sizing: border-box; min-width: 0 !important; }
+    table, div { max-width: 100% !important; }
+    table { width: 100% !important; }
+    td, th, p, a, span { overflow-wrap: anywhere; }
+    img { max-width: 100% !important; height: auto !important; }
+    pre { white-space: pre-wrap !important; overflow-wrap: anywhere; }
+  }
+</style>
 <script>
 (function () {
   function reportHeight() {

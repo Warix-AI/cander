@@ -1,5 +1,7 @@
 "use client";
 
+import { PanelLoadingState } from "@/components/shell/PanelLoadingState";
+
 import { useMemo } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import {
@@ -19,7 +21,6 @@ import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flo
 import { editedMeta } from "@/lib/format-relative-time";
 import { projectCoverImageSrc } from "@/lib/project-cover";
 import { useSpaceProjects } from "@/lib/hooks/use-space-query";
-import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
   creatorLabel,
@@ -132,7 +133,7 @@ export function CreateDashboard() {
 
         <div className="mt-5">
           {projectsLoading && !projectItems.length ? (
-            <QuerySkeleton rows={2} />
+            <PanelLoadingState />
           ) : (
           <PreviewGrid
               layout={spaceLayout}

@@ -665,7 +665,7 @@ export function GmailConnectorView({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white dark:bg-space-canvas">
+    <div className="flex h-full min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-white dark:bg-space-canvas">
       {error ? (
         <p className="shrink-0 border-b border-black/5 px-3 py-2 text-[12px] text-destructive dark:border-white/10">
           {error}
@@ -712,10 +712,10 @@ export function GmailConnectorView({
       ) : null}
 
       {page === "detail" && detail ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
             <div className="px-4 pb-3 pt-4">
-              <h2 className="text-[17px] font-semibold tracking-[-0.02em] text-foreground">
+              <h2 className="break-words text-[17px] font-semibold tracking-[-0.02em] text-foreground">
                 {detail.subject || "(no subject)"}
               </h2>
             </div>
@@ -740,7 +740,7 @@ export function GmailConnectorView({
                               {formatWhen(msg.receivedAt)}
                             </span>
                           </div>
-                          <p className="text-[12px] text-muted-foreground">
+                          <p className="break-words text-[12px] text-muted-foreground">
                             to {(msg.toAddrs ?? []).join(", ") || "me"}
                           </p>
                         </div>
@@ -832,7 +832,7 @@ export function GmailConnectorView({
       {page === "inbox" ? (
         <div
           ref={listRef}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
           onScroll={(event) => {
             listScrollTopRef.current = event.currentTarget.scrollTop;
           }}

@@ -1,5 +1,7 @@
 "use client";
 
+import { PanelLoadingState } from "@/components/shell/PanelLoadingState";
+
 import { useMemo } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import {
@@ -7,7 +9,6 @@ import {
   SpaceEmptyCard,
 } from "@/components/spaces/SpaceEmptyCard";
 import { WorkCollectionGrid } from "@/components/spaces/work/WorkCollectionGrid";
-import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
 import { useSpaceAttachments } from "@/lib/hooks/use-space-query";
 import {
   WORK_COLLECTION_ITEMS,
@@ -50,7 +51,7 @@ export function WorkSpaceView({
   );
 
   if (attachmentsLoading) {
-    return <QuerySkeleton rows={2} />;
+    return <PanelLoadingState />;
   }
 
   // Fresh Work space — show the same inviting empty card as other spaces.
