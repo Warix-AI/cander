@@ -111,8 +111,10 @@ export function MobileFilterBar({
       return;
     }
     setPanelActions({
-      onNewChat: () => onNewChatRef.current?.(),
-      newChatLabel,
+      onNewChat: onNewChat
+        ? () => onNewChatRef.current?.()
+        : undefined,
+      newChatLabel: onNewChat ? newChatLabel : undefined,
       scope: scopeRef.current
         ? {
             ...scopeRef.current,
@@ -137,6 +139,7 @@ export function MobileFilterBar({
   }, [
     active,
     setPanelActions,
+    onNewChat,
     newChatLabel,
     scopeValue,
     layoutValue,
@@ -209,7 +212,8 @@ export function MobilePanelActionsCluster({
               ))}
               {config.connector.controls}
             </div>
-          ) : <div className="mb-4 space-y-0.5">
+          ) : config.onNewChat ? (
+            <div className="mb-4 space-y-0.5">
             <SheetAction
               icon={SquarePen}
               label={composeLabel}
@@ -218,7 +222,8 @@ export function MobilePanelActionsCluster({
                 onCompose();
               }}
             />
-          </div>}
+          </div>
+          ) : null}
           {scope ? (
             <div className="mb-4">
               <p className="px-1 pb-2 font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">

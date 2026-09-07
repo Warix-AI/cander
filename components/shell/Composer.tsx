@@ -827,7 +827,11 @@ export function Composer({
   // Sticky keyboard on mobile new chat until the first send.
   // Focus once when chat owns the screen — never fight blur/hide (that flicker
   // glitches the menu swipe). Hold focus by canceling outside taps instead.
+  const prevSurfaceRef = useRef(mobileSurface);
   useEffect(() => {
+    const fromMenu = prevSurfaceRef.current === "menu";
+    prevSurfaceRef.current = mobileSurface;
+
     if (!autoFocus || !mobile) return;
     if (suppressAutoFocusRef.current) return;
     if (overlay) return;
@@ -836,6 +840,7 @@ export function Composer({
 
     const focusComposer = () => {
       if (suppressAutoFocusRef.current) return;
+      if (mobileSurface !== "chat") return;
       const el =
         textRef.current ??
         (document.querySelector(
@@ -849,8 +854,10 @@ export function Composer({
       }
     };
 
-    // Instant reopen when returning from menu/panel.
-    const openId = window.setTimeout(focusComposer, 0);
+    // Wait for the menu slide to finish before raising the keyboard — focusing
+    // mid-transform leaves WKWebView with a stuck horizontal offset.
+    const delay = fromMenu ? 520 : 0;
+    const openId = window.setTimeout(focusComposer, delay);
 
     const holdKeyboard = (event: TouchEvent) => {
       if (suppressAutoFocusRef.current) return;
@@ -1670,7 +1677,7 @@ export function Composer({
         ) : null}
 
         {compact ? (
-          <div className="composer-shell bg-white py-1.5 pr-1.5 pl-3 dark:bg-input">
+          <div className="composer-shell bg-transparent py-1.5 pr-1.5 pl-3 dark:bg-input">
             <div className={cn("relative", dictatingActive && "h-9")}>
               {dictatingActive ? (
                 <div className="absolute inset-0 z-10 flex items-center">
@@ -1741,7 +1748,7 @@ export function Composer({
         ) : (
           <div
             className={cn(
-              "composer-shell bg-white px-2.5 py-1.5 dark:bg-input",
+              "composer-shell bg-transparent px-2.5 py-1.5 dark:bg-input",
             )}
           >
             {files.length || images.length ? (

@@ -45,7 +45,9 @@ export function MobilePager({
     const el = viewportRef.current;
     if (!el) return;
     const measure = () => {
-      const next = Math.round(el.getBoundingClientRect().width);
+      // offsetWidth is layout size — not affected by ancestor transforms (menu
+      // peek) or visualViewport keyboard shrink the way getBoundingClientRect is.
+      const next = Math.round(el.offsetWidth || el.clientWidth);
       setWidth((prev) => (prev === next ? prev : next));
     };
     measure();

@@ -1738,7 +1738,7 @@ export function ProjectBrowserPanel({
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden",
         mobile && session.tabs.length > 1 && "pb-[calc(5rem+env(safe-area-inset-bottom,0px))]",
-        BROWSER_CHROME_BG,
+        mobile ? "bg-white dark:bg-black" : BROWSER_CHROME_BG,
       )}
     >
       {mobile ? null : standalone ? (

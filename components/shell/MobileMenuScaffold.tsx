@@ -1,12 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { MobileMenuPane } from "@/components/shell/MobileMenuPane";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
   MOBILE_APP_BG,
   MOBILE_MENU_BG,
+  MOBILE_PAGER_MS,
   MOBILE_PEEK_RADIUS,
 } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
@@ -25,11 +26,24 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
   const mobile = useMobileShell();
   const { mobileSurface, mobileContentSurface, setMobileSurface } = useApp();
 
-  if (!mobile) return <>{children}</>;
-
   const menuOpen = mobileSurface === "menu";
   const menuWidth = `calc(${MOBILE_MENU_WIDTH * 100}% + 5px)`;
   const peekPct = (1 - MOBILE_MENU_WIDTH) * 100;
+
+  // After close, clear any iOS scroll/viewport hitch left by keyboard + transform.
+  useEffect(() => {
+    if (!mobile || menuOpen) return;
+    const reset = () => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollLeft = 0;
+      document.body.scrollLeft = 0;
+    };
+    reset();
+    const id = window.setTimeout(reset, MOBILE_PAGER_MS + 32);
+    return () => window.clearTimeout(id);
+  }, [mobile, menuOpen]);
+
+  if (!mobile) return <>{children}</>;
 
   return (
     <div
@@ -46,10 +60,11 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
       <div
         aria-hidden={!menuOpen}
         className={cn(
-          "absolute inset-y-0 left-0 z-10 flex flex-col overflow-hidden will-change-transform",
+          "absolute inset-y-0 left-0 z-10 flex flex-col overflow-hidden",
           MOBILE_MENU_BG,
           "transition-transform",
           MENU_EASE,
+          menuOpen && "will-change-transform",
           !menuOpen && "pointer-events-none",
         )}
         style={{
@@ -64,10 +79,11 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
 
       <div
         className={cn(
-          "relative z-20 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden will-change-transform",
+          "relative z-20 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
           MOBILE_APP_BG,
-          "transition-[transform,border-radius,background-color]",
+          "transition-[transform,border-radius,background-color,box-shadow]",
           MENU_EASE,
+          menuOpen && "will-change-transform",
           menuOpen && MOBILE_PEEK_RADIUS,
           menuOpen && "mobile-menu-peek",
           // While open, the slid-over surface must not intercept menu taps

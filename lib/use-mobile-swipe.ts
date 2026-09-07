@@ -4,7 +4,6 @@ import { useCallback, useRef, type TouchEvent } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { canUseRightPanel } from "@/lib/right-panel";
 import { dismissNativeKeyboard } from "@/lib/mobile-shell";
-import { isChatSpace } from "@/lib/spaces";
 import { useMobileShell } from "@/lib/use-media-query";
 
 const SWIPE_MIN = 56;
@@ -40,7 +39,6 @@ export function useMobileSwipeGestures() {
     setMobileSurface,
     panelMode,
     setPanelMode,
-    openSpaceChat,
   } = useApp();
 
   const startX = useRef(0);
@@ -57,7 +55,10 @@ export function useMobileSwipeGestures() {
       projectId,
       jobId,
       skillId,
-    }) || view === "space";
+    }) ||
+    view === "space" ||
+    Boolean(projectId) ||
+    Boolean(connectorId);
 
   const onTouchStart = useCallback(
     (event: TouchEvent) => {
@@ -96,24 +97,16 @@ export function useMobileSwipeGestures() {
         return;
       }
 
-      const withPanel = panelAvailable;
-
       const goSurface = (next: "menu" | "chat" | "panel") => {
         // Dismiss before the surface slide so the keyboard never rides along.
         if (next !== "chat") dismissNativeKeyboard();
         setMobileSurface(next);
       };
 
-      // Swipe right → toward menu
+      // Swipe right → panel → chat → menu
       if (dx > 0) {
         if (mobileSurface === "panel") {
-          if (projectId) {
-            goSurface("chat");
-          } else if (view === "space" && spaceId && isChatSpace(spaceId)) {
-            openSpaceChat(spaceId);
-          } else {
-            goSurface("chat");
-          }
+          goSurface("chat");
           return;
         }
         if (mobileSurface === "chat") {
@@ -122,13 +115,13 @@ export function useMobileSwipeGestures() {
         return;
       }
 
-      // Swipe left → toward panel / chat from menu
+      // Swipe left → menu → chat → panel
       if (dx < 0) {
         if (mobileSurface === "menu") {
           goSurface("chat");
           return;
         }
-        if (mobileSurface === "chat" && withPanel) {
+        if (mobileSurface === "chat" && panelAvailable) {
           if (panelMode === "collapsed") setPanelMode("split");
           goSurface("panel");
         }
@@ -136,14 +129,10 @@ export function useMobileSwipeGestures() {
     },
     [
       mobileSurface,
-      openSpaceChat,
       panelAvailable,
       panelMode,
-      projectId,
       setMobileSurface,
       setPanelMode,
-      spaceId,
-      view,
     ],
   );
 

@@ -868,6 +868,15 @@ export function GmailConnectorView({
             onSubmit={() => undefined}
             onDismiss={() => setMobileSearchOpen(false)}
           />
+          {loading && !visibleThreads.length ? (
+            <div className="flex flex-col items-center justify-center gap-3 px-4 py-16">
+              <Loader2
+                className="h-6 w-6 animate-spin text-muted-foreground"
+                strokeWidth={1.8}
+              />
+              <p className="text-[13px] text-muted-foreground">Loading mail…</p>
+            </div>
+          ) : null}
           {!loading && !visibleThreads.length ? (
             <div className="px-4 py-10 text-center">
               <p className="text-[13px] font-medium text-foreground">

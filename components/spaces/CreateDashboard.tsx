@@ -116,8 +116,6 @@ export function CreateDashboard() {
       >
         <DashToolbar
           active={hoistFilters}
-          onNewChat={chatClosed ? () => openSpaceChat("studio") : undefined}
-          newChatLabel="Ask"
           layout={{ value: spaceLayout, onChange: setSpaceLayout }}
           actions={
             <>

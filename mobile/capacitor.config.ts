@@ -27,6 +27,7 @@ const config = {
   plugins: {
     Keyboard: {
       // WebView stays full-height; we lift the composer via --keyboard-inset.
+      // Scroll-to-dismiss is handled in ChatColumn for active threads.
       resize: "none",
       resizeOnFullScreen: true,
     },

@@ -23,6 +23,7 @@ import { chatSpaceId } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import { useChatCanvasCentered } from "@/lib/chat-layout";
 import { useMobileShell } from "@/lib/use-media-query";
+import { dismissNativeKeyboard } from "@/lib/mobile-shell";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 
@@ -102,6 +103,8 @@ export function ChatColumn() {
       (item) => item.role === "user" || item.role === "assistant",
     ),
   );
+  const hasChatTurnsRef = useRef(hasChatTurns);
+  hasChatTurnsRef.current = hasChatTurns;
   // Empty new chat → autofocus composer on mobile. Reading an existing
   // thread or any overlay/browser surface must not steal focus.
   const autofocusComposer =
@@ -148,10 +151,20 @@ export function ChatColumn() {
     scrollUnsubRef.current = null;
     scrollParentRef.current = node;
     if (!node) return;
+    let lastScrollTop = node.scrollTop;
     const onScroll = () => {
       const distanceFromBottom =
         node.scrollHeight - node.scrollTop - node.clientHeight;
       userPinnedScroll.current = distanceFromBottom > 80;
+      // Active thread: a firm scroll dismisses the keyboard (swipe through the
+      // transcript). New-chat sticky keyboard is handled separately.
+      if (mobile && hasChatTurnsRef.current) {
+        const delta = Math.abs(node.scrollTop - lastScrollTop);
+        lastScrollTop = node.scrollTop;
+        if (delta >= 28) dismissNativeKeyboard();
+      } else {
+        lastScrollTop = node.scrollTop;
+      }
     };
     node.addEventListener("scroll", onScroll, { passive: true });
     scrollUnsubRef.current = () =>
