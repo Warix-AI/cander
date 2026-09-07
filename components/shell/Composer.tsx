@@ -829,11 +829,14 @@ export function Composer({
     if (suppressAutoFocusRef.current) return;
     if (overlay) return;
     if (view === "browser") return;
-    const id = window.requestAnimationFrame(() => {
+    // Let the mobile screen finish its push transition before focusing. This
+    // keeps the keyboard from interrupting the animation while still opening
+    // it automatically on every fresh chat.
+    const id = window.setTimeout(() => {
       if (suppressAutoFocusRef.current) return;
       textRef.current?.focus();
-    });
-    return () => window.cancelAnimationFrame(id);
+    }, nativeShell ? 260 : 0);
+    return () => window.clearTimeout(id);
   }, [autoFocus, nativeShell, overlay, view, thread?.id]);
 
   useEffect(() => {
