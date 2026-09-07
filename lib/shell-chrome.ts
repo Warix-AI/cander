@@ -13,6 +13,8 @@ export const SHELL_G3_RADIUS_PX = 20;
 /** Electron desktop window outer radius — slightly larger than in-app G3 cards. */
 export const DESKTOP_WINDOW_RADIUS_PX = 24;
 export const SHELL_G3_RADIUS = "shell-g3-radius";
+/** G3 radius for compact controls where a 20px card radius would read as a pill. */
+export const CONNECTOR_CONTROL_RADIUS = "connector-control-radius";
 /** Floating shell inset — matches my-3 / ml-3 / mr-3 on menu and panels. */
 export const SHELL_FLOAT_INSET_PX = 12;
 /** Interior of a floating shell panel — inherits light-surface / composer-shell chrome. */

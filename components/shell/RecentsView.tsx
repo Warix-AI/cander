@@ -13,10 +13,7 @@ import {
   openIndexEntry,
   useSpaceIndex,
 } from "@/lib/hooks/use-space-index";
-import { CHAT_SPACES } from "@/lib/spaces";
 import { QueryError, QuerySkeleton } from "@/lib/hooks/space-query-ui";
-import { navLabel } from "@/lib/use-main-nav-items";
-import type { SpaceId } from "@/lib/types";
 import { MobileFilterBar } from "@/components/shell/mobile/MobilePanelActions";
 import { useMobileShell } from "@/lib/use-media-query";
 
@@ -25,25 +22,35 @@ export function RecentsView() {
   const mobile = useMobileShell();
   const [scope, setScope] = useState<string>("all");
 
-  const scopeOptions = useMemo(() => {
-    const seen = new Set<string>();
-    return [
-      { id: "all", label: "All" },
-      ...CHAT_SPACES.flatMap((id) => {
-        const label = navLabel(id as SpaceId) ?? id;
-        if (seen.has(label)) return [];
-        seen.add(label);
-        return [{ id, label }];
-      }),
-    ];
-  }, []);
+  const scopeOptions = [
+    { id: "all", label: "All" },
+    { id: "new", label: "New" },
+    { id: "connectors", label: "Connectors" },
+    { id: "search", label: "Search" },
+    { id: "image", label: "Image" },
+    { id: "app", label: "App" },
+    { id: "website", label: "Website" },
+  ];
 
   const { entries, loading, error } = useSpaceIndex({
-    space: scope === "all" ? "all" : (scope as SpaceId),
+    space: "all",
   });
 
+  const scopedEntries = useMemo(() => {
+    if (scope === "all") return entries;
+    return entries.filter((entry) => {
+      if (scope === "new") return entry.kind === "thread" && !entry.linkedProjectId;
+      if (scope === "connectors") return entry.kind === "briefing";
+      if (scope === "search") return entry.space === "research";
+      if (scope === "image") return entry.space === "studio";
+      if (scope === "app") return entry.projectKind === "app";
+      if (scope === "website") return entry.projectKind === "site";
+      return true;
+    });
+  }, [entries, scope]);
+
   const items = useMemo(() => {
-    return entries.map((entry): PreviewEntry & { openKey: string } => {
+    return scopedEntries.map((entry): PreviewEntry & { openKey: string } => {
       const research =
         entry.space === "research"
           ? researchPaperPreviews[entry.entityId]
@@ -72,10 +79,10 @@ export function RecentsView() {
         bannerKey: entry.space,
       };
     });
-  }, [entries]);
+  }, [scopedEntries]);
 
   const open = (key: string) => {
-    const entry = entries.find((item) => item.key === key);
+    const entry = scopedEntries.find((item) => item.key === key);
     if (!entry) return;
     openIndexEntry(entry, { openThread, openProject, openSpaceEntity });
   };

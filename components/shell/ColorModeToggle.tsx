@@ -6,6 +6,7 @@ import {
   setColorMode,
   useAppearance,
 } from "@/lib/appearance";
+import { CONNECTOR_CONTROL_RADIUS, SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 const MODES: {
@@ -32,7 +33,8 @@ export function ColorModeToggle({
       role="group"
       aria-label="Appearance"
       className={cn(
-        "inline-flex w-fit items-center gap-0.5 rounded-[10px] border border-border/60 bg-muted/35 p-0.5 dark:bg-muted/25",
+        "inline-flex w-fit items-center gap-0.5 border-0 bg-white/45 p-1 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-white/[0.06] dark:shadow-[0_8px_24px_rgba(0,0,0,0.16)]",
+        SHELL_G3_RADIUS,
         className,
       )}
     >
@@ -46,11 +48,12 @@ export function ColorModeToggle({
             aria-pressed={active}
             onClick={() => setColorMode(id)}
             className={cn(
-              "inline-flex items-center justify-center rounded-[8px] transition-[color,background-color,box-shadow] duration-200",
+              "inline-flex items-center justify-center transition-[color,background-color,box-shadow] duration-200",
               compact ? "h-7 w-7" : "h-8 w-8",
+              CONNECTOR_CONTROL_RADIUS,
               active
-                ? "bg-background text-foreground shadow-sm ring-1 ring-border/55"
-                : "text-muted-foreground hover:bg-background/55 hover:text-foreground",
+                ? "bg-black/[0.06] text-foreground shadow-sm dark:bg-white/[0.1]"
+                : "text-muted-foreground hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.1]",
             )}
           >
             <Icon className="h-3.5 w-3.5" strokeWidth={1.6} />

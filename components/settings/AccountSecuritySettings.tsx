@@ -5,7 +5,6 @@ import { useApp } from "@/components/app/AppProvider";
 import { DashBtn } from "@/components/spaces/ItemSet";
 import {
   SettingsGroup,
-  SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsChrome";
 import { isSupabaseConfigured } from "@/lib/data-backend";
@@ -13,6 +12,7 @@ import { signOutAccount, clearLocalAuthState } from "@/lib/auth/sign-out";
 import {
   deleteAccount,
   requestPasswordReset,
+  signInWithPassword,
   updateEmail,
   updatePassword,
   authEmail,
@@ -43,7 +43,7 @@ function formatPeriodEnd(iso: string | undefined) {
 export function AccountSecuritySettings({ onAfterSignOut }: Props) {
   const mobile = useMobileShell();
   const nativeShell = isMobileShell();
-  const { entitlements, actor, setSettingsTab } = useApp();
+  const { entitlements, actor, orgMembers, setSettingsTab } = useApp();
   const supabase = isSupabaseConfigured();
   const user = useSyncExternalStore(
     subscribeSupabaseUser,
@@ -51,8 +51,16 @@ export function AccountSecuritySettings({ onAfterSignOut }: Props) {
     getSupabaseUserServerSnapshot,
   );
   const currentEmail = authEmail(user);
+  const managedByOrganization = actor.kind === "org";
+  const hasOtherOrgMembers = managedByOrganization && orgMembers.some(
+    (member) =>
+      member.id !== actor.id &&
+      member.kind === "org" &&
+      (!actor.orgId || !member.orgId || member.orgId === actor.orgId),
+  );
 
   const [email, setEmail] = useState(currentEmail);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -94,13 +102,18 @@ export function AccountSecuritySettings({ onAfterSignOut }: Props) {
 
   const savePassword = () =>
     run("password", async () => {
+      if (!currentPassword) {
+        throw new Error("Enter your current password.");
+      }
       if (password.length < 8) {
         throw new Error("Password must be at least 8 characters.");
       }
       if (password !== passwordConfirm) {
         throw new Error("Passwords do not match.");
       }
+      await signInWithPassword({ email: currentEmail, password: currentPassword });
       await updatePassword(password);
+      setCurrentPassword("");
       setPassword("");
       setPasswordConfirm("");
       setMessage("Password updated.");
@@ -120,6 +133,9 @@ export function AccountSecuritySettings({ onAfterSignOut }: Props) {
 
   const removeAccount = () =>
     run("delete", async () => {
+      if (hasOtherOrgMembers) {
+        throw new Error("Remove all other organization users before deleting your account.");
+      }
       if (!deleteConfirmOk) {
         throw new Error('Type "delete" to confirm.');
       }
@@ -136,7 +152,10 @@ export function AccountSecuritySettings({ onAfterSignOut }: Props) {
     });
 
   const deleteDescription = () => {
-    if (!entitlements.canDeleteAccount && actor.kind === "org" && actor.role !== "Owner") {
+    if (hasOtherOrgMembers) {
+      return "Remove all other organization users before deleting your account.";
+    }
+    if (managedByOrganization && !entitlements.isOwner) {
       return "Your seat is managed by your organization. Contact an admin to leave.";
     }
     if (billingBlocksDelete) {
@@ -154,159 +173,176 @@ export function AccountSecuritySettings({ onAfterSignOut }: Props) {
     return "Clears local session data for this browser.";
   };
 
-  const body = (
-    <>
-      {supabase && !entitlements.showOrgManaged ? (
-        <>
-          <SettingsRow
-            label="Email"
-            description={
-              mobile
-                ? undefined
-                : "Change email — confirm via the link we send to the new address."
-            }
-          >
-            <div className="flex w-full max-w-sm flex-col gap-2 sm:items-end">
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="h-10 w-full rounded-[10px] border border-border bg-background px-3 text-[13.5px] outline-none focus:border-foreground/20"
-              />
-              <DashBtn onClick={() => void saveEmail()}>
-                {busy === "email" ? "Saving…" : "Update email"}
-              </DashBtn>
-            </div>
-          </SettingsRow>
-
-          <SettingsRow
-            label="Password"
-            description={
-              mobile ? undefined : "Set a new password while signed in."
-            }
-          >
-            <div className="flex w-full max-w-sm flex-col gap-2 sm:items-end">
-              <input
-                type="password"
-                autoComplete="new-password"
-                placeholder="New password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="h-10 w-full rounded-[10px] border border-border bg-background px-3 text-[13.5px] outline-none focus:border-foreground/20"
-              />
-              <input
-                type="password"
-                autoComplete="new-password"
-                placeholder="Confirm password"
-                value={passwordConfirm}
-                onChange={(event) => setPasswordConfirm(event.target.value)}
-                className="h-10 w-full rounded-[10px] border border-border bg-background px-3 text-[13.5px] outline-none focus:border-foreground/20"
-              />
-              <div className="flex flex-wrap gap-2">
+  return (
+    <SettingsSection title="Account">
+      <SettingsGroup>
+        {supabase ? (
+          <div className="settings-glass-row flex flex-col gap-3 px-4 py-4">
+              <div>
+                <p className="text-[13.5px] font-medium tracking-[-0.01em]">Password</p>
+                {!mobile ? (
+                  <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
+                    Set a new password while signed in.
+                  </p>
+                ) : null}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Current password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  className="settings-glass-input h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25"
+                />
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="New password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="settings-glass-input h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25"
+                />
                 <DashBtn onClick={() => void savePassword()}>
                   {busy === "password" ? "Saving…" : "Update password"}
                 </DashBtn>
+              </div>
+              <input
+                type="password"
+                autoComplete="new-password"
+                placeholder="Confirm new password"
+                value={passwordConfirm}
+                onChange={(event) => setPasswordConfirm(event.target.value)}
+                className="settings-glass-input h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25 sm:max-w-[calc(50%-0.25rem)]"
+              />
+          </div>
+        ) : null}
+
+        {supabase ? (
+          <div className="settings-glass-row flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1">
+                <p className="text-[13.5px] font-medium tracking-[-0.01em]">Email</p>
+                {!mobile ? (
+                  <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
+                    {managedByOrganization
+                      ? "Your organization manages this email address."
+                      : "Change email — confirm via the link we send to the new address."}
+                  </p>
+                ) : null}
+                <input
+                  type="email"
+                  value={email}
+                  readOnly={managedByOrganization}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="settings-glass-input mt-3 h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25 read-only:bg-muted/40 read-only:text-muted-foreground"
+                />
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {!managedByOrganization ? (
+                  <DashBtn onClick={() => void saveEmail()}>
+                    {busy === "email" ? "Saving…" : "Update email"}
+                  </DashBtn>
+                ) : null}
                 <DashBtn onClick={() => void sendReset()}>
                   {busy === "reset" ? "Sending…" : "Email reset link"}
                 </DashBtn>
               </div>
+          </div>
+        ) : null}
+
+        <div className="settings-glass-row flex items-center justify-between gap-4 px-4 py-4">
+            <div>
+              <p className="text-[13.5px] font-medium tracking-[-0.01em]">Log out</p>
+              {!mobile ? (
+                <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
+                  Sign out on this device.
+                </p>
+              ) : null}
             </div>
-          </SettingsRow>
-        </>
-      ) : null}
+            <DashBtn onClick={() => void logout()}>
+              {busy === "logout" ? "Signing out…" : "Log out"}
+            </DashBtn>
+        </div>
 
-      <SettingsRow
-        label="Log out"
-        description={mobile ? undefined : "Sign out on this device."}
-      >
-        <DashBtn onClick={() => void logout()}>
-          {busy === "logout" ? "Signing out…" : "Log out"}
-        </DashBtn>
-      </SettingsRow>
-
-      {entitlements.canDeleteAccount ? (
-        <SettingsRow
-          label="Delete account"
-          description={mobile ? undefined : deleteDescription()}
-        >
-          {confirmDelete ? (
-            <div className="flex w-full max-w-sm flex-col gap-2 sm:items-end">
-              <input
-                type="text"
-                value={deleteConfirmText}
-                onChange={(event) => setDeleteConfirmText(event.target.value)}
-                placeholder='Type "delete" to confirm'
-                aria-label='Type "delete" to confirm account deletion'
-                className="h-10 w-full rounded-[10px] border border-border bg-background px-3 text-[13.5px] outline-none focus:border-foreground/20"
-              />
-              <div className="flex flex-wrap items-center gap-2">
+        {entitlements.canDeleteAccount || managedByOrganization ? (
+          <div className="settings-glass-row flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-[13.5px] font-medium tracking-[-0.01em]">Delete account</p>
+                {!mobile ? (
+                  <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
+                    {deleteDescription()}
+                  </p>
+                ) : null}
+              </div>
+              {managedByOrganization && !entitlements.isOwner ? (
+                <span className="shrink-0 text-[12.5px] text-muted-foreground">
+                  Managed by your organization
+                </span>
+              ) : hasOtherOrgMembers ? (
+                <span className="shrink-0 text-[12.5px] text-muted-foreground">
+                  Remove other users first
+                </span>
+              ) : confirmDelete ? (
+                <div className="flex w-full max-w-sm flex-col gap-2 sm:items-end">
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={(event) => setDeleteConfirmText(event.target.value)}
+                    placeholder='Type "delete" to confirm'
+                    aria-label='Type "delete" to confirm account deletion'
+                    className="settings-glass-input h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={busy === "delete" || !deleteConfirmOk}
+                      onClick={() => void removeAccount()}
+                      className="inline-flex h-10 items-center rounded-[10px] border border-destructive/30 bg-destructive/10 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/15 disabled:opacity-50"
+                    >
+                      {busy === "delete" ? "Deleting…" : "Confirm delete"}
+                    </button>
+                    <DashBtn
+                      onClick={() => {
+                        setConfirmDelete(false);
+                        setDeleteConfirmText("");
+                      }}
+                    >
+                      Cancel
+                    </DashBtn>
+                  </div>
+                </div>
+              ) : billingBlocksDelete ? (
                 <button
                   type="button"
-                  disabled={busy === "delete" || !deleteConfirmOk}
-                  onClick={() => void removeAccount()}
-                  className="inline-flex h-10 items-center rounded-[10px] border border-destructive/30 bg-destructive/10 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/15 disabled:opacity-50"
+                  onClick={() =>
+                    nativeShell
+                      ? openExternalUrl(webAppPlansSettingsUrl())
+                      : setSettingsTab("plans")
+                  }
+                  className="inline-flex h-10 shrink-0 items-center rounded-[10px] border border-foreground/15 px-4 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-muted"
                 >
-                  {busy === "delete" ? "Deleting…" : "Confirm delete"}
+                  {nativeShell ? "Manage billing on web" : "Cancel plan"}
                 </button>
-                <DashBtn
-                  onClick={() => {
-                    setConfirmDelete(false);
-                    setDeleteConfirmText("");
-                  }}
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="inline-flex h-10 shrink-0 items-center rounded-[10px] border border-destructive/30 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/10"
                 >
-                  Cancel
-                </DashBtn>
-              </div>
-            </div>
-          ) : billingBlocksDelete ? (
-            <button
-              type="button"
-              onClick={() =>
-                nativeShell
-                  ? openExternalUrl(webAppPlansSettingsUrl())
-                  : setSettingsTab("plans")
-              }
-              className="inline-flex h-10 items-center rounded-[10px] border border-foreground/15 px-4 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-            >
-              {nativeShell ? "Manage billing on web" : "Cancel plan"}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(true)}
-              className="inline-flex h-10 items-center rounded-[10px] border border-destructive/30 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/10"
-            >
-              Delete account
-            </button>
-          )}
-        </SettingsRow>
-      ) : entitlements.showOrgManaged ? (
-        <SettingsRow
-          label="Delete account"
-          description={mobile ? undefined : deleteDescription()}
-        >
-          <span className="text-[12.5px] text-muted-foreground">
-            Managed by your organization
-          </span>
-        </SettingsRow>
-      ) : null}
+                  Delete account
+                </button>
+              )}
+          </div>
+        ) : null}
+
+      </SettingsGroup>
 
       {message ? (
-        <p className="px-4 pb-3 text-[12.5px] text-muted-foreground">{message}</p>
+        <p className="px-1 text-[12.5px] text-muted-foreground">{message}</p>
       ) : null}
       {error ? (
-        <p className="px-4 pb-3 text-[12.5px] text-destructive">{error}</p>
+        <p className="px-1 text-[12.5px] text-destructive">{error}</p>
       ) : null}
-    </>
+    </SettingsSection>
   );
-
-  if (mobile) {
-    return (
-      <SettingsSection title="Account">
-        <SettingsGroup>{body}</SettingsGroup>
-      </SettingsSection>
-    );
-  }
-
-  return <SettingsGroup title="Account">{body}</SettingsGroup>;
 }

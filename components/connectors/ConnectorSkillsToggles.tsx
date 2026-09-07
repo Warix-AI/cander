@@ -16,14 +16,12 @@ export function ConnectorSkillsToggles({
   workspaceId,
   connection,
   disabled = false,
-  disabledHint,
   onUpdated,
   className,
 }: {
   workspaceId: string;
   connection: ConnectorConnection;
   disabled?: boolean;
-  disabledHint?: string;
   onUpdated?: (connection: ConnectorConnection) => void;
   className?: string;
 }) {
@@ -72,7 +70,7 @@ export function ConnectorSkillsToggles({
         className={cn(
           "flex items-center justify-center px-4 py-8 text-center text-[13px] text-muted-foreground",
           SHELL_G3_RADIUS,
-          "border border-border/70 dark:border-white/15",
+          "bg-white/45 shadow-[0_12px_32px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-white/[0.06] dark:shadow-[0_12px_32px_rgba(0,0,0,0.16)]",
           className,
         )}
       >
@@ -86,14 +84,9 @@ export function ConnectorSkillsToggles({
       {error ? (
         <p className="mb-2 text-[12px] text-destructive">{error}</p>
       ) : null}
-      {disabled && disabledHint ? (
-        <p className="mb-3 text-[12px] leading-relaxed text-muted-foreground">
-          {disabledHint}
-        </p>
-      ) : null}
       <div
         className={cn(
-          "divide-y divide-border/70 border border-border/70 dark:divide-white/15 dark:border-white/15",
+          "space-y-1 overflow-hidden bg-white/45 p-2.5 shadow-[0_12px_32px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-white/[0.06] dark:shadow-[0_12px_32px_rgba(0,0,0,0.16)]",
           SHELL_G3_RADIUS,
         )}
       >
@@ -102,7 +95,10 @@ export function ConnectorSkillsToggles({
           return (
             <div
               key={tool.id}
-              className="flex items-start justify-between gap-3 px-3 py-3"
+              className={cn(
+                "flex items-center justify-between gap-3 px-3 py-3 transition-colors hover:bg-black/[0.06] dark:hover:bg-white/[0.08]",
+                SHELL_G3_RADIUS,
+              )}
             >
               <div className="flex min-w-0 items-start gap-2.5">
                 <span

@@ -5,7 +5,10 @@ import { Plus, Search, X } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import { DashFrame, ScopeToggle } from "@/components/spaces/ItemSet";
-import { FLOAT_ICON_BUTTON, SHELL_G3_RADIUS } from "@/lib/shell-chrome";
+import {
+  CONNECTOR_CONTROL_RADIUS,
+  SHELL_G3_RADIUS,
+} from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 import {
   getInstalledConnectorsServerSnapshot,
@@ -25,6 +28,7 @@ import {
   detachWorkConnector,
   peekWorkConnectorAttach,
 } from "@/lib/work-connectors";
+import { connectionsForConnector } from "@/lib/workspace-connections";
 import {
   activeAccountsForConnector,
   connectionsForConnectorLive,
@@ -42,7 +46,6 @@ import {
   claimConnectorOAuthSession,
 } from "@/lib/api/connector-client";
 import { ConnectorDetailModal } from "@/components/connectors/ConnectorDetailModal";
-import { ComposioConsentModal } from "@/components/connectors/ComposioConsentModal";
 import type { ConnectorConnection } from "@/lib/connectors/types";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import {
@@ -51,6 +54,7 @@ import {
 import { invalidateConnectorViewCache } from "@/lib/connectors/view-session-cache";
 import { isMobileShell } from "@/lib/mobile-shell";
 import { setComposerPendingInput } from "@/lib/composer-seed";
+import { getDataBackend } from "@/lib/data-backend";
 
 const SECTION_ORDER = [
   "Featured",
@@ -73,6 +77,7 @@ export function ConnectorsDashboard() {
     openConnector,
     workspaceId,
     workspace,
+    actor,
     workspacePolicies,
     billingPlan,
     pinTier,
@@ -96,18 +101,46 @@ export function ConnectorsDashboard() {
     getConnectorConnectionsServerSnapshot,
   );
   const [query, setQuery] = useState("");
-  const [info, setInfo] = useState("");
+  const [, setInfo] = useState("");
   const [catalogView, setCatalogView] = useState<ConnectorsView>("connectors");
   const [searchOpen, setSearchOpen] = useState(false);
   const [workAttachFor, setWorkAttachFor] = useState<string | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [detailConnectorId, setDetailConnectorId] = useState<string | null>(null);
-  const [consentConnectorId, setConsentConnectorId] = useState<string | null>(
-    null,
+  const [connectionsLoading, setConnectionsLoading] = useState(
+    () => getDataBackend() !== "local",
   );
-  const [pendingAuthUrl, setPendingAuthUrl] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  const accessibleWorkspaceIds = useMemo(
+    () => Array.from(new Set([workspaceId, ...actor.workspaceIds])),
+    [actor.workspaceIds, workspaceId],
+  );
+  const isLocalBackend = getDataBackend() === "local";
+
+  useEffect(() => {
+    let cancelled = false;
+    if (getDataBackend() === "local") {
+      return;
+    }
+
+    queueMicrotask(() => {
+      if (!cancelled) setConnectionsLoading(true);
+    });
+    void Promise.allSettled(
+      accessibleWorkspaceIds.map(async (id) => {
+        const connections = await fetchConnectorConnections(id);
+        replaceConnectorConnectionsForWorkspace(id, connections);
+      }),
+    ).finally(() => {
+      if (!cancelled) setConnectionsLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessibleWorkspaceIds]);
 
   useEffect(() => {
     setWorkAttachFor(peekWorkConnectorAttach());
@@ -174,21 +207,39 @@ export function ConnectorsDashboard() {
           (row) => row.status === "pending" || row.status === "active",
         );
         const accounts = activeAccountsForConnector(workspaceId, item.id);
+        const localAccounts = isLocalBackend
+          ? connectionsForConnector(workspaceId, item.id, workspace)
+          : [];
         const pending = pendingConnectorIdsLive(workspaceId).includes(item.id);
-        const liveConnected = accounts.length > 0;
+        const liveConnected = accounts.length > 0 || localAccounts.length > 0;
         // OAuth connectors are only "installed" after a verified active connection.
         // Local catalog installs never fake Connected/Installed for Composio OAuth apps.
         const localInstall =
           !isOauthConnectorId(item.id) && installedIds.includes(item.id);
+        const accountConnections = accessibleWorkspaceIds.flatMap((id) =>
+          connectionsForConnectorLive(id, item.id).filter(
+            (row) => row.status === "pending" || row.status === "active",
+          ),
+        );
         return {
           ...item,
           installed: liveConnected || localInstall,
+          accountInstalled:
+            liveConnected || localInstall || accountConnections.length > 0,
+          accountConnections,
           pending,
           accounts,
           liveConnections,
         };
       }),
-    [installedIds, connectionRevision, workspaceId],
+    [
+      accessibleWorkspaceIds,
+      connectionRevision,
+      installedIds,
+      isLocalBackend,
+      workspace,
+      workspaceId,
+    ],
   );
 
   const bindToWorkIfArmed = (id: string) => {
@@ -211,18 +262,17 @@ export function ConnectorsDashboard() {
     }
     if (isOauthConnectorId(id)) {
       setInfo("");
-      setDetailConnectorId(null);
-      setConsentConnectorId(id);
+      setDetailConnectorId(id);
+      await proceedComposioOAuth(id);
       return;
     }
     installConnector(id);
     bindToWorkIfArmed(id);
-    openConnector(id);
+    setDetailConnectorId(id);
+    void refreshConnections();
   };
 
-  const proceedComposioOAuth = async () => {
-    const id = consentConnectorId;
-    if (!id) return;
+  const proceedComposioOAuth = async (id: string) => {
     const { openConnectorAuthorizationUrl } = await import(
       "@/lib/open-connector-oauth"
     );
@@ -243,7 +293,6 @@ export function ConnectorsDashboard() {
                     workspaceId,
                     claimed.connection,
                   );
-                  setPendingAuthUrl(null);
                   setInfo(
                     `${appConnectorById(claimed.connectorId ?? id)?.name ?? "Connector"} connected.`,
                   );
@@ -259,7 +308,6 @@ export function ConnectorsDashboard() {
           },
         });
         const label = appConnectorById(id)?.name ?? id;
-        setPendingAuthUrl(authorizationUrl);
         try {
           await navigator.clipboard.writeText(authorizationUrl);
         } catch {
@@ -270,7 +318,6 @@ export function ConnectorsDashboard() {
             ? `Continue in the browser sheet to connect ${label}. Return here when finished — this window finishes automatically.`
             : `Finish ${label} in the browser that opened, then return here — this window completes the connection automatically.`,
         );
-        setConsentConnectorId(null);
         const started = Date.now();
         const poll = window.setInterval(() => {
           void (async () => {
@@ -282,7 +329,6 @@ export function ConnectorsDashboard() {
                   workspaceId,
                   claimed.connection,
                 );
-                setPendingAuthUrl(null);
                 setInfo(
                   `${appConnectorById(claimed.connectorId ?? id)?.name ?? label} connected.`,
                 );
@@ -303,7 +349,6 @@ export function ConnectorsDashboard() {
               if (active || Date.now() - started > 180_000) {
                 window.clearInterval(poll);
                 if (active) {
-                  setPendingAuthUrl(null);
                   setInfo(`${label} connected.`);
                   invalidateConnectorViewCache(id, workspaceId);
                 }
@@ -324,12 +369,10 @@ export function ConnectorsDashboard() {
         return;
       }
       setInfo(`Could not start ${id} authorization.`);
-      setConsentConnectorId(null);
     } catch (err) {
       setInfo(
         err instanceof Error ? err.message : "Could not start connection.",
       );
-      setConsentConnectorId(null);
     } finally {
       setConnectingId(null);
     }
@@ -390,7 +433,7 @@ export function ConnectorsDashboard() {
 
 
   const installed = apps.filter(
-    (item) => item.installed && !blockedIds.includes(item.id),
+    (item) => item.accountInstalled && !blockedIds.includes(item.id),
   );
 
   const needle = query.trim().toLowerCase();
@@ -440,58 +483,12 @@ export function ConnectorsDashboard() {
 
   return (
     <>
-    <DashFrame
-      banner={false}
-      title="Connectors"
-      subtitle="Connect apps to your workspace."
-    >
-        {info ? (
-          <div className="mb-4 rounded-[10px] border border-border bg-muted/40 px-4 py-3">
-            <p className="text-[13px] leading-relaxed text-muted-foreground">
-              {info}
-            </p>
-            {pendingAuthUrl ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void import("@/lib/open-connector-oauth").then(
-                      ({ openConnectorAuthorizationUrl }) => {
-                        openConnectorAuthorizationUrl(pendingAuthUrl);
-                      },
-                    );
-                  }}
-                  className="inline-flex h-8 items-center rounded-full bg-foreground px-3.5 text-[12.5px] font-medium text-background transition-opacity hover:opacity-90"
-                >
-                  Open authorization
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void navigator.clipboard
-                      .writeText(pendingAuthUrl)
-                      .then(() =>
-                        setInfo(
-                          "Authorization link copied. Paste it into Chrome or Safari to continue.",
-                        ),
-                      )
-                      .catch(() => undefined);
-                  }}
-                  className="inline-flex h-8 items-center rounded-full border border-border bg-background px-3.5 text-[12.5px] font-medium text-foreground transition-colors hover:bg-muted"
-                >
-                  Copy link
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPendingAuthUrl(null)}
-                  className="text-[12px] text-muted-foreground hover:text-foreground"
-                >
-                  Dismiss
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+      {!detailItem ? (
+        <DashFrame
+          banner={false}
+          title="Connectors"
+          subtitle="Connect apps to your workspace."
+        >
         {workAttachFor ? (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-border bg-muted/50 px-4 py-3">
             <p className="text-[13px] leading-relaxed text-muted-foreground">
@@ -532,6 +529,7 @@ export function ConnectorsDashboard() {
         >
           <ScopeToggle
             wrap
+            glass
             value={catalogView}
             onChange={(value) => setCatalogView(value as ConnectorsView)}
             options={[...connectorScopeOptions]}
@@ -554,7 +552,11 @@ export function ConnectorsDashboard() {
                     }
                   }}
                   placeholder="Search"
-                  className="h-10 w-full rounded-[10px] border border-border bg-background pr-9 pl-9 text-[13px] outline-none placeholder:text-muted-foreground focus:border-foreground/20"
+                  className={cn(
+                    "h-10 w-full pr-9 pl-9 text-[13px] outline-none placeholder:text-muted-foreground focus:outline-none",
+                    "bg-white/45 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-white/[0.06] dark:shadow-[0_8px_24px_rgba(0,0,0,0.16)]",
+                    CONNECTOR_CONTROL_RADIUS,
+                  )}
                 />
                 <button
                   type="button"
@@ -563,7 +565,10 @@ export function ConnectorsDashboard() {
                     setQuery("");
                     setSearchOpen(false);
                   }}
-                  className="absolute top-1/2 right-1.5 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className={cn(
+                    "absolute top-1/2 right-1.5 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center text-muted-foreground hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.1]",
+                    CONNECTOR_CONTROL_RADIUS,
+                  )}
                 >
                   <X className="h-3.5 w-3.5" strokeWidth={1.6} />
                 </button>
@@ -573,7 +578,11 @@ export function ConnectorsDashboard() {
                 type="button"
                 aria-label="Search connectors"
                 onClick={() => setSearchOpen(true)}
-                className={cn(FLOAT_ICON_BUTTON, "text-muted-foreground hover:text-foreground")}
+                className={cn(
+                  "inline-flex h-10 w-12 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.1]",
+                  "bg-white/45 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-white/[0.06] dark:shadow-[0_8px_24px_rgba(0,0,0,0.16)]",
+                  CONNECTOR_CONTROL_RADIUS,
+                )}
               >
                 <Search className="h-4 w-4" strokeWidth={1.6} />
               </button>
@@ -598,7 +607,11 @@ export function ConnectorsDashboard() {
                 }
               }}
               placeholder="Search connectors"
-              className="h-10 w-full rounded-[10px] border border-border bg-background pr-9 pl-9 text-[13px] outline-none placeholder:text-muted-foreground focus:border-foreground/20"
+              className={cn(
+                "h-10 w-full pr-9 pl-9 text-[13px] outline-none placeholder:text-muted-foreground focus:outline-none",
+                "bg-white/45 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-white/[0.06] dark:shadow-[0_8px_24px_rgba(0,0,0,0.16)]",
+                CONNECTOR_CONTROL_RADIUS,
+              )}
             />
             <button
               type="button"
@@ -607,14 +620,21 @@ export function ConnectorsDashboard() {
                 setQuery("");
                 setSearchOpen(false);
               }}
-              className="absolute top-1/2 right-1.5 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              className={cn(
+                "absolute top-1/2 right-1.5 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center text-muted-foreground hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.1]",
+                CONNECTOR_CONTROL_RADIUS,
+              )}
             >
               <X className="h-3.5 w-3.5" strokeWidth={1.6} />
             </button>
           </div>
         ) : null}
 
-        {sections.length ? (
+        {connectionsLoading && catalogView === "installed" ? (
+          <p className="mt-10 text-[13px] text-muted-foreground">
+            Loading installed connectors…
+          </p>
+        ) : sections.length ? (
           sections.map((section) => {
             return (
               <section key={section.title} className="mt-10">
@@ -652,11 +672,13 @@ export function ConnectorsDashboard() {
               : "No connectors match that search."}
           </p>
         )}
-    </DashFrame>
-    {detailItem && !consentConnectorId ? (
-      <ConnectorDetailModal
+        </DashFrame>
+      ) : null}
+      {detailItem ? (
+        <ConnectorDetailModal
         open={Boolean(detailItem)}
         onClose={() => setDetailConnectorId(null)}
+        dedicated
         item={detailItem}
         workspaceId={workspaceId}
         blocked={blockedIds.includes(detailItem.id)}
@@ -687,17 +709,8 @@ export function ConnectorsDashboard() {
           setComposerPendingInput({ text, source: "quick-ask" });
           newChat();
         }}
-      />
-    ) : null}
-    <ComposioConsentModal
-      open={Boolean(consentConnectorId)}
-      connectorName={
-        apps.find((entry) => entry.id === consentConnectorId)?.name
-      }
-      busy={connectingId === consentConnectorId}
-      onClose={() => setConsentConnectorId(null)}
-      onProceed={proceedComposioOAuth}
-    />
+        />
+      ) : null}
     </>
   );
 }
@@ -715,6 +728,8 @@ function DirectoryItem({
     pending?: boolean;
     liveConnections?: ConnectorConnection[];
     installed?: boolean;
+    accountInstalled?: boolean;
+    accountConnections?: ConnectorConnection[];
   };
   active: boolean;
   blocked?: boolean;
@@ -724,6 +739,13 @@ function DirectoryItem({
   onConnect: () => void;
 }) {
   const isConnected = item.liveConnections?.some((row) => row.status === "active");
+  const hasCurrentPending = item.liveConnections?.some(
+    (row) => row.status === "pending",
+  );
+  const connectedElsewhere =
+    !isConnected &&
+    !hasCurrentPending &&
+    item.accountConnections?.some((row) => row.status === "active");
   const isOauth = isOauthConnectorId(item.id);
   const oauthPending = appConnectorById(item.id)?.oauthReady === false;
 
@@ -731,6 +753,8 @@ function DirectoryItem({
     ? "Connecting"
     : isConnected
       ? "Connected"
+      : connectedElsewhere
+        ? "Connected in another workspace"
       : oauthPending
         ? "Coming soon"
         : !isOauth && item.installed
@@ -740,11 +764,11 @@ function DirectoryItem({
   return (
     <div
       className={cn(
-        "flex w-full items-center gap-3 px-2 py-2 transition-colors duration-200",
+        "flex w-full items-center gap-3 bg-transparent px-3 py-3 transition-[background-color,box-shadow] duration-200",
         SHELL_G3_RADIUS,
-        "hover:bg-muted/70",
+        "hover:bg-black/[0.06] hover:shadow-[0_8px_24px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.08] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.14)]",
         (disconnecting || connecting) && "opacity-60",
-        active && "bg-muted/50",
+        active && "bg-black/[0.04] dark:bg-white/[0.05]",
       )}
     >
       <button
@@ -769,10 +793,10 @@ function DirectoryItem({
                   "inline-flex h-5 shrink-0 items-center px-1.5 text-[10px] font-medium tracking-[-0.01em]",
                   SHELL_G3_RADIUS,
                   isConnected
-                    ? "border border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                    ? "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400"
                     : item.pending
-                      ? "border border-chart-3/30 bg-chart-3/10 text-chart-3"
-                      : "border border-border bg-muted text-muted-foreground",
+                      ? "bg-chart-3/10 text-chart-3"
+                      : "bg-muted/70 text-muted-foreground",
                 )}
               >
                 {statusLabel}

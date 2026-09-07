@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { MemberPlanToggle } from "@/components/settings/MemberPlanToggle";
 import {
-  SettingsFootnote,
   SettingsGroup,
   SettingsHeader,
   SettingsPage,
@@ -15,8 +13,7 @@ import { OrgMemberAccessMobile, OrgMemberAccessPanel } from "@/components/settin
 import { planLabel } from "@/lib/billing";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { getWorkspaceCatalogSnapshot } from "@/lib/workspace-catalog";
-import { workspaceKindOf } from "@/lib/workspace-kind";
+import { workspacesFor } from "@/lib/entitlements";
 import { isMobileShell } from "@/lib/mobile-shell";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -38,9 +35,7 @@ export function OrgMemberDetailSettings({ memberId, onBack }: Props) {
   const mobile = useMobileShell();
   const member = orgMembers.find((item) => item.id === memberId);
   const orgId = actor.orgId;
-  const orgWorkspaces = getWorkspaceCatalogSnapshot().filter(
-    (item) => workspaceKindOf(item) === "business",
-  );
+  const orgWorkspaces = workspacesFor(actor, entitlements);
   const [planError, setPlanError] = useState<string | null>(null);
   const [planBusy, setPlanBusy] = useState(false);
   const [removeBusy, setRemoveBusy] = useState(false);
@@ -48,14 +43,10 @@ export function OrgMemberDetailSettings({ memberId, onBack }: Props) {
   if (!member) {
     return (
       <SettingsPage>
-        <button
-          type="button"
-          onClick={onBack}
-          className="mb-6 inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.7} />
-          Organization
-        </button>
+        <SettingsHeader
+          title="Member"
+          breadcrumbs={[{ label: "Organization", onClick: onBack }, { label: "Member" }]}
+        />
         <p className="text-[13px] text-muted-foreground">Member not found.</p>
       </SettingsPage>
     );
@@ -147,17 +138,13 @@ export function OrgMemberDetailSettings({ memberId, onBack }: Props) {
 
   return (
     <SettingsPage>
-      <button
-        type="button"
-        onClick={onBack}
-        className="mb-6 inline-flex items-center gap-1 text-[13px] text-muted-foreground transition-colors duration-200 hover:text-foreground max-lg:hidden"
-      >
-        <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.7} />
-        Organization
-      </button>
       <SettingsHeader
-        title={member.id === actor.id ? `${member.name} (You)` : member.name}
+        title={member.name}
         subtitle={member.email}
+        breadcrumbs={[
+          { label: "Organization", onClick: onBack },
+          { label: member.name },
+        ]}
       />
 
       {planError ? (
@@ -196,35 +183,28 @@ export function OrgMemberDetailSettings({ memberId, onBack }: Props) {
             )}
           </div>
         </SettingsGroup>
-        <SettingsFootnote>
-          Billing prorates on the owner&apos;s subscription when plans change.
-        </SettingsFootnote>
       </SettingsSection>
 
-      {!pending && canEditAccess ? (
-        <SettingsSection title="Access" className="mt-8">
-          {mobile ? (
-            <OrgMemberAccessMobile
-              member={member}
-              orgWorkspaces={orgWorkspaces}
-              workspacePolicies={workspacePolicies}
-              canEdit={canEditAccess}
-              orgId={orgId}
-            />
-          ) : (
-            <SettingsGroup>
-              <OrgMemberAccessPanel
-                member={member}
-                orgWorkspaces={orgWorkspaces}
-                workspacePolicies={workspacePolicies}
-                canEdit={canEditAccess}
-                orgId={orgId}
-                embedded
-              />
-            </SettingsGroup>
-          )}
-        </SettingsSection>
-      ) : null}
+      <SettingsSection title="Workspace access" className="mt-8">
+        {mobile ? (
+          <OrgMemberAccessMobile
+            member={member}
+            orgWorkspaces={orgWorkspaces}
+            workspacePolicies={workspacePolicies}
+            canEdit={canEditAccess}
+            orgId={orgId}
+          />
+        ) : (
+          <OrgMemberAccessPanel
+            member={member}
+            orgWorkspaces={orgWorkspaces}
+            workspacePolicies={workspacePolicies}
+            canEdit={canEditAccess}
+            orgId={orgId}
+            embedded
+          />
+        )}
+      </SettingsSection>
 
       {canRemove || (canEditPlan && pending) ? (
         <SettingsSection title="Actions" className="mt-8">

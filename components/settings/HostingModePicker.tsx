@@ -98,7 +98,7 @@ export function HostingModePicker({
     <div className={cn("flex flex-col gap-4", className)}>
       <div
         className={cn(
-          "overflow-hidden border border-border bg-card",
+          "settings-glass-surface overflow-hidden",
           SHELL_G3_RADIUS,
         )}
       >
@@ -111,7 +111,7 @@ export function HostingModePicker({
               type="button"
               onClick={() => select(item.id)}
               className={cn(
-                "flex w-full flex-col gap-1 border-b border-border/60 px-4 py-3.5 text-left transition-colors last:border-b-0",
+                "settings-glass-row flex w-full flex-col gap-1 px-4 py-3.5 text-left",
                 selected
                   ? "bg-muted/50"
                   : "bg-transparent hover:bg-muted/30",
@@ -142,7 +142,7 @@ export function HostingModePicker({
 
       <div
         className={cn(
-          "border border-border/80 bg-muted/20 px-4 py-3.5 text-[12.5px] leading-relaxed text-muted-foreground",
+          "settings-glass-surface px-4 py-3.5 text-[12.5px] leading-relaxed text-muted-foreground",
           SHELL_G3_RADIUS,
         )}
       >

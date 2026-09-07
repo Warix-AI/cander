@@ -57,6 +57,9 @@ export type KnowledgeFileRow = {
   size_label: string;
   uploaded_label: string;
   content_text?: string | null;
+  storage_path?: string | null;
+  mime_type?: string | null;
+  byte_size?: number | null;
 };
 
 export type UserPinRow = {
@@ -123,6 +126,9 @@ export function knowledgeFileRowToFile(row: KnowledgeFileRow): KnowledgeFile {
     size: row.size_label,
     uploadedAt: row.uploaded_label,
     ...(content ? { contentText: content } : {}),
+    ...(row.storage_path ? { storagePath: row.storage_path } : {}),
+    ...(row.mime_type ? { mimeType: row.mime_type } : {}),
+    ...(typeof row.byte_size === "number" ? { byteSize: row.byte_size } : {}),
   };
 }
 
@@ -139,6 +145,9 @@ export function knowledgeFileToRow(
     size_label: file.size,
     uploaded_label: file.uploadedAt,
     content_text: file.contentText ?? "",
+    storage_path: file.storagePath ?? null,
+    mime_type: file.mimeType ?? null,
+    byte_size: file.byteSize ?? null,
   };
 }
 

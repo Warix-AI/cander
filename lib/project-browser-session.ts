@@ -546,7 +546,19 @@ function hydrateKey(key: ProjectBrowserKey, fallback: ProjectBrowserSession) {
     key.spaceId,
   );
   const session = stored
-    ? ensurePinnedTab(stored, fallback.tabs[0])
+    ? key.spaceId === "research"
+      ? (() => {
+          const webTabs = stored.tabs.filter((tab) => tab.kind === "web");
+          return webTabs.length
+            ? {
+                tabs: webTabs,
+                activeTabId: webTabs.some((tab) => tab.id === stored.activeTabId)
+                  ? stored.activeTabId
+                  : webTabs[0]!.id,
+              }
+            : fallback;
+        })()
+      : ensurePinnedTab(stored, fallback.tabs[0])
     : fallback;
   cache.set(storageKey, session);
   return session;

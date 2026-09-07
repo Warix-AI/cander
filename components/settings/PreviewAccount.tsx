@@ -71,7 +71,7 @@ export function PreviewAccount({
   }
 
   return (
-    <div className="rounded-[10px] border border-border p-4">
+    <div className="settings-glass-surface rounded-[10px] p-4">
       <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
         Demo seat
       </p>
@@ -89,7 +89,7 @@ export function PreviewAccount({
             aria-expanded={open}
             aria-haspopup="menu"
             onClick={toggle}
-            className="flex h-10 w-full items-center gap-2 rounded-[10px] border border-border bg-background px-3 text-left transition-colors duration-200 hover:bg-muted"
+            className="settings-glass-row flex h-10 w-full items-center gap-2 px-3 text-left"
           >
             <span className="min-w-0 flex-1 truncate text-[13.5px]">
               {current.label}
@@ -152,7 +152,7 @@ function CompactPicker({
       {open ? (
         <div
           role="menu"
-          className="mt-1 max-h-[min(22rem,calc(100vh-12rem))] overflow-y-auto rounded-[10px] border border-border bg-background p-1.5"
+          className="settings-glass-surface mt-1 max-h-[min(22rem,calc(100vh-12rem))] overflow-y-auto p-1.5"
         >
           <RoleList
             currentId={currentId}

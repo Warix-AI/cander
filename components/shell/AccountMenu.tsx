@@ -116,7 +116,7 @@ export function AccountMenu() {
       placement="top"
       align="start"
       matchTrigger
-      menuClassName="!p-1"
+      menuClassName="!p-1 menu-glass-surface"
       trigger={({ open, toggle }) => (
         <button
           type="button"
@@ -138,7 +138,7 @@ export function AccountMenu() {
     >
       {(close) => (
         <div className="flex flex-col gap-px">
-          <div className="border-b border-border/50 px-2 py-2">
+          <div className="px-2 py-2">
             <ColorModeToggle />
           </div>
           <button
@@ -176,7 +176,6 @@ export function AccountMenu() {
             type="button"
             className={cn(
               flyoutRowClass,
-              "border-t border-border/50",
               view === "settings" && "bg-sidebar-accent font-medium",
             )}
             onClick={() => {

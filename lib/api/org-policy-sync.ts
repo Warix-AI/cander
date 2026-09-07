@@ -180,7 +180,8 @@ async function syncWorkspacePolicy(
     if (spaceError) throw spaceError;
   }
 
-  const kbIds = policy.knowledgeBases.map((item) => item.id);
+  const knowledgeBases = policy.knowledgeBases.slice(0, 1);
+  const kbIds = knowledgeBases.map((item) => item.id);
   if (kbIds.length) {
     const { error: deleteFilesError } = await supabase
       .from("knowledge_files")
@@ -195,7 +196,7 @@ async function syncWorkspacePolicy(
     .eq("workspace_id", workspaceId);
   if (deleteKbError) throw deleteKbError;
 
-  for (const kb of policy.knowledgeBases) {
+  for (const kb of knowledgeBases) {
     const kbRow = knowledgeBaseToRow(kb, workspaceId);
     const { error: kbError } = await supabase.from("knowledge_bases").insert(kbRow);
     if (kbError) throw kbError;
@@ -213,7 +214,6 @@ async function syncWorkspacePolicy(
 }
 
 export async function syncOrgPolicyToSupabase(ctx: WorkspaceCtx) {
-  const supabase = createSupabaseBrowserClient();
   const members = getMembersSnapshot();
   const policies = getPoliciesSnapshot();
   const workspaceIds = await listMemberWorkspaceIds(ctx.actorId);

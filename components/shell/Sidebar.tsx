@@ -595,7 +595,7 @@ function SidebarNavButton({
         if (!comingSoon) onOpen(id);
       }}
       className={cn(
-        "flex w-full items-center gap-3 px-3 py-1.5 text-left text-[15px] transition-colors duration-200",
+        "flex w-full items-center gap-3 px-3.5 py-2 text-left text-[15px] transition-colors duration-200",
         cardSurface ? cardRadius : "rounded-lg",
         comingSoon
           ? "cursor-default opacity-70"
@@ -764,7 +764,7 @@ function PinnedRow({
         {inUse ? (
           <span
             aria-hidden
-            className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-[oklch(0.62_0.19_260)] transition-opacity duration-150 group-hover:opacity-0"
+            className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-[#0b4fc4] transition-opacity duration-150 group-hover:opacity-0"
           />
         ) : null}
         <PinControl kind={kind} id={id} />

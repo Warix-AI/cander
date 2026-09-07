@@ -61,7 +61,7 @@ export function ThinkingIndicator({
       aria-live="polite"
       aria-label={`Working. ${visibleDetail}`}
     >
-      <span className="thinking-dot mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500 dark:bg-sky-400" aria-hidden />
+      <span className="thinking-dot mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#0b4fc4]" aria-hidden />
       <div className="min-w-0" aria-hidden>
         <div className="text-[14px] font-medium tracking-[-0.01em] text-foreground/80">
           Working

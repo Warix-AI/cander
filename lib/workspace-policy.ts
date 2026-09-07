@@ -109,6 +109,13 @@ function asFiles(value: unknown): KnowledgeFile[] {
         size: String(row.size ?? "—"),
         uploadedAt: String(row.uploadedAt ?? "Just now"),
         ...(contentText ? { contentText } : {}),
+        ...(typeof row.storagePath === "string" && row.storagePath
+          ? { storagePath: row.storagePath }
+          : {}),
+        ...(typeof row.mimeType === "string" && row.mimeType
+          ? { mimeType: row.mimeType }
+          : {}),
+        ...(typeof row.byteSize === "number" ? { byteSize: row.byteSize } : {}),
       },
     ];
   });
@@ -562,6 +569,7 @@ export function addKnowledgeBase(workspaceId: string, name: string) {
   const trimmed = name.trim();
   if (!trimmed) return;
   const current = policyFor(workspaceId);
+  if (current.knowledgeBases[0]) return current.knowledgeBases[0];
   const next: KnowledgeBase = {
     id: `kb-${Date.now()}`,
     name: trimmed,
@@ -578,6 +586,7 @@ export function addKnowledgeBase(workspaceId: string, name: string) {
     },
   };
   persist();
+  return next;
 }
 
 export function removeKnowledgeBase(workspaceId: string, knowledgeId: string) {
@@ -597,16 +606,29 @@ export function removeKnowledgeBase(workspaceId: string, knowledgeId: string) {
 export function addKnowledgeFile(
   workspaceId: string,
   knowledgeId: string,
-  upload: { name: string; size: string; contentText?: string },
+  upload: {
+    id?: string;
+    name: string;
+    size: string;
+    contentText?: string;
+    storagePath?: string;
+    mimeType?: string;
+    byteSize?: number;
+  },
 ) {
   const current = policyFor(workspaceId);
   const nextFile: KnowledgeFile = {
-    id: `file-${Date.now()}`,
+    id: upload.id ?? `file-${Date.now()}`,
     name: upload.name,
     size: upload.size,
     uploadedAt: "Just now",
     ...(upload.contentText?.trim()
       ? { contentText: upload.contentText.slice(0, 200_000) }
+      : {}),
+    ...(upload.storagePath ? { storagePath: upload.storagePath } : {}),
+    ...(upload.mimeType ? { mimeType: upload.mimeType } : {}),
+    ...(typeof upload.byteSize === "number"
+      ? { byteSize: upload.byteSize }
       : {}),
   };
   policies = {

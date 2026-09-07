@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import {
   DM_Sans,
   Geist_Mono,
@@ -85,14 +84,10 @@ export const viewport: Viewport = {
   userScalable: false,
   viewportFit: "cover",
   interactiveWidget: "overlays-content",
-  // App theme owns chrome; init script rewrites theme-color to match appearance.
+  // App theme owns chrome; ThemeProvider syncs theme-color after hydration.
   themeColor: "#ffffff",
   colorScheme: "light",
 };
-
-import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme-bootstrap";
-
-const mobileShellScript = `(function(){try{var ua=navigator.userAgent||'';if(/\\bCapacitor\\b/i.test(ua)||(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())){document.documentElement.classList.add('cander-mobile')}}catch(e){}})();`;
 
 export default function RootLayout({
   children,
@@ -105,18 +100,6 @@ export default function RootLayout({
       className={`${dmSans.variable} ${geistMono.variable} ${inter.variable} ${spaceGrotesk.variable} ${ibmPlex.variable} ${sourceSerif.variable} ${newsreader.variable} antialiased`}
       suppressHydrationWarning
     >
-      <head>
-        <Script
-          id="courier-theme-init"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }}
-        />
-        <Script
-          id="cander-mobile-shell-init"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: mobileShellScript }}
-        />
-      </head>
       <body
         className="min-h-svh overflow-x-hidden overflow-y-auto bg-background font-sans text-foreground"
         suppressHydrationWarning

@@ -14,7 +14,11 @@ import {
   upsertOrgMember,
 } from "@/lib/workspace-policy";
 import { memberRowToMember, type OrgMemberRow } from "@/lib/supabase/org-policy-mapper";
-import { persistOrgId, persistOrgName } from "@/lib/org-onboarding";
+import {
+  getOrgSetupDeferredSnapshot,
+  persistOrgId,
+  persistOrgName,
+} from "@/lib/org-onboarding";
 import type { BillingPlan, Member, Role, SpaceId, SubscriptionStatus, WorkspaceKind } from "@/lib/types";
 
 function asPlan(value: unknown): BillingPlan {
@@ -58,6 +62,7 @@ function asSubscriptionStatus(value: unknown): SubscriptionStatus {
 export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
   const supabase = createSupabaseBrowserClient();
   const base = memberFromSupabaseUser(user);
+  const organizationDeferred = getOrgSetupDeferredSnapshot();
 
   const [profileResult, membershipResult] = await Promise.all([
     supabase
@@ -105,7 +110,6 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
     memberships.map((row) => [String(row.workspace_id), asRole(row.role)]),
   ) as Record<string, Role>;
   const plan = asPlan(profile?.plan);
-  const teamPlan = isTeamPlan(plan);
 
   if (workspaceIds.length) {
     const { data: workspaces, error: wsError } = await supabase
@@ -145,7 +149,9 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
     role: asRole(profile?.role ?? memberships[0]?.role),
     workspaceIds,
     workspaceRoles,
-    kind: teamPlan ? "org" : "personal",
+    // A paid plan can be personal. Organization membership is determined by
+    // the org_members row loaded below, not by the billing tier alone.
+    kind: "personal",
     seatStatus: "active",
     subscriptionStatus: asSubscriptionStatus(profile?.subscription_status),
     subscriptionPeriodEnd:
@@ -153,6 +159,7 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
         ? profile.subscription_period_end
         : undefined,
     cancelAtPeriodEnd: profile?.cancel_at_period_end === true,
+    ...(organizationDeferred ? { orgSetupDeferred: true } : {}),
   };
 
   for (const row of memberships) {
@@ -198,6 +205,9 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
       member = {
         ...member,
         ...selfOrgRow,
+        ...(organizationDeferred
+          ? { kind: "personal" as const, orgSetupDeferred: true }
+          : {}),
         id: member.id,
         orgId,
         email: member.email,
@@ -217,6 +227,9 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
           return {
             ...parsed,
             ...member,
+            ...(organizationDeferred
+              ? { kind: "personal" as const, orgSetupDeferred: true }
+              : {}),
             orgId,
             managedByOrgName: orgName,
             workspaceRoles: member.workspaceRoles,
@@ -258,7 +271,6 @@ export async function applySignupPlanAndSpaces(opts: {
 }) {
   const supabase = createSupabaseBrowserClient();
   const teamPlan = isTeamPlan(opts.plan);
-  const navSpaces = [...NAV_SPACES];
 
   // Prefer server finish (service role) so missing client GRANTs cannot block Enter.
   const {
@@ -442,7 +454,7 @@ async function applySignupPlanAndSpacesClient(opts: {
     .eq("profile_id", opts.userId);
   if (listError) throw listError;
 
-  let ids = (memberships ?? []).map((row) => String(row.workspace_id));
+  const ids = (memberships ?? []).map((row) => String(row.workspace_id));
 
   // Trigger usually creates the personal workspace; create one if signup raced ahead.
   if (!ids.length) {

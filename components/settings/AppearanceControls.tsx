@@ -115,11 +115,11 @@ function AppearanceOptionCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        "flex flex-col gap-2 border p-2 text-left transition-colors",
+        "settings-glass-row flex flex-col gap-2 border p-2 text-left transition-colors",
         curve ?? "rounded-[12px]",
         active
           ? "border-foreground/25 bg-muted/40"
-          : "border-border hover:border-foreground/15 hover:bg-muted/20",
+          : "border-border/60 hover:border-foreground/15",
         mobile && "p-2.5",
       )}
     >

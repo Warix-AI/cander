@@ -28,29 +28,27 @@ import {
   SettingsHeader,
   SettingsPage,
   SettingsPanel,
-  SettingsRow,
   SettingsSection,
   SettingsStatGrid,
-  SettingsSwitch,
   settingsInputClass,
 } from "@/components/settings/SettingsChrome";
 import { WorkspacesSettings } from "@/components/settings/WorkspaceSettings";
 import { OrgMemberDetailSettings } from "@/components/settings/OrgMemberDetailSettings";
 import { OrgInviteModal } from "@/components/settings/OrgInviteModal";
+import { Modal } from "@/components/ui/Modal";
 import {
-  memberName,
   orgMembersOf,
-  orgMaxSeats,
 } from "@/lib/entitlements";
-import { orgSeatMix, planLabel, seatMixLabel } from "@/lib/billing";
+import { planLabel } from "@/lib/billing";
 import {
   getOrgIdSnapshot,
   getOrgNameSnapshot,
+  persistOrgId,
   persistOrgName,
   persistOrgSetupDeferred,
 } from "@/lib/org-onboarding";
 import { setupOrgOnSupabase } from "@/lib/supabase/setup-org-onboarding";
-import { getWorkspaceCatalogSnapshot } from "@/lib/workspace-catalog";
+import { getWorkspaceCatalogSnapshot, upsertCatalogWorkspace } from "@/lib/workspace-catalog";
 import { webAppOrgSettingsUrl } from "@/lib/plans";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { isMobileShell, openExternalUrl } from "@/lib/mobile-shell";
@@ -71,6 +69,7 @@ import {
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { useMobileShell } from "@/lib/use-media-query";
 import {
+  removeOrgMember,
   upsertOrgMember,
 } from "@/lib/workspace-policy";
 
@@ -106,13 +105,18 @@ export function SettingsView() {
     if (settingsTab === "workspaces" && !entitlements.hasWorkspaces) {
       setSettingsTab("plans");
     }
-    if (settingsTab === "organization" && !entitlements.showOrgSettings) {
+    if (
+      settingsTab === "organization" &&
+      !entitlements.showOrgSettings &&
+      !entitlements.canActivateOrganization
+    ) {
       setSettingsTab("plans");
     }
   }, [
     settingsTab,
     entitlements.hasWorkspaces,
     entitlements.showOrgSettings,
+    entitlements.canActivateOrganization,
     setSettingsTab,
   ]);
 
@@ -139,7 +143,7 @@ export function SettingsView() {
 
   const settingsBody = settingsMobileHub ? (
     <div className={cn("min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-2 lg:hidden", MOBILE_APP_BG)}>
-      <SettingsGroup dividerInset="icon">
+      <SettingsGroup dividerInset="icon" glass={false}>
         {settingsNav.map((tab) => {
           const Icon = settingsIcons[tab.id];
           return (
@@ -169,7 +173,7 @@ export function SettingsView() {
       </SettingsGroup>
     </div>
   ) : (
-    <div className={cn("min-h-0 flex-1 overflow-y-auto", MOBILE_APP_BG)}>
+    <div className={cn("settings-screen-canvas min-h-0 flex-1 overflow-y-auto", MOBILE_APP_BG)}>
       {settingsTab === "organization" ? (
         entitlements.showOrgManaged ? (
           <ManagedOrganizationSettings />
@@ -217,7 +221,7 @@ export function SettingsView() {
           {settingsBody}
         </MobileSlideStack>
       ) : (
-        <>
+        <div className="settings-screen-canvas min-h-0 flex-1 overflow-y-auto">
           {settingsTab === "organization" ? (
             entitlements.showOrgManaged ? (
               <ManagedOrganizationSettings />
@@ -249,7 +253,7 @@ export function SettingsView() {
           ) : null}
 
           {settingsTab === "appearance" ? <AppearanceSettings /> : null}
-        </>
+        </div>
       )}
     </div>
   );
@@ -319,104 +323,303 @@ function OrganizationSettings({
   const orgDisplayName = getOrgNameSnapshot() || actor.managedByOrgName || "Organization";
   const orgId = actor.orgId || getOrgIdSnapshot();
   const roster = orgMembersOf(orgMembers);
-  const [inviteWarning, setInviteWarning] = useState<string | null>(null);
+  const [inviteWarning] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.sessionStorage.getItem("cander-invite-send-warning");
+  });
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [finishOrgName, setFinishOrgName] = useState("");
-  const [finishBusy, setFinishBusy] = useState(false);
-  const [finishError, setFinishError] = useState<string | null>(null);
+  const [activateOpen, setActivateOpen] = useState(false);
+  const [activateName, setActivateName] = useState("");
+  const [activateBusy, setActivateBusy] = useState(false);
+  const [activateError, setActivateError] = useState<string | null>(null);
+  const [deactivateOpen, setDeactivateOpen] = useState(false);
+  const [deactivateConfirm, setDeactivateConfirm] = useState("");
+  const [deactivateBusy, setDeactivateBusy] = useState(false);
+  const [deactivateError, setDeactivateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const warning = window.sessionStorage.getItem("cander-invite-send-warning");
-    if (!warning) return;
+    if (!inviteWarning) return;
     window.sessionStorage.removeItem("cander-invite-send-warning");
-    setInviteWarning(warning);
-  }, []);
+  }, [inviteWarning]);
 
-  const finishOrgSetup = async () => {
-    const name = finishOrgName.trim() || orgDisplayName.trim();
+  const activateOrganization = async () => {
+    const name = activateName.trim() || actor.managedByOrgName?.trim() || orgDisplayName.trim();
     if (!name || name === "Organization") {
-      setFinishError("Add your organization name.");
+      setActivateError("Add your organization name.");
       return;
     }
-    setFinishBusy(true);
-    setFinishError(null);
+    setActivateBusy(true);
+    setActivateError(null);
     try {
       const workspaceId =
-        orgWorkspaces[0]?.id ?? actor.workspaceIds[0] ?? null;
+        orgWorkspaces[0]?.id ??
+        actor.workspaceIds[0] ??
+        getWorkspaceCatalogSnapshot()[0]?.id ??
+        null;
       if (!workspaceId) {
-        throw new Error("Create a workspace before finishing org setup.");
+        throw new Error("Create a workspace before activating your organization.");
       }
       if (isSupabaseConfigured()) {
-        const orgIdCreated = await setupOrgOnSupabase({
-          orgName: name,
-          workspaceId,
-          invites: [],
-        });
+        let orgIdCreated = actor.orgId || getOrgIdSnapshot();
+        if (orgIdCreated) {
+          const supabase = createSupabaseBrowserClient();
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          if (!session?.access_token) throw new Error("Sign in to activate your organization.");
+          const response = await fetch("/api/org/reactivate", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ orgId: orgIdCreated, name }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error ?? "Could not activate organization.");
+          orgIdCreated = data.orgId ?? orgIdCreated;
+        } else {
+          orgIdCreated = await setupOrgOnSupabase({
+            orgName: name,
+            workspaceId,
+            invites: [],
+          });
+        }
         upsertOrgMember({
           ...actor,
           orgId: orgIdCreated,
           kind: "org",
+          managedByOrgName: name,
           orgSetupDeferred: false,
         });
       } else {
         persistOrgName(name);
+        persistOrgId(actor.orgId || `local-org-${actor.id}`);
         upsertOrgMember({
           ...actor,
+          orgId: actor.orgId || `local-org-${actor.id}`,
           kind: "org",
+          managedByOrgName: name,
           orgSetupDeferred: false,
         });
       }
+      const actorWorkspaceIds = new Set([...actor.workspaceIds, workspaceId]);
+      getWorkspaceCatalogSnapshot()
+        .filter((workspace) => actorWorkspaceIds.has(workspace.id))
+        .forEach((workspace) =>
+          upsertCatalogWorkspace({ ...workspace, kind: "business", personal: false }),
+        );
       persistOrgName(name);
       persistOrgSetupDeferred(false);
-      setFinishOrgName("");
+      setActivateName("");
+      setActivateOpen(false);
     } catch (err) {
-      setFinishError(
+      setActivateError(
         err instanceof Error ? err.message : "Could not finish organization setup.",
       );
     } finally {
-      setFinishBusy(false);
+      setActivateBusy(false);
+    }
+  };
+
+  const deactivateOrganization = async () => {
+    if (deactivateConfirm.trim().toLowerCase() !== "deactivate") {
+      setDeactivateError('Type "deactivate" to confirm.');
+      return;
+    }
+    setDeactivateBusy(true);
+    setDeactivateError(null);
+    try {
+      if (isSupabaseConfigured()) {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.access_token) throw new Error("Sign in to deactivate your organization.");
+        const response = await fetch("/api/org/deactivate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ orgId: orgId || undefined }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? "Could not deactivate organization.");
+        getWorkspaceCatalogSnapshot()
+          .filter((workspace) => workspaceKindOf(workspace) === "business")
+          .forEach((workspace) =>
+            upsertCatalogWorkspace({ ...workspace, kind: "personal", personal: true }),
+          );
+        persistOrgName(orgDisplayName);
+        persistOrgSetupDeferred(true);
+        if (data.orgId) persistOrgId(String(data.orgId));
+        upsertOrgMember({
+          ...actor,
+          kind: "personal",
+          orgId: (data.orgId ?? actor.orgId ?? getOrgIdSnapshot()) || undefined,
+          managedByOrgName: orgDisplayName,
+          orgSetupDeferred: true,
+        });
+        if (!data.orgId) {
+          persistOrgId("");
+          upsertOrgMember({
+            ...actor,
+            kind: "personal",
+            orgId: undefined,
+            managedByOrgName: orgDisplayName,
+            orgSetupDeferred: true,
+          });
+          setDeactivateConfirm("");
+          setDeactivateOpen(false);
+          return;
+        }
+        window.location.reload();
+        return;
+      }
+
+      if (orgMembers.some((member) => member.kind === "org" && member.id !== actor.id)) {
+        throw new Error("Remove all other organization users before deactivating.");
+      }
+      orgMembers
+        .filter((member) => member.kind === "org")
+        .forEach((member) => removeOrgMember(member.id));
+      getWorkspaceCatalogSnapshot()
+        .filter((workspace) => workspaceKindOf(workspace) === "business")
+        .forEach((workspace) =>
+          upsertCatalogWorkspace({ ...workspace, kind: "personal", personal: true }),
+        );
+      // Keep the organization identity so the owner can activate it again later.
+      persistOrgName(orgDisplayName);
+      persistOrgId(orgId || actor.orgId || `local-org-${actor.id}`);
+      persistOrgSetupDeferred(true);
+      upsertOrgMember({
+        ...actor,
+        kind: "personal",
+        orgId: orgId || actor.orgId || `local-org-${actor.id}`,
+        managedByOrgName: orgDisplayName,
+        orgSetupDeferred: true,
+      });
+      setDeactivateConfirm("");
+      setDeactivateOpen(false);
+    } catch (err) {
+      setDeactivateError(
+        err instanceof Error ? err.message : "Could not deactivate organization.",
+      );
+    } finally {
+      setDeactivateBusy(false);
     }
   };
 
   const orgWorkspaces = getWorkspaceCatalogSnapshot().filter(
     (item) => workspaceKindOf(item) === "business",
   );
-  const maxSeats = orgMaxSeats(orgMembers);
-  const mixLabel = seatMixLabel(orgSeatMix(orgMembers)).join(" · ");
-  const domainGuess = (() => {
-    const email = actor.email.trim();
-    const at = email.lastIndexOf("@");
-    if (at < 0) return "";
-    const domain = email.slice(at + 1).toLowerCase();
-    if (!domain || domain.includes("gmail.") || domain.includes("yahoo.") || domain.includes("outlook.") || domain.includes("icloud.")) {
-      return "";
-    }
-    return domain;
-  })();
-
   const overviewItems = [
-    { label: "Legal name", value: orgDisplayName },
-    ...(domainGuess ? [{ label: "Domain", value: domainGuess }] : []),
-    { label: "Seat mix", value: mixLabel || "None" },
-    { label: "Max seats", value: `${maxSeats}` },
-    { label: "People", value: `${roster.length}` },
+    { label: "Name", value: orgDisplayName },
+    { label: "Users", value: `${roster.length}` },
   ];
+  const organizationActive = entitlements.inOrg && !actor.orgSetupDeferred;
+
+  if (!organizationActive) {
+    return (
+      <SettingsPage>
+        <SettingsHeader title="Organization" />
+        <SettingsSection className="mt-2 lg:mt-8">
+          <SettingsPanel>
+            <p className="text-[1.15rem] font-medium tracking-[-0.02em]">
+              Activate Organization
+            </p>
+            <p className="mt-2 max-w-xl text-[13.5px] leading-relaxed text-muted-foreground">
+              Bring teammates together, invite users, and manage shared workspace access from one place.
+            </p>
+            <div className="mt-5 grid gap-2 sm:grid-cols-3">
+              {[
+                ["Invite teammates", "Bring your team into shared workspaces."],
+                ["Manage access", "Choose which workspaces each user can see."],
+                ["Shared controls", "Keep connectors and workspace policies together."],
+              ].map(([title, description]) => (
+                <div key={title} className="rounded-[14px] bg-muted/35 px-3.5 py-3">
+                  <p className="text-[13px] font-medium">{title}</p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">{description}</p>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setActivateError(null);
+                setActivateName(actor.managedByOrgName || getOrgNameSnapshot() || "");
+                setActivateOpen(true);
+              }}
+              className="mt-5 inline-flex h-10 items-center rounded-full bg-primary px-5 text-[13.5px] font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              Activate
+            </button>
+          </SettingsPanel>
+        </SettingsSection>
+        <Modal
+          open={activateOpen}
+          onClose={() => setActivateOpen(false)}
+          labelledBy="activate-org-title"
+          className="settings-glass-surface w-full max-w-[26rem] border border-foreground/10 p-5"
+          backdropClassName="bg-black/10"
+        >
+          <h3 id="activate-org-title" className="text-[1.1rem] font-medium">Activate Organization</h3>
+          <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+            Name your organization to start inviting users and managing workspace access.
+          </p>
+          <input
+            value={activateName}
+            onChange={(event) => {
+              setActivateName(event.target.value);
+              setActivateError(null);
+            }}
+            placeholder="Organization name"
+            className={cn(settingsInputClass, "mt-4")}
+            autoFocus
+          />
+          {activateError ? <p className="mt-2 text-[12.5px] text-destructive">{activateError}</p> : null}
+          <div className="mt-5 flex justify-end gap-2">
+            <button type="button" onClick={() => setActivateOpen(false)} className="inline-flex h-9 items-center rounded-full px-4 text-[13px] hover:bg-muted">Cancel</button>
+            <button type="button" disabled={activateBusy} onClick={() => void activateOrganization()} className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground disabled:opacity-50">
+              {activateBusy ? "Activating…" : "Activate"}
+            </button>
+          </div>
+        </Modal>
+      </SettingsPage>
+    );
+  }
 
   return (
     <SettingsPage>
       <SettingsHeader
         title="Organization"
         actions={
-          entitlements.canManageMembers && !nativeShell && !actor.orgSetupDeferred ? (
-            <button
-              type="button"
-              onClick={() => setInviteOpen(true)}
-              className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium tracking-[-0.01em] text-primary-foreground hover:bg-primary/90"
-            >
-              + Invite
-            </button>
+          entitlements.canManageMembers && !nativeShell ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setInviteOpen(true)}
+                className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium tracking-[-0.01em] text-primary-foreground hover:bg-primary/90"
+              >
+                + Invite
+              </button>
+              {entitlements.isOwner ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeactivateError(null);
+                    setDeactivateConfirm("");
+                    setDeactivateOpen(true);
+                  }}
+                  className="inline-flex h-9 items-center rounded-full border border-foreground/15 px-4 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
+                >
+                  Settings
+                </button>
+              ) : null}
+            </div>
           ) : null
         }
       />
@@ -432,6 +635,38 @@ function OrganizationSettings({
         }}
       />
 
+      <Modal
+        open={deactivateOpen}
+        onClose={() => setDeactivateOpen(false)}
+        labelledBy="deactivate-org-title"
+        className="settings-glass-surface w-full max-w-[26rem] border border-foreground/10 p-5"
+        backdropClassName="bg-black/10"
+      >
+        <h3 id="deactivate-org-title" className="text-[1.1rem] font-medium">
+          Deactivate Organization
+        </h3>
+        <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+          This deactivates organization features while keeping the organization, your account, and workspaces. You can activate it again later. Remove all other users before deactivating.
+        </p>
+        <input
+          value={deactivateConfirm}
+          onChange={(event) => {
+            setDeactivateConfirm(event.target.value);
+            setDeactivateError(null);
+          }}
+          placeholder='Type "deactivate" to confirm'
+          className={cn(settingsInputClass, "mt-4")}
+          autoFocus
+        />
+        {deactivateError ? <p className="mt-2 text-[12.5px] text-destructive">{deactivateError}</p> : null}
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={() => setDeactivateOpen(false)} className="inline-flex h-9 items-center rounded-full px-4 text-[13px] hover:bg-muted">Cancel</button>
+          <button type="button" disabled={deactivateBusy} onClick={() => void deactivateOrganization()} className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground disabled:opacity-50">
+            {deactivateBusy ? "Deactivating…" : "Deactivate"}
+          </button>
+        </div>
+      </Modal>
+
       {inviteWarning ? (
         <p className="mt-4 text-[12.5px] leading-relaxed text-destructive">
           {inviteWarning}
@@ -443,44 +678,7 @@ function OrganizationSettings({
         </p>
       ) : null}
 
-      {actor.orgSetupDeferred ? (
-        <SettingsSection
-          title="Finish setup"
-          description="Name your organization to unlock teammate invites."
-          className="mt-2 lg:mt-8"
-        >
-          <SettingsPanel>
-            <p className="text-[13px] leading-relaxed text-muted-foreground">
-              You chose Max with org setup later. Add your organization name to
-              finish.
-            </p>
-            <input
-              value={finishOrgName}
-              onChange={(event) => {
-                setFinishOrgName(event.target.value);
-                setFinishError(null);
-              }}
-              placeholder="Organization name"
-              className={cn(settingsInputClass, "mt-4")}
-            />
-            {finishError ? (
-              <p className="mt-2 text-[12.5px] text-destructive">{finishError}</p>
-            ) : null}
-            <div className="mt-4">
-              <button
-                type="button"
-                disabled={finishBusy}
-                onClick={() => void finishOrgSetup()}
-                className="inline-flex h-10 items-center rounded-full bg-primary px-5 text-[13.5px] font-medium tracking-[-0.01em] text-primary-foreground disabled:opacity-50"
-              >
-                {finishBusy ? "Saving…" : "Create organization"}
-              </button>
-            </div>
-          </SettingsPanel>
-        </SettingsSection>
-      ) : null}
-
-      <SettingsSection title="Overview" className={actor.orgSetupDeferred ? "mt-6" : "mt-2 lg:mt-8"}>
+      <SettingsSection className="mt-2 lg:mt-8">
         <SettingsStatGrid items={overviewItems} />
       </SettingsSection>
 
@@ -502,15 +700,10 @@ function OrganizationSettings({
       ) : null}
 
 
-      <SettingsSection
-        title="Users"
-        description="Invite Pro or Max seats — mixed rosters are supported. Open a user to manage access and billing."
-      >
+      <SettingsSection title="Users">
         <SettingsGroup dividerInset="icon">
           {roster.map((member) => {
             const pending = member.seatStatus === "pending";
-            const seatPlan: "pro" | "max" =
-              member.plan === "max" ? "max" : "pro";
             return (
               <button
                 key={member.id}
@@ -518,35 +711,26 @@ function OrganizationSettings({
                 onClick={() => onSelectMember(member.id)}
                 className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-muted/50"
               >
+                <AccountAvatar
+                  memberId={member.id}
+                  name={member.name}
+                  initials={member.initials}
+                  size="md"
+                />
                 <span className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-center gap-2">
-                    <span className="text-[13.5px] font-medium tracking-[-0.01em]">
-                      {member.id === actor.id
-                        ? `${member.name} (You)`
-                        : member.name}
-                    </span>
-                    {member.role === "Owner" ? (
-                      <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[11px] font-medium tracking-[-0.01em] text-muted-foreground">
-                        Owner
-                      </span>
-                    ) : null}
-                    <span
-                      className={cn(
-                        "inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium tracking-[-0.01em]",
-                        pending
-                          ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                          : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                      )}
-                    >
-                      {pending ? "Pending" : "Active"}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
-                    {member.email}
+                  <span className="text-[13.5px] font-medium tracking-[-0.01em]">
+                    {member.name}
                   </span>
                 </span>
-                <span className="hidden shrink-0 text-[12.5px] font-medium text-muted-foreground sm:block">
-                  {planLabel(seatPlan)}
+                <span
+                  className={cn(
+                    "inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[11px] font-medium tracking-[-0.01em]",
+                    pending
+                      ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                      : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                  )}
+                >
+                  {pending ? "Pending" : "Active"}
                 </span>
                 <ChevronRight
                   className="h-4 w-4 shrink-0 text-muted-foreground/70"
@@ -566,15 +750,13 @@ function GeneralSettings({
 }: {
   onAfterSignOut: () => void;
 }) {
-  const [photoError, setPhotoError] = useState<string | null>(null);
-  const [fullName, setFullName] = useState("");
-  const [shortName, setShortName] = useState("");
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [profileSaved, setProfileSaved] = useState(false);
-  const [profileBusy, setProfileBusy] = useState(false);
-  const photoInput = useRef<HTMLInputElement>(null);
   const mobile = useMobileShell();
   const { actor, entitlements } = useApp();
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [fullName, setFullName] = useState(() => actor.name);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const profileSaveTimer = useRef<number | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
   const photos = useSyncExternalStore(
     subscribeProfilePhotos,
     getProfilePhotosSnapshot,
@@ -582,55 +764,13 @@ function GeneralSettings({
   );
   const photo = profilePhotoFor(actor.id, photos);
 
-  const managed = entitlements.showOrgManaged;
-
-  useEffect(() => {
-    setFullName(actor.name);
-    setShortName(actor.short);
-  }, [actor.id, actor.name, actor.short]);
-
-  const saveProfile = async () => {
-    const short = shortName.trim() || actor.short || "You";
-    if (managed) {
-      setProfileBusy(true);
-      setProfileError(null);
-      setProfileSaved(false);
-      try {
-        upsertOrgMember({ ...actor, short });
-        if (isSupabaseConfigured()) {
-          const supabase = createSupabaseBrowserClient();
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
-          if (!user) throw new Error("Sign in to save your profile.");
-          const { error } = await supabase
-            .from("profiles")
-            .update({ short_name: short })
-            .eq("id", user.id);
-          if (error && !/short_name|42703|column/i.test(error.message)) {
-            throw error;
-          }
-        }
-        setProfileSaved(true);
-      } catch (err) {
-        setProfileError(
-          err instanceof Error ? err.message : "Could not save profile.",
-        );
-      } finally {
-        setProfileBusy(false);
-      }
-      return;
-    }
-
-    const name = fullName.trim();
-    const displayShort = shortName.trim() || name.split(/\s+/)[0] || "You";
+  const saveProfile = async (nextFullName: string) => {
+    const name = nextFullName.trim();
     if (!name) {
       setProfileError("Add your full name.");
       return;
     }
-    setProfileBusy(true);
-    setProfileError(null);
-    setProfileSaved(false);
+    const displayShort = name.split(/\s+/)[0] || "You";
     try {
       const initials = name
         .split(/\s+/)
@@ -665,76 +805,129 @@ function GeneralSettings({
           throw error;
         }
       }
-      setProfileSaved(true);
+      setProfileError(null);
     } catch (err) {
       setProfileError(
         err instanceof Error ? err.message : "Could not save profile.",
       );
-    } finally {
-      setProfileBusy(false);
     }
   };
 
-  const profileFields = (
-    <div className="grid gap-4 px-4 py-4 sm:grid-cols-2">
-      <SettingsField label="Full name">
-        <input
-          value={fullName}
-          onChange={(event) => {
-            if (managed) return;
-            setFullName(event.target.value);
-            setProfileSaved(false);
-            setProfileError(null);
-          }}
-          readOnly={managed}
-          className={cn(
-            settingsInputClass,
-            managed && "bg-muted/40 text-muted-foreground",
-          )}
-        />
-      </SettingsField>
-      <SettingsField
-        label="Email"
-        hint={
-          managed
-            ? "Managed by your organization."
-            : "Change email in Account security below."
-        }
-      >
-        <input
-          value={actor.email}
-          readOnly
-          className={cn(settingsInputClass, "bg-muted/40 text-muted-foreground")}
-        />
-      </SettingsField>
-      <SettingsField label="What should we call you?">
-        <input
-          value={shortName}
-          onChange={(event) => {
-            setShortName(event.target.value);
-            setProfileSaved(false);
-            setProfileError(null);
-          }}
-          className={settingsInputClass}
-        />
-      </SettingsField>
-      <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
-        <button
-          type="button"
-          disabled={profileBusy}
-          onClick={() => void saveProfile()}
-          className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground disabled:opacity-50"
-        >
-          {profileBusy ? "Saving…" : managed ? "Save" : "Save profile"}
-        </button>
-        {profileSaved ? (
-          <span className="text-[12.5px] text-muted-foreground">Saved</span>
-        ) : null}
-        {profileError ? (
-          <span className="text-[12.5px] text-destructive">{profileError}</span>
-        ) : null}
+  const scheduleProfileSave = (nextFullName: string) => {
+    if (profileSaveTimer.current != null) {
+      window.clearTimeout(profileSaveTimer.current);
+    }
+    profileSaveTimer.current = window.setTimeout(() => {
+      profileSaveTimer.current = null;
+      void saveProfile(nextFullName);
+    }, 500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (profileSaveTimer.current != null) {
+        window.clearTimeout(profileSaveTimer.current);
+      }
+    };
+  }, []);
+
+  const saveProfileField = (nextName: string) => {
+    setFullName(nextName);
+    setProfileError(null);
+    scheduleProfileSave(nextName);
+  };
+
+  const profilePhotoCard = (
+    <div className="settings-glass-row flex flex-wrap items-center gap-4 px-4 py-4">
+      <AccountAvatar
+        memberId={actor.id}
+        name={actor.name}
+        initials={actor.initials}
+        size="lg"
+      />
+      <div className="min-w-0 flex-1">
+          <p className={cn("font-medium tracking-[-0.01em]", mobile ? "text-[15px]" : "text-[13.5px]")}>Profile photo</p>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setPhotoError(null);
+                photoInput.current?.click();
+              }}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 font-medium tracking-[-0.01em] hover:bg-muted",
+                mobile ? "h-9 text-[13px]" : "h-8 text-[12.5px]",
+                "rounded-full border border-foreground/15",
+              )}
+            >
+              <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
+              {photo ? "Replace" : "Upload"}
+            </button>
+            {photo ? (
+              <button
+                type="button"
+                onClick={() => {
+                  clearProfilePhoto(actor.id);
+                  setPhotoError(null);
+                }}
+                className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                Remove
+              </button>
+            ) : null}
+          </div>
+          {photoError ? (
+            <p className="mt-2 text-[12.5px] text-destructive">{photoError}</p>
+          ) : null}
       </div>
+      <input
+        ref={photoInput}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          void readProfilePhotoFile(file)
+            .then((dataUrl) => {
+              setProfilePhoto(actor.id, dataUrl);
+              setPhotoError(null);
+            })
+            .catch((err: unknown) => {
+              setPhotoError(
+                err instanceof Error ? err.message : "Could not upload image.",
+              );
+            });
+        }}
+      />
     </div>
+  );
+
+  const profileFieldCards = (
+    <>
+      <div className="settings-glass-row px-4 py-4">
+          <SettingsField label="Full name">
+            <input
+              value={fullName}
+              onChange={(event) => saveProfileField(event.target.value)}
+              className={settingsInputClass}
+            />
+          </SettingsField>
+      </div>
+      <div className="settings-glass-row px-4 py-4">
+          <SettingsField label="Email">
+            <input
+              value={actor.email}
+              readOnly
+              className={cn(settingsInputClass, "bg-muted/40 text-muted-foreground")}
+            />
+          </SettingsField>
+      </div>
+      {profileError ? (
+        <p className="px-1 text-[12.5px] text-destructive">{profileError}</p>
+      ) : null}
+    </>
   );
 
   return (
@@ -750,168 +943,14 @@ function GeneralSettings({
       <div
         className={cn(
           !entitlements.showOrgSettings ? "mt-4" : "mt-2",
-          mobile ? "space-y-6" : "space-y-3",
         )}
       >
-        {mobile ? (
-          <SettingsSection title="Profile">
-            <SettingsGroup>
-              <div
-                className={cn(
-                  "flex flex-wrap items-center gap-4 px-4",
-                  mobile ? "py-3.5" : "py-4",
-                )}
-              >
-                <AccountAvatar
-                  memberId={actor.id}
-                  name={actor.name}
-                  initials={actor.initials}
-                  size="lg"
-                />
-                <div className="min-w-0 flex-1">
-                  <p
-                    className={cn(
-                      "font-medium tracking-[-0.01em]",
-                      mobile ? "text-[15px]" : "text-[13.5px]",
-                    )}
-                  >
-                    Profile photo
-                  </p>
-                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPhotoError(null);
-                        photoInput.current?.click();
-                      }}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-[13px] font-medium tracking-[-0.01em] hover:bg-muted"
-                    >
-                      <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
-                      {photo ? "Replace" : "Upload"}
-                    </button>
-                    {photo ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          clearProfilePhoto(actor.id);
-                          setPhotoError(null);
-                        }}
-                        className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        Remove
-                      </button>
-                    ) : null}
-                  </div>
-                  {photoError ? (
-                    <p className="mt-2 text-[12.5px] text-destructive">
-                      {photoError}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-              <input
-                ref={photoInput}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (!file) return;
-                  void readProfilePhotoFile(file)
-                    .then((dataUrl) => {
-                      setProfilePhoto(actor.id, dataUrl);
-                      setPhotoError(null);
-                    })
-                    .catch((err: unknown) => {
-                      setPhotoError(
-                        err instanceof Error
-                          ? err.message
-                          : "Could not upload image.",
-                      );
-                    });
-                }}
-              />
-              {profileFields}
-            </SettingsGroup>
-            <SettingsFootnote>
-              Shown on your account row and in shared workspaces.
-            </SettingsFootnote>
-          </SettingsSection>
-        ) : (
-          <SettingsGroup title="Profile">
-            <div className="flex flex-wrap items-center gap-4 px-4 py-4">
-              <AccountAvatar
-                memberId={actor.id}
-                name={actor.name}
-                initials={actor.initials}
-                size="lg"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-[13.5px] font-medium tracking-[-0.01em]">
-                  Profile photo
-                </p>
-                <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                  Shown on your account row and in shared workspaces.
-                </p>
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPhotoError(null);
-                      photoInput.current?.click();
-                    }}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-                  >
-                    <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.6} />
-                    {photo ? "Replace" : "Upload"}
-                  </button>
-                  {photo ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        clearProfilePhoto(actor.id);
-                        setPhotoError(null);
-                      }}
-                      className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
-                    >
-                      Remove
-                    </button>
-                  ) : null}
-                </div>
-                {photoError ? (
-                  <p className="mt-2 text-[12.5px] text-destructive">
-                    {photoError}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-            <input
-              ref={photoInput}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (!file) return;
-                void readProfilePhotoFile(file)
-                  .then((dataUrl) => {
-                    setProfilePhoto(actor.id, dataUrl);
-                    setPhotoError(null);
-                  })
-                  .catch((err: unknown) => {
-                    setPhotoError(
-                      err instanceof Error
-                        ? err.message
-                        : "Could not upload image.",
-                    );
-                  });
-              }}
-            />
-            {profileFields}
+        <SettingsSection className="mt-2 lg:mt-8">
+          <SettingsGroup>
+            {profilePhotoCard}
+            {profileFieldCards}
           </SettingsGroup>
-        )}
+        </SettingsSection>
 
         <AccountSecuritySettings onAfterSignOut={onAfterSignOut} />
       </div>

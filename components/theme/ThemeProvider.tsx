@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 import {
   getAppearanceSnapshot,
   setAppearance,
@@ -12,6 +19,7 @@ import {
   subscribeTheme,
 } from "@/lib/session";
 import type { Theme } from "@/lib/types";
+import { resolveBootstrapTheme } from "@/lib/theme-bootstrap";
 
 const ThemeContext = createContext<{
   theme: Theme;
@@ -39,6 +47,30 @@ function applyTheme(next: Theme) {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    persistTheme(resolveBootstrapTheme());
+
+    try {
+      const ua = navigator.userAgent || "";
+      const capacitor = (
+        window as Window & {
+          Capacitor?: { isNativePlatform?: () => boolean };
+        }
+      ).Capacitor;
+      if (
+        /\bCapacitor\b/i.test(ua) ||
+        (capacitor &&
+          typeof capacitor.isNativePlatform === "function" &&
+          capacitor.isNativePlatform())
+      ) {
+        root.classList.add("cander-mobile");
+      }
+    } catch {
+      // Native shell detection is best effort.
+    }
+  }, []);
+
   const theme = useSyncExternalStore(
     subscribeTheme,
     getThemeSnapshot,

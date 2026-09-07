@@ -148,7 +148,7 @@ export function PinsSheet({
                   {inUse ? (
                     <span
                       aria-hidden
-                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-[oklch(0.62_0.19_260)]"
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#0b4fc4]"
                     />
                   ) : null}
                 </button>

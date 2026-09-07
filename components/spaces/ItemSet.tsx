@@ -20,8 +20,10 @@ import { SPACE_CANVAS_BG } from "@/lib/mobile-menu-styles";
 import { isDashboardOnlySpace } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
 import {
+  CONNECTOR_CONTROL_RADIUS,
   FLOAT_CONTROL_SHELL,
   FLOAT_TOGGLE_ACTIVE,
+  SHELL_G3_RADIUS,
 } from "@/lib/shell-chrome";
 
 /** True when the space chat column is dismissed (no active thread or draft). */
@@ -55,9 +57,9 @@ export function LayoutToggle({
             aria-expanded={open}
             onClick={toggle}
             className={cn(
-              "inline-flex items-center justify-center rounded-[10px] transition-colors duration-200",
+              "inline-flex items-center justify-center bg-white/45 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-colors duration-200 dark:bg-white/[0.06] dark:shadow-[0_8px_24px_rgba(0,0,0,0.16)]",
               compact ? "h-8 w-8" : "h-9 w-9",
-              FLOAT_CONTROL_SHELL,
+              SHELL_G3_RADIUS,
               "text-foreground",
             )}
           >
@@ -108,8 +110,8 @@ export function LayoutToggle({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-0.5 rounded-[10px] p-1",
-        FLOAT_CONTROL_SHELL,
+        "inline-flex items-center gap-0.5 bg-white/45 p-1 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-white/[0.06] dark:shadow-[0_8px_24px_rgba(0,0,0,0.16)]",
+        SHELL_G3_RADIUS,
       )}
     >
       <button
@@ -118,11 +120,12 @@ export function LayoutToggle({
         aria-pressed={layout === "cards"}
         onClick={() => onChange("cards")}
         className={cn(
-          "inline-flex items-center justify-center rounded-[8px] transition-colors duration-200",
+          "inline-flex items-center justify-center transition-colors duration-200",
           compact ? "h-6 w-6" : "h-8 w-8",
+          CONNECTOR_CONTROL_RADIUS,
           layout === "cards"
-            ? FLOAT_TOGGLE_ACTIVE
-            : "text-muted-foreground hover:text-foreground",
+            ? "bg-black/[0.06] text-foreground dark:bg-white/[0.1]"
+            : "text-muted-foreground hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.1]",
         )}
       >
         <LayoutGrid className="h-3.5 w-3.5" strokeWidth={1.6} />
@@ -133,11 +136,12 @@ export function LayoutToggle({
         aria-pressed={layout === "list"}
         onClick={() => onChange("list")}
         className={cn(
-          "inline-flex items-center justify-center rounded-[8px] transition-colors duration-200",
+          "inline-flex items-center justify-center transition-colors duration-200",
           compact ? "h-6 w-6" : "h-8 w-8",
+          CONNECTOR_CONTROL_RADIUS,
           layout === "list"
-            ? FLOAT_TOGGLE_ACTIVE
-            : "text-muted-foreground hover:text-foreground",
+            ? "bg-black/[0.06] text-foreground dark:bg-white/[0.1]"
+            : "text-muted-foreground hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.1]",
         )}
       >
         <List className="h-3.5 w-3.5" strokeWidth={1.6} />
@@ -325,12 +329,14 @@ export function ScopeToggle({
   options,
   compact = false,
   wrap = false,
+  glass = false,
 }: {
   value: string;
   onChange: (id: string) => void;
   options: { id: string; label: string }[];
   compact?: boolean;
   wrap?: boolean;
+  glass?: boolean;
 }) {
   const mobile = useMobileShell();
   const active = options.find((item) => item.id === value) ?? options[0];
@@ -340,16 +346,26 @@ export function ScopeToggle({
       <Dropdown
         align="start"
         matchTrigger={false}
-        menuClassName="min-w-[11rem]"
+        menuClassName={cn(
+          "min-w-[11rem]",
+          glass &&
+            "bg-white/55 shadow-[0_12px_32px_rgba(15,23,42,0.12)] backdrop-blur-xl dark:bg-white/[0.08] dark:shadow-[0_12px_32px_rgba(0,0,0,0.22)]",
+          glass && CONNECTOR_CONTROL_RADIUS,
+        )}
         trigger={({ open, toggle }) => (
           <button
             type="button"
             aria-expanded={open}
             onClick={toggle}
             className={cn(
-              "inline-flex max-w-full items-center gap-1.5 rounded-[10px] px-3 font-medium tracking-[-0.01em] transition-colors duration-200",
+              "inline-flex max-w-full items-center gap-1.5 px-3 font-medium tracking-[-0.01em] transition-colors duration-200",
               compact ? "h-8 text-[12px]" : "h-9 text-[13px]",
-              FLOAT_CONTROL_SHELL,
+              glass
+                ? cn(
+                    "bg-white/45 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-white/[0.06] dark:shadow-[0_8px_24px_rgba(0,0,0,0.16)]",
+                    CONNECTOR_CONTROL_RADIUS,
+                  )
+                : cn("rounded-[10px]", FLOAT_CONTROL_SHELL),
               "text-foreground",
             )}
           >
@@ -378,7 +394,8 @@ export function ScopeToggle({
                     close();
                   }}
                   className={cn(
-                    "menu-row-hover flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-[13px] transition-colors",
+                    "menu-row-hover flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-[13px] transition-colors",
+                    glass ? CONNECTOR_CONTROL_RADIUS : "rounded-[8px]",
                     selected && "font-medium",
                   )}
                 >
@@ -398,8 +415,13 @@ export function ScopeToggle({
   return (
     <div
       className={cn(
-        "inline-flex max-w-full items-center gap-0.5 rounded-[10px] p-1",
-        FLOAT_CONTROL_SHELL,
+        "inline-flex max-w-full items-center gap-0.5 p-1",
+        glass
+          ? cn(
+              "bg-white/45 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-white/[0.06] dark:shadow-[0_8px_24px_rgba(0,0,0,0.16)]",
+              CONNECTOR_CONTROL_RADIUS,
+            )
+          : cn("rounded-[10px]", FLOAT_CONTROL_SHELL),
         wrap ? "flex-wrap" : null,
       )}
     >
@@ -410,10 +432,13 @@ export function ScopeToggle({
           aria-pressed={value === item.id}
           onClick={() => onChange(item.id)}
           className={cn(
-            "inline-flex items-center rounded-[8px] font-medium tracking-[-0.01em] transition-colors duration-200",
+            "inline-flex items-center font-medium tracking-[-0.01em] transition-colors duration-200",
             compact ? "h-6 px-2.5 text-[12px]" : "h-8 px-3 text-[13px]",
+            glass ? CONNECTOR_CONTROL_RADIUS : "rounded-[8px]",
             value === item.id
-              ? FLOAT_TOGGLE_ACTIVE
+              ? glass
+                ? "bg-black/[0.06] text-foreground dark:bg-white/[0.1]"
+                : FLOAT_TOGGLE_ACTIVE
               : "text-muted-foreground hover:text-foreground",
           )}
         >
@@ -753,11 +778,12 @@ export function DashBtn({
       aria-label={label}
       onClick={onClick}
       className={cn(
-        "inline-flex h-9 items-center gap-1.5 rounded-[10px] text-[13px] font-medium tracking-[-0.01em] transition-colors duration-200",
+        "inline-flex h-9 items-center gap-1.5 text-[13px] font-medium tracking-[-0.01em] transition-colors duration-200",
         icon ? "w-10 justify-center px-0" : "px-4",
+        SHELL_G3_RADIUS,
         primary
-          ? "bg-primary text-primary-foreground hover:bg-foreground"
-          : "border border-foreground/15 hover:bg-canvas-hover",
+          ? "bg-white/45 text-foreground shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl hover:bg-white/65 dark:bg-white/[0.08] dark:text-foreground dark:shadow-[0_8px_24px_rgba(0,0,0,0.16)] dark:hover:bg-white/[0.14]"
+          : "bg-white/35 text-foreground shadow-[0_6px_18px_rgba(15,23,42,0.06)] backdrop-blur-xl hover:bg-white/55 dark:bg-white/[0.05] dark:hover:bg-white/[0.1]",
       )}
     >
       {children}

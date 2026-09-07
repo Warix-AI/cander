@@ -6,6 +6,8 @@ import { DashBtn } from "@/components/spaces/ItemSet";
 import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flow";
 import { Dropdown } from "@/components/ui/Controls";
 import { canvasStartOptions } from "@/lib/canvas-start-options";
+import { CONNECTOR_CONTROL_RADIUS } from "@/lib/shell-chrome";
+import { cn } from "@/lib/utils";
 
 type NewCanvasMenuProps = {
   onCreated: (projectId: string) => void;
@@ -25,7 +27,7 @@ export function NewCanvasMenu({ onCreated, icon = true, buttonLabel = "New" }: N
       <Dropdown
         align="end"
         matchTrigger={false}
-        menuClassName="min-w-[12rem]"
+        menuClassName="menu-glass-surface min-w-[12rem] !p-2"
         trigger={({ open, toggle }) =>
           icon ? (
             <DashBtn primary icon onClick={toggle} label="New in Canvas">
@@ -64,7 +66,10 @@ export function NewCanvasMenu({ onCreated, icon = true, buttonLabel = "New" }: N
                     summary: item.summary,
                   });
                 }}
-                className="flex w-full flex-col rounded-[10px] px-3 py-2 text-left hover:bg-muted disabled:opacity-50"
+                className={cn(
+                  "menu-row-hover flex w-full flex-col px-3 py-2 text-left transition-colors hover:bg-black/[0.06] dark:hover:bg-white/[0.1] disabled:opacity-50",
+                  CONNECTOR_CONTROL_RADIUS,
+                )}
               >
                 <span className="text-[13px] font-medium">{item.label}</span>
                 <span className="text-[12px] text-muted-foreground">

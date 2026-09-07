@@ -213,7 +213,7 @@ export function PlansSettings() {
     return (
       <SettingsPage>
         <SettingsHeader kicker="Plan" title="Your plan" />
-        <SettingsSection title="Current plan" className="mt-8">
+        <SettingsSection className="mt-8">
           <SettingsGroup>{billingBody}</SettingsGroup>
           <p className="mt-4 text-[12.5px] leading-relaxed text-muted-foreground">
             Upgrades and cancellations open in Safari — not in-app purchase.
@@ -228,10 +228,9 @@ export function PlansSettings() {
       <SettingsHeader
         kicker="Plan"
         title="Your plan"
-        subtitle="Account status for this seat. Cancel anytime — billing runs through the end of your current period."
       />
 
-      <SettingsSection title="Current plan" className="mt-8">
+      <SettingsSection className="mt-8">
         <SettingsGroup>{billingBody}</SettingsGroup>
       </SettingsSection>
     </SettingsPage>

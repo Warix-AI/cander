@@ -43,6 +43,8 @@ export type Entitlements = {
   canManageRoles: boolean;
   hasSharedWorkspaceKnowledge: boolean;
   showOrganizationControls: boolean;
+  /** Max personal owners can activate an organization from Settings. */
+  canActivateOrganization: boolean;
   canCreatePersonalWorkspace: boolean;
   canCreateBusinessWorkspace: boolean;
   canManageBilling: boolean;
@@ -123,7 +125,9 @@ export function entitlementsFor(actor: Member): Entitlements {
   const showOrgManaged =
     inOrg && seatActive && !showOrgAdmin && (plan === "pro" || plan === "max");
   const orgActive =
-    inOrg && isTeamPlan(plan) && seatActive;
+    inOrg && !actor.orgSetupDeferred && isTeamPlan(plan) && seatActive;
+  const canActivateOrganization =
+    (!inOrg || Boolean(actor.orgSetupDeferred)) && plan === "max" && seatActive;
   const isOwner = orgActive && actor.role === "Owner";
   const isAdmin = orgActive && actor.role === "Admin";
   const isMember = orgActive && actor.role === "Member";
@@ -149,6 +153,7 @@ export function entitlementsFor(actor: Member): Entitlements {
     hasSharedWorkspaceKnowledge:
       orgActive && caps.sharedWorkspaceKnowledge,
     showOrganizationControls: showOrgAdmin,
+    canActivateOrganization,
     canCreatePersonalWorkspace: canCreate,
     canCreateBusinessWorkspace: canCreate,
     canManageBilling: isOwner || orgAdminFromDeferred,
@@ -199,7 +204,8 @@ export function sharedResourcesFor(
   });
 }
 
-export function workspacesFor(actor: Member, _access: Entitlements): Workspace[] {
+export function workspacesFor(actor: Member, access: Entitlements): Workspace[] {
+  void access;
   const workspaces = getWorkspaceCatalogSnapshot();
   return workspaces.filter((item) => actor.workspaceIds.includes(item.id));
 }

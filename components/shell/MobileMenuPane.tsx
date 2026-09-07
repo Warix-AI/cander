@@ -175,7 +175,7 @@ function MenuMain({
               type="button"
               onClick={onNewChat}
               className={cn(
-                "flex w-full items-center gap-3 px-4 py-[0.825rem] text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200",
+                "flex w-full items-center gap-3 px-5 py-[0.95rem] text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200",
                 PRIMARY_NAV_CARD_RADIUS_FIRST_MOBILE,
                 newActive ? PRIMARY_NAV_CARD_ACTIVE : PRIMARY_NAV_CARD_HOVER,
               )}
@@ -313,7 +313,7 @@ function MobileNavRow({
       onClick={() => onOpen(id)}
       className={cn(
         cardSurface
-          ? "flex w-full items-center gap-3 px-4 py-[0.825rem] text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200"
+          ? "flex w-full items-center gap-3 px-5 py-[0.95rem] text-left text-[16px] font-medium tracking-[-0.02em] transition-colors duration-200"
           : mobileMenuRowClass,
         cardSurface && cardRadius,
         comingSoon

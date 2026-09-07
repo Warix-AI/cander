@@ -139,6 +139,7 @@ import {
   defaultProjectBrowserSession,
   focusAgentBrowserTab,
   getProjectBrowserSession,
+  clearProjectBrowserSession,
   getProjectBrowserSessionRevision,
   isPreviewTabKind,
   isStudioMediaTabKind,
@@ -331,6 +332,15 @@ export function ProjectBrowserPanel({
         ? getStandaloneBrowserSession(key, fallback)
         : getProjectBrowserSession(key, fallback)
       : fallback;
+
+  // Search projects are browser-only. Remove legacy pinned project tabs so the
+  // first tab is always a closable blank browser tab.
+  useEffect(() => {
+    if (!key || standalone || spaceId !== "research") return;
+    if (session.tabs.some((tab) => tab.kind !== "web")) {
+      clearProjectBrowserSession(key);
+    }
+  }, [key, session, spaceId, standalone]);
 
   // Keep agent-builder tabs in sync with project_agents (one tab per agent).
   // Do not depend on sessionRevision — that re-fetched on every tab write.
@@ -546,8 +556,13 @@ export function ProjectBrowserPanel({
     }
 
     if (session.tabs.length <= 1) {
-      const blank = makeWebTab();
-      write({ tabs: [blank], activeTabId: blank.id });
+      if (!standalone && key) {
+        clearProjectBrowserSession(key);
+        backToSpaceHome();
+      } else {
+        const blank = makeWebTab();
+        write({ tabs: [blank], activeTabId: blank.id });
+      }
       return;
     }
 
@@ -609,7 +624,7 @@ export function ProjectBrowserPanel({
   const addUrlTab = (url?: string) => {
     const leaving = active;
     const tab = makeWebTab();
-    const next = url
+    const next = url && url !== "about:blank"
       ? navigateProjectBrowserTab(tab, normalizeBrowserUrl(url))
       : tab;
     const commit = () =>
@@ -1806,9 +1821,20 @@ export function ProjectBrowserPanel({
                 </RailBtn>
               </>
             ) : browserSpaceId === "research" ? (
-              <RailBtn label="Project tools" disabled>
-                <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
-              </RailBtn>
+              <ResearchBrowserToolsMenu
+                address={address}
+                onShare={async () => {
+                  try {
+                    await navigator.clipboard.writeText(address);
+                  } catch {
+                    window.prompt("Copy page address", address);
+                  }
+                }}
+                // Duplicate the actual browser page; an empty search tab stays blank
+                // instead of normalizing the project preview or tab title as a query.
+                onOpenExternal={() => addUrlTab(active.url || "about:blank")}
+                onClear={() => navigateAddressTo("about:blank")}
+              />
             ) : (
               <DesktopProjectToolsMenu
                 selectMode={selectMode}
@@ -2658,6 +2684,64 @@ function ProjectMobileTabBar({
   );
 }
 
+function ResearchBrowserToolsMenu({
+  address,
+  onShare,
+  onOpenExternal,
+  onClear,
+}: {
+  address: string;
+  onShare: () => void | Promise<void>;
+  onOpenExternal: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <BrowserChromeDropdown
+      align="end"
+      matchTrigger={false}
+      menuClassName="min-w-[13rem] z-[320]"
+      trigger={({ toggle }) => (
+        <RailBtn label="Browser tools" onClick={toggle}>
+          <Ellipsis className="h-3.5 w-3.5" strokeWidth={1.6} />
+        </RailBtn>
+      )}
+    >
+      {(close) => (
+        <>
+          <DesktopMenuItem
+            icon={Share}
+            onClick={() => {
+              void onShare();
+              close();
+            }}
+          >
+            Copy page link
+          </DesktopMenuItem>
+          <DesktopMenuItem
+            icon={ExternalLink}
+            onClick={() => {
+              onOpenExternal();
+              close();
+            }}
+          >
+            Open in new tab
+          </DesktopMenuItem>
+          <DesktopMenuItem
+            icon={Trash2}
+            onClick={() => {
+              onClear();
+              close();
+            }}
+            disabled={address === "about:blank"}
+          >
+            Clear page
+          </DesktopMenuItem>
+        </>
+      )}
+    </BrowserChromeDropdown>
+  );
+}
+
 function BrowserChromeDropdown(props: ComponentProps<typeof Dropdown>) {
   const [open, setOpen] = useState(false);
   const nativeSurface = usesNativeBrowserSurface();
@@ -2776,20 +2860,24 @@ function DesktopMenuItem({
   active,
   onClick,
   icon: Icon,
+  disabled = false,
 }: {
   children: string;
   active?: boolean;
   onClick: () => void;
   icon: typeof Upload;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       role="menuitem"
+      disabled={disabled}
       onClick={onClick}
       className={cn(
         "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] tracking-[-0.01em] hover:bg-muted",
         active && "bg-muted",
+        disabled && "pointer-events-none opacity-40",
       )}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.6} />

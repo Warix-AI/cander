@@ -115,7 +115,8 @@ export function OrgInviteModal({
       open={open}
       onClose={handleClose}
       labelledBy="org-invite-title"
-      className="w-full max-w-[24rem]"
+      className="settings-glass-surface w-full max-w-[24rem]"
+      backdropClassName="bg-black/25"
     >
       <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-3">
         <div>

@@ -492,6 +492,10 @@ export type KnowledgeFile = {
   uploadedAt: string;
   /** Extracted plain text for retrieval (text/md/etc.). */
   contentText?: string;
+  /** Private Supabase Storage object path, when the file is persisted remotely. */
+  storagePath?: string;
+  mimeType?: string;
+  byteSize?: number;
 };
 
 export type KnowledgeBase = {

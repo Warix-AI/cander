@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRight, Ellipsis, X } from "lucide-react";
+import { ArrowRight, Settings2, X } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { ConnectorInfoSection } from "@/components/connectors/ConnectorInfoSection";
 import { ConnectorSkillsToggles } from "@/components/connectors/ConnectorSkillsToggles";
@@ -13,6 +13,7 @@ import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import type { Connector, PinTier } from "@/lib/types";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import { appConnectorById } from "@/lib/connectors/apps/definitions";
+import { SPACE_CANVAS_BG } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 
 type ConnectorPrompt = {
@@ -99,6 +100,7 @@ const CONNECTOR_ICON_CLASS = "!h-[2.875rem] !w-[2.875rem]";
 export function ConnectorDetailModal({
   open,
   onClose,
+  dedicated = false,
   item,
   workspaceId,
   blocked,
@@ -116,6 +118,7 @@ export function ConnectorDetailModal({
 }: {
   open: boolean;
   onClose: () => void;
+  dedicated?: boolean;
   item: Connector & {
     pending?: boolean;
     installed?: boolean;
@@ -229,15 +232,49 @@ export function ConnectorDetailModal({
       open={open}
       onClose={onClose}
       labelledBy={`connector-detail-${item.id}`}
-      className={cn("flex flex-col", MODAL_WIDTH, MODAL_HEIGHT, SHELL_G3_RADIUS)}
+      embedded={dedicated}
+      lockScroll={!dedicated}
+      className={cn(
+        "flex flex-col",
+        dedicated
+          ? cn("h-full w-full", SPACE_CANVAS_BG)
+          : cn(MODAL_WIDTH, MODAL_HEIGHT, SHELL_G3_RADIUS),
+      )}
       backdropClassName="bg-black/30"
     >
       <div className="relative flex min-h-0 flex-1 flex-col">
+        {dedicated ? (
+          <div className="flex h-12 shrink-0 items-center gap-2 px-5">
+            <button
+              type="button"
+              onClick={onClose}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2 py-1 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                SHELL_G3_RADIUS,
+              )}
+            >
+              <span>Connectors</span>
+            </button>
+            <span className="text-muted-foreground/50" aria-hidden="true">
+              /
+            </span>
+            <span className="text-[13px] font-medium text-foreground">
+              {item.name}
+            </span>
+          </div>
+        ) : null}
+        <div
+          className={cn(
+            dedicated
+              ? "connector-detail-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain"
+              : "contents",
+          )}
+        >
         {confirmDisconnect ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/25 p-4">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 p-4 dark:bg-black/25">
             <div
               className={cn(
-                "w-full max-w-sm border border-border bg-background p-4 shadow-lg",
+                "light-surface w-full max-w-sm bg-white/85 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.14)] backdrop-blur-xl dark:bg-zinc-900/85 dark:shadow-[0_16px_40px_rgba(0,0,0,0.28)]",
                 SHELL_G3_RADIUS,
               )}
             >
@@ -256,7 +293,10 @@ export function ConnectorDetailModal({
                   type="button"
                   disabled={busy}
                   onClick={() => setConfirmDisconnect(false)}
-                  className="inline-flex h-9 items-center rounded-full px-3 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  className={cn(
+                    "inline-flex h-9 items-center px-3 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50",
+                    SHELL_G3_RADIUS,
+                  )}
                 >
                   Cancel
                 </button>
@@ -269,7 +309,10 @@ export function ConnectorDetailModal({
                       setConfirmDisconnect(false);
                     })();
                   }}
-                  className="inline-flex h-9 items-center rounded-full bg-destructive px-4 text-[13px] font-medium text-destructive-foreground disabled:opacity-50"
+                  className={cn(
+                    "inline-flex h-9 items-center bg-destructive px-4 text-[13px] font-medium text-destructive-foreground disabled:opacity-50",
+                    SHELL_G3_RADIUS,
+                  )}
                 >
                   {busy
                     ? canManageServerConnection
@@ -283,25 +326,40 @@ export function ConnectorDetailModal({
             </div>
           </div>
         ) : null}
-        <div className="relative shrink-0 px-5 pt-5">
-          <div className="absolute right-4 top-3 flex items-center gap-0.5">
+        <div
+          className={cn(
+            dedicated
+              ? "mx-auto w-full max-w-[42rem] px-5 pt-[75px]"
+              : "contents",
+          )}
+        >
+        <div
+          className={cn(
+            "relative shrink-0",
+            dedicated ? "px-0" : "px-5 pt-5",
+          )}
+        >
+          <div className="absolute top-0 right-0 flex items-center gap-0.5">
             {showActionsMenu ? (
               <Dropdown
                 align="end"
                 placement="bottom"
-                menuClassName="min-w-[10rem]"
+                menuClassName={cn(
+                  "min-w-[10rem] bg-white/55 shadow-[0_12px_32px_rgba(15,23,42,0.12)] backdrop-blur-xl dark:bg-white/[0.08] dark:shadow-[0_12px_32px_rgba(0,0,0,0.22)]",
+                  SHELL_G3_RADIUS,
+                )}
                 matchTrigger={false}
                 trigger={({ toggle }) => (
                   <button
                     type="button"
-                    aria-label="Connector actions"
+                    aria-label="Connector options"
                     onClick={toggle}
                     className={cn(
-                      "inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground",
+                      "inline-flex h-10 w-12 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground",
                       SHELL_G3_RADIUS,
                     )}
                   >
-                    <Ellipsis className="h-4 w-4" strokeWidth={1.6} />
+                    <Settings2 className="h-5 w-5" strokeWidth={1.8} />
                   </button>
                 )}
               >
@@ -315,7 +373,10 @@ export function ConnectorDetailModal({
                           onClearPin();
                           close();
                         }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                        className={cn(
+                          "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1]",
+                          SHELL_G3_RADIUS,
+                        )}
                       >
                         Unpin
                       </button>
@@ -327,7 +388,10 @@ export function ConnectorDetailModal({
                           onSetPin();
                           close();
                         }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                        className={cn(
+                          "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1]",
+                          SHELL_G3_RADIUS,
+                        )}
                       >
                         Pin
                       </button>
@@ -340,7 +404,10 @@ export function ConnectorDetailModal({
                           close();
                           onOpen();
                         }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted"
+                        className={cn(
+                          "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1]",
+                          SHELL_G3_RADIUS,
+                        )}
                       >
                         Open
                       </button>
@@ -354,7 +421,10 @@ export function ConnectorDetailModal({
                           close();
                           void onConnect();
                         }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-muted disabled:opacity-50"
+                        className={cn(
+                          "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] disabled:opacity-50",
+                          SHELL_G3_RADIUS,
+                        )}
                       >
                         {busy ? "Working…" : primaryLabel}
                       </button>
@@ -368,7 +438,10 @@ export function ConnectorDetailModal({
                           close();
                           setConfirmDisconnect(true);
                         }}
-                        className="flex w-full rounded-[10px] px-3 py-2 text-left text-[13px] text-destructive hover:bg-destructive/5 disabled:opacity-50"
+                        className={cn(
+                          "flex w-full px-3 py-2 text-left text-[13px] text-destructive hover:bg-destructive/5 disabled:opacity-50",
+                          SHELL_G3_RADIUS,
+                        )}
                       >
                         {canManageServerConnection
                           ? "Disconnect"
@@ -379,17 +452,19 @@ export function ConnectorDetailModal({
                 )}
               </Dropdown>
             ) : null}
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={onClose}
-              className={cn(
-                "inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground",
-                SHELL_G3_RADIUS,
-              )}
-            >
-              <X className="h-4 w-4" strokeWidth={1.6} />
-            </button>
+            {!dedicated ? (
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={onClose}
+                className={cn(
+                  "inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground",
+                  SHELL_G3_RADIUS,
+                )}
+              >
+                <X className="h-4 w-4" strokeWidth={1.6} />
+              </button>
+            ) : null}
           </div>
 
           <div className="flex items-center gap-3 pr-[4.75rem]">
@@ -425,7 +500,8 @@ export function ConnectorDetailModal({
 
         <div
           className={cn(
-            "relative mx-5 mt-5 flex min-h-[12rem] shrink-0 items-center overflow-hidden px-5 py-6 panel-wash-host",
+            "relative mt-5 flex min-h-[12rem] shrink-0 items-center overflow-hidden px-5 py-6 panel-wash-host",
+            dedicated ? "mx-0" : "mx-5",
             SHELL_G3_RADIUS,
           )}
         >
@@ -459,8 +535,17 @@ export function ConnectorDetailModal({
           </div>
         </div>
 
-        <div className="mt-5 flex min-h-0 flex-1 flex-col px-5 pb-2">
-          <div className="chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div
+          className={cn(
+            "mt-5 flex min-h-0 flex-col",
+            dedicated ? "px-0 pb-6" : "flex-1 px-5 pb-2",
+          )}
+        >
+          <div
+            className={cn(
+              !dedicated && "chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain",
+            )}
+          >
             <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
               Skills {skills.length || "—"}
             </p>
@@ -478,11 +563,6 @@ export function ConnectorDetailModal({
                 workspaceId={workspaceId}
                 connection={previewConnection}
                 disabled
-                disabledHint={
-                  canManageServerConnection
-                    ? "Connect this app to enable read and write skills for Cander."
-                    : "Install this connector to configure skills when support is available."
-                }
               />
             )}
             <p className="mb-3 mt-8 text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
@@ -495,7 +575,8 @@ export function ConnectorDetailModal({
         {showConnectFooter ? (
           <div
             className={cn(
-              "flex shrink-0 items-center justify-end gap-2 border-t border-border/70 px-5 py-4",
+              "flex shrink-0 items-center justify-end gap-2 border-t border-border/70 py-4",
+              dedicated ? "px-0" : "px-5",
             )}
           >
             <button
@@ -511,8 +592,16 @@ export function ConnectorDetailModal({
             </button>
           </div>
         ) : (
-          <div className="shrink-0 border-t border-border/70 px-5 py-4" aria-hidden />
+          <div
+            className={cn(
+              "shrink-0 border-t border-border/70 py-4",
+              dedicated ? "px-0" : "px-5",
+            )}
+            aria-hidden
+          />
         )}
+        </div>
+        </div>
       </div>
     </Modal>
   );

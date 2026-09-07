@@ -197,6 +197,9 @@ export function useSpaceIndex(opts?: {
         createdById: thread.createdBy,
         createdByName: creator ?? undefined,
         linkedProjectId: thread.projectId,
+        projectKind: thread.projectId
+          ? projects.find((project) => project.id === thread.projectId)?.kind
+          : undefined,
       });
     }
 
@@ -224,6 +227,7 @@ export function useSpaceIndex(opts?: {
         snippet: project.summary,
         createdById: project.createdBy,
         createdByName: creator ?? undefined,
+        projectKind: project.kind,
       });
     }
 

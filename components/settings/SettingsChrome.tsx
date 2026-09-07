@@ -2,8 +2,11 @@
 
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
-import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
-import { MOBILE_APP_BG, MOBILE_SETTINGS_SURFACE } from "@/lib/mobile-menu-styles";
+import { CONNECTOR_CONTROL_RADIUS, SHELL_G3_RADIUS } from "@/lib/shell-chrome";
+import {
+  MOBILE_APP_BG,
+  MOBILE_SETTINGS_SURFACE,
+} from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +25,7 @@ export function SettingsPage({
   return (
     <div
       className={cn(
-        "min-h-0 flex-1 overflow-y-auto",
+        "settings-screen-canvas min-h-full",
         mobile ? MOBILE_APP_BG : "bg-background",
       )}
     >
@@ -30,8 +33,8 @@ export function SettingsPage({
         className={cn(
           "mx-auto w-full",
           mobile
-            ? "px-4 pt-3 pb-10"
-            : "px-5 pt-7 pb-14 sm:px-8 lg:px-10 lg:pt-9",
+            ? "px-4 pt-0 pb-10"
+            : "px-5 pb-14 sm:px-8 lg:px-10",
           wide ? "max-w-6xl" : "max-w-[53.2rem]",
           className,
         )}
@@ -45,60 +48,116 @@ export function SettingsPage({
 export function SettingsHeader({
   kicker = "Settings",
   title,
+  titleContent,
   subtitle,
   actions,
+  breadcrumbs,
 }: {
   kicker?: string;
   title: string;
+  titleContent?: ReactNode;
   subtitle?: string;
   actions?: ReactNode;
+  breadcrumbs?: { label: string; onClick?: () => void }[];
 }) {
   const mobile = useMobileShell();
+  const trail = breadcrumbs ?? [];
 
   // Mobile chrome already shows the title — keep subtitle/actions only.
   if (mobile) {
-    if (!subtitle && !actions) return null;
+    const showTrail = trail.length > 1;
+    if (!subtitle && !actions && !showTrail) return null;
     return (
-      <header
-        className={cn(
-          "flex flex-wrap items-start gap-3",
-          subtitle ? "justify-between" : "justify-end",
-        )}
-      >
-        {subtitle ? (
-          <p className="min-w-0 max-w-xl text-[13.5px] leading-relaxed text-muted-foreground">
-            {subtitle}
-          </p>
-        ) : null}
-        {actions ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
-        ) : null}
-      </header>
+      <>
+        {showTrail ? <SettingsBreadcrumbs items={trail} /> : null}
+        <header
+          className={cn(
+            "flex flex-wrap items-start gap-3",
+            subtitle ? "justify-between" : "justify-end",
+          )}
+        >
+          {subtitle ? (
+            <p className="min-w-0 max-w-xl text-[13.5px] leading-relaxed text-muted-foreground">
+              {subtitle}
+            </p>
+          ) : null}
+          {actions ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+          ) : null}
+        </header>
+      </>
     );
   }
 
   return (
-    <header className="flex flex-wrap items-end justify-between gap-4">
-      <div className="min-w-0 max-w-2xl">
-        <p className="font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase">
-          {kicker}
-        </p>
-        <h2
-          id="settings-title"
-          className="heading-display mt-1.5 text-[1.75rem] tracking-[-0.03em] sm:text-[1.95rem]"
-        >
-          {title}
-        </h2>
-        {subtitle ? (
-          <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted-foreground">
-            {subtitle}
-          </p>
+    <>
+      <SettingsBreadcrumbs items={trail} />
+      <header className="mt-[50px] flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0 max-w-2xl">
+          <h2
+            id="settings-title"
+            className="heading-display text-[1.75rem] tracking-[-0.03em] sm:text-[1.95rem]"
+          >
+            {titleContent ?? title}
+          </h2>
+          {subtitle ? (
+            <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted-foreground">
+              {subtitle}
+            </p>
+          ) : null}
+        </div>
+        {actions ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
         ) : null}
-      </div>
-      {actions ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
-      ) : null}
-    </header>
+      </header>
+    </>
+  );
+}
+
+export function SettingsBreadcrumbs({
+  items,
+}: {
+  items: { label: string; onClick?: () => void }[];
+}) {
+  return (
+    <nav
+      aria-label="Breadcrumb"
+      aria-hidden={items.length === 0}
+      className="settings-breadcrumbs flex h-12 min-w-0 shrink-0 items-center justify-start gap-2 text-left text-[13px]"
+    >
+      {items.map((item, index) => (
+        <span key={`${item.label}-${index}`} className="flex min-w-0 items-center gap-3">
+          {index > 0 ? (
+            <span className="text-muted-foreground/45" aria-hidden="true">
+              /
+            </span>
+          ) : null}
+          {item.onClick ? (
+            <button
+              type="button"
+              onClick={item.onClick}
+              className={cn(
+                "settings-breadcrumb-link truncate px-2 py-1 text-muted-foreground transition-colors hover:text-foreground",
+                SHELL_G3_RADIUS,
+              )}
+            >
+              {item.label}
+            </button>
+          ) : (
+            <span
+              className={cn(
+                "truncate",
+                index === items.length - 1
+                  ? "font-medium text-foreground"
+                  : "text-muted-foreground",
+              )}
+            >
+              {item.label}
+            </span>
+          )}
+        </span>
+      ))}
+    </nav>
   );
 }
 
@@ -110,7 +169,7 @@ export function SettingsSection({
   children,
   className,
 }: {
-  title: string;
+  title?: string;
   description?: string;
   actions?: ReactNode;
   children: ReactNode;
@@ -119,65 +178,65 @@ export function SettingsSection({
   const mobile = useMobileShell();
   return (
     <section className={cn(mobile ? "mt-6" : "mt-8", className)}>
-      <div
-        className={cn(
-          "flex flex-wrap items-end justify-between gap-3",
-          mobile ? "mb-2 px-1" : "mb-3",
-        )}
-      >
-        <div className="min-w-0 max-w-2xl">
-          <h3
-            className={cn(
-              mobile
-                ? "text-[13px] font-medium tracking-[-0.01em] text-muted-foreground"
-                : "heading-section text-[1rem] tracking-[-0.02em]",
-            )}
-          >
-            {title}
-          </h3>
-          {description && !mobile ? (
-            <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-              {description}
-            </p>
+      {title || actions ? (
+        <div
+          className={cn(
+            "flex flex-wrap items-end justify-between gap-3",
+            mobile ? "mb-2 px-1" : "mb-3",
+          )}
+        >
+          {title ? (
+            <div className="min-w-0 max-w-2xl">
+              <h3
+                className={cn(
+                  mobile
+                    ? "text-[13px] font-medium tracking-[-0.01em] text-muted-foreground"
+                    : "heading-section text-[1rem] tracking-[-0.02em]",
+                )}
+              >
+                {title}
+              </h3>
+              {description && !mobile ? (
+                <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                  {description}
+                </p>
+              ) : null}
+            </div>
           ) : null}
+          {actions}
         </div>
-        {actions}
-      </div>
+      ) : null}
       {children}
     </section>
   );
 }
 
-/**
- * Cursor-like bordered card. Children are typically SettingsRow items
- * separated by Apple-style inset hairlines (start under the text column).
- */
+/** Glass card whose children are inset, rounded settings rows. */
 export function SettingsGroup({
   title,
   children,
   className,
+  glass = true,
   /** `icon` insets past a leading 16px icon + gap (settings hub rows). */
   dividerInset = "plain",
 }: {
   title?: string;
   children: ReactNode;
   className?: string;
+  glass?: boolean;
   dividerInset?: "plain" | "icon";
 }) {
-  const mobile = useMobileShell();
   return (
     <div
       className={cn(
         "overflow-hidden",
-        mobile
-          ? MOBILE_SETTINGS_SURFACE
-          : "border border-border bg-card",
+        glass ? "settings-glass-surface" : MOBILE_SETTINGS_SURFACE,
         SHELL_G3_RADIUS,
         className,
       )}
     >
       {title ? (
-        <div className="border-b border-border px-4 py-2.5">
+        <div className="settings-glass-heading px-4 py-2.5">
           <p className="text-[12.5px] font-medium tracking-[-0.01em] text-muted-foreground">
             {title}
           </p>
@@ -185,10 +244,11 @@ export function SettingsGroup({
       ) : null}
       <div
         className={cn(
-          "[&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:top-0 [&>*+*]:before:right-0 [&>*+*]:before:h-px [&>*+*]:before:bg-border",
-          dividerInset === "icon"
-            ? "[&>*+*]:before:left-[2.75rem]"
-            : "[&>*+*]:before:left-4",
+          glass ? "settings-glass-content" : "[&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:top-0 [&>*+*]:before:right-0 [&>*+*]:before:h-px [&>*+*]:before:bg-border",
+          !glass &&
+            (dividerInset === "icon"
+              ? "[&>*+*]:before:left-[2.75rem]"
+              : "[&>*+*]:before:left-4"),
         )}
       >
         {children}
@@ -233,7 +293,7 @@ export function SettingsRow({
         type="button"
         onClick={onClick}
         className={cn(
-          "flex w-full items-center gap-4 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-muted/50",
+          "settings-glass-row flex w-full items-center gap-4 px-4 py-3.5 text-left",
           className,
         )}
       >
@@ -243,7 +303,7 @@ export function SettingsRow({
   }
 
   return (
-    <div className={cn("flex w-full items-center gap-4 px-4 py-3.5", className)}>
+    <div className={cn("settings-glass-row flex w-full items-center gap-4 px-4 py-3.5", className)}>
       {body}
     </div>
   );
@@ -259,13 +319,10 @@ export function SettingsPanel({
   className?: string;
   padded?: boolean;
 }) {
-  const mobile = useMobileShell();
   return (
     <div
       className={cn(
-        mobile
-          ? MOBILE_SETTINGS_SURFACE
-          : "border border-border bg-card",
+        "settings-glass-surface",
         SHELL_G3_RADIUS,
         padded && "p-4 sm:p-5",
         className,
@@ -281,35 +338,28 @@ export function SettingsStatGrid({
 }: {
   items: { label: string; value: string }[];
 }) {
-  const mobile = useMobileShell();
   return (
     <div
       className={cn(
-        "overflow-hidden",
-        mobile
-          ? MOBILE_SETTINGS_SURFACE
-          : "border border-border bg-card",
+        "overflow-hidden settings-glass-surface",
         SHELL_G3_RADIUS,
-        "[&>*+*]:relative [&>*+*]:before:absolute [&>*+*]:before:top-0 [&>*+*]:before:right-0 [&>*+*]:before:left-4 [&>*+*]:before:h-px [&>*+*]:before:bg-border",
       )}
     >
-      {items.map((item) => (
-        <div
-          key={item.label}
-          className="flex items-baseline justify-between gap-4 px-4 py-3.5"
-        >
-          <p
-            className={cn(
-              "text-[13px] tracking-[-0.01em] text-muted-foreground",
-            )}
+      <div className="settings-glass-content">
+        {items.map((item) => (
+          <div
+            key={item.label}
+            className="settings-glass-row flex items-baseline justify-between gap-4 px-4 py-3.5"
           >
-            {item.label}
-          </p>
-          <p className="text-right text-[14.5px] font-medium tracking-[-0.02em]">
-            {item.value}
-          </p>
-        </div>
-      ))}
+            <p className="text-[13px] tracking-[-0.01em] text-muted-foreground">
+              {item.label}
+            </p>
+            <p className="text-right text-[14.5px] font-medium tracking-[-0.02em]">
+              {item.value}
+            </p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -342,12 +392,12 @@ export function SettingsField({
 
 /** Shared input chrome for settings forms. */
 export const settingsInputClass = cn(
-  "h-10 w-full border border-border bg-input px-3 text-[13.5px] outline-none focus:border-foreground/20",
+  "settings-glass-input h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25",
   SHELL_G3_RADIUS,
 );
 
 export const settingsSelectClass = cn(
-  "h-9 border border-border bg-input px-2.5 text-[13px] outline-none focus:border-foreground/20",
+  "settings-glass-input h-9 px-2.5 text-[13px] outline-none focus:border-foreground/25",
   SHELL_G3_RADIUS,
 );
 
@@ -392,15 +442,17 @@ export function SettingsSwitch({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative inline-flex h-[31px] w-[51px] shrink-0 items-center rounded-full transition-colors duration-200",
-        checked ? "bg-[#34C759]" : "bg-muted",
+        "relative inline-flex h-[29px] w-[51px] shrink-0 items-center transition-colors duration-200",
+        CONNECTOR_CONTROL_RADIUS,
+        checked ? "bg-[#0b4fc4]" : "bg-muted",
         disabled && "opacity-40",
       )}
     >
       <span
         className={cn(
-          "inline-block h-[27px] w-[27px] rounded-full bg-white shadow-sm transition-transform duration-200",
-          checked ? "translate-x-[22px]" : "translate-x-[2px]",
+          "inline-block h-[23px] w-[23px] bg-white shadow-sm transition-transform duration-200",
+          CONNECTOR_CONTROL_RADIUS,
+          checked ? "translate-x-[25px]" : "translate-x-[3px]",
         )}
       />
     </button>
@@ -466,7 +518,7 @@ export function SettingsLinkRow({
         type="button"
         onClick={onClick}
         className={cn(
-          "flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-muted/50 lg:gap-4",
+          "settings-glass-row flex w-full items-center gap-3 px-4 py-3.5 text-left lg:gap-4",
           className,
         )}
       >
@@ -476,7 +528,7 @@ export function SettingsLinkRow({
   }
 
   return (
-    <div className={cn("flex w-full items-center gap-3 px-4 py-3.5 lg:gap-4", className)}>
+    <div className={cn("settings-glass-row flex w-full items-center gap-3 px-4 py-3.5 lg:gap-4", className)}>
       {body}
     </div>
   );

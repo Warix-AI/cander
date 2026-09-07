@@ -62,14 +62,17 @@ export function ConnectorInfoSection({
     <div className={cn(className)}>
       <div
         className={cn(
-          "divide-y divide-border/70 border border-border/70 dark:divide-white/15 dark:border-white/15",
+          "space-y-1 overflow-hidden bg-white/45 p-2.5 shadow-[0_12px_32px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-white/[0.06] dark:shadow-[0_12px_32px_rgba(0,0,0,0.16)]",
           SHELL_G3_RADIUS,
         )}
       >
         {rows.map((row) => (
           <div
             key={row.label}
-            className="flex items-start justify-between gap-4 px-3 py-2.5"
+            className={cn(
+              "flex items-start justify-between gap-4 px-3 py-2.5 transition-colors hover:bg-black/[0.06] dark:hover:bg-white/[0.08]",
+              SHELL_G3_RADIUS,
+            )}
           >
             <span className="shrink-0 text-[13px] text-muted-foreground">
               {row.label}

@@ -44,6 +44,22 @@ export async function POST(request: Request) {
       .eq("profile_id", user.id)
       .maybeSingle();
 
+    if (orgMember?.kind === "org" && orgMember.role === "Owner" && orgMember.org_id) {
+      const { data: orgMembers, error: orgMembersError } = await admin
+        .from("org_members")
+        .select("profile_id")
+        .eq("org_id", orgMember.org_id);
+      if (orgMembersError) {
+        return NextResponse.json({ error: orgMembersError.message }, { status: 500 });
+      }
+      if ((orgMembers ?? []).some((member) => member.profile_id && member.profile_id !== user.id)) {
+        return NextResponse.json(
+          { error: "Remove all other organization users before deleting your account." },
+          { status: 403 },
+        );
+      }
+    }
+
     const { data: profile } = await admin
       .from("profiles")
       .select(

@@ -1150,7 +1150,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ? projectId
             : null;
 
-      if (!focusProjectId && !sameSpace) {
+      // Canvas is the project directory. Switching into it from another
+      // surface should not reopen the last project's preview tab.
+      if (!focusProjectId && !sameSpace && dest !== "studio") {
         const remembered = readSpaceProjectFocus({
           profileId: actor.id,
           workspaceId,
@@ -5068,6 +5070,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDrafting(!hasMessages);
     setPanelIntent("execute");
     setPanelMode("split");
+    // Keep connector details in the existing panel layout.
     // Choice-panel compact ratio must not stick after leaving New Chat.
     setPanelRatioState((ratio) =>
       ratio < PANEL_RATIO_OPEN_FLOOR ? PANEL_RATIO_OPEN_FLOOR : ratio,

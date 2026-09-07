@@ -142,7 +142,7 @@ export function OrgTeammateInvitePanel({
           {rows.map((row, index) => (
             <div
               key={index}
-              className="space-y-2 rounded-[10px] border border-border bg-background/60 p-3"
+              className="settings-glass-surface space-y-2 p-3"
             >
               <div className="grid grid-cols-2 gap-2">
                 <input

@@ -12,6 +12,7 @@ export function Modal({
   className,
   children,
   lockScroll = true,
+  embedded = false,
   edgeToEdge = false,
   backdropClassName = "bg-black/72",
 }: {
@@ -21,6 +22,8 @@ export function Modal({
   className?: string;
   children: ReactNode;
   lockScroll?: boolean;
+  /** Render as part of the current workspace surface instead of an overlay. */
+  embedded?: boolean;
   edgeToEdge?: boolean;
   backdropClassName?: string;
 }) {
@@ -46,6 +49,21 @@ export function Modal({
   }, [open, onClose, lockScroll]);
 
   if (!open) return null;
+
+  if (embedded) {
+    return (
+      <div
+        role="region"
+        aria-labelledby={labelledBy}
+        className={cn(
+          "@container relative flex min-h-0 flex-1 flex-col overflow-hidden text-foreground",
+          className,
+        )}
+      >
+        {children}
+      </div>
+    );
+  }
 
   return (
     <>
