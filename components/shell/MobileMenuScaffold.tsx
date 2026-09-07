@@ -32,11 +32,14 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
     <div
       className={cn(
         "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-        "bg-transparent",
+        MOBILE_MENU_BG,
       )}
     >
       {/* Menu canvas fills the rounded-corner gaps behind the peek strip. */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-transparent" />
+      <div
+        aria-hidden
+        className={cn("pointer-events-none absolute inset-0", MOBILE_MENU_BG)}
+      />
       <div
         className={cn(
           "relative z-20 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden will-change-transform",

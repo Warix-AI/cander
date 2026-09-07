@@ -4,7 +4,7 @@ import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 export const MOBILE_MENU_BG = "mobile-menu-canvas";
 
 /** Main app surfaces on mobile — pure white in light, dark gray in dark. */
-export const MOBILE_APP_BG = "bg-transparent mobile-app-surface";
+export const MOBILE_APP_BG = "bg-white mobile-app-surface";
 
 /** Space dashboards — off-white in light; menu-matched canvas in dark. */
 export const SPACE_CANVAS_BG = "bg-space-canvas";

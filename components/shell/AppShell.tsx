@@ -47,7 +47,7 @@ import {
 import { setShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { useMobileSwipeGestures } from "@/lib/use-mobile-swipe";
-import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
+import { MOBILE_APP_BG, MOBILE_MENU_BG } from "@/lib/mobile-menu-styles";
 import { syncNativeShellTheme } from "@/lib/native-shell-theme";
 import { cn } from "@/lib/utils";
 import {
@@ -267,7 +267,7 @@ function AuthenticatedShell() {
           onTouchEnd={swipe.onTouchEnd}
           className={cn(
             "relative flex h-svh min-h-0 flex-1 overflow-hidden text-foreground",
-            mobile ? "bg-transparent" : "bg-background",
+            mobile ? MOBILE_MENU_BG : "bg-background",
             // Bottom tab bar removed — no reserved nav inset on mobile.
           )}
         >
