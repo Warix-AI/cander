@@ -824,8 +824,9 @@ export function Composer({
     suppressAutoFocusRef.current = false;
   }, [thread?.id]);
 
-  // Sticky keyboard on mobile new chat until the first send. Menu/panel leave
-  // chat (`autoFocus` false); returning to chat re-opens the keyboard.
+  // Sticky keyboard on mobile new chat until the first send.
+  // Focus once when chat owns the screen — never fight blur/hide (that flicker
+  // glitches the menu swipe). Hold focus by canceling outside taps instead.
   useEffect(() => {
     if (!autoFocus || !mobile) return;
     if (suppressAutoFocusRef.current) return;
@@ -835,31 +836,43 @@ export function Composer({
 
     const focusComposer = () => {
       if (suppressAutoFocusRef.current) return;
-      if (!autoFocus) return;
       const el =
         textRef.current ??
         (document.querySelector(
           ".composer-shell [role='textbox'][contenteditable='true'], .composer-shell textarea",
         ) as HTMLElement | null);
-      el?.focus({ preventScroll: true });
+      try {
+        el?.focus({ preventScroll: true });
+        if (el) textRef.current = el;
+      } catch {
+        /* ignore */
+      }
     };
 
-    // Let the mobile screen finish its push transition before focusing.
-    const openId = window.setTimeout(focusComposer, nativeShell ? 260 : 40);
+    // Instant reopen when returning from menu/panel.
+    const openId = window.setTimeout(focusComposer, 0);
 
-    const onHide = () => {
+    const holdKeyboard = (event: TouchEvent) => {
       if (suppressAutoFocusRef.current) return;
-      window.setTimeout(focusComposer, 16);
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      // Composer (+ attach/send) and header chrome must stay interactive.
+      if (wrapRef.current?.contains(target)) return;
+      if (target.closest("header, [data-allow-keyboard-dismiss]")) return;
+      // Keep the soft keyboard up — don't let the tap steal focus.
+      event.preventDefault();
     };
-    window.addEventListener("keyboardWillHide", onHide);
-    window.addEventListener("keyboardDidHide", onHide);
+
+    document.addEventListener("touchstart", holdKeyboard, {
+      capture: true,
+      passive: false,
+    });
 
     return () => {
       window.clearTimeout(openId);
-      window.removeEventListener("keyboardWillHide", onHide);
-      window.removeEventListener("keyboardDidHide", onHide);
+      document.removeEventListener("touchstart", holdKeyboard, true);
     };
-  }, [autoFocus, mobile, mobileSurface, nativeShell, overlay, view, thread?.id]);
+  }, [autoFocus, mobile, mobileSurface, overlay, view, thread?.id]);
 
   useEffect(() => {
     if (!menu) return;
@@ -933,21 +946,6 @@ export function Composer({
     } catch {
       /* ignore */
     }
-  };
-
-  /** New-chat sticky keyboard: refuse blur until first send / leave chat. */
-  const stickNewChatKeyboard = () => {
-    if (!autoFocus || !mobile || suppressAutoFocusRef.current) return;
-    window.setTimeout(() => {
-      if (
-        !autoFocus ||
-        suppressAutoFocusRef.current ||
-        mobileSurface !== "chat"
-      ) {
-        return;
-      }
-      keepComposerKeyboard();
-    }, 16);
   };
 
   const browserMode = view === "browser";
@@ -1709,7 +1707,6 @@ export function Composer({
                     suppressAutoFocusRef.current = false;
                     onFocus?.();
                   }}
-                  onBlur={stickNewChatKeyboard}
                   onChange={(event) => {
                     setValue(event.target.value);
                     syncComposerFieldHeight(
@@ -1913,7 +1910,6 @@ export function Composer({
                     suppressAutoFocusRef.current = false;
                     onFocus?.();
                   }}
-                  onBlur={stickNewChatKeyboard}
                   onChange={(event) => {
                     if (dictatingActive) return;
                     const next = event.target.value;
@@ -2011,7 +2007,6 @@ export function Composer({
                     suppressAutoFocusRef.current = false;
                     onFocus?.();
                   }}
-                  onBlur={stickNewChatKeyboard}
                   onCursorChange={(cursor) => {
                     textCursorRef.current = cursor;
                   }}

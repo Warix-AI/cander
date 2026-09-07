@@ -12,10 +12,9 @@ const SWIPE_MIN = 56;
 function isChromeTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false;
   // Inputs always block; when the menu is open we still want edge swipes over rows.
-  if (target.closest("input, textarea, select, [contenteditable='true']")) {
-    return true;
-  }
   if (target.closest("[data-allow-swipe]")) return false;
+  // Composer text is swipeable so LTR can open the menu over the keyboard.
+  // Header / buttons still block so taps don't start a swipe.
   return Boolean(
     target.closest(
       "header, button, a, [role='tab'], [role='tablist'], [data-no-swipe]",
@@ -100,6 +99,7 @@ export function useMobileSwipeGestures() {
       const withPanel = panelAvailable;
 
       const goSurface = (next: "menu" | "chat" | "panel") => {
+        // Dismiss before the surface slide so the keyboard never rides along.
         if (next !== "chat") dismissNativeKeyboard();
         setMobileSurface(next);
       };

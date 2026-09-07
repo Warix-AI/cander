@@ -45,7 +45,6 @@ import {
   mobileChromeButtonClass,
 } from "@/lib/mobile-menu-styles";
 import type { MobileSurface, SpaceId } from "@/lib/types";
-import { isNewChatScreen } from "@/lib/right-panel";
 import { cn } from "@/lib/utils";
 
 type MediaProjectActions = {
@@ -70,9 +69,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
     connectorId,
     jobId,
     skillId,
-    drafting,
-    thread,
-    threadId,
     entitlements,
     mobileSurface,
     mobileContentSurface,
@@ -232,18 +228,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
           (!entityOpen || inConnector))),
   );
   const connectorBack = showPanelActions ? panelActions?.connector?.back : undefined;
-  const onNewChatScreen =
-    !inChromeSub &&
-    !onMenuMain &&
-    !inConnector &&
-    isNewChatScreen({
-      view,
-      threadId,
-      thread,
-      spaceId,
-      projectId,
-      drafting,
-    });
 
   const startNewChat = () => {
     if (spaceId && isChatSpace(spaceId)) {
@@ -355,6 +339,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
       setMobileSurface(mobileContentSurface);
       return;
     }
+    dismissNativeKeyboard();
     setMobileSurface("menu");
   };
 
@@ -365,7 +350,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
       setMobileSurface("panel");
       return;
     }
-    dismissNativeKeyboard();
     if (projectId) {
       setMobileSurface("chat");
       return;
@@ -550,7 +534,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
                 config={panelActions}
                 onCompose={handlePanelCompose}
               />
-            ) : hideNewChat || onNewChatScreen ? (
+            ) : hideNewChat ? (
               <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
             ) : (
               <button

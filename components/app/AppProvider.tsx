@@ -635,14 +635,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (next === "chat" || next === "panel") {
           mobileContentSurfaceRef.current = next;
         }
-        if (next !== prev && next !== "chat") {
-          dismissNativeKeyboard();
-        }
         return next;
       });
     },
     [],
   );
+
+  // Drop the keyboard the moment we leave chat — before/with the slide so it
+  // never stays up over the panel or fights the menu animation.
+  useEffect(() => {
+    if (mobileSurface === "chat") return;
+    dismissNativeKeyboard();
+  }, [mobileSurface]);
   const mobileContentSurface: "chat" | "panel" =
     mobileSurface === "menu"
       ? mobileContentSurfaceRef.current
