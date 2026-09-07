@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
+import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
 import { useApp } from "@/components/app/AppProvider";
 import {
   WorkspaceEmptyState,
@@ -450,6 +451,7 @@ export function DriveConnectorView({
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [query, setQuery] = useState(() => restored?.query ?? "");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [typeFilter, setTypeFilter] = useState<DriveTypeFilter>(
     () => restored?.typeFilter ?? "all",
   );
@@ -870,6 +872,7 @@ export function DriveConnectorView({
             onSearch: () => {
               void loadFiles({ force: true, searchQuery: query });
             },
+            onOpenMobileSearch: () => setMobileSearchOpen(true),
             typeFilter,
             sortMode,
             onTypeFilter: (value) => setTypeFilter(value as DriveTypeFilter),
@@ -910,7 +913,7 @@ export function DriveConnectorView({
   return (
     <WorkspacePanelFrame status={status} error={error}>
       {page === "create" ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+        <div className="mobile-header-content flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-4">
           <div className="flex gap-2">
             <button
               type="button"
@@ -979,7 +982,7 @@ export function DriveConnectorView({
           ) : null}
 
           {preview?.previewKind === "text" && preview.textContent ? (
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
               <pre className="whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed text-foreground/90">
                 {preview.textContent}
               </pre>
@@ -1092,11 +1095,21 @@ export function DriveConnectorView({
         <div className="flex min-h-0 flex-1 flex-col">
           <div
             ref={listRef}
-            className="min-h-0 flex-1 overflow-y-auto"
+            className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain"
             onScroll={(event) => {
               listScrollTopRef.current = event.currentTarget.scrollTop;
             }}
           >
+            <ConnectorMobileSearchBar
+              open={mobileSearchOpen}
+              placeholder="Search Drive"
+              value={query}
+              onChange={setQuery}
+              onSubmit={() => {
+                void loadFiles({ force: true, searchQuery: query });
+              }}
+              onDismiss={() => setMobileSearchOpen(false)}
+            />
             {!visibleFiles.length ? (
               <WorkspaceEmptyState
                 title={syncing ? "Loading Drive…" : "Nothing here yet"}

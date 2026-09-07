@@ -6,6 +6,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
 import {
   WorkspacePanelFrame,
   type WorkspaceToolbarState,
@@ -223,6 +224,8 @@ export function CalendarConnectorView({
   const [summary, setSummary] = useState("");
   const [startLocal, setStartLocal] = useState(() => defaultCreateStart(new Date()));
   const [attendees, setAttendees] = useState("");
+  const [query, setQuery] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   const loadEvents = useCallback(
     async (opts?: { force?: boolean }) => {
@@ -309,6 +312,22 @@ export function CalendarConnectorView({
     return eventsByDay.get(dayKey(selectedDay)) ?? [];
   }, [eventsByDay, selectedDay]);
 
+  const searchMatches = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return [];
+    return [...events]
+      .filter((event) => {
+        const hay = [event.summary, event.when, event.location]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(needle);
+      })
+      .sort((a, b) =>
+        a.summary.localeCompare(b.summary, undefined, { sensitivity: "base" }),
+      );
+  }, [events, query]);
+
   const openCreate = useCallback((day?: Date | null) => {
     const target = day ?? selectedDay ?? new Date();
     setSelectedDay(target);
@@ -387,6 +406,19 @@ export function CalendarConnectorView({
               viewLabel: "Month",
             }
           : null,
+      driveChrome:
+        page === "month"
+          ? {
+              query,
+              onQueryChange: setQuery,
+              onSearch: () => undefined,
+              onOpenMobileSearch: () => setMobileSearchOpen(true),
+              typeFilter: "all",
+              sortMode: "name-asc",
+              onTypeFilter: () => undefined,
+              onSortMode: () => undefined,
+            }
+          : null,
     });
   }, [
     page,
@@ -398,6 +430,7 @@ export function CalendarConnectorView({
     createEvent,
     openCreate,
     goToday,
+    query,
   ]);
 
   const cells = monthGrid(month);
@@ -505,8 +538,57 @@ export function CalendarConnectorView({
       ) : null}
 
       {/* Month first on phones; the compact calendar and selected-day agenda stack beneath it. */}
-      <div className="@container relative flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
-        <div className="flex h-[46svh] min-h-[20rem] min-w-0 shrink-0 flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1">
+      <div className="@container relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain mobile-header-content lg:flex-row lg:overflow-hidden lg:pt-0">
+        <ConnectorMobileSearchBar
+          open={mobileSearchOpen && page === "month"}
+          placeholder="Search Calendar"
+          value={query}
+          onChange={setQuery}
+          onSubmit={() => undefined}
+          onDismiss={() => setMobileSearchOpen(false)}
+          className="lg:hidden"
+        />
+        {mobileSearchOpen && page === "month" && query.trim() ? (
+          <div className="flex min-h-0 flex-1 flex-col lg:hidden">
+            {!searchMatches.length ? (
+              <p className="px-4 py-10 text-center text-[13px] text-muted-foreground">
+                No events match this search.
+              </p>
+            ) : (
+              <ul className="divide-y divide-black/5 dark:divide-white/10">
+                {searchMatches.map((event) => (
+                  <li key={event.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelected(event);
+                        setPage("detail");
+                        setMobileSearchOpen(false);
+                      }}
+                      className="flex w-full flex-col gap-0.5 px-4 py-3 text-left hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"
+                    >
+                      <span className="truncate text-[14px] font-medium">
+                        {event.summary}
+                      </span>
+                      <span className="truncate text-[12px] text-muted-foreground">
+                        {event.when}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
+        <div
+          className={cn(
+            "flex h-[46svh] min-h-[20rem] min-w-0 shrink-0 flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1",
+            mobileSearchOpen &&
+              page === "month" &&
+              query.trim() &&
+              "hidden lg:flex",
+          )}
+        >
           <div className="grid shrink-0 grid-cols-7 border-b border-black/[0.06] dark:border-white/10">
             {WEEKDAYS.map((label) => (
               <div

@@ -152,12 +152,15 @@ function Root() {
     };
   }, []);
 
-  // Phone browser (non-Capacitor): same no-zoom / keyboard lock as the app.
-  // Capacitor already locks via useCapacitorMobileShell — don't double-bind.
+  // Narrow layout (phone browser, responsive desktop, Electron at mobile width):
+  // enable mobile glass CSS via `cander-narrow`. Capacitor uses `cander-mobile`
+  // from useCapacitorMobileShell — don't double-bind viewport lock there.
+  // Do NOT skip this for Electron: without `cander-narrow`, glass header chrome
+  // (segment pills, circular menu buttons) never paints on localhost.
   useEffect(() => {
-    if (!mobile || isDesktopShell()) return;
+    if (!mobile) return;
     document.documentElement.classList.add("cander-narrow");
-    if (isMobileShell()) {
+    if (isMobileShell() || isDesktopShell()) {
       return () => {
         document.documentElement.classList.remove("cander-narrow");
       };

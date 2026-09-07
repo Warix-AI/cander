@@ -12,6 +12,7 @@ import {
 } from "react";
 import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
+import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
 import {
   StripeEntityAvatar,
   emailFromStripeRaw,
@@ -242,6 +243,7 @@ export function StripeConnectorView({
       initialSection?.data.query ??
       "",
   );
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [items, setItems] = useState<AppListItem[]>(
     () => initialSection?.data.items ?? [],
   );
@@ -785,6 +787,7 @@ export function StripeConnectorView({
             onSearch: () => {
               void refresh({ force: true, searchQuery: query });
             },
+            onOpenMobileSearch: () => setMobileSearchOpen(true),
             typeFilter: "all",
             sortMode: "modified-desc",
             onTypeFilter: () => undefined,
@@ -909,7 +912,7 @@ export function StripeConnectorView({
           </MobileFloatingNav>
 
           {tab === "overview" ? (
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
               <h2 className="text-[15px] font-medium tracking-tight">
                 Account balance
               </h2>
@@ -1012,7 +1015,17 @@ export function StripeConnectorView({
                   ))}
                 </div>
               ) : null}
-              <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                <ConnectorMobileSearchBar
+                  open={mobileSearchOpen}
+                  placeholder="Search Stripe"
+                  value={query}
+                  onChange={setQuery}
+                  onSubmit={() => {
+                    void refresh({ force: true, searchQuery: query });
+                  }}
+                  onDismiss={() => setMobileSearchOpen(false)}
+                />
                 {!items.length ? (
                   <WorkspaceEmptyState
                     title={
@@ -1067,7 +1080,7 @@ export function StripeConnectorView({
               Loading…
             </div>
           ) : null}
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
             <div className="mb-4 flex items-start gap-3">
               {tab === "customers" || tab === "products" ? (
                 <StripeEntityAvatar
@@ -1188,7 +1201,7 @@ export function StripeConnectorView({
       ) : null}
 
       {page === "create" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
           <h2 className="text-[15px] font-medium tracking-tight">
             New customer
           </h2>

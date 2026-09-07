@@ -205,8 +205,6 @@ export function MobileAppChrome({ className }: { className?: string }) {
     !settingsWorkspaceId &&
     (entitlements.canCreatePersonalWorkspace ||
       entitlements.canCreateBusinessWorkspace);
-  const hideNewChat =
-    onMenuMain || inChromeSub || showProjectTools || showCreateWorkspace;
 
   const panelActionsCtx = useMobilePanelActionsState();
   const panelActions = panelActionsCtx?.actions;
@@ -227,13 +225,17 @@ export function MobileAppChrome({ className }: { className?: string }) {
       !inChromeSub &&
       !showProjectTools &&
       !showCreateWorkspace &&
-      ((inConnector && surface === "panel") || view === "recents" ||
-        (view === "space" && mobileSurface === "panel" && (!entityOpen || inConnector))),
+      (inConnector ||
+        view === "recents" ||
+        (view === "space" &&
+          mobileSurface === "panel" &&
+          (!entityOpen || inConnector))),
   );
   const connectorBack = showPanelActions ? panelActions?.connector?.back : undefined;
   const onNewChatScreen =
     !inChromeSub &&
     !onMenuMain &&
+    !inConnector &&
     isNewChatScreen({
       view,
       threadId,
@@ -271,6 +273,13 @@ export function MobileAppChrome({ className }: { className?: string }) {
     startPanelNewChat();
   };
 
+  // Pinned connectors keep menu · Chat|App · ⋯ — no New-chat pencil on chat.
+  const hideNewChat =
+    onMenuMain ||
+    inChromeSub ||
+    showProjectTools ||
+    showCreateWorkspace ||
+    inConnector;
   const preview = previewAddress(project?.name);
   const address = liveUrl ?? previewUrlForProject(projectId ?? "project") ?? preview.url;
   const published = Boolean(

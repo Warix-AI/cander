@@ -200,7 +200,7 @@ export function PinSectionFolder({
         >
           <div
             ref={innerRef}
-            className="relative flex flex-col pt-1"
+            className="relative flex flex-col"
             style={{
               paddingLeft: CHILD_PAD_LEFT,
               opacity: animOpen ? 1 : 0,

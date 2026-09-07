@@ -90,7 +90,7 @@ export function ChatColumn() {
     view,
     projectId,
     overlay,
-    mobileContentSurface,
+    mobileSurface,
   } =
     useApp();
   const api = useSpaceApi();
@@ -102,15 +102,15 @@ export function ChatColumn() {
       (item) => item.role === "user" || item.role === "assistant",
     ),
   );
-  // Empty new chat → autofocus composer (Capacitor). Reading an existing
+  // Empty new chat → autofocus composer on mobile. Reading an existing
   // thread or any overlay/browser surface must not steal focus.
   const autofocusComposer =
     !browserMode &&
     !hasChatTurns &&
     !overlay &&
-    // The chat pane remains mounted alongside pinned panels on iOS. Never let
-    // its empty composer raise the keyboard while a panel owns the screen.
-    (!mobile || mobileContentSurface === "chat");
+    // Chat stays mounted under menu/panel — only raise the keyboard when chat
+    // actually owns the screen (not menu peek or a pinned panel).
+    (!mobile || mobileSurface === "chat");
   const showSpaceNewPrompt =
     drafting && Boolean(spaceId) && !hasChatTurns && !browserMode;
   const showLanding =

@@ -640,12 +640,44 @@ html.dark {
 }
 
 .dark .mobile-menu-canvas {
-  background-color: var(--mobile-menu-canvas);
+  background-color: #000;
 }
 
 /* The shadow follows the rounded shifted screen itself, preventing a straight seam. */
 .mobile-menu-peek {
   filter: drop-shadow(-8px 0 18px oklch(0 0 0 / 0.1));
+}
+
+/* Dark: hairline only — both surfaces are near-black, so keep it short and faint. */
+html.dark .mobile-menu-peek,
+.dark .mobile-menu-peek {
+  filter: drop-shadow(-0.5px 0 0 oklch(1 0 0 / 0.1));
+}
+
+/*
+ * Menu open: slid-over context peeks as very dark gray against the black menu.
+ * Menu closed: surfaces return to true black (rules below).
+ */
+html.dark.cander-mobile .mobile-menu-peek,
+html.dark.cander-narrow .mobile-menu-peek {
+  background-color: oklch(0.2 0 0) !important;
+  transition: background-color 500ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+html.dark.cander-mobile .mobile-menu-peek .mobile-app-surface,
+html.dark.cander-narrow .mobile-menu-peek .mobile-app-surface,
+html.dark.cander-mobile .mobile-menu-peek .bg-space-canvas,
+html.dark.cander-narrow .mobile-menu-peek .bg-space-canvas,
+html.dark.cander-mobile .mobile-menu-peek .bg-neutral-950,
+html.dark.cander-narrow .mobile-menu-peek .bg-neutral-950,
+html.dark.cander-mobile .mobile-menu-peek .bg-black,
+html.dark.cander-narrow .mobile-menu-peek .bg-black,
+html.dark.cander-mobile .mobile-menu-peek .bg-white,
+html.dark.cander-narrow .mobile-menu-peek .bg-white,
+html.dark.cander-mobile .mobile-menu-peek .bg-background,
+html.dark.cander-narrow .mobile-menu-peek .bg-background {
+  background-color: oklch(0.2 0 0) !important;
+  transition: background-color 500ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 html.cander-mobile .mobile-header-content,

@@ -32,6 +32,8 @@ export type WorkspaceToolbarState = {
     query: string;
     onQueryChange: (value: string) => void;
     onSearch: () => void;
+    /** Mobile ⋯ sheet — open the in-page search bar (not an input in the sheet). */
+    onOpenMobileSearch?: () => void;
     typeFilter: string;
     sortMode: string;
     onTypeFilter: (value: string) => void;
@@ -49,19 +51,26 @@ export function WorkspacePanelFrame({
   error?: string | null;
 }) {
   return (
-    <div className="mobile-header-content flex h-full min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-white dark:bg-space-canvas">
+    <div
+      className={cn(
+        "flex h-full min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden",
+        // Desktop keeps a solid canvas. Mobile stays transparent so lists can
+        // scroll under the glass header (Gmail pattern).
+        "bg-white dark:bg-space-canvas max-lg:bg-transparent max-lg:dark:bg-transparent",
+      )}
+    >
       <div className="relative flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden">
-      {error ? (
-        <p className="shrink-0 border-b border-black/5 px-3 py-2 text-[12px] text-destructive dark:border-white/10">
-          {error}
-        </p>
-      ) : null}
-      {status ? (
-        <p className="shrink-0 border-b border-black/5 px-3 py-1.5 text-[11px] text-muted-foreground dark:border-white/10">
-          {status}
-        </p>
-      ) : null}
-      {children}
+        {error ? (
+          <p className="shrink-0 border-b border-black/5 px-3 py-2 text-[12px] text-destructive dark:border-white/10">
+            {error}
+          </p>
+        ) : null}
+        {status ? (
+          <p className="shrink-0 border-b border-black/5 px-3 py-1.5 text-[11px] text-muted-foreground dark:border-white/10">
+            {status}
+          </p>
+        ) : null}
+        {children}
       </div>
     </div>
   );

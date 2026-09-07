@@ -231,6 +231,9 @@ export function ProjectBrowserPanel({
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
   const [mobileSheet, setMobileSheet] = useState<"add" | "rename" | null>(null);
+  const [closeConfirmTabId, setCloseConfirmTabId] = useState<string | null>(
+    null,
+  );
   const [addQuery, setAddQuery] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -606,6 +609,31 @@ export function ProjectBrowserPanel({
 
     write({ tabs, activeTabId });
   };
+
+  const requestCloseTab = (id: string) => {
+    const tab = session.tabs.find((item) => item.id === id);
+    if (mobile && tab?.kind === "studio-image") {
+      setCloseConfirmTabId(id);
+      return;
+    }
+    closeTab(id);
+  };
+
+  const closeConfirmTab =
+    closeConfirmTabId == null
+      ? null
+      : (session.tabs.find((item) => item.id === closeConfirmTabId) ?? null);
+  const closeConfirmLabel = (() => {
+    if (!closeConfirmTab || closeConfirmTab.kind !== "studio-image") {
+      return closeConfirmTab?.title || "Image";
+    }
+    const studioIndex = session.tabs
+      .filter((item) => item.kind === "studio-image")
+      .findIndex((item) => item.id === closeConfirmTab.id);
+    return studioIndex >= 0
+      ? studioImageTabLabel(studioIndex)
+      : closeConfirmTab.title || "Image";
+  })();
 
   const addAgentTab = () => {
     if (!projectId || !key) return;
@@ -2170,11 +2198,56 @@ export function ProjectBrowserPanel({
           projects={allProjects}
           projectTitle={projectTitle}
           onSelect={selectTab}
-          onClose={closeTab}
+          onClose={requestCloseTab}
           onAdd={openAddSheet}
           generatingTabIds={tabGeneratingIds}
         />
       ) : null}
+
+      <MobileBottomSheet
+        open={mobile && Boolean(closeConfirmTab)}
+        onClose={() => setCloseConfirmTabId(null)}
+        mode="info"
+      >
+        <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
+          <p className="px-1 text-[17px] font-medium tracking-[-0.02em]">
+            Delete image?
+          </p>
+          <p className="mt-1 px-1 text-[13px] text-muted-foreground">
+            This removes the tab from the project. You can’t undo this.
+          </p>
+          <div className="mt-4 flex items-center gap-3 rounded-[14px] bg-muted/50 px-3 py-3 dark:bg-white/[0.06]">
+            {closeConfirmTab ? (
+              <TabGlyph tab={closeConfirmTab} className="h-8 w-8 rounded-[8px]" />
+            ) : (
+              <Image className="h-8 w-8 text-muted-foreground" strokeWidth={1.6} />
+            )}
+            <span className="min-w-0 flex-1 truncate text-[15px] font-medium tracking-[-0.01em]">
+              {closeConfirmLabel}
+            </span>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setCloseConfirmTabId(null)}
+              className="inline-flex h-11 items-center justify-center rounded-full bg-muted text-[15px] font-medium text-foreground transition-colors hover:bg-muted/80"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const id = closeConfirmTabId;
+                setCloseConfirmTabId(null);
+                if (id) closeTab(id);
+              }}
+              className="inline-flex h-11 items-center justify-center rounded-full bg-red-600 text-[15px] font-medium text-white transition-colors hover:bg-red-600/90"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </MobileBottomSheet>
 
       <MobileBottomSheet
         open={mobile && mobileSheet === "rename"}
@@ -4034,13 +4107,20 @@ function StudioMediaSurface({
     !isEditing &&
     !isUploading &&
     !(kind === "studio-image" && studioCleared);
+  const showImageToolbar =
+    kind === "studio-image" && (hasMedia || isGenerating || isEditing);
+  // Mobile: keep toolbar in document flow under the chrome. Absolute + safe-area
+  // offsets drift on iOS and paint the bar over the artboard.
+  const mobileFlowToolbar = mobile && showImageToolbar;
 
   return (
     <div
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden",
         mobile ? "bg-white dark:bg-black" : BROWSER_CHROME_BG,
-        mobile && "-mt-[calc(env(safe-area-inset-top,0px)+3.375rem)]",
+        mobile &&
+          !mobileFlowToolbar &&
+          "-mt-[calc(env(safe-area-inset-top,0px)+3.375rem)]",
       )}
     >
       <input
@@ -4055,15 +4135,22 @@ function StudioMediaSurface({
           startUpload(file);
         }}
       />
-      {kind === "studio-image" && (hasMedia || isGenerating || isEditing) ? (
-        <StudioImageToolbar
-          busy={canvasBusy}
-          onRemoveBackground={() => void runEdit("remove-bg")}
-          onResize={(preset) => void runEdit("resize", { resizePreset: preset })}
-          onSuggestEdit={(prompt) =>
-            void runEdit("suggest-edit", { prompt })
-          }
-        />
+      {showImageToolbar ? (
+        <div
+          className={cn(
+            mobileFlowToolbar && "shrink-0 pb-3 pt-1",
+          )}
+        >
+          <StudioImageToolbar
+            positioned={!mobileFlowToolbar}
+            busy={canvasBusy}
+            onRemoveBackground={() => void runEdit("remove-bg")}
+            onResize={(preset) => void runEdit("resize", { resizePreset: preset })}
+            onSuggestEdit={(prompt) =>
+              void runEdit("suggest-edit", { prompt })
+            }
+          />
+        </div>
       ) : null}
 
       {isUploading && !hasMedia ? (
@@ -4078,7 +4165,12 @@ function StudioMediaSurface({
           />
         </div>
       ) : showImageArtboard ? (
-        <div className="@container flex min-h-0 flex-1 items-center justify-center px-8 pt-[4.75rem] pb-[4.25rem]">
+        <div
+          className={cn(
+            "@container flex min-h-0 flex-1 items-center justify-center px-8",
+            mobileFlowToolbar ? "pb-[4.25rem] pt-1" : "pt-[4.75rem] pb-[4.25rem]",
+          )}
+        >
           <div
             className="relative overflow-hidden rounded-[18px] bg-neutral-200/80 shadow-[0_10px_32px_rgba(0,0,0,0.08)] transition-[width,height] duration-300 ease-out dark:bg-neutral-900"
             style={studioArtboardStyle(frameRatio.w, frameRatio.h)}

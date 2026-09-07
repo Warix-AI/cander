@@ -173,6 +173,7 @@ export function ComposerEditableSurface({
   onBlocksChange,
   onCursorChange,
   onFocus,
+  onBlur,
   onKeyDown,
   onRemoveConnector,
   onTriggerClick,
@@ -188,6 +189,7 @@ export function ComposerEditableSurface({
   onBlocksChange: (blocks: ComposerBlock[], cursor: number) => void;
   onCursorChange?: (cursor: number) => void;
   onFocus?: () => void;
+  onBlur?: () => void;
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
   onRemoveConnector?: (connectionId: string) => void;
   onTriggerClick?: (triggerKey: string, anchor: HTMLElement) => void;
@@ -301,6 +303,7 @@ export function ComposerEditableSurface({
           "caret-foreground [&_*]:outline-none",
         )}
         onFocus={() => onFocus?.()}
+        onBlur={() => onBlur?.()}
         onClick={(event) => {
           const target = event.target as HTMLElement;
           const remove = target.closest(

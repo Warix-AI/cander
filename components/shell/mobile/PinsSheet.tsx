@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
 import { PinSectionFolder } from "@/components/shell/PinSectionFolder";
 import { PinnedEmptyHint } from "@/components/shell/PinnedEmptyHint";
@@ -42,7 +42,7 @@ export function PinsSheet({
   } = useApp();
   const { pinnedItems } = usePinnedItems();
   const { prefs: pinPrefs } = usePinDisplayPrefs();
-  const { isCollapsed, toggle: togglePinSection } =
+  const { isCollapsed, toggle: togglePinSection, open: openPinSection } =
     usePinSectionCollapse();
 
   const pinGroups = useMemo(
@@ -77,9 +77,29 @@ export function PinsSheet({
     return projectId === item.id;
   };
 
+  const activePinKey =
+    connectorId && spaceId === "connectors"
+      ? `connector:${connectorId}`
+      : projectId
+        ? `project:${projectId}`
+        : threadId
+          ? `thread:${threadId}`
+          : null;
+
+  // Only when the active destination changes — don't re-lock the accordion
+  // while the user browses other pin folders (Images, Searches, …).
+  useEffect(() => {
+    if (!activePinKey) return;
+    const owning = pinGroups.find((group) =>
+      group.items.some((item) => `${item.kind}:${item.id}` === activePinKey),
+    );
+    if (owning) openPinSection(owning.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pinGroups read on nav change only
+  }, [activePinKey, openPinSection]);
+
   if (!pinGroups.length) {
     return (
-      <div className="space-y-1">
+      <>
         {!hideHeading ? (
           <div className="mb-2 flex items-center gap-1 px-1">
             <p className="min-w-0 flex-1 text-[12px] font-medium tracking-[0.04em] text-muted-foreground uppercase">
@@ -88,17 +108,18 @@ export function PinsSheet({
           </div>
         ) : null}
         <PinnedEmptyHint rowClassName={mobileMenuRowClass} />
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="space-y-1">
+    <>
       {pinGroups.map((group) => {
         const collapsed = isCollapsed(group.id);
         const SectionIcon = PIN_SECTION_ICONS[group.id];
         const activeChild = group.items.find((item) => isActive(item));
-        const sectionActive = !collapsed || Boolean(activeChild);
+        // Highlight only when this section owns the current view — not when merely open.
+        const sectionActive = Boolean(activeChild);
         const treeActiveKey = activeChild
           ? `${activeChild.kind}:${activeChild.id}`
           : null;
@@ -161,6 +182,6 @@ export function PinsSheet({
           </PinSectionFolder>
         );
       })}
-    </div>
+    </>
   );
 }

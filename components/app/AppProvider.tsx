@@ -1289,6 +1289,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [pushTarget, workspaceId, actor.id]);
 
+  // Mobile / iOS: always land on New Chat when the shell mounts.
+  const mobileLandedRef = useRef(false);
+  useEffect(() => {
+    if (!mobile || !workspaceId.trim() || mobileLandedRef.current) return;
+    mobileLandedRef.current = true;
+    const id = window.setTimeout(() => {
+      applyHomeNewChat();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [mobile, workspaceId, applyHomeNewChat]);
+
   const newChat = useCallback(
     (space?: SpaceId) => {
       if (space && isChatSpace(space) && projectId && spaceId === space) {

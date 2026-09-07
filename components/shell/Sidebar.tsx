@@ -101,7 +101,7 @@ export function Sidebar() {
   const mainNavItems = useMainNavItems({ spacesOnly: true });
   const { pinnedItems } = usePinnedItems();
   const { prefs: pinPrefs } = usePinDisplayPrefs();
-  const { isCollapsed, toggle: togglePinSection, closeAll: closePinSections } =
+  const { isCollapsed, toggle: togglePinSection, open: openPinSection, closeAll: closePinSections } =
     usePinSectionCollapse();
   useSyncExternalStore(
     subscribeWorkspaceCatalog,
@@ -263,6 +263,26 @@ export function Sidebar() {
     // openProject always sets threadId — still highlight the pin by project.
     return projectId === item.id;
   };
+
+  const activePinKey =
+    connectorId && spaceId === "connectors"
+      ? `connector:${connectorId}`
+      : projectId
+        ? `project:${projectId}`
+        : threadId
+          ? `thread:${threadId}`
+          : null;
+
+  // Expand the owning folder only when navigation changes — not while the
+  // user opens other pin sections to browse.
+  useEffect(() => {
+    if (!activePinKey) return;
+    const owning = pinGroups.find((group) =>
+      group.items.some((item) => `${item.kind}:${item.id}` === activePinKey),
+    );
+    if (owning) openPinSection(owning.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pinGroups read on nav change only
+  }, [activePinKey, openPinSection]);
 
   const openNav = (id: SidebarNavId) => {
     if (isComingSoonNav(id)) return;
@@ -505,9 +525,8 @@ export function Sidebar() {
                       const activeChild = group.items.find((item) =>
                         pinRowActive(item),
                       );
-                      // Open folder, or the folder that owns the current view.
-                      const sectionActive =
-                        !collapsed || Boolean(activeChild);
+                      // Only the folder that owns the current view — not merely open.
+                      const sectionActive = Boolean(activeChild);
                       const treeActiveKey = activeChild
                         ? `${activeChild.kind}:${activeChild.id}`
                         : null;

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
+import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
 import {
   WorkspaceEmptyState,
   WorkspaceField,
@@ -139,6 +140,7 @@ export function SheetsConnectorView({
   );
   const [newTitle, setNewTitle] = useState(() => cached?.data.newTitle ?? "");
   const [query, setQuery] = useState(() => cached?.data.query ?? "");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(
     () => cached?.data.lastSyncedAt ?? null,
   );
@@ -408,6 +410,7 @@ export function SheetsConnectorView({
             onSearch: () => {
               void refresh({ force: true, searchQuery: query });
             },
+            onOpenMobileSearch: () => setMobileSearchOpen(true),
             typeFilter: "all",
             sortMode: "modified-desc",
             onTypeFilter: () => undefined,
@@ -453,7 +456,7 @@ export function SheetsConnectorView({
   return (
     <WorkspacePanelFrame status={status} error={error}>
       {page === "create" ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+        <div className="mobile-header-content flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-4">
           <WorkspaceField
             label="Name"
             value={newTitle}
@@ -507,7 +510,17 @@ export function SheetsConnectorView({
 
       {page === "browse" ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <ConnectorMobileSearchBar
+              open={mobileSearchOpen}
+              placeholder="Search Sheets"
+              value={query}
+              onChange={setQuery}
+              onSubmit={() => {
+                void refresh({ force: true, searchQuery: query });
+              }}
+              onDismiss={() => setMobileSearchOpen(false)}
+            />
             {!sheets.length ? (
               <WorkspaceEmptyState
                 title={syncing ? "Loading Sheets…" : "Nothing here yet"}

@@ -74,12 +74,15 @@ export function StudioImageToolbar({
   onRemoveBackground,
   onResize,
   onSuggestEdit,
+  /** Absolute overlay (desktop). Mobile places this in-flow above the artboard. */
+  positioned = true,
   className,
 }: {
   busy?: boolean;
   onRemoveBackground: () => void;
   onResize: (preset: StudioResizePresetId) => void;
   onSuggestEdit: (prompt: string) => void;
+  positioned?: boolean;
   className?: string;
 }) {
   const { entitlements } = useApp();
@@ -177,7 +180,10 @@ export function StudioImageToolbar({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top,0px)+7rem)] z-20 flex justify-center px-3 lg:top-8",
+        "pointer-events-none z-20 flex justify-center px-3",
+        positioned
+          ? "absolute inset-x-0 top-[calc(env(safe-area-inset-top,0px)+7rem)] lg:top-8"
+          : "relative w-full",
         className,
       )}
     >

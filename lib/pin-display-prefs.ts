@@ -185,8 +185,12 @@ export function groupPinnedItemsByKind<T extends PinnableRow>(
   return groups;
 }
 
-/** Accordion: at most one pin section open. Stores the open section id, or null. */
-const OPEN_STORAGE_KEY = "cander:pin-section-open-v3";
+/** Accordion: at most one pin section open. Session-only — never persist.
+ *  Stale localStorage used to leave Connectors/Images open on New. */
+const LEGACY_OPEN_STORAGE_KEYS = [
+  "cander:pin-section-open-v3",
+  "cander:pin-section-open",
+] as const;
 
 let openSectionId: string | null = null;
 let collapseHydrated = false;
@@ -195,27 +199,19 @@ const collapseListeners = new Set<Listener>();
 function hydrateCollapse() {
   if (collapseHydrated || typeof window === "undefined") return;
   collapseHydrated = true;
-  try {
-    const raw = window.localStorage.getItem(OPEN_STORAGE_KEY);
-    if (raw == null) return;
-    const parsed = JSON.parse(raw) as unknown;
-    openSectionId = typeof parsed === "string" && parsed.length ? parsed : null;
-  } catch {
-    openSectionId = null;
+  // Drop legacy persisted open folders so New starts with everything closed.
+  for (const key of LEGACY_OPEN_STORAGE_KEYS) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
   }
+  openSectionId = null;
 }
 
 function emitCollapse() {
   collapseListeners.forEach((listener) => listener());
-}
-
-function persistOpenSection() {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(OPEN_STORAGE_KEY, JSON.stringify(openSectionId));
-  } catch {
-    /* ignore */
-  }
 }
 
 export function subscribePinSectionCollapse(listener: Listener) {
@@ -239,7 +235,14 @@ export function getPinSectionCollapseServerSnapshot(): string | null {
 export function togglePinSectionCollapsed(sectionId: string) {
   hydrateCollapse();
   openSectionId = openSectionId === sectionId ? null : sectionId;
-  persistOpenSection();
+  emitCollapse();
+}
+
+/** Open a section without toggling closed (e.g. the folder that owns the view). */
+export function openPinSection(sectionId: string) {
+  hydrateCollapse();
+  if (openSectionId === sectionId) return;
+  openSectionId = sectionId;
   emitCollapse();
 }
 
@@ -248,7 +251,6 @@ export function closeAllPinSections() {
   hydrateCollapse();
   if (openSectionId == null) return;
   openSectionId = null;
-  persistOpenSection();
   emitCollapse();
 }
 
@@ -262,6 +264,7 @@ export function usePinSectionCollapse() {
     openId,
     isCollapsed: (sectionId: string) => openId !== sectionId,
     toggle: togglePinSectionCollapsed,
+    open: openPinSection,
     closeAll: closeAllPinSections,
   };
 }

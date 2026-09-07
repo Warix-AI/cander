@@ -14,9 +14,12 @@ import { cn } from "@/lib/utils";
 /** Menu width as a fraction of the viewport; the rest stays visible as a peek strip. */
 export const MOBILE_MENU_WIDTH = 0.75;
 
+const MENU_EASE =
+  "duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]";
+
 /**
- * ChatGPT-style mobile frame: menu slides in from the left (~75% width) while
- * the active screen stays visible on the right with G3 rounded corners.
+ * ChatGPT-style mobile frame: menu and main surface move by the same delta so
+ * open and close are one continuous LTR / RTL slide — no separate menu pop-in.
  */
 export function MobileMenuScaffold({ children }: { children: ReactNode }) {
   const mobile = useMobileShell();
@@ -35,37 +38,49 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
         MOBILE_MENU_BG,
       )}
     >
-      {/* Menu canvas fills the rounded-corner gaps behind the peek strip. */}
       <div
         aria-hidden
         className={cn("pointer-events-none absolute inset-0", MOBILE_MENU_BG)}
       />
-      <div
-        className={cn(
-          "relative z-20 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden will-change-transform",
-          MOBILE_APP_BG,
-          "transition-[transform,border-radius] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]",
-          menuOpen && MOBILE_PEEK_RADIUS,
-          menuOpen && "mobile-menu-peek",
-        )}
-        style={{
-          transform: menuOpen ? `translate3d(${menuWidth}, 0, 0)` : undefined,
-        }}
-      >
-        {children}
-      </div>
 
       <div
         aria-hidden={!menuOpen}
         className={cn(
-          "absolute inset-y-0 left-0 z-10 flex flex-col overflow-hidden",
+          "absolute inset-y-0 left-0 z-10 flex flex-col overflow-hidden will-change-transform",
           MOBILE_MENU_BG,
-          "transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform",
-          menuOpen ? "translate-x-0" : "-translate-x-full pointer-events-none",
+          "transition-transform",
+          MENU_EASE,
+          !menuOpen && "pointer-events-none",
         )}
-        style={{ width: menuWidth }}
+        style={{
+          width: menuWidth,
+          transform: menuOpen
+            ? "translate3d(0, 0, 0)"
+            : `translate3d(calc(-1 * (${menuWidth})), 0, 0)`,
+        }}
       >
         <MobileMenuPane />
+      </div>
+
+      <div
+        className={cn(
+          "relative z-20 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden will-change-transform",
+          MOBILE_APP_BG,
+          "transition-[transform,border-radius,background-color]",
+          MENU_EASE,
+          menuOpen && MOBILE_PEEK_RADIUS,
+          menuOpen && "mobile-menu-peek",
+          // While open, the slid-over surface must not intercept menu taps
+          // (iOS WKWebView hit-testing can still hit the transformed layer).
+          menuOpen && "pointer-events-none",
+        )}
+        style={{
+          transform: menuOpen
+            ? `translate3d(${menuWidth}, 0, 0)`
+            : "translate3d(0, 0, 0)",
+        }}
+      >
+        {children}
       </div>
 
       {menuOpen ? (
@@ -73,7 +88,7 @@ export function MobileMenuScaffold({ children }: { children: ReactNode }) {
           type="button"
           aria-label="Close menu"
           data-allow-swipe=""
-          className="absolute inset-y-0 right-0 z-30"
+          className="pointer-events-auto absolute inset-y-0 right-0 z-30"
           style={{ width: `calc(${peekPct}% - 5px)` }}
           onClick={() => setMobileSurface(mobileContentSurface)}
         />

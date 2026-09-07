@@ -207,9 +207,6 @@ function MenuMain({
               onOpen={onOpenNav}
             />
           ))}
-        </div>
-
-        <div className="mt-2">
           <PinsSheet onSelect={onSelectPin} hideHeading />
         </div>
 

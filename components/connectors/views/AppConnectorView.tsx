@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
+import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
 import {
   WorkspaceEmptyState,
   WorkspaceListRow,
@@ -118,6 +119,7 @@ export function AppConnectorView({
     () => cached?.data.error ?? null,
   );
   const [query, setQuery] = useState(() => cached?.data.query ?? "");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(
     () => cached?.data.lastSyncedAt ?? null,
   );
@@ -360,6 +362,7 @@ export function AppConnectorView({
             onSearch: () => {
               void refresh({ force: true, searchQuery: query });
             },
+            onOpenMobileSearch: () => setMobileSearchOpen(true),
             typeFilter: "all",
             sortMode: "modified-desc",
             onTypeFilter: () => undefined,
@@ -416,7 +419,7 @@ export function AppConnectorView({
               Loading…
             </div>
           ) : null}
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
             <div className="mb-4 flex items-start gap-3">
               <ConnectorMark
                 id={connectorId}
@@ -458,7 +461,17 @@ export function AppConnectorView({
 
       {page === "browse" ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <ConnectorMobileSearchBar
+              open={mobileSearchOpen}
+              placeholder={searchPlaceholder}
+              value={query}
+              onChange={setQuery}
+              onSubmit={() => {
+                void refresh({ force: true, searchQuery: query });
+              }}
+              onDismiss={() => setMobileSearchOpen(false)}
+            />
             {!items.length ? (
               <WorkspaceEmptyState
                 title={

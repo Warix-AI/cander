@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Loader2, Paperclip, RefreshCw, Send } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
 import { MailBody } from "@/components/connectors/views/MailBody";
 import { MailHtmlFrame } from "@/components/connectors/views/MailHtmlFrame";
 import { MailSenderAvatar } from "@/components/connectors/views/MailSenderAvatar";
@@ -113,6 +114,8 @@ export type GmailToolbarState = {
   onToggleRead: () => void;
   onForward: () => void;
   onFocusReply: () => void;
+  /** Mobile ⋯ sheet — open the in-page search bar. */
+  onOpenMobileSearch?: () => void;
 };
 
 export function GmailConnectorView({
@@ -148,6 +151,8 @@ export function GmailConnectorView({
   const [composeBody, setComposeBody] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [replyOpen, setReplyOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const replyRef = useRef<HTMLTextAreaElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const listScrollTopRef = useRef(cached?.data.listScrollTop ?? 0);
@@ -158,6 +163,22 @@ export function GmailConnectorView({
   const locallyReadIdsRef = useRef(new Set<string>());
 
   const threads = useMemo(() => groupIntoThreads(messages), [messages]);
+  const visibleThreads = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return threads;
+    return threads.filter((item) => {
+      const hay = [
+        item.subject,
+        item.fromAddr,
+        item.snippet,
+        ...(item.toAddrs ?? []),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(needle);
+    });
+  }, [threads, query]);
 
   const persistListCache = useCallback(
     (patch: Partial<GmailListCache>) => {
@@ -403,6 +424,8 @@ export function GmailConnectorView({
       onToggleRead: toggleReadCurrent,
       onForward: forwardCurrent,
       onFocusReply: focusReply,
+      onOpenMobileSearch:
+        page === "inbox" ? () => setMobileSearchOpen(true) : undefined,
     });
   }, [
     page,
@@ -837,28 +860,40 @@ export function GmailConnectorView({
             listScrollTopRef.current = event.currentTarget.scrollTop;
           }}
         >
-          {!loading && !threads.length ? (
+          <ConnectorMobileSearchBar
+            open={mobileSearchOpen}
+            placeholder="Search Mail"
+            value={query}
+            onChange={setQuery}
+            onSubmit={() => undefined}
+            onDismiss={() => setMobileSearchOpen(false)}
+          />
+          {!loading && !visibleThreads.length ? (
             <div className="px-4 py-10 text-center">
               <p className="text-[13px] font-medium text-foreground">
-                No messages yet
+                {query.trim() ? "No matching messages" : "No messages yet"}
               </p>
               <p className="mt-1 text-[12px] text-muted-foreground">
-                Refresh to sync recent mail from Gmail.
+                {query.trim()
+                  ? "Try a different name, subject, or address."
+                  : "Refresh to sync recent mail from Gmail."}
               </p>
-              <button
-                type="button"
-                disabled={syncing}
-                onClick={() => void refresh()}
-                className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium hover:bg-muted"
-              >
-                <RefreshCw
-                  className={cn("h-3.5 w-3.5", syncing && "animate-spin")}
-                />
-                Sync now
-              </button>
+              {!query.trim() ? (
+                <button
+                  type="button"
+                  disabled={syncing}
+                  onClick={() => void refresh()}
+                  className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium hover:bg-muted"
+                >
+                  <RefreshCw
+                    className={cn("h-3.5 w-3.5", syncing && "animate-spin")}
+                  />
+                  Sync now
+                </button>
+              ) : null}
             </div>
           ) : null}
-          {threads.map((item) => (
+          {visibleThreads.map((item) => (
             <button
               key={item.threadId || item.providerMessageId}
               type="button"

@@ -20,23 +20,24 @@ export const SPLIT_CHAT_MAX_WIDTH = "max-w-[38rem]";
 /** Slightly wider reading column when the right panel is closed. */
 export const FULL_CHAT_MAX_WIDTH = "max-w-[46rem]";
 
-/** Empty home chat — no space, thread, or draft armed. */
+/** Empty home chat — no space, project, or sent turns yet. */
 export function isNewChatScreen(opts: {
   view: CourierView;
   threadId?: string | null;
-  thread?: unknown;
+  thread?: { messages?: Array<{ role?: string }> } | null;
   spaceId?: NavDestinationId | null;
   projectId?: string | null;
   drafting?: boolean;
 }) {
-  return (
-    opts.view === "chat" &&
-    !opts.threadId &&
-    !opts.thread &&
-    !opts.spaceId &&
-    !opts.projectId &&
-    !opts.drafting
+  if (opts.view !== "chat" || opts.spaceId || opts.projectId) return false;
+  const hasTurns = Boolean(
+    opts.thread?.messages?.some(
+      (item) => item.role === "user" || item.role === "assistant",
+    ),
   );
+  if (hasTurns) return false;
+  // Blank home, or an armed New Chat draft waiting for the first send.
+  return !opts.threadId || Boolean(opts.drafting) || !opts.thread;
 }
 
 /** Home chat route — includes armed drafts; used for right-panel chrome placement. */

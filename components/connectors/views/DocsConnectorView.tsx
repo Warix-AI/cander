@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
+import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
 import {
   WorkspaceEmptyState,
   WorkspaceField,
@@ -136,6 +137,7 @@ export function DocsConnectorView({
   const [title, setTitle] = useState(() => cached?.data.title ?? "");
   const [markdown, setMarkdown] = useState(() => cached?.data.markdown ?? "");
   const [query, setQuery] = useState(() => cached?.data.query ?? "");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(
     () => cached?.data.lastSyncedAt ?? null,
   );
@@ -398,6 +400,7 @@ export function DocsConnectorView({
             onSearch: () => {
               void refresh({ force: true, searchQuery: query });
             },
+            onOpenMobileSearch: () => setMobileSearchOpen(true),
             typeFilter: "all",
             sortMode: "modified-desc",
             onTypeFilter: () => undefined,
@@ -443,7 +446,7 @@ export function DocsConnectorView({
   return (
     <WorkspacePanelFrame status={status} error={error}>
       {page === "create" ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+        <div className="mobile-header-content flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-4">
           <WorkspaceField
             label="Name"
             value={title}
@@ -474,7 +477,7 @@ export function DocsConnectorView({
             </div>
           ) : null}
           {selected.bodyText ? (
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
               <pre className="whitespace-pre-wrap break-words font-sans text-[14px] leading-relaxed text-foreground/90">
                 {selected.bodyText}
               </pre>
@@ -497,7 +500,17 @@ export function DocsConnectorView({
 
       {page === "browse" ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <ConnectorMobileSearchBar
+              open={mobileSearchOpen}
+              placeholder="Search Docs"
+              value={query}
+              onChange={setQuery}
+              onSubmit={() => {
+                void refresh({ force: true, searchQuery: query });
+              }}
+              onDismiss={() => setMobileSearchOpen(false)}
+            />
             {!documents.length ? (
               <WorkspaceEmptyState
                 title={syncing ? "Loading Docs…" : "Nothing here yet"}

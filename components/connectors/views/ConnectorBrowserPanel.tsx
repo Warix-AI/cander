@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Reply,
   RotateCw,
+  Search,
   X,
 } from "lucide-react";
 import { useMobilePanelActionsState, type MobilePanelActionsConfig } from "@/components/shell/mobile/MobilePanelActions";
@@ -127,7 +128,8 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         prev.busy === next.busy &&
         prev.canGoInbox === next.canGoInbox &&
         prev.isUnread === next.isUnread &&
-        prev.syncHint === next.syncHint
+        prev.syncHint === next.syncHint &&
+        Boolean(prev.onOpenMobileSearch) === Boolean(next.onOpenMobileSearch)
       ) {
         return prev;
       }
@@ -175,16 +177,33 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
   const isAppBrowse = Boolean(
     appConnectorById(connectorId) && workspaceToolbar?.driveChrome,
   );
+  const isCalendarBrowse = Boolean(
+    connectorId === "gcal" && workspaceToolbar?.driveChrome,
+  );
+  const isStripeBrowse = Boolean(
+    connectorId === "stripe" && workspaceToolbar?.driveChrome,
+  );
   const isWorkspaceBrowse =
-    isDriveBrowse || isSheetsBrowse || isDocsBrowse || isAppBrowse;
-  const browseSearchPlaceholder = isSheetsBrowse
-    ? "Search Sheets"
-    : isDocsBrowse
-      ? "Search Docs"
-      : isAppBrowse
-        ? appConnectorById(connectorId)?.searchPlaceholder ??
-          `Search ${appConnectorById(connectorId)?.name ?? title}`
-        : "Search Drive";
+    isDriveBrowse ||
+    isSheetsBrowse ||
+    isDocsBrowse ||
+    isAppBrowse ||
+    isStripeBrowse;
+  const browseSearchPlaceholder =
+    connectorId === "gmail"
+      ? "Search Mail"
+      : isCalendarBrowse
+        ? "Search Calendar"
+        : isStripeBrowse
+          ? "Search Stripe"
+          : isSheetsBrowse
+            ? "Search Sheets"
+            : isDocsBrowse
+              ? "Search Docs"
+              : isAppBrowse
+                ? appConnectorById(connectorId)?.searchPlaceholder ??
+                  `Search ${appConnectorById(connectorId)?.name ?? title}`
+                : "Search Drive";
   const isWorkspaceConnector =
     connectorId === "gcal" ||
     connectorId === "gdrive" ||
@@ -306,6 +325,13 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         );
       }
       actions.push({ label: gmail.syncing ? "Refreshing…" : "Refresh", icon: RefreshCw, disabled: gmail.syncing, onClick: () => gmailToolbarRef.current?.onRefresh() });
+      if (gmail.onOpenMobileSearch) {
+        actions.push({
+          label: "Search Mail",
+          icon: Search,
+          onClick: () => gmailToolbarRef.current?.onOpenMobileSearch?.(),
+        });
+      }
     }
     if (workspace) {
       if (workspace.canGoBack) actions.push({ label: workspace.backLabel ?? "Back", icon: ArrowLeft, onClick: () => workspaceToolbarRef.current?.onBack() });
@@ -319,6 +345,13 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         );
       }
       actions.push({ label: workspace.syncing ? "Refreshing…" : "Refresh", icon: RefreshCw, disabled: workspace.syncing, onClick: () => workspaceToolbarRef.current?.onRefresh() });
+      if (workspace.driveChrome?.onOpenMobileSearch) {
+        actions.push({
+          label: browseSearchPlaceholder,
+          icon: Search,
+          onClick: () => workspaceToolbarRef.current?.driveChrome?.onOpenMobileSearch?.(),
+        });
+      }
     }
     setMobileActions({ connector: {
       title: gmail ? "Inbox" : workspace?.title ?? title,
@@ -328,20 +361,8 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
         : undefined,
       syncHint: gmail?.syncHint ?? workspace?.syncHint,
       actions,
-      controls: workspace?.driveChrome ? (
-        <div className="mt-3 flex items-center gap-2">
-          <input aria-label={browseSearchPlaceholder} placeholder={browseSearchPlaceholder}
-            defaultValue={workspace.driveChrome.query}
-            onChange={(event) => workspaceToolbarRef.current?.driveChrome?.onQueryChange(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter") workspaceToolbarRef.current?.driveChrome?.onSearch(); }}
-            className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-transparent px-3 text-[16px]" />
-          {isDriveBrowse ? <DriveFilterMenu typeFilter={workspace.driveChrome.typeFilter} sortMode={workspace.driveChrome.sortMode}
-            onTypeFilter={(value) => workspaceToolbarRef.current?.driveChrome?.onTypeFilter(value)}
-            onSortMode={(value) => workspaceToolbarRef.current?.driveChrome?.onSortMode(value)} /> : null}
-        </div>
-      ) : undefined,
     } });
-  }, [setMobileActions, connectorId, gmailToolbar, workspaceToolbar, title, browseSearchPlaceholder, isDriveBrowse, isConnectorTab, session, updateSession]);
+  }, [setMobileActions, connectorId, gmailToolbar, workspaceToolbar, title, browseSearchPlaceholder, isConnectorTab, session, updateSession]);
   useEffect(() => () => setMobileActions?.(null), [setMobileActions]);
 
   return (
