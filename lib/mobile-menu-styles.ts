@@ -63,4 +63,4 @@ export const PRIMARY_NAV_CARD_RADIUS_LAST_MOBILE =
 
 /** Chrome icon / pill button on mobile. */
 export const mobileChromeButtonClass =
-  "mobile-glass-pill inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-foreground transition-colors duration-200 hover:bg-muted";
+  "mobile-glass-segment inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-foreground transition-colors duration-200 hover:bg-muted";
