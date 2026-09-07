@@ -4039,7 +4039,7 @@ function StudioMediaSurface({
     <div
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden",
-        mobile ? "bg-white" : BROWSER_CHROME_BG,
+        mobile ? "bg-white dark:bg-black" : BROWSER_CHROME_BG,
         mobile && "-mt-[calc(env(safe-area-inset-top,0px)+3.375rem)]",
       )}
     >

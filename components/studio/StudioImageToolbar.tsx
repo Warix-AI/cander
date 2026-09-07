@@ -263,7 +263,7 @@ export function StudioImageToolbar({
             </button>
           </div>
         ) : (
-          <div className="inline-flex items-center gap-0.5 rounded-[10px] border border-border/70 bg-background/90 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.12)] backdrop-blur-md dark:bg-neutral-900/90">
+          <div className="mobile-glass-segment inline-flex items-center gap-0.5 rounded-[10px] border border-border/70 bg-background/90 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.12)] backdrop-blur-md dark:bg-neutral-900/90">
             <button
               type="button"
               disabled={busy}

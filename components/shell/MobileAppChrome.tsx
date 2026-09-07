@@ -561,6 +561,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
         open={actionsOpen}
         onClose={() => setActionsOpen(false)}
         mode="actions"
+        className="mobile-glass-segment mobile-actions-sheet"
       >
         {mediaProjectActions ? (
           <ProjectMediaActionsSheetBody

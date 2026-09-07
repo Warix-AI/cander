@@ -21,7 +21,7 @@ export function MobileFloatingNav({ children, activeId, label = "Sections" }: {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-[21px] pb-[max(0.125rem,calc(env(safe-area-inset-bottom)+0.075rem))] sm:px-[29px] lg:hidden">
       <nav ref={navRef} aria-label={label}
-        className="mobile-glass-pill pointer-events-auto mx-auto flex h-14 w-full max-w-3xl items-center gap-1 overflow-x-auto overscroll-x-contain rounded-[28px] border border-border/60 px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        className="mobile-floating-nav mobile-glass-pill pointer-events-auto mx-auto flex h-14 w-full max-w-3xl items-center gap-1 overflow-x-auto overscroll-x-contain rounded-[28px] border border-border/60 px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {children}
       </nav>
     </div>
