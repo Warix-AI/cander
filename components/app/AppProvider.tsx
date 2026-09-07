@@ -1406,14 +1406,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         (mobileSurface === "panel" || mobileSurface === "menu");
 
       if (slideFirst) {
+        // Starting New must replace the active context immediately. Delaying
+        // the reset leaves the previous chat mounted while the pager changes,
+        // which makes it appear to slide in from the wrong direction.
         setMobileSurface("chat");
         if (mobileSurface === "menu") {
           setMobileMenuScreen("main");
         }
-        mobileNavTimer.current = window.setTimeout(() => {
-          mobileNavTimer.current = null;
-          applyHomeNewChat();
-        }, MOBILE_PAGER_MS);
+        applyHomeNewChat();
         return;
       }
 
