@@ -211,7 +211,9 @@ html.cander-narrow .mobile-glass-panel {
 
 html.cander-mobile .mobile-glass-pill,
 html.cander-narrow .mobile-glass-pill {
-  background: oklch(1 0 0 / 0.98);
+  background: linear-gradient(145deg, oklch(1 0 0 / 0.92), oklch(0.96 0.006 265 / 0.78));
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
   box-shadow:
     inset 0 0 0 0.5px oklch(1 0 0 / 0.65),
     0 1px 3px oklch(0 0 0 / 0.05);
@@ -219,9 +221,11 @@ html.cander-narrow .mobile-glass-pill {
 
 html.dark.cander-mobile .mobile-glass-pill,
 html.dark.cander-narrow .mobile-glass-pill {
-  background: oklch(0.2 0.012 265 / 0.94);
+  background: linear-gradient(145deg, oklch(0.24 0.012 265 / 0.92), oklch(0.14 0.01 265 / 0.84));
   color: oklch(0.94 0.01 265);
   border: 1px solid oklch(1 0 0 / 0.1);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
   box-shadow:
     inset 0 0 0 0.5px oklch(1 0 0 / 0.1),
     0 2px 8px oklch(0 0 0 / 0.28);
