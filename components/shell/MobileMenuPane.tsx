@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   LayoutGrid,
   PanelsTopLeft,
-  Pin,
   Settings,
   SquarePen,
 } from "lucide-react";
@@ -117,6 +116,10 @@ export function MobileMenuPane() {
             }}
             onOpenScreen={setMobileMenuScreen}
             onOpenNav={openNav}
+            onSelectPin={() => {
+              setMobileMenuScreen("main");
+              setMobileSurface("panel");
+            }}
           />
         ) : (
           <MenuSub
@@ -148,6 +151,7 @@ function MenuMain({
   onNewChat,
   onOpenScreen,
   onOpenNav,
+  onSelectPin,
 }: {
   view: string;
   spaceId: NavDestinationId | null;
@@ -156,6 +160,7 @@ function MenuMain({
   onNewChat: () => void;
   onOpenScreen: (screen: MobileMenuScreen) => void;
   onOpenNav: (id: SidebarNavId) => void;
+  onSelectPin: () => void;
 }) {
   const spaceItems = useMainNavItems({ spacesOnly: true });
   const newActive =
@@ -202,20 +207,10 @@ function MenuMain({
               onOpen={onOpenNav}
             />
           ))}
-          <button
-            type="button"
-            onClick={() => onOpenScreen("pinned")}
-            className={cn(mobileMenuRowClass, "-mt-0.5")}
-          >
-            <Pin
-              className={cn(
-                MOBILE_MENU_ICON_SIZE,
-                "shrink-0 text-muted-foreground",
-              )}
-              strokeWidth={MOBILE_MENU_ICON_STROKE}
-            />
-            Pinned
-          </button>
+        </div>
+
+        <div className="mt-2">
+          <PinsSheet onSelect={onSelectPin} hideHeading />
         </div>
 
         <div className="mt-auto pt-3">
