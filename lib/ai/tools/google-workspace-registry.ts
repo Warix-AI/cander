@@ -114,6 +114,77 @@ export function registerGoogleWorkspaceTools(
     },
   });
 
+  registerCanderTool({
+    id: "gcal.patchEvent",
+    connectorId: "gcal",
+    capabilityFamily: "calendar",
+    category: "productivity",
+    label: "Patch event",
+    description: "Update fields on an existing Google Calendar event.",
+    risk: "write",
+    confirmationPolicy: "when_ambiguous",
+    defaultEnabled: true,
+    providerTool: GCAL_COMPOSIO_SLUGS["gcal.patchEvent"],
+    inputSchema: {
+      type: "object",
+      required: ["eventId"],
+      properties: {
+        eventId: { type: "string", description: "Event id to patch." },
+        calendarId: { type: "string", description: "Calendar id (default primary)." },
+        summary: { type: "string", description: "New title." },
+        description: { type: "string", description: "New description." },
+        start: { type: "string", description: "New start datetime." },
+        end: { type: "string", description: "New end datetime." },
+      },
+    },
+  });
+
+  registerCanderTool({
+    id: "gcal.updateEvent",
+    connectorId: "gcal",
+    capabilityFamily: "calendar",
+    category: "productivity",
+    label: "Update event",
+    description: "Replace an existing Google Calendar event.",
+    risk: "write",
+    confirmationPolicy: "when_ambiguous",
+    defaultEnabled: true,
+    providerTool: GCAL_COMPOSIO_SLUGS["gcal.updateEvent"],
+    inputSchema: {
+      type: "object",
+      required: ["eventId"],
+      properties: {
+        eventId: { type: "string", description: "Event id to update." },
+        calendarId: { type: "string", description: "Calendar id (default primary)." },
+        summary: { type: "string", description: "Event title." },
+        description: { type: "string", description: "Event description." },
+        start: { type: "string", description: "Start datetime." },
+        end: { type: "string", description: "End datetime." },
+      },
+    },
+  });
+
+  registerCanderTool({
+    id: "gcal.deleteEvent",
+    connectorId: "gcal",
+    capabilityFamily: "calendar",
+    category: "productivity",
+    label: "Delete event",
+    description: "Delete a Google Calendar event by id.",
+    risk: "write",
+    confirmationPolicy: "always",
+    defaultEnabled: true,
+    providerTool: GCAL_COMPOSIO_SLUGS["gcal.deleteEvent"],
+    inputSchema: {
+      type: "object",
+      required: ["eventId"],
+      properties: {
+        eventId: { type: "string", description: "Event id to delete." },
+        calendarId: { type: "string", description: "Calendar id (default primary)." },
+      },
+    },
+  });
+
   // ── Drive ───────────────────────────────────────────────────────────────────
   registerCanderTool({
     id: "gdrive.find",

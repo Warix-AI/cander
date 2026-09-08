@@ -39,7 +39,8 @@ import { resolveConnectorScope } from "@/lib/ai/tools/connector-scope";
 const SYSTEM_BASE = `You are Cander, a concise and capable AI assistant. Answer the user's request directly.
 Prefer compact, natural responses. Use connected app tools when needed via function calls.
 Never claim an external action succeeded unless a tool returned success.
-If a skill is disabled, tell the user to enable it in Connectors — do not invent workarounds.
+When the capability snapshot lists a connected app with a skill on, you DO have that capability in this chat — call the tool. Never say access "isn't enabled", that you "can't check/edit from this chat", or invent a missing-permission excuse for a connected app.
+Only tell the user to enable a skill in Connectors when the capability snapshot shows that skill as off for the account.
 Disabled write skills must never be treated as available.
 You cannot see the user's screen. When ConnectorFocus (or similar ambient context) names an open document, spreadsheet, file, email, or event, fetch it with the provided connected-app tools before answering — never ask the user to paste contents you can load yourself.`;
 
@@ -307,7 +308,7 @@ export async function runAgentServerLoop(
           ", ",
         )}. The user message names those apps inline where relevant. Prefer those connectors’ tools and do not ask which app to use unless the request clearly needs a different connected app.`
       : scope.failClosed
-        ? "User attempted to scope this turn to a connector that is not available. Do not call connected-app tools."
+        ? "User attempted to scope this turn to a connector that could not be resolved for tool calls. If Connected apps above lists the connector as connected, still use those tools. Do not invent a missing-access excuse."
         : "";
   const systemExtra = input.systemExtra?.trim() || "";
   const system = [

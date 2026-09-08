@@ -230,11 +230,18 @@ export function SpaceChatLayout() {
         style={pinChat ? undefined : { width: `${liveChatPct}%` }}
         aria-hidden={liveChatPct === 0 && !pinChat}
       >
-        {chatArmed && chatReady ? (
-          <>
+        {chatArmed ? (
+          <div
+            className={cn(
+              "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+              !chatReady && "pointer-events-none invisible",
+            )}
+            aria-hidden={!chatReady}
+          >
             <TopRail />
+            {/* Stay mounted while armed so send→pin survives panel width animation. */}
             <ChatColumn />
-          </>
+          </div>
         ) : null}
       </div>
 

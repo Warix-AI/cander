@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { faviconUrlForSite } from "@/lib/preview-url";
 import { isCdnCitationHost } from "@/lib/ai/orchestrator/citations";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
+import { useMobileShell } from "@/lib/use-media-query";
 
 function blockKey(block: ChatBlock, index: number): string {
   switch (block.type) {
@@ -141,6 +142,7 @@ function ActionSourcesRow({
   visibleContent: string;
 }) {
   const { openInAppBrowser } = useApp();
+  const mobile = useMobileShell();
   const [moreOpen, setMoreOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
@@ -333,7 +335,13 @@ function ActionSourcesRow({
             title={copied ? "Copied" : "Copy"}
             aria-label={copied ? "Copied" : "Copy"}
             onClick={() => void copy()}
-            className="pointer-events-none inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-[color,background-color,opacity] duration-150 hover:bg-muted hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/assistant:pointer-events-auto group-hover/assistant:opacity-100 group-focus-within/assistant:pointer-events-auto group-focus-within/assistant:opacity-100"
+            className={cn(
+              "inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-[color,background-color,opacity] duration-150 hover:bg-muted hover:text-foreground",
+              // Touch / mobile: always visible — no hover. Desktop: reveal on hover/focus.
+              mobile
+                ? "opacity-100"
+                : "pointer-events-none opacity-0 focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/assistant:pointer-events-auto group-hover/assistant:opacity-100 group-focus-within/assistant:pointer-events-auto group-focus-within/assistant:opacity-100",
+            )}
           >
             {copied ? (
               <Check className="h-3.5 w-3.5" strokeWidth={1.8} />

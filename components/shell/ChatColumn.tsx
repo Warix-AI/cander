@@ -138,6 +138,8 @@ export function ChatColumn() {
     projectId,
     overlay,
     mobileSurface,
+    connectorId,
+    resumeConnectorChat,
   } =
     useApp();
   const api = useSpaceApi();
@@ -160,6 +162,13 @@ export function ChatColumn() {
     drafting && Boolean(spaceId) && !hasChatTurns && !browserMode;
   const showLanding =
     !browserMode && !hasChatTurns && (!thread || drafting) && !showSpaceNewPrompt;
+
+  // Keep the one-chat-per-connector thread selected whenever chat is shown
+  // beside a connector (covers panel remounts and Chat|Panel toggles).
+  useEffect(() => {
+    if (!connectorId) return;
+    resumeConnectorChat();
+  }, [connectorId, resumeConnectorChat]);
   const endRef = useRef<HTMLDivElement>(null);
   const latestUserRef = useRef<HTMLDivElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
@@ -359,23 +368,36 @@ export function ChatColumn() {
     prevProjectId.current = projectId;
     prevSpaceId.current = spaceId;
 
-    if (navigated) {
+    if (!hasChatTurns) {
+      if (navigated) {
+        userPinnedScroll.current = false;
+        pinningTurnRef.current = false;
+        lastPinnedUserIdRef.current = null;
+        pinCleanupRef.current?.();
+        pinCleanupRef.current = null;
+        setSpacerPx(TRANSCRIPT_BOTTOM_GAP_PX);
+      }
+      return;
+    }
+
+    const needsPin =
+      Boolean(lastUserId) && lastUserId !== lastPinnedUserIdRef.current;
+    // First send often creates/switches thread.id in the same tick as the user
+    // bubble — treat that as a pin, not a history browse (which snaps to bottom).
+    const activeTurn =
+      last?.role === "user" ||
+      (last?.role === "assistant" &&
+        (last.status === "pending" || last.status === "streaming"));
+
+    if (navigated && !(needsPin && activeTurn)) {
       userPinnedScroll.current = false;
       pinningTurnRef.current = false;
-      lastPinnedUserIdRef.current = null;
+      lastPinnedUserIdRef.current = lastUserId ?? null;
       pinCleanupRef.current?.();
       pinCleanupRef.current = null;
       setSpacerPx(TRANSCRIPT_BOTTOM_GAP_PX);
-    }
-
-    if (!hasChatTurns) return;
-
-    // Returning from a project / switching spaces: land at the bottom with a
-    // small gap above the composer — not mid-page or in empty pin-room.
-    if (navigated) {
       snapTranscriptToBottom("auto");
       const parent = scrollParentRef.current;
-      // Width/visibility animations can leave scroll mid-transcript; re-snap.
       const t1 = window.requestAnimationFrame(() => snapTranscriptToBottom("auto"));
       const t2 = window.setTimeout(() => snapTranscriptToBottom("auto"), 120);
       const t3 = window.setTimeout(() => snapTranscriptToBottom("auto"), 560);
@@ -387,8 +409,8 @@ export function ChatColumn() {
       };
     }
 
-    // Same-thread new user turn: ChatGPT cycle — pin that bubble under the header.
-    if (!lastUserId || lastUserId === lastPinnedUserIdRef.current) return;
+    // New user turn (same thread OR send that opened a new thread): pin under header.
+    if (!needsPin || !lastUserId) return;
     lastPinnedUserIdRef.current = lastUserId;
     pinningTurnRef.current = true;
     pinCleanupRef.current?.();
@@ -411,7 +433,17 @@ export function ChatColumn() {
     pinLatestUserToTop("smooth");
     const t = window.setTimeout(() => pinLatestUserToTop("smooth"), 80);
     return () => window.clearTimeout(t);
-  }, [lastUserId, last?.id, thread?.id, mobile, hasChatTurns, projectId, spaceId]);
+  }, [
+    lastUserId,
+    last?.id,
+    last?.role,
+    last?.status,
+    thread?.id,
+    mobile,
+    hasChatTurns,
+    projectId,
+    spaceId,
+  ]);
 
   useEffect(() => {
     // While the assistant is typing, follow the reply only if the user hasn't

@@ -15,6 +15,7 @@ import {
   looksLikeSendIntent,
   threadIsActiveEmailConversation,
 } from "../lib/ai/connectors/comms-intent.ts";
+import { isCalendarConnectorTurn } from "../lib/ai/connectors/calendar-intent.ts";
 import { enabledToolIds } from "../lib/connectors/tool-catalog.ts";
 import { getAiTool } from "../lib/ai/tools/registry.ts";
 
@@ -146,6 +147,29 @@ Best, Alex`,
     true,
   );
   assert.equal(isCommsConnectorTurn("Are there any sports going on", thread), false);
+});
+
+test("isCalendarConnectorTurn routes check follow-ups with calendar context", () => {
+  const thread = [
+    {
+      role: "user",
+      content: "When did you put that on my Google Calendar?",
+    },
+    {
+      role: "assistant",
+      content:
+        "I added it on September 7, 2026, at 10:30 PM MDT as an all-day event for September 9.",
+    },
+  ];
+  assert.equal(
+    isCalendarConnectorTurn(
+      "I see that it was added to September 8th. Not September 9th. Can you check to see if you've added it to the wrong day?",
+      thread,
+    ),
+    true,
+  );
+  assert.equal(isCalendarConnectorTurn("What's the weather today?", thread), false);
+  assert.equal(isCalendarConnectorTurn("show my calendar for tomorrow"), true);
 });
 
 test("looksLikeSendIntent matches capability nudges", () => {

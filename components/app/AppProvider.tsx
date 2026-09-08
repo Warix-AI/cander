@@ -33,6 +33,8 @@ import { registerAppActionHandlers } from "@/lib/ai/runtime/app-actions";
 import { executeAuthorizedTool } from "@/lib/ai/runtime/tools";
 import { createApiBundle } from "@/lib/api";
 import { CONNECTOR_CATALOG } from "@/lib/api/connector-catalog";
+import { connectionsForConnectorLive } from "@/lib/connector-connections-store";
+import { isUiConnectedStatus } from "@/lib/connectors/authz";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
 import { resolveChatImageUrl } from "@/lib/chat-attachment-image-url";
 import {
@@ -490,6 +492,8 @@ type AppContextValue = {
   openShared: () => void;
   openSettings: (tab?: SettingsTab, opts?: { hub?: boolean }) => void;
   openConnector: (id: string) => void;
+  /** Re-select the persistent one-chat-per-connector thread. */
+  resumeConnectorChat: () => void;
   openJob: (id: string) => void;
   openSkill: (id: string) => void;
   openFile: (id: string) => void;
@@ -2069,13 +2073,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = useCallback(
     (text: string, opts?: SendOpts) => {
       const sendAttachments = opts?.sendAttachments ?? [];
-      const selectedConnectionId = opts?.selectedConnectionId ?? null;
-      const selectedConnectionIds =
+      let selectedConnectionId = opts?.selectedConnectionId ?? null;
+      let selectedConnectionIds =
         opts?.selectedConnectionIds?.filter(Boolean) ??
         (selectedConnectionId ? [selectedConnectionId] : []);
-      const composerConnectors = (opts?.composerConnectors ?? []).filter(
+      let composerConnectors = (opts?.composerConnectors ?? []).filter(
         (c) => c.connectionId && c.connectorId && c.label,
       );
+      // One-chat-per-connector / open connector panel: always scope tools when connected.
+      if (selectedConnectionIds.length === 0) {
+        const cid =
+          opts?.scopedConnectorId ||
+          connectorId ||
+          thread?.connectorId ||
+          null;
+        if (cid) {
+          const active = connectionsForConnectorLive(workspaceId, cid).find(
+            (row) => isUiConnectedStatus(row.status),
+          );
+          if (active) {
+            selectedConnectionId = active.id;
+            selectedConnectionIds = [active.id];
+            if (composerConnectors.length === 0) {
+              const catalog = CONNECTOR_CATALOG.find((item) => item.id === cid);
+              composerConnectors = [
+                {
+                  connectionId: active.id,
+                  connectorId: cid,
+                  label: catalog?.name ?? cid,
+                },
+              ];
+            }
+          }
+        }
+      }
       const attachmentsFromSend = sendAttachments
         .filter((a) => a.type === "image" && a.dataUrl)
         .map((a) => ({
@@ -2446,14 +2477,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const chatSpace = chatSpaceId(space);
       const useProjectPersistent =
         Boolean(projectId) && Boolean(chatSpace) && isChatSpace(space);
+      // One continuous transcript per connector — never remap to the workspace
+      // default chat or history only appears after the first send.
+      const useConnectorPersistent =
+        Boolean(connectorId) && !projectId && !intent.projectId;
       const useContinuousPersistent =
         !projectId &&
+        !connectorId &&
         !intent.projectId &&
         (view === "space" ||
           view === "chat" ||
-          Boolean(opts?.space) ||
-          space === "connectors");
-      const usePersistent = useProjectPersistent || useContinuousPersistent;
+          Boolean(opts?.space));
+      const usePersistent =
+        useProjectPersistent ||
+        useContinuousPersistent ||
+        useConnectorPersistent;
       let activeId = threadId ?? nextId("t");
       // Detached New Chat sessions stay unattached until Default chat —
       // even if the UI still shows a space lens.
@@ -2469,6 +2507,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             workspaceId,
             projectId,
             chatSpace,
+          );
+          list = upserted.threads;
+          activeId = upserted.id;
+        } else if (useConnectorPersistent && connectorId) {
+          const upserted = upsertPersistentConnectorThread(
+            list,
+            workspaceId,
+            connectorId,
           );
           list = upserted.threads;
           activeId = upserted.id;
@@ -5118,6 +5164,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [pushTarget, workspaceId, setThreads]);
 
+  /** Re-bind the one chat for the open connector (Chat|Panel toggle / remount). */
+  const resumeConnectorChat = useCallback(() => {
+    if (!connectorId) return;
+    const catalog = CONNECTOR_CATALOG.find((item) => item.id === connectorId);
+    const title = catalog?.name ? `${catalog.name}` : "Connector";
+    const snapshot = getChatStoreSnapshot().threads;
+    const { threads: next, id: nextId } = upsertPersistentConnectorThread(
+      snapshot,
+      workspaceId,
+      connectorId,
+      title,
+    );
+    const connectorThread = next.find((item) => item.id === nextId);
+    const hasMessages = threadHasTurns(connectorThread);
+    if (threadIdRef.current !== nextId) {
+      flushSync(() => {
+        threadIdRef.current = nextId;
+        setThreadId(nextId);
+      });
+    }
+    setThreads(() => next);
+    setDrafting(!hasMessages);
+  }, [connectorId, workspaceId, setThreads]);
+
   const openJob = useCallback((id: string) => {
     const chatActive = Boolean(threadId) || drafting;
     const keepChat = chatActive && spaceId === "build" && jobId === id;
@@ -5355,6 +5425,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openShared,
       openSettings,
       openConnector,
+      resumeConnectorChat,
       openJob,
       openSkill,
       openFile,
@@ -5516,6 +5587,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openShared,
       openSettings,
       openConnector,
+      resumeConnectorChat,
       openJob,
       openSkill,
       openFile,

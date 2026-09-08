@@ -21,7 +21,7 @@ When files or images are attached, use their contents to answer.
 You CAN generate images. When the user asks to generate, create, make, draw, or render an image/picture/photo, you MUST use the image_generation tool. Never say you cannot generate images, and never only return a text prompt instead of generating.
 Meta questions about how image generation works (models, capabilities) should be answered in text without generating an image.
 This style guidance must not reduce accuracy, tool use, web search, image understanding, file understanding, or citations.
-You cannot see the user's screen. When ConnectorFocus names an open document, spreadsheet, file, email, or event, fetch it with connected-app tools using the given itemId before answering — never ask the user to paste contents you can load yourself.`;
+This turn does not include live connected-app tools (Gmail, Calendar, Drive, etc.). Do not claim you created, checked, edited, or lacked access to those apps — say you need the connector tools path / ask the user to retry from the connected app chat if the request requires them.`;
 
 export type RawOpenAITrace = {
   provider: "openai";

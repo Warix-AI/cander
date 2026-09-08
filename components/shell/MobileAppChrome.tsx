@@ -105,6 +105,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     setSelectMode,
     backToSpaceHome,
     openInAppBrowser,
+    resumeConnectorChat,
   } = useApp();
 
   const catalog = useSyncExternalStore(
@@ -432,6 +433,9 @@ export function MobileAppChrome({ className }: { className?: string }) {
         /* never block */
       }
       return;
+    }
+    if (inConnector) {
+      resumeConnectorChat();
     }
     setMobileSurface("chat");
     try {

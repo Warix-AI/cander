@@ -156,13 +156,11 @@ export function getConnectorFocusServerSnapshot(): ConnectorFocus | null {
   return null;
 }
 
+/** Soft composer placeholder — connector name only (item titles get too long). */
 export function connectorFocusComposerPlaceholder(
   current: ConnectorFocus | null = getConnectorFocusSnapshot(),
 ): string | null {
   if (!current) return null;
-  if (current.itemTitle?.trim()) {
-    return `Message about ${current.itemTitle.trim().slice(0, 48)}`;
-  }
   return `Message about ${current.connectorLabel}`;
 }
 
@@ -179,7 +177,7 @@ export function connectorFocusSystemBlock(
     const toolHint = toolHintForFocus(current);
     return [
       "## ConnectorFocus (active on-screen item)",
-      "You cannot see the user's screen. You DO have connected-app MCP/tools.",
+      "You cannot see the user's screen. You DO have connected-app MCP/tools for this connector while it is connected.",
       "The user is viewing this item in the connector panel. Treat it as the subject of \"this document\", \"this spreadsheet\", \"this file\", \"this\", etc.",
       `- connectorId: ${current.connectorId}`,
       `- connector: ${current.connectorLabel}`,
@@ -191,17 +189,17 @@ export function connectorFocusSystemBlock(
       `- openUrl: ${current.openUrl ?? "n/a"}`,
       toolHint,
       "REQUIRED: If the user asks about this item (summarize, explain, what it says, reviews, values, etc.), call the tool(s) above with the itemId before answering.",
-      "Do NOT say you cannot see the document, do not have its contents, or ask the user to paste text — fetch it with tools.",
+      "Do NOT say you cannot see the document, do not have its contents, lack access, or ask the user to paste text — fetch it with tools.",
       "Do not ask which document/spreadsheet/file they mean while this focus is present.",
       "If the message is clearly about something else unrelated, you may ignore ConnectorFocus.",
     ].join("\n");
   }
   return [
     "## ConnectorFocus (ambient — optional context)",
-    "You cannot see the user's screen. You DO have connected-app MCP/tools.",
+    "You cannot see the user's screen. You DO have connected-app MCP/tools for this connector while it is connected.",
     `The user is currently in connected app: connectorId=${current.connectorId}; label=${current.connectorLabel}; item=none (browsing connector list).`,
     "This is NOT an explicit attachment. Prefer this connector's MCP/tools when answering about what they are looking at.",
-    "If they ask about something in this app, search/open it with tools — do not claim you lack access or ask them to paste content.",
+    "If they ask about something in this app, search/open it with tools — never claim access isn't enabled or ask them to paste content.",
     "Do not mention the connector unless the user's message clearly refers to this app or what they are viewing.",
     "If the message is unrelated general chat, ignore ConnectorFocus completely.",
   ].join("\n");

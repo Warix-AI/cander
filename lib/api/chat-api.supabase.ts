@@ -336,16 +336,11 @@ export async function upsertThreadsToSupabase(
   }
 
   // Drop orphaned server messages so promoted defaults don't keep old turns.
+  // Never wipe a thread when the local copy has zero messages — empty shells
+  // (e.g. opening a connector chat) must not prune remote history.
   for (const thread of threads) {
     const keepIds = thread.messages.map((message) => message.id);
     if (!keepIds.length) {
-      const { error } = await supabase
-        .from("messages")
-        .delete()
-        .eq("thread_id", thread.id);
-      if (error) {
-        console.warn("[cander] prune thread messages failed", thread.id, error);
-      }
       continue;
     }
     const { error } = await supabase

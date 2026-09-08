@@ -1132,6 +1132,23 @@ export function Composer({
           ];
         }
       }
+      // Persistent one-chat-per-connector threads carry connectorId on the thread.
+      if (liveScopes.length === 0 && thread?.connectorId) {
+        const cid = thread.connectorId;
+        const active = connectionsForConnectorLive(workspaceId, cid).find(
+          (row) => isUiConnectedStatus(row.status),
+        );
+        if (active) {
+          const catalog = connectors.find((c) => c.id === cid);
+          liveScopes = [
+            {
+              connectionId: active.id,
+              connectorId: cid,
+              label: catalog?.name ?? cid,
+            },
+          ];
+        }
+      }
       // Ambient open-item focus (survives Chat|Panel toggles).
       if (liveScopes.length === 0) {
         const focus = getConnectorFocusSnapshot();
@@ -1367,6 +1384,22 @@ export function Composer({
             connectionId: active.id,
             connectorId,
             label: catalog?.name ?? connectorId,
+          },
+        ];
+      }
+    }
+    if (liveScopes.length === 0 && thread?.connectorId) {
+      const cid = thread.connectorId;
+      const active = connectionsForConnectorLive(workspaceId, cid).find(
+        (row) => isUiConnectedStatus(row.status),
+      );
+      if (active) {
+        const catalog = connectors.find((c) => c.id === cid);
+        liveScopes = [
+          {
+            connectionId: active.id,
+            connectorId: cid,
+            label: catalog?.name ?? cid,
           },
         ];
       }

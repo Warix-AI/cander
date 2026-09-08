@@ -93,6 +93,16 @@ export async function runAssistantTurn(
       opts?.selectedConnectionId ||
         (opts?.selectedConnectionIds && opts.selectedConnectionIds.length > 0),
     );
+    const { isCommsConnectorTurn } = await import(
+      "@/lib/ai/connectors/comms-intent"
+    );
+    const { isCalendarConnectorTurn } = await import(
+      "@/lib/ai/connectors/calendar-intent"
+    );
+    const needsConnectorTools =
+      connectorScoped ||
+      isCommsConnectorTurn(request.content, request.messages) ||
+      isCalendarConnectorTurn(request.content, request.messages);
 
     // Agent projects: client-executed builder tools (same mutation layer as the UI).
     if (
@@ -109,8 +119,8 @@ export async function runAssistantTurn(
     }
 
     // Default chat uses streamed raw OpenAI (ChatGPT-style tokens).
-    // Connector-scoped turns still use the agent loop.
-    const preferRawChat = isRawOpenAIModeEnabled() && !connectorScoped;
+    // Connector-scoped / calendar / Gmail turns must use the agent loop with tools.
+    const preferRawChat = isRawOpenAIModeEnabled() && !needsConnectorTools;
 
     const agentV2 = preferRawChat ? false : await probeAgentRuntimeV2();
     latency?.mark("agent_probe_end");
@@ -125,9 +135,6 @@ export async function runAssistantTurn(
     }
 
     // Legacy path until AI_AGENT_RUNTIME=v2 is enabled server-side.
-    const { isCommsConnectorTurn } = await import(
-      "@/lib/ai/connectors/comms-intent"
-    );
     if (isCommsConnectorTurn(request.content, request.messages)) {
       latency?.setTransport("comms");
       const { runCommsConnectorTurn } = await import(
