@@ -11,10 +11,14 @@ export function slugFromProjectName(name: string) {
 
 export function buildPublishDomainOptions(opts: {
   displayName: string;
+  /** Allocated cander_subdomain when known (preferred over title slug). */
+  subdomain?: string | null;
   domains?: string[];
   liveUrl?: string | null;
 }): PublishDomainOption[] {
-  const slug = slugFromProjectName(opts.displayName || "app");
+  const slug =
+    (opts.subdomain?.trim().toLowerCase() ||
+      slugFromProjectName(opts.displayName || "app")).replace(/^https?:\/\//, "");
   const hostedUrl = `https://${slug}.cander.app`;
   const custom = (opts.domains ?? []).map((domain) => {
     const label = domain.replace(/^https?:\/\//, "").replace(/\/$/, "");

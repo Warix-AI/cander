@@ -18,15 +18,30 @@ export function usePublishDomainOptions() {
   const { project: entityProject } = useSpaceProject(projectId);
   const displayName = entityProject?.title ?? project?.name ?? "app";
   const domains = entityProject?.domains ?? project?.domains ?? [];
+  // Prefer allocated infra subdomain when present on published_url host.
+  const subdomainFromUrl = (() => {
+    const raw = entityProject?.publishedUrl || liveUrl;
+    if (!raw) return null;
+    try {
+      const host = new URL(raw).hostname.toLowerCase();
+      if (host.endsWith(".cander.app") && !host.startsWith("draft--")) {
+        return host.slice(0, -".cander.app".length);
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  })();
 
   return useMemo(
     () =>
       buildPublishDomainOptions({
         displayName,
+        subdomain: subdomainFromUrl,
         domains,
-        liveUrl,
+        liveUrl: entityProject?.publishedUrl ?? liveUrl,
       }),
-    [displayName, domains, liveUrl],
+    [displayName, domains, liveUrl, entityProject?.publishedUrl, subdomainFromUrl],
   );
 }
 

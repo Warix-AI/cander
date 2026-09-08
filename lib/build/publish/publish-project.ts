@@ -163,22 +163,47 @@ export async function publishProject(opts: {
       sha: draftSha,
     });
 
-    const publishedUrl = preferred || deployment.url;
+    const vercelOrigin = (() => {
+      try {
+        return new URL(deployment.url).origin;
+      } catch {
+        return deployment.url;
+      }
+    })();
+    // Friendly host for users; vercel_production_url is the proxy upstream (Phase 8).
+    const publishedUrl =
+      preferred ||
+      (project.cander_subdomain
+        ? `https://${project.cander_subdomain}.cander.app`
+        : deployment.url);
     const now = new Date().toISOString();
     const deploymentRecordId = newDeploymentId();
 
-    await admin
+    const projectUpdate: Record<string, string> = {
+      status: "published",
+      published_sha: draftSha,
+      published_url: publishedUrl,
+      vercel_project_id: vercelProject.vercelProjectId,
+      vercel_production_deployment_id: deployment.id,
+      updated_at: now,
+    };
+    // Column from migration 063 — best-effort if not migrated yet.
+    projectUpdate.vercel_production_url = vercelOrigin;
+
+    const { error: projectUpErr } = await admin
       .from("projects")
-      .update({
-        status: "published",
-        published_sha: draftSha,
-        published_url: publishedUrl,
-        vercel_project_id: vercelProject.vercelProjectId,
-        vercel_production_deployment_id: deployment.id,
-        updated_at: now,
-      })
+      .update(projectUpdate)
       .eq("id", opts.projectId)
       .eq("workspace_id", opts.workspaceId);
+    if (projectUpErr) {
+      // Retry without vercel_production_url if column missing.
+      delete projectUpdate.vercel_production_url;
+      await admin
+        .from("projects")
+        .update(projectUpdate)
+        .eq("id", opts.projectId)
+        .eq("workspace_id", opts.workspaceId);
+    }
 
     // Best-effort deployments row (columns from 062 may be absent until migrated).
     const deployRow: Record<string, unknown> = {
@@ -256,7 +281,7 @@ export async function publishProject(opts: {
       vercelProjectId: vercelProject.vercelProjectId,
       deploymentRecordId,
       preferredUrl: preferred,
-      message: `Published ${draftSha.slice(0, 7)} to production.`,
+      message: `Published ${draftSha.slice(0, 7)} → ${publishedUrl}`,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

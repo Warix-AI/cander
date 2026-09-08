@@ -34,6 +34,37 @@ export function draftPreviewUrl(subdomain: string): string {
   return `https://${draftPreviewHost(subdomain)}`;
 }
 
+/** Production public host (Phase 8) — no draft-- prefix. */
+export function productionAppHost(subdomain: string): string {
+  return `${subdomain}.cander.app`;
+}
+
+export function productionAppUrl(subdomain: string): string {
+  return `https://${productionAppHost(subdomain)}`;
+}
+
+/**
+ * Production upstream allowlist — Vercel deployment hosts only (tighter than sandbox).
+ * Rejects localhost, cander.app (proxy loops), and non-https.
+ */
+export function isAllowedProductionUpstreamOrigin(origin: string): boolean {
+  try {
+    const u = new URL(origin);
+    if (u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") return false;
+    if (host === "cander.app" || host.endsWith(".cander.app")) return false;
+    // Production deploys are *.vercel.app (and occasional vercel DNS aliases).
+    return (
+      /\.vercel\.app$/i.test(host) ||
+      /\.vercel\.sh$/i.test(host) ||
+      host === "vercel.app"
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Rewrite root-relative URLs so path-based iframe proxies keep assets on Cander. */
 export function rewriteHtmlForPreviewProxy(
   html: string,

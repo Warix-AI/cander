@@ -61,6 +61,8 @@ export function isReservedSubdomain(slug: string): boolean {
 export function isValidSubdomainLabel(slug: string): boolean {
   if (!slug || slug.length > 63) return false;
   if (isReservedSubdomain(slug)) return false;
+  // Never allocate draft--* or double-hyphen labels (draft hosts use draft-- prefix).
+  if (slug.includes("--") || slug.startsWith("draft")) return false;
   return /^[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(slug);
 }
 

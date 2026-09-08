@@ -38,6 +38,7 @@ Token needs permission to create projects and read API keys in the Warix org.
 | `POST` | `/api/projects/:id/sandbox/ensure` | Sandbox lifecycle (+ start dev server) |
 | `GET/…` | `/api/projects/:id/preview/:workspaceId/…` | Same-origin live preview proxy |
 | `GET/…` | `/api/preview-host/:subdomain/…` | Host proxy for `draft--*.cander.app` |
+| `GET/…` | `/api/publish-host/:subdomain/…` | Public host proxy for `{sub}.cander.app` |
 | `POST` | `/api/projects/:id/sandbox/files` | File/exec/persist |
 | `POST` | `/api/projects/:id/git/persist` | Commit draft |
 | `GET` | `/api/projects/:id/git/commits?workspaceId=` | List draft commits (revisions) |
@@ -85,11 +86,24 @@ Publish / `published_sha` remains Phase 7.
 3. Create a **production** deployment from the draft tip via Deployments API; poll until `READY`
 4. On success only: promote `main` (default branch) to that SHA, set `published_sha` / `published_url` / `vercel_production_deployment_id`, insert a `deployments` row (`kind=production`), and store `project_revisions` published pointer as `git:{sha}`
 5. On deploy failure: leave the previous published tip unchanged
-6. Preferred `{slug}.cander.app` URL is stored when provided; **Phase 8** routes that host to production (until then Vercel URL also works)
+6. Preferred `{slug}.cander.app` URL is stored when provided; **Phase 8** routes that host to production
 
 Requires `VERCEL_TOKEN` + `VERCEL_TEAM_ID`, GitHub App, and Vercel↔GitHub integration on the Warix team for git-based deploys.
 
 Migration: `062_deployments_publish_meta.sql` (`vercel_deployment_id`, `git_sha`, `kind` on `deployments`).
+
+## Phase 8 behavior
+
+1. `https://{cander_subdomain}.cander.app` → `proxy.ts` → `/api/publish-host/{sub}/…` (public, no auth)
+2. Upstream is the pinned `projects.vercel_production_url` (Vercel deployment origin); falls back to deployment id lookup
+3. SSRF allowlist: https `*.vercel.app` only — never proxy to `*.cander.app` (loop) or arbitrary hosts
+4. Host precedence: markdown `m…` → `draft--…` (auth preview) → bare subdomain (production)
+5. Publish stores both friendly `published_url` and `vercel_production_url` (migration `063`)
+6. Matcher includes `/_next/static` so tenant hosts can proxy app assets; platform static short-circuits
+
+DNS: platform wildcard `*.cander.app` must already point at the Cander deployment (same as draft hosts).
+
+Custom domains remain Phase 10.
 
 ## Enable Phase 3+ flag
 
