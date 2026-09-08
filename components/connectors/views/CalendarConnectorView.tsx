@@ -539,7 +539,7 @@ export function CalendarConnectorView({
         </div>
       ) : null}
 
-      {/* Month first on phones; the compact calendar and selected-day agenda stack beneath it. */}
+      {/* Month grid + day agenda on mobile; desktop keeps the mini calendar rail. */}
       <div className="@container relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain mobile-header-content lg:flex-row lg:overflow-hidden lg:pt-0">
         <ConnectorMobileSearchBar
           open={mobileSearchOpen && page === "month"}
@@ -591,6 +591,14 @@ export function CalendarConnectorView({
               "hidden lg:flex",
           )}
         >
+          <div className="flex shrink-0 items-center justify-between px-3 py-2 lg:hidden">
+            <p className="text-[15px] font-medium tracking-[-0.02em]">
+              {formatMonthLabel(month)}
+            </p>
+            {syncing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            ) : null}
+          </div>
           <div className="grid shrink-0 grid-cols-7 border-b border-black/[0.06] dark:border-white/10">
             {WEEKDAYS.map((label) => (
               <div
@@ -695,8 +703,52 @@ export function CalendarConnectorView({
           </div>
         </div>
 
-        {/* Desktop right rail; vertically stacked context beneath the month on mobile. */}
-        <aside className="flex w-full shrink-0 flex-col gap-4 border-t border-black/[0.06] p-4 dark:border-white/10 lg:w-[min(16rem,42%)] lg:overflow-y-auto lg:border-t-0 lg:border-l lg:p-3">
+        {/* Mobile: selected-day agenda under the month. Desktop: mini calendar + agenda rail. */}
+        {selectedDay ? (
+          <div className="shrink-0 border-t border-black/[0.06] p-4 dark:border-white/10 lg:hidden">
+            <p className="mb-2 px-0.5 text-[11px] font-medium text-muted-foreground">
+              {selectedDay.toLocaleDateString([], {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+              })}
+            </p>
+            {dayAgenda.length === 0 ? (
+              <p className="px-0.5 text-[11.5px] text-muted-foreground">
+                Nothing scheduled
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {dayAgenda.map((event) => (
+                  <li key={event.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelected(event);
+                        setPage("detail");
+                      }}
+                      className={cn(
+                        "w-full px-2 py-2 text-left hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
+                        SHELL_G3_RADIUS,
+                      )}
+                    >
+                      <p className="truncate text-[12px] font-medium">
+                        {event.summary}
+                      </p>
+                      <p className="truncate text-[10.5px] text-muted-foreground">
+                        {formatChipTime(event.startIso, event.allDay) ||
+                          "All day"}
+                      </p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
+
+        {/* Desktop right rail; mini month stays desktop-only. */}
+        <aside className="hidden w-full shrink-0 flex-col gap-4 border-t border-black/[0.06] p-4 dark:border-white/10 lg:flex lg:w-[min(16rem,42%)] lg:overflow-y-auto lg:border-t-0 lg:border-l lg:p-3">
           <div>
             <div className="mb-2 flex items-center justify-between px-0.5">
               <p className="text-[12.5px] font-medium tracking-[-0.01em]">

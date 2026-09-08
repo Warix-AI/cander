@@ -612,7 +612,11 @@ export function ProjectBrowserPanel({
 
   const requestCloseTab = (id: string) => {
     const tab = session.tabs.find((item) => item.id === id);
-    if (mobile && tab?.kind === "studio-image") {
+    if (
+      mobile &&
+      (tab?.kind === "studio-image" ||
+        (spaceId === "research" && tab?.kind === "web"))
+    ) {
       setCloseConfirmTabId(id);
       return;
     }
@@ -623,17 +627,30 @@ export function ProjectBrowserPanel({
     closeConfirmTabId == null
       ? null
       : (session.tabs.find((item) => item.id === closeConfirmTabId) ?? null);
+  const closeConfirmIsImage = closeConfirmTab?.kind === "studio-image";
   const closeConfirmLabel = (() => {
-    if (!closeConfirmTab || closeConfirmTab.kind !== "studio-image") {
-      return closeConfirmTab?.title || "Image";
+    if (!closeConfirmTab) return "Tab";
+    if (closeConfirmTab.kind === "studio-image") {
+      const studioIndex = session.tabs
+        .filter((item) => item.kind === "studio-image")
+        .findIndex((item) => item.id === closeConfirmTab.id);
+      return studioIndex >= 0
+        ? studioImageTabLabel(studioIndex)
+        : closeConfirmTab.title || "Image";
     }
-    const studioIndex = session.tabs
-      .filter((item) => item.kind === "studio-image")
-      .findIndex((item) => item.id === closeConfirmTab.id);
-    return studioIndex >= 0
-      ? studioImageTabLabel(studioIndex)
-      : closeConfirmTab.title || "Image";
+    if (closeConfirmTab.kind === "web") {
+      return (
+        closeConfirmTab.title ||
+        displayHostFromUrl(closeConfirmTab.url) ||
+        "Website"
+      );
+    }
+    return closeConfirmTab.title || "Tab";
   })();
+  const showMobileTabBar =
+    mobile &&
+    session.tabs.length > 0 &&
+    (session.tabs.length > 1 || spaceId === "research");
 
   const addAgentTab = () => {
     if (!projectId || !key) return;
@@ -1737,7 +1754,7 @@ export function ProjectBrowserPanel({
     <div
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden",
-        mobile && session.tabs.length > 1 && "pb-[calc(5rem+env(safe-area-inset-bottom,0px))]",
+        mobile && showMobileTabBar && "pb-[calc(5rem+env(safe-area-inset-bottom,0px))]",
         mobile ? "bg-white dark:bg-black" : BROWSER_CHROME_BG,
       )}
     >
@@ -2191,7 +2208,7 @@ export function ProjectBrowserPanel({
           </span>
         </button>
       ) : null}
-      {mobile && session.tabs.length > 1 ? (
+      {showMobileTabBar ? (
         <ProjectMobileTabBar
           tabs={session.tabs}
           activeId={active.id}
@@ -2211,16 +2228,20 @@ export function ProjectBrowserPanel({
       >
         <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-1">
           <p className="px-1 text-[17px] font-medium tracking-[-0.02em] text-foreground">
-            Delete image?
+            {closeConfirmIsImage ? "Delete image?" : "Remove website?"}
           </p>
           <p className="mt-1 px-1 text-[13px] text-muted-foreground">
-            This removes the tab from the project. You can’t undo this.
+            {closeConfirmIsImage
+              ? "This removes the tab from the project. You can’t undo this."
+              : "This removes the site from the project. You can’t undo this."}
           </p>
           <div className="mt-4 flex items-center gap-3 rounded-[14px] bg-muted/50 px-3 py-3 dark:bg-white/[0.08]">
             {closeConfirmTab ? (
               <TabGlyph tab={closeConfirmTab} className="h-8 w-8 rounded-[8px]" />
-            ) : (
+            ) : closeConfirmIsImage ? (
               <Image className="h-8 w-8 text-muted-foreground" strokeWidth={1.6} />
+            ) : (
+              <Globe className="h-8 w-8 text-muted-foreground" strokeWidth={1.6} />
             )}
             <span className="min-w-0 flex-1 truncate text-[15px] font-medium tracking-[-0.01em] text-foreground">
               {closeConfirmLabel}
@@ -2243,7 +2264,7 @@ export function ProjectBrowserPanel({
               }}
               className="inline-flex h-11 items-center justify-center rounded-full bg-red-600 text-[15px] font-medium text-white transition-colors hover:bg-red-600/90"
             >
-              Delete
+              {closeConfirmIsImage ? "Delete" : "Remove"}
             </button>
           </div>
         </div>

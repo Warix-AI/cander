@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore, type TouchEventHandler } from "react";
-import { Blocks, ChevronLeft, Ellipsis, Image as ImageIcon, PanelsTopLeft, Plus, SquarePen } from "lucide-react";
+import { Blocks, ChevronLeft, Ellipsis, Hammer, Image as ImageIcon, PanelsTopLeft, Plus, Search, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
@@ -142,12 +142,14 @@ export function MobileAppChrome({ className }: { className?: string }) {
     !inChromeSub &&
     !onMenuMain &&
     mobileSurface !== "menu";
+  const inCanvasProject =
+    Boolean(projectId) &&
+    !isWorkItemBrowser &&
+    (inPrimarySpace || spaceId === "research" || spaceId === "build");
   const showProjectTools =
     !inChromeSub &&
     !onMenuMain &&
-    Boolean(projectId) &&
-    inPrimarySpace &&
-    !isWorkItemBrowser;
+    inCanvasProject;
   const showHomeChatPanelToggle =
     !inChromeSub &&
     !onMenuMain &&
@@ -455,7 +457,15 @@ export function MobileAppChrome({ className }: { className?: string }) {
             type="button"
             role="tab"
             aria-selected={surface === "panel"}
-            aria-label={mediaProjectActions ? "Image preview" : "Project preview"}
+            aria-label={
+              mediaProjectActions
+                ? "Image preview"
+                : spaceId === "research"
+                  ? "Search project"
+                  : spaceId === "build"
+                    ? "Build project"
+                    : "Project preview"
+            }
             onClick={() => setChatOrPanel("panel")}
             className={cn(
               "inline-flex min-w-11 items-center justify-center rounded-full px-3 py-2 transition-colors",
@@ -466,6 +476,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
           >
             {mediaProjectActions ? (
               <ImageIcon className="h-4 w-4" strokeWidth={1.8} />
+            ) : spaceId === "research" ? (
+              <Search className="h-4 w-4" strokeWidth={1.8} />
+            ) : spaceId === "build" ? (
+              <Hammer className="h-4 w-4" strokeWidth={1.8} />
             ) : (
               <PanelsTopLeft className="h-4 w-4" strokeWidth={1.8} />
             )}
