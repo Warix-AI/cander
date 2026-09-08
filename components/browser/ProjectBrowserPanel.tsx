@@ -864,6 +864,52 @@ export function ProjectBrowserPanel({
   const isMarkdownDocTab =
     active.kind === "studio-document" &&
     decodeTextDataUrl(active.url) != null;
+
+  const researchBrowserActionsRef = useRef({
+    onCopyLink: () => {},
+    onOpenNewTab: () => {},
+    onClearPage: () => {},
+    address: "about:blank" as string,
+  });
+  researchBrowserActionsRef.current = {
+    address,
+    onCopyLink: async () => {
+      try {
+        await navigator.clipboard.writeText(address);
+      } catch {
+        window.prompt("Copy page address", address);
+      }
+    },
+    onOpenNewTab: () => addUrlTab(active.url || "about:blank"),
+    onClearPage: () => navigateAddressTo("about:blank"),
+  };
+
+  useEffect(() => {
+    if (!mobile || browserSpaceId !== "research" || standalone) {
+      window.dispatchEvent(
+        new CustomEvent("mobile-research-browser-actions", { detail: null }),
+      );
+      return;
+    }
+    window.dispatchEvent(
+      new CustomEvent("mobile-research-browser-actions", {
+        detail: {
+          address: researchBrowserActionsRef.current.address,
+          onCopyLink: () =>
+            void researchBrowserActionsRef.current.onCopyLink(),
+          onOpenNewTab: () =>
+            researchBrowserActionsRef.current.onOpenNewTab(),
+          onClearPage: () => researchBrowserActionsRef.current.onClearPage(),
+        },
+      }),
+    );
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent("mobile-research-browser-actions", { detail: null }),
+      );
+    };
+  }, [mobile, browserSpaceId, standalone, address, active.id]);
+
   const workItem = findWorkCollectionItem(projectId);
   const projectTitle =
     standalone
@@ -1754,7 +1800,6 @@ export function ProjectBrowserPanel({
     <div
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden",
-        mobile && showMobileTabBar && "pb-[calc(5rem+env(safe-area-inset-bottom,0px))]",
         mobile ? "bg-white dark:bg-black" : BROWSER_CHROME_BG,
       )}
     >
@@ -2180,7 +2225,7 @@ export function ProjectBrowserPanel({
           />
         ) : null}
       </div>
-      {mobile && showBrowserNavChrome ? (
+      {mobile && showBrowserNavChrome && !showMobileTabBar ? (
         <button
           type="button"
           aria-label={

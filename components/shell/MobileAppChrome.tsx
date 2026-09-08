@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore, type TouchEventHandler } from "react";
-import { Blocks, ChevronLeft, Ellipsis, Hammer, Image as ImageIcon, PanelsTopLeft, Plus, Search, SquarePen } from "lucide-react";
+import { Blocks, ChevronLeft, Ellipsis, ExternalLink, Hammer, Image as ImageIcon, PanelsTopLeft, Plus, Search, Share, SquarePen, Trash2 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
@@ -54,6 +54,13 @@ type MediaProjectActions = {
   onReplace: () => void;
   onRemove: () => void;
   disabled?: boolean;
+};
+
+type ResearchBrowserActions = {
+  address: string;
+  onCopyLink: () => void;
+  onOpenNewTab: () => void;
+  onClearPage: () => void;
 };
 
 /**
@@ -113,6 +120,8 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [mediaProjectActions, setMediaProjectActions] =
     useState<MediaProjectActions | null>(null);
+  const [researchBrowserActions, setResearchBrowserActions] =
+    useState<ResearchBrowserActions | null>(null);
   const { updateProject } = useSpaceMutation();
   const { ctx } = useSpaceData();
   const { project: entityProject } = useSpaceProject(projectId);
@@ -222,9 +231,23 @@ export function MobileAppChrome({ className }: { className?: string }) {
         (event as CustomEvent<MediaProjectActions | null>).detail,
       );
     };
+    const onResearchActions = (event: Event) => {
+      setResearchBrowserActions(
+        (event as CustomEvent<ResearchBrowserActions | null>).detail,
+      );
+    };
     window.addEventListener("mobile-project-media-actions", onMediaActions);
-    return () =>
+    window.addEventListener(
+      "mobile-research-browser-actions",
+      onResearchActions,
+    );
+    return () => {
       window.removeEventListener("mobile-project-media-actions", onMediaActions);
+      window.removeEventListener(
+        "mobile-research-browser-actions",
+        onResearchActions,
+      );
+    };
   }, []);
   const showPanelActions = Boolean(
     panelActions &&
@@ -653,6 +676,46 @@ export function MobileAppChrome({ className }: { className?: string }) {
             }}
             disabled={mediaProjectActions.disabled}
           />
+        ) : researchBrowserActions ? (
+          <div className="flex flex-col py-0.5">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                researchBrowserActions.onCopyLink();
+                setActionsOpen(false);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-full px-3 py-2.5 text-left text-[15px] tracking-[-0.01em] hover:bg-black/[0.04] dark:hover:bg-white/[0.08]"
+            >
+              <Share className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+              <span className="min-w-0 flex-1 truncate">Copy page link</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                researchBrowserActions.onOpenNewTab();
+                setActionsOpen(false);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-full px-3 py-2.5 text-left text-[15px] tracking-[-0.01em] hover:bg-black/[0.04] dark:hover:bg-white/[0.08]"
+            >
+              <ExternalLink className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+              <span className="min-w-0 flex-1 truncate">Open in new tab</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={researchBrowserActions.address === "about:blank"}
+              onClick={() => {
+                researchBrowserActions.onClearPage();
+                setActionsOpen(false);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-full px-3 py-2.5 text-left text-[15px] tracking-[-0.01em] hover:bg-black/[0.04] dark:hover:bg-white/[0.08] disabled:opacity-40"
+            >
+              <Trash2 className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+              <span className="min-w-0 flex-1 truncate">Clear page</span>
+            </button>
+          </div>
         ) : (
           <div className="px-1 pb-1 pt-0.5">
             <ProjectActionsSheetBody

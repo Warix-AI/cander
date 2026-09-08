@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 
-/** Composer-sized, panel-local navigation. The containing panel reserves its bottom space. */
+/** Composer-sized floating nav over panel content (does not reserve layout space). */
 export function MobileFloatingNav({ children, activeId, label = "Sections" }: {
   children: ReactNode;
   activeId: string;

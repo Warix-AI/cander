@@ -721,6 +721,9 @@ export function clearProjectBrowserSession(key: ProjectBrowserKey) {
   const storageKey = projectBrowserStorageKey(key);
   cache.delete(storageKey);
   hydratedKeys.delete(storageKey);
+  // Stamp a local write so remote hydrate can't resurrect deleted tabs.
+  localWriteAt.set(storageKey, Date.now());
+  lastChangedKey = storageKey;
   if (typeof window !== "undefined") {
     try {
       window.localStorage.removeItem(`${STORAGE_PREFIX}:${storageKey}`);
@@ -772,9 +775,28 @@ export function mergeProjectBrowserRemoteSessions(
           item.key.spaceId,
         ) ?? undefined;
     }
+    // Local adds more tabs → keep local until remote catches up.
     if (existing && existing.tabs.length > item.session.tabs.length) {
       hydratedKeys.add(storageKey);
       cache.set(storageKey, existing);
+      continue;
+    }
+    // Local deletes (fewer tabs) after a recent write → keep local; remote
+    // often still has the pre-delete snapshot for a bit and would resurrect tabs.
+    if (
+      existing &&
+      localWritten &&
+      existing.tabs.length < item.session.tabs.length &&
+      Date.now() - localWritten < 5 * 60_000
+    ) {
+      continue;
+    }
+    // Cleared locally (no cache) with a fresh write stamp → skip remote restore.
+    if (
+      !existing &&
+      localWritten &&
+      Date.now() - localWritten < 5 * 60_000
+    ) {
       continue;
     }
 
