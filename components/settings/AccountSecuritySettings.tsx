@@ -160,12 +160,12 @@ export function AccountSecuritySettings({ onAfterSignOut }: Props) {
     }
     if (billingBlocksDelete) {
       if (isPaidPlan(actor.plan) && !actor.cancelAtPeriodEnd) {
-        return "Cancel your plan first. Billing runs through the end of your current period.";
+        return "You can’t delete your account until your subscription has been cancelled. Billing runs through the end of your current period.";
       }
       if (periodLabel) {
         return `Your plan stays active until ${periodLabel}. You can delete your account after billing ends.`;
       }
-      return "Cancel your plan before deleting your account.";
+      return "You can’t delete your account until your subscription has been cancelled.";
     }
     if (supabase) {
       return "Permanently deletes your Auth user and cascaded profile data.";
@@ -266,76 +266,74 @@ export function AccountSecuritySettings({ onAfterSignOut }: Props) {
             </DashBtn>
         </div>
 
-        {entitlements.canDeleteAccount || managedByOrganization ? (
-          <div className="settings-glass-row flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-[13.5px] font-medium tracking-[-0.01em]">Delete account</p>
-                {!mobile ? (
-                  <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
-                    {deleteDescription()}
-                  </p>
-                ) : null}
-              </div>
-              {managedByOrganization && !entitlements.isOwner ? (
-                <span className="shrink-0 text-[12.5px] text-muted-foreground">
-                  Managed by your organization
-                </span>
-              ) : hasOtherOrgMembers ? (
-                <span className="shrink-0 text-[12.5px] text-muted-foreground">
-                  Remove other users first
-                </span>
-              ) : confirmDelete ? (
-                <div className="flex w-full max-w-sm flex-col gap-2 sm:items-end">
-                  <input
-                    type="text"
-                    value={deleteConfirmText}
-                    onChange={(event) => setDeleteConfirmText(event.target.value)}
-                    placeholder='Type "delete" to confirm'
-                    aria-label='Type "delete" to confirm account deletion'
-                    className="settings-glass-input h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25"
-                  />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={busy === "delete" || !deleteConfirmOk}
-                      onClick={() => void removeAccount()}
-                      className="inline-flex h-10 items-center rounded-[10px] border border-destructive/30 bg-destructive/10 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/15 disabled:opacity-50"
-                    >
-                      {busy === "delete" ? "Deleting…" : "Confirm delete"}
-                    </button>
-                    <DashBtn
-                      onClick={() => {
-                        setConfirmDelete(false);
-                        setDeleteConfirmText("");
-                      }}
-                    >
-                      Cancel
-                    </DashBtn>
-                  </div>
+        <div className="settings-glass-row flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-[13.5px] font-medium tracking-[-0.01em]">Delete account</p>
+              {!mobile ? (
+                <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
+                  {deleteDescription()}
+                </p>
+              ) : null}
+            </div>
+            {managedByOrganization && !entitlements.isOwner ? (
+              <span className="shrink-0 text-[12.5px] text-muted-foreground">
+                Managed by your organization
+              </span>
+            ) : hasOtherOrgMembers ? (
+              <span className="shrink-0 text-[12.5px] text-muted-foreground">
+                Remove other users first
+              </span>
+            ) : confirmDelete ? (
+              <div className="flex w-full max-w-sm flex-col gap-2 sm:items-end">
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(event) => setDeleteConfirmText(event.target.value)}
+                  placeholder='Type "delete" to confirm'
+                  aria-label='Type "delete" to confirm account deletion'
+                  className="settings-glass-input h-10 w-full px-3 text-[13.5px] outline-none focus:border-foreground/25"
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={busy === "delete" || !deleteConfirmOk}
+                    onClick={() => void removeAccount()}
+                    className="inline-flex h-10 items-center rounded-[10px] border border-destructive/30 bg-destructive/10 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/15 disabled:opacity-50"
+                  >
+                    {busy === "delete" ? "Deleting…" : "Confirm delete"}
+                  </button>
+                  <DashBtn
+                    onClick={() => {
+                      setConfirmDelete(false);
+                      setDeleteConfirmText("");
+                    }}
+                  >
+                    Cancel
+                  </DashBtn>
                 </div>
-              ) : billingBlocksDelete ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    nativeShell
-                      ? openExternalUrl(webAppPlansSettingsUrl())
-                      : setSettingsTab("plans")
-                  }
-                  className="inline-flex h-10 shrink-0 items-center rounded-[10px] border border-foreground/15 px-4 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-muted"
-                >
-                  {nativeShell ? "Manage billing on web" : "Cancel plan"}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  className="inline-flex h-10 shrink-0 items-center rounded-[10px] border border-destructive/30 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/10"
-                >
-                  Delete account
-                </button>
-              )}
-          </div>
-        ) : null}
+              </div>
+            ) : billingBlocksDelete ? (
+              <button
+                type="button"
+                onClick={() =>
+                  nativeShell
+                    ? openExternalUrl(webAppPlansSettingsUrl())
+                    : setSettingsTab("plans")
+                }
+                className="inline-flex h-10 shrink-0 items-center rounded-[10px] border border-foreground/15 px-4 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-muted"
+              >
+                {nativeShell ? "Manage billing on web" : "Cancel plan"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="inline-flex h-10 shrink-0 items-center rounded-[10px] border border-destructive/30 px-4 text-[13.5px] font-medium tracking-[-0.01em] text-destructive hover:bg-destructive/10"
+              >
+                Delete account
+              </button>
+            )}
+        </div>
 
       </SettingsGroup>
 

@@ -1003,6 +1003,33 @@ html.dark .light-surface.menu-glass-surface {
   box-shadow: inset 0 0 0 0.5px oklch(1 0 0 / 0.05);
 }
 
+/* Onboarding auth fields — transparent fill; kill browser autofill yellow + focus glow. */
+.onboarding-input {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.onboarding-input:hover,
+.onboarding-input:focus,
+.onboarding-input:focus-visible {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.onboarding-input:-webkit-autofill,
+.onboarding-input:-webkit-autofill:hover,
+.onboarding-input:-webkit-autofill:focus,
+.onboarding-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--foreground) !important;
+  caret-color: var(--foreground);
+  /* Paint page background over Chrome/Safari autofill yellow */
+  box-shadow: 0 0 0 1000px var(--background) inset !important;
+  background-color: transparent !important;
+  transition: background-color 99999s ease-out;
+}
+
 /* Settings breadcrumbs share the connector detail placement: flush with the
    main panel while the page body remains centered at its readable max width. */
 @media (min-width: 1024px) {

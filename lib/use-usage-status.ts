@@ -71,6 +71,20 @@ export function useUsageStatusPercent(): {
 } {
   const { snapshot, loaded } = useUsageSnapshot();
 
+  if (snapshot?.accountSpend) {
+    const spend = snapshot.accountSpend;
+    return {
+      percent: spend.percentUsed,
+      label:
+        spend.status === "exhausted"
+          ? "Account usage budget reached"
+          : spend.status === "approaching"
+            ? "Approaching account usage budget"
+            : `${spend.percentUsed}% of account usage`,
+      loaded,
+    };
+  }
+
   const aiChat = snapshot?.features.find((feature) => feature.feature === "ai_chat");
   if (aiChat?.percentUsed != null) {
     return {
@@ -81,6 +95,18 @@ export function useUsageStatusPercent(): {
           : aiChat.status === "limited"
             ? "Monthly allowance reached"
             : `${aiChat.percentUsed}% of monthly AI usage`,
+      loaded,
+    };
+  }
+
+  // Only use demo % when we have no live snapshot at all.
+  if (!loaded) {
+    return { percent: 0, label: "Loading…", loaded };
+  }
+  if (snapshot) {
+    return {
+      percent: 0,
+      label: "Account usage",
       loaded,
     };
   }

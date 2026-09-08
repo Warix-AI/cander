@@ -20,6 +20,10 @@ import {
   isLocalOrPrivateUrl,
   resolveChatWorkspaceId,
 } from "../lib/ai/authz.ts";
+import {
+  canAccessProjectState,
+  isSharedWorkspaceState,
+} from "../lib/security/project-access-state.ts";
 import { resolveAuthorizedToolNames } from "../lib/ai/tools/registry.ts";
 import { trustedApplicationOrigin } from "../lib/security/server-origin.ts";
 import { isManagedWorkspaceIconUrl } from "../lib/security/storage-url.ts";
@@ -269,5 +273,59 @@ test("create_chat only attaches workspace when actor is a member", () => {
       isWorkspaceMember: true,
     }),
     null,
+  );
+});
+
+test("shared workspace = business or 2+ members", () => {
+  assert.equal(
+    isSharedWorkspaceState({ kind: "business", memberCount: 1 }),
+    true,
+  );
+  assert.equal(
+    isSharedWorkspaceState({ kind: "personal", memberCount: 2 }),
+    true,
+  );
+  assert.equal(
+    isSharedWorkspaceState({ kind: "personal", memberCount: 1 }),
+    false,
+  );
+});
+
+test("projects private unless shared workspace", () => {
+  assert.equal(
+    canAccessProjectState({
+      actorId: "a",
+      createdBy: "a",
+      isMember: true,
+      shared: false,
+    }),
+    true,
+  );
+  assert.equal(
+    canAccessProjectState({
+      actorId: "b",
+      createdBy: "a",
+      isMember: true,
+      shared: false,
+    }),
+    false,
+  );
+  assert.equal(
+    canAccessProjectState({
+      actorId: "b",
+      createdBy: "a",
+      isMember: true,
+      shared: true,
+    }),
+    true,
+  );
+  assert.equal(
+    canAccessProjectState({
+      actorId: "b",
+      createdBy: "a",
+      isMember: false,
+      shared: true,
+    }),
+    false,
   );
 });

@@ -286,9 +286,9 @@ async function main() {
       .eq("workspace_id", workspaceId)
       .limit(1);
     results.push({
-      name: "Member can see shared projects (intentional)",
+      name: "Member project visibility (owner-or-shared RLS)",
       pass: true,
-      detail: `rows=${(memProjects ?? []).length} (member-shared content is intentional)`,
+      detail: `rows=${(memProjects ?? []).length} (shared workspaces allow co-member access)`,
     });
   }
 
@@ -473,7 +473,7 @@ async function main() {
     console.log(`${mark}  ${r.name} — ${r.detail}`);
   }
   console.log(
-    `\n${results.length - failed}/${results.length} passed (chat private; projects member-shared).`,
+    `\n${results.length - failed}/${results.length} passed (chats private; projects owner-or-shared).`,
   );
   process.exit(failed ? 1 : 0);
 }

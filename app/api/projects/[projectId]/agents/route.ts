@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import {
-  assertProjectInWorkspace,
+  assertProjectAccessForUser,
   assertWorkspaceMember,
   countProjectAgentRunsSince,
   createProjectAgent,
@@ -36,7 +36,7 @@ export async function GET(
   if (!(await assertWorkspaceMember(workspaceId, auth.user.id))) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
-  const project = await assertProjectInWorkspace(projectId, workspaceId);
+  const project = await assertProjectAccessForUser(projectId, workspaceId, auth.user.id);
   if (!project.ok) {
     return NextResponse.json({ error: "Project not found." }, { status: 404 });
   }
@@ -97,7 +97,7 @@ export async function POST(
   if (!(await assertWorkspaceMember(workspaceId, auth.user.id))) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
-  const project = await assertProjectInWorkspace(projectId, workspaceId);
+  const project = await assertProjectAccessForUser(projectId, workspaceId, auth.user.id);
   if (!project.ok) {
     return NextResponse.json({ error: "Project not found." }, { status: 404 });
   }

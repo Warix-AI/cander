@@ -80,5 +80,6 @@ export type ComputerProvider = {
     sessionId: string,
     userId: string,
     projectId: string,
+    opts?: { workspaceId?: string },
   ): Promise<{ fileCount: number }>;
 };

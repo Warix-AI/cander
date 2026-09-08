@@ -46,6 +46,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Task missing project/workspace." }, { status: 400 });
   }
 
+  const { assertProjectAccess } = await import("@/lib/security/project-access");
+  const access = await assertProjectAccess({
+    projectId,
+    workspaceId,
+    userId: auth.userId,
+  });
+  if (!access.ok) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
   const idempotencyKey =
     request.headers.get("Idempotency-Key")?.trim() ||
     `sandbox-build:${workspaceId}:${taskId}`;
@@ -74,7 +84,9 @@ export async function POST(request: Request) {
       taskId,
     });
 
-    const restored = await provider.restoreProject(session.id, auth.userId, projectId);
+    const restored = await provider.restoreProject(session.id, auth.userId, projectId, {
+      workspaceId,
+    });
     const install = await provider.exec(session.id, auth.userId, "npm", ["install"]);
     if (install.exitCode !== 0) {
       throw new Error(install.stderr || "npm install failed.");

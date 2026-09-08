@@ -5,6 +5,11 @@
 import { readChatAttachmentImageBytes } from "@/lib/ai/raw-openai/attachment-image-bytes";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { studioAssetImageUrl } from "@/lib/studio-assets-client";
+import {
+  assertProjectAccess,
+  assertProjectInWorkspace as projectExistsInWorkspace,
+  assertWorkspaceMember as workspaceMemberCheck,
+} from "@/lib/security/project-access";
 
 export const STUDIO_ASSETS_BUCKET = "studio-assets";
 
@@ -35,28 +40,24 @@ export async function assertWorkspaceMember(
   workspaceId: string,
   userId: string,
 ): Promise<boolean> {
-  const admin = createSupabaseAdminClient();
-  const { data } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("workspace_id", workspaceId)
-    .eq("profile_id", userId)
-    .maybeSingle();
-  return Boolean(data);
+  return workspaceMemberCheck(workspaceId, userId);
 }
 
 export async function assertProjectInWorkspace(
   projectId: string,
   workspaceId: string,
 ): Promise<boolean> {
-  const admin = createSupabaseAdminClient();
-  const { data } = await admin
-    .from("projects")
-    .select("id")
-    .eq("id", projectId)
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  return Boolean(data);
+  return projectExistsInWorkspace(projectId, workspaceId);
+}
+
+/** Member + (owner or shared workspace). */
+export async function assertProjectAccessForUser(
+  projectId: string,
+  workspaceId: string,
+  userId: string,
+): Promise<boolean> {
+  const result = await assertProjectAccess({ projectId, workspaceId, userId });
+  return result.ok;
 }
 
 export async function storeStudioAsset(opts: {

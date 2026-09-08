@@ -39,6 +39,7 @@ export async function POST(request: Request) {
         sessionId,
         auth.userId,
         body.projectId,
+        body.workspaceId ? { workspaceId: body.workspaceId } : undefined,
       );
       return NextResponse.json({ ok: true, ...result });
     }

@@ -1,7 +1,7 @@
 import type { BillingPlan } from "../types.ts";
 
-/** Versioned plan config — bump when allowance structure changes. Approved 2026-08-31. */
-export const USAGE_PLAN_CONFIG_VERSION = 2;
+/** Versioned plan config — bump when allowance structure changes. Account spend budgets 2026-09-08. */
+export const USAGE_PLAN_CONFIG_VERSION = 3;
 
 /** Normalized feature categories for metering and enforcement. */
 export type UsageFeatureCategory =
@@ -71,6 +71,10 @@ export type PlanUsagePolicy = {
   workspaceDailyCostCeilingMicros: number;
   workspaceMonthlyCostCeilingMicros: number;
   userDailyExpensiveActionCeilingMicros: number;
+  /** Customer-facing monthly bill (marketing price). */
+  billAmountMicros: number;
+  /** Usable AI spend for the account this period (shared across workspaces). */
+  usableBudgetMicros: number;
 };
 
 export type UsageGuardInput = {
@@ -144,4 +148,15 @@ export type UsageStatusSnapshot = {
   features: UsageStatusFeature[];
   notices: string[];
   upgradePlan: BillingPlan | null;
+  /** Single account meter shared across workspaces. */
+  accountSpend?: {
+    spentMicros: number;
+    reservedMicros: number;
+    usableBudgetMicros: number;
+    billAmountMicros: number;
+    percentUsed: number;
+    periodStart: string;
+    periodEnd: string;
+    status: "ok" | "approaching" | "exhausted";
+  };
 };

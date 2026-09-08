@@ -57,7 +57,7 @@ export function OAuthButtons({
           disabled={disabled || Boolean(busy)}
           onClick={() => void start(item.id)}
           className={cn(
-            "inline-flex h-11 w-full items-center justify-center gap-2.5 border border-foreground/15 text-[14px] font-medium tracking-[-0.01em] hover:bg-muted disabled:opacity-50",
+            "inline-flex h-11 w-full items-center justify-center gap-2.5 border border-foreground/12 bg-background text-[14px] font-medium tracking-[-0.01em] transition-colors duration-150 hover:border-foreground/20 hover:bg-muted disabled:opacity-50",
             SHELL_G3_RADIUS,
           )}
         >

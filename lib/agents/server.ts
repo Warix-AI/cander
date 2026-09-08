@@ -24,6 +24,11 @@ import {
   agentStatusFromRow,
   parseAgentTrigger,
 } from "@/lib/agents/types";
+import {
+  assertProjectAccess,
+  assertProjectInWorkspace as projectExistsInWorkspace,
+  assertWorkspaceMember as workspaceMemberCheck,
+} from "@/lib/security/project-access";
 
 export function newProjectAgentId() {
   return `pag_${crypto.randomUUID().replace(/-/g, "")}`;
@@ -45,29 +50,34 @@ export async function assertWorkspaceMember(
   workspaceId: string,
   userId: string,
 ): Promise<boolean> {
-  const admin = createSupabaseAdminClient();
-  const { data } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("workspace_id", workspaceId)
-    .eq("profile_id", userId)
-    .maybeSingle();
-  return Boolean(data);
+  return workspaceMemberCheck(workspaceId, userId);
 }
 
 export async function assertProjectInWorkspace(
   projectId: string,
   workspaceId: string,
 ): Promise<{ ok: true; kind: string | null } | { ok: false }> {
+  const ok = await projectExistsInWorkspace(projectId, workspaceId);
+  if (!ok) return { ok: false };
   const admin = createSupabaseAdminClient();
   const { data } = await admin
     .from("projects")
-    .select("id, kind")
+    .select("kind")
     .eq("id", projectId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
-  if (!data) return { ok: false };
-  return { ok: true, kind: (data.kind as string | null) ?? null };
+  return { ok: true, kind: (data?.kind as string | null) ?? null };
+}
+
+/** Prefer this over assertProjectInWorkspace for mutating routes. */
+export async function assertProjectAccessForUser(
+  projectId: string,
+  workspaceId: string,
+  userId: string,
+): Promise<{ ok: true; kind: string | null } | { ok: false }> {
+  const result = await assertProjectAccess({ projectId, workspaceId, userId });
+  if (!result.ok) return { ok: false };
+  return { ok: true, kind: result.project.kind };
 }
 
 function mapAgent(row: Record<string, unknown>): ProjectAgent {

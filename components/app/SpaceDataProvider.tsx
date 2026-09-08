@@ -43,7 +43,7 @@ import {
   getSessionReadySnapshot,
   subscribeSessionReady,
 } from "@/lib/session-ready";
-import { bindPinsProfile } from "@/lib/session";
+import { bindPinsProfile, bindWorkspaceProfile } from "@/lib/session";
 import type { WorkspaceCtx } from "@/lib/space-entities";
 
 type SpaceDataContextValue = {
@@ -89,6 +89,7 @@ export function SpaceDataProvider({
     bindChatStoreOwner(scopedOwner);
     if (isAppearanceActorId(actorId)) {
       bindPinsProfile(actorId);
+      bindWorkspaceProfile(actorId);
     }
   }, [actorId, backend]);
 

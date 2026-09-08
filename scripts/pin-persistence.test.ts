@@ -232,6 +232,20 @@ describe("pinned item persistence", () => {
     assert.equal(h.tables.get("user_pins")?.length, 1);
   });
 
+  it("keeps local pins and re-pushes when remote pins are empty", async () => {
+    const h = createHarness();
+    h.session.bindPinsProfile(PROFILE_A);
+    h.session.setStoredPin("connector", "gmail", "primary");
+    h.session.markPinsSynced(h.session.getPinsLocalEpoch());
+    assert.equal(h.session.arePinsDirty(), false);
+    assert.deepEqual(h.tables.get("user_pins") ?? [], []);
+    await h.sync.hydrateUserPrefsFromRemote(contextFor(PROFILE_A));
+    await h.runFor(3000);
+    assert.deepEqual(h.pins(), [gmail]);
+    assert.equal(h.tables.get("user_pins")?.length, 1);
+    assert.equal(h.session.arePinsDirty(), false);
+  });
+
   it("preserves unsynced pin and unpin changes across sign-out binding and reload", () => {
     const h = createHarness();
     h.session.bindPinsProfile(PROFILE_A);

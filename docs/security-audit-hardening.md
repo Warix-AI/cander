@@ -34,7 +34,7 @@ Ephemeral Owner A + Member B (same workspace) + Outsider C. Evidence stored as p
 | Unauth Edge `chat-send` / `briefing-sync` / `build-publish` | Pass | `401` |
 | Outsider `create_chat` with foreign `workspaceId` | Pass | Chat created with `workspace_id: null` |
 
-**Intentional residual:** any workspace **member** can CRUD projects/sources/files (`002_space_entities.sql`). Chats remain **owner-private** (`025`–`027`). Documented product split — not silent.
+**Intentional residual (updated 2026-09):** chats remain **owner-private** (`025`–`027`, tightened in `057`). Projects/apps/sites are **creator-only** in personal/solo workspaces and **member-shared** when `is_shared_workspace` (business kind or ≥2 members) — see migration `058_project_owner_or_shared.sql`.
 
 ### Phase C — P0/P1 fixes shipped
 

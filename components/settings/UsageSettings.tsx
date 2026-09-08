@@ -19,6 +19,8 @@ export function UsageSettings() {
   const { workspaceId, billingPlan } = useApp();
   const { snapshot, loaded } = useUsageSnapshot();
 
+  // Prefer account-wide dollar spend; fall back to feature meters.
+  const accountPercent = snapshot?.accountSpend?.percentUsed;
   const meters = useMemo(
     () =>
       buildUsageMeters({
@@ -29,16 +31,17 @@ export function UsageSettings() {
     [billingPlan, snapshot?.features, snapshot?.plan, workspaceId],
   );
 
-  // Single main meter (AI chat); fall back to highest enabled if chat is off.
   const mainMeter =
     meters.find((meter) => meter.id === "chat" && meter.enabled) ??
     meters.find((meter) => meter.enabled);
-  const overallPercent = mainMeter?.percent ?? 0;
+  const overallPercent = accountPercent ?? mainMeter?.percent ?? 0;
   const usageLabel = !loaded
     ? "Loading…"
-    : mainMeter
+    : accountPercent != null
       ? `${overallPercent}%`
-      : "No usage yet";
+      : mainMeter
+        ? `${overallPercent}%`
+        : "No usage yet";
 
   return (
     <SettingsPage>
@@ -49,7 +52,7 @@ export function UsageSettings() {
           <div className="settings-glass-row px-4 py-3.5">
             <div className="flex items-baseline justify-between gap-3">
               <p className="text-[13.5px] font-medium tracking-[-0.01em]">
-                Usage
+                Account usage
               </p>
               <p className="tabular-nums text-[12.5px] text-foreground/50 dark:text-zinc-400">
                 {usageLabel}

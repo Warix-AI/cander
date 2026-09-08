@@ -26,10 +26,26 @@ export async function upsertSharedMarkdownDoc(opts: {
   shareId?: string | null;
 }): Promise<SharedMarkdownDoc> {
   const admin = createSupabaseAdminClient();
-  const id =
-    opts.shareId && isMarkdownShareId(opts.shareId)
-      ? opts.shareId
-      : newMarkdownShareId();
+  const requestedId =
+    opts.shareId && isMarkdownShareId(opts.shareId) ? opts.shareId : null;
+
+  if (requestedId) {
+    const { data: existing } = await admin
+      .from("shared_markdown_docs")
+      .select("id, created_by, workspace_id")
+      .eq("id", requestedId)
+      .maybeSingle();
+    if (existing) {
+      if (
+        existing.created_by !== opts.userId ||
+        existing.workspace_id !== opts.workspaceId
+      ) {
+        throw new Error("You cannot update this shared document.");
+      }
+    }
+  }
+
+  const id = requestedId ?? newMarkdownShareId();
 
   const row = {
     id,

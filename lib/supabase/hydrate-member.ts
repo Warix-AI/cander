@@ -4,7 +4,12 @@ import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { memberFromSupabaseUser } from "@/lib/supabase/member-from-user";
 import { NAV_SPACES } from "@/lib/spaces";
-import { getWorkspaceSnapshot, persistWorkspace } from "@/lib/session";
+import {
+  bindWorkspaceProfile,
+  getWorkspaceOrderSnapshot,
+  getWorkspaceSnapshot,
+  persistWorkspace,
+} from "@/lib/session";
 import { normalizePlan, isTeamPlan } from "@/lib/plans";
 import { upsertCatalogWorkspace } from "@/lib/workspace-catalog";
 import {
@@ -62,6 +67,8 @@ function asSubscriptionStatus(value: unknown): SubscriptionStatus {
 
 /** Load profile + workspace memberships into the local member roster for nav/ACL. */
 export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
+  // Restore profile-scoped last workspace before membership fallback picks [0].
+  bindWorkspaceProfile(user.id);
   const supabase = createSupabaseBrowserClient();
   const base = memberFromSupabaseUser(user);
 
@@ -290,7 +297,10 @@ export async function hydrateMemberFromSupabase(user: User): Promise<Member> {
   if (workspaceIds.length) {
     const current = getWorkspaceSnapshot();
     if (!workspaceIds.includes(current)) {
-      persistWorkspace(workspaceIds[0]!);
+      const fromOrder = getWorkspaceOrderSnapshot().find((id) =>
+        workspaceIds.includes(id),
+      );
+      persistWorkspace(fromOrder ?? workspaceIds[0]!);
     }
   }
 

@@ -34,6 +34,7 @@ import {
   getPinsProfileId,
   getPinsScopeVersion,
   markPinsSynced,
+  persistPins,
   replacePinsState,
   replaceSidebarState,
   SIDEBAR_STORAGE_VERSION,
@@ -406,7 +407,16 @@ export async function hydrateUserPrefsFromRemote(ctx: WorkspaceCtx) {
     if (arePinsDirty()) {
       pushLocalPrefs = true;
     } else if (!dirtyAtStart && getPinsLocalEpoch() === epochAtStart) {
-      replacePinsState(((pinResult.data ?? []) as UserPinRow[]).map(pinRowToPin));
+      const remotePins = ((pinResult.data ?? []) as UserPinRow[]).map(pinRowToPin);
+      const localPins = getPinsSnapshot();
+      // Empty remote usually means never synced (or wiped), not an intentional
+      // clear. Keep profile-scoped local pins and push them back up.
+      if (remotePins.length === 0 && localPins.length > 0) {
+        persistPins(localPins);
+        pushLocalPrefs = true;
+      } else {
+        replacePinsState(remotePins);
+      }
     }
 
     if (sidebarResult.data) {

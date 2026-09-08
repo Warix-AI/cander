@@ -38,9 +38,59 @@ export { SIDEBAR_STORAGE_VERSION };
 
 const workspaceListeners = new Set<Listener>();
 let workspaceId = "";
+let workspaceProfileId: string | null = null;
 
 function emitWorkspace() {
   workspaceListeners.forEach((listener) => listener());
+}
+
+function workspaceProfileKey(profileId: string) {
+  return `courier-workspace:${profileId}`;
+}
+
+function workspaceOrderKey(profileId: string) {
+  return `courier-workspace-order:${profileId}`;
+}
+
+function readWorkspaceForProfile(profileId: string | null): string {
+  if (!profileId || typeof window === "undefined") return "";
+  const stored = window.localStorage.getItem(workspaceProfileKey(profileId))?.trim() ?? "";
+  if (
+    !stored ||
+    ["marketing", "engineering", "operations", "solo-pro", "solo-ultra", "solo-free"].includes(
+      stored,
+    )
+  ) {
+    return "";
+  }
+  return stored;
+}
+
+function readWorkspaceOrderForProfile(profileId: string | null): string[] {
+  if (!profileId || typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(workspaceOrderKey(profileId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(String).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function writeWorkspaceOrderForProfile(profileId: string | null, order: string[]) {
+  if (!profileId || typeof window === "undefined") return;
+  window.localStorage.setItem(workspaceOrderKey(profileId), JSON.stringify(order));
+}
+
+function rememberWorkspaceSelection(next: string) {
+  if (!next || typeof window === "undefined") return;
+  window.localStorage.setItem("courier-workspace", next);
+  if (!workspaceProfileId) return;
+  window.localStorage.setItem(workspaceProfileKey(workspaceProfileId), next);
+  const prev = readWorkspaceOrderForProfile(workspaceProfileId).filter((id) => id !== next);
+  writeWorkspaceOrderForProfile(workspaceProfileId, [next, ...prev]);
 }
 
 export function subscribeWorkspace(listener: Listener) {
@@ -72,13 +122,54 @@ export function getWorkspaceServerSnapshot() {
   return "";
 }
 
-export function persistWorkspace(next: string) {
-  workspaceId = next;
-  window.localStorage.setItem("courier-workspace", next);
+export function getWorkspaceOrderSnapshot(): string[] {
+  return readWorkspaceOrderForProfile(workspaceProfileId);
+}
+
+/**
+ * Bind last-used workspace to the signed-in profile so logout/login restores
+ * the workspace the user was actually in (and rail order prefers it).
+ */
+export function bindWorkspaceProfile(profileId: string | null) {
+  const next = profileId?.trim() || null;
+  if (workspaceProfileId === next) return;
+  workspaceProfileId = next;
+  if (!next) {
+    workspaceId = "";
+    emitWorkspace();
+    return;
+  }
+  const remembered = readWorkspaceForProfile(next);
+  if (remembered) {
+    workspaceId = remembered;
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("courier-workspace", remembered);
+    }
+  } else {
+    const legacy =
+      (typeof window !== "undefined"
+        ? window.localStorage.getItem("courier-workspace")?.trim()
+        : "") || workspaceId;
+    if (
+      legacy &&
+      !["marketing", "engineering", "operations", "solo-pro", "solo-ultra", "solo-free"].includes(
+        legacy,
+      )
+    ) {
+      workspaceId = legacy;
+      rememberWorkspaceSelection(legacy);
+    }
+  }
   emitWorkspace();
 }
 
-/** Reset in-memory workspace selection (sign-out / user switch). */
+export function persistWorkspace(next: string) {
+  workspaceId = next;
+  rememberWorkspaceSelection(next);
+  emitWorkspace();
+}
+
+/** Reset in-memory workspace selection (sign-out / user switch). Keeps profile-scoped prefs. */
 export function resetWorkspaceSession() {
   if (workspaceId === "") return;
   workspaceId = "";

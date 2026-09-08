@@ -7,7 +7,7 @@ import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import type { AgentConfigPatch } from "@/lib/agents/types";
 import {
   applyAgentConfigPatch,
-  assertProjectInWorkspace,
+  assertProjectAccessForUser,
   assertWorkspaceMember,
 } from "@/lib/agents/server";
 
@@ -57,7 +57,7 @@ export async function PATCH(
   if (!(await assertWorkspaceMember(workspaceId, auth.user.id))) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
-  if (!(await assertProjectInWorkspace(projectId, workspaceId)).ok) {
+  if (!(await assertProjectAccessForUser(projectId, workspaceId, auth.user.id)).ok) {
     return NextResponse.json({ error: "Project not found." }, { status: 404 });
   }
 

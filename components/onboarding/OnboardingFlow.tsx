@@ -196,7 +196,7 @@ const PANEL_COPY: Record<
   { title: string; body: string }
 > = {
   welcome: {
-    title: "Operate, build, and explore in one place.",
+    title: "Operate, build, and explore together.",
     body: "Connect apps, run automations, and keep every workspace in sync.",
   },
   "sign-in": {
@@ -251,7 +251,7 @@ const PANEL_COPY: Record<
 
 /** One-line copy for the mobile gradient card (7–8 words). */
 const MOBILE_PANEL_LINE: Record<Step, string> = {
-  welcome: "Operate, build, and explore in one place.",
+  welcome: "Operate, build, and explore together.",
   "sign-in": "Pick up where you left off.",
   forgot: "Reset your password with an email link.",
   create: "Create an account, then finish setup.",
@@ -1171,7 +1171,7 @@ function OnboardingShell({
                   type="button"
                   onClick={goBack}
                   className={cn(
-                    "inline-flex h-9 items-center gap-2 border border-border bg-background px-3 text-[13px] font-medium tracking-[-0.01em] text-foreground transition-colors duration-200 hover:bg-muted rounded-[10px]",
+                    "inline-flex h-9 items-center gap-2 border border-foreground/10 bg-background px-3 text-[13px] font-medium tracking-[-0.01em] text-foreground transition-colors duration-150 hover:border-foreground/20 hover:bg-muted rounded-[10px]",
                   )}
                 >
                   <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -1420,7 +1420,14 @@ function OnboardingShell({
               <div className="panel-grain" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
               <div className="absolute inset-x-0 bottom-0 p-10 xl:p-14">
-                <p className="max-w-lg text-[1.75rem] font-medium tracking-[-0.03em] text-white xl:text-[2rem]">
+                <p
+                  className={cn(
+                    "font-medium tracking-[-0.03em] text-white",
+                    step === "welcome"
+                      ? "whitespace-nowrap text-[1.45rem] xl:text-[1.65rem]"
+                      : "max-w-lg text-[1.75rem] xl:text-[2rem]",
+                  )}
+                >
                   {panel.title}
                 </p>
                 {step === "plan" && plan ? (
@@ -2456,29 +2463,29 @@ function ConnectorsStep({
 }
 
 const inputClass = cn(
-  "h-11 w-full border border-border bg-input px-3.5 text-[14px] outline-none focus:border-foreground/20",
+  "onboarding-input h-11 w-full border border-foreground/12 bg-transparent px-3.5 text-[14px] text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground/12 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
   SHELL_G3_RADIUS,
 );
 
 const primaryBtnClass = cn(
-  "inline-flex h-11 w-full items-center justify-center bg-primary text-[14px] font-medium tracking-[-0.01em] text-primary-foreground hover:bg-foreground disabled:opacity-50",
+  "inline-flex h-11 w-full items-center justify-center bg-primary text-[14px] font-medium tracking-[-0.01em] text-primary-foreground transition-colors duration-150 hover:bg-foreground disabled:opacity-50",
   SHELL_G3_RADIUS,
 );
 
 const secondaryBtnClass = cn(
-  "inline-flex h-11 w-full items-center justify-center border border-foreground/15 text-[14px] font-medium tracking-[-0.01em] hover:bg-muted disabled:opacity-50",
+  "inline-flex h-11 w-full items-center justify-center border border-foreground/12 bg-background text-[14px] font-medium tracking-[-0.01em] transition-colors duration-150 hover:border-foreground/20 hover:bg-muted disabled:opacity-50",
   SHELL_G3_RADIUS,
 );
 
 const ghostBtnClass = cn(
-  "inline-flex h-10 w-full items-center justify-center text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60",
+  "inline-flex h-10 w-full items-center justify-center text-[13px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:opacity-60",
   SHELL_G3_RADIUS,
 );
 
 const onboardingSelectorActiveClass =
-  "border-foreground bg-muted ring-2 ring-foreground/15 shadow-sm";
+  "border-foreground bg-muted ring-2 ring-foreground/10 shadow-sm";
 const onboardingSelectorIdleClass =
-  "border-border hover:border-foreground/25 hover:bg-muted/40";
+  "border-foreground/10 bg-background hover:border-foreground/20 hover:bg-muted/60";
 
 function OnboardingMobilePanel({ step }: { step: Step }) {
   return (

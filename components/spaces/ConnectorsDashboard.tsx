@@ -540,8 +540,8 @@ export function ConnectorsDashboard() {
     const featuredIds = new Set(featured.map((item) => item.id));
     const groups: { title: string; items: Connector[] }[] = [];
     if (featured.length) {
-      // Mobile: no “Featured” / first-connector heading — list starts cold.
-      groups.push({ title: mobile ? "" : "Featured", items: featured });
+      // No “Featured” heading — list starts cold on mobile and desktop.
+      groups.push({ title: "", items: featured });
     }
     for (const title of SECTION_ORDER) {
       if (title === "Featured") continue;
@@ -560,7 +560,7 @@ export function ConnectorsDashboard() {
     );
     if (leftover.length) groups.push({ title: "More", items: leftover });
     return groups;
-  }, [directory, catalogView, mobile]);
+  }, [directory, catalogView]);
 
   return (
     <>
@@ -736,7 +736,8 @@ export function ConnectorsDashboard() {
                 ) : null}
                 <div
                   className={cn(
-                    "grid grid-cols-1 gap-y-0.5",
+                    "grid gap-x-3 gap-y-0.5",
+                    mobile ? "grid-cols-1" : "grid-cols-2",
                     showTitle ? "mt-4" : "mt-0",
                   )}
                 >

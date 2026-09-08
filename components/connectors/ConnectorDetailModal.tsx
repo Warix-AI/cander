@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, Settings2, X } from "lucide-react";
+import { ArrowRight, Settings2, X } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { ConnectorInfoSection } from "@/components/connectors/ConnectorInfoSection";
 import { ConnectorSkillsToggles } from "@/components/connectors/ConnectorSkillsToggles";
@@ -191,7 +191,7 @@ export function ConnectorDetailModal({
             ? "Connect"
             : "Install";
 
-  const showActionsMenu = !blocked && !dedicated;
+  const showActionsMenu = !blocked && !(dedicated && mobile);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   useEffect(() => {
@@ -246,23 +246,9 @@ export function ConnectorDetailModal({
     >
       <div className="relative flex min-h-0 flex-1 flex-col">
         {dedicated && !mobile ? (
-          <div className="flex h-12 shrink-0 items-center gap-2 px-5">
-            <button
-              type="button"
-              onClick={onClose}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-2 py-1 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                SHELL_G3_RADIUS,
-              )}
-            >
-              <ArrowLeft className="h-4 w-4" strokeWidth={1.8} />
-              <span>Connectors</span>
-            </button>
-            <span className="text-muted-foreground/50" aria-hidden="true">
-              /
-            </span>
-            <span className="text-[13px] font-medium text-foreground">
-              {item.name}
+          <div className="flex h-12 shrink-0 items-center px-5">
+            <span className="text-[13px] font-medium tracking-[-0.01em] text-foreground">
+              Connectors
             </span>
           </div>
         ) : null}

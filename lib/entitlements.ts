@@ -18,6 +18,7 @@ import type {
   WorkspaceResource,
 } from "./types";
 import { getWorkspaceCatalogSnapshot } from "./workspace-catalog";
+import { getWorkspaceOrderSnapshot } from "./session";
 import {
   emailFitsWorkspaceKind,
   workspaceKindOf,
@@ -207,7 +208,21 @@ export function sharedResourcesFor(
 export function workspacesFor(actor: Member, access: Entitlements): Workspace[] {
   void access;
   const workspaces = getWorkspaceCatalogSnapshot();
-  return workspaces.filter((item) => actor.workspaceIds.includes(item.id));
+  const allowed = workspaces.filter((item) => actor.workspaceIds.includes(item.id));
+  const preference = getWorkspaceOrderSnapshot();
+  const rank = new Map<string, number>();
+  preference.forEach((id, index) => {
+    if (!rank.has(id)) rank.set(id, index);
+  });
+  actor.workspaceIds.forEach((id, index) => {
+    if (!rank.has(id)) rank.set(id, preference.length + index);
+  });
+  return [...allowed].sort((a, b) => {
+    const left = rank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+    const right = rank.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+    if (left !== right) return left - right;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 export function canInviteEmailToWorkspace(

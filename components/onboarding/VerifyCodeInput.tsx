@@ -142,7 +142,7 @@ export function VerifyCodeInput({
               }
             }}
             className={cn(
-              "h-12 min-w-0 flex-1 border border-border bg-background text-center text-[1.25rem] font-medium tabular-nums outline-none focus:border-foreground/25 focus:ring-2 focus:ring-foreground/10 disabled:opacity-50",
+              "onboarding-input h-12 min-w-0 flex-1 border border-foreground/12 bg-transparent text-center text-[1.25rem] font-medium tabular-nums text-foreground outline-none focus:border-foreground/12 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 disabled:opacity-50",
               SHELL_G3_RADIUS,
             )}
           />

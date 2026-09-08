@@ -180,7 +180,7 @@ export function InviteAcceptFlow({ token }: { token: string }) {
   }
 
   const inputClass = cn(
-    "h-11 w-full border border-border bg-background px-3.5 text-[14px] outline-none focus:border-foreground/20",
+    "onboarding-input h-11 w-full border border-foreground/12 bg-transparent px-3.5 text-[14px] text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground/12 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
     SHELL_G3_RADIUS,
   );
 
@@ -204,20 +204,20 @@ export function InviteAcceptFlow({ token }: { token: string }) {
                 value={preview.firstName}
                 readOnly
                 aria-label="First name"
-                className={cn(inputClass, "bg-muted/40 text-muted-foreground")}
+                className={cn(inputClass, "bg-transparent text-muted-foreground")}
               />
               <input
                 value={preview.lastName}
                 readOnly
                 aria-label="Last name"
-                className={cn(inputClass, "bg-muted/40 text-muted-foreground")}
+                className={cn(inputClass, "bg-transparent text-muted-foreground")}
               />
             </div>
             <input
               value={preview.email}
               readOnly
               aria-label="Email"
-              className={cn(inputClass, "bg-muted/40 text-muted-foreground")}
+              className={cn(inputClass, "bg-transparent text-muted-foreground")}
             />
             <input
               type="password"
@@ -248,7 +248,7 @@ export function InviteAcceptFlow({ token }: { token: string }) {
           disabled={busy}
           onClick={() => void submit()}
           className={cn(
-            "inline-flex h-11 w-full items-center justify-center bg-primary text-[14px] font-medium tracking-[-0.01em] text-primary-foreground hover:bg-foreground disabled:opacity-50",
+            "inline-flex h-11 w-full items-center justify-center bg-primary text-[14px] font-medium tracking-[-0.01em] text-primary-foreground transition-colors duration-150 hover:bg-foreground disabled:opacity-50",
             SHELL_G3_RADIUS,
           )}
         >

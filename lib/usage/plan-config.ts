@@ -196,6 +196,8 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     workspaceDailyCostCeilingMicros: 500_000,
     workspaceMonthlyCostCeilingMicros: 5_000_000,
     userDailyExpensiveActionCeilingMicros: 200_000,
+    billAmountMicros: 0,
+    usableBudgetMicros: 1_000_000, // $1 usable
   },
   pro: {
     plan: "pro",
@@ -205,6 +207,8 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     workspaceDailyCostCeilingMicros: 15_000_000,
     workspaceMonthlyCostCeilingMicros: 150_000_000,
     userDailyExpensiveActionCeilingMicros: 5_000_000,
+    billAmountMicros: 20_000_000, // $20
+    usableBudgetMicros: 15_000_000, // $15 usable threshold
   },
   max: {
     plan: "max",
@@ -214,6 +218,8 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     workspaceDailyCostCeilingMicros: 40_000_000,
     workspaceMonthlyCostCeilingMicros: 400_000_000,
     userDailyExpensiveActionCeilingMicros: 12_000_000,
+    billAmountMicros: 50_000_000, // $50
+    usableBudgetMicros: 40_000_000, // $40 usable
   },
 };
 

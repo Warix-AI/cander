@@ -381,6 +381,79 @@ export async function guardUsage(
     }
   }
 
+  // Account-level usable $ hard stop (shared across workspaces).
+  let periodId: string | undefined;
+  let periodReserved = estimatedCost;
+  try {
+    const accountPeriod = await import("./account-period.ts");
+    const period = await accountPeriod.ensureAccountUsagePeriod({
+      profileId: input.profileId,
+      plan,
+    });
+    if (period) {
+      const committed = period.spentMicros + period.reservedMicros;
+      if (committed + estimatedCost > period.usableBudgetMicros) {
+        const failure = toGuardFailure(
+          {
+            ok: false,
+            status: 429,
+            code: "quota_exceeded",
+            message:
+              "You've reached this month's account usage budget. Upgrade or wait until your period resets.",
+          },
+          plan,
+          input.feature,
+        );
+        await store.writeAudit({
+          workspaceId: input.workspaceId,
+          profileId: input.profileId,
+          feature: input.feature,
+          decision: "blocked",
+          reason: failure.message,
+          metadata: { periodId: period.id, committed, estimatedCost },
+        });
+        return failure;
+      }
+      const reserved = await accountPeriod.reserveAccountSpend({
+        periodId: period.id,
+        costMicros: estimatedCost,
+      });
+      if (!reserved.ok) {
+        const failure = toGuardFailure(
+          {
+            ok: false,
+            status: 429,
+            code: "quota_exceeded",
+            message:
+              "You've reached this month's account usage budget. Upgrade or wait until your period resets.",
+          },
+          plan,
+          input.feature,
+        );
+        await store.writeAudit({
+          workspaceId: input.workspaceId,
+          profileId: input.profileId,
+          feature: input.feature,
+          decision: "blocked",
+          reason: failure.message,
+          metadata: { periodId: period.id, estimatedCost },
+        });
+        return failure;
+      }
+      periodId = period.id;
+      const spendPct = accountPeriod.accountSpendSnapshot(reserved.period)
+        .percentUsed;
+      if (spendPct >= 85 && !throttled) {
+        throttled = true;
+        notice =
+          notice ??
+          "You're approaching this month's account usage budget.";
+      }
+    }
+  } catch {
+    // Periods table / admin client unavailable (local tests) — skip account hard-stop.
+  }
+
   const reservation = await store.reserve({
     idempotencyKey: input.idempotencyKey,
     workspaceId: input.workspaceId,
@@ -391,7 +464,16 @@ export async function guardUsage(
     units: input.estimatedUnits,
     unitKind: input.unitKind,
     estimatedCostMicros: estimatedCost,
-    metadata: input.metadata,
+    metadata: {
+      ...(input.metadata ?? {}),
+      ...(periodId
+        ? {
+            periodId,
+            periodReservedMicros: periodReserved,
+            billingProfileId: input.profileId,
+          }
+        : {}),
+    },
   });
 
   for (const kind of ["minute", "hour", "day", "month"] as UsageWindowKind[]) {
@@ -430,7 +512,40 @@ export async function reconcileUsage(
   input: UsageReconcileInput,
   store?: UsageStore,
 ) {
-  return (store ?? (await getUsageStore())).reconcile(input);
+  const resolved = store ?? (await getUsageStore());
+  const event = await resolved.reconcile(input);
+  if (event) {
+    const periodId =
+      typeof event.metadata.periodId === "string"
+        ? event.metadata.periodId
+        : null;
+    const reservedMicros = Number(
+      event.metadata.periodReservedMicros ?? event.estimatedCostMicros ?? 0,
+    );
+    if (periodId) {
+      try {
+        const accountPeriod = await import("./account-period.ts");
+        if (input.status === "confirmed") {
+          await accountPeriod.confirmAccountSpend({
+            periodId,
+            reservedMicros,
+            actualMicros:
+              input.actualCostMicros ??
+              event.actualCostMicros ??
+              event.estimatedCostMicros,
+          });
+        } else {
+          await accountPeriod.releaseAccountSpend({
+            periodId,
+            reservedMicros,
+          });
+        }
+      } catch {
+        // best-effort when admin/periods unavailable
+      }
+    }
+  }
+  return event;
 }
 
 export async function buildUsageStatusSnapshot(input: {
@@ -490,14 +605,38 @@ export async function buildUsageStatusSnapshot(input: {
     }),
   );
 
+  let accountSpend: UsageStatusSnapshot["accountSpend"];
+  try {
+    const accountPeriod = await import("./account-period.ts");
+    const period = await accountPeriod.ensureAccountUsagePeriod({
+      profileId: input.profileId,
+      plan: input.plan,
+    });
+    accountSpend = period
+      ? accountPeriod.accountSpendSnapshot(period)
+      : undefined;
+  } catch {
+    accountSpend = undefined;
+  }
+  const notices = [
+    ...(policy.marketingUnlimited
+      ? ["Your plan includes generous fair-use limits for normal work."]
+      : []),
+    ...(accountSpend?.status === "approaching"
+      ? ["You're approaching this month's account usage budget."]
+      : []),
+    ...(accountSpend?.status === "exhausted"
+      ? ["You've reached this month's account usage budget."]
+      : []),
+  ];
+
   return {
     plan: input.plan,
     planLabel: policy.label,
     configVersion: usagePlanConfigVersion(),
     features,
-    notices: policy.marketingUnlimited
-      ? ["Your plan includes generous fair-use limits for normal work."]
-      : [],
+    notices,
     upgradePlan: input.plan === "free" ? "pro" : input.plan === "pro" ? "max" : null,
+    accountSpend,
   };
 }

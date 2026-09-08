@@ -219,12 +219,36 @@ export class VercelSandboxComputerProvider implements ComputerProvider {
     sessionId: string,
     userId: string,
     projectId: string,
+    opts?: { workspaceId?: string },
   ): Promise<{ fileCount: number }> {
     const admin = createSupabaseAdminClient();
+    const { data: project, error: projectError } = await admin
+      .from("projects")
+      .select("id, workspace_id, created_by")
+      .eq("id", projectId)
+      .maybeSingle();
+    if (projectError || !project) {
+      throw new Error("Project not found.");
+    }
+    const workspaceId = opts?.workspaceId ?? String(project.workspace_id);
+    if (opts?.workspaceId && opts.workspaceId !== project.workspace_id) {
+      throw new Error("Project workspace mismatch.");
+    }
+    const { assertProjectAccess } = await import("@/lib/security/project-access");
+    const access = await assertProjectAccess({
+      projectId,
+      workspaceId,
+      userId,
+    });
+    if (!access.ok) {
+      throw new Error("Forbidden.");
+    }
+
     const { data, error } = await admin
       .from("project_files")
       .select("path, content")
-      .eq("project_id", projectId);
+      .eq("project_id", projectId)
+      .eq("workspace_id", workspaceId);
     if (error) {
       throw new Error(error.message);
     }
