@@ -36,7 +36,15 @@ Without these, project create still succeeds; `infra_status` stays `partial` and
 
 - `VERCEL_TOKEN` — team-scoped token for Sandbox + later Deployments API
 - `VERCEL_TEAM_ID` — Warix team
-- Do **not** rely on developer laptop CLI login for product behavior
+
+### Enable Phase 3 (AI → sandbox → draft push)
+
+```
+CANDER_BUILD_SANDBOX=1
+NEXT_PUBLIC_CANDER_BUILD_SANDBOX=1
+```
+
+This routes `create_work_task` through `/api/computer/build` and unlocks `computer.files.*` / `computer.exec` tools.
 
 ### Supabase Management (later)
 
@@ -47,34 +55,33 @@ Without these, project create still succeeds; `infra_status` stays `partial` and
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `POST` | `/api/projects/:id/infra/ensure` | Idempotent subdomain + GitHub repo ensure |
-| `GET` | `/api/projects/:id/infra?workspaceId=` | Infra status (no secrets) |
-| `POST` | `/api/projects/:id/sandbox/ensure` | Start/resume build sandbox (git clone draft) |
-| `GET` | `/api/projects/:id/sandbox?workspaceId=` | Sandbox status for Preview chrome |
+| `POST` | `/api/projects/:id/infra/ensure` | Subdomain + GitHub repo |
+| `GET` | `/api/projects/:id/infra?workspaceId=` | Infra status |
+| `POST` | `/api/projects/:id/sandbox/ensure` | Start/resume sandbox |
+| `GET` | `/api/projects/:id/sandbox?workspaceId=` | Sandbox status |
+| `POST` | `/api/projects/:id/sandbox/files` | read/write/list/exec/persist |
+| `POST` | `/api/projects/:id/git/persist` | Commit dirty sandbox (or explicit files) to `cander/draft` |
+| `POST` | `/api/computer/build` | Durable work-task: ensure → write facts.files → build → persist |
 
-Auth: Bearer Supabase JWT. Authorization: `assertProjectAccess` before any GitHub/Vercel call.
+Auth: Bearer Supabase JWT + `assertProjectAccess`.
 
-## Client hooks
+## Phase 3 behavior
 
-- After `createProject` for Build app/site → fire-and-forget `ensureProjectInfraClient`
-- On Build panel open → infra ensure + `ensureProjectSandboxClient`
-- Preview overlay: Starting / Ready / Error + Retry (force restart)
+1. AI `create_work_task` (when sandbox flag on) → `/api/computer/build`
+2. Soft lock: refuse if another `ai_tasks` row for the project is queued/running/verifying
+3. Ensure sandbox (git clone draft)
+4. Apply `facts.files` writes when present
+5. Optional `npm install` / `npm run build`
+6. Persist dirty files via Octokit Git Data API → update `projects.draft_sha`
+7. Candidate change set for review
 
-## Sandbox lifecycle (Phase 2)
+`computer.files.write` defaults to persist=true so interactive edits also land on GitHub.
 
-- One **build_app** sandbox per user per project (`computer_sessions`)
-- Created via `Sandbox.create` with `source: { type: "git", … }` using a short-lived installation token
-- Checks out `cander/draft`; exposes port `3000` (preview proxy in Phase 5)
-- Resume when possible; recreate from GitHub when dead
-- Raw upstream stays in `build_state` (not returned to the browser)
-
-## Database
-
-Migration `061_project_build_infra.sql` adds binding columns on `projects` (`github_*`, `draft_sha`, `cander_subdomain`, `infra_status`, `sandbox_*`, …).
+**Git is not on the AI exec allowlist** — push is always server-orchestrated via Octokit.
 
 ## Security
 
 - Management credentials only on the Next server
-- Client never sends repo/sandbox IDs as authority — server loads bindings from DB after ACL
-- GitHub installation tokens are mint-and-discard for clone only
-- Preview upstream URLs stay out of public API responses in Phase 2
+- Path traversal blocked (`safeRepoRelativePath`)
+- Client never sends repo/sandbox IDs as authority
+- Installation tokens mint-and-discard for clone only

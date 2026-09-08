@@ -7,9 +7,16 @@ import {
   enforceUsageForRequest,
   finalizeUsageReservation,
 } from "@/lib/usage/server/guard-route";
+import { ensureProjectSandbox } from "@/lib/build/sandbox/lifecycle";
+import { assertNoConcurrentBuild } from "@/lib/build/sandbox/lock";
+import { sandboxWriteFile } from "@/lib/build/sandbox/files";
+import { persistSandboxToDraft } from "@/lib/build/sandbox/persist";
+import { safeRepoRelativePath } from "@/lib/build/git/commit-draft";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+
+type TaskFile = { path?: unknown; content?: unknown };
 
 export async function POST(request: Request) {
   const auth = await requireComputerAuth(request);
@@ -43,7 +50,10 @@ export async function POST(request: Request) {
   const projectId = row.project_id ? String(row.project_id) : null;
   const workspaceId = row.workspace_id ? String(row.workspace_id) : null;
   if (!projectId || !workspaceId) {
-    return NextResponse.json({ error: "Task missing project/workspace." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Task missing project/workspace." },
+      { status: 400 },
+    );
   }
 
   const { assertProjectAccess } = await import("@/lib/security/project-access");
@@ -54,6 +64,17 @@ export async function POST(request: Request) {
   });
   if (!access.ok) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
+  try {
+    await assertNoConcurrentBuild({
+      projectId,
+      workspaceId,
+      exceptTaskId: taskId,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ ok: false, error: message }, { status: 409 });
   }
 
   const idempotencyKey =
@@ -74,9 +95,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { ensureProjectSandbox } = await import(
-      "@/lib/build/sandbox/lifecycle"
-    );
+    await admin
+      .from("ai_tasks")
+      .update({
+        status: "running",
+        progress_note: "Starting build environment…",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", taskId);
+
     const ensured = await ensureProjectSandbox({
       userId: auth.userId,
       projectId,
@@ -84,36 +111,87 @@ export async function POST(request: Request) {
     });
     if (ensured.status !== "ready" || !ensured.sessionId) {
       throw new Error(
-        ensured.message ||
-          `Build sandbox not ready (${ensured.status}).`,
+        ensured.message || `Build sandbox not ready (${ensured.status}).`,
       );
     }
-
-    const provider = getComputerProvider();
     const sessionId = ensured.sessionId;
 
-    // Prefer git-cloned tree; fall back to legacy project_files restore.
-    let fileCount = 0;
-    try {
-      const restored = await provider.restoreProject(
-        sessionId,
-        auth.userId,
+    // Apply explicit file writes from task.facts.files when present.
+    const facts =
+      row.facts && typeof row.facts === "object"
+        ? (row.facts as Record<string, unknown>)
+        : {};
+    const factFiles = Array.isArray(facts.files)
+      ? (facts.files as TaskFile[])
+      : [];
+    let written = 0;
+    for (const file of factFiles) {
+      const path = typeof file.path === "string" ? file.path : "";
+      if (!path) continue;
+      const content = typeof file.content === "string" ? file.content : "";
+      await sandboxWriteFile({
+        userId: auth.userId,
         projectId,
-        { workspaceId },
-      );
-      fileCount = restored.fileCount;
+        workspaceId,
+        path: safeRepoRelativePath(path),
+        content,
+        persist: false,
+      });
+      written += 1;
+    }
+
+    // Optional install/build when package.json exists.
+    const provider = getComputerProvider();
+    let built = false;
+    try {
+      const pkg = await provider.readFile(sessionId, auth.userId, "package.json");
+      if (pkg.trim()) {
+        await admin
+          .from("ai_tasks")
+          .update({
+            progress_note: "Installing dependencies…",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", taskId);
+        const install = await provider.exec(sessionId, auth.userId, "npm", [
+          "install",
+        ]);
+        if (install.exitCode === 0) {
+          await admin
+            .from("ai_tasks")
+            .update({
+              progress_note: "Running build…",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", taskId);
+          const build = await provider.exec(sessionId, auth.userId, "npm", [
+            "run",
+            "build",
+          ]);
+          built = build.exitCode === 0;
+        }
+      }
     } catch {
-      fileCount = 0;
+      /* no package.json or build script — fine for sites */
     }
 
-    const install = await provider.exec(sessionId, auth.userId, "npm", [
-      "install",
-    ]);
-    if (install.exitCode !== 0) {
-      throw new Error(install.stderr || "npm install failed.");
-    }
+    await admin
+      .from("ai_tasks")
+      .update({
+        status: "verifying",
+        progress_note: "Saving draft to GitHub…",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", taskId);
 
-    await provider.exec(sessionId, auth.userId, "npm", ["run", "build"]);
+    const goal = String(row.goal ?? row.title ?? "Draft update");
+    const persisted = await persistSandboxToDraft({
+      sessionId,
+      userId: auth.userId,
+      projectId,
+      workspaceId,
+      message: `Cander: ${goal}`.slice(0, 500),
+    });
 
     await createCandidateChangeSet({
       projectId,
@@ -128,11 +206,18 @@ export async function POST(request: Request) {
       actualUnits: 1,
     });
 
+    const resultSummary = persisted.noop
+      ? `Environment ready${written ? ` (${written} file writes)` : ""}${built ? "; build ok" : ""}. No new git changes to push.`
+      : `Draft saved (${persisted.filesCommitted} file${persisted.filesCommitted === 1 ? "" : "s"}) → ${persisted.draftBranch}@${persisted.draftSha.slice(0, 7)}.`;
+
     return NextResponse.json({
       ok: true,
       sessionId,
-      fileCount,
-      resultSummary: `Build finished in sandbox session ${sessionId}.`,
+      draftSha: persisted.draftSha || null,
+      filesCommitted: persisted.filesCommitted,
+      written,
+      built,
+      resultSummary,
     });
   } catch (err) {
     await finalizeUsageReservation({
@@ -140,6 +225,15 @@ export async function POST(request: Request) {
       status: "failed",
     });
     const message = err instanceof Error ? err.message : String(err);
+    await admin
+      .from("ai_tasks")
+      .update({
+        status: "failed",
+        progress_note: "That work didn’t finish. Tell me if you want to try again.",
+        result_summary: message,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", taskId);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

@@ -1,6 +1,7 @@
 /**
  * Feature flags for Cander Intelligence.
- * PCC/sandbox stay off until entitlement / adapter are ready.
+ * PCC stays off until entitlement / adapter are ready.
+ * Build sandbox can be enabled via env without localStorage.
  */
 
 export type IntelligenceFlags = {
@@ -8,6 +9,13 @@ export type IntelligenceFlags = {
   cloudWorkEnabled: boolean;
   sandboxEnabled: boolean;
 };
+
+function envSandboxEnabled(): boolean {
+  const v =
+    process.env.NEXT_PUBLIC_CANDER_BUILD_SANDBOX?.trim().toLowerCase() ||
+    process.env.CANDER_BUILD_SANDBOX?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "on" || v === "yes";
+}
 
 const DEFAULTS: IntelligenceFlags = {
   pccEnabled: false,
@@ -18,6 +26,7 @@ const DEFAULTS: IntelligenceFlags = {
 let override: Partial<IntelligenceFlags> | null = null;
 
 export function getIntelligenceFlags(): IntelligenceFlags {
+  const fromEnv = envSandboxEnabled();
   if (typeof window !== "undefined") {
     try {
       const raw = window.localStorage.getItem("cander-intelligence-flags");
@@ -25,7 +34,10 @@ export function getIntelligenceFlags(): IntelligenceFlags {
         const parsed = JSON.parse(raw) as Partial<IntelligenceFlags>;
         return {
           ...DEFAULTS,
+          sandboxEnabled: fromEnv || Boolean(parsed.sandboxEnabled),
           ...parsed,
+          // env wins for sandbox when set
+          ...(fromEnv ? { sandboxEnabled: true } : {}),
           ...override,
         };
       }
@@ -33,7 +45,11 @@ export function getIntelligenceFlags(): IntelligenceFlags {
       // ignore
     }
   }
-  return { ...DEFAULTS, ...override };
+  return {
+    ...DEFAULTS,
+    sandboxEnabled: fromEnv || DEFAULTS.sandboxEnabled,
+    ...override,
+  };
 }
 
 /** Test / server override. */

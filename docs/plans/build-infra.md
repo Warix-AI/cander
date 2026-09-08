@@ -1,6 +1,6 @@
 # Build platform — approved implementation plan
 
-**Status:** Approved 2026-09-08. Phase 0/1 done. Phase 2 landing.
+**Status:** Approved 2026-09-08. Phases 0–3 landing.
 
 ## Stance
 
@@ -8,10 +8,10 @@ Backend infrastructure integration behind the existing Apps / Websites experienc
 
 ## Phases
 
-0. Platform credentials + SDK scaffolding (Octokit, Vercel REST, Supabase Management) — **done**
+0. Platform credentials + SDK scaffolding — **done**
 1. Persistent GitHub repo + subdomain on `projects` — **done**
-2. Vercel Sandbox lifecycle from git — **landing**
-3. AI ↔ sandbox + commit/push draft
+2. Vercel Sandbox lifecycle from git — **done**
+3. AI ↔ sandbox + commit/push draft — **landing**
 4. Per-app Supabase (Warix Management API)
 5. Live preview proxy
 6. Revisions = git SHAs

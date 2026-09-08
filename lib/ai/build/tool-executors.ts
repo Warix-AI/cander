@@ -1,7 +1,6 @@
 /**
  * Build tool executors — semantic tools wrap store / recipes / components.
- * Low-level computer.* tools remain stubs here when no live session
- * (ComputerProvider is invoked via /api/computer when sandbox is enabled).
+ * computer.* tools hit the project sandbox via authenticated APIs (Phase 3).
  */
 
 import type { AiToolCallResult } from "../runtime/tools.ts";
@@ -9,7 +8,56 @@ import { compileBuildSpecSlice } from "./build-spec.ts";
 import { loadBuildSpec } from "./store.ts";
 import { searchComponentsBounded } from "./component-provider.ts";
 import { getBuildRecipe } from "./recipes.ts";
-import { getTurnProjectId } from "../runtime/turn-context.ts";
+import {
+  getTurnProjectId,
+  getTurnWorkspaceId,
+} from "../runtime/turn-context.ts";
+import { isSandboxEnabled } from "../intelligence/flags.ts";
+
+async function authHeaders(): Promise<HeadersInit> {
+  try {
+    const { createSupabaseBrowserClient } = await import(
+      "@/lib/supabase/client"
+    );
+    const supabase = createSupabaseBrowserClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return { Authorization: `Bearer ${session.access_token}` };
+    }
+  } catch {
+    /* server / no session */
+  }
+  return {};
+}
+
+async function sandboxFilesApi(opts: {
+  projectId: string;
+  workspaceId: string;
+  body: Record<string, unknown>;
+}): Promise<{ ok: boolean; output: string; data?: Record<string, unknown> }> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(opts.projectId)}/sandbox/files`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({
+        workspaceId: opts.workspaceId,
+        ...opts.body,
+      }),
+    },
+  );
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok || data.ok === false) {
+    return {
+      ok: false,
+      output: String(data.error ?? `sandbox files failed (${res.status})`),
+    };
+  }
+  return { ok: true, output: "ok", data };
+}
 
 export async function executeBuildTool(opts: {
   name: string;
@@ -27,6 +75,8 @@ export async function executeBuildTool(opts: {
 
   const projectId =
     String(args.projectId ?? getTurnProjectId() ?? "").trim() || null;
+  const workspaceId =
+    String(args.workspaceId ?? getTurnWorkspaceId() ?? "").trim() || null;
 
   if (name === "build.spec.read") {
     if (!projectId) {
@@ -95,11 +145,115 @@ export async function executeBuildTool(opts: {
     name === "computer.exec" ||
     name === "computer.port.expose"
   ) {
+    if (!isSandboxEnabled()) {
+      return {
+        name,
+        ok: false,
+        output:
+          "Sandbox tools are disabled. Enable CANDER_BUILD_SANDBOX (or intelligence sandbox flag).",
+      };
+    }
+    if (!projectId || !workspaceId) {
+      return {
+        name,
+        ok: false,
+        output: "projectId and workspaceId required for sandbox tools",
+      };
+    }
+
+    if (name === "computer.files.write" || name === "computer.files.patch") {
+      const path = String(args.path ?? "").trim();
+      const content = String(args.content ?? args.patch ?? "");
+      if (!path) return { name, ok: false, output: "path required" };
+      const result = await sandboxFilesApi({
+        projectId,
+        workspaceId,
+        body: {
+          action: "write",
+          path,
+          content,
+          persist: args.persist !== false,
+        },
+      });
+      return {
+        name,
+        ok: result.ok,
+        output: result.ok
+          ? `Wrote ${path}${result.data?.draftSha ? ` → draft ${String(result.data.draftSha).slice(0, 7)}` : ""}`
+          : result.output,
+        data: result.data,
+      };
+    }
+
+    if (name === "computer.files.read") {
+      const path = String(args.path ?? "").trim();
+      if (!path) return { name, ok: false, output: "path required" };
+      const result = await sandboxFilesApi({
+        projectId,
+        workspaceId,
+        body: { action: "read", path },
+      });
+      return {
+        name,
+        ok: result.ok,
+        output: result.ok
+          ? String(result.data?.content ?? "")
+          : result.output,
+        data: result.data,
+      };
+    }
+
+    if (name === "computer.files.list") {
+      const result = await sandboxFilesApi({
+        projectId,
+        workspaceId,
+        body: { action: "list", path: args.path },
+      });
+      return {
+        name,
+        ok: result.ok,
+        output: result.ok
+          ? JSON.stringify(result.data?.entries ?? [])
+          : result.output,
+        data: result.data,
+      };
+    }
+
+    if (name === "computer.exec") {
+      const command = String(args.command ?? args.cmd ?? "").trim();
+      if (!command) return { name, ok: false, output: "command required" };
+      const rawArgs = args.args;
+      const execArgs = Array.isArray(rawArgs)
+        ? rawArgs.map((a) => String(a))
+        : [];
+      const result = await sandboxFilesApi({
+        projectId,
+        workspaceId,
+        body: { action: "exec", command, args: execArgs },
+      });
+      return {
+        name,
+        ok: result.ok,
+        output: result.ok
+          ? String(result.data?.stdout ?? "")
+          : result.output,
+        data: result.data,
+      };
+    }
+
+    if (name === "computer.port.expose") {
+      return {
+        name,
+        ok: true,
+        output:
+          "Port exposure is managed by the build sandbox (port 3000). Live preview routing lands in a later phase.",
+      };
+    }
+
     return {
       name,
       ok: false,
-      output:
-        "Sandbox session required. Low-level computer tools run only with an active project session.",
+      output: `Unsupported sandbox tool: ${name}`,
     };
   }
 

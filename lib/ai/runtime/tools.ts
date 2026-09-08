@@ -106,6 +106,18 @@ export async function executeAuthorizedTool(
     tool.name === "computer.exec" ||
     tool.name === "computer.port.expose"
   ) {
+    if (
+      tool.name.startsWith("computer.") ||
+      tool.name === "build.validate"
+    ) {
+      const { authorizeToolCapability } = await import(
+        "@/lib/ai/intelligence/capability-gateway"
+      );
+      const gate = authorizeToolCapability(tool.name);
+      if (!gate.ok) {
+        return { name: tool.name, ok: false, output: gate.reason };
+      }
+    }
     const { executeBuildTool } = await import("@/lib/ai/build/tool-executors");
     const built = await executeBuildTool({ name: tool.name, args });
     if (built) return built;

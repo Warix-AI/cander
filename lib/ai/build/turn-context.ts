@@ -8,6 +8,7 @@ import {
   isBuildLocalOrchestratorEnabled,
   isBuildOrchestratorEnabled,
 } from "../orchestrator/flags.ts";
+import { isSandboxEnabled } from "../intelligence/flags.ts";
 import type { ConversationTurnState } from "../turn-environment/conversation-types.ts";
 import {
   compileBuildSpecSlice,
@@ -188,7 +189,9 @@ export function resolveBuildTurnContext(
     buildSpec: planningSpec,
     buildSpecSlice,
     turnPlan,
-    forceDomains: ["build", "projects"],
+    forceDomains: isSandboxEnabled()
+      ? ["build", "projects", "computer"]
+      : ["build", "projects"],
   };
 }
 

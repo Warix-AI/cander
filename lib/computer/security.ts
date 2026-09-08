@@ -42,6 +42,11 @@ const ALLOWED_EXEC_COMMANDS = new Set([
   "sh",
 ]);
 
+/**
+ * AI-facing exec allowlist. `git` is intentionally excluded —
+ * draft persist uses Octokit (lib/build/git/commit-draft.ts) and
+ * privileged sandbox helpers (lib/build/sandbox/privileged.ts).
+ */
 export function assertAllowedExecCommand(command: string): void {
   const base = command.trim().split(/\s+/)[0];
   if (!ALLOWED_EXEC_COMMANDS.has(base)) {
