@@ -246,9 +246,22 @@ export function ConnectorDetailModal({
     >
       <div className="relative flex min-h-0 flex-1 flex-col">
         {dedicated && !mobile ? (
-          <div className="flex h-12 shrink-0 items-center px-5">
-            <span className="text-[13px] font-medium tracking-[-0.01em] text-foreground">
+          <div className="flex h-12 shrink-0 items-center gap-2 px-5">
+            <button
+              type="button"
+              onClick={onClose}
+              className={cn(
+                "text-[13px] text-muted-foreground transition-colors hover:text-foreground",
+                SHELL_G3_RADIUS,
+              )}
+            >
               Connectors
+            </button>
+            <span className="text-muted-foreground/50" aria-hidden="true">
+              /
+            </span>
+            <span className="text-[13px] font-medium text-foreground">
+              {item.name}
             </span>
           </div>
         ) : null}
