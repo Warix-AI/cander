@@ -141,8 +141,8 @@ export function UserMessage({
         </div>
       ) : null}
       {content ? (
-        <div className="rounded-2xl border-0 bg-white px-3.5 py-2.5 shadow-none dark:bg-input">
-          <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed tracking-[-0.01em]">
+        <div className="rounded-[22px] border-0 bg-[#ebebeb] px-3.5 py-2.5 shadow-none dark:bg-[#2e2e2e]">
+          <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed tracking-[-0.01em] text-foreground">
             {parts.map((part, index) =>
               part.kind === "text" ? (
                 <span key={`t-${index}`}>{part.text}</span>

@@ -503,6 +503,17 @@ public class CanderBrowserPlugin: CAPPlugin, CAPBridgedPlugin, WKNavigationDeleg
         decisionHandler(.grant)
     }
 
+    @available(iOS 15.0, *)
+    public func webView(
+        _ webView: WKWebView,
+        requestGeolocationPermissionFor origin: WKSecurityOrigin,
+        initiatedByFrame frame: WKFrameInfo,
+        decisionHandler: @escaping (WKPermissionDecision) -> Void
+    ) {
+        // Allow sites to request location; iOS still shows the system Location prompt.
+        decisionHandler(.grant)
+    }
+
     // MARK: - Helpers
 
     private func destroyTabSync(_ tabId: String) {

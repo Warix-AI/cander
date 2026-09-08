@@ -28,6 +28,15 @@ export async function GET(request: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Job not found." }, { status: 404 });
   }
 
+  // Recover jobs that completed but were wrongly flipped back to generating
+  // by a heartbeat race (pre-fix). If we have pixels, surface them as done.
+  if (job.status === "generating" && job.dataUrl) {
+    job =
+      (await updateImageGenerationJob(id, auth.user.id, {
+        status: "completed",
+      })) ?? job;
+  }
+
   if (job.status === "generating" && isImageJobStale(job)) {
     job =
       (await updateImageGenerationJob(id, auth.user.id, {

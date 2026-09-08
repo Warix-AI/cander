@@ -14,7 +14,7 @@ const REC_BTN = 28;
 
 /**
  * Recording composer row — same height as the idle composer line:
- * [ X ]  [ live transcript | waveform / Transcribing… ]  [ ■ ] [ ↑ / spinner ]
+ * [ X ]  [ live transcript | waveform / Transcribing ]  [ ■ ] [ ↑ / spinner ]
  */
 export function ComposerRecordingView({
   onCancel,
@@ -79,7 +79,7 @@ export function ComposerRecordingView({
               compact ? "text-[12px]" : "text-[13px]",
             )}
           >
-            Transcribing…
+            Transcribing
           </p>
         ) : spoken ? (
           <p

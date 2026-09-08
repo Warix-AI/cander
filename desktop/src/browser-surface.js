@@ -57,7 +57,7 @@ function emitToRenderer(channel, payload) {
   hostWindow.webContents.send(channel, payload);
 }
 
-/** Camera / mic / screen share for in-panel browsing (Discord, Meet, etc.). */
+/** Camera / mic / screen share / location for in-panel browsing. */
 function isBrowserMediaPermission(permission) {
   return (
     permission === "media" ||
@@ -65,6 +65,17 @@ function isBrowserMediaPermission(permission) {
     permission === "display-capture" ||
     permission === "camera" ||
     permission === "microphone"
+  );
+}
+
+function isBrowserLocationPermission(permission) {
+  return permission === "geolocation";
+}
+
+function isBrowserAllowedPermission(permission) {
+  return (
+    isBrowserMediaPermission(permission) ||
+    isBrowserLocationPermission(permission)
   );
 }
 
@@ -131,8 +142,14 @@ function hardenSession(ses) {
   ses.__canderBrowserHardened = true;
 
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {
-    if (!isBrowserMediaPermission(permission)) {
+    if (!isBrowserAllowedPermission(permission)) {
       callback(false);
+      return;
+    }
+    if (isBrowserLocationPermission(permission)) {
+      // Sites asking for GPS (maps, delivery, check-in). OS Location Services
+      // still gate access via NSLocationWhenInUseUsageDescription.
+      callback(true);
       return;
     }
     void ensureMacMediaAccess(permission, details).then((ok) => {
@@ -143,7 +160,8 @@ function hardenSession(ses) {
   // Return false until OS TCC is granted so Chromium issues a real request
   // (which triggers askForMediaAccess). Returning true too early hides devices.
   ses.setPermissionCheckHandler((_wc, permission, _origin, details) => {
-    if (!isBrowserMediaPermission(permission)) return false;
+    if (!isBrowserAllowedPermission(permission)) return false;
+    if (isBrowserLocationPermission(permission)) return true;
     if (process.platform !== "darwin") return true;
     const kinds = mediaKindsForRequest(permission, details);
     if (kinds.length === 0) return true;

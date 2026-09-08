@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore, type TouchEventHandler } from "react";
-import { Blocks, ChevronLeft, Ellipsis, ExternalLink, Hammer, Image as ImageIcon, PanelsTopLeft, Plus, Search, Share, SquarePen, Trash2 } from "lucide-react";
+import { Blocks, ChevronLeft, Ellipsis, ExternalLink, Globe, Hammer, Image as ImageIcon, PanelsTopLeft, Plus, Search, Share, SquarePen, Trash2 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
@@ -61,6 +61,7 @@ type ResearchBrowserActions = {
   address: string;
   onCopyLink: () => void;
   onOpenNewTab: () => void;
+  onOpenSystemBrowser: () => void;
   onClearPage: () => void;
 };
 
@@ -706,6 +707,19 @@ export function MobileAppChrome({ className }: { className?: string }) {
             >
               <ExternalLink className="h-4 w-4 shrink-0" strokeWidth={1.8} />
               <span className="min-w-0 flex-1 truncate">Open in new tab</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={researchBrowserActions.address === "about:blank"}
+              onClick={() => {
+                researchBrowserActions.onOpenSystemBrowser();
+                setActionsOpen(false);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-full px-3 py-2.5 text-left text-[15px] tracking-[-0.01em] hover:bg-black/[0.04] dark:hover:bg-white/[0.08] disabled:opacity-40"
+            >
+              <Globe className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+              <span className="min-w-0 flex-1 truncate">Open in Safari</span>
             </button>
             <button
               type="button"

@@ -55,6 +55,8 @@
 	<string>Cander uses the microphone for dictation, voice chat, and calls in the in-app browser.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Cander turns your speech into text for dictation and voice chat.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Cander allows websites you open in the browser panel to use your location when you approve their request.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Cander reads selected Apple Health metrics (steps, workouts, active energy, resting heart rate, and sleep) only when you ask about your own activity. Data is processed on your device and is not sold or used for advertising.</string>
 	<key>CFBundleURLTypes</key>

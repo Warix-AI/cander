@@ -53,7 +53,7 @@ export async function runAgentClientTransport(
   report({
     phase: "thinking",
     label: "Thinking",
-    detail: "Starting agent",
+    detail: "Thinking",
   });
 
   const history = (request.messages ?? []).map((m) => ({

@@ -77,6 +77,7 @@ import {
 } from "@/lib/composer-attach";
 import { composerAttachActions } from "@/lib/ai/raw-openai/limits";
 import { getNativeCapabilities } from "@/lib/native";
+import { dismissNativeKeyboard } from "@/lib/mobile-shell";
 import {
   isSpeechToTextSupported,
   startSpeechToText,
@@ -984,6 +985,12 @@ export function Composer({
     }
   };
 
+  /** After send: collapse keyboard so ChatColumn can pin the turn under the header. */
+  const dismissComposerKeyboardAfterSend = () => {
+    suppressAutoFocusRef.current = true;
+    dismissNativeKeyboard({ suppressComposer: true });
+  };
+
   /** Re-raise after dictation stop — field flips off readOnly on the next paint. */
   const raiseComposerKeyboardAfterDictation = () => {
     suppressAutoFocusRef.current = false;
@@ -1197,9 +1204,8 @@ export function Composer({
       setAttachError(null);
       clearPageReference();
       clearEntityReference();
-      // Keep keyboard up after send — only scroll dismisses it in chat.
-      queueMicrotask(() => keepComposerKeyboard());
-      window.setTimeout(keepComposerKeyboard, 80);
+      // Collapse keyboard so the new user turn can pin under the header.
+      dismissComposerKeyboardAfterSend();
       return;
     }
 
@@ -1417,8 +1423,8 @@ export function Composer({
     setAttachError(null);
     clearPageReference();
     clearEntityReference();
-    queueMicrotask(() => keepComposerKeyboard());
-    window.setTimeout(keepComposerKeyboard, 80);
+    // Collapse keyboard so the new user turn can pin under the header.
+    dismissComposerKeyboardAfterSend();
   };
 
   const startDictation = () => {

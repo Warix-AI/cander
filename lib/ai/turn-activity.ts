@@ -47,7 +47,7 @@ export function labelForPhase(phase: TurnActivityPhase): string {
 export function detailForPhase(phase: TurnActivityPhase): string {
   switch (phase) {
     case "generating":
-      return "Preparing a response";
+      return "Thinking";
     case "searching":
       return "Searching the web";
     case "reading":
@@ -68,7 +68,9 @@ function friendlyProgressDetail(
   const detail = progress.detail?.trim();
   if (
     detail &&
-    !/^(thinking|generating|searching|reading|checking|building|updating)\.?\.?\.?$/i.test(detail)
+    !/^(thinking|generating|searching|reading|checking|building|updating|starting agent)\.?\.?\.?$/i.test(
+      detail,
+    )
   ) {
     return detail.replace(/\s*[.…]+$/u, "").trim();
   }

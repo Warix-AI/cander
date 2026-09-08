@@ -71,6 +71,7 @@ import {
   isBrowserContextReading,
 } from "@/lib/browser-context";
 import { hasDesktopBrowserBridge, isDesktopShell } from "@/lib/desktop-shell";
+import { openUrlInSystemBrowser } from "@/lib/open-system-browser";
 import { isCapacitorNative } from "@/lib/composer-attach";
 import { NavToggle } from "@/components/shell/NavToggle";
 import {
@@ -868,6 +869,7 @@ export function ProjectBrowserPanel({
   const researchBrowserActionsRef = useRef({
     onCopyLink: () => {},
     onOpenNewTab: () => {},
+    onOpenSystemBrowser: () => {},
     onClearPage: () => {},
     address: "about:blank" as string,
   });
@@ -881,6 +883,9 @@ export function ProjectBrowserPanel({
       }
     },
     onOpenNewTab: () => addUrlTab(active.url || "about:blank"),
+    onOpenSystemBrowser: () => {
+      void openUrlInSystemBrowser(active.url || address);
+    },
     onClearPage: () => navigateAddressTo("about:blank"),
   };
 
@@ -899,6 +904,8 @@ export function ProjectBrowserPanel({
             void researchBrowserActionsRef.current.onCopyLink(),
           onOpenNewTab: () =>
             researchBrowserActionsRef.current.onOpenNewTab(),
+          onOpenSystemBrowser: () =>
+            researchBrowserActionsRef.current.onOpenSystemBrowser(),
           onClearPage: () => researchBrowserActionsRef.current.onClearPage(),
         },
       }),
@@ -2093,6 +2100,14 @@ export function ProjectBrowserPanel({
                 >
                   <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.6} />
                 </RailBtn>
+                <RailBtn
+                  label="Open in system browser"
+                  onClick={() => {
+                    void openUrlInSystemBrowser(active.url || address);
+                  }}
+                >
+                  <Globe className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </RailBtn>
               </>
             ) : browserSpaceId === "research" ? (
               <ResearchBrowserToolsMenu
@@ -2107,6 +2122,9 @@ export function ProjectBrowserPanel({
                 // Duplicate the actual browser page; an empty search tab stays blank
                 // instead of normalizing the project preview or tab title as a query.
                 onOpenExternal={() => addUrlTab(active.url || "about:blank")}
+                onOpenSystemBrowser={() => {
+                  void openUrlInSystemBrowser(active.url || address);
+                }}
                 onClear={() => navigateAddressTo("about:blank")}
               />
             ) : (
@@ -2120,6 +2138,9 @@ export function ProjectBrowserPanel({
                 onPublish={() => openOverlay("publish")}
                 onDomain={() => openOverlay("domains")}
                 onOpenExternal={() => addUrlTab(address)}
+                onOpenSystemBrowser={() => {
+                  void openUrlInSystemBrowser(active.url || address);
+                }}
                 onSelectElement={() => setSelectMode(!selectMode)}
                 onRefresh={() => {
                   refreshPreview();
@@ -3060,11 +3081,13 @@ function ResearchBrowserToolsMenu({
   address,
   onShare,
   onOpenExternal,
+  onOpenSystemBrowser,
   onClear,
 }: {
   address: string;
   onShare: () => void | Promise<void>;
   onOpenExternal: () => void;
+  onOpenSystemBrowser: () => void;
   onClear: () => void;
 }) {
   return (
@@ -3097,6 +3120,16 @@ function ResearchBrowserToolsMenu({
             }}
           >
             Open in new tab
+          </DesktopMenuItem>
+          <DesktopMenuItem
+            icon={Globe}
+            onClick={() => {
+              onOpenSystemBrowser();
+              close();
+            }}
+            disabled={address === "about:blank"}
+          >
+            Open in system browser
           </DesktopMenuItem>
           <DesktopMenuItem
             icon={Trash2}
@@ -3139,6 +3172,7 @@ function DesktopProjectToolsMenu({
   onPublish,
   onDomain,
   onOpenExternal,
+  onOpenSystemBrowser,
   onSelectElement,
   onRefresh,
 }: {
@@ -3148,6 +3182,7 @@ function DesktopProjectToolsMenu({
   onPublish: () => void;
   onDomain: () => void;
   onOpenExternal: () => void;
+  onOpenSystemBrowser: () => void;
   onSelectElement: () => void;
   onRefresh: () => void;
 }) {
@@ -3201,6 +3236,15 @@ function DesktopProjectToolsMenu({
             }}
           >
             Open in new tab
+          </DesktopMenuItem>
+          <DesktopMenuItem
+            icon={Globe}
+            onClick={() => {
+              onOpenSystemBrowser();
+              close();
+            }}
+          >
+            Open in system browser
           </DesktopMenuItem>
           <DesktopMenuItem
             icon={MousePointer2}

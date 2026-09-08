@@ -138,6 +138,18 @@ export async function updateImageGenerationJob(
     console.log("[IMAGE_JOB]", { event: "ignore_after_cancel", id });
     return current;
   }
+  // Never downgrade a finished job back to generating (heartbeat race).
+  if (
+    (current.status === "completed" || current.status === "failed") &&
+    patch.status === "generating"
+  ) {
+    console.log("[IMAGE_JOB]", {
+      event: "ignore_downgrade_to_generating",
+      id,
+      status: current.status,
+    });
+    return current;
+  }
 
   const next: ImageGenerationJob = {
     ...current,

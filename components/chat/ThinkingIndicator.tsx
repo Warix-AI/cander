@@ -1,38 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { TurnActivityPhase } from "@/lib/ai/turn-activity";
 import { detailForPhase } from "@/lib/ai/turn-activity";
 import { cn } from "@/lib/utils";
-
-const STATUS_CYCLE = [
-  "Understanding your request",
-  "Gathering what’s needed",
-  "Preparing a response",
-] as const;
-/** Time each status label stays visible before cycling to the next. */
-const STATUS_CYCLE_MS = 5000;
-
-function useCyclingStatus(active: boolean, intervalMs = STATUS_CYCLE_MS) {
-  const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    if (!active) return;
-    const id = window.setInterval(() => {
-      setIndex((value) => (value + 1) % STATUS_CYCLE.length);
-    }, intervalMs);
-    return () => window.clearInterval(id);
-  }, [active, intervalMs]);
-
-  return STATUS_CYCLE[index]!;
-}
 
 function cleanStatusText(value: string): string {
   return value.replace(/\s*[.…]+$/u, "").trim();
 }
 
+/** Map jargon / startup copy to the quiet default label. */
+function normalizeStatusText(value: string): string {
+  const cleaned = cleanStatusText(value);
+  if (
+    !cleaned ||
+    /^(starting agent|understanding your request|gathering what(?:’|')?s needed|preparing a response)$/i.test(
+      cleaned,
+    )
+  ) {
+    return "Thinking";
+  }
+  return cleaned;
+}
+
 /**
  * In-flight turn indicator — single status line with a light-wave shimmer.
+ * Default: "Thinking". Specific actions (web search, etc.) replace it.
  */
 export function ThinkingIndicator({
   className,
@@ -48,12 +40,11 @@ export function ThinkingIndicator({
   label?: string;
   active?: boolean;
 }) {
-  const cyclingLabel = useCyclingStatus(active && !phase && !detail);
-  const visibleDetail = cleanStatusText(
+  const visibleDetail = normalizeStatusText(
     detail?.trim() ||
       (phase ? detailForPhase(phase) : null) ||
-      (label && !/^Thinking\b/i.test(label) ? label : cyclingLabel) ||
-      "",
+      (label && !/^Thinking\b/i.test(label) ? label : "Thinking") ||
+      "Thinking",
   );
 
   return (

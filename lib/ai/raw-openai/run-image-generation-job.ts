@@ -103,10 +103,18 @@ async function executeImageGenerationJob(opts: {
   });
 
   // Heartbeat so leave/return + stale checks don't treat an active job as dead.
+  // Only bump updatedAt — never force status:"generating" (that raced completed
+  // results back to generating and made the client spin until timeout).
+  let heartbeatAlive = true;
   const heartbeat = setInterval(() => {
-    void updateImageGenerationJob(opts.jobId, opts.userId, {
-      status: "generating",
-    }).catch(() => {});
+    if (!heartbeatAlive) return;
+    void (async () => {
+      const current = await getImageGenerationJob(opts.jobId, opts.userId);
+      if (!current || current.status !== "generating") return;
+      await updateImageGenerationJob(opts.jobId, opts.userId, {
+        // Touch only — omit status so we don't clobber a concurrent complete.
+      });
+    })().catch(() => {});
   }, 20_000);
 
   try {
@@ -162,6 +170,10 @@ async function executeImageGenerationJob(opts: {
       });
     }
 
+    // Stop heartbeat before marking complete so it cannot race the write.
+    heartbeatAlive = false;
+    clearInterval(heartbeat);
+
     const completed = await updateImageGenerationJob(opts.jobId, opts.userId, {
       status: "completed",
       mimeType: generated.mimeType,
@@ -187,6 +199,8 @@ async function executeImageGenerationJob(opts: {
       id: opts.jobId,
       error: message.slice(0, 300),
     });
+    heartbeatAlive = false;
+    clearInterval(heartbeat);
     const failed = await updateImageGenerationJob(opts.jobId, opts.userId, {
       status: "failed",
       error: message.slice(0, 500),
@@ -198,6 +212,7 @@ async function executeImageGenerationJob(opts: {
     jobReservationIds.delete(opts.jobId);
     return failed;
   } finally {
+    heartbeatAlive = false;
     clearInterval(heartbeat);
   }
 }

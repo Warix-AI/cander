@@ -61,12 +61,10 @@ function scheduleImageJob(jobId: string, work: () => Promise<void>) {
         error: error instanceof Error ? error.message.slice(0, 300) : "fail",
       });
     });
+  // Always kick immediately so generation does not depend solely on `after()`
+  // (which can be delayed/dropped). In-process lock prevents duplicate OpenAI calls.
+  void run();
   after(run);
-  // Local/dev: `after()` can be dropped on HMR; kick immediately too.
-  // In-process lock in runImageGenerationJob prevents duplicate OpenAI calls.
-  if (process.env.NODE_ENV !== "production") {
-    void run();
-  }
 }
 
 export async function POST(request: Request) {

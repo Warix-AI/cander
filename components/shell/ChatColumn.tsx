@@ -27,6 +27,42 @@ import { dismissNativeKeyboard } from "@/lib/mobile-shell";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 
+/** Wait until the soft keyboard is fully down, then run (ChatGPT send→pin timing). */
+function afterKeyboardCollapsed(run: () => void) {
+  if (typeof window === "undefined") {
+    run();
+    return () => undefined;
+  }
+  const open = document.documentElement.dataset.keyboard === "1";
+  if (!open) {
+    const id = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(run);
+    });
+    return () => window.cancelAnimationFrame(id);
+  }
+  let done = false;
+  let fallback = 0;
+  let settle = 0;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    window.removeEventListener("keyboardDidHide", finish);
+    window.removeEventListener("keyboardWillHide", finish);
+    if (fallback) window.clearTimeout(fallback);
+    settle = window.setTimeout(run, 48);
+  };
+  window.addEventListener("keyboardDidHide", finish);
+  window.addEventListener("keyboardWillHide", finish);
+  fallback = window.setTimeout(finish, 480);
+  return () => {
+    done = true;
+    window.removeEventListener("keyboardDidHide", finish);
+    window.removeEventListener("keyboardWillHide", finish);
+    if (fallback) window.clearTimeout(fallback);
+    if (settle) window.clearTimeout(settle);
+  };
+}
+
 function ComposerDock({
   onSend,
   hideSpaceTools,
@@ -122,12 +158,22 @@ export function ChatColumn() {
   const userPinnedScroll = useRef(false);
   const scrollParentRef = useRef<HTMLDivElement | null>(null);
   const scrollUnsubRef = useRef<(() => void) | null>(null);
+  const pinCleanupRef = useRef<(() => void) | null>(null);
+  const lastPinnedUserIdRef = useRef<string | null>(null);
   const last = thread?.messages.at(-1);
   const lastUserId = [...(thread?.messages ?? [])]
     .reverse()
     .find((m) => m.role === "user")?.id;
   const floating = useShellStyle() === "floating";
   const { centered, chatMaxWidthClass } = useChatCanvasCentered();
+
+  const pinLatestUserToTop = (behavior: ScrollBehavior = "smooth") => {
+    const el = latestUserRef.current;
+    if (!el) return;
+    // Lock follow-streaming so the reply grows downward under the pinned turn.
+    userPinnedScroll.current = true;
+    el.scrollIntoView({ block: "start", behavior });
+  };
 
   const snapTranscriptToBottom = (behavior: ScrollBehavior = "auto") => {
     const parent = scrollParentRef.current;
@@ -178,7 +224,10 @@ export function ChatColumn() {
     };
   };
 
-  useEffect(() => () => scrollUnsubRef.current?.(), []);
+  useEffect(() => () => {
+    scrollUnsubRef.current?.();
+    pinCleanupRef.current?.();
+  }, []);
 
   // Bulk listThreads omits heavy image blocks; hydrate the open thread on demand.
   useEffect(() => {
@@ -212,6 +261,9 @@ export function ChatColumn() {
 
     if (navigated) {
       userPinnedScroll.current = false;
+      lastPinnedUserIdRef.current = null;
+      pinCleanupRef.current?.();
+      pinCleanupRef.current = null;
     }
 
     if (!hasChatTurns) return;
@@ -233,21 +285,27 @@ export function ChatColumn() {
       };
     }
 
-    // Same-thread new turn: pin the latest user message near the top.
+    // Same-thread new user turn: ChatGPT cycle — pin that bubble under the header.
+    if (!lastUserId || lastUserId === lastPinnedUserIdRef.current) return;
+    lastPinnedUserIdRef.current = lastUserId;
+    pinCleanupRef.current?.();
+
     if (mobile) {
-      const el = latestUserRef.current ?? endRef.current;
-      if (!el) return;
-      el.scrollIntoView({ block: "start", behavior: "auto" });
-      return;
+      dismissNativeKeyboard({ suppressComposer: true });
+      pinCleanupRef.current = afterKeyboardCollapsed(() => {
+        pinLatestUserToTop("smooth");
+        // Second pass after layout/spacer settles.
+        window.setTimeout(() => pinLatestUserToTop("smooth"), 120);
+      });
+      return () => {
+        pinCleanupRef.current?.();
+        pinCleanupRef.current = null;
+      };
     }
 
-    if (!lastUserId) return;
-    const el = latestUserRef.current;
-    if (!el) return;
-    el.scrollIntoView({
-      block: "start",
-      behavior: "smooth",
-    });
+    pinLatestUserToTop("smooth");
+    const t = window.setTimeout(() => pinLatestUserToTop("smooth"), 80);
+    return () => window.clearTimeout(t);
   }, [lastUserId, last?.id, thread?.id, mobile, hasChatTurns, projectId, spaceId]);
 
   useEffect(() => {
@@ -300,7 +358,7 @@ export function ChatColumn() {
             ref={pin ? latestUserRef : undefined}
             className={
               pin
-                ? "scroll-mt-[-25px] md:scroll-mt-[-100px]"
+                ? "scroll-mt-3 md:scroll-mt-4"
                 : undefined
             }
           >
@@ -308,8 +366,11 @@ export function ChatColumn() {
           </div>
         );
       })}
-      {/* Room below the latest turn so it can sit near the top like ChatGPT. */}
-      <div className="min-h-[30dvh]" aria-hidden />
+      {/* Tall spacer so the latest user turn can sit under the header like ChatGPT. */}
+      <div
+        className="min-h-[min(72dvh,calc(100dvh-11rem))] shrink-0"
+        aria-hidden
+      />
       <div ref={endRef} />
     </>
   );

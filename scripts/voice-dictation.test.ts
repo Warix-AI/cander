@@ -71,7 +71,7 @@ describe("Dictation isolation", () => {
     assert.ok(src.includes("liveText"));
     assert.ok(src.includes("onSend"));
     assert.equal(/Listening[.…]/.test(src), false);
-    assert.ok(src.includes("Transcribing…"));
+    assert.ok(src.includes("Transcribing"));
     assert.equal(src.includes("VoiceWaveButton"), false);
     assert.match(src, /REC_BTN\s*=\s*28/);
     assert.ok(src.includes('status === "transcribing"'));

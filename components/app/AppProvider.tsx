@@ -2256,7 +2256,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           activity: {
             phase: "generating",
             startedAt: Date.now(),
-            detail: "Understanding your request",
+            detail: "Thinking",
             kind: "idle",
           },
         };
@@ -3324,7 +3324,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 activity: {
                   phase: "generating" as const,
                   startedAt: Date.now(),
-                  detail: "Understanding your request",
+                  detail: "Thinking",
                   kind: "idle" as const,
                 },
               },

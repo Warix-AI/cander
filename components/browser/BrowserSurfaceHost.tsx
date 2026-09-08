@@ -417,7 +417,7 @@ export function BrowserSurfaceHost({
           data-tab-id={tabId}
           src={url}
           sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin"
-          allow="accelerometer; autoplay; camera; display-capture; encrypted-media; fullscreen; microphone; clipboard-write"
+          allow="accelerometer; autoplay; camera; display-capture; encrypted-media; fullscreen; geolocation; microphone; clipboard-write"
           referrerPolicy="no-referrer"
           className="h-full w-full border-0 bg-white"
           onError={() => setEmbedBlocked(true)}

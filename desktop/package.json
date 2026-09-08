@@ -50,7 +50,8 @@
       "extendInfo": {
         "NSCameraUsageDescription": "Cander uses the camera for in-app browsing and video calls.",
         "NSMicrophoneUsageDescription": "Cander uses the microphone for dictation, voice chat, and in-app browsing.",
-        "NSSpeechRecognitionUsageDescription": "Cander turns your speech into text for dictation and voice chat."
+        "NSSpeechRecognitionUsageDescription": "Cander turns your speech into text for dictation and voice chat.",
+        "NSLocationWhenInUseUsageDescription": "Cander allows websites you open in the browser panel to use your location when you approve their request."
       }
     },
     "dmg": {
