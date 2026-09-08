@@ -49,7 +49,7 @@ export function isHomeChatView(opts: {
   return opts.view === "chat" && !opts.spaceId && !opts.projectId;
 }
 
-/** Standalone browser on home chat, or ephemeral quick search on Explore. */
+/** Standalone browser on home chat, or ephemeral quick search on Explore / home links. */
 export function showStandaloneBrowserPanel(opts: {
   standaloneBrowserOpen: boolean;
   standaloneBrowserEphemeral?: boolean;
@@ -60,7 +60,11 @@ export function showStandaloneBrowserPanel(opts: {
   if (!opts.standaloneBrowserOpen || opts.projectId) return false;
 
   if (opts.standaloneBrowserEphemeral) {
-    return opts.view === "space" && Boolean(opts.spaceId) && !opts.projectId;
+    // Ephemeral quick-search style browser: space chat OR home/new chat.
+    return (
+      (opts.view === "space" && Boolean(opts.spaceId)) ||
+      (opts.view === "chat" && !opts.spaceId)
+    );
   }
 
   return (

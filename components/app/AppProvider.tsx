@@ -5024,6 +5024,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // Mobile home / new chat: ephemeral panel browser with floating tabs
+      // (same pattern as search-projects) — never pin fullscreen standalone.
+      if (mobile && !projectId) {
+        const key = standaloneBrowserKey(actor.id, workspaceId);
+        beginQuickSearchBrowserSession(key);
+        setStandaloneBrowserEphemeral(true);
+        setStandaloneBrowserOpen(true);
+        openUrlInStandaloneBrowser({
+          profileId: actor.id,
+          workspaceId,
+          url,
+          title,
+        });
+        setPanelMode("split");
+        setPanelRatioState((ratio) =>
+          ratio < PANEL_RATIO_OPEN_FLOOR ? PANEL_RATIO_OPEN_FLOOR : ratio,
+        );
+        setMobileSurface("panel");
+        return;
+      }
+
       openStandaloneBrowser();
       openUrlInStandaloneBrowser({
         profileId: actor.id,
@@ -5039,6 +5060,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       spaceId,
       project?.name,
       view,
+      mobile,
       openStandaloneBrowser,
     ],
   );

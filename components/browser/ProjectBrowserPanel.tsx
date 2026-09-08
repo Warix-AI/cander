@@ -190,6 +190,7 @@ import { useProjectCoverCapture } from "@/lib/hooks/use-project-cover-capture";
 import {
   defaultStandaloneBrowserSession,
   getStandaloneBrowserSession,
+  isStandaloneBrowserEphemeral,
   setStandaloneBrowserSession,
   standaloneBrowserKey,
   STANDALONE_BROWSER_PROJECT_ID,
@@ -572,12 +573,17 @@ export function ProjectBrowserPanel({
     }
 
     if (session.tabs.length <= 1) {
-      if (!standalone && key) {
-        clearProjectBrowserSession(key);
-        backToSpaceHome();
-      } else {
+      if (standalone) {
+        // Ephemeral chat/quick-search browser: closing the last tab leaves panel.
+        if (isStandaloneBrowserEphemeral()) {
+          closeStandaloneBrowser();
+          return;
+        }
         const blank = makeWebTab();
         write({ tabs: [blank], activeTabId: blank.id });
+      } else if (key) {
+        clearProjectBrowserSession(key);
+        backToSpaceHome();
       }
       return;
     }
@@ -651,7 +657,7 @@ export function ProjectBrowserPanel({
   const showMobileTabBar =
     mobile &&
     session.tabs.length > 0 &&
-    (session.tabs.length > 1 || spaceId === "research");
+    (session.tabs.length > 1 || spaceId === "research" || standalone);
 
   const addAgentTab = () => {
     if (!projectId || !key) return;

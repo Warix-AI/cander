@@ -60,7 +60,7 @@ export function ThinkingIndicator({
     >
       <p
         key={visibleDetail}
-        className="thinking-shimmer animate-in fade-in text-[16px] font-medium leading-6 tracking-[-0.015em] duration-300 sm:text-[17px]"
+        className="thinking-shimmer animate-in fade-in text-[16px] font-medium leading-6 tracking-[-0.015em] duration-300 sm:text-[14px] sm:leading-5"
       >
         {visibleDetail}
       </p>

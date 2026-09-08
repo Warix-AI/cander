@@ -365,11 +365,15 @@ function BlockView({
   messageId?: string;
   threadId?: string;
 }) {
+  const { openInAppBrowser } = useApp();
   switch (block.type) {
     case "text":
       return (
         <div className="text-[14.5px] leading-relaxed text-muted-foreground">
-          <MarkdownRenderer content={block.text} />
+          <MarkdownRenderer
+            content={block.text}
+            onLinkClick={(href) => openInAppBrowser(href)}
+          />
         </div>
       );
     case "plan":
