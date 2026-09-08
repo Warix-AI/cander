@@ -386,6 +386,19 @@ export function dismissNativeKeyboard(opts?: {
 }
 
 /**
+ * Raise the soft keyboard when an editable field is already focused.
+ * Needed after mic teardown (dictation stop) which often dismisses iOS
+ * keyboard while leaving the composer in a zombie-focused state.
+ */
+export function showNativeKeyboard() {
+  const keyboard = getCapacitor()?.Plugins?.Keyboard;
+  if (!keyboard?.show) return;
+  void keyboard.show().catch(() => {
+    // ignore — web / unsupported platforms
+  });
+}
+
+/**
  * Lift the composer with the keyboard (padding-bottom = keyboard height).
  *
  * With Capacitor `Keyboard.resize: none`, the WebView often does not shrink, so

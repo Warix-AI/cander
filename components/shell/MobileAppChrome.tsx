@@ -30,6 +30,7 @@ import {
   isDashboardOnlySpace,
   isDockChatSpace,
   PRIMARY_NAV_SPACES,
+  resolveNavSpaceId,
 } from "@/lib/spaces";
 import { previewUrlForProject } from "@/lib/preview-url";
 import {
@@ -137,9 +138,11 @@ export function MobileAppChrome({ className }: { className?: string }) {
   const inChromeSub = inMenuSub || inSettings;
   const onMenuMain = mobileSurface === "menu" && mobileMenuScreen === "main";
 
+  // research/build fold under Canvas in nav — resolve so leave-project chrome matches menu.
+  const navSpaceId = resolveNavSpaceId(spaceId) ?? spaceId;
   const inPrimarySpace =
-    Boolean(spaceId) &&
-    (PRIMARY_NAV_SPACES as readonly string[]).includes(spaceId as string);
+    Boolean(navSpaceId) &&
+    (PRIMARY_NAV_SPACES as readonly string[]).includes(navSpaceId as string);
   const inConnector = spaceId === "connectors" && Boolean(connectorId);
   const inConnectorsSpace = spaceId === "connectors";
   const isWorkItemBrowser = isWorkItemBrowserProjectId(projectId);
@@ -204,7 +207,9 @@ export function MobileAppChrome({ className }: { className?: string }) {
           ? "General"
           : "";
 
-  const spaceLabel = spaceId ? navLabel(spaceId as SpaceId) ?? "Space" : "Space";
+  const spaceLabel = navSpaceId
+    ? navLabel(navSpaceId as SpaceId) ?? "Space"
+    : "Space";
   const panelTabLabel = showHomeChatPanelToggle ? "Panel" : spaceLabel;
   const surface: MobileSurface =
     mobileSurface === "menu"

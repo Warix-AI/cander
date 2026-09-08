@@ -968,6 +968,57 @@ export function Composer({
     } catch {
       /* ignore */
     }
+    // Mic teardown often drops the soft keyboard while the field stays focused
+    // (zombie focus). Explicitly re-raise on Capacitor.
+    try {
+      getNativeCapabilities().keyboard.show();
+    } catch {
+      /* never block */
+    }
+  };
+
+  /** Re-raise after dictation stop — field flips off readOnly on the next paint. */
+  const raiseComposerKeyboardAfterDictation = () => {
+    suppressAutoFocusRef.current = false;
+    keepComposerKeyboard();
+    queueMicrotask(() => keepComposerKeyboard());
+    for (const ms of [50, 80, 200, 320]) {
+      window.setTimeout(keepComposerKeyboard, ms);
+    }
+    // If still zombie-focused with no keyboard, blur so the next tap can open it.
+    window.setTimeout(() => {
+      const el = textRef.current;
+      if (!el || document.activeElement !== el) return;
+      const inset =
+        typeof document !== "undefined"
+          ? Number.parseFloat(
+              getComputedStyle(document.documentElement).getPropertyValue(
+                "--keyboard-inset",
+              ) || "0",
+            )
+          : 0;
+      if (Number.isFinite(inset) && inset > 24) return;
+      try {
+        getNativeCapabilities().keyboard.show();
+      } catch {
+        /* ignore */
+      }
+      window.setTimeout(() => {
+        const still = textRef.current;
+        if (!still || document.activeElement !== still) return;
+        const inset2 = Number.parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue(
+            "--keyboard-inset",
+          ) || "0",
+        );
+        if (Number.isFinite(inset2) && inset2 > 24) return;
+        try {
+          still.blur();
+        } catch {
+          /* ignore */
+        }
+      }, 120);
+    }, 400);
   };
 
   const browserMode = view === "browser";
@@ -998,6 +1049,8 @@ export function Composer({
     } catch {
       /* never block */
     }
+    // Focus while still in the tap gesture — before mic release drops the keyboard.
+    keepComposerKeyboard();
     dictationRef.current?.cancel();
     dictationRef.current = null;
     speechRef.current?.stop();
@@ -1014,7 +1067,7 @@ export function Composer({
     if (valueBaseRef.current) {
       setValue(valueBaseRef.current.trimEnd());
     }
-    queueMicrotask(() => keepComposerKeyboard());
+    raiseComposerKeyboardAfterDictation();
   };
 
   const finishTranscription = (text: string) => {
@@ -1118,6 +1171,8 @@ export function Composer({
     } catch {
       /* never block */
     }
+    // Hold focus in the tap gesture before async mic teardown.
+    keepComposerKeyboard();
 
     const session = dictationRef.current;
     if (session) {
@@ -1148,6 +1203,7 @@ export function Composer({
           setTranscribing(false);
           setDictating(false);
           setDictationMeter(null);
+          raiseComposerKeyboardAfterDictation();
         });
       return;
     }
@@ -1170,6 +1226,7 @@ export function Composer({
           setTranscriptReveal(false);
           const el = textRef.current;
           if (el) focusComposerTextEnd(el);
+          raiseComposerKeyboardAfterDictation();
         }, 180);
       }
       return;

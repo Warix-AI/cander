@@ -4097,7 +4097,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!spaceId) return;
     // Same 500ms push/pop curve as chat ↔ Build/Explore (enter from left).
     requestMobileSurfaceEnter("back");
-    const chatSpace = chatSpaceId(spaceId);
+    // research/build open under Canvas — remap so Chat|Canvas chrome matches menu nav.
+    const homeSpace = (resolveNavSpaceId(spaceId) ?? spaceId) as typeof spaceId;
+    const chatSpace = chatSpaceId(homeSpace);
     const chatWasOpen = Boolean(threadId) || drafting;
     let tid: string | null = threadId;
     let hasMessages = Boolean(thread);
@@ -4113,6 +4115,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     }
+    setSpaceId(homeSpace);
     setProjectId(null);
     setConnectorId(null);
     setJobId(null);
@@ -4135,7 +4138,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     pushTarget({
       view: "space",
-      spaceId,
+      spaceId: homeSpace,
       threadId: chatWasOpen ? tid : null,
       projectId: null,
       panelMode: chatWasOpen ? "split" : "collapsed",

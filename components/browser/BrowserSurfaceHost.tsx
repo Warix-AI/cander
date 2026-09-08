@@ -12,6 +12,10 @@ import {
   hasDesktopBrowserBridge,
   isDesktopShell,
 } from "@/lib/desktop-shell";
+import {
+  getMobileFloatingNavReserve,
+  subscribeMobileFloatingNavReserve,
+} from "@/lib/mobile-floating-nav-chrome";
 import { isGoogleUrl } from "@/lib/preview-url";
 import { NewTabPage } from "@/components/browser/NewTabPage";
 import {
@@ -97,16 +101,26 @@ export function BrowserSurfaceHost({
     () => isBrowserPipTab(tabId),
     () => false,
   );
+  const floatingNavReserve = useSyncExternalStore(
+    subscribeMobileFloatingNavReserve,
+    getMobileFloatingNavReserve,
+    () => 0,
+  );
 
   const syncBounds = (): BrowserSurfaceBounds | null => {
     const el = hostRef.current;
     if (!el) return null;
     const rect = el.getBoundingClientRect();
+    // Native views paint above the HTML shell — leave the floating tab bar uncovered.
+    const bottomChrome = Math.min(
+      floatingNavReserve,
+      Math.max(0, Math.round(rect.height) - 1),
+    );
     return {
       x: Math.round(rect.left),
       y: Math.round(rect.top),
       width: Math.round(rect.width),
-      height: Math.round(rect.height),
+      height: Math.max(0, Math.round(rect.height) - bottomChrome),
     };
   };
 
@@ -304,7 +318,7 @@ export function BrowserSurfaceHost({
       layoutRoot?.removeEventListener("transitionend", onResize);
       ro?.disconnect();
     };
-  }, [tabId, active, suppressed, tabReady, pipActive, url]);
+  }, [tabId, active, suppressed, tabReady, pipActive, url, floatingNavReserve]);
 
   if (pipActive) {
     return (
