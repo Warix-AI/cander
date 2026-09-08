@@ -495,9 +495,9 @@ export function CalendarConnectorView({
         </div>
       ) : null}
 
-      {/* Detail — uses panel header back */}
+      {/* Detail — uses panel header back; clear the floating chrome on mobile. */}
       {page === "detail" && selected ? (
-        <div className="absolute inset-0 z-20 flex flex-col overflow-y-auto bg-white p-5 dark:bg-space-canvas">
+        <div className="absolute inset-0 z-20 flex flex-col overflow-y-auto bg-white px-5 pb-5 dark:bg-space-canvas mobile-header-content lg:pt-5">
           <div
             className="mb-4 h-1.5 w-12 rounded-full"
             style={{ backgroundColor: ACCENT }}
