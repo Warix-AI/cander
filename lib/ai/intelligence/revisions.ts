@@ -87,6 +87,8 @@ export async function createCandidateChangeSet(opts: {
   baseRevisionId?: string | null;
   summary: string;
   workerRunId?: string | null;
+  /** When set, candidate storage_pointer is git:{sha} (Phase 6). */
+  gitSha?: string | null;
 }): Promise<string | null> {
   if (!isSupabaseConfigured()) return null;
   const workspaceId = opts.workspaceId?.trim();
@@ -106,6 +108,11 @@ export async function createCandidateChangeSet(opts: {
         .maybeSingle();
       baseId = tip?.id ? String(tip.id) : null;
     }
+    const sha = opts.gitSha?.trim().toLowerCase();
+    const storagePointer =
+      sha && /^[0-9a-f]{7,40}$/.test(sha)
+        ? `git:${sha}`
+        : `candidate://${opts.projectId}/${Date.now()}`;
     const { data: cand } = await supabase
       .from("project_revisions")
       .insert({
@@ -113,11 +120,15 @@ export async function createCandidateChangeSet(opts: {
         workspace_id: workspaceId,
         kind: "candidate",
         parent_revision_id: baseId,
-        storage_pointer: `candidate://${opts.projectId}/${Date.now()}`,
+        storage_pointer: storagePointer,
       })
       .select("id")
       .single();
     const candidateId = cand?.id ? String(cand.id) : null;
+    const summary =
+      sha && !opts.summary.includes(sha.slice(0, 7))
+        ? `${opts.summary} (${sha.slice(0, 7)})`
+        : opts.summary;
     const { data, error } = await supabase
       .from("project_change_sets")
       .insert({
@@ -126,7 +137,7 @@ export async function createCandidateChangeSet(opts: {
         base_revision_id: baseId,
         candidate_revision_id: candidateId,
         status: "pending_review",
-        summary: opts.summary,
+        summary: summary.slice(0, 500),
         worker_run_id: opts.workerRunId ?? null,
       })
       .select("id")

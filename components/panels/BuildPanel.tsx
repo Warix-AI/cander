@@ -57,6 +57,11 @@ export function BuildPanel() {
   >(null);
   const [envMessage, setEnvMessage] = useState<string | null>(null);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [draftMeta, setDraftMeta] = useState<{
+    branch: string | null;
+    sha: string | null;
+    fullName: string | null;
+  }>({ branch: null, sha: null, fullName: null });
 
   const ensureSandbox = (forceRestart = false) => {
     if (!projectId || !ctx.workspaceId) return;
@@ -76,6 +81,11 @@ export function BuildPanel() {
       }
       setEnvStatus(result.status);
       setEnvMessage(result.message ?? result.error ?? null);
+      setDraftMeta({
+        branch: result.draftBranch,
+        sha: result.draftSha,
+        fullName: result.githubFullName,
+      });
       if (result.subdomain) {
         setPreviewUrl(`https://draft--${result.subdomain}.cander.app`);
       }
@@ -294,10 +304,28 @@ export function BuildPanel() {
 
         {!locked && tool === "git" ? (
           <div className="py-2">
-            <StatLine label="Branch" value="main" />
-            <Row title="components/Pricing.tsx" meta="M" />
-            <Row title="app/pricing/page.tsx" meta="M" />
-            <Row title="PR · Pricing copy pass" meta="Open" />
+            <StatLine
+              label="Repo"
+              value={draftMeta.fullName ?? "Not bound yet"}
+            />
+            <StatLine
+              label="Draft branch"
+              value={draftMeta.branch ?? "cander/draft"}
+            />
+            <StatLine
+              label="Tip SHA"
+              value={
+                draftMeta.sha
+                  ? draftMeta.sha.slice(0, 7)
+                  : envStatus === "ready"
+                    ? "—"
+                    : "Waiting for environment"
+              }
+            />
+            <Row
+              title="Open Changes for full history"
+              meta="Revisions = git SHAs"
+            />
           </div>
         ) : null}
 

@@ -40,6 +40,8 @@ Token needs permission to create projects and read API keys in the Warix org.
 | `GET/…` | `/api/preview-host/:subdomain/…` | Host proxy for `draft--*.cander.app` |
 | `POST` | `/api/projects/:id/sandbox/files` | File/exec/persist |
 | `POST` | `/api/projects/:id/git/persist` | Commit draft |
+| `GET` | `/api/projects/:id/git/commits?workspaceId=` | List draft commits (revisions) |
+| `POST` | `/api/projects/:id/git/restore` | Move draft tip to SHA + restart sandbox |
 | `POST` | `/api/computer/build` | Durable work-task pipeline |
 
 ## Phase 4 behavior
@@ -63,6 +65,17 @@ Token needs permission to create projects and read API keys in the Warix org.
 6. WebSocket/HMR through route handlers is not supported (426) — use Reload after edits
 
 Upstream origins must match Vercel sandbox hosts (SSRF allowlist).
+
+## Phase 6 behavior
+
+1. Source of truth for draft revisions is git SHAs on `cander/draft`
+2. Persist updates `projects.draft_sha` and `project_revisions.draft_tip.storage_pointer = git:{sha}`
+3. Candidate change sets after real commits use `git:{sha}` (not stub URIs)
+4. `GET …/git/commits` lists draft history and reconciles tip if DB drifted
+5. `POST …/git/restore` force-moves the draft tip to an older SHA on that history, then recreates the sandbox
+6. Build **Changes** timeline loads commits; Restore calls the restore API
+
+Publish / `published_sha` remains Phase 7.
 
 ## Enable Phase 3+ flag
 

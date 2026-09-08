@@ -173,25 +173,15 @@ export async function commitFilesToDraftBranch(opts: {
   });
 
   const draftSha = newCommit.sha;
-  await admin
-    .from("projects")
-    .update({
-      draft_sha: draftSha,
-      draft_branch: draftBranch,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", opts.projectId)
-    .eq("workspace_id", opts.workspaceId);
-
-  try {
-    await admin
-      .from("project_revisions")
-      .update({ storage_pointer: `git:${draftSha}` })
-      .eq("project_id", opts.projectId)
-      .eq("kind", "draft_tip");
-  } catch {
-    /* optional */
-  }
+  const { syncProjectDraftTipToSha } = await import(
+    "@/lib/build/git/revision-sync"
+  );
+  await syncProjectDraftTipToSha({
+    projectId: opts.projectId,
+    workspaceId: opts.workspaceId,
+    draftSha,
+    draftBranch,
+  });
 
   return {
     draftSha,

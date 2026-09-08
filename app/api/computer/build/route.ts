@@ -215,12 +215,26 @@ export async function POST(request: Request) {
       message: `Cander: ${goal}`.slice(0, 500),
     });
 
-    await createCandidateChangeSet({
-      projectId,
-      workspaceId,
-      summary: `Candidate change for “${String(row.title ?? "Work task")}”`,
-      workerRunId: taskId,
-    });
+    if (persisted.draftSha && !persisted.noop) {
+      const { recordGitCandidateChangeSet } = await import(
+        "@/lib/build/git/revision-sync"
+      );
+      await recordGitCandidateChangeSet({
+        projectId,
+        workspaceId,
+        draftSha: persisted.draftSha,
+        summary: `Candidate change for “${String(row.title ?? "Work task")}”`,
+        workerRunId: taskId,
+      });
+    } else {
+      await createCandidateChangeSet({
+        projectId,
+        workspaceId,
+        summary: `Candidate change for “${String(row.title ?? "Work task")}”`,
+        workerRunId: taskId,
+        gitSha: persisted.draftSha || null,
+      });
+    }
 
     await finalizeUsageReservation({
       reservationId: usage.reservationId,

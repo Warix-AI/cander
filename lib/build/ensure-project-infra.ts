@@ -238,13 +238,17 @@ export async function ensureProjectInfra(opts: {
       })
       .eq("id", project.id);
 
-    // Align draft revision pointer when possible (best-effort).
+    // Align draft revision pointer to git SHA (Phase 6).
     try {
-      await admin
-        .from("project_revisions")
-        .update({ storage_pointer: `git:${repo.draftSha}` })
-        .eq("project_id", project.id)
-        .eq("kind", "draft_tip");
+      const { syncProjectDraftTipToSha } = await import(
+        "@/lib/build/git/revision-sync"
+      );
+      await syncProjectDraftTipToSha({
+        projectId: project.id,
+        workspaceId: opts.workspaceId,
+        draftSha: repo.draftSha,
+        draftBranch: repo.draftBranch,
+      });
     } catch {
       /* optional */
     }

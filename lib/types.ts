@@ -395,6 +395,9 @@ export type Checkpoint = {
   summary: string;
   files: string[];
   diff?: string;
+  /** Git commit SHA when revision is backed by cander/draft */
+  sha?: string;
+  shortSha?: string;
 };
 
 export type ViewportId = "desktop" | "tablet" | "mobile";
