@@ -17,6 +17,7 @@ export async function POST(request: Request) {
     args?: string[];
     action?: string;
     projectId?: string;
+    workspaceId?: string;
     path?: string;
     content?: string;
   } = {};
