@@ -248,6 +248,30 @@ async function createBuildSandboxFromGit(opts: {
       sandbox_status: "ready",
     });
 
+    // If app already has a ready Supabase binding, re-inject env (secrets never in git).
+    try {
+      const { loadAppSupabaseBinding } = await import(
+        "@/lib/build/supabase/provision"
+      );
+      const binding = await loadAppSupabaseBinding(
+        opts.projectId,
+        opts.workspaceId,
+      );
+      if (binding?.status === "ready" && binding.ref) {
+        const { injectAppSupabaseIntoSandbox } = await import(
+          "@/lib/build/supabase/inject"
+        );
+        await injectAppSupabaseIntoSandbox({
+          userId: opts.userId,
+          projectId: opts.projectId,
+          workspaceId: opts.workspaceId,
+          sessionId,
+        });
+      }
+    } catch (err) {
+      console.warn("[cander] supabase inject on sandbox create skipped", err);
+    }
+
     return {
       session: (await getComputerSessionById(sessionId, opts.userId)) ?? session,
       previewUpstream,
@@ -366,6 +390,28 @@ export async function ensureProjectSandbox(opts: {
         sandbox_session_id: existing.id,
         sandbox_status: "ready",
       });
+      try {
+        const { loadAppSupabaseBinding } = await import(
+          "@/lib/build/supabase/provision"
+        );
+        const binding = await loadAppSupabaseBinding(
+          opts.projectId,
+          opts.workspaceId,
+        );
+        if (binding?.status === "ready" && binding.ref) {
+          const { injectAppSupabaseIntoSandbox } = await import(
+            "@/lib/build/supabase/inject"
+          );
+          await injectAppSupabaseIntoSandbox({
+            userId: opts.userId,
+            projectId: opts.projectId,
+            workspaceId: opts.workspaceId,
+            sessionId: existing.id,
+          });
+        }
+      } catch (err) {
+        console.warn("[cander] supabase inject on resume skipped", err);
+      }
       return publicResult({
         status: "ready",
         sessionId: existing.id,

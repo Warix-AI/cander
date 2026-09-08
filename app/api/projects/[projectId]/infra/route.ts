@@ -60,6 +60,12 @@ export async function GET(request: Request, ctx: RouteCtx) {
             publishedSha: row.published_sha,
           }
         : { bound: false },
+      supabase: await (async () => {
+        const { getAppSupabasePublicStatus } = await import(
+          "@/lib/build/supabase/provision"
+        );
+        return getAppSupabasePublicStatus({ projectId, workspaceId });
+      })(),
     },
   });
 }

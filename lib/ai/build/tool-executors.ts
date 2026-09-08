@@ -114,11 +114,77 @@ export async function executeBuildTool(opts: {
     if (!recipe) {
       return { name, ok: false, output: `unknown recipe: ${recipeId}` };
     }
+    // Auth/backend recipes: lazily provision Warix Supabase + inject sandbox env.
+    if (
+      recipe.backend?.some((b) => /auth|rls|profiles/i.test(b)) &&
+      projectId &&
+      workspaceId
+    ) {
+      const headers = await authHeaders();
+      const res = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}/supabase`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...headers },
+          body: JSON.stringify({ workspaceId, injectSandbox: true }),
+        },
+      );
+      const data = (await res.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+      return {
+        name,
+        ok: res.ok && data.ok !== false,
+        output:
+          data.status === "ready"
+            ? `recipe ${recipe.recipeId}@${recipe.recipeVersion} ready; Supabase ${String(data.projectRef ?? "")} provisioned`
+            : data.status === "skipped"
+              ? `recipe ${recipe.recipeId}@${recipe.recipeVersion} ready; Supabase provisioning skipped (not configured)`
+              : String(
+                  data.message ??
+                    data.error ??
+                    `recipe ready; supabase status=${String(data.status)}`,
+                ),
+        data: { recipe, supabase: data },
+      };
+    }
     return {
       name,
       ok: true,
       output: `recipe ${recipe.recipeId}@${recipe.recipeVersion} ready`,
       data: { recipe },
+    };
+  }
+
+  if (name === "build.auth.configure") {
+    if (!projectId || !workspaceId) {
+      return {
+        name,
+        ok: false,
+        output: "projectId and workspaceId required for auth configure",
+      };
+    }
+    const headers = await authHeaders();
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/supabase`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ workspaceId, injectSandbox: true }),
+      },
+    );
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    return {
+      name,
+      ok: res.ok && (data.ok !== false || data.status === "skipped"),
+      output:
+        data.status === "ready"
+          ? `Auth backend ready (Supabase ${String(data.projectRef ?? "project")}).`
+          : data.status === "skipped"
+            ? "Auth configure skipped — Supabase Management API not configured on this server."
+            : String(data.message ?? data.error ?? "Auth configure failed."),
+      data,
     };
   }
 

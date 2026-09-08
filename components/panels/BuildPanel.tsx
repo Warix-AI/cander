@@ -321,6 +321,14 @@ export function BuildPanel() {
             </p>
             <Row title="Stripe" meta="•••• saved" />
             <Row title="Keys" meta="•••• saved" />
+            <Row
+              title="Supabase"
+              meta={
+                envMessage?.includes("Supabase")
+                  ? "Configured in sandbox"
+                  : "Provisioned when auth is needed"
+              }
+            />
           </div>
         ) : null}
 

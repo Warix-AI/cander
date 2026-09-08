@@ -116,11 +116,33 @@ export async function POST(request: Request) {
     }
     const sessionId = ensured.sessionId;
 
-    // Apply explicit file writes from task.facts.files when present.
+    // Lazy Supabase when task asks for auth/backend.
+    const goalText = String(row.goal ?? row.title ?? "");
     const facts =
       row.facts && typeof row.facts === "object"
         ? (row.facts as Record<string, unknown>)
         : {};
+    const wantsSupabase =
+      facts.needSupabase === true ||
+      facts.supabase === true ||
+      /\b(auth|supabase|login|sign[- ]?up|rls)\b/i.test(goalText);
+    if (wantsSupabase) {
+      try {
+        const { injectAppSupabaseIntoSandbox } = await import(
+          "@/lib/build/supabase/inject"
+        );
+        await injectAppSupabaseIntoSandbox({
+          userId: auth.userId,
+          projectId,
+          workspaceId,
+          sessionId,
+        });
+      } catch (err) {
+        console.warn("[cander] build-task supabase inject", err);
+      }
+    }
+
+    // Apply explicit file writes from task.facts.files when present.
     const factFiles = Array.isArray(facts.files)
       ? (facts.files as TaskFile[])
       : [];
