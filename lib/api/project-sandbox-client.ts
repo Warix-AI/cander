@@ -21,6 +21,8 @@ export type ProjectSandboxClientResult = {
   draftSha: string | null;
   githubFullName: string | null;
   hasPreviewUpstream: boolean;
+  previewPath?: string | null;
+  previewHost?: string | null;
   message?: string;
   reused?: boolean;
   error?: string;
@@ -76,6 +78,8 @@ export async function ensureProjectSandboxClient(opts: {
       draftSha: data.draftSha ?? null,
       githubFullName: data.githubFullName ?? null,
       hasPreviewUpstream: Boolean(data.hasPreviewUpstream),
+      previewPath: data.previewPath ?? null,
+      previewHost: data.previewHost ?? null,
       message: data.message,
       reused: data.reused,
       error: data.error,

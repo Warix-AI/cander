@@ -41,6 +41,7 @@ export function BuildPanel() {
     advancedMode,
     setAdvancedMode,
     liveUrl,
+    refreshPreview,
   } = useApp();
   const ctx = useWorkspaceCtx();
   const api = useSpaceApi();
@@ -55,6 +56,7 @@ export function BuildPanel() {
     import("@/lib/build/sandbox/constants").BuildSandboxStatus | null
   >(null);
   const [envMessage, setEnvMessage] = useState<string | null>(null);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
 
   const ensureSandbox = (forceRestart = false) => {
     if (!projectId || !ctx.workspaceId) return;
@@ -69,12 +71,18 @@ export function BuildPanel() {
       if (!result) {
         setEnvStatus("unavailable");
         setEnvMessage("Sign in required to start the build environment.");
+        setPreviewSrc(null);
         return;
       }
       setEnvStatus(result.status);
       setEnvMessage(result.message ?? result.error ?? null);
       if (result.subdomain) {
-        setPreviewUrl(`https://${result.subdomain}.cander.app`);
+        setPreviewUrl(`https://draft--${result.subdomain}.cander.app`);
+      }
+      if (result.status === "ready" && result.previewPath) {
+        setPreviewSrc(`${result.previewPath}?_r=${Date.now()}`);
+      } else {
+        setPreviewSrc(null);
       }
     });
   };
@@ -139,14 +147,20 @@ export function BuildPanel() {
   const locked = ADVANCED_TOOLS.includes(tool) && !advancedMode;
   const publishedUrl =
     entityProject?.publishedUrl ?? deployments[0]?.url ?? liveUrl;
+  const chromeUrl = publishedUrl ?? previewUrl ?? address.url;
+  const chromeTitle = previewUrl
+    ? `${displayName} · draft`
+    : publishedUrl
+      ? `${displayName} · live`
+      : address.tab;
 
   return (
     <div className={SHELL_PANEL_BODY}>
       <PreviewChrome
         tool={tool}
         onTool={(id) => setBuildTool(id)}
-        title={address.tab}
-        url={publishedUrl ?? previewUrl ?? address.url}
+        title={chromeTitle}
+        url={chromeUrl}
       />
       <div
         className={cn(
@@ -255,6 +269,16 @@ export function BuildPanel() {
               envStatus={envStatus}
               envMessage={envMessage}
               onRetryEnv={() => ensureSandbox(true)}
+              previewSrc={previewSrc}
+              onReloadPreview={() => {
+                refreshPreview();
+                if (previewSrc) {
+                  const base = previewSrc.split("?")[0];
+                  setPreviewSrc(`${base}?_r=${Date.now()}`);
+                } else {
+                  ensureSandbox(false);
+                }
+              }}
             />
           </div>
         ) : null}

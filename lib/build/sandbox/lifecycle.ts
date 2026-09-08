@@ -16,6 +16,7 @@ import {
   type BuildSandboxState,
   type BuildSandboxStatus,
 } from "@/lib/build/sandbox/constants";
+import { projectPreviewPath } from "@/lib/build/preview/urls";
 import type { AgentBrowserSandbox } from "@/lib/computer/spike/agent-browser-bootstrap";
 import type { ComputerSessionRecord } from "@/lib/computer/computer-provider";
 import {
@@ -33,14 +34,19 @@ import {
 } from "@/lib/computer/session-store";
 
 export type EnsureProjectSandboxResult = {
+  projectId: string;
   status: BuildSandboxStatus;
   sessionId: string | null;
   subdomain: string | null;
   draftBranch: string | null;
   draftSha: string | null;
   githubFullName: string | null;
-  /** Never send raw upstream to browser in Phase 2 — kept for server/logs. */
+  /** Never send raw upstream to browser — server-only. */
   hasPreviewUpstream: boolean;
+  /** Same-origin path proxy for the Build iframe. */
+  previewPath: string | null;
+  /** Friendly draft host when subdomain is allocated. */
+  previewHost: string | null;
   message?: string;
   reused: boolean;
 };
@@ -83,14 +89,24 @@ async function writeBuildState(
 }
 
 function publicResult(
-  partial: Omit<EnsureProjectSandboxResult, "hasPreviewUpstream"> & {
+  partial: Omit<
+    EnsureProjectSandboxResult,
+    "hasPreviewUpstream" | "previewPath" | "previewHost"
+  > & {
     previewUpstream?: string | null;
+    workspaceId: string;
   },
 ): EnsureProjectSandboxResult {
-  const { previewUpstream: _drop, ...rest } = partial;
+  const { previewUpstream, workspaceId, ...rest } = partial;
+  const previewPath =
+    rest.status === "ready" && rest.sessionId
+      ? projectPreviewPath(rest.projectId, workspaceId)
+      : null;
   return {
     ...rest,
-    hasPreviewUpstream: Boolean(partial.previewUpstream),
+    hasPreviewUpstream: Boolean(previewUpstream),
+    previewPath,
+    previewHost: rest.subdomain ? `draft--${rest.subdomain}.cander.app` : null,
   };
 }
 
@@ -309,6 +325,8 @@ export async function ensureProjectSandbox(opts: {
 }): Promise<EnsureProjectSandboxResult> {
   if (!isVercelTeamConfigured()) {
     return publicResult({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
       status: "unavailable",
       sessionId: null,
       subdomain: null,
@@ -335,6 +353,8 @@ export async function ensureProjectSandbox(opts: {
           ? "unavailable"
           : "needs_repo";
     return publicResult({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
       status,
       sessionId: null,
       subdomain: infra.subdomain,
@@ -351,6 +371,8 @@ export async function ensureProjectSandbox(opts: {
 
   if (!isGitHubAppConfigured() || !infra.github.fullName) {
     return publicResult({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
       status: "needs_repo",
       sessionId: null,
       subdomain: infra.subdomain,
@@ -412,7 +434,22 @@ export async function ensureProjectSandbox(opts: {
       } catch (err) {
         console.warn("[cander] supabase inject on resume skipped", err);
       }
+      let message = "Environment resumed";
+      try {
+        const { ensureSandboxDevServer } = await import(
+          "@/lib/build/preview/dev-server"
+        );
+        const dev = await ensureSandboxDevServer({
+          sessionId: existing.id,
+          userId: opts.userId,
+        });
+        if (!dev.ready && dev.message) message = dev.message;
+      } catch (err) {
+        console.warn("[cander] dev server on resume", err);
+      }
       return publicResult({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
         status: "ready",
         sessionId: existing.id,
         subdomain: infra.subdomain,
@@ -421,7 +458,7 @@ export async function ensureProjectSandbox(opts: {
         githubFullName: fullName,
         previewUpstream: resumed.previewUpstream,
         reused: true,
-        message: "Environment resumed",
+        message,
       });
     }
   }
@@ -436,7 +473,22 @@ export async function ensureProjectSandbox(opts: {
       draftBranch,
       draftSha,
     });
+    let message = "Environment ready";
+    try {
+      const { ensureSandboxDevServer } = await import(
+        "@/lib/build/preview/dev-server"
+      );
+      const dev = await ensureSandboxDevServer({
+        sessionId: created.session.id,
+        userId: opts.userId,
+      });
+      if (!dev.ready && dev.message) message = dev.message;
+    } catch (err) {
+      console.warn("[cander] dev server on create", err);
+    }
     return publicResult({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
       status: "ready",
       sessionId: created.session.id,
       subdomain: infra.subdomain,
@@ -445,11 +497,13 @@ export async function ensureProjectSandbox(opts: {
       githubFullName: fullName,
       previewUpstream: created.previewUpstream,
       reused: false,
-      message: "Environment ready",
+      message,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return publicResult({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
       status: "error",
       sessionId: null,
       subdomain: infra.subdomain,
@@ -478,6 +532,8 @@ export async function getProjectSandboxStatus(opts: {
 
   if (!project) {
     return publicResult({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
       status: "error",
       sessionId: null,
       subdomain: null,
@@ -512,6 +568,8 @@ export async function getProjectSandboxStatus(opts: {
   }
 
   return publicResult({
+    projectId: opts.projectId,
+    workspaceId: opts.workspaceId,
     status,
     sessionId,
     subdomain: project.cander_subdomain

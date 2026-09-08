@@ -7,8 +7,7 @@ import type { BuildSandboxStatus } from "@/lib/build/sandbox/constants";
 import { cn } from "@/lib/utils";
 
 /**
- * Calm project preview placeholder — no select-to-edit / localhost mock UI.
- * Real live iframe arrives in Phase 5; Phase 2 surfaces sandbox lifecycle only.
+ * Build project preview — live iframe via Cander path proxy when ready.
  */
 export function AppViewport({
   name,
@@ -16,12 +15,17 @@ export function AppViewport({
   envStatus,
   envMessage,
   onRetryEnv,
+  previewSrc,
+  onReloadPreview,
 }: {
   name: string;
   summary: string;
   envStatus?: BuildSandboxStatus | null;
   envMessage?: string | null;
   onRetryEnv?: () => void;
+  /** Same-origin preview proxy URL */
+  previewSrc?: string | null;
+  onReloadPreview?: () => void;
 }) {
   const { viewport, previewKey, project } = useApp();
 
@@ -35,6 +39,8 @@ export function AppViewport({
     envStatus === "error" ||
     envStatus === "unavailable" ||
     envStatus === "needs_repo";
+
+  const showLive = envStatus === "ready" && Boolean(previewSrc);
 
   return (
     <div
@@ -54,7 +60,16 @@ export function AppViewport({
             "h-full w-auto max-w-full aspect-[9/19.5] rounded-[18px] shadow-[0_16px_40px_rgba(0,0,0,0.28)]",
         )}
       >
-        {cover ? (
+        {showLive ? (
+          <iframe
+            title={`${name} preview`}
+            src={previewSrc!}
+            className="absolute inset-0 h-full w-full border-0 bg-white"
+            // sandbox: allow scripts/forms/same-origin for Next apps; no top-nav
+            sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-modals"
+            allow="clipboard-read; clipboard-write"
+          />
+        ) : cover ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={cover}
@@ -105,7 +120,22 @@ export function AppViewport({
           </div>
         ) : null}
 
-        {envStatus === "ready" ? (
+        {showLive ? (
+          <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2">
+            <span className="rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium tracking-[-0.01em] text-white/90">
+              Live preview
+            </span>
+            {onReloadPreview ? (
+              <button
+                type="button"
+                onClick={onReloadPreview}
+                className="rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium text-white/90 hover:bg-black/70"
+              >
+                Reload
+              </button>
+            ) : null}
+          </div>
+        ) : envStatus === "ready" ? (
           <div className="absolute bottom-3 left-3 z-10 rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium tracking-[-0.01em] text-white/90">
             Environment ready
           </div>

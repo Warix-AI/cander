@@ -1,6 +1,6 @@
 # Build platform — approved implementation plan
 
-**Status:** Approved 2026-09-08. Phases 0–4 landing.
+**Status:** Approved 2026-09-08. Phases 0–5 landed.
 
 ## Stance
 
@@ -12,11 +12,11 @@ Backend infrastructure behind existing Apps / Websites UX. Warix-managed GitHub,
 1. Persistent GitHub repo + subdomain — **done**
 2. Vercel Sandbox lifecycle from git — **done**
 3. AI ↔ sandbox + commit/push draft — **done**
-4. Per-app Supabase (Warix Management API) — **landing**
-5. Live preview proxy
+4. Per-app Supabase (Warix Management API) — **done**
+5. Live preview proxy — **done**
 6. Revisions = git SHAs
 7. Publish → Vercel production deploy
-8. `*.cander.app` routing
+8. `*.cander.app` routing (production hosts)
 9. Reliability / security cleanup
 10. Custom domains foundation
 

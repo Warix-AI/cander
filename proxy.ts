@@ -25,6 +25,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // Shared markdown docs: https://{m…}.cander.app → /d/{id}
+  // Draft app previews: https://draft--{sub}.cander.app → preview-host proxy
   const hostname = request.nextUrl.hostname.toLowerCase();
   if (
     hostname.endsWith(".cander.app") &&
@@ -35,6 +36,16 @@ export async function proxy(request: NextRequest) {
     if (/^m[a-z0-9]{24}$/.test(sub)) {
       const url = request.nextUrl.clone();
       url.pathname = `/d/${sub}`;
+      return NextResponse.rewrite(url);
+    }
+    if (/^draft--[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(sub)) {
+      const slug = sub.slice("draft--".length);
+      const url = request.nextUrl.clone();
+      const suffix =
+        request.nextUrl.pathname === "/"
+          ? ""
+          : request.nextUrl.pathname;
+      url.pathname = `/api/preview-host/${slug}${suffix}`;
       return NextResponse.rewrite(url);
     }
   }
