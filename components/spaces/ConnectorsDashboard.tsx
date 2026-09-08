@@ -540,10 +540,8 @@ export function ConnectorsDashboard() {
     const featuredIds = new Set(featured.map((item) => item.id));
     const groups: { title: string; items: Connector[] }[] = [];
     if (featured.length) {
-      // Mobile: lead with the first featured connector’s name instead of “Featured”.
-      const featuredTitle =
-        mobile && featured[0]?.name ? featured[0].name : "Featured";
-      groups.push({ title: featuredTitle, items: featured });
+      // Mobile: no “Featured” / first-connector heading — list starts cold.
+      groups.push({ title: mobile ? "" : "Featured", items: featured });
     }
     for (const title of SECTION_ORDER) {
       if (title === "Featured") continue;
@@ -717,10 +715,21 @@ export function ConnectorsDashboard() {
             Loading installed connectors…
           </p>
         ) : sections.length ? (
-          sections.map((section) => {
+          sections.map((section, index) => {
+            const showTitle =
+              catalogView === "connectors" && Boolean(section.title);
             return (
-              <section key={section.title} className="mt-10">
-                {catalogView === "connectors" ? (
+              <section
+                key={section.title || `section-${index}`}
+                className={cn(
+                  mobile
+                    ? index === 0
+                      ? "mt-1"
+                      : "mt-8"
+                    : "mt-10",
+                )}
+              >
+                {showTitle ? (
                   <h2 className="text-[15px] font-medium tracking-[-0.02em]">
                     {section.title}
                   </h2>
@@ -728,7 +737,7 @@ export function ConnectorsDashboard() {
                 <div
                   className={cn(
                     "grid grid-cols-1 gap-y-0.5",
-                    catalogView === "connectors" ? "mt-4" : "mt-0",
+                    showTitle ? "mt-4" : "mt-0",
                   )}
                 >
                   {section.items.map((item) => (

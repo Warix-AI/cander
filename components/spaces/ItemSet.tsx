@@ -565,8 +565,8 @@ export function DashFrame({
       <div
         className={cn(
           "mx-auto w-full px-4 pt-3 pb-4 @min-[480px]:px-8 @min-[480px]:pb-6",
-          mobile && "px-4 py-3",
-          hideMobileHero && "pt-3",
+          mobile && (hideMobileHero ? "px-4 pt-1 pb-3" : "px-4 py-3"),
+          hideMobileHero && !mobile && "pt-3",
           inPanel ? "max-w-none pr-12" : "max-w-6xl",
         )}
       >

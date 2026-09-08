@@ -184,7 +184,9 @@ export function MobileBottomSheet({
 /**
  * Apple Photos–style header actions popover for mobile ⋯ / filter.
  * Anchors top-right; tap outside or choose an action to dismiss.
- * Replaces the header ⋯ (and surface toggle) while open — not full-screen.
+ * Menu is a direct `body` portal sibling of the dismiss layer so
+ * `backdrop-filter` can sample page content (nesting inside a fixed
+ * fullscreen wrapper makes WebKit paint a flat opaque card).
  */
 export function MobileHeaderActionsPopover({
   open,
@@ -199,7 +201,6 @@ export function MobileHeaderActionsPopover({
 }) {
   const titleId = useId();
   const [mounted, setMounted] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -214,40 +215,45 @@ export function MobileHeaderActionsPopover({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  const panel = (
-    <div className="fixed inset-0 z-[85] max-w-[100vw]" role="presentation">
-      <button
-        type="button"
-        aria-label="Dismiss"
-        className="absolute inset-0 cursor-default bg-transparent"
-        onClick={onClose}
-      />
-      <div
-        ref={panelRef}
-        role="menu"
-        aria-labelledby={titleId}
-        className={cn(
-          "mobile-glass-popover absolute right-3 top-[calc(env(safe-area-inset-top,0px)+0.65rem)]",
-          "flex max-h-[min(70vh,28rem)] w-[min(17.5rem,calc(100vw-1.5rem))] flex-col overflow-hidden",
-          "rounded-[18px] text-foreground",
-          className,
-        )}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <span id={titleId} className="sr-only">
-          Actions
-        </span>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 py-1.5">
-          {children}
-        </div>
+  if (!open || !mounted) {
+    return <NativeOverlayGate open={false} />;
+  }
+
+  const dismiss = (
+    <button
+      type="button"
+      aria-label="Dismiss"
+      className="fixed inset-0 z-[85] cursor-default bg-transparent"
+      onClick={onClose}
+    />
+  );
+
+  const menu = (
+    <div
+      role="menu"
+      aria-labelledby={titleId}
+      className={cn(
+        "mobile-glass-popover fixed right-3 z-[86]",
+        "top-[calc(env(safe-area-inset-top,0px)+0.65rem)]",
+        "flex max-h-[min(70vh,28rem)] w-[min(17.5rem,calc(100vw-1.5rem))] flex-col",
+        "rounded-[18px] text-foreground",
+        className,
+      )}
+    >
+      <span id={titleId} className="sr-only">
+        Actions
+      </span>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 py-1.5">
+        {children}
       </div>
     </div>
   );
 
   return (
     <>
-      <NativeOverlayGate open={open && mounted} />
-      {open && mounted ? createPortal(panel, document.body) : null}
+      <NativeOverlayGate open />
+      {createPortal(dismiss, document.body)}
+      {createPortal(menu, document.body)}
     </>
   );
 }
