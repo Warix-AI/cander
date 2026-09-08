@@ -44,6 +44,7 @@ Token needs permission to create projects and read API keys in the Warix org.
 | `GET` | `/api/projects/:id/git/commits?workspaceId=` | List draft commits (revisions) |
 | `POST` | `/api/projects/:id/git/restore` | Move draft tip to SHA + restart sandbox |
 | `POST` | `/api/projects/:id/publish` | Promote draft → Vercel production |
+| `GET/POST/DELETE` | `/api/projects/:id/domains` | Custom domain attach / status / detach |
 | `POST` | `/api/computer/build` | Durable work-task pipeline |
 
 ## Phase 4 behavior
@@ -103,7 +104,21 @@ Migration: `062_deployments_publish_meta.sql` (`vercel_deployment_id`, `git_sha`
 
 DNS: platform wildcard `*.cander.app` must already point at the Cander deployment (same as draft hosts).
 
-Custom domains remain Phase 10.
+## Phase 9 behavior
+
+1. Preview SSRF allowlist is suffix-only (no `includes("vercel")` escape hatch)
+2. Preview/publish proxies strip `Authorization`, `Cookie`, and `X-Forwarded-*` toward upstreams
+3. Preferred `published_url` must be the project’s `*.cander.app` host or a **verified** custom domain
+4. Publish is billed as `sandbox_deploy`; idempotent when `published_sha` already equals draft tip
+5. Concurrent AI builds block publish; stale sandboxes are stopped before recreate
+6. `vercelFetch` retries on 429/5xx; with `NEXT_PUBLIC_CANDER_BUILD_SANDBOX=1`, Edge `build-publish` stub is not used as a fake “live” path
+
+## Phase 10 behavior
+
+1. `POST/GET/DELETE /api/projects/:id/domains` attaches customer domains on the Warix Vercel project (Domains API)
+2. Stores `custom_domain` + `custom_domain_status` (`pending|verified|error`) + verification jsonb (migration `064`)
+3. Domains sheet shows DNS hint + refresh verification; traffic is **Vercel-native** (CNAME → Vercel), not Cander reverse-proxy
+4. Only verified custom domains may become `published_url` on publish
 
 ## Enable Phase 3+ flag
 

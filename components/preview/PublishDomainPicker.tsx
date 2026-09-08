@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
@@ -12,6 +12,7 @@ import {
 } from "@/lib/publish-domain";
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import { cn } from "@/lib/utils";
+import { notifyEntityStoreChange } from "@/lib/api/space-entity-store";
 
 export function usePublishDomainOptions() {
   const { liveUrl, project, projectId } = useApp();
@@ -102,10 +103,40 @@ export function ProjectDomainsManager({ compact = false }: { compact?: boolean }
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [domainState, setDomainState] = useState<{
+    domain: string | null;
+    status: string;
+    verified: boolean;
+    dnsHint?: { type: string; name: string; value: string } | null;
+    message?: string;
+  } | null>(null);
 
   const displayName = entityProject?.title ?? project?.name ?? "app";
   const domains = entityProject?.domains ?? project?.domains ?? [];
   const options = usePublishDomainOptions();
+
+  const refreshDomain = useCallback(() => {
+    if (!projectId || !ctx.workspaceId) return;
+    void import("@/lib/api/project-domains-client").then(async (m) => {
+      const state = await m.getProjectDomainClient({
+        projectId,
+        workspaceId: ctx.workspaceId,
+      });
+      if (state?.ok) {
+        setDomainState({
+          domain: state.domain,
+          status: state.status,
+          verified: state.verified,
+          dnsHint: state.dnsHint,
+          message: state.message,
+        });
+      }
+    });
+  }, [projectId, ctx.workspaceId]);
+
+  useEffect(() => {
+    refreshDomain();
+  }, [refreshDomain]);
 
   const addDomain = async () => {
     if (!projectId || busy) return;
@@ -125,10 +156,34 @@ export function ProjectDomainsManager({ compact = false }: { compact?: boolean }
     setBusy(true);
     setError(null);
     try {
-      await updateProject(ctx, projectId, {
-        domains: [...domains, normalized],
+      const m = await import("@/lib/api/project-domains-client");
+      const result = await m.attachProjectDomainClient({
+        projectId,
+        workspaceId: ctx.workspaceId,
+        domain: normalized,
       });
-      setDraft("");
+      if (!result?.ok) {
+        // Fall back to local list if domain API unavailable.
+        if (result?.error?.includes("VERCEL_TOKEN") || result?.error?.includes("not available")) {
+          await updateProject(ctx, projectId, {
+            domains: [...domains, normalized],
+          });
+          setDraft("");
+          setError("Saved locally — Vercel domain attach needs server config.");
+        } else {
+          setError(result?.error || "Could not attach domain.");
+        }
+      } else {
+        setDraft("");
+        setDomainState({
+          domain: result.domain,
+          status: result.status,
+          verified: result.verified,
+          dnsHint: result.dnsHint,
+          message: result.message,
+        });
+        notifyEntityStoreChange();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save domain.");
     } finally {
@@ -141,9 +196,25 @@ export function ProjectDomainsManager({ compact = false }: { compact?: boolean }
     setBusy(true);
     setError(null);
     try {
-      await updateProject(ctx, projectId, {
-        domains: domains.filter((item) => item !== domain),
+      const m = await import("@/lib/api/project-domains-client");
+      const result = await m.detachProjectDomainClient({
+        projectId,
+        workspaceId: ctx.workspaceId,
+        domain,
       });
+      if (!result?.ok) {
+        await updateProject(ctx, projectId, {
+          domains: domains.filter((item) => item !== domain),
+        });
+      } else {
+        setDomainState({
+          domain: null,
+          status: "none",
+          verified: false,
+          dnsHint: null,
+        });
+        notifyEntityStoreChange();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not remove domain.");
     } finally {
@@ -159,8 +230,8 @@ export function ProjectDomainsManager({ compact = false }: { compact?: boolean }
             Domains
           </h2>
           <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-            Connect a custom domain to {displayName}. Pick a domain when you
-            publish, or use the default {options[0]?.label ?? "cander.app"} URL.
+            Connect a custom domain to {displayName}. Domains attach on the
+            Warix Vercel project after DNS verification.
           </p>
         </>
       ) : null}
@@ -176,7 +247,16 @@ export function ProjectDomainsManager({ compact = false }: { compact?: boolean }
           >
             <div className="min-w-0">
               <p className="truncate font-mono text-[13px]">{item.label}</p>
-              <p className="text-[12px] text-muted-foreground">{item.hint}</p>
+              <p className="text-[12px] text-muted-foreground">
+                {item.id === "cander"
+                  ? item.hint
+                  : domainState?.domain === normalizeCustomDomain(item.label) &&
+                      domainState.status === "verified"
+                    ? "Verified on Vercel"
+                    : domainState?.domain === normalizeCustomDomain(item.label)
+                      ? `Status: ${domainState.status}`
+                      : item.hint}
+              </p>
             </div>
             {item.id !== "cander" ? (
               <button
@@ -191,6 +271,24 @@ export function ProjectDomainsManager({ compact = false }: { compact?: boolean }
           </div>
         ))}
       </div>
+
+      {domainState?.dnsHint && domainState.status === "pending" ? (
+        <div className="mt-3 rounded-[10px] border border-border bg-muted/30 p-3">
+          <p className="text-[12px] font-medium">DNS to finish verification</p>
+          <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+            {domainState.dnsHint.type} {domainState.dnsHint.name} →{" "}
+            {domainState.dnsHint.value}
+          </p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => refreshDomain()}
+            className="mt-2 text-[12px] font-medium text-foreground underline-offset-2 hover:underline"
+          >
+            Refresh verification
+          </button>
+        </div>
+      ) : null}
 
       <p className="mt-5 text-[13px] font-medium">Add custom domain</p>
       <div className="mt-2 flex gap-2">
@@ -224,7 +322,8 @@ export function ProjectDomainsManager({ compact = false }: { compact?: boolean }
         <p className="mt-2 text-[12px] text-destructive">{error}</p>
       ) : (
         <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-          Point your DNS CNAME to cander.app. Verification runs when you publish.
+          Point DNS at Vercel (CNAME → cname.vercel-dns.com). Only verified
+          domains can be selected as the published URL.
         </p>
       )}
     </div>

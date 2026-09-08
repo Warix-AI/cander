@@ -29,6 +29,14 @@ describe("preview upstream allowlist", () => {
       isAllowedPreviewUpstreamOrigin("https://evil.example.com"),
       false,
     );
+    assert.equal(
+      isAllowedPreviewUpstreamOrigin("https://notvercel.example.com"),
+      false,
+    );
+    assert.equal(
+      isAllowedPreviewUpstreamOrigin("https://acme.cander.app"),
+      false,
+    );
   });
 });
 

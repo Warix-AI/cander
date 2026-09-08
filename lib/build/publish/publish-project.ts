@@ -11,6 +11,8 @@ import { createProductionDeployment } from "@/lib/build/vercel/deployments";
 import { promoteDraftShaToDefaultBranch } from "@/lib/build/git/promote-published";
 import { gitStoragePointer } from "@/lib/build/git/revision-pointers";
 import { ensureProjectInfra } from "@/lib/build/ensure-project-infra";
+import { assertNoConcurrentBuild } from "@/lib/build/sandbox/lock";
+import { resolveSafePublishedUrl } from "@/lib/build/publish/published-url";
 
 export type PublishProjectResult = {
   ok: boolean;
@@ -72,17 +74,53 @@ export async function publishProject(opts: {
     workspaceId: opts.workspaceId,
   });
 
+  try {
+    await assertNoConcurrentBuild({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      status: "error",
+      publishedSha: null,
+      publishedUrl: null,
+      vercelDeploymentId: null,
+      vercelProjectId: null,
+      deploymentRecordId: null,
+      preferredUrl: opts.preferredUrl ?? null,
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+
   const admin = createSupabaseAdminClient();
   const { data: project, error } = await admin
     .from("projects")
     .select(
-      "id, title, github_full_name, github_repo_id, draft_branch, draft_sha, published_sha, published_url, cander_subdomain, vercel_project_id",
+      "id, title, github_full_name, github_repo_id, draft_branch, draft_sha, published_sha, published_url, cander_subdomain, vercel_project_id, vercel_production_deployment_id, vercel_production_url, custom_domain, custom_domain_status",
     )
     .eq("id", opts.projectId)
     .eq("workspace_id", opts.workspaceId)
     .maybeSingle();
 
   if (error || !project) {
+    // Retry without Phase 10 columns if migration not applied.
+    if (error) {
+      const retry = await admin
+        .from("projects")
+        .select(
+          "id, title, github_full_name, github_repo_id, draft_branch, draft_sha, published_sha, published_url, cander_subdomain, vercel_project_id, vercel_production_deployment_id, vercel_production_url",
+        )
+        .eq("id", opts.projectId)
+        .eq("workspace_id", opts.workspaceId)
+        .maybeSingle();
+      if (retry.data) {
+        return publishProjectWithRow({
+          ...opts,
+          project: { ...retry.data, custom_domain: null, custom_domain_status: null },
+        });
+      }
+    }
     return {
       ok: false,
       status: "error",
@@ -95,6 +133,20 @@ export async function publishProject(opts: {
       message: "Project not found.",
     };
   }
+
+  return publishProjectWithRow({ ...opts, project });
+}
+
+async function publishProjectWithRow(opts: {
+  userId: string;
+  projectId: string;
+  workspaceId: string;
+  preferredUrl?: string | null;
+  slug?: string | null;
+  project: Record<string, unknown>;
+}): Promise<PublishProjectResult> {
+  const project = opts.project;
+  const admin = createSupabaseAdminClient();
 
   const draftSha = project.draft_sha ? String(project.draft_sha) : null;
   const githubRepoId = project.github_repo_id
@@ -133,13 +185,35 @@ export async function publishProject(opts: {
     };
   }
 
-  const preferred =
-    opts.preferredUrl?.trim() ||
-    (opts.slug?.trim()
-      ? `https://${opts.slug.trim().toLowerCase()}.cander.app`
-      : project.cander_subdomain
-        ? `https://${project.cander_subdomain}.cander.app`
-        : null);
+  // Idempotent: already live at this tip.
+  const priorSha = project.published_sha
+    ? String(project.published_sha).toLowerCase()
+    : "";
+  if (
+    priorSha === draftSha.toLowerCase() &&
+    project.vercel_production_deployment_id &&
+    project.published_url
+  ) {
+    return {
+      ok: true,
+      status: "published",
+      publishedSha: draftSha,
+      publishedUrl: String(project.published_url),
+      vercelDeploymentId: String(project.vercel_production_deployment_id),
+      vercelProjectId: project.vercel_project_id
+        ? String(project.vercel_project_id)
+        : null,
+      deploymentRecordId: null,
+      preferredUrl: opts.preferredUrl ?? null,
+      message: `Already published at ${draftSha.slice(0, 7)}.`,
+    };
+  }
+
+  const verifiedCustom =
+    String(project.custom_domain_status || "") === "verified" &&
+    project.custom_domain
+      ? String(project.custom_domain)
+      : null;
 
   try {
     const vercelProject = await ensureAppVercelProject({
@@ -156,7 +230,6 @@ export async function publishProject(opts: {
       sha: draftSha,
     });
 
-    // Deploy succeeded — promote main + commit published pointers.
     await promoteDraftShaToDefaultBranch({
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
@@ -170,12 +243,19 @@ export async function publishProject(opts: {
         return deployment.url;
       }
     })();
-    // Friendly host for users; vercel_production_url is the proxy upstream (Phase 8).
-    const publishedUrl =
-      preferred ||
-      (project.cander_subdomain
-        ? `https://${project.cander_subdomain}.cander.app`
-        : deployment.url);
+
+    const safe = resolveSafePublishedUrl({
+      preferredUrl: opts.preferredUrl,
+      slug: opts.slug,
+      ctx: {
+        canderSubdomain: project.cander_subdomain
+          ? String(project.cander_subdomain)
+          : null,
+        verifiedCustomDomain: verifiedCustom,
+      },
+      fallbackUrl: deployment.url,
+    });
+    const publishedUrl = safe.url;
     const now = new Date().toISOString();
     const deploymentRecordId = newDeploymentId();
 
@@ -185,10 +265,9 @@ export async function publishProject(opts: {
       published_url: publishedUrl,
       vercel_project_id: vercelProject.vercelProjectId,
       vercel_production_deployment_id: deployment.id,
+      vercel_production_url: vercelOrigin,
       updated_at: now,
     };
-    // Column from migration 063 — best-effort if not migrated yet.
-    projectUpdate.vercel_production_url = vercelOrigin;
 
     const { error: projectUpErr } = await admin
       .from("projects")
@@ -196,7 +275,6 @@ export async function publishProject(opts: {
       .eq("id", opts.projectId)
       .eq("workspace_id", opts.workspaceId);
     if (projectUpErr) {
-      // Retry without vercel_production_url if column missing.
       delete projectUpdate.vercel_production_url;
       await admin
         .from("projects")
@@ -205,7 +283,21 @@ export async function publishProject(opts: {
         .eq("workspace_id", opts.workspaceId);
     }
 
-    // Best-effort deployments row (columns from 062 may be absent until migrated).
+    // If publishing to a verified custom domain, ensure it is attached on Vercel.
+    if (safe.reason === "custom" && verifiedCustom) {
+      try {
+        const { ensureCustomDomainOnVercelProject } = await import(
+          "@/lib/build/vercel/domains"
+        );
+        await ensureCustomDomainOnVercelProject({
+          vercelProjectId: vercelProject.vercelProjectId,
+          domain: verifiedCustom,
+        });
+      } catch (err) {
+        console.warn("[cander] custom domain attach on publish", err);
+      }
+    }
+
     const deployRow: Record<string, unknown> = {
       id: deploymentRecordId,
       workspace_id: opts.workspaceId,
@@ -221,7 +313,6 @@ export async function publishProject(opts: {
     };
     const { error: depErr } = await admin.from("deployments").insert(deployRow);
     if (depErr) {
-      // Retry without Phase 7 columns if migration not applied yet.
       const { error: depErr2 } = await admin.from("deployments").insert({
         id: deploymentRecordId,
         workspace_id: opts.workspaceId,
@@ -237,7 +328,6 @@ export async function publishProject(opts: {
       }
     }
 
-    // Published revision pointer = git:{sha}
     try {
       const pointer = gitStoragePointer(draftSha);
       const { data: tip } = await admin
@@ -280,7 +370,7 @@ export async function publishProject(opts: {
       vercelDeploymentId: deployment.id,
       vercelProjectId: vercelProject.vercelProjectId,
       deploymentRecordId,
-      preferredUrl: preferred,
+      preferredUrl: opts.preferredUrl ?? null,
       message: `Published ${draftSha.slice(0, 7)} → ${publishedUrl}`,
     };
   } catch (err) {
@@ -299,7 +389,7 @@ export async function publishProject(opts: {
         ? String(project.vercel_project_id)
         : null,
       deploymentRecordId: null,
-      preferredUrl: preferred,
+      preferredUrl: opts.preferredUrl ?? null,
       message,
     };
   }

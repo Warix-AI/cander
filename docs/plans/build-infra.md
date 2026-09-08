@@ -1,6 +1,6 @@
 # Build platform — approved implementation plan
 
-**Status:** Approved 2026-09-08. Phases 0–8 landed.
+**Status:** Approved 2026-09-08. Phases 0–10 landed.
 
 ## Stance
 
@@ -17,8 +17,8 @@ Backend infrastructure behind existing Apps / Websites UX. Warix-managed GitHub,
 6. Revisions = git SHAs — **done**
 7. Publish → Vercel production deploy — **done**
 8. `*.cander.app` routing (production hosts) — **done**
-9. Reliability / security cleanup
-10. Custom domains foundation
+9. Reliability / security cleanup — **done**
+10. Custom domains foundation — **done**
 
 ## Docs
 

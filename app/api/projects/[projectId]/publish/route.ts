@@ -56,13 +56,15 @@ export async function POST(request: Request, ctx: RouteCtx) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
+  const draftShaHint =
+    request.headers.get("X-Cander-Draft-Sha")?.trim().slice(0, 40) || "tip";
   const idempotencyKey =
     request.headers.get("Idempotency-Key")?.trim() ||
-    `publish:${workspaceId}:${projectId}:${Date.now()}`;
+    `publish:${workspaceId}:${projectId}:${draftShaHint}`;
 
   const usage = await enforceUsageForRequest({
     request,
-    feature: "sandbox_runtime",
+    feature: "sandbox_deploy",
     workspaceId,
     idempotencyKey,
     estimatedUnits: 1,

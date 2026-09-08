@@ -11,7 +11,9 @@ export function isAllowedPreviewUpstreamOrigin(origin: string): boolean {
     if (u.protocol !== "https:" && u.protocol !== "http:") return false;
     const host = u.hostname.toLowerCase();
     if (host === "localhost" || host === "127.0.0.1") return false;
-    return ALLOWED_UPSTREAM_HOST.test(host) || host.includes("vercel");
+    if (host === "cander.app" || host.endsWith(".cander.app")) return false;
+    // Suffix allowlist only (Phase 9 — no substring "vercel" escape hatch).
+    return ALLOWED_UPSTREAM_HOST.test(host);
   } catch {
     return false;
   }

@@ -461,6 +461,16 @@ export async function ensureProjectSandbox(opts: {
         message,
       });
     }
+    // Phase 9: GC stale sandbox before recreate
+    try {
+      await stopSessionRecordById(existing.id, existing.userId);
+    } catch {
+      await updateComputerSession(existing.id, { status: "stopped" });
+    }
+    await patchProjectSandbox(opts.projectId, opts.workspaceId, {
+      sandbox_session_id: null,
+      sandbox_status: "idle",
+    });
   }
 
   try {

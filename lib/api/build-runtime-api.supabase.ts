@@ -69,13 +69,25 @@ export function createSupabaseBuildRuntimeApi(
         return { url: infra.url };
       }
 
-      if (infra && !infra.ok && infra.status !== "unavailable") {
-        throw new Error(
-          infra.error || infra.message || "Production publish failed.",
-        );
+      const buildSandboxOn =
+        (typeof process !== "undefined" &&
+          (process.env.NEXT_PUBLIC_CANDER_BUILD_SANDBOX || "")
+            .trim()
+            .toLowerCase() === "1") ||
+        false;
+
+      if (infra && !infra.ok) {
+        // Phase 9: never fake live when build-infra is enabled, or on hard errors.
+        if (infra.status !== "unavailable" || buildSandboxOn) {
+          throw new Error(
+            infra.error ||
+              infra.message ||
+              "Production publish failed.",
+          );
+        }
       }
 
-      // Legacy Edge stub when GitHub/Vercel publish is unavailable.
+      // Legacy Edge stub only when build-infra flag is off and APIs are unavailable.
       const supabase = createSupabaseBrowserClient();
       const { data, error } = await supabase.functions.invoke("build-publish", {
         body: {

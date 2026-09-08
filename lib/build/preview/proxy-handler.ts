@@ -50,10 +50,15 @@ export async function proxyToPreviewUpstream(opts: {
     const lower = key.toLowerCase();
     if (HOP_BY_HOP.has(lower)) return;
     if (lower === "cookie") return; // don't leak Cander cookies upstream
+    if (lower === "authorization") return; // don't leak bearer tokens upstream
+    if (lower.startsWith("x-forwarded-")) return;
+    if (lower === "x-real-ip") return;
     headers.set(key, value);
   });
   headers.set("host", new URL(opts.upstream.upstreamOrigin).host);
   headers.delete("accept-encoding"); // simplify body handling
+  headers.delete("authorization");
+  headers.delete("cookie");
 
   const init: RequestInit = {
     method: opts.request.method,
