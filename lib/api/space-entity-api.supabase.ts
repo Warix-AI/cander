@@ -154,6 +154,19 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
           actorId: ctx.actorId,
         }),
       );
+      // Apps/Websites: provision Warix GitHub + subdomain behind the existing create flow.
+      if (
+        project.space === "build" ||
+        project.kind === "app" ||
+        project.kind === "site"
+      ) {
+        void import("@/lib/api/project-infra-client").then((m) =>
+          m.ensureProjectInfraClient({
+            projectId: project.id,
+            workspaceId: ctx.workspaceId,
+          }),
+        );
+      }
       return project;
     },
 

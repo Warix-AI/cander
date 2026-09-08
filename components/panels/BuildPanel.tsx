@@ -52,6 +52,17 @@ export function BuildPanel() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [filesLoading, setFilesLoading] = useState(false);
 
+  // Behind the existing Build open flow: ensure Warix repo + subdomain (idempotent).
+  useEffect(() => {
+    if (!projectId || !ctx.workspaceId) return;
+    void import("@/lib/api/project-infra-client").then((m) =>
+      m.ensureProjectInfraClient({
+        projectId,
+        workspaceId: ctx.workspaceId,
+      }),
+    );
+  }, [projectId, ctx.workspaceId]);
+
   const projectThreads = useMemo(
     () =>
       project
