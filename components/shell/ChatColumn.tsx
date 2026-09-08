@@ -27,6 +27,16 @@ import { dismissNativeKeyboard } from "@/lib/mobile-shell";
 import { useShellStyle } from "@/lib/shell-chrome";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 
+/** Gap between the last bubble and the composer when scrolled to the end. */
+const TRANSCRIPT_BOTTOM_GAP_PX = 30;
+
+/** Offset of `el` within a scroll container's content coordinates. */
+function offsetWithinScrollParent(el: HTMLElement, parent: HTMLElement) {
+  const parentRect = parent.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  return elRect.top - parentRect.top + parent.scrollTop;
+}
+
 /** Wait until the soft keyboard is fully down, then run (ChatGPT send→pin timing). */
 function afterKeyboardCollapsed(run: () => void) {
   if (typeof window === "undefined") {
@@ -152,6 +162,7 @@ export function ChatColumn() {
     !browserMode && !hasChatTurns && (!thread || drafting) && !showSpaceNewPrompt;
   const endRef = useRef<HTMLDivElement>(null);
   const latestUserRef = useRef<HTMLDivElement>(null);
+  const spacerRef = useRef<HTMLDivElement>(null);
   const prevThreadId = useRef<string | null>(null);
   const prevProjectId = useRef<string | null | undefined>(undefined);
   const prevSpaceId = useRef<string | null | undefined>(undefined);
@@ -160,18 +171,55 @@ export function ChatColumn() {
   const scrollUnsubRef = useRef<(() => void) | null>(null);
   const pinCleanupRef = useRef<(() => void) | null>(null);
   const lastPinnedUserIdRef = useRef<string | null>(null);
+  /** Keep pin-room spacer until the current assistant turn finishes. */
+  const pinningTurnRef = useRef(false);
+  const [spacerPx, setSpacerPx] = useState(TRANSCRIPT_BOTTOM_GAP_PX);
   const last = thread?.messages.at(-1);
   const lastUserId = [...(thread?.messages ?? [])]
     .reverse()
     .find((m) => m.role === "user")?.id;
   const floating = useShellStyle() === "floating";
   const { centered, chatMaxWidthClass } = useChatCanvasCentered();
+  const assistantBusy =
+    last?.role === "assistant" &&
+    (last.status === "streaming" || last.status === "pending");
+  const assistantTurnSettled =
+    last?.role === "assistant" &&
+    last.status !== "streaming" &&
+    last.status !== "pending";
+
+  const measurePinSpacer = () => {
+    const parent = scrollParentRef.current;
+    const userEl = latestUserRef.current;
+    const endEl = endRef.current;
+    if (!parent || !userEl || !endEl) return TRANSCRIPT_BOTTOM_GAP_PX;
+    const scrollMargin =
+      Number.parseFloat(getComputedStyle(userEl).scrollMarginTop) ||
+      (mobile ? 12 : 16);
+    const fromUserToEnd = Math.max(
+      0,
+      offsetWithinScrollParent(endEl, parent) -
+        offsetWithinScrollParent(userEl, parent),
+    );
+    const pinRoom = parent.clientHeight - scrollMargin - fromUserToEnd;
+    return Math.max(TRANSCRIPT_BOTTOM_GAP_PX, Math.ceil(pinRoom));
+  };
+
+  const updateTranscriptSpacer = (opts?: { forcePinRoom?: boolean }) => {
+    const wantPinRoom =
+      opts?.forcePinRoom || pinningTurnRef.current || assistantBusy;
+    const next = wantPinRoom ? measurePinSpacer() : TRANSCRIPT_BOTTOM_GAP_PX;
+    setSpacerPx((prev) => (prev === next ? prev : next));
+    return next;
+  };
 
   const pinLatestUserToTop = (behavior: ScrollBehavior = "smooth") => {
     const el = latestUserRef.current;
     if (!el) return;
     // Lock follow-streaming so the reply grows downward under the pinned turn.
     userPinnedScroll.current = true;
+    pinningTurnRef.current = true;
+    updateTranscriptSpacer({ forcePinRoom: true });
     el.scrollIntoView({ block: "start", behavior });
   };
 
@@ -229,6 +277,58 @@ export function ChatColumn() {
     pinCleanupRef.current?.();
   }, []);
 
+  // Size the bottom spacer from content: pin-room while a turn is active,
+  // otherwise only a small gap above the composer (no endless white scroll).
+  useLayoutEffect(() => {
+    if (!hasChatTurns) {
+      setSpacerPx(TRANSCRIPT_BOTTOM_GAP_PX);
+      return;
+    }
+
+    const wasPinning = pinningTurnRef.current;
+    // Keep pin-room after send until the assistant finishes — not merely while
+    // status is pending/streaming (there is a beat with only the user bubble).
+    if (assistantTurnSettled && pinningTurnRef.current) {
+      pinningTurnRef.current = false;
+    }
+
+    updateTranscriptSpacer();
+
+    // Short finished turns: collapse pin-room and rest above the composer.
+    if (wasPinning && !pinningTurnRef.current && assistantTurnSettled) {
+      const parent = scrollParentRef.current;
+      const userEl = latestUserRef.current;
+      const endEl = endRef.current;
+      if (parent && userEl && endEl) {
+        const fromUserToEnd =
+          offsetWithinScrollParent(endEl, parent) -
+          offsetWithinScrollParent(userEl, parent);
+        if (fromUserToEnd + TRANSCRIPT_BOTTOM_GAP_PX <= parent.clientHeight) {
+          snapTranscriptToBottom("auto");
+        }
+      }
+    }
+
+    const parent = scrollParentRef.current;
+    if (!parent || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      updateTranscriptSpacer();
+    });
+    ro.observe(parent);
+    if (latestUserRef.current) ro.observe(latestUserRef.current);
+    if (endRef.current) ro.observe(endRef.current);
+    return () => ro.disconnect();
+  }, [
+    hasChatTurns,
+    assistantBusy,
+    assistantTurnSettled,
+    last?.content,
+    last?.id,
+    lastUserId,
+    mobile,
+    thread?.messages?.length,
+  ]);
+
   // Bulk listThreads omits heavy image blocks; hydrate the open thread on demand.
   useEffect(() => {
     const threadId = thread?.id;
@@ -261,15 +361,17 @@ export function ChatColumn() {
 
     if (navigated) {
       userPinnedScroll.current = false;
+      pinningTurnRef.current = false;
       lastPinnedUserIdRef.current = null;
       pinCleanupRef.current?.();
       pinCleanupRef.current = null;
+      setSpacerPx(TRANSCRIPT_BOTTOM_GAP_PX);
     }
 
     if (!hasChatTurns) return;
 
-    // Returning from a project / switching spaces: land at the bottom with the
-    // spacer gap so the transcript is ready for the next prompt — not mid-page.
+    // Returning from a project / switching spaces: land at the bottom with a
+    // small gap above the composer — not mid-page or in empty pin-room.
     if (navigated) {
       snapTranscriptToBottom("auto");
       const parent = scrollParentRef.current;
@@ -288,11 +390,14 @@ export function ChatColumn() {
     // Same-thread new user turn: ChatGPT cycle — pin that bubble under the header.
     if (!lastUserId || lastUserId === lastPinnedUserIdRef.current) return;
     lastPinnedUserIdRef.current = lastUserId;
+    pinningTurnRef.current = true;
     pinCleanupRef.current?.();
+    updateTranscriptSpacer({ forcePinRoom: true });
 
     if (mobile) {
       dismissNativeKeyboard({ suppressComposer: true });
       pinCleanupRef.current = afterKeyboardCollapsed(() => {
+        updateTranscriptSpacer({ forcePinRoom: true });
         pinLatestUserToTop("smooth");
         // Second pass after layout/spacer settles.
         window.setTimeout(() => pinLatestUserToTop("smooth"), 120);
@@ -366,12 +471,15 @@ export function ChatColumn() {
           </div>
         );
       })}
-      {/* Tall spacer so the latest user turn can sit under the header like ChatGPT. */}
+      {/* End of real content — streaming follow / bottom snap land here. */}
+      <div ref={endRef} />
+      {/* Dynamic pin-room while a turn is active; otherwise ~30px above composer. */}
       <div
-        className="min-h-[min(72dvh,calc(100dvh-11rem))] shrink-0"
+        ref={spacerRef}
+        className="shrink-0"
+        style={{ height: spacerPx }}
         aria-hidden
       />
-      <div ref={endRef} />
     </>
   );
 
