@@ -1,7 +1,7 @@
 "use client";
 
 import { MobileFloatingNav } from "@/components/shell/mobile/MobileFloatingNav";
-import { PanelLoadingState } from "@/components/shell/PanelLoadingState";
+import { ConnectorLoadingState } from "@/components/connectors/views/ConnectorLoadingState";
 
 import {
   useCallback,
@@ -10,7 +10,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
 import {
@@ -18,6 +17,10 @@ import {
   emailFromStripeRaw,
 } from "@/components/connectors/views/StripeEntityAvatar";
 import { useApp } from "@/components/app/AppProvider";
+import {
+  connectorLabelForId,
+  setConnectorFocus,
+} from "@/lib/connector-focus";
 import {
   WorkspaceEmptyState,
   WorkspaceField,
@@ -537,12 +540,20 @@ export function StripeConnectorView({
       if (!resource) return;
 
       setSelected(item);
-      setPage("detail");
       setError(null);
       setStatus(null);
       setSubscriptions([]);
       setPrices([]);
       setBusy(true);
+      setPage("detail");
+      setConnectorFocus({
+        connectorId: "stripe",
+        connectorLabel: connectorLabelForId("stripe"),
+        itemId: item.id,
+        itemTitle: item.title,
+        itemKind: "other",
+        openUrl: item.openUrl ?? undefined,
+      });
       persistChrome({
         selected: item,
         page: "detail",
@@ -925,7 +936,12 @@ export function StripeConnectorView({
                 Money available to pay out, and amounts still pending in Stripe.
               </p>
               {syncing && !balanceLines.length ? (
-                <PanelLoadingState />
+                <div className="mt-8 flex min-h-[12rem] flex-1 flex-col">
+                  <ConnectorLoadingState
+                    connectorId="stripe"
+                    label="Loading Stripe"
+                  />
+                </div>
               ) : balanceLines.length ? (
                 <div className="mt-4 space-y-3">
                   {balanceLines.map((line) => (
@@ -965,6 +981,7 @@ export function StripeConnectorView({
                 </div>
               ) : (
                 <WorkspaceEmptyState
+                  connectorId="stripe"
                   title="No balance to show"
                   body={
                     isConnected
@@ -1026,6 +1043,7 @@ export function StripeConnectorView({
                 />
                 {!items.length ? (
                   <WorkspaceEmptyState
+                    connectorId="stripe"
                     title={
                       syncing
                         ? "Loading…"
@@ -1073,11 +1091,13 @@ export function StripeConnectorView({
       {page === "detail" && selected ? (
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
           {busy ? (
-            <div className="pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/90 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur-sm">
-              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.7} />
-              Loading…
+            <div className="mobile-header-content flex min-h-0 flex-1 flex-col">
+              <ConnectorLoadingState
+                connectorId="stripe"
+                label={`Loading ${selected.title}`}
+              />
             </div>
-          ) : null}
+          ) : (
           <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
             <div className="mb-4 flex items-start gap-3">
               {tab === "customers" || tab === "products" ? (
@@ -1195,6 +1215,7 @@ export function StripeConnectorView({
               </details>
             ) : null}
           </div>
+          )}
         </div>
       ) : null}
 

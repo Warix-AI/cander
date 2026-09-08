@@ -31,6 +31,36 @@ function parseToolJson(output: string): Record<string, unknown> {
   return {};
 }
 
+function extractValueGrid(payload: Record<string, unknown>): string[][] {
+  const valueRanges = Array.isArray(payload.valueRanges)
+    ? payload.valueRanges
+    : Array.isArray(payload.value_ranges)
+      ? payload.value_ranges
+      : null;
+  if (valueRanges?.[0] && typeof valueRanges[0] === "object") {
+    const values = (valueRanges[0] as Record<string, unknown>).values;
+    if (Array.isArray(values)) {
+      return values.map((row) =>
+        Array.isArray(row)
+          ? row.map((cell) => String(cell ?? ""))
+          : [String(row ?? "")],
+      );
+    }
+  }
+  if (Array.isArray(payload.values)) {
+    return payload.values.map((row) =>
+      Array.isArray(row)
+        ? row.map((cell) => String(cell ?? ""))
+        : [String(row ?? "")],
+    );
+  }
+  const data = payload.data;
+  if (data && typeof data === "object") {
+    return extractValueGrid(data as Record<string, unknown>);
+  }
+  return [];
+}
+
 async function runTool(
   ctx: ActionContext | SyncContext,
   tool: string,
@@ -168,7 +198,14 @@ export const gsheetsViewAdapter: ConnectorViewAdapter = {
             range,
           });
           if (!result.ok) return { ok: false, error: result.error };
-          return { ok: true, data: parseToolJson(result.output) };
+          const payload = parseToolJson(result.output);
+          return {
+            ok: true,
+            data: {
+              ...payload,
+              values: extractValueGrid(payload),
+            },
+          };
         }
         case "createSpreadsheet": {
           const title = pickString(args.title, args.name) || "Untitled spreadsheet";

@@ -27,8 +27,12 @@ function useCyclingStatus(active: boolean, intervalMs = STATUS_CYCLE_MS) {
   return STATUS_CYCLE[index]!;
 }
 
+function cleanStatusText(value: string): string {
+  return value.replace(/\s*[.…]+$/u, "").trim();
+}
+
 /**
- * In-flight turn indicator — quiet heading with a truthful live activity line.
+ * In-flight turn indicator — single status line with a light-wave shimmer.
  */
 export function ThinkingIndicator({
   className,
@@ -45,34 +49,30 @@ export function ThinkingIndicator({
   active?: boolean;
 }) {
   const cyclingLabel = useCyclingStatus(active && !phase && !detail);
-  const visibleDetail =
+  const visibleDetail = cleanStatusText(
     detail?.trim() ||
-    (phase ? detailForPhase(phase) : null) ||
-    (label && !/^Thinking\b/i.test(label) ? label : cyclingLabel);
+      (phase ? detailForPhase(phase) : null) ||
+      (label && !/^Thinking\b/i.test(label) ? label : cyclingLabel) ||
+      "",
+  );
 
   return (
     <div
       className={cn(
-        "flex w-full items-start gap-3 transition-opacity duration-200",
+        "flex w-full items-center transition-opacity duration-200",
         active ? "opacity-100" : "opacity-0",
         className,
       )}
       role="status"
       aria-live="polite"
-      aria-label={`Working. ${visibleDetail}`}
+      aria-label={visibleDetail}
     >
-      <span className="thinking-dot mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#0b4fc4]" aria-hidden />
-      <div className="min-w-0" aria-hidden>
-        <div className="text-[14px] font-medium tracking-[-0.01em] text-foreground/80">
-          Working
-        </div>
-        <div
-          key={visibleDetail}
-          className="mt-0.5 animate-in fade-in slide-in-from-bottom-1 text-[13px] leading-5 text-muted-foreground duration-300"
-        >
-          {visibleDetail}
-        </div>
-      </div>
+      <p
+        key={visibleDetail}
+        className="thinking-shimmer animate-in fade-in text-[16px] font-medium leading-6 tracking-[-0.015em] duration-300 sm:text-[17px]"
+      >
+        {visibleDetail}
+      </p>
     </div>
   );
 }

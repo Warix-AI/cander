@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
+import { ConnectorLoadingState } from "@/components/connectors/views/ConnectorLoadingState";
 import {
   WorkspaceEmptyState,
   WorkspaceListRow,
@@ -12,6 +12,10 @@ import {
   type WorkspaceToolbarState,
 } from "@/components/connectors/views/WorkspaceViewChrome";
 import { runConnectorViewOperation } from "@/lib/api/connector-client";
+import {
+  connectorLabelForId,
+  setConnectorFocus,
+} from "@/lib/connector-focus";
 import {
   connectionsForConnectorLive,
   getConnectorConnectionsRevision,
@@ -261,17 +265,26 @@ export function AppConnectorView({
   const openItem = useCallback(
     async (item: AppListItem) => {
       setSelected(item);
-      setPage("detail");
       setError(null);
       setStatus(null);
       setDetail(null);
       persist({ selected: item, page: "detail", error: null, detail: null });
+      setConnectorFocus({
+        connectorId,
+        connectorLabel: connectorLabelForId(connectorId) || name,
+        itemId: item.id,
+        itemTitle: item.title,
+        itemKind: "other",
+        openUrl: item.openUrl ?? undefined,
+      });
 
       if (!def?.getProvider) {
+        setPage("detail");
         return;
       }
 
       setBusy(true);
+      setPage("detail");
       try {
         const result = await runConnectorViewOperation({
           workspaceId,
@@ -295,7 +308,7 @@ export function AppConnectorView({
         setBusy(false);
       }
     },
-    [connectorId, def?.getProvider, itemNoun, persist, workspaceId],
+    [connectorId, def?.getProvider, itemNoun, name, persist, workspaceId],
   );
 
   const openExternal = useCallback(() => {
@@ -419,48 +432,51 @@ export function AppConnectorView({
       {page === "detail" && selected ? (
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
           {busy ? (
-            <div className="pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/90 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur-sm">
-              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.7} />
-              Loading…
-            </div>
-          ) : null}
-          <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
-            <div className="mb-4 flex items-start gap-3">
-              <ConnectorMark
-                id={connectorId}
-                size="md"
-                className="!h-10 !w-10 shrink-0 !bg-transparent"
+            <div className="mobile-header-content flex min-h-0 flex-1 flex-col">
+              <ConnectorLoadingState
+                connectorId={connectorId}
+                label={`Loading ${selected.title}`}
               />
-              <div className="min-w-0 flex-1">
-                <h2 className="truncate text-[15px] font-medium tracking-tight">
-                  {selected.title}
-                </h2>
-                {selected.subtitle ? (
-                  <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
-                    {selected.subtitle}
-                  </p>
-                ) : null}
-                {selected.meta ? (
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    {selected.meta}
-                  </p>
-                ) : null}
-              </div>
             </div>
-            {preview ? (
-              <pre className="overflow-x-auto rounded-[10px] border border-black/5 bg-black/[0.02] p-3 text-[11px] leading-relaxed text-foreground/90 dark:border-white/10 dark:bg-white/[0.03]">
-                {preview}
-              </pre>
-            ) : (
-              <p className="text-[12px] text-muted-foreground">
-                {def.getProvider
-                  ? "Select refresh if details did not load."
-                  : selected.openUrl
-                    ? "Use Open in the bottom bar to view this in the provider."
-                    : `No extra detail for this ${itemNoun.replace(/s$/, "") || "item"}.`}
-              </p>
-            )}
-          </div>
+          ) : (
+            <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              <div className="mb-4 flex items-start gap-3">
+                <ConnectorMark
+                  id={connectorId}
+                  size="md"
+                  className="!h-10 !w-10 shrink-0 !bg-transparent"
+                />
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-[15px] font-medium tracking-tight">
+                    {selected.title}
+                  </h2>
+                  {selected.subtitle ? (
+                    <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                      {selected.subtitle}
+                    </p>
+                  ) : null}
+                  {selected.meta ? (
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {selected.meta}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              {preview ? (
+                <pre className="overflow-x-auto rounded-[10px] border border-black/5 bg-black/[0.02] p-3 text-[11px] leading-relaxed text-foreground/90 dark:border-white/10 dark:bg-white/[0.03]">
+                  {preview}
+                </pre>
+              ) : (
+                <p className="text-[12px] text-muted-foreground">
+                  {def.getProvider
+                    ? "Select refresh if details did not load."
+                    : selected.openUrl
+                      ? "Use Open in the bottom bar to view this in the provider."
+                      : `No extra detail for this ${itemNoun.replace(/s$/, "") || "item"}.`}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -479,6 +495,7 @@ export function AppConnectorView({
             />
             {!items.length ? (
               <WorkspaceEmptyState
+                connectorId={connectorId}
                 title={
                   oauthPending && !isConnected
                     ? `${name} coming soon`

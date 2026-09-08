@@ -393,9 +393,11 @@ describe("Raw multimodal isolation", () => {
       "components/chat/ThinkingIndicator.tsx",
       "utf8",
     );
-    assert.ok(thinking.includes("CanderActivityMark"));
+    assert.ok(thinking.includes("thinking-shimmer"));
     assert.ok(thinking.includes("transition-opacity"));
     assert.equal(thinking.includes("formatTurnActivityLine"), false);
+    assert.equal(thinking.includes("Working"), false);
+    assert.equal(thinking.includes("thinking-dot"), false);
     const composer = fs.readFileSync(
       "components/shell/ComposerVoice.tsx",
       "utf8",

@@ -896,6 +896,15 @@ async function buildFmPrompt(
       // ignore
     }
   }
+  let connectorFocusMeta = "";
+  try {
+    const { connectorFocusSystemBlock } = await import(
+      "@/lib/connector-focus"
+    );
+    connectorFocusMeta = connectorFocusSystemBlock();
+  } catch {
+    // ignore
+  }
   const toolsEnabled = profile.toolMode !== "disallowed" && profile.tools.length > 0;
   const instructions = [
     buildCanderOnDeviceInstructions({
@@ -917,6 +926,7 @@ async function buildFmPrompt(
     pkg.taskStateText,
     toolBlock,
     activeBrowserMeta,
+    connectorFocusMeta,
     evidenceBlock,
     profile.outputSchema === "semantic_blocks_v1"
       ? semanticBlocksInstruction()

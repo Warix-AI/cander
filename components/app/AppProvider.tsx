@@ -112,6 +112,7 @@ import {
 } from "@/lib/workspace-policy";
 import { clearWorkspaceConnections } from "@/lib/workspace-connections";
 import { clearConnectorConnectionsCache } from "@/lib/connector-connections-store";
+import { clearConnectorFocus } from "@/lib/connector-focus";
 import { clearWorkspaceIcon } from "@/lib/workspace-icons";
 import {
   entitlementsFor,
@@ -647,6 +648,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (mobileSurface === "chat") return;
     dismissNativeKeyboard();
   }, [mobileSurface]);
+
+  // Drop connector item focus when leaving the connectors space (not on Chat|Panel
+  // toggles — those keep spaceId === "connectors" so chat still knows the open doc).
+  const prevSpaceIdRef = useRef(spaceId);
+  useEffect(() => {
+    const prev = prevSpaceIdRef.current;
+    prevSpaceIdRef.current = spaceId;
+    if (prev === "connectors" && spaceId !== "connectors") {
+      clearConnectorFocus();
+    }
+  }, [spaceId]);
   const mobileContentSurface: "chat" | "panel" =
     mobileSurface === "menu"
       ? mobileContentSurfaceRef.current

@@ -8,9 +8,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
+import { ConnectorLoadingState } from "@/components/connectors/views/ConnectorLoadingState";
 import { useApp } from "@/components/app/AppProvider";
 import {
   WorkspaceEmptyState,
@@ -20,6 +20,11 @@ import {
   type WorkspaceToolbarState,
 } from "@/components/connectors/views/WorkspaceViewChrome";
 import { runConnectorViewOperation } from "@/lib/api/connector-client";
+import {
+  connectorLabelForId,
+  setConnectorBrowseFocus,
+  setConnectorFocus,
+} from "@/lib/connector-focus";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
@@ -390,6 +395,19 @@ function formatSyncWhen(value: string | null | undefined) {
 
 function fallBackToEmbed(prev: FilePreview | null): FilePreview | null {
   if (!prev) return null;
+  // Images/PDFs must stay on the connected MCP download path — Google /preview
+  // iframes force a separate Google sign-in (often dark) and break light mode.
+  if (
+    prev.previewKind === "image" ||
+    prev.previewKind === "pdf" ||
+    (typeof prev.mimeType === "string" && prev.mimeType.startsWith("image/"))
+  ) {
+    return {
+      ...prev,
+      previewKind: "unsupported",
+      displayUrl: null,
+    };
+  }
   const embedUrl = prev.embedUrl;
   if (!embedUrl) {
     return {
@@ -414,7 +432,7 @@ function PreviewFrame({
   children: ReactNode;
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-black/[0.02] dark:bg-white/[0.03]">
+    <div className="mobile-header-content flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-black/[0.02] dark:bg-white/[0.03]">
       <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
       <p className="sr-only">{title}</p>
     </div>
@@ -659,21 +677,36 @@ export function DriveConnectorView({
       setSelected(file);
       setError(null);
       setStatus(null);
+      setPreviewLoading(true);
       setPage("detail");
       const video = isVideoMimeClient(file.mimeType);
       const workspace = file.mimeType.startsWith("application/vnd.google-apps.");
-      // Google web embeds require the browser's separate Google session. Load
-      // every file through the connected Drive operation instead.
-      setPreview(workspace ? null : {
-        previewKind: video ? "video" : "embed",
+      const image = file.mimeType.startsWith("image/");
+      const pdf = file.mimeType === "application/pdf";
+      // Never seed Google /preview embeds for images/PDFs/workspace — those
+      // require a separate Google browser session. Wait for MCP download.
+      setPreview(
+        video
+          ? {
+              previewKind: "video",
+              mimeType: file.mimeType,
+              displayUrl: null,
+              embedUrl: null,
+              openUrl: clientOpenUrl(file),
+              name: file.name,
+              linkLabel: "Open in Drive",
+            }
+          : null,
+      );
+      setConnectorFocus({
+        connectorId: "gdrive",
+        connectorLabel: connectorLabelForId("gdrive"),
+        itemId: file.id,
+        itemTitle: file.name,
+        itemKind: "drive-file",
         mimeType: file.mimeType,
-        displayUrl: null,
-        embedUrl: clientEmbedUrl(file),
         openUrl: clientOpenUrl(file),
-        name: file.name,
-        linkLabel: "Open in Drive",
       });
-      setPreviewLoading(true);
       try {
         const result = await runConnectorViewOperation({
           workspaceId,
@@ -690,45 +723,33 @@ export function DriveConnectorView({
         if (video) {
           setPreview({
             ...next,
-            previewKind: next.displayUrl ? "video" : "embed",
-            embedUrl: next.embedUrl || clientEmbedUrl(file),
+            previewKind: next.displayUrl ? "video" : "unsupported",
+            embedUrl: null,
+          });
+        } else if (image || pdf || workspace) {
+          setPreview({
+            ...next,
+            previewKind:
+              next.previewKind === "embed" ? "unsupported" : next.previewKind,
+            embedUrl: null,
           });
         } else {
           setPreview({
             ...next,
             previewKind:
-              workspace && next.previewKind === "embed"
-                ? "unsupported"
-                : next.previewKind,
-            embedUrl:
-              workspace && next.previewKind === "embed"
-                ? null
-                : next.embedUrl || clientEmbedUrl(file),
+              next.previewKind === "embed" ? "unsupported" : next.previewKind,
+            embedUrl: null,
           });
         }
       } catch {
-        if (video) {
-          setPreview((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  previewKind: "embed",
-                  displayUrl: null,
-                  embedUrl: prev.embedUrl || clientEmbedUrl(file),
-                }
-              : prev,
-          );
-        }
-        if (workspace) {
-          setPreview({
-            previewKind: "unsupported",
-            mimeType: file.mimeType,
-            displayUrl: null,
-            openUrl: clientOpenUrl(file),
-            name: file.name,
-            linkLabel: "Open in Drive",
-          });
-        }
+        setPreview({
+          previewKind: "unsupported",
+          mimeType: file.mimeType,
+          displayUrl: null,
+          openUrl: clientOpenUrl(file),
+          name: file.name,
+          linkLabel: "Open in Drive",
+        });
       } finally {
         setPreviewLoading(false);
       }
@@ -906,15 +927,22 @@ export function DriveConnectorView({
     typeFilter,
   ]);
 
+  // Never use Google /preview embeds here — they force a separate sign-in.
   const previewSrc =
-    preview?.previewKind === "embed"
-      ? preview.embedUrl
-      : preview?.previewKind === "pdf" ||
-          preview?.previewKind === "image"
-        ? preview.displayUrl
-        : preview?.previewKind === "video" || preview?.previewKind === "audio"
-          ? null
-          : preview?.embedUrl;
+    preview?.previewKind === "pdf" && preview.displayUrl
+      ? preview.displayUrl
+      : null;
+
+  useEffect(() => {
+    if (page === "browse") {
+      setConnectorBrowseFocus({
+        connectorId: "gdrive",
+        connectorLabel: connectorLabelForId("gdrive"),
+      });
+    }
+  }, [page]);
+
+  // Keep focus across Chat|Panel toggles (do not clear on unmount).
 
   return (
     <WorkspacePanelFrame status={status} error={error}>
@@ -978,16 +1006,14 @@ export function DriveConnectorView({
 
       {page === "detail" && selected ? (
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-          {previewLoading &&
-          preview?.previewKind !== "video" &&
-          preview?.previewKind !== "unsupported" ? (
-            <div className="pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/90 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur-sm">
-              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.7} />
-              Loading…
+          {previewLoading ? (
+            <div className="mobile-header-content flex min-h-0 flex-1 flex-col">
+              <ConnectorLoadingState
+                connectorId="gdrive"
+                label="Loading file"
+              />
             </div>
-          ) : null}
-
-          {preview?.previewKind === "text" && preview.textContent ? (
+          ) : preview?.previewKind === "text" && preview.textContent ? (
             <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
               <pre className="whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed text-foreground/90">
                 {preview.textContent}
@@ -1025,47 +1051,23 @@ export function DriveConnectorView({
                   }}
                 />
               </PreviewFrame>
-            ) : preview.embedUrl ? (
-              <PreviewFrame title={preview.name}>
-                <iframe
-                  title={preview.name}
-                  src={preview.embedUrl}
-                  className="h-full w-full border-0 bg-black"
-                  allow="autoplay; encrypted-media"
-                  referrerPolicy="no-referrer-when-downgrade"
-                />
-              </PreviewFrame>
             ) : (
-              <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-                {previewLoading ? (
-                  <>
-                    <Loader2
-                      className="h-5 w-5 animate-spin text-muted-foreground"
-                      strokeWidth={1.7}
-                    />
-                    <p className="text-[13px] text-muted-foreground">
-                      Loading video…
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <DriveTypeIcon
-                      mime={selected.mimeType}
-                      kind="file"
-                      size="md"
-                    />
-                    <p className="text-[13px] font-medium">
-                      Couldn’t play this video here
-                    </p>
-                    <p className="max-w-sm text-[12px] text-muted-foreground">
-                      Use Open in the bottom bar to watch it in Google Drive.
-                    </p>
-                  </>
-                )}
+              <div className="mobile-header-content flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                <DriveTypeIcon
+                  mime={selected.mimeType}
+                  kind="file"
+                  size="md"
+                />
+                <p className="text-[13px] font-medium">
+                  Couldn’t play this video here
+                </p>
+                <p className="max-w-sm text-[12px] text-muted-foreground">
+                  Use Open to watch it in Google Drive.
+                </p>
               </div>
             )
           ) : preview?.previewKind === "audio" && preview.displayUrl ? (
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6">
+            <div className="mobile-header-content flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6">
               <DriveTypeIcon mime={selected.mimeType} kind="file" size="md" />
               <audio controls src={preview.displayUrl} className="w-full max-w-md" />
             </div>
@@ -1118,6 +1120,7 @@ export function DriveConnectorView({
             />
             {!visibleFiles.length ? (
               <WorkspaceEmptyState
+                connectorId="gdrive"
                 title={syncing ? "Loading Drive…" : "Nothing here yet"}
                 body={
                   error

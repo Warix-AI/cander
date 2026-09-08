@@ -48,6 +48,10 @@ import {
 import { CONNECTOR_CATALOG } from "@/lib/api/connector-catalog";
 import { appConnectorById } from "@/lib/connectors/apps/definitions";
 import {
+  connectorLabelForId,
+  setConnectorBrowseFocus,
+} from "@/lib/connector-focus";
+import {
   connectorBrowserStorageKey,
   getConnectorBrowserSession,
   makeConnectorWebTab,
@@ -364,6 +368,24 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
     } });
   }, [setMobileActions, connectorId, gmailToolbar, workspaceToolbar, title, browseSearchPlaceholder, isConnectorTab, session, updateSession]);
   useEffect(() => () => setMobileActions?.(null), [setMobileActions]);
+
+  // Ambient ConnectorFocus while browsing a connector (detail views publish item ids).
+  useEffect(() => {
+    if (workspaceToolbar?.canGoBack || gmailToolbar?.canGoInbox) return;
+    setConnectorBrowseFocus({
+      connectorId,
+      connectorLabel: connectorLabelForId(connectorId) || title,
+    });
+  }, [
+    connectorId,
+    title,
+    workspaceToolbar?.canGoBack,
+    gmailToolbar?.canGoInbox,
+  ]);
+
+  // Do not clear on unmount — mobile Chat|Panel toggles unmount this panel and
+  // chat still needs the open item. Focus is replaced when another screen sets it
+  // or cleared when leaving the connectors space.
 
   return (
     <div className={cn(SHELL_PANEL_BODY, CONNECTOR_CHROME_BG)}>

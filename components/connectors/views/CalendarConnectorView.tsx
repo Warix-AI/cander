@@ -1,17 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Loader2,
-  MapPin,
-} from "lucide-react";
+import { MapPin } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
+import { ConnectorLoadingState } from "@/components/connectors/views/ConnectorLoadingState";
 import {
   WorkspacePanelFrame,
   type WorkspaceToolbarState,
 } from "@/components/connectors/views/WorkspaceViewChrome";
 import { runConnectorViewOperation } from "@/lib/api/connector-client";
+import {
+  connectorLabelForId,
+  setConnectorBrowseFocus,
+  setConnectorFocus,
+} from "@/lib/connector-focus";
 import {
   peekViewCache,
   viewCacheKey,
@@ -370,6 +373,24 @@ export function CalendarConnectorView({
     }
   }, [attendees, loadEvents, startLocal, summary, workspaceId]);
 
+  useEffect(() => {
+    if (page === "month") {
+      setConnectorBrowseFocus({
+        connectorId: "gcal",
+        connectorLabel: connectorLabelForId("gcal"),
+      });
+    } else if (page === "detail" && selected) {
+      setConnectorFocus({
+        connectorId: "gcal",
+        connectorLabel: connectorLabelForId("gcal"),
+        itemId: selected.id,
+        itemTitle: selected.summary,
+        itemKind: "event",
+        openUrl: selected.htmlLink ?? undefined,
+      });
+    }
+  }, [page, selected]);
+
   const goToday = useCallback(() => {
     const now = new Date();
     setMonth(startOfMonth(now));
@@ -395,6 +416,10 @@ export function CalendarConnectorView({
         setSelected(null);
         setQuery("");
         setMobileSearchOpen(false);
+        setConnectorBrowseFocus({
+          connectorId: "gcal",
+          connectorLabel: connectorLabelForId("gcal"),
+        });
       },
       onRefresh: () => void loadEvents({ force: true }),
       onPrimary: page === "create" ? () => void createEvent() : null,
@@ -540,6 +565,14 @@ export function CalendarConnectorView({
       ) : null}
 
       {/* Month grid + day agenda on mobile; desktop keeps the mini calendar rail. */}
+      {page === "month" && syncing && !events.length ? (
+        <div className="mobile-header-content flex min-h-0 flex-1 flex-col">
+          <ConnectorLoadingState
+            connectorId="gcal"
+            label="Loading calendar"
+          />
+        </div>
+      ) : page === "month" || page === "detail" ? (
       <div className="@container relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain mobile-header-content lg:flex-row lg:overflow-hidden lg:pt-0">
         <ConnectorMobileSearchBar
           open={mobileSearchOpen && page === "month"}
@@ -595,9 +628,6 @@ export function CalendarConnectorView({
             <p className="text-[15px] font-medium tracking-[-0.02em]">
               {formatMonthLabel(month)}
             </p>
-            {syncing ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-            ) : null}
           </div>
           <div className="grid shrink-0 grid-cols-7 border-b border-black/[0.06] dark:border-white/10">
             {WEEKDAYS.map((label) => (
@@ -754,9 +784,6 @@ export function CalendarConnectorView({
               <p className="text-[12.5px] font-medium tracking-[-0.01em]">
                 {formatMonthLabel(month)}
               </p>
-              {syncing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-              ) : null}
             </div>
             <div className="grid grid-cols-7 gap-y-0.5">
               {["S", "M", "T", "W", "T", "F", "S"].map((label, i) => (
@@ -872,6 +899,7 @@ export function CalendarConnectorView({
           ) : null}
         </aside>
       </div>
+      ) : null}
     </WorkspacePanelFrame>
   );
 }

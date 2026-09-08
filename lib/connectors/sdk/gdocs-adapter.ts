@@ -4,6 +4,11 @@
 
 import { executeConnectorTool } from "../tool-execute.ts";
 import { createSupabaseAdminClient } from "../../supabase/admin.ts";
+import {
+  docsHtmlToMarkdown,
+  normalizeDocBodyText,
+  structuredDocsToMarkdown,
+} from "./gdocs-body.ts";
 import type {
   ActionContext,
   ActionResult,
@@ -64,6 +69,9 @@ function extractList(payload: Record<string, unknown>): unknown[] {
 }
 
 function extractDocumentBody(payload: Record<string, unknown>): string | null {
+  const structured = structuredDocsToMarkdown(payload);
+  if (structured && structured.length > 40) return structured;
+
   const direct = pickString(
     payload.markdown,
     payload.markdown_text,
@@ -71,38 +79,65 @@ function extractDocumentBody(payload: Record<string, unknown>): string | null {
     payload.content,
     payload.body,
   );
-  if (direct) return direct;
+  if (direct) {
+    const normalized = normalizeDocBodyText(direct);
+    if (structured && (normalized.match(/\n/g) ?? []).length < 3) {
+      return structured;
+    }
+    return normalized;
+  }
+
+  if (structured) return structured;
 
   const data = payload.data;
   if (data && typeof data === "object") {
     return extractDocumentBody(data as Record<string, unknown>);
   }
 
-  // Google Docs API structured body — flatten plain text runs when present.
-  const body = payload.body;
-  if (body && typeof body === "object") {
-    const content = (body as Record<string, unknown>).content;
-    if (Array.isArray(content)) {
-      const parts: string[] = [];
-      for (const block of content) {
-        if (!block || typeof block !== "object") continue;
-        const paragraph = (block as Record<string, unknown>).paragraph;
-        if (!paragraph || typeof paragraph !== "object") continue;
-        const elements = (paragraph as Record<string, unknown>).elements;
-        if (!Array.isArray(elements)) continue;
-        for (const el of elements) {
-          if (!el || typeof el !== "object") continue;
-          const textRun = (el as Record<string, unknown>).textRun;
-          if (!textRun || typeof textRun !== "object") continue;
-          const text = pickString((textRun as Record<string, unknown>).content);
-          if (text) parts.push(text);
-        }
-      }
-      if (parts.length) return parts.join("");
-    }
-  }
-
   return null;
+}
+
+async function fetchHtmlExport(
+  ctx: ActionContext,
+  documentId: string,
+): Promise<string | null> {
+  try {
+    const result = await runTool(ctx, "gdrive.download", {
+      fileId: documentId,
+      mimeType: "text/html",
+      sourceMimeType: "application/vnd.google-apps.document",
+    });
+    if (!result.ok) return null;
+    const payload = parseToolJson(result.output);
+    const downloaded =
+      payload.downloaded_file_content &&
+      typeof payload.downloaded_file_content === "object"
+        ? (payload.downloaded_file_content as Record<string, unknown>)
+        : null;
+    const url = pickString(
+      payload.display_url,
+      payload.displayUrl,
+      payload.export_link,
+      payload.exportLink,
+      downloaded?.s3url,
+      downloaded?.s3Url,
+      downloaded?.url,
+    );
+    if (!url) return null;
+    const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+    if (!res.ok) return null;
+    const html = await res.text();
+    if (
+      html.includes("docs_flag_initialData") ||
+      html.includes("_docs_flag_") ||
+      html.includes("DOCS_modelChunk")
+    ) {
+      return null;
+    }
+    return html;
+  } catch {
+    return null;
+  }
 }
 
 export function embedUrlForGoogleDoc(documentId: string): string {
@@ -167,12 +202,30 @@ export const gdocsViewAdapter: ConnectorViewAdapter = {
               (payload.data as Record<string, unknown> | undefined)?.name,
             ) ||
             "Document";
+
+          let bodyText = extractDocumentBody(payload);
+          let bodyHtml: string | null = null;
+          const html = await fetchHtmlExport(ctx, documentId);
+          if (html) {
+            bodyHtml = html;
+            const fromHtml = docsHtmlToMarkdown(html);
+            if (
+              fromHtml &&
+              (!bodyText ||
+                fromHtml.length > bodyText.length * 0.8 ||
+                (bodyText.match(/\n/g) ?? []).length < 3)
+            ) {
+              bodyText = fromHtml;
+            }
+          }
+
           return {
             ok: true,
             data: {
               id: documentId,
               title,
-              bodyText: extractDocumentBody(payload),
+              bodyText,
+              bodyHtml,
               embedUrl: embedUrlForGoogleDoc(documentId),
               openUrl: openUrlForGoogleDoc(documentId),
               raw: payload,

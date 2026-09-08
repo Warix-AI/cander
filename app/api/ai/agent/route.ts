@@ -37,6 +37,8 @@ type Body = {
   confirmedToolCallId?: string | null;
   selectedConnectionId?: string | null;
   selectedConnectionIds?: string[] | null;
+  /** Client ambient focus (open doc/sheet/page). Soft context only. */
+  systemExtra?: string | null;
   clientHint?: { etag?: string };
 };
 
@@ -129,6 +131,8 @@ export async function POST(request: Request) {
       selectedConnectionIds: Array.isArray(body.selectedConnectionIds)
         ? body.selectedConnectionIds.map(String).filter(Boolean)
         : null,
+      systemExtra:
+        typeof body.systemExtra === "string" ? body.systemExtra.slice(0, 12_000) : null,
     });
 
     await finalizeUsageReservation({

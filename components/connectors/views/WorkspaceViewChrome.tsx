@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelLoadingState } from "@/components/shell/PanelLoadingState";
+import { ConnectorLoadingState } from "@/components/connectors/views/ConnectorLoadingState";
 import type { ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
@@ -82,14 +82,23 @@ export function WorkspaceEmptyState({
   actionLabel,
   syncing,
   onAction,
+  connectorId,
 }: {
   title: string;
   body: string;
   actionLabel: string;
   syncing?: boolean;
   onAction: () => void;
+  connectorId?: string;
 }) {
-  if (syncing) return <PanelLoadingState />;
+  if (syncing) {
+    return (
+      <ConnectorLoadingState
+        connectorId={connectorId ?? "gdrive"}
+        label={title}
+      />
+    );
+  }
   return (
     <div className="px-4 py-10 text-center">
       <p className="text-[13px] font-medium text-foreground">{title}</p>

@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
+import { ConnectorLoadingState } from "@/components/connectors/views/ConnectorLoadingState";
+import { MobileFloatingNav } from "@/components/shell/mobile/MobileFloatingNav";
 import {
   WorkspaceEmptyState,
   WorkspaceField,
@@ -13,6 +14,11 @@ import {
   type WorkspaceToolbarState,
 } from "@/components/connectors/views/WorkspaceViewChrome";
 import { runConnectorViewOperation } from "@/lib/api/connector-client";
+import {
+  connectorLabelForId,
+  setConnectorBrowseFocus,
+  setConnectorFocus,
+} from "@/lib/connector-focus";
 import {
   connectionsForConnectorLive,
   getConnectorConnectionsRevision,
@@ -25,6 +31,7 @@ import {
   viewCacheKey,
   writeViewCache,
 } from "@/lib/connectors/view-session-cache";
+import { cn } from "@/lib/utils";
 
 type Page = "browse" | "detail" | "create";
 
@@ -107,6 +114,36 @@ function parseSheetItem(raw: unknown): SheetItem | null {
   };
 }
 
+function extractValueGrid(payload: Record<string, unknown>): string[][] {
+  const valueRanges = Array.isArray(payload.valueRanges)
+    ? payload.valueRanges
+    : Array.isArray(payload.value_ranges)
+      ? payload.value_ranges
+      : null;
+  if (valueRanges?.[0] && typeof valueRanges[0] === "object") {
+    const values = (valueRanges[0] as Record<string, unknown>).values;
+    if (Array.isArray(values)) {
+      return values.map((row) =>
+        Array.isArray(row)
+          ? row.map((cell) => String(cell ?? ""))
+          : [String(row ?? "")],
+      );
+    }
+  }
+  if (Array.isArray(payload.values)) {
+    return payload.values.map((row) =>
+      Array.isArray(row)
+        ? row.map((cell) => String(cell ?? ""))
+        : [String(row ?? "")],
+    );
+  }
+  const data = payload.data;
+  if (data && typeof data === "object") {
+    return extractValueGrid(data as Record<string, unknown>);
+  }
+  return [];
+}
+
 export function SheetsConnectorView({
   onToolbarChange,
   onOpenLink,
@@ -143,6 +180,15 @@ export function SheetsConnectorView({
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(
     () => cached?.data.lastSyncedAt ?? null,
+  );
+  const [tabs, setTabs] = useState<string[]>(
+    () => cached?.data.selected?.sheetNames ?? [],
+  );
+  const [activeTab, setActiveTab] = useState<string | null>(
+    () => cached?.data.selected?.sheetNames?.[0] ?? null,
+  );
+  const [grid, setGrid] = useState<string[][]>(
+    () => cached?.data.selected?.values ?? [],
   );
 
   const persist = useCallback(
@@ -239,12 +285,24 @@ export function SheetsConnectorView({
         ...sheet,
         embedUrl: sheet.embedUrl || urls.embedUrl,
         webViewLink: sheet.webViewLink || urls.webViewLink,
+        values: undefined,
       };
       setSelected(next);
-      setPage("detail");
       setError(null);
       setStatus(null);
+      setTabs([]);
+      setActiveTab(null);
+      setGrid([]);
       setPreviewLoading(true);
+      setPage("detail");
+      setConnectorFocus({
+        connectorId: "gsheets",
+        connectorLabel: connectorLabelForId("gsheets"),
+        itemId: next.id,
+        itemTitle: next.name,
+        itemKind: "sheet",
+        openUrl: next.webViewLink,
+      });
       persist({ selected: next, page: "detail", error: null });
       try {
         const namesResult = await runConnectorViewOperation({
@@ -254,36 +312,96 @@ export function SheetsConnectorView({
           input: { spreadsheetId: sheet.id },
         });
         const sheetNames = Array.isArray(namesResult.data.sheetNames)
-          ? namesResult.data.sheetNames.filter((name): name is string => typeof name === "string")
+          ? namesResult.data.sheetNames.filter(
+              (name): name is string => typeof name === "string" && Boolean(name),
+            )
           : [];
+        const first = sheetNames[0] ?? "Sheet1";
+        const names = sheetNames.length ? sheetNames : [first];
+        setTabs(names);
+        setActiveTab(first);
         const valuesResult = await runConnectorViewOperation({
           workspaceId,
           connectorId: "gsheets",
           operation: "getValues",
           input: {
             spreadsheetId: sheet.id,
-            range: `${sheetNames[0] ?? "Sheet1"}!A1:Z100`,
+            range: `${first}!A1:Z100`,
           },
         });
-        const rawValues = Array.isArray(valuesResult.data.values)
-          ? valuesResult.data.values
-          : [];
+        const nextGrid = extractValueGrid(valuesResult.data);
+        setGrid(nextGrid);
         const loaded = {
           ...next,
-          sheetNames,
-          values: rawValues.map((row) =>
-            Array.isArray(row) ? row.map(String) : [String(row)],
-          ),
+          sheetNames: names,
+          values: nextGrid,
         };
         setSelected(loaded);
+        setConnectorFocus({
+          connectorId: "gsheets",
+          connectorLabel: connectorLabelForId("gsheets"),
+          itemId: loaded.id,
+          itemTitle: loaded.name,
+          itemKind: "sheet",
+          openUrl: loaded.webViewLink,
+          sheetTab: first,
+        });
         persist({ selected: loaded, page: "detail", error: null });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not load this spreadsheet.");
+        setError(
+          err instanceof Error ? err.message : "Could not load this spreadsheet.",
+        );
       } finally {
         setPreviewLoading(false);
       }
     },
     [persist, workspaceId],
+  );
+
+  const loadSheetTab = useCallback(
+    async (sheet: SheetItem, tab: string) => {
+      setActiveTab(tab);
+      setPreviewLoading(true);
+      setError(null);
+      try {
+        const valuesResult = await runConnectorViewOperation({
+          workspaceId,
+          connectorId: "gsheets",
+          operation: "getValues",
+          input: {
+            spreadsheetId: sheet.id,
+            range: `${tab}!A1:Z100`,
+          },
+        });
+        const nextGrid = extractValueGrid(valuesResult.data);
+        setGrid(nextGrid);
+        setSelected((prev) =>
+          prev
+            ? {
+                ...prev,
+                values: nextGrid,
+                sheetNames: tabs.length ? tabs : prev.sheetNames,
+              }
+            : prev,
+        );
+        setConnectorFocus({
+          connectorId: "gsheets",
+          connectorLabel: connectorLabelForId("gsheets"),
+          itemId: sheet.id,
+          itemTitle: sheet.name,
+          itemKind: "sheet",
+          openUrl: sheet.webViewLink,
+          sheetTab: tab,
+        });
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Could not load this sheet tab.",
+        );
+      } finally {
+        setPreviewLoading(false);
+      }
+    },
+    [tabs, workspaceId],
   );
 
   const createSpreadsheet = useCallback(async () => {
@@ -341,6 +459,17 @@ export function SheetsConnectorView({
     void refresh({ force: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / workspace only
   }, [workspaceId]);
+
+  useEffect(() => {
+    if (page === "browse") {
+      setConnectorBrowseFocus({
+        connectorId: "gsheets",
+        connectorLabel: connectorLabelForId("gsheets"),
+      });
+    }
+  }, [page]);
+
+  // Keep focus across Chat|Panel toggles (do not clear on unmount).
 
   // After OAuth activates, drop any failed first-open cache and reload.
   useEffect(() => {
@@ -475,22 +604,88 @@ export function SheetsConnectorView({
       ) : null}
 
       {page === "detail" && selected ? (
-        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-          {previewLoading ? (
-            <div className="pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/90 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur-sm">
-              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.7} />
-              Loading…
+        <div className="relative flex min-h-0 flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
+          {/* Desktop: top tab strip. Mobile: floating bottom nav (Stripe-style). */}
+          <div className="hidden shrink-0 overflow-x-auto border-b border-black/5 px-2 py-2 dark:border-white/10 lg:block">
+            <div className="flex min-w-max gap-1">
+              {(tabs.length ? tabs : ["Sheet1"]).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => {
+                    if (tab === activeTab) return;
+                    void loadSheetTab(selected, tab);
+                  }}
+                  className={cn(
+                    "h-7 shrink-0 rounded-full px-2.5 text-[11.5px] font-medium tracking-[-0.01em] transition-colors",
+                    (activeTab ?? tabs[0] ?? "Sheet1") === tab
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
-          ) : null}
-          {selected.values ? (
-            <div className="min-h-0 flex-1 overflow-auto p-4">
-              <p className="mb-3 text-[13px] font-medium">{selected.sheetNames?.[0] ?? "Sheet1"}</p>
+          </div>
+
+          <MobileFloatingNav
+            activeId={activeTab ?? tabs[0] ?? "Sheet1"}
+            label="Spreadsheet tabs"
+          >
+            {(tabs.length ? tabs : ["Sheet1"]).map((tab) => {
+              const active = (activeTab ?? tabs[0] ?? "Sheet1") === tab;
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => {
+                    if (active) return;
+                    void loadSheetTab(selected, tab);
+                  }}
+                  className={cn(
+                    "h-10 shrink-0 rounded-full px-4 text-[14px] font-medium transition-colors",
+                    active
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:bg-muted/60",
+                  )}
+                >
+                  {tab}
+                </button>
+              );
+            })}
+          </MobileFloatingNav>
+
+          {previewLoading ? (
+            <div className="mobile-header-content flex min-h-0 flex-1 flex-col">
+              <ConnectorLoadingState
+                connectorId="gsheets"
+                label="Loading spreadsheet"
+              />
+            </div>
+          ) : grid.length ? (
+            <div className="mobile-header-content min-h-0 flex-1 overflow-auto overscroll-contain">
               <table className="min-w-full border-collapse text-left text-[12px]">
                 <tbody>
-                  {selected.values.map((row, rowIndex) => (
-                    <tr key={rowIndex} className="border-b border-border/60">
+                  {grid.map((row, rowIndex) => (
+                    <tr
+                      key={rowIndex}
+                      className={cn(
+                        "border-b border-border/60",
+                        rowIndex === 0 && "bg-muted/50",
+                      )}
+                    >
                       {row.map((value, columnIndex) => (
-                        <td key={columnIndex} className="max-w-56 border-r border-border/60 px-2 py-1.5 align-top break-words">{value}</td>
+                        <td
+                          key={columnIndex}
+                          className={cn(
+                            "max-w-56 border-r border-border/60 px-2.5 py-1.5 align-top break-words",
+                            rowIndex === 0 && "font-medium text-foreground",
+                          )}
+                        >
+                          {value}
+                        </td>
                       ))}
                     </tr>
                   ))}
@@ -498,15 +693,15 @@ export function SheetsConnectorView({
               </table>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+            <div className="mobile-header-content flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
               <ConnectorMark
                 id="gsheets"
                 size="md"
                 className="!h-10 !w-10 !bg-transparent"
               />
-              <p className="text-[13px] font-medium">Spreadsheet content is unavailable</p>
+              <p className="text-[13px] font-medium">No values in this range</p>
               <p className="max-w-sm text-[12px] text-muted-foreground">
-                This spreadsheet is being read through the connected Google Sheets account.
+                Use Open to view this spreadsheet in Google Sheets, or try another tab.
               </p>
             </div>
           )}
@@ -528,6 +723,7 @@ export function SheetsConnectorView({
             />
             {!sheets.length ? (
               <WorkspaceEmptyState
+                connectorId="gsheets"
                 title={syncing ? "Loading Sheets…" : "Nothing here yet"}
                 body={
                   error

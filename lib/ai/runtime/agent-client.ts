@@ -53,7 +53,7 @@ export async function runAgentClientTransport(
   report({
     phase: "thinking",
     label: "Thinking",
-    detail: "Starting agent…",
+    detail: "Starting agent",
   });
 
   const history = (request.messages ?? []).map((m) => ({
@@ -72,6 +72,16 @@ export async function runAgentClientTransport(
   const selectedConnectionIds =
     opts?.selectedConnectionIds?.filter(Boolean) ??
     (opts?.selectedConnectionId ? [opts.selectedConnectionId] : []);
+
+  let systemExtra = "";
+  try {
+    const { buildAmbientFocusToolContext } = await import(
+      "@/lib/connector-focus"
+    );
+    systemExtra = buildAmbientFocusToolContext().trim();
+  } catch {
+    /* ignore */
+  }
 
   let res: Response;
   const latency = opts?.latency;
@@ -94,6 +104,7 @@ export async function runAgentClientTransport(
         selectedConnectionId: selectedConnectionIds[0] ?? null,
         selectedConnectionIds:
           selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
+        ...(systemExtra ? { systemExtra } : {}),
       }),
       signal: opts?.signal,
     });

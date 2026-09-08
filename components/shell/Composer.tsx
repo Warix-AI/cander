@@ -34,6 +34,13 @@ import {
   getBrowsingFocusSnapshot,
   subscribeBrowsingFocus,
 } from "@/lib/browser-context/browsing-focus";
+import {
+  connectorFocusComposerPlaceholder,
+  getConnectorFocusServerSnapshot,
+  getConnectorFocusSnapshot,
+  subscribeConnectorFocus,
+} from "@/lib/connector-focus";
+import { connectionsForConnectorLive } from "@/lib/connector-connections-store";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import {
   isSpaceLibrarySpace,
@@ -1091,8 +1098,52 @@ export function Composer({
       const liveMentions = detectConnectorMentions(next, detectCandidates).filter(
         (m) => !dismissedConnectorIds.has(m.connectorId),
       );
-      const liveScopes =
-        liveMentions.length > 0 ? liveMentions : connectorScopes;
+      let liveScopes =
+        connectorScopes.length > 0
+          ? connectorScopes
+          : liveMentions.map((m) => ({
+              connectionId: m.connectionId,
+              connectorId: m.connectorId,
+              label: m.label,
+            }));
+      if (
+        liveScopes.length === 0 &&
+        spaceId === "connectors" &&
+        connectorId
+      ) {
+        const active = connectionsForConnectorLive(workspaceId, connectorId).find(
+          (row) => isUiConnectedStatus(row.status),
+        );
+        if (active) {
+          const catalog = connectors.find((c) => c.id === connectorId);
+          liveScopes = [
+            {
+              connectionId: active.id,
+              connectorId,
+              label: catalog?.name ?? connectorId,
+            },
+          ];
+        }
+      }
+      // Ambient open-item focus (survives Chat|Panel toggles).
+      if (liveScopes.length === 0) {
+        const focus = getConnectorFocusSnapshot();
+        if (focus?.connectorId) {
+          const active = connectionsForConnectorLive(
+            workspaceId,
+            focus.connectorId,
+          ).find((row) => isUiConnectedStatus(row.status));
+          if (active) {
+            liveScopes = [
+              {
+                connectionId: active.id,
+                connectorId: focus.connectorId,
+                label: focus.connectorLabel || focus.connectorId,
+              },
+            ];
+          }
+        }
+      }
       // Swap trigger words for connector labels so the AI sees the app name.
       let spoken = next;
       for (const mention of [...liveMentions].sort(
@@ -1286,7 +1337,7 @@ export function Composer({
     const liveMentions = detectConnectorMentions(value, detectCandidates).filter(
       (m) => !dismissedConnectorIds.has(m.connectorId),
     );
-    const liveScopes =
+    let liveScopes =
       connectorScopes.length > 0
         ? connectorScopes
         : liveMentions.map((m) => ({
@@ -1294,6 +1345,44 @@ export function Composer({
             connectorId: m.connectorId,
             label: m.label,
           }));
+    // Connector panel chat: prefer the open connector's MCP tools even without chips.
+    if (
+      liveScopes.length === 0 &&
+      spaceId === "connectors" &&
+      connectorId
+    ) {
+      const active = connectionsForConnectorLive(workspaceId, connectorId).find(
+        (row) => isUiConnectedStatus(row.status),
+      );
+      if (active) {
+        const catalog = connectors.find((c) => c.id === connectorId);
+        liveScopes = [
+          {
+            connectionId: active.id,
+            connectorId,
+            label: catalog?.name ?? connectorId,
+          },
+        ];
+      }
+    }
+    if (liveScopes.length === 0) {
+      const focus = getConnectorFocusSnapshot();
+      if (focus?.connectorId) {
+        const active = connectionsForConnectorLive(
+          workspaceId,
+          focus.connectorId,
+        ).find((row) => isUiConnectedStatus(row.status));
+        if (active) {
+          liveScopes = [
+            {
+              connectionId: active.id,
+              connectorId: focus.connectorId,
+              label: focus.connectorLabel || focus.connectorId,
+            },
+          ];
+        }
+      }
+    }
     const liveConnectorPayload =
       liveScopes.length > 0
         ? {
@@ -1459,15 +1548,26 @@ export function Composer({
     getBrowsingFocusSnapshot,
     getBrowsingFocusServerSnapshot,
   );
+  const connectorFocus = useSyncExternalStore(
+    subscribeConnectorFocus,
+    getConnectorFocusSnapshot,
+    getConnectorFocusServerSnapshot,
+  );
   const browsingFocusHint =
     !pageReference && browsingFocus
       ? browsingFocusComposerPlaceholder(browsingFocus)
+      : null;
+  const connectorFocusHint =
+    !pageReference && !browsingFocusHint && connectorFocus
+      ? connectorFocusComposerPlaceholder(connectorFocus)
       : null;
   const hint =
     placeholder ??
     (selectedId && !stayInPlace
       ? `Change the ${labelFor(selectedId)}…`
-      : browsingFocusHint ?? APP_MESSAGE_PLACEHOLDER);
+      : browsingFocusHint ??
+        connectorFocusHint ??
+        APP_MESSAGE_PLACEHOLDER);
 
   /** Mobile / dock: 6 lines; desktop new-chat & shell: 8 lines. */
   const composerMaxLines = mobile || compact ? 6 : 8;

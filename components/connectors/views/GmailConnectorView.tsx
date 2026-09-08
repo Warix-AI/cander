@@ -7,9 +7,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { Loader2, Paperclip, RefreshCw, Send } from "lucide-react";
+import { Paperclip, RefreshCw, Send } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
+import { ConnectorLoadingState } from "@/components/connectors/views/ConnectorLoadingState";
 import { MailBody } from "@/components/connectors/views/MailBody";
 import { MailHtmlFrame } from "@/components/connectors/views/MailHtmlFrame";
 import { MailSenderAvatar } from "@/components/connectors/views/MailSenderAvatar";
@@ -25,6 +26,11 @@ import {
   resolveMailHtml,
   resolveMailPlainText,
 } from "@/lib/mail-body-sanitize";
+import {
+  connectorLabelForId,
+  setConnectorBrowseFocus,
+  setConnectorFocus,
+} from "@/lib/connector-focus";
 import {
   peekViewCache,
   patchViewCache,
@@ -239,6 +245,10 @@ export function GmailConnectorView({
     setError(null);
     setQuery("");
     setMobileSearchOpen(false);
+    setConnectorBrowseFocus({
+      connectorId: "gmail",
+      connectorLabel: connectorLabelForId("gmail"),
+    });
   }, []);
 
   const goCompose = useCallback(() => {
@@ -533,6 +543,13 @@ export function GmailConnectorView({
     setStatus(null);
     setBusy(true);
     setError(null);
+    setConnectorFocus({
+      connectorId: "gmail",
+      connectorLabel: connectorLabelForId("gmail"),
+      itemId: item.providerMessageId,
+      itemTitle: item.subject || item.fromAddr || "Email",
+      itemKind: "email",
+    });
 
     const threadKey = item.threadId || item.providerMessageId;
     const threadUnreadIds = messages
@@ -778,10 +795,11 @@ export function GmailConnectorView({
                             !html;
                           if (loadingBody) {
                             return (
-                              <div className="flex min-h-[12rem] items-center justify-center bg-white dark:bg-space-canvas">
-                                <Loader2
-                                  className="h-6 w-6 animate-spin text-muted-foreground"
-                                  strokeWidth={1.8}
+                              <div className="flex min-h-[12rem] flex-1 items-center justify-center bg-white dark:bg-space-canvas">
+                                <ConnectorLoadingState
+                                  connectorId="gmail"
+                                  label="Loading message"
+                                  className="py-10"
                                 />
                               </div>
                             );
@@ -871,13 +889,7 @@ export function GmailConnectorView({
             onDismiss={() => setMobileSearchOpen(false)}
           />
           {loading && !visibleThreads.length ? (
-            <div className="flex flex-col items-center justify-center gap-3 px-4 py-16">
-              <Loader2
-                className="h-6 w-6 animate-spin text-muted-foreground"
-                strokeWidth={1.8}
-              />
-              <p className="text-[13px] text-muted-foreground">Loading mail…</p>
-            </div>
+            <ConnectorLoadingState connectorId="gmail" label="Loading mail" />
           ) : null}
           {!loading && !visibleThreads.length ? (
             <div className="px-4 py-10 text-center">

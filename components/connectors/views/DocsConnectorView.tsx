@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { Loader2 } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
+import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 import { useApp } from "@/components/app/AppProvider";
 import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
+import { ConnectorLoadingState } from "@/components/connectors/views/ConnectorLoadingState";
 import {
   WorkspaceEmptyState,
   WorkspaceField,
@@ -13,6 +14,11 @@ import {
   type WorkspaceToolbarState,
 } from "@/components/connectors/views/WorkspaceViewChrome";
 import { runConnectorViewOperation } from "@/lib/api/connector-client";
+import {
+  connectorLabelForId,
+  setConnectorBrowseFocus,
+  setConnectorFocus,
+} from "@/lib/connector-focus";
 import {
   connectionsForConnectorLive,
   getConnectorConnectionsRevision,
@@ -36,6 +42,7 @@ type DocItem = {
   embedUrl?: string;
   openUrl?: string;
   bodyText?: string | null;
+  bodyHtml?: string | null;
 };
 
 type DocsSessionCache = {
@@ -237,12 +244,22 @@ export function DocsConnectorView({
         ...doc,
         embedUrl: doc.embedUrl || urls.embedUrl,
         openUrl: doc.openUrl || urls.openUrl,
+        bodyText: null,
+        bodyHtml: null,
       };
       setSelected(next);
-      setPage("detail");
       setError(null);
       setStatus(null);
       setPreviewLoading(true);
+      setPage("detail");
+      setConnectorFocus({
+        connectorId: "gdocs",
+        connectorLabel: connectorLabelForId("gdocs"),
+        itemId: next.id,
+        itemTitle: next.title,
+        itemKind: "doc",
+        openUrl: next.openUrl,
+      });
       persist({ selected: next, page: "detail", error: null });
       try {
         const result = await runConnectorViewOperation({
@@ -255,8 +272,17 @@ export function DocsConnectorView({
           ...next,
           title: typeof result.data.title === "string" ? result.data.title : next.title,
           bodyText: typeof result.data.bodyText === "string" ? result.data.bodyText : null,
+          bodyHtml: typeof result.data.bodyHtml === "string" ? result.data.bodyHtml : null,
         };
         setSelected(loaded);
+        setConnectorFocus({
+          connectorId: "gdocs",
+          connectorLabel: connectorLabelForId("gdocs"),
+          itemId: loaded.id,
+          itemTitle: loaded.title,
+          itemKind: "doc",
+          openUrl: loaded.openUrl,
+        });
         persist({ selected: loaded, page: "detail", error: null });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not load this document.");
@@ -330,6 +356,17 @@ export function DocsConnectorView({
     void refresh({ force: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / workspace only
   }, [workspaceId]);
+
+  useEffect(() => {
+    if (page === "browse") {
+      setConnectorBrowseFocus({
+        connectorId: "gdocs",
+        connectorLabel: connectorLabelForId("gdocs"),
+      });
+    }
+  }, [page]);
+
+  // Keep focus across Chat|Panel toggles (do not clear on unmount).
 
   useEffect(() => {
     const connections = connectionsForConnectorLive(workspaceId, "gdocs");
@@ -474,21 +511,27 @@ export function DocsConnectorView({
       ) : null}
 
       {page === "detail" && selected ? (
-        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#f7f7f5] dark:bg-black">
           {previewLoading ? (
-            <div className="pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/90 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur-sm">
-              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.7} />
-              Loading…
+            <div className="mobile-header-content flex min-h-0 flex-1 flex-col">
+              <ConnectorLoadingState
+                connectorId="gdocs"
+                label="Loading document"
+              />
             </div>
-          ) : null}
-          {selected.bodyText ? (
-            <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
-              <pre className="whitespace-pre-wrap break-words font-sans text-[14px] leading-relaxed text-foreground/90">
-                {selected.bodyText}
-              </pre>
+          ) : selected.bodyText ? (
+            <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-6 sm:py-6">
+              <article className="mx-auto min-h-[70vh] w-full max-w-[720px] bg-white px-6 py-8 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)] sm:px-12 sm:py-12 dark:bg-neutral-950 dark:shadow-[0_1px_2px_rgba(0,0,0,0.4)]">
+                <h1 className="mb-6 border-b border-black/5 pb-4 text-[26px] font-semibold leading-tight tracking-[-0.03em] text-foreground dark:border-white/10 sm:text-[32px]">
+                  {selected.title}
+                </h1>
+                <div className="doc-page-body text-[15px] leading-[1.7] tracking-[-0.01em] text-foreground/90 [&_h1]:mb-3 [&_h1]:mt-6 [&_h1]:text-[22px] [&_h1]:font-semibold [&_h2]:mb-2.5 [&_h2]:mt-5 [&_h2]:text-[18px] [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-[16px] [&_h3]:font-semibold [&_li]:my-0.5 [&_ol]:my-3 [&_p]:my-2.5 [&_table]:my-4 [&_ul]:my-3">
+                  <MarkdownRenderer content={selected.bodyText} />
+                </div>
+              </article>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+            <div className="mobile-header-content flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
               <ConnectorMark
                 id="gdocs"
                 size="md"
@@ -496,7 +539,7 @@ export function DocsConnectorView({
               />
               <p className="text-[13px] font-medium">Document content is unavailable</p>
               <p className="max-w-sm text-[12px] text-muted-foreground">
-                This document is being read through the connected Google Docs account.
+                Use Open to view this document in Google Docs, or try Refresh from the menu.
               </p>
             </div>
           )}
@@ -518,6 +561,7 @@ export function DocsConnectorView({
             />
             {!documents.length ? (
               <WorkspaceEmptyState
+                connectorId="gdocs"
                 title={syncing ? "Loading Docs…" : "Nothing here yet"}
                 body={
                   error

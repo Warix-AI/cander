@@ -70,7 +70,7 @@ function friendlyProgressDetail(
     detail &&
     !/^(thinking|generating|searching|reading|checking|building|updating)\.?\.?\.?$/i.test(detail)
   ) {
-    return detail.replace(/\.{3}$/, "");
+    return detail.replace(/\s*[.…]+$/u, "").trim();
   }
   return detailForPhase(phase);
 }

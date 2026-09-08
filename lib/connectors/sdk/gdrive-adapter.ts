@@ -306,9 +306,11 @@ export const gdriveViewAdapter: ConnectorViewAdapter = {
             pickString(args.exportMimeType, args.export_mime_type) ||
             exportMimeForDriveFile(sourceMime);
 
-          // Always return an embeddable Google preview so the UI can show something
-          // even when Composio download fails (access, size, format).
+          // Prefer connected-account download. Avoid Google /preview embeds for
+          // ordinary files — those require a separate Google browser login.
           const isVideo = isVideoMime(sourceMime);
+          const isImage =
+            typeof sourceMime === "string" && sourceMime.startsWith("image/");
           const fallback = {
             id: fileId,
             name: pickString(args.name) ?? "File",
@@ -317,7 +319,11 @@ export const gdriveViewAdapter: ConnectorViewAdapter = {
             displayUrl: null as string | null,
             embedUrl: embedUrlForDriveFile(fileId, sourceMime),
             openUrl: openUrlForDriveFile(fileId, sourceMime, webViewLink),
-            previewKind: (isVideo ? "video" : "embed") as "video" | "embed",
+            previewKind: (isVideo
+              ? "video"
+              : isImage
+                ? "unsupported"
+                : "embed") as "video" | "embed" | "unsupported",
             linkLabel: "Open in Drive",
             exportApplied: false,
           };

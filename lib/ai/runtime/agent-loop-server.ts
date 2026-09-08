@@ -40,7 +40,10 @@ const SYSTEM_BASE = `You are Cander, a concise and capable AI assistant. Answer 
 Prefer compact, natural responses. Use connected app tools when needed via function calls.
 Never claim an external action succeeded unless a tool returned success.
 If a skill is disabled, tell the user to enable it in Connectors — do not invent workarounds.
-Disabled write skills must never be treated as available.`;
+Disabled write skills must never be treated as available.
+You cannot see the user's screen. When ConnectorFocus (or similar ambient context) names an open document, spreadsheet, file, email, or event, fetch it with the provided connected-app tools before answering — never ask the user to paste contents you can load yourself.`;
+
+const CONNECTOR_FOCUS_FETCH_RULE = `When system context includes ConnectorFocus with an itemId/itemTitle: call the matching connected-app tool (e.g. gdocs.get, gsheets.valuesGet, gdrive.download) using that id before summarizing or answering. Do not say you lack the contents or ask the user to paste them.`;
 
 export type AgentMessage = {
   role: "user" | "assistant" | "system";
@@ -306,9 +309,11 @@ export async function runAgentServerLoop(
       : scope.failClosed
         ? "User attempted to scope this turn to a connector that is not available. Do not call connected-app tools."
         : "";
+  const systemExtra = input.systemExtra?.trim() || "";
   const system = [
     SYSTEM_BASE,
-    input.systemExtra?.trim() || "",
+    systemExtra,
+    systemExtra.includes("ConnectorFocus") ? CONNECTOR_FOCUS_FETCH_RULE : "",
     formatCapabilitySnapshotForPrompt(snapshot),
     scopePrompt,
     refsPrompt,
