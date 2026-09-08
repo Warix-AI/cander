@@ -9,7 +9,7 @@ Cander Apps and Websites provision durable code and runtime resources **under th
 | GitHub (Warix org) | Durable source of truth | GitHub App + Octokit |
 | Vercel Sandbox | Disposable build/runtime | `@vercel/sandbox` |
 | Supabase (Warix org) | Per-app persistent backend | Management API |
-| Vercel Deployments | Published hosting | Deployments/Domains API (Phase 7+) |
+| Vercel Deployments | Published hosting | Deployments API (Phase 7); Domains (Phase 10) |
 | `*.cander.app` | Friendly URLs | Edge proxy (draft Phase 5; prod Phase 8) |
 
 ## Required server env
@@ -42,6 +42,7 @@ Token needs permission to create projects and read API keys in the Warix org.
 | `POST` | `/api/projects/:id/git/persist` | Commit draft |
 | `GET` | `/api/projects/:id/git/commits?workspaceId=` | List draft commits (revisions) |
 | `POST` | `/api/projects/:id/git/restore` | Move draft tip to SHA + restart sandbox |
+| `POST` | `/api/projects/:id/publish` | Promote draft → Vercel production |
 | `POST` | `/api/computer/build` | Durable work-task pipeline |
 
 ## Phase 4 behavior
@@ -76,6 +77,19 @@ Upstream origins must match Vercel sandbox hosts (SSRF allowlist).
 6. Build **Changes** timeline loads commits; Restore calls the restore API
 
 Publish / `published_sha` remains Phase 7.
+
+## Phase 7 behavior
+
+1. `POST /api/projects/:id/publish` (Publish sheet → build runtime) deploys the current `draft_sha`
+2. Lazy-create a Warix-team Vercel project (`projects.vercel_project_id`) linked to the GitHub repo when possible
+3. Create a **production** deployment from the draft tip via Deployments API; poll until `READY`
+4. On success only: promote `main` (default branch) to that SHA, set `published_sha` / `published_url` / `vercel_production_deployment_id`, insert a `deployments` row (`kind=production`), and store `project_revisions` published pointer as `git:{sha}`
+5. On deploy failure: leave the previous published tip unchanged
+6. Preferred `{slug}.cander.app` URL is stored when provided; **Phase 8** routes that host to production (until then Vercel URL also works)
+
+Requires `VERCEL_TOKEN` + `VERCEL_TEAM_ID`, GitHub App, and Vercel↔GitHub integration on the Warix team for git-based deploys.
+
+Migration: `062_deployments_publish_meta.sql` (`vercel_deployment_id`, `git_sha`, `kind` on `deployments`).
 
 ## Enable Phase 3+ flag
 

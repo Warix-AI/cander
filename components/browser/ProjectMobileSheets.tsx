@@ -475,6 +475,7 @@ function PublishPaneBody({ published = false }: { published?: boolean }) {
   const options = usePublishDomainOptions();
   const [selected, setSelected] = useState(options[0]?.id ?? "cander");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const url = useMemo(
     () => resolvePublishUrl(options, selected, liveUrl),
     [options, selected, liveUrl],
@@ -487,9 +488,12 @@ function PublishPaneBody({ published = false }: { published?: boolean }) {
   const handlePublish = useCallback(async () => {
     if (!projectId || busy || !url) return;
     setBusy(true);
+    setError(null);
     try {
       const result = await publishBuild(projectId, url);
       publishApp(result.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Publish failed.");
     } finally {
       setBusy(false);
     }
@@ -510,7 +514,14 @@ function PublishPaneBody({ published = false }: { published?: boolean }) {
         className="mt-2 [&_button]:rounded-[12px]"
       />
       <p className="mt-4 text-[13px] font-medium">Environment</p>
-      <p className="mt-1 text-[13px] text-muted-foreground">Production</p>
+      <p className="mt-1 text-[13px] text-muted-foreground">
+        Production — deploys the current draft tip via Vercel
+      </p>
+      {error ? (
+        <p className="mt-3 text-[13px] leading-relaxed text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      ) : null}
       <button
         type="button"
         disabled={busy || !projectId}

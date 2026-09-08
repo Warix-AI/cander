@@ -16,6 +16,7 @@ export function PublishSheet() {
   const options = usePublishDomainOptions();
   const [selected, setSelected] = useState(options[0]?.id ?? "cander");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const url = useMemo(
     () => resolvePublishUrl(options, selected, liveUrl),
@@ -27,9 +28,13 @@ export function PublishSheet() {
   const handlePublish = async () => {
     if (!projectId || busy || !url) return;
     setBusy(true);
+    setError(null);
     try {
       const result = await publishBuild(projectId, url);
       publishApp(result.url);
+      closeOverlay();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Publish failed.");
     } finally {
       setBusy(false);
     }
@@ -62,7 +67,14 @@ export function PublishSheet() {
           className="mt-2"
         />
         <p className="mt-4 text-[13px] font-medium">Environment</p>
-        <p className="mt-1 text-[13px] text-muted-foreground">Production</p>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          Production — deploys the current draft tip via Vercel
+        </p>
+        {error ? (
+          <p className="mt-3 text-[13px] leading-relaxed text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        ) : null}
         <button
           type="button"
           disabled={busy || !projectId}

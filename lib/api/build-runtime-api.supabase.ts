@@ -53,6 +53,29 @@ export function createSupabaseBuildRuntimeApi(
     },
 
     async publish(ctx, projectId, input: PublishInput) {
+      // Phase 7: real git → Vercel production when build-infra is configured.
+      const { publishProjectClient } = await import(
+        "@/lib/api/project-publish-client"
+      );
+      const infra = await publishProjectClient({
+        projectId,
+        workspaceId: ctx.workspaceId,
+        url: input.url ?? null,
+        slug: input.slug ?? null,
+      });
+
+      if (infra?.ok && infra.url) {
+        notifyEntityStoreChange();
+        return { url: infra.url };
+      }
+
+      if (infra && !infra.ok && infra.status !== "unavailable") {
+        throw new Error(
+          infra.error || infra.message || "Production publish failed.",
+        );
+      }
+
+      // Legacy Edge stub when GitHub/Vercel publish is unavailable.
       const supabase = createSupabaseBrowserClient();
       const { data, error } = await supabase.functions.invoke("build-publish", {
         body: {
