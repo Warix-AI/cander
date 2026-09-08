@@ -204,7 +204,9 @@ export function ChatColumn() {
     if (!parent || !userEl || !endEl) return TRANSCRIPT_BOTTOM_GAP_PX;
     const scrollMargin =
       Number.parseFloat(getComputedStyle(userEl).scrollMarginTop) ||
-      (mobile ? 12 : 16);
+      (mobile
+        ? Number.parseFloat(getComputedStyle(parent).paddingTop) || 70
+        : 16);
     const fromUserToEnd = Math.max(
       0,
       offsetWithinScrollParent(endEl, parent) -
@@ -224,11 +226,25 @@ export function ChatColumn() {
 
   const pinLatestUserToTop = (behavior: ScrollBehavior = "smooth") => {
     const el = latestUserRef.current;
+    const parent = scrollParentRef.current;
     if (!el) return;
     // Lock follow-streaming so the reply grows downward under the pinned turn.
     userPinnedScroll.current = true;
     pinningTurnRef.current = true;
     updateTranscriptSpacer({ forcePinRoom: true });
+    // Mobile: scrollIntoView ignores the scroll container's padding-top and
+    // parks the bubble under the transparent chrome. Scroll manually so the
+    // message settles just below the header with a smooth upward slide.
+    if (parent && mobile) {
+      const padTop = Number.parseFloat(getComputedStyle(parent).paddingTop) || 0;
+      const gap = 8;
+      const top = Math.max(
+        0,
+        offsetWithinScrollParent(el, parent) - padTop - gap,
+      );
+      parent.scrollTo({ top, behavior });
+      return;
+    }
     el.scrollIntoView({ block: "start", behavior });
   };
 
@@ -495,7 +511,10 @@ export function ChatColumn() {
             ref={pin ? latestUserRef : undefined}
             className={
               pin
-                ? "scroll-mt-3 md:scroll-mt-4"
+                ? mobile
+                  ? // Match chat-scroll top pad so the bubble settles under the transparent header.
+                    "scroll-mt-[calc(env(safe-area-inset-top,0px)+4.5rem)]"
+                  : "scroll-mt-4"
                 : undefined
             }
           >

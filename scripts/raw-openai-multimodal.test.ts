@@ -403,6 +403,7 @@ describe("Raw multimodal isolation", () => {
       "utf8",
     );
     assert.ok(composer.includes("ComposerStopButton"));
+    assert.ok(composer.includes("ComposerSteerButton"));
     assert.ok(composer.includes("turnActive"));
     const chatCol = fs.readFileSync("components/shell/ChatColumn.tsx", "utf8");
     assert.equal(chatCol.includes("homeSuggestions"), false);

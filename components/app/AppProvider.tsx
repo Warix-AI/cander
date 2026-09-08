@@ -289,6 +289,8 @@ type SendOpts = {
   selectedConnectionId?: string | null;
   selectedConnectionIds?: string[] | null;
   scopedConnectorId?: string | null;
+  /** User redirected while a reply was still streaming. */
+  steered?: boolean;
   /** Inline composer connectors for the user bubble (and AI scope labels). */
   composerConnectors?: Array<{
     connectionId: string;
@@ -2072,6 +2074,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const sendMessage = useCallback(
     (text: string, opts?: SendOpts) => {
+      // Steer / overlapping send: cleanly finalize any in-flight assistant first
+      // so abort does not paint the prior bubble as an error.
+      if (turnActive || opts?.steered) {
+        turnAbortRef.current?.abort();
+        turnAbortRef.current = null;
+        if (thread) {
+          const tid = thread.id;
+          setThreads((current) =>
+            current.map((item) => {
+              if (item.id !== tid) return item;
+              return {
+                ...item,
+                updatedAt: new Date().toISOString(),
+                messages: item.messages.map((message) => {
+                  if (
+                    message.role === "assistant" &&
+                    (message.status === "pending" ||
+                      message.status === "streaming")
+                  ) {
+                    return {
+                      ...message,
+                      status: "complete" as const,
+                      activity: null,
+                      content: message.content?.trim() ? message.content : "",
+                    };
+                  }
+                  return message;
+                }),
+              };
+            }),
+          );
+        }
+      }
       const sendAttachments = opts?.sendAttachments ?? [];
       let selectedConnectionId = opts?.selectedConnectionId ?? null;
       let selectedConnectionIds =
@@ -2727,7 +2762,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           liveThread?.aiChatId ??
           threads.find((item) => item.id === activeId)?.aiChatId ??
           null;
-        const historyMessages = (liveThread?.messages ?? [])
+        const historyMessages: Array<{
+          role: "user" | "assistant" | "system";
+          content: string;
+          id?: string;
+        }> = (liveThread?.messages ?? [])
           .filter(
             (m) =>
               (m.role === "user" || m.role === "assistant") &&
@@ -2746,6 +2785,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             id: m.id,
           }))
           .filter((m) => Boolean(m.content?.trim()));
+        if (opts?.steered) {
+          historyMessages.push({
+            role: "system",
+            content:
+              "The user redirected mid-reply (Steer). Drop the unfinished previous answer and follow their latest message instead.",
+          });
+        }
         const replyProjectId =
           projectId ?? intent.projectId ?? matched?.id ?? null;
         const replyProjectSpace =
@@ -3203,6 +3249,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   ? err.name.slice(0, 40)
                   : "error",
             });
+            if (cancelled) {
+              // Steer / Stop already finalized the bubble as complete — don't
+              // overwrite with an error flash.
+              setThreads((current) =>
+                current.map((item) => ({
+                  ...item,
+                  messages: item.messages.map((message) => {
+                    const isTarget =
+                      message.id === assistantId ||
+                      (message.role === "assistant" &&
+                        (message.status === "pending" ||
+                          message.status === "streaming" ||
+                          message.content === "Thinking…" ||
+                          message.content === "Thinking..."));
+                    if (!isTarget) return message;
+                    if (message.status === "complete") return message;
+                    return {
+                      ...message,
+                      status: "complete" as const,
+                      activity: null,
+                      content: message.content?.trim() ? message.content : "",
+                    };
+                  }),
+                })),
+              );
+              return;
+            }
             const detail =
               err instanceof Error && err.message.trim()
                 ? err.message.trim().slice(0, 280)
@@ -3323,6 +3396,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       supabaseUser,
       actor.id,
       voiceActive,
+      turnActive,
       setThreads,
       trackImageGenerationJob,
       schedulePanelReveal,

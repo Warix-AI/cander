@@ -18,6 +18,7 @@ import {
   Paperclip,
   Pin,
   Plus,
+  CornerDownLeft,
   X,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
@@ -219,6 +220,7 @@ export function Composer({
       selectedConnectionId?: string | null;
       selectedConnectionIds?: string[] | null;
       scopedConnectorId?: string | null;
+      steered?: boolean;
       composerConnectors?: Array<{
         connectionId: string;
         connectorId: string;
@@ -351,6 +353,9 @@ export function Composer({
   const [dictating, setDictating] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [dictationMeter, setDictationMeter] = useState<AudioMeter | null>(null);
+  /** Brief ChatGPT-style “Steer” flash when redirecting mid-reply. */
+  const [steerFlash, setSteerFlash] = useState(false);
+  const steerFlashTimerRef = useRef<number | null>(null);
   const [liveSpeechMode, setLiveSpeechMode] = useState(false);
   const [transcriptReveal, setTranscriptReveal] = useState(false);
   const [menu, setMenu] = useState<MenuId>(null);
@@ -610,6 +615,14 @@ export function Composer({
       window.removeEventListener("keydown", onKey);
     };
   }, [triggerPicker]);
+
+  useEffect(() => {
+    return () => {
+      if (steerFlashTimerRef.current) {
+        window.clearTimeout(steerFlashTimerRef.current);
+      }
+    };
+  }, []);
 
   const connectorScopePayload =
     connectorScopes.length > 0
@@ -1327,7 +1340,7 @@ export function Composer({
       ? `[ref: ${pageReference.title} — ${pageReference.url}] `
       : entityReference
         ? `[ref: ${entityReference.label ?? entityReference.type} — ${entityReference.snapshot ?? entityReference.id}] `
-      : "";
+        : "";
     // Visible chat text = typed words with connector labels in chip slots.
     const body = `${refPrefix}${serializedValue}`.trim();
     if (!body && !images.length && !files.length) return;
@@ -1348,6 +1361,19 @@ export function Composer({
         "That attachment couldn’t be prepared for send. Try a JPEG/PNG or another file.",
       );
       return;
+    }
+    // Mid-reply redirect: finalize the in-flight turn, flash Steer, then send.
+    const steered = turnActive;
+    if (steered) {
+      stopTurn();
+      if (steerFlashTimerRef.current) {
+        window.clearTimeout(steerFlashTimerRef.current);
+      }
+      setSteerFlash(true);
+      steerFlashTimerRef.current = window.setTimeout(() => {
+        setSteerFlash(false);
+        steerFlashTimerRef.current = null;
+      }, 1200);
     }
     // Keep keyboard up after send — only scroll dismisses it in chat.
     try {
@@ -1435,13 +1461,13 @@ export function Composer({
             })),
           }
         : {};
-    // Keep in-flight draft alive until Send consumes it.
     speculationRef.current?.prepareSend();
     onSend(body || "", {
       ...(usableImages.length ? { attachments: usableImages } : {}),
       ...(files.length ? { files } : {}),
       ...(sendAttachments.length ? { sendAttachments } : {}),
       ...liveConnectorPayload,
+      ...(steered ? { steered: true } : {}),
     });
     clearComposerDraft(draftKeyRef.current);
     setValue("");
@@ -1692,6 +1718,18 @@ export function Composer({
           })();
         }}
       >
+        {steerFlash ? (
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-full z-10 mb-2 flex justify-center"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 py-1 text-[12px] font-medium text-foreground shadow-sm backdrop-blur-sm">
+              <CornerDownLeft className="h-3.5 w-3.5" strokeWidth={2} />
+              Steer
+            </span>
+          </div>
+        ) : null}
         {menu === "plus" && !compact ? (
           <ComposerMenu mobile={mobile} openAbove={!landing}>
             {showStartInPlus ? (

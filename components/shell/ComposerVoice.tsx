@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ArrowUp, LoaderCircle, Mic, Square, X } from "lucide-react";
+import { ArrowUp, CornerDownLeft, LoaderCircle, Mic, Square, X } from "lucide-react";
 import { VoiceDictationWaveform } from "@/components/shell/VoiceDictationWaveform";
 import type { AudioMeter } from "@/lib/voice/audio-meter";
 import { cn } from "@/lib/utils";
@@ -210,7 +210,7 @@ export function ComposerDictationButton({
  * Trailing actions for the normal (non-recording) composer.
  * Dictation only — no live / realtime voice control.
  * Empty draft → mic only (no send). Has payload → mic (if voice) + send.
- * Active turn → stop.
+ * Active turn + empty → stop. Active turn + payload → Steer (redirect mid-reply).
  */
 export function ComposerTrailingActions({
   canSend,
@@ -230,6 +230,9 @@ export function ComposerTrailingActions({
   onSend?: () => void;
   onStop?: () => void;
 }) {
+  if (turnActive && canSend) {
+    return <ComposerSteerButton compact={compact} onClick={onSend} />;
+  }
   if (turnActive) {
     return <ComposerStopButton compact={compact} onClick={onStop} />;
   }
@@ -243,6 +246,41 @@ export function ComposerTrailingActions({
         <ComposerSendButton compact={compact} onClick={onSend} />
       ) : null}
     </>
+  );
+}
+
+export function ComposerSteerButton({
+  compact = false,
+  className,
+  onClick,
+}: {
+  compact?: boolean;
+  className?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label="Steer"
+      title="Steer"
+      onPointerDown={(event) => {
+        event.preventDefault();
+      }}
+      onClick={(event) => {
+        event.preventDefault();
+        onClick?.();
+      }}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors duration-200 hover:bg-foreground",
+        compact ? "h-7 w-7" : "h-8 w-8",
+        className,
+      )}
+    >
+      <CornerDownLeft
+        className={compact ? "h-3.5 w-3.5" : "h-4 w-4"}
+        strokeWidth={2}
+      />
+    </button>
   );
 }
 
