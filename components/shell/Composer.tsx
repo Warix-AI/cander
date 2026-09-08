@@ -872,7 +872,7 @@ export function Composer({
       if (wrapRef.current?.contains(target)) return;
       if (
         target.closest(
-          "header, .chat-scroll, [data-allow-keyboard-dismiss], [data-composer-keep-keyboard]",
+          "header, .chat-scroll, [data-allow-keyboard-dismiss], [data-composer-keep-keyboard], [data-header-actions-menu], [data-header-actions-dismiss]",
         )
       )
         return;

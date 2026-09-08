@@ -201,6 +201,9 @@ export function MobileHeaderActionsPopover({
 }) {
   const titleId = useId();
   const [mounted, setMounted] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     setMounted(true);
@@ -209,11 +212,25 @@ export function MobileHeaderActionsPopover({
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
+    };
+    // Capture-phase outside tap — must close even when composer sticky-keyboard
+    // calls preventDefault on touchstart (which otherwise kills the scrim click).
+    const onOutside = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest("[data-header-actions-menu]")) return;
+      onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+    document.addEventListener("pointerdown", onOutside, true);
+    document.addEventListener("touchstart", onOutside, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onOutside, true);
+      document.removeEventListener("touchstart", onOutside, true);
+    };
+  }, [open]);
 
   if (!open || !mounted) {
     return <NativeOverlayGate open={false} />;
@@ -223,14 +240,22 @@ export function MobileHeaderActionsPopover({
     <button
       type="button"
       aria-label="Dismiss"
+      data-header-actions-dismiss=""
+      data-allow-keyboard-dismiss=""
       className="fixed inset-0 z-[85] cursor-default bg-transparent"
-      onClick={onClose}
+      onClick={() => onCloseRef.current()}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        onCloseRef.current();
+      }}
     />
   );
 
   const menu = (
     <div
+      ref={menuRef}
       role="menu"
+      data-header-actions-menu=""
       aria-labelledby={titleId}
       className={cn(
         "mobile-glass-popover fixed right-3 z-[86]",
@@ -363,7 +388,9 @@ export function ProjectActionsSheetBody({
       <div
         className={cn(
           "absolute inset-0 flex flex-col bg-background transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
-          pane === "publish" ? "translate-x-0" : "translate-x-full",
+          pane === "publish"
+            ? "translate-x-0"
+            : "pointer-events-none translate-x-full",
         )}
       >
         <SheetSubHeader title={publishLabel} onBack={() => setPane("main")} />
@@ -375,7 +402,9 @@ export function ProjectActionsSheetBody({
       <div
         className={cn(
           "absolute inset-0 flex flex-col bg-background transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
-          pane === "domains" ? "translate-x-0" : "translate-x-full",
+          pane === "domains"
+            ? "translate-x-0"
+            : "pointer-events-none translate-x-full",
         )}
       >
         <SheetSubHeader title="Domains" onBack={() => setPane("main")} />
