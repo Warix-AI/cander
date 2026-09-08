@@ -428,3 +428,11 @@ export async function stopSessionRecordById(
 export function evictSandboxCache(sessionId: string): void {
   sandboxCache.delete(sessionId);
 }
+
+/** Register a newly created sandbox handle in the process cache. */
+export function cacheSandboxHandle(
+  sessionId: string,
+  sandbox: AgentBrowserSandbox,
+): void {
+  sandboxCache.set(sessionId, sandbox);
+}

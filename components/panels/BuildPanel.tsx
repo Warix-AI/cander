@@ -51,8 +51,35 @@ export function BuildPanel() {
   const [files, setFiles] = useState<{ path: string; label?: string }[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [filesLoading, setFilesLoading] = useState(false);
+  const [envStatus, setEnvStatus] = useState<
+    import("@/lib/build/sandbox/constants").BuildSandboxStatus | null
+  >(null);
+  const [envMessage, setEnvMessage] = useState<string | null>(null);
 
-  // Behind the existing Build open flow: ensure Warix repo + subdomain (idempotent).
+  const ensureSandbox = (forceRestart = false) => {
+    if (!projectId || !ctx.workspaceId) return;
+    setEnvStatus("starting");
+    setEnvMessage(null);
+    void import("@/lib/api/project-sandbox-client").then(async (m) => {
+      const result = await m.ensureProjectSandboxClient({
+        projectId,
+        workspaceId: ctx.workspaceId,
+        forceRestart,
+      });
+      if (!result) {
+        setEnvStatus("unavailable");
+        setEnvMessage("Sign in required to start the build environment.");
+        return;
+      }
+      setEnvStatus(result.status);
+      setEnvMessage(result.message ?? result.error ?? null);
+      if (result.subdomain) {
+        setPreviewUrl(`https://${result.subdomain}.cander.app`);
+      }
+    });
+  };
+
+  // Behind the existing Build open flow: ensure Warix repo + sandbox (idempotent).
   useEffect(() => {
     if (!projectId || !ctx.workspaceId) return;
     void import("@/lib/api/project-infra-client").then((m) =>
@@ -61,6 +88,8 @@ export function BuildPanel() {
         workspaceId: ctx.workspaceId,
       }),
     );
+    ensureSandbox(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per project
   }, [projectId, ctx.workspaceId]);
 
   const projectThreads = useMemo(
@@ -223,6 +252,9 @@ export function BuildPanel() {
                     "Preview will show here when this project is published or running."
                   : "Keep typing. A preview will stand up as soon as this chat has a project."
               }
+              envStatus={envStatus}
+              envMessage={envMessage}
+              onRetryEnv={() => ensureSandbox(true)}
             />
           </div>
         ) : null}

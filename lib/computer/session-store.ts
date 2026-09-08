@@ -73,6 +73,41 @@ export async function findActiveSessionByScope(
   return mapRow(data as ComputerSessionRow);
 }
 
+/** Latest active build_app session for a project (any collaborator). */
+export async function findActiveBuildSessionForProject(
+  projectId: string,
+): Promise<ComputerSessionRecord | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("computer_sessions")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("scope_type", "project")
+    .in("status", ["starting", "active", "idle"])
+    .order("last_active_at", { ascending: false })
+    .limit(12);
+
+  if (error || !data?.length) {
+    return null;
+  }
+  const rows = data as ComputerSessionRow[];
+  const build = rows.find((r) => r.build_state?.purpose === "build_app");
+  return build ? mapRow(build) : null;
+}
+
+export async function getComputerSessionRowById(
+  sessionId: string,
+): Promise<ComputerSessionRow | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("computer_sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as ComputerSessionRow;
+}
+
 export async function insertComputerSession(
   row: Omit<ComputerSessionRow, "created_at" | "last_active_at"> & {
     created_at?: string;

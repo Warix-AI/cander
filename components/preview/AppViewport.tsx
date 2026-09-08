@@ -3,18 +3,25 @@
 import { useApp } from "@/components/app/AppProvider";
 import { DefaultChatPreviewWash } from "@/components/spaces/BannerWash";
 import { buildPreviews } from "@/lib/data";
+import type { BuildSandboxStatus } from "@/lib/build/sandbox/constants";
 import { cn } from "@/lib/utils";
 
 /**
  * Calm project preview placeholder — no select-to-edit / localhost mock UI.
- * Real previews use published URLs (iframe) in ProjectBrowserPanel.
+ * Real live iframe arrives in Phase 5; Phase 2 surfaces sandbox lifecycle only.
  */
 export function AppViewport({
   name,
   summary,
+  envStatus,
+  envMessage,
+  onRetryEnv,
 }: {
   name: string;
   summary: string;
+  envStatus?: BuildSandboxStatus | null;
+  envMessage?: string | null;
+  onRetryEnv?: () => void;
 }) {
   const { viewport, previewKey, project } = useApp();
 
@@ -22,6 +29,12 @@ export function AppViewport({
   const cover =
     project?.cover ??
     buildPreviews.find((item) => item.projectId === project?.id)?.image;
+
+  const showEnvOverlay =
+    envStatus === "starting" ||
+    envStatus === "error" ||
+    envStatus === "unavailable" ||
+    envStatus === "needs_repo";
 
   return (
     <div
@@ -62,6 +75,41 @@ export function AppViewport({
             </div>
           </>
         )}
+
+        {showEnvOverlay ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/55 px-6 text-center backdrop-blur-[2px]">
+            <p className="text-[14px] font-medium tracking-[-0.02em] text-white">
+              {envStatus === "starting"
+                ? "Starting environment…"
+                : envStatus === "needs_repo"
+                  ? "Preparing project repository…"
+                  : envStatus === "unavailable"
+                    ? "Environment unavailable"
+                    : "Environment failed to start"}
+            </p>
+            {envMessage ? (
+              <p className="mt-2 max-w-sm text-[12.5px] leading-relaxed text-white/70">
+                {envMessage}
+              </p>
+            ) : null}
+            {(envStatus === "error" || envStatus === "unavailable") &&
+            onRetryEnv ? (
+              <button
+                type="button"
+                onClick={onRetryEnv}
+                className="mt-4 inline-flex h-9 items-center rounded-full bg-white px-4 text-[13px] font-medium text-foreground hover:bg-white/90"
+              >
+                Retry
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {envStatus === "ready" ? (
+          <div className="absolute bottom-3 left-3 z-10 rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium tracking-[-0.01em] text-white/90">
+            Environment ready
+          </div>
+        ) : null}
       </div>
     </div>
   );

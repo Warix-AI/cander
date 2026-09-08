@@ -48,21 +48,33 @@ Without these, project create still succeeds; `infra_status` stays `partial` and
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/api/projects/:id/infra/ensure` | Idempotent subdomain + GitHub repo ensure |
-| `GET` | `/api/projects/:id/infra?workspaceId=` | Status (no secrets) |
+| `GET` | `/api/projects/:id/infra?workspaceId=` | Infra status (no secrets) |
+| `POST` | `/api/projects/:id/sandbox/ensure` | Start/resume build sandbox (git clone draft) |
+| `GET` | `/api/projects/:id/sandbox?workspaceId=` | Sandbox status for Preview chrome |
 
 Auth: Bearer Supabase JWT. Authorization: `assertProjectAccess` before any GitHub/Vercel call.
 
 ## Client hooks
 
 - After `createProject` for Build app/site → fire-and-forget `ensureProjectInfraClient`
-- On Build panel open → same ensure (covers older projects)
+- On Build panel open → infra ensure + `ensureProjectSandboxClient`
+- Preview overlay: Starting / Ready / Error + Retry (force restart)
+
+## Sandbox lifecycle (Phase 2)
+
+- One **build_app** sandbox per user per project (`computer_sessions`)
+- Created via `Sandbox.create` with `source: { type: "git", … }` using a short-lived installation token
+- Checks out `cander/draft`; exposes port `3000` (preview proxy in Phase 5)
+- Resume when possible; recreate from GitHub when dead
+- Raw upstream stays in `build_state` (not returned to the browser)
 
 ## Database
 
-Migration `061_project_build_infra.sql` adds binding columns on `projects` (`github_*`, `draft_sha`, `cander_subdomain`, `infra_status`, …).
+Migration `061_project_build_infra.sql` adds binding columns on `projects` (`github_*`, `draft_sha`, `cander_subdomain`, `infra_status`, `sandbox_*`, …).
 
 ## Security
 
 - Management credentials only on the Next server
 - Client never sends repo/sandbox IDs as authority — server loads bindings from DB after ACL
-- Preview upstream URLs stay out of public project SELECT columns (use session/`build_state` in later phases)
+- GitHub installation tokens are mint-and-discard for clone only
+- Preview upstream URLs stay out of public API responses in Phase 2

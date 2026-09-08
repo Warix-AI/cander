@@ -74,25 +74,46 @@ export async function POST(request: Request) {
   }
 
   try {
-    const provider = getComputerProvider();
-    const session = await provider.createOrReuseSession({
+    const { ensureProjectSandbox } = await import(
+      "@/lib/build/sandbox/lifecycle"
+    );
+    const ensured = await ensureProjectSandbox({
       userId: auth.userId,
-      scopeType: "project",
-      scopeId: projectId,
       projectId,
       workspaceId,
-      taskId,
     });
+    if (ensured.status !== "ready" || !ensured.sessionId) {
+      throw new Error(
+        ensured.message ||
+          `Build sandbox not ready (${ensured.status}).`,
+      );
+    }
 
-    const restored = await provider.restoreProject(session.id, auth.userId, projectId, {
-      workspaceId,
-    });
-    const install = await provider.exec(session.id, auth.userId, "npm", ["install"]);
+    const provider = getComputerProvider();
+    const sessionId = ensured.sessionId;
+
+    // Prefer git-cloned tree; fall back to legacy project_files restore.
+    let fileCount = 0;
+    try {
+      const restored = await provider.restoreProject(
+        sessionId,
+        auth.userId,
+        projectId,
+        { workspaceId },
+      );
+      fileCount = restored.fileCount;
+    } catch {
+      fileCount = 0;
+    }
+
+    const install = await provider.exec(sessionId, auth.userId, "npm", [
+      "install",
+    ]);
     if (install.exitCode !== 0) {
       throw new Error(install.stderr || "npm install failed.");
     }
 
-    await provider.exec(session.id, auth.userId, "npm", ["run", "build"]);
+    await provider.exec(sessionId, auth.userId, "npm", ["run", "build"]);
 
     await createCandidateChangeSet({
       projectId,
@@ -109,9 +130,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      sessionId: session.id,
-      fileCount: restored.fileCount,
-      resultSummary: `Build finished in sandbox session ${session.id}.`,
+      sessionId,
+      fileCount,
+      resultSummary: `Build finished in sandbox session ${sessionId}.`,
     });
   } catch (err) {
     await finalizeUsageReservation({
