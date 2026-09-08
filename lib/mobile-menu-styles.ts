@@ -22,6 +22,7 @@ export const MOBILE_PAGER_MS = 500;
 /** Shared Apple-style glass material classes (see globals.css). */
 export const MOBILE_GLASS_BAR = "mobile-glass-bar";
 export const MOBILE_GLASS_PANEL = "mobile-glass-panel";
+export const MOBILE_GLASS_POPOVER = "mobile-glass-popover";
 export const MOBILE_GLASS_PILL = "mobile-glass-pill";
 export const MOBILE_GLASS_SEGMENT = "mobile-glass-segment";
 export const MOBILE_GLASS_SEGMENT_ACTIVE = "mobile-glass-segment-active";

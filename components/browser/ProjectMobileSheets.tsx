@@ -227,7 +227,7 @@ export function MobileHeaderActionsPopover({
         role="menu"
         aria-labelledby={titleId}
         className={cn(
-          "mobile-glass-panel absolute right-3 top-[calc(env(safe-area-inset-top,0px)+0.65rem)]",
+          "mobile-glass-popover absolute right-3 top-[calc(env(safe-area-inset-top,0px)+0.65rem)]",
           "flex max-h-[min(70vh,28rem)] w-[min(17.5rem,calc(100vw-1.5rem))] flex-col overflow-hidden",
           "rounded-[18px] text-foreground",
           className,

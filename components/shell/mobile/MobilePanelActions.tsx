@@ -15,7 +15,10 @@ import {
   SheetAction,
 } from "@/components/browser/ProjectMobileSheets";
 import { getNativeCapabilities } from "@/lib/native";
-import { mobileChromeButtonClass } from "@/lib/mobile-menu-styles";
+import {
+  MOBILE_GLASS_SEGMENT_ACTIVE,
+  mobileChromeButtonClass,
+} from "@/lib/mobile-menu-styles";
 import type { SpaceLayout } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -352,7 +355,7 @@ function PopoverRow({
         destructive
           ? "text-destructive hover:bg-destructive/10"
           : selected
-            ? "mobile-glass-segment-active font-medium"
+            ? cn(MOBILE_GLASS_SEGMENT_ACTIVE, "font-medium")
             : "hover:bg-black/[0.04] dark:hover:bg-white/[0.08]",
         disabled && "opacity-40",
       )}
