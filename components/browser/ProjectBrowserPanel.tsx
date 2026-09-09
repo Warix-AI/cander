@@ -474,6 +474,7 @@ export function ProjectBrowserPanel({
   }, [standalone, projectId, ctx.workspaceId, browserSpaceId, entity?.kind, entity?.publishedUrl, setupBlocksPreview]);
 
   // Poll status only — never call ensure in a loop (burns sandbox_runtime concurrency).
+  // Re-ensure at most once every ~30s while stuck starting so npm/next can finish.
   useEffect(() => {
     if (
       standalone ||
@@ -486,6 +487,7 @@ export function ProjectBrowserPanel({
     }
     let cancelled = false;
     let recreateAttempted = false;
+    let ensureAttemptedAt = 0;
     const tick = async () => {
       try {
         const sandbox = await import("@/lib/api/project-sandbox-client");
@@ -540,6 +542,39 @@ export function ProjectBrowserPanel({
             setSandboxPreviewSrc(null);
           }
           return;
+        }
+        // Soft-fail / timed-out ensure left us on "starting" with no live port —
+        // retry ensure occasionally (not every poll) so next can finish booting.
+        const now = Date.now();
+        if (
+          (result.status === "starting" ||
+            result.status === "idle" ||
+            !result.sessionId) &&
+          now - ensureAttemptedAt > 30_000
+        ) {
+          ensureAttemptedAt = now;
+          const resumed = await sandbox.ensureProjectSandboxClient({
+            projectId,
+            workspaceId: ctx.workspaceId,
+            forceRestart: !result.sessionId,
+          });
+          if (cancelled || !resumed) return;
+          setSandboxEnvMessage(resumed.message ?? resumed.error ?? null);
+          if (
+            resumed.status === "ready" &&
+            resumed.hasPreviewUpstream &&
+            resumed.previewPath
+          ) {
+            setSandboxEnvStatus("ready");
+            setSandboxPreviewSrc(`${resumed.previewPath}?_r=${Date.now()}`);
+            setDraftPreviewUrl(draftPreviewUrlForSubdomain(resumed.subdomain));
+            return;
+          }
+          if (resumed.status === "error" || resumed.status === "unavailable") {
+            setSandboxEnvStatus(resumed.status);
+            setSandboxPreviewSrc(null);
+            return;
+          }
         }
         if (result.status === "error" || result.status === "unavailable") {
           setSandboxEnvStatus(result.status);

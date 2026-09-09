@@ -9,6 +9,7 @@
 
 import type { RetrievedComponentRef } from "@/lib/ai/build/website-setup-brief";
 import type { SiteSpec } from "@/lib/ai/build/site-spec";
+import { sanitizeTwentyFirstVendorSource } from "@/lib/ai/build/site-support-files";
 
 export const TWENTY_FIRST_MCP_URL = "https://21st.dev/api/mcp";
 
@@ -716,7 +717,7 @@ export function retrievedComponentsToScaffoldFiles(
       ` */`,
       "",
     ].join("\n");
-    files.push({ path, content: `${banner}${code}\n` });
+    files.push({ path, content: `${banner}${sanitizeTwentyFirstVendorSource(code)}\n` });
     indexLines.push(
       `// ${c.category}: ${c.name} (${c.id}) → ${path}`,
     );

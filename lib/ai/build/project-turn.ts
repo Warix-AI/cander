@@ -808,7 +808,9 @@ async function runWebsiteCreatePipeline(opts: {
         "app/sitemap.js",
         "app/globals.css",
         "app/page.js",
-      ].includes(f.path),
+        "tsconfig.json",
+        "lib/utils.ts",
+      ].includes(f.path) || f.path.startsWith("components/ui/"),
     );
     const { ensureNextInPackageJson } = await import(
       "@/lib/ai/build/site-package"

@@ -4,6 +4,8 @@
  * "next" is missing from dependencies.
  */
 
+import { SITE_COMMON_DEPENDENCIES } from "@/lib/ai/build/site-support-files";
+
 export const SITE_NEXT_VERSION = "16.3.1";
 export const SITE_REACT_VERSION = "19.1.0";
 
@@ -23,6 +25,7 @@ export function canonicalSitePackageJson(opts?: {
       next: SITE_NEXT_VERSION,
       react: SITE_REACT_VERSION,
       "react-dom": SITE_REACT_VERSION,
+      ...SITE_COMMON_DEPENDENCIES,
     },
   };
 }
@@ -63,21 +66,18 @@ export function ensureNextInPackageJson(
   }
   try {
     const pkg = JSON.parse(raw) as Record<string, unknown>;
+    const existingDeps =
+      (pkg.dependencies as Record<string, string> | undefined) ?? {};
     const dependencies = {
-      ...((pkg.dependencies as Record<string, string> | undefined) ?? {}),
-      next:
-        ((pkg.dependencies as Record<string, string> | undefined)?.next as
-          | string
-          | undefined) || SITE_NEXT_VERSION,
-      react:
-        ((pkg.dependencies as Record<string, string> | undefined)?.react as
-          | string
-          | undefined) || SITE_REACT_VERSION,
-      "react-dom":
-        ((pkg.dependencies as Record<string, string> | undefined)?.[
-          "react-dom"
-        ] as string | undefined) || SITE_REACT_VERSION,
+      ...SITE_COMMON_DEPENDENCIES,
+      ...existingDeps,
+      next: existingDeps.next || SITE_NEXT_VERSION,
+      react: existingDeps.react || SITE_REACT_VERSION,
+      "react-dom": existingDeps["react-dom"] || SITE_REACT_VERSION,
     };
+    for (const [key, version] of Object.entries(SITE_COMMON_DEPENDENCIES)) {
+      if (!dependencies[key]) dependencies[key] = version;
+    }
     // Prefer dependencies over devDependencies for Next (Vercel detection).
     const devDependencies = {
       ...((pkg.devDependencies as Record<string, string> | undefined) ?? {}),

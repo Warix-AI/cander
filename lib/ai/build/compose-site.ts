@@ -6,6 +6,7 @@ import type { ScaffoldFile, SiteSection, SiteSpec } from "@/lib/ai/build/site-sp
 import { resolveHeroVariant } from "@/lib/ai/build/site-spec";
 import { emitGlobalsCss } from "@/lib/ai/build/design-system/tokens";
 import { canonicalSitePackageJsonText } from "@/lib/ai/build/site-package";
+import { siteSupportScaffoldFiles } from "@/lib/ai/build/site-support-files";
 
 function esc(value: string): string {
   return JSON.stringify(value).slice(1, -1);
@@ -356,6 +357,7 @@ export function composeSiteFromSpec(spec: SiteSpec): ScaffoldFile[] {
       path: "next.config.mjs",
       content: "export default {};\n",
     },
+    ...siteSupportScaffoldFiles(),
     {
       path: "app/globals.css",
       content: emitGlobalsCss(spec.theme),

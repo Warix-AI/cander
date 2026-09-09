@@ -721,6 +721,66 @@ export async function getProjectSandboxStatus(opts: {
     if (row?.status === "stopped" || row?.status === "error") {
       status = row.status === "error" ? "error" : "idle";
     }
+
+    // Promote "starting" → ready when the app port is already listening
+    // (common after ensure timed out waiting on npm install).
+    if (
+      row?.user_id &&
+      (status === "starting" || (status === "ready" && !previewUpstream))
+    ) {
+      try {
+        const { runPrivilegedSandboxCommand } = await import(
+          "@/lib/build/sandbox/privileged"
+        );
+        const probe = await runPrivilegedSandboxCommand({
+          sessionId,
+          userId: String(row.user_id),
+          cmd: "sh",
+          args: [
+            "-c",
+            `code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:${BUILD_APP_PORT}/ 2>/dev/null || echo 000); echo "$code"`,
+          ],
+        });
+        const code = (probe.stdout || "").trim().split(/\s+/).pop() || "";
+        if (/^[1-5]\d\d$/.test(code)) {
+          if (!previewUpstream) {
+            try {
+              const session = await getComputerSessionById(
+                sessionId,
+                String(row.user_id),
+              );
+              if (session) {
+                const resumed = await tryResumeBuildSession(session);
+                if (resumed.ok) previewUpstream = resumed.previewUpstream;
+              }
+            } catch {
+              /* keep */
+            }
+          }
+          status = "ready";
+          message = "Environment ready";
+          await persistPreviewUpstream({
+            sessionId,
+            previewUpstream,
+            status,
+            message,
+            githubFullName: project.github_full_name
+              ? String(project.github_full_name)
+              : undefined,
+            draftBranch: project.draft_branch
+              ? String(project.draft_branch)
+              : undefined,
+            draftSha: project.draft_sha ? String(project.draft_sha) : null,
+          });
+          await patchProjectSandbox(opts.projectId, opts.workspaceId, {
+            sandbox_session_id: sessionId,
+            sandbox_status: "ready",
+          });
+        }
+      } catch (err) {
+        console.warn("[cander] sandbox status probe", err);
+      }
+    }
   } else if (!project.github_full_name) {
     status = "needs_repo";
   }
