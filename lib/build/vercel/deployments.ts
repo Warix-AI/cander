@@ -83,6 +83,8 @@ export async function createProductionDeployment(opts: {
         rootDirectory: null,
         buildCommand: "next build",
         installCommand: "npm install",
+        // Must not inherit project-level "exit 0" ignore which cancels Deploy API builds.
+        commandForIgnoringBuildStep: null,
       },
       meta: {
         canderPublish: "1",

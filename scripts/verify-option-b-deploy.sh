@@ -56,7 +56,7 @@ sleep 5
 echo "== disable git auto-deploy =="
 curl -sS -X PATCH -H "$AUTH" -H 'Content-Type: application/json' \
   "$API/v9/projects/$PID?teamId=$TEAM" \
-  -d '{"gitProviderOptions":{"createDeployments":"disabled"},"commandForIgnoringBuildStep":"exit 0"}' \
+  -d '{"gitProviderOptions":{"createDeployments":"disabled"},"commandForIgnoringBuildStep":null}' \
   | python3 -c 'import sys,json; d=json.load(sys.stdin); print("createDeployments=", (d.get("gitProviderOptions") or {}).get("createDeployments")); print("ignore=", d.get("commandForIgnoringBuildStep"))'
 sleep 2
 

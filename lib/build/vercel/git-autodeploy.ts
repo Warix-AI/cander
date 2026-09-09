@@ -1,6 +1,9 @@
 /**
  * Disable Vercel Git auto-deployments so Cander's Deploy API is the only
  * production trigger (Option B). Server-only.
+ *
+ * Do NOT set `commandForIgnoringBuildStep: "exit 0"` — that cancels Deploy API
+ * builds too (Ignored Build Step applies to all deployments).
  */
 
 import { vercelFetch } from "@/lib/build/vercel/api";
@@ -21,8 +24,8 @@ export async function disableGitAutoDeployments(
       gitProviderOptions: {
         createDeployments: "disabled",
       },
-      // Belt-and-suspenders: ignore build step if a Git push still reaches Vercel.
-      commandForIgnoringBuildStep: "exit 0",
+      // Clear any prior ignore-build command that would cancel Deploy API builds.
+      commandForIgnoringBuildStep: null,
     }),
   });
 
