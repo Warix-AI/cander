@@ -67,9 +67,9 @@ function resultFromAttempt(
   return {
     ok,
     status: ok ? "published" : "error",
-    publishedSha: attempt.draft_sha,
-    publishedUrl: attempt.published_url,
-    vercelDeploymentId: attempt.vercel_deployment_id,
+    publishedSha: ok ? attempt.draft_sha : null,
+    publishedUrl: ok ? attempt.published_url : null,
+    vercelDeploymentId: ok ? attempt.vercel_deployment_id : null,
     vercelProjectId: attempt.vercel_project_id,
     deploymentRecordId: null,
     preferredUrl,

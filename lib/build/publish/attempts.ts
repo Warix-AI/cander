@@ -71,8 +71,9 @@ export async function findSuccessfulPublishForSha(opts: {
 }
 
 /**
- * Insert a pending attempt. On unique conflict, return the existing row
- * (in-flight or already successful).
+ * Insert a pending attempt. On unique conflict:
+ * - success / in-flight → return existing (idempotent)
+ * - failed → reclaim row for a new attempt
  */
 export async function beginPublishAttempt(opts: {
   workspaceId: string;
@@ -112,6 +113,32 @@ export async function beginPublishAttempt(opts: {
       projectId: opts.projectId,
       draftSha,
     }));
+
+  if (existing?.status === "failed") {
+    const { data: reclaimed, error: reclaimError } = await admin
+      .from("publish_attempts")
+      .update({
+        publish_attempt_id: opts.publishAttemptId,
+        status: "pending",
+        error: null,
+        vercel_deployment_id: null,
+        published_url: null,
+        git_sync_error: null,
+        promoted_main_sha: null,
+        completed_at: null,
+        meta: opts.meta ?? {},
+        started_at: now,
+        updated_at: now,
+      })
+      .eq("id", existing.id)
+      .eq("status", "failed")
+      .select("*")
+      .maybeSingle();
+    if (!reclaimError && reclaimed) {
+      return { attempt: reclaimed as PublishAttemptRow, created: true };
+    }
+  }
+
   if (existing) {
     return { attempt: existing, created: false };
   }
