@@ -251,7 +251,9 @@ async function createBuildSandboxFromGit(opts: {
         username: "x-access-token",
         password: token,
         depth: 1,
-        revision: opts.draftBranch,
+        // Prefer exact tip SHA when known so compile preflight / preview
+        // land on the same commit Publish will deploy.
+        revision: opts.draftSha || opts.draftBranch,
       },
       ports: [BUILD_APP_PORT],
       timeout: BUILD_SANDBOX_TTL_MS,
