@@ -97,7 +97,18 @@ export async function executeAuthorizedTool(
     }
     return { name: tool.name, ok: false, output: validated.error };
   }
-  const args = validated.args;
+  // Schema strips unknown keys (e.g. projectId on computer.files.write).
+  // Re-inject turn / caller IDs for sandbox/build tools after validation.
+  const args: Record<string, unknown> = { ...validated.args };
+  const rawArgs = (call.arguments ?? {}) as Record<string, unknown>;
+  const injectProjectId = String(
+    args.projectId ?? rawArgs.projectId ?? getTurnProjectId() ?? "",
+  ).trim();
+  const injectWorkspaceId = String(
+    args.workspaceId ?? rawArgs.workspaceId ?? getTurnWorkspaceId() ?? "",
+  ).trim();
+  if (injectProjectId) args.projectId = injectProjectId;
+  if (injectWorkspaceId) args.workspaceId = injectWorkspaceId;
 
   // Build / sandbox tools (gated by capability compiler domains).
   if (

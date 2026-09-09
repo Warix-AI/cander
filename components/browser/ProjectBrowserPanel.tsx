@@ -18,6 +18,7 @@ import {
   Maximize2,
   MessageSquare,
   Minimize2,
+  Monitor,
   MousePointer2,
   Pencil,
   PictureInPicture2,
@@ -26,6 +27,8 @@ import {
   LoaderCircle,
   RotateCw,
   Share,
+  Smartphone,
+  Tablet,
   Trash2,
   Upload,
   Video,
@@ -232,6 +235,8 @@ export function ProjectBrowserPanel({
     liveUrl,
     mobileSurface,
     closeStandaloneBrowser,
+    viewport,
+    setViewport,
   } = useApp();
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
@@ -344,6 +349,7 @@ export function ProjectBrowserPanel({
   const [sandboxPreviewSrc, setSandboxPreviewSrc] = useState<string | null>(
     null,
   );
+  const [draftPreviewUrl, setDraftPreviewUrl] = useState<string | null>(null);
 
   // Build drafts: ensure infra/sandbox and point the pinned preview at draft--
   // (never load `{projectId}.cander.app`, which embeds the Cander login shell).
@@ -352,12 +358,18 @@ export function ProjectBrowserPanel({
       standalone ||
       !projectId ||
       !ctx.workspaceId ||
-      browserSpaceId !== "build" ||
       entity?.kind === "automation" ||
+      entity?.kind === "research" ||
       Boolean(entity?.publishedUrl)
     ) {
       return;
     }
+    const looksLikeBuild =
+      browserSpaceId === "build" ||
+      entity?.kind === "site" ||
+      entity?.kind === "app" ||
+      entity?.space === "build";
+    if (!looksLikeBuild) return;
     let cancelled = false;
     setSandboxEnvStatus("starting");
     setSandboxEnvMessage(null);
@@ -378,6 +390,7 @@ export function ProjectBrowserPanel({
           setSandboxEnvStatus("unavailable");
           setSandboxEnvMessage("Sign in required to start the build environment.");
           setSandboxPreviewSrc(null);
+          setDraftPreviewUrl(null);
           return;
         }
         setSandboxEnvStatus(result.status);
@@ -388,6 +401,7 @@ export function ProjectBrowserPanel({
           setSandboxPreviewSrc(null);
         }
         const draftUrl = draftPreviewUrlForSubdomain(result.subdomain);
+        setDraftPreviewUrl(draftUrl);
         if (draftUrl && key) {
           const current = getProjectBrowserSession(key, fallback);
           const pinnedId = current.tabs.find(
@@ -418,6 +432,7 @@ export function ProjectBrowserPanel({
           err instanceof Error ? err.message : "Failed to start sandbox",
         );
         setSandboxPreviewSrc(null);
+        setDraftPreviewUrl(null);
       }
     })();
     return () => {
@@ -1041,7 +1056,9 @@ export function ProjectBrowserPanel({
         active.title ??
         "Project");
   const previewFallbackName = workItem?.title ?? project?.name ?? "Project";
-  const previewFallbackSummary = workItem?.summary ?? project?.summary ?? "";
+  const previewFallbackSummary = isBuildSiteOrApp
+    ? "Start generating your website in chat."
+    : (workItem?.summary ?? project?.summary ?? "");
   const canRename =
     !standalone &&
     !isWorkItemBrowserProjectId(projectId) &&
@@ -1059,13 +1076,16 @@ export function ProjectBrowserPanel({
   const isAgentSurfaceTab =
     repairedActive?.kind === "agent-builder" ||
     repairedActive?.kind === "agent-overview";
-  const showBrowserNavChrome = isAgentSurfaceTab || isAgentProject
-    ? active?.kind === "web" && !isAgentSurfaceTab
-    : isMarkdownDocTab
-      ? true
-      : isStudioProject
-        ? active?.kind === "web"
-        : !isWorkItemBrowser || session.tabs.some((tab) => tab.kind === "web");
+  // Build site/app: no bottom address header — controls live on the tab row.
+  const showBrowserNavChrome = isBuildSiteOrApp
+    ? false
+    : isAgentSurfaceTab || isAgentProject
+      ? active?.kind === "web" && !isAgentSurfaceTab
+      : isMarkdownDocTab
+        ? true
+        : isStudioProject
+          ? active?.kind === "web"
+          : !isWorkItemBrowser || session.tabs.some((tab) => tab.kind === "web");
 
   const pipGate = canEnterBrowserPip(
     active?.kind === "web" ? address || active.url || "" : "",
@@ -2059,6 +2079,66 @@ export function ProjectBrowserPanel({
             className="ml-auto flex shrink-0 items-center gap-1"
             onPointerLeave={clearBrowserChromeHovers}
           >
+            {isBuildSiteOrApp ? (
+              <>
+                <RailBtn
+                  label="Back"
+                  disabled={!canBack}
+                  onClick={() => runBrowserNav("back")}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </RailBtn>
+                <RailBtn
+                  label="Forward"
+                  disabled={!canForward}
+                  onClick={() => runBrowserNav("forward")}
+                >
+                  <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </RailBtn>
+                <RailBtn label="Reload" onClick={() => runBrowserNav("reload")}>
+                  <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
+                </RailBtn>
+                {(
+                  [
+                    { id: "desktop" as const, label: "Desktop", Icon: Monitor },
+                    { id: "tablet" as const, label: "Tablet", Icon: Tablet },
+                    { id: "mobile" as const, label: "Mobile", Icon: Smartphone },
+                  ] as const
+                ).map(({ id, label, Icon }) => (
+                  <RailBtn
+                    key={id}
+                    label={label}
+                    active={viewport === id}
+                    onClick={() => setViewport(id)}
+                  >
+                    <Icon className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  </RailBtn>
+                ))}
+                <DesktopProjectToolsMenu
+                  selectMode={selectMode}
+                  canRename={canRename}
+                  onRename={() => {
+                    setRenameTarget("project");
+                    setDesktopRenameOpen(true);
+                  }}
+                  onPublish={() => openOverlay("publish")}
+                  onDomain={() => openOverlay("domains")}
+                  onOpenExternal={() =>
+                    addUrlTab(draftPreviewUrl || navigationUrl || address)
+                  }
+                  onOpenSystemBrowser={() => {
+                    void openUrlInSystemBrowser(
+                      draftPreviewUrl || active.url || address,
+                    );
+                  }}
+                  onSelectElement={() => setSelectMode(!selectMode)}
+                  onRefresh={() => {
+                    refreshPreview();
+                    runBrowserNav("reload");
+                  }}
+                />
+              </>
+            ) : null}
             {panelMode === "collapsed" ? null : standalone ? (
               <BrowserChromeTooltip label="Close browser">
                 <BrowserChromeIconButton
@@ -2356,6 +2436,9 @@ export function ProjectBrowserPanel({
           sandboxEnvStatus={sandboxEnvStatus}
           sandboxEnvMessage={sandboxEnvMessage}
           sandboxPreviewSrc={sandboxPreviewSrc}
+          draftPreviewUrl={
+            entity?.publishedUrl?.trim() || draftPreviewUrl || null
+          }
           onSandboxRetry={() => {
             if (!projectId || !ctx.workspaceId) return;
             setSandboxEnvStatus("starting");
@@ -2688,6 +2771,7 @@ function ProjectBrowserBody({
   sandboxEnvStatus = null,
   sandboxEnvMessage = null,
   sandboxPreviewSrc = null,
+  draftPreviewUrl = null,
   onSandboxRetry,
   onSandboxReload,
 }: {
@@ -2706,6 +2790,7 @@ function ProjectBrowserBody({
   sandboxEnvStatus?: BuildSandboxStatus | null;
   sandboxEnvMessage?: string | null;
   sandboxPreviewSrc?: string | null;
+  draftPreviewUrl?: string | null;
   onSandboxRetry?: () => void;
   onSandboxReload?: () => void;
 }) {
@@ -2993,10 +3078,14 @@ function ProjectBrowserBody({
     return (
       <AppViewport
         name={match?.title ?? fallbackName}
-        summary={match?.summary ?? fallbackSummary}
+        summary={
+          (match?.summary || fallbackSummary || "").trim() ||
+          "Start generating your website in chat."
+        }
         envStatus={sandboxEnvStatus}
         envMessage={sandboxEnvMessage}
         previewSrc={sandboxPreviewSrc}
+        draftPreviewUrl={draftPreviewUrl}
         onRetryEnv={onSandboxRetry}
         onReloadPreview={onSandboxReload}
       />
@@ -4721,11 +4810,13 @@ function RailBtn({
   children,
   onClick,
   disabled,
+  active,
 }: {
   label: string;
   children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
+  active?: boolean;
 }) {
   return (
     <BrowserChromeTooltip label={label}>
@@ -4736,6 +4827,7 @@ function RailBtn({
         disabled={disabled}
         className={cn(
           "inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-lg px-1.5 text-muted-foreground transition-colors duration-200 hover:bg-black/[0.06] dark:hover:bg-white/[0.1] hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
+          active && "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
         )}
       >
         {children}

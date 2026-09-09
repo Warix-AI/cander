@@ -115,7 +115,7 @@ export async function runAssistantTurn(
       const { runAgentBuilderTurn } = await import(
         "@/lib/ai/agents/builder-turn"
       );
-      return runAgentBuilderTurn(request, opts);
+      return await runAgentBuilderTurn(request, opts);
     }
 
     // Build site/app projects: write into sandbox instead of dumping HTML in chat.
@@ -154,7 +154,7 @@ export async function runAssistantTurn(
         const { runBuildProjectTurn } = await import(
           "@/lib/ai/build/project-turn"
         );
-        return runBuildProjectTurn(request, opts);
+        return await runBuildProjectTurn(request, opts);
       }
     }
 
@@ -171,7 +171,7 @@ export async function runAssistantTurn(
       const { runAgentClientTransport } = await import(
         "@/lib/ai/runtime/agent-client"
       );
-      return runAgentClientTransport(request, opts);
+      return await runAgentClientTransport(request, opts);
     }
 
     // Legacy path until AI_AGENT_RUNTIME=v2 is enabled server-side.
@@ -180,12 +180,12 @@ export async function runAssistantTurn(
       const { runCommsConnectorTurn } = await import(
         "@/lib/ai/connectors/comms-turn"
       );
-      return runCommsConnectorTurn(request, opts);
+      return await runCommsConnectorTurn(request, opts);
     }
 
     latency?.setTransport("raw");
     const { runRawOpenAITurn } = await import("@/lib/ai/raw-openai/run-turn");
-    return runRawOpenAITurn(request, opts);
+    return await runRawOpenAITurn(request, opts);
   } finally {
     clearTurnContext();
   }

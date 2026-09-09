@@ -16,7 +16,6 @@ import {
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
 import { threadsForProject } from "@/lib/selectors";
 import type { BuildTool } from "@/lib/types";
-import { chromeUrlForBuildProject } from "@/lib/preview-url";
 import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
@@ -158,11 +157,6 @@ export function BuildPanel() {
   const locked = ADVANCED_TOOLS.includes(tool) && !advancedMode;
   // Draft/sandbox hosts stay out of the address chrome until publish.
   const publishedUrl = entityProject?.publishedUrl?.trim() || null;
-  const chromeUrl =
-    chromeUrlForBuildProject({
-      publishedUrl,
-      candidateUrl: publishedUrl ?? deployments[0]?.url ?? liveUrl,
-    }) || "";
   const chromeTitle = publishedUrl
     ? `${displayName} · live`
     : `${displayName} · draft`;
@@ -173,7 +167,6 @@ export function BuildPanel() {
         tool={tool}
         onTool={(id) => setBuildTool(id)}
         title={chromeTitle}
-        url={chromeUrl}
       />
       <div
         className={cn(
@@ -274,15 +267,19 @@ export function BuildPanel() {
               name={displayName}
               summary={
                 project
-                  ? entityProject?.summary ||
-                    project.summary ||
-                    "Preview will show here when this project is published or running."
+                  ? "Start generating your website in chat."
                   : "Keep typing. A preview will stand up as soon as this chat has a project."
               }
               envStatus={envStatus}
               envMessage={envMessage}
               onRetryEnv={() => ensureSandbox(true)}
               previewSrc={previewSrc}
+              draftPreviewUrl={
+                publishedUrl ||
+                (previewUrl && previewUrl.includes("draft--")
+                  ? previewUrl
+                  : null)
+              }
               onReloadPreview={() => {
                 refreshPreview();
                 if (previewSrc) {

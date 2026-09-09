@@ -551,13 +551,6 @@ export async function runBuildProjectTurn(
     const okWrites = written.filter((r) => r.ok).length;
     const failed = written.filter((r) => !r.ok);
 
-    report({
-      phase: "thinking",
-      label: "Building",
-      detail: "Restarting preview…",
-    });
-    await ensureSandboxReady({ projectId, workspaceId, forceRestart: true });
-
     if (okWrites === 0) {
       return {
         content: `I couldn’t write files into the sandbox${
@@ -571,12 +564,13 @@ export async function runBuildProjectTurn(
       };
     }
 
+    // Refresh sandbox so draft preview can pick up the new files (silent).
+    await ensureSandboxReady({ projectId, workspaceId, forceRestart: true });
+
     return {
       content: [
-        `Built a crawlable draft site for **${copy.businessName}** in your sandbox (${okWrites} files).`,
-        "It uses Next.js App Router with server-rendered HTML, metadata, robots, and sitemap so search engines can index it after you publish.",
-        "Preview may take a minute while `next dev` installs and starts — use Reload if you still see SANDBOX_NOT_LISTENING.",
-        "The public subdomain appears in the address bar only after you publish.",
+        `Created a draft site for **${copy.businessName}** (${okWrites} files) and saved it to your project’s GitHub draft.`,
+        "Live preview will load on your draft URL when the sandbox is ready — use Reload if it’s still blank.",
         failed.length
           ? `Some writes failed: ${failed.map((f) => f.output).join("; ")}`
           : "",
@@ -689,13 +683,20 @@ export async function runBuildProjectTurn(
           report,
         });
         toolResults.push(...written);
-        await ensureSandboxReady({ projectId, workspaceId, forceRestart: true });
         const okWrites = written.filter((r) => r.ok).length;
+        if (okWrites > 0) {
+          await ensureSandboxReady({
+            projectId,
+            workspaceId,
+            forceRestart: true,
+          });
+        }
         return {
           content:
             okWrites > 0
-              ? `I wrote a crawlable Next.js draft for **${copy.businessName}** into your sandbox (${okWrites} files) instead of pasting code in chat. Reload Preview when ready.`
-              : visible.slice(0, 400) || "Couldn’t write files. Try again.",
+              ? `Created a draft site for **${copy.businessName}** (${okWrites} files) and saved it to GitHub. Live preview will appear when ready — Reload if blank.`
+              : written.find((r) => !r.ok)?.output ||
+                "Couldn’t write files. Try again.",
           runtime: "cloud",
           offline: false,
           condensationOccurred: false,

@@ -4,6 +4,7 @@ import { useApp } from "@/components/app/AppProvider";
 import { DefaultChatPreviewWash } from "@/components/spaces/BannerWash";
 import { buildPreviews } from "@/lib/data";
 import type { BuildSandboxStatus } from "@/lib/build/sandbox/constants";
+import { displayHostFromUrl } from "@/lib/preview-url";
 import { cn } from "@/lib/utils";
 
 /**
@@ -16,6 +17,7 @@ export function AppViewport({
   envMessage,
   onRetryEnv,
   previewSrc,
+  draftPreviewUrl,
   onReloadPreview,
 }: {
   name: string;
@@ -25,6 +27,8 @@ export function AppViewport({
   onRetryEnv?: () => void;
   /** Same-origin preview proxy URL */
   previewSrc?: string | null;
+  /** Draft host shown in the live-preview badge (e.g. draft--sub.cander.app) */
+  draftPreviewUrl?: string | null;
   onReloadPreview?: () => void;
 }) {
   const { viewport, previewKey, project } = useApp();
@@ -41,6 +45,11 @@ export function AppViewport({
     envStatus === "needs_repo";
 
   const showLive = envStatus === "ready" && Boolean(previewSrc);
+  const emptyCopy =
+    summary?.trim() || "Start generating your website in chat.";
+  const liveHost = draftPreviewUrl
+    ? displayHostFromUrl(draftPreviewUrl) || draftPreviewUrl
+    : null;
 
   return (
     <div
@@ -84,8 +93,7 @@ export function AppViewport({
                 {name}
               </p>
               <p className="mt-2 max-w-sm text-[13.5px] leading-relaxed text-white/75">
-                {summary?.trim() ||
-                  "Preview will show here when this project is published or running."}
+                {emptyCopy}
               </p>
             </div>
           </>
@@ -121,23 +129,19 @@ export function AppViewport({
         ) : null}
 
         {showLive ? (
-          <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2">
-            <span className="rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium tracking-[-0.01em] text-white/90">
-              Live preview
+          <div className="absolute bottom-3 left-3 z-10 flex max-w-[min(100%-1.5rem,28rem)] items-center gap-2">
+            <span className="min-w-0 truncate rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium tracking-[-0.01em] text-white/90">
+              {liveHost ? `Live preview · ${liveHost}` : "Live preview"}
             </span>
             {onReloadPreview ? (
               <button
                 type="button"
                 onClick={onReloadPreview}
-                className="rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium text-white/90 hover:bg-black/70"
+                className="shrink-0 rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium text-white/90 hover:bg-black/70"
               >
                 Reload
               </button>
             ) : null}
-          </div>
-        ) : envStatus === "ready" ? (
-          <div className="absolute bottom-3 left-3 z-10 rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium tracking-[-0.01em] text-white/90">
-            Environment ready
           </div>
         ) : null}
       </div>

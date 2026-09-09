@@ -14,7 +14,6 @@ import {
   MousePointer2,
   RotateCw,
   Smartphone,
-  SquareStack,
   Tablet,
   Upload,
 } from "lucide-react";
@@ -22,10 +21,6 @@ import { useApp } from "@/components/app/AppProvider";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { Dropdown } from "@/components/ui/Controls";
 import { useMobileShell } from "@/lib/use-media-query";
-import {
-  displayHostFromUrl,
-  isDraftPreviewUrl,
-} from "@/lib/preview-url";
 import type { BuildTool, ViewportId } from "@/lib/types";
 import {
   BROWSER_CHROME_BG,
@@ -63,12 +58,12 @@ export function PreviewChrome({
   tool,
   onTool,
   title,
-  url,
 }: {
   tool: BuildTool;
   onTool: (id: BuildTool) => void;
   title: string;
-  url: string;
+  /** @deprecated Address bar removed — draft URL lives in Live preview badge. */
+  url?: string;
 }) {
   const {
     panelMode,
@@ -77,25 +72,14 @@ export function PreviewChrome({
     setViewport,
     selectMode,
     setSelectMode,
-    liveUrl,
     refreshPreview,
     openOverlay,
     openInAppBrowser,
+    liveUrl,
   } = useApp();
   const mobile = useMobileShell();
   const previewing = tool === "preview";
   const changing = tool === "activity";
-  // Prefer a non-draft live URL; never show draft-- / unpublished hosts as live.
-  const preferred =
-    liveUrl && !isDraftPreviewUrl(liveUrl) ? liveUrl : url;
-  const address =
-    !preferred ||
-    preferred === "about:blank" ||
-    isDraftPreviewUrl(preferred)
-      ? ""
-      : preferred;
-  const addressLabel =
-    displayHostFromUrl(address) || address || "Not published yet";
 
   return (
     <div className={cn("min-w-0 shrink-0 overflow-hidden", BROWSER_CHROME_BG)}>
@@ -103,79 +87,50 @@ export function PreviewChrome({
         <div className="flex h-10 min-w-0 items-center gap-2 px-3">
           <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.6} />
           <span className="min-w-0 flex-1 truncate text-[13px] tracking-[-0.01em] text-muted-foreground">
-            {addressLabel}
-          </span>
-          <span className="truncate text-[12px] font-medium tracking-[-0.01em]">
             {changing ? "Changes" : title}
           </span>
         </div>
       ) : (
-        <>
-      <div className="flex h-11 min-w-0 items-center gap-1 px-3">
-        <RailBtn
-          active={changing}
-          label="Changes"
-          onClick={() => onTool(changing ? "preview" : "activity")}
-        >
-          <GitCompare className="h-3.5 w-3.5" strokeWidth={1.6} />
-          <span className="text-[12px] font-medium tracking-[-0.01em]">
-            Changes
-          </span>
-        </RailBtn>
-
-        <button
-          type="button"
-          onClick={() => onTool("preview")}
-          className={cn(
-            "inline-flex h-7 max-w-[14rem] items-center gap-1.5 rounded-lg px-2 text-[12px] tracking-[-0.01em]",
-            previewing
-              ? cn(BROWSER_CHROME_CHIP, "text-foreground")
-              : cn(
-                  "text-muted-foreground",
-                  BROWSER_CHROME_CHIP_HOVER,
-                  "hover:text-foreground",
-                ),
-          )}
-        >
-          <Globe className="h-3.5 w-3.5 shrink-0" strokeWidth={1.6} />
-          <span className="truncate">{title}</span>
-        </button>
-
-        <span className="ml-auto flex items-center gap-0.5">
+        <div className="flex h-11 min-w-0 items-center gap-0.5 px-3">
           <RailBtn
-            label={panelMode === "immersive" ? "Exit full screen" : "Full screen"}
-            onClick={() =>
-              setPanelMode(panelMode === "immersive" ? "split" : "immersive")
-            }
+            active={changing}
+            label="Changes"
+            onClick={() => onTool(changing ? "preview" : "activity")}
           >
-            {panelMode === "immersive" ? (
-              <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-            ) : (
-              <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-            )}
+            <GitCompare className="h-3.5 w-3.5" strokeWidth={1.6} />
+            <span className="text-[12px] font-medium tracking-[-0.01em]">
+              Changes
+            </span>
           </RailBtn>
-          <PanelToggle />
-        </span>
-      </div>
 
-      <div className="flex h-10 min-w-0 items-center gap-0.5 px-3">
-        <RailBtn label="Back">
-          <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
-        </RailBtn>
-        <RailBtn label="Forward">
-          <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
-        </RailBtn>
-        <RailBtn label="Refresh" onClick={refreshPreview}>
-          <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
-        </RailBtn>
+          <button
+            type="button"
+            onClick={() => onTool("preview")}
+            className={cn(
+              "inline-flex h-7 max-w-[14rem] items-center gap-1.5 rounded-lg px-2 text-[12px] tracking-[-0.01em]",
+              previewing
+                ? cn(BROWSER_CHROME_CHIP, "text-foreground")
+                : cn(
+                    "text-muted-foreground",
+                    BROWSER_CHROME_CHIP_HOVER,
+                    "hover:text-foreground",
+                  ),
+            )}
+          >
+            <Globe className="h-3.5 w-3.5 shrink-0" strokeWidth={1.6} />
+            <span className="truncate">{title}</span>
+          </button>
 
-        <div className="mx-1 flex h-7 min-w-0 flex-1 items-center overflow-hidden rounded-lg border border-border bg-white px-2.5 font-mono text-[11.5px] text-muted-foreground dark:bg-muted/60 dark:border-transparent">
-          <span className="truncate">
-            {address || "Not published yet"}
-          </span>
-        </div>
+          <RailBtn label="Back">
+            <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </RailBtn>
+          <RailBtn label="Forward">
+            <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </RailBtn>
+          <RailBtn label="Refresh" onClick={refreshPreview}>
+            <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
+          </RailBtn>
 
-        <span className="ml-0.5 flex shrink-0 items-center gap-0.5">
           {DEVICES.map((device) => {
             const Icon = device.icon;
             return (
@@ -189,26 +144,42 @@ export function PreviewChrome({
               </RailBtn>
             );
           })}
-          <RailBtn
-            active={selectMode}
-            label="Select element"
-            onClick={() => setSelectMode(!selectMode)}
-          >
-            <MousePointer2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-          </RailBtn>
-          <RailBtn label="Publish" onClick={() => openOverlay("publish")}>
-            <Upload className="h-3.5 w-3.5" strokeWidth={1.6} />
-          </RailBtn>
-          <AdvancedMenu
-            tool={tool}
-            onTool={onTool}
-            address={address}
-            previewing={previewing}
-            onOpenAddress={() => openInAppBrowser(address)}
-          />
-        </span>
-      </div>
-        </>
+
+          <span className="ml-auto flex items-center gap-0.5">
+            <RailBtn
+              active={selectMode}
+              label="Select element"
+              onClick={() => setSelectMode(!selectMode)}
+            >
+              <MousePointer2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+            </RailBtn>
+            <RailBtn label="Publish" onClick={() => openOverlay("publish")}>
+              <Upload className="h-3.5 w-3.5" strokeWidth={1.6} />
+            </RailBtn>
+            <AdvancedMenu
+              tool={tool}
+              onTool={onTool}
+              address={liveUrl ?? ""}
+              previewing={previewing}
+              onOpenAddress={() => {
+                if (liveUrl) openInAppBrowser(liveUrl);
+              }}
+            />
+            <RailBtn
+              label={panelMode === "immersive" ? "Exit full screen" : "Full screen"}
+              onClick={() =>
+                setPanelMode(panelMode === "immersive" ? "split" : "immersive")
+              }
+            >
+              {panelMode === "immersive" ? (
+                <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+              ) : (
+                <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
+              )}
+            </RailBtn>
+            <PanelToggle />
+          </span>
+        </div>
       )}
     </div>
   );
@@ -255,7 +226,7 @@ function AdvancedMenu({
           <MenuItem
             icon={ExternalLink}
             onClick={() => {
-              onOpenAddress();
+              if (address) onOpenAddress();
               close();
             }}
           >
