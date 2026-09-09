@@ -201,7 +201,9 @@ export async function resolveSandboxForSession(
   if (!record) {
     return null;
   }
-  const { sandbox } = await attachSandbox(record);
+  // Resume only — do not require STREAM_PORT (9223). Build sandboxes open
+  // app port 3000; browser/spike sessions attach the stream separately.
+  const sandbox = await resumeSandbox(record);
   const fresh = (await getComputerSessionById(sessionId, userId)) ?? record;
   return { record: fresh, sandbox };
 }
