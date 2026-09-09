@@ -25,18 +25,23 @@ const SKIP_PREFIXES = [
   ".global/",
   ".local/",
   ".npm/",
+  ".vercel/",
 ];
 
 const SKIP_NAMES = new Set([
   ".npmrc",
   ".sudo_as_admin_successful",
   ".DS_Store",
+  "package-lock.json",
 ]);
 
 function shouldSkipPath(path: string): boolean {
   const base = path.split("/").pop() || path;
   if (SKIP_NAMES.has(base) || SKIP_NAMES.has(path)) return true;
-  return SKIP_PREFIXES.some((p) => path === p.slice(0, -1) || path.startsWith(p));
+  if (path === "node_modules" || path === ".next" || path === ".codex") return true;
+  return SKIP_PREFIXES.some(
+    (p) => path === p.slice(0, -1) || path.startsWith(p) || path === p.replace(/\/$/, ""),
+  );
 }
 
 function parsePorcelain(stdout: string): string[] {
@@ -79,11 +84,20 @@ if [ ! -d .git ]; then
     cd "$(dirname "\${git_dir}")"
   fi
 fi
-git status --porcelain 2>/dev/null || true`,
+git status --porcelain -uall --untracked-files=normal 2>/dev/null || true`,
     ],
   });
 
-  let paths = parsePorcelain(status.stdout);
+  let paths = parsePorcelain(status.stdout).filter((p) => !shouldSkipPath(p));
+  // Cap accidental huge trees (e.g. unignored node_modules listing).
+  if (paths.length > 200) {
+    paths = paths.filter(
+      (p) =>
+        !p.includes("node_modules/") &&
+        !p.startsWith(".") &&
+        !p.includes("/."),
+    );
+  }
 
   // If git reports nothing but we may have written outside index, fall back to empty.
   if (paths.length === 0) {
