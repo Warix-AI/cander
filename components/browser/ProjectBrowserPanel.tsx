@@ -396,11 +396,19 @@ export function ProjectBrowserPanel({
           workspaceId: ctx.workspaceId,
         });
         const sandbox = await import("@/lib/api/project-sandbox-client");
-        // Fresh ensure from git tip — required after incomplete drafts / cleared sessions.
+        const status = await sandbox.getProjectSandboxStatusClient({
+          projectId,
+          workspaceId: ctx.workspaceId,
+        });
+        const needsFresh =
+          !status?.sessionId ||
+          status.status === "idle" ||
+          status.status === "error" ||
+          /No package\.json/i.test(status.message || "");
         const result = await sandbox.ensureProjectSandboxClient({
           projectId,
           workspaceId: ctx.workspaceId,
-          forceRestart: true,
+          forceRestart: needsFresh,
         });
         if (cancelled) return;
         if (!result) {
