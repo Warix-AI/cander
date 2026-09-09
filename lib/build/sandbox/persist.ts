@@ -89,14 +89,52 @@ git status --porcelain -uall --untracked-files=normal 2>/dev/null || true`,
   });
 
   let paths = parsePorcelain(status.stdout).filter((p) => !shouldSkipPath(p));
-  // Cap accidental huge trees (e.g. unignored node_modules listing).
-  if (paths.length > 200) {
-    paths = paths.filter(
-      (p) =>
-        !p.includes("node_modules/") &&
-        !p.startsWith(".") &&
-        !p.includes("/."),
-    );
+
+  // Expand directories (e.g. `?? app/`) into file paths — readFile on a dir hangs/fails.
+  const needsExpand = paths.some((p) => p.endsWith("/") || !p.includes("."));
+  if (paths.length > 0) {
+    const expand = await runPrivilegedSandboxCommand({
+      sessionId: opts.sessionId,
+      userId: opts.userId,
+      cmd: "sh",
+      args: [
+        "-c",
+        `set -eu
+if [ ! -d .git ]; then
+  git_dir=$(find . -maxdepth 3 -type d -name .git 2>/dev/null | head -1 || true)
+  if [ -n "$git_dir" ]; then cd "$(dirname "$git_dir")"; fi
+fi
+# List changed/untracked files only (not dirs), capped.
+git status --porcelain -uall | while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  rest=$(echo "$line" | cut -c4-)
+  path=$(echo "$rest" | sed 's/ -> /\\n/' | tail -n1 | tr -d '"')
+  if [ -d "$path" ]; then
+    find "$path" -type f ! -path '*/node_modules/*' ! -path '*/.next/*' ! -path '*/.git/*' 2>/dev/null
+  elif [ -f "$path" ]; then
+    echo "$path"
+  fi
+done | head -n 100`,
+      ],
+    });
+    const expanded = expand.stdout
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .filter((p) => !shouldSkipPath(p));
+    if (expanded.length > 0) paths = [...new Set(expanded)];
+  }
+
+  // Cap accidental huge trees.
+  if (paths.length > 100) {
+    paths = paths
+      .filter(
+        (p) =>
+          !p.includes("node_modules/") &&
+          !p.startsWith(".") &&
+          !p.includes("/."),
+      )
+      .slice(0, 100);
   }
 
   // If git reports nothing but we may have written outside index, fall back to empty.
