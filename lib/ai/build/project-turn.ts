@@ -209,6 +209,61 @@ async function writeScaffold(opts: {
   report: NonNullable<AgentTurnOptions["onProgress"]>;
 }): Promise<AiToolCallResult[]> {
   const results: AiToolCallResult[] = [];
+  if (opts.files.length === 0) return results;
+
+  // Prefer GitHub draft commits — works even when the sandbox VM is "starting"
+  // because Next isn't listening yet (empty repos have no package.json).
+  opts.report({
+    phase: "tool",
+    label: "Building",
+    detail: `Saving ${opts.files.length} files to draft…`,
+    toolName: "computer.files.persist",
+    contentStreaming: true,
+  });
+  try {
+    const { commitProjectDraftFilesClient } = await import(
+      "@/lib/api/project-git-client"
+    );
+    const committed = await commitProjectDraftFilesClient({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+      files: opts.files,
+      message: `Cander: write ${opts.files.length} scaffold files`,
+    });
+    if (committed?.ok) {
+      for (const file of opts.files) {
+        results.push({
+          name: "computer.files.write",
+          ok: true,
+          output: `Wrote ${file.path} → draft ${committed.draftSha?.slice(0, 7) || ""}`,
+        });
+      }
+      results.push({
+        name: "computer.files.persist",
+        ok: true,
+        output: `Persisted ${committed.filesCommitted ?? opts.files.length} files`,
+      });
+      opts.report({
+        phase: "follow_up",
+        label: "Building",
+        detail: `Saved ${opts.files.length} files to GitHub draft…`,
+        toolName: "computer.files.persist",
+        toolOk: true,
+        contentStreaming: true,
+      });
+      return results;
+    }
+    console.warn(
+      "[cander:build] git scaffold persist failed; falling back to sandbox writes",
+      committed?.error,
+    );
+  } catch (err) {
+    console.warn(
+      "[cander:build] git scaffold persist threw; falling back to sandbox writes",
+      err,
+    );
+  }
+
   for (const file of opts.files) {
     opts.report({
       phase: "tool",

@@ -19,7 +19,20 @@ export async function ensureBuildSandboxSession(opts: {
   workspaceId: string;
 }): Promise<{ sessionId: string }> {
   const ensured = await ensureProjectSandbox(opts);
-  if (ensured.status !== "ready" || !ensured.sessionId) {
+  // File/exec ops only need a live VM. "starting" is normal before package.json
+  // exists / Next is listening — blocking writes here caused empty drafts
+  // ("couldn't write files into the sandbox") and endless preview spin.
+  if (!ensured.sessionId) {
+    throw new Error(
+      ensured.message || `Sandbox not ready (${ensured.status}).`,
+    );
+  }
+  if (
+    ensured.status === "error" ||
+    ensured.status === "unavailable" ||
+    ensured.status === "needs_repo" ||
+    ensured.status === "idle"
+  ) {
     throw new Error(
       ensured.message || `Sandbox not ready (${ensured.status}).`,
     );

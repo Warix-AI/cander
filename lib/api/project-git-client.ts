@@ -137,3 +137,63 @@ export async function restoreProjectDraftShaClient(opts: {
     };
   }
 }
+
+/** Commit explicit file contents to cander/draft (no sandbox required). */
+export async function commitProjectDraftFilesClient(opts: {
+  projectId: string;
+  workspaceId: string;
+  files: Array<{ path: string; content: string }>;
+  message?: string;
+}): Promise<{
+  ok: boolean;
+  draftSha?: string;
+  filesCommitted?: number;
+  error?: string;
+} | null> {
+  if (!isSupabaseConfigured()) return null;
+  const token = await authToken();
+  if (!token) return null;
+  if (!opts.files.length) {
+    return { ok: true, filesCommitted: 0 };
+  }
+
+  try {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(opts.projectId)}/git/persist`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          workspaceId: opts.workspaceId,
+          message: opts.message || "Cander: save draft scaffold",
+          files: opts.files,
+        }),
+      },
+    );
+    const data = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      draftSha?: string;
+      filesCommitted?: number;
+      error?: string;
+    };
+    if (!res.ok || data.ok === false) {
+      return {
+        ok: false,
+        error: data.error || `git persist failed (${res.status})`,
+      };
+    }
+    return {
+      ok: true,
+      draftSha: data.draftSha,
+      filesCommitted: data.filesCommitted ?? opts.files.length,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
