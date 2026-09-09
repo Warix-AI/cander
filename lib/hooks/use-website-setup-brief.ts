@@ -34,11 +34,39 @@ export function useWebsiteSetupBrief(opts: {
   useEffect(() => {
     void refresh();
     if (!isSite || !opts.projectId) return;
-    const id = window.setInterval(() => {
+
+    const onReady = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail as
+        | { projectId?: string }
+        | undefined;
+      if (detail?.projectId && detail.projectId !== opts.projectId) return;
+      // Optimistically unlock while we refetch — avoids stuck "building" ring.
+      setBrief((prev) =>
+        prev
+          ? { ...prev, status: "ready" }
+          : {
+              status: "ready",
+              completedSteps: 8,
+              answers: {},
+              updatedAt: new Date().toISOString(),
+            },
+      );
       void refresh();
-    }, 2500);
-    return () => window.clearInterval(id);
-  }, [refresh, isSite, opts.projectId]);
+    };
+    window.addEventListener("cander:website-setup-ready", onReady);
+
+    const building = brief?.status === "building";
+    const id = window.setInterval(
+      () => {
+        void refresh();
+      },
+      building ? 1000 : 2500,
+    );
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("cander:website-setup-ready", onReady);
+    };
+  }, [refresh, isSite, opts.projectId, brief?.status]);
 
   const setupBlocksPreview =
     isSite && (!brief || brief.status !== "ready");

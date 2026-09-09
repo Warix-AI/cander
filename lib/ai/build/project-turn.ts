@@ -40,12 +40,10 @@ import {
 import { validateWebsiteFiles } from "@/lib/ai/build/website-validate";
 import {
   formatRetrievedComponentsForCodex,
-  isTwentyFirstConfigured,
-  retrieveComponentsForSiteSpec,
   retrievedComponentsToScaffoldFiles,
   setActiveTwentyFirstClient,
-  createTwentyFirstMcpClient,
 } from "@/lib/ai/build/twenty-first-mcp";
+import { retrieveTwentyFirstForSiteSpecClient } from "@/lib/api/twenty-first-client";
 import {
   getProjectKindForSetup,
   loadWebsiteSetupBrief,
@@ -537,9 +535,7 @@ async function runWebsiteCreatePipeline(opts: {
   report({
     phase: "thinking",
     label: "Building",
-    detail: isTwentyFirstConfigured()
-      ? "Connecting to 21st.dev MCP and retrieving matching components…"
-      : "Composing site from the design system…",
+    detail: "Retrieving matching components from 21st.dev…",
   });
 
   let retrieved =
@@ -550,8 +546,13 @@ async function runWebsiteCreatePipeline(opts: {
     tools: [] as string[],
   };
   try {
-    const mcpClient = await createTwentyFirstMcpClient();
-    const retrieval = await retrieveComponentsForSiteSpec(spec, mcpClient);
+    // Build turn runs in the browser — MCP must go through the server API
+    // so API_KEY_21ST never ships to the client.
+    const retrieval = await retrieveTwentyFirstForSiteSpecClient({
+      workspaceId,
+      projectId,
+      spec,
+    });
     retrieved = retrieval.components;
     usedTwentyFirstFallback = retrieval.usedFallback;
     twentyFirstMeta = {

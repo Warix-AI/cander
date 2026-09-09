@@ -32,6 +32,7 @@ import {
   persistWebsiteSetupProgress,
 } from "@/lib/ai/clarification/website-setup-ui";
 import { WEBSITE_SETUP_RESUME_TOOL } from "@/lib/ai/build/website-setup-brief";
+import { formatWebsiteSetupUserSummary } from "@/lib/ai/build/website-setup-brief";
 import { fetchWebsiteSetupBrief } from "@/lib/api/website-setup-client";
 import {
   migrateThreadTaskState,
@@ -3457,6 +3458,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const assistantId = nextId("a");
       const userMsgId = nextId("u");
       const summary = formatClarificationAnswersForModel(result);
+      const isWebsiteSetup =
+        result.resumeTool === WEBSITE_SETUP_RESUME_TOOL ||
+        result.title.trim().toLowerCase() === "website setup";
+      const userFacingSummary = isWebsiteSetup
+        ? formatWebsiteSetupUserSummary(result.answers)
+        : `Submitted: ${result.title}`;
 
       setThreads((current) =>
         current.map((item) => {
@@ -3464,22 +3471,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return {
             ...item,
             updatedAt: nowTime(),
-            snippet: result.title,
+            snippet: isWebsiteSetup
+              ? userFacingSummary.slice(0, 80)
+              : result.title,
             messages: [
               ...item.messages,
               {
                 id: userMsgId,
                 role: "user" as const,
-                content: `Submitted: ${result.title}`,
+                content: userFacingSummary,
                 at: nowTime(),
-                blocks: [
-                  {
-                    type: "clarification" as const,
-                    title: result.title,
-                    answers: result.answers,
-                    skipped: result.skipped,
-                  },
-                ],
+                // Website setup: no raw field dump in the bubble — summary only.
+                blocks: isWebsiteSetup
+                  ? undefined
+                  : [
+                      {
+                        type: "clarification" as const,
+                        title: result.title,
+                        answers: result.answers,
+                        skipped: result.skipped,
+                      },
+                    ],
               },
               {
                 id: assistantId,
@@ -3543,6 +3555,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const buildContent = [
             summary,
             "",
+            `User-facing brief: ${userFacingSummary}`,
+            "",
             "Build my site from guided setup (website.build_from_setup).",
             "confirm_build: true",
           ].join("\n");
@@ -3565,7 +3579,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 agentId: agentChat.agentId,
               };
             })(),
-            messages: historyMessages,
+            messages: [
+              ...historyMessages,
+              { role: "user" as const, content: userFacingSummary },
+            ],
             onProgress: (progress) => {
               setThreads((current) =>
                 current.map((item) => ({
@@ -3603,11 +3620,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               }),
             );
           };
+          const finalizePreview = async () => {
+            const projectForPreview = pid || projectId;
+            if (!projectForPreview) return;
+            // Unlock progress ring + ensure sandbox immediately (panels listen).
+            window.dispatchEvent(
+              new CustomEvent("cander:website-setup-ready", {
+                detail: { projectId: projectForPreview, workspaceId },
+              }),
+            );
+            try {
+              const sandbox = await import(
+                "@/lib/api/project-sandbox-client"
+              );
+              await sandbox.ensureProjectSandboxClient({
+                projectId: projectForPreview,
+                workspaceId,
+                forceRestart: false,
+              });
+              window.dispatchEvent(
+                new CustomEvent("cander:website-preview-reload", {
+                  detail: { projectId: projectForPreview, workspaceId },
+                }),
+              );
+            } catch (err) {
+              console.warn("[cander] post-build preview ensure failed", err);
+            }
+          };
           if (reply.runtime === "apple-local") {
             applyReply(reply.content, true);
+            void finalizePreview();
             return;
           }
-          typewriterReveal(reply.content, applyReply);
+          typewriterReveal(reply.content, (partial, done) => {
+            applyReply(partial, done);
+            if (done) void finalizePreview();
+          });
           return;
         }
         if (result.resumeTool) {

@@ -130,20 +130,22 @@ DNS: platform wildcard `*.cander.app` must already point at the Cander deploymen
 Websites (`kind=site`) use an **8-step ClarificationCard** before any draft is generated:
 
 1. Business + goal → 2. Audience + CTA → 3. Site depth → 4. Visual style → 5. Colors → 6. Layout shape → 7. Copy tone → 8. Sections/features → confirm **Build my site**
-2. Preview stays blank with an 8-segment Cander progress ring (`setup` / spinning `building`) until brief `status=ready`
-3. Pipeline: brief → `planWebsite` SiteSpec → **21st.dev MCP** (`https://21st.dev/api/mcp`, server-only `API_KEY_21ST` via `x-api-key`) `tools/list` → bounded `search` + `get_component` (cached per build) → vendor files under `components/twenty-first/` → Codex adapt (`build.component.search` / `build.component.get`) → `website-validate` → sandbox preview. If MCP is down/empty, **Cander catalog compose** is the fallback (logged).
-4. Sites **skip** auto Supabase provision/inject; apps keep the heavier backend path
+2. Chat shows a **natural-language summary** from the user (raw field dumps stay server-side)
+3. Preview stays blank with an 8-segment Cander progress ring (`setup` / spinning `building`) until brief `status=ready`, then auto-ensures sandbox preview
+4. Pipeline: brief → `planWebsite` SiteSpec → **server** `/api/ai/twenty-first` (MCP with `API_KEY_21ST`) → vendor files → Codex adapt → validate → preview. Catalog compose is the fallback if MCP is down/empty.
+5. Sites **skip** auto Supabase provision/inject; apps keep the heavier backend path
 
 Migration: `065_website_setup_brief.sql` (`projects.website_setup_brief` jsonb).
 
-Server env for 21st (never `NEXT_PUBLIC_`):
+Server env for 21st (never `NEXT_PUBLIC_`; must be available to the Next.js server runtime):
 
 ```
 API_KEY_21ST=
 # TWENTY_FIRST_API_KEY=   # alias
 ```
 
-Smoke: `API_KEY_21ST=… npx tsx scripts/test-21st-mcp.ts`
+Smoke (server): `API_KEY_21ST=… npx tsx scripts/test-21st-mcp.ts`  
+Smoke (deployed): `GET /api/ai/twenty-first` → `{ configured: true }`
 
 ## Enable Phase 3+ flag
 

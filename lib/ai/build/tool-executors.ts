@@ -97,37 +97,33 @@ export async function executeBuildTool(opts: {
   if (name === "build.component.search") {
     const query = String(args.query ?? args.role ?? "").trim();
     const role = args.role ? String(args.role) : undefined;
+    const projectId = getTurnProjectId();
+    const workspaceId = getTurnWorkspaceId();
     try {
-      const {
-        getActiveTwentyFirstClient,
-        createTwentyFirstMcpClient,
-        setActiveTwentyFirstClient,
-      } = await import("@/lib/ai/build/twenty-first-mcp");
-      let client = getActiveTwentyFirstClient();
-      if (!client) {
-        client = await createTwentyFirstMcpClient();
-        if (client) setActiveTwentyFirstClient(client);
-      }
-      if (client) {
-        const hits = await client.search({ query, role, limit: 5 });
-        const candidates = hits.map((h) => ({
-          id: h.id,
-          name: h.name,
-          category: role || h.category,
-          source: "twenty_first" as const,
-          hasCode: Boolean(h.codeSnippet?.trim()),
-        }));
-        return {
-          name,
-          ok: true,
-          output: JSON.stringify({
-            provider: "21st-mcp",
-            query,
-            role,
-            candidates,
-          }),
-          data: { candidates, provider: "21st-mcp" },
-        };
+      if (workspaceId) {
+        const { searchTwentyFirstClient } = await import(
+          "@/lib/api/twenty-first-client"
+        );
+        const candidates = await searchTwentyFirstClient({
+          workspaceId,
+          projectId,
+          query,
+          role,
+          limit: 5,
+        });
+        if (candidates.length) {
+          return {
+            name,
+            ok: true,
+            output: JSON.stringify({
+              provider: "21st-mcp",
+              query,
+              role,
+              candidates,
+            }),
+            data: { candidates, provider: "21st-mcp" },
+          };
+        }
       }
     } catch (err) {
       console.warn(
@@ -159,26 +155,23 @@ export async function executeBuildTool(opts: {
     if (!componentId) {
       return { name, ok: false, output: "componentId required" };
     }
+    const projectId = getTurnProjectId();
+    const workspaceId = getTurnWorkspaceId();
     try {
-      const {
-        getActiveTwentyFirstClient,
-        createTwentyFirstMcpClient,
-        setActiveTwentyFirstClient,
-        vendorPathForComponent,
-      } = await import("@/lib/ai/build/twenty-first-mcp");
-      let client = getActiveTwentyFirstClient();
-      if (!client) {
-        client = await createTwentyFirstMcpClient();
-        if (client) setActiveTwentyFirstClient(client);
+      if (!workspaceId) {
+        return { name, ok: false, output: "workspaceId required" };
       }
-      if (!client) {
-        return {
-          name,
-          ok: false,
-          output: "21st MCP unavailable (API_KEY_21ST not set or connect failed)",
-        };
-      }
-      const component = await client.getComponent(componentId);
+      const { getTwentyFirstClient } = await import(
+        "@/lib/api/twenty-first-client"
+      );
+      const { vendorPathForComponent } = await import(
+        "@/lib/ai/build/twenty-first-mcp"
+      );
+      const component = await getTwentyFirstClient({
+        workspaceId,
+        projectId,
+        componentId,
+      });
       if (!component) {
         return { name, ok: false, output: `component not found: ${componentId}` };
       }

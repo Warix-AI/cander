@@ -456,6 +456,49 @@ export function ProjectBrowserPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per project / setup gate
   }, [standalone, projectId, ctx.workspaceId, browserSpaceId, entity?.kind, entity?.publishedUrl, setupBlocksPreview]);
 
+  // Instant draft preview after guided website build completes.
+  useEffect(() => {
+    if (standalone || !projectId || !ctx.workspaceId) return;
+    const onReload = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail as
+        | { projectId?: string }
+        | undefined;
+      if (detail?.projectId && detail.projectId !== projectId) return;
+      setSandboxEnvStatus("starting");
+      void (async () => {
+        try {
+          const sandbox = await import("@/lib/api/project-sandbox-client");
+          const result = await sandbox.ensureProjectSandboxClient({
+            projectId,
+            workspaceId: ctx.workspaceId,
+          });
+          if (!result) {
+            setSandboxEnvStatus("unavailable");
+            return;
+          }
+          setSandboxEnvStatus(result.status);
+          setSandboxEnvMessage(result.message ?? result.error ?? null);
+          if (result.status === "ready" && result.previewPath) {
+            setSandboxPreviewSrc(`${result.previewPath}?_r=${Date.now()}`);
+          }
+          const draftUrl = draftPreviewUrlForSubdomain(result.subdomain);
+          setDraftPreviewUrl(draftUrl);
+        } catch (err) {
+          setSandboxEnvStatus("error");
+          setSandboxEnvMessage(
+            err instanceof Error ? err.message : "Failed to start sandbox",
+          );
+        }
+      })();
+    };
+    window.addEventListener("cander:website-preview-reload", onReload);
+    window.addEventListener("cander:website-setup-ready", onReload);
+    return () => {
+      window.removeEventListener("cander:website-preview-reload", onReload);
+      window.removeEventListener("cander:website-setup-ready", onReload);
+    };
+  }, [standalone, projectId, ctx.workspaceId]);
+
   const session =
     hydrated && key
       ? standalone

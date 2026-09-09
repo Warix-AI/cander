@@ -125,6 +125,25 @@ export function BuildPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per project / setup gate
   }, [projectId, ctx.workspaceId, setupBlocksPreview]);
 
+  // Instant unlock after guided website build completes.
+  useEffect(() => {
+    if (!projectId || !ctx.workspaceId) return;
+    const onReload = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail as
+        | { projectId?: string }
+        | undefined;
+      if (detail?.projectId && detail.projectId !== projectId) return;
+      ensureSandbox(false);
+    };
+    window.addEventListener("cander:website-preview-reload", onReload);
+    window.addEventListener("cander:website-setup-ready", onReload);
+    return () => {
+      window.removeEventListener("cander:website-preview-reload", onReload);
+      window.removeEventListener("cander:website-setup-ready", onReload);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, ctx.workspaceId]);
+
   const projectThreads = useMemo(
     () =>
       project

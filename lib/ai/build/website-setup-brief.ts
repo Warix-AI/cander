@@ -216,6 +216,51 @@ export function briefToPlanningPrompt(brief: WebsiteSetupBrief): string {
   ].join("\n");
 }
 
+/**
+ * Natural-language user message for chat — hides raw field dumps.
+ * Looks like something the user typed after answering the setup card.
+ */
+export function formatWebsiteSetupUserSummary(
+  answers: WebsiteSetupAnswers | Record<string, unknown>,
+): string {
+  const a = answers as WebsiteSetupAnswers;
+  const depth =
+    a.site_depth === "landing"
+      ? "a single landing page"
+      : a.site_depth === "small"
+        ? "a small multi-page site"
+        : a.site_depth === "multi"
+          ? "a multi-page marketing site"
+          : "a website";
+  const style = String(a.visual_style || "modern")
+    .replace(/-/g, " ")
+    .trim();
+  const layout = Array.isArray(a.layout_shape)
+    ? a.layout_shape.join(", ")
+    : String(a.layout_shape || "").trim();
+  const sections = Array.isArray(a.sections_features)
+    ? a.sections_features.join(", ")
+    : String(a.sections_features || "").trim();
+
+  const parts = [
+    `Create ${depth} for us.`,
+    a.business_goal ? `Business & goal: ${String(a.business_goal).trim()}` : "",
+    a.audience_cta
+      ? `Audience & primary CTA: ${String(a.audience_cta).trim()}`
+      : "",
+    style ? `Visual direction: ${style}.` : "",
+    a.brand_colors
+      ? `Colors: ${String(a.brand_colors).trim()}.`
+      : "",
+    layout ? `Layout feel: ${layout}.` : "",
+    a.copy_tone ? `Copy: ${String(a.copy_tone).trim()}.` : "",
+    sections ? `Include sections for: ${sections}.` : "",
+    "Build the draft site from this brief.",
+  ].filter(Boolean);
+
+  return parts.join(" ");
+}
+
 export function mergeAnswersIntoBrief(
   brief: WebsiteSetupBrief,
   answers: Record<string, unknown>,

@@ -440,5 +440,6 @@ export const CREATE_PROJECT_SPACE_QUESTIONS: ClarificationQuestion[] = [
 export {
   WEBSITE_SETUP_QUESTIONS,
   WEBSITE_SETUP_RESUME_TOOL,
+  formatWebsiteSetupUserSummary,
 } from "@/lib/ai/build/website-setup-brief";
 

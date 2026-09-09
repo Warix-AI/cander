@@ -16,10 +16,21 @@ const LOG = "[cander:21st-mcp]";
 
 export function getTwentyFirstApiKey(): string | null {
   // Never read NEXT_PUBLIC_* — key must stay server-only.
-  const key =
+  let key =
     process.env.API_KEY_21ST?.trim() ||
     process.env.TWENTY_FIRST_API_KEY?.trim() ||
     "";
+  // Vercel / dotenv sometimes wrap secrets in quotes.
+  if (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1).trim();
+  }
+  // Reject Vercel pull placeholders
+  if (!key || key === "[SENSITIVE]" || key.toLowerCase() === "sensitive") {
+    return null;
+  }
   return key || null;
 }
 
@@ -164,6 +175,8 @@ export class TwentyFirstMcpClient {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
       "x-api-key": this.apiKey,
+      // Codex / some 21st clients use Bearer; send both.
+      Authorization: `Bearer ${this.apiKey}`,
     };
     if (this.sessionId) {
       headers["mcp-session-id"] = this.sessionId;
@@ -206,39 +219,57 @@ export class TwentyFirstMcpClient {
       return { ok: true, tools: this.discoveredTools };
     }
     try {
-      logInfo("connecting", { url: TWENTY_FIRST_MCP_URL });
-      await this.rpc("initialize", {
-        protocolVersion: "2024-11-05",
-        capabilities: {},
-        clientInfo: { name: "cander-build", version: "1.0.0" },
+      logInfo("connecting", {
+        url: TWENTY_FIRST_MCP_URL,
+        keyLen: this.apiKey.length,
+        keyPrefix: this.apiKey.slice(0, 3),
       });
       try {
-        await this.rpc("notifications/initialized", {}, { notification: true });
-      } catch (err) {
-        logWarn("notifications/initialized skipped", {
-          error: err instanceof Error ? err.message : String(err),
+        await this.rpc("initialize", {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "cander-build", version: "1.0.0" },
         });
+        try {
+          await this.rpc(
+            "notifications/initialized",
+            {},
+            { notification: true },
+          );
+        } catch (err) {
+          logWarn("notifications/initialized skipped", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+
+        const listed = await this.rpc("tools/list", {});
+        const toolsRaw =
+          listed &&
+          typeof listed === "object" &&
+          Array.isArray((listed as { tools?: unknown }).tools)
+            ? ((listed as { tools: McpToolDescriptor[] }).tools)
+            : [];
+        this.tools = toolsRaw.map((t) => ({
+          name: String(t.name),
+          description:
+            typeof t.description === "string" ? t.description : undefined,
+          inputSchema:
+            t.inputSchema && typeof t.inputSchema === "object"
+              ? (t.inputSchema as Record<string, unknown>)
+              : undefined,
+        }));
+      } catch (initErr) {
+        // Some HTTP MCP servers accept tools/call without a full initialize handshake.
+        logWarn("initialize/tools.list failed — probing search directly", {
+          error: initErr instanceof Error ? initErr.message : String(initErr),
+        });
+        this.tools = [
+          { name: "search" },
+          { name: "get_component" },
+        ];
       }
 
-      const listed = await this.rpc("tools/list", {});
-      const toolsRaw =
-        listed &&
-        typeof listed === "object" &&
-        Array.isArray((listed as { tools?: unknown }).tools)
-          ? ((listed as { tools: McpToolDescriptor[] }).tools)
-          : [];
-      this.tools = toolsRaw.map((t) => ({
-        name: String(t.name),
-        description:
-          typeof t.description === "string" ? t.description : undefined,
-        inputSchema:
-          t.inputSchema && typeof t.inputSchema === "object"
-            ? (t.inputSchema as Record<string, unknown>)
-            : undefined,
-      }));
-
       const names = new Set(this.discoveredTools);
-      // Prefer current names; fall back to legacy Magic names if needed.
       if (!names.has("search")) {
         for (const legacy of [
           "21st_magic_component_inspiration",
@@ -250,17 +281,24 @@ export class TwentyFirstMcpClient {
           }
         }
       }
-      if (!names.has("get_component")) {
-        for (const legacy of [
-          "21st_magic_component_builder",
-          "generate",
-        ]) {
-          if (names.has(legacy) && legacy !== this.toolNameMap.search) {
-            // Prefer explicit get if present; otherwise keep get_component name
-            // and let call fail loudly.
-            break;
-          }
-        }
+
+      // Probe auth with a tiny search; if this fails, connect is not ok.
+      try {
+        const probe = await this.rpc("tools/call", {
+          name: this.toolNameMap.search,
+          arguments: {
+            query: "hero",
+            limit: 1,
+            type: "component",
+          },
+        });
+        unwrapToolResult(probe);
+      } catch (probeErr) {
+        const message =
+          probeErr instanceof Error ? probeErr.message : String(probeErr);
+        logWarn("connect probe failed", { error: message });
+        this.connected = false;
+        return { ok: false, tools: this.discoveredTools, error: message };
       }
 
       this.connected = true;
