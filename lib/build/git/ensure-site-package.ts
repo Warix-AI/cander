@@ -99,6 +99,7 @@ export async function ensureDraftSitePackageJson(opts: {
   const needsSupport = !utils?.trim() || !tsconfig?.trim();
 
   // Sanitize vendor files that import the `ai` SDK (common 21st FAQ paste).
+  // Do not inject @ts-nocheck — components must compile.
   const vendorRepairs: { path: string; content: string }[] = [];
   try {
     const { data: tree } = await octokit.request(
@@ -131,7 +132,13 @@ export async function ensureDraftSitePackageJson(opts: {
     console.warn("[cander] vendor sanitize skipped", err);
   }
 
-  if (!needsPkg && !needsSupport && vendorRepairs.length === 0) {
+  // Always refresh tsconfig if it still excludes twenty-first (legacy suppression).
+  let needsTsconfigFix = false;
+  if (tsconfig?.includes("components/twenty-first")) {
+    needsTsconfigFix = true;
+  }
+
+  if (!needsPkg && !needsSupport && vendorRepairs.length === 0 && !needsTsconfigFix) {
     return {
       draftSha: project.draft_sha ? String(project.draft_sha) : "",
       repaired: false,
@@ -152,11 +159,21 @@ export async function ensureDraftSitePackageJson(opts: {
       content: ensureNextInPackageJson(rawPkg, { name: slug }),
     });
   }
-  if (needsSupport) {
+  if (needsSupport || needsTsconfigFix) {
     for (const f of siteSupportScaffoldFiles()) {
       // Don't overwrite existing utils/tsconfig if only one is missing.
-      if (f.path === "lib/utils.ts" && utils?.trim()) continue;
-      if (f.path === "tsconfig.json" && tsconfig?.trim()) continue;
+      if (f.path === "lib/utils.ts" && utils?.trim() && !needsTsconfigFix) continue;
+      if (
+        f.path === "tsconfig.json" &&
+        tsconfig?.trim() &&
+        !needsTsconfigFix
+      ) {
+        continue;
+      }
+      if (f.path === "tsconfig.json" && needsTsconfigFix) {
+        files.push(f);
+        continue;
+      }
       const existing = await readRepoFile(octokit, owner, repo, f.path, tip);
       if (existing?.trim() && f.path.startsWith("components/ui/")) continue;
       files.push(f);

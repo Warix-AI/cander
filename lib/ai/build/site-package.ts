@@ -68,7 +68,7 @@ export function ensureNextInPackageJson(
     const pkg = JSON.parse(raw) as Record<string, unknown>;
     const existingDeps =
       (pkg.dependencies as Record<string, string> | undefined) ?? {};
-    const dependencies = {
+    const dependencies: Record<string, string> = {
       ...SITE_COMMON_DEPENDENCIES,
       ...existingDeps,
       next: existingDeps.next || SITE_NEXT_VERSION,

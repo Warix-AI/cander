@@ -133,16 +133,65 @@ export function validateWebsiteFiles(opts: {
     );
   }
 
-  // When 21st vendor files are present, require provenance markers / paths.
-  const twentyFirstFiles = [...map.keys()].filter((p) =>
-    p.startsWith("components/twenty-first/"),
+  // When 21st vendor files are present, require support files and resolvable deps.
+  const twentyFirstFiles = [...map.keys()].filter(
+    (p) =>
+      p.startsWith("components/twenty-first/") &&
+      /\.(tsx|ts|jsx|js)$/.test(p) &&
+      !p.endsWith("README.md"),
   );
   if (twentyFirstFiles.length > 0) {
     const hasProvenance =
       /\/\*\s*21st(?:\.dev)?[:\s]/i.test(blob) ||
-      twentyFirstFiles.some((p) => p.endsWith(".tsx") || p.endsWith(".jsx"));
+      twentyFirstFiles.length > 0;
     if (!hasProvenance) {
       issues.push("21st vendor files present but provenance markers missing");
+    }
+    if (!map.has("lib/utils.ts") && /@\/lib\/utils/.test(blob)) {
+      issues.push("21st components import @/lib/utils but lib/utils.ts is missing");
+    }
+    if (!map.has("tsconfig.json") && /@\//.test(blob)) {
+      issues.push("21st components use @/ imports but tsconfig.json is missing");
+    }
+    let pkgDeps: Record<string, string> = {};
+    try {
+      const parsed = JSON.parse(pkgRaw || "{}") as {
+        dependencies?: Record<string, string>;
+      };
+      pkgDeps = parsed.dependencies ?? {};
+    } catch {
+      /* ignore */
+    }
+    for (const path of twentyFirstFiles) {
+      const src = map.get(path) || "";
+      if (/from\s+["']ai["']/.test(src)) {
+        issues.push(`${path} still imports blocked package "ai"`);
+      }
+      if (/^\s*\/\/\s*@ts-nocheck/m.test(src)) {
+        issues.push(`${path} uses @ts-nocheck — normalize instead of suppressing errors`);
+      }
+      const importRe =
+        /from\s+["'](framer-motion|lucide-react|clsx|tailwind-merge|class-variance-authority)["']/g;
+      let m: RegExpExecArray | null;
+      while ((m = importRe.exec(src)) !== null) {
+        const name = m[1]!;
+        if (!pkgDeps[name]) {
+          issues.push(`${path} imports ${name} but package.json lacks it`);
+        }
+      }
+      const uiRe = /from\s+["']@\/components\/ui\/([^"']+)["']/g;
+      while ((m = uiRe.exec(src)) !== null) {
+        const ui = m[1]!;
+        const candidates = [
+          `components/ui/${ui}.tsx`,
+          `components/ui/${ui}.ts`,
+          `components/ui/${ui}.jsx`,
+          `components/ui/${ui}.js`,
+        ];
+        if (!candidates.some((c) => map.has(c))) {
+          issues.push(`${path} imports @/components/ui/${ui} but file is missing`);
+        }
+      }
     }
   }
 

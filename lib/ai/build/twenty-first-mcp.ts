@@ -9,7 +9,6 @@
 
 import type { RetrievedComponentRef } from "@/lib/ai/build/website-setup-brief";
 import type { SiteSpec } from "@/lib/ai/build/site-spec";
-import { sanitizeTwentyFirstVendorSource } from "@/lib/ai/build/site-support-files";
 
 export const TWENTY_FIRST_MCP_URL = "https://21st.dev/api/mcp";
 
@@ -695,6 +694,7 @@ export function vendorPathForComponent(c: RetrievedComponentRef): string {
 
 /**
  * Turn retrieved snippets into sandbox files the agent must adapt.
+ * Prefer normalizeTwentyFirstPipeline — this writes already-normalized snippets only.
  */
 export function retrievedComponentsToScaffoldFiles(
   components: RetrievedComponentRef[],
@@ -708,19 +708,25 @@ export function retrievedComponentsToScaffoldFiles(
     const code = c.codeSnippet?.trim();
     if (!code) continue;
     const path = vendorPathForComponent(c);
-    const banner = [
-      `/* 21st.dev component`,
-      ` * id: ${c.id}`,
-      ` * name: ${c.name}`,
-      ` * role: ${c.category}`,
-      ` * Adapt props/copy/tokens to SiteSpec; keep structure.`,
-      ` */`,
-      "",
-    ].join("\n");
-    files.push({ path, content: `${banner}${sanitizeTwentyFirstVendorSource(code)}\n` });
-    indexLines.push(
-      `// ${c.category}: ${c.name} (${c.id}) → ${path}`,
-    );
+    // Assume code is already normalized by normalizeTwentyFirstPipeline.
+    // Only add a banner if missing.
+    const content = code.includes("21st.dev component")
+      ? code.endsWith("\n")
+        ? code
+        : `${code}\n`
+      : [
+          `/* 21st.dev component`,
+          ` * id: ${c.id}`,
+          ` * name: ${c.name}`,
+          ` * role: ${c.category}`,
+          ` * Adapt props/copy/tokens to SiteSpec; keep structure.`,
+          ` */`,
+          "",
+          code,
+          "",
+        ].join("\n");
+    files.push({ path, content });
+    indexLines.push(`// ${c.category}: ${c.name} (${c.id}) → ${path}`);
   }
   if (files.length) {
     files.push({
@@ -728,8 +734,7 @@ export function retrievedComponentsToScaffoldFiles(
       content: [
         "# 21st.dev components for this build",
         "",
-        "These files were retrieved via the 21st MCP (`search` + `get_component`).",
-        "Codex should import/adapt them into the App Router pages instead of inventing new section markup from scratch.",
+        "These files were retrieved via the 21st MCP and normalized (deps, UI primitives, imports) before Codex adaptation.",
         "",
         ...indexLines.filter((l) => l.startsWith("//")),
         "",

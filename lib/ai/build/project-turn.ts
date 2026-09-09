@@ -584,25 +584,105 @@ async function runWebsiteCreatePipeline(opts: {
   }
 
   let files = composeSiteFromSpec(spec);
-  const vendorFiles = retrievedComponentsToScaffoldFiles(retrieved);
   let usedCodex = false;
-  const hasUsableTwentyFirst = retrieved.some((c) => c.codeSnippet?.trim());
+  let hasUsableTwentyFirst = retrieved.some((c) => c.codeSnippet?.trim());
+  let usedTwentyFirstFallbackAfterNormalize = usedTwentyFirstFallback;
+
+  // 21st search → fetch → analyze → resolve/install → normalize → validate
+  // → only then expose clean components to Codex.
+  let normalizedFiles: { path: string; content: string }[] = [];
+  let normalizedPackageDeps: Record<string, string> = {};
+  if (hasUsableTwentyFirst) {
+    report({
+      phase: "thinking",
+      label: "Building",
+      detail: "Analyzing 21st.dev dependencies and installing support files…",
+    });
+    const {
+      normalizeTwentyFirstPipeline,
+      normalizedToRetrievedRefs,
+    } = await import("@/lib/ai/build/twenty-first/pipeline");
+    const globalsFile = files.find((f) => f.path === "app/globals.css");
+    const normalized = normalizeTwentyFirstPipeline({
+      components: retrieved,
+      existingGlobalsCss: globalsFile?.content ?? null,
+    });
+    for (const line of normalized.logs) {
+      console.info("[cander:21st-normalize]", line);
+    }
+    if (normalized.fallbackToCatalog || !normalized.ok) {
+      usedTwentyFirstFallbackAfterNormalize = true;
+      hasUsableTwentyFirst = false;
+      retrieved = [];
+      report({
+        phase: "thinking",
+        label: "Building",
+        detail:
+          "21st components could not be normalized — using Cander catalog…",
+      });
+    } else {
+      retrieved = normalizedToRetrievedRefs(normalized.components);
+      normalizedFiles = normalized.files;
+      normalizedPackageDeps = normalized.packageDependencies;
+      usedTwentyFirstFallbackAfterNormalize = false;
+      hasUsableTwentyFirst = retrieved.length > 0;
+
+      // Persist package.json + support + normalized vendor BEFORE Codex.
+      const { ensureNextInPackageJson, canonicalSitePackageJson } =
+        await import("@/lib/ai/build/site-package");
+      const basePkg = canonicalSitePackageJson({ name: "cander-site" });
+      const mergedDeps = {
+        ...((basePkg.dependencies as Record<string, string>) || {}),
+        ...normalizedPackageDeps,
+      };
+      const pkgJson = ensureNextInPackageJson(
+        JSON.stringify({ ...basePkg, dependencies: mergedDeps }),
+        { name: "cander-site" },
+      );
+      const installFiles = [
+        { path: "package.json", content: pkgJson },
+        ...normalizedFiles.filter((f) => f.path !== "package.json"),
+      ];
+      // Deduplicate by path (last wins)
+      const byPath = new Map<string, { path: string; content: string }>();
+      for (const f of installFiles) byPath.set(f.path, f);
+      const toWrite = [...byPath.values()];
+      report({
+        phase: "thinking",
+        label: "Building",
+        detail: `Installing ${Object.keys(normalizedPackageDeps).length} packages and ${toWrite.length} support files…`,
+      });
+      const written = await writeScaffold({
+        projectId,
+        workspaceId,
+        files: toWrite,
+        report,
+      });
+      toolResults.push(...written);
+
+      // Force sandbox recreate so npm install sees the new package.json.
+      await ensureSandboxReady({ projectId, workspaceId, forceRestart: true });
+    }
+
+    if (brief) {
+      brief = {
+        ...brief,
+        retrievedComponents: retrieved,
+        updatedAt: new Date().toISOString(),
+      };
+      await saveWebsiteSetupBrief({ projectId, workspaceId, brief });
+    }
+  }
+
+  const vendorFiles = retrievedComponentsToScaffoldFiles(retrieved);
 
   if (hasUsableTwentyFirst) {
     report({
       phase: "thinking",
       label: "Building",
-      detail: "Writing retrieved 21st components, then Codex adapting them…",
+      detail: "Codex adapting normalized 21st components into the site…",
     });
-    // Persist vendor sources first so Codex adapts real code, not placeholders.
-    const vendorWritten = await writeScaffold({
-      projectId,
-      workspaceId,
-      files: vendorFiles,
-      report,
-    });
-    toolResults.push(...vendorWritten);
-
+    // Vendor already written during normalize; Codex adapts into pages.
     const composeRequest: AiGenerateRequest = {
       ...request,
       content: [
@@ -610,6 +690,7 @@ async function runWebsiteCreatePipeline(opts: {
         "CRITICAL: Adapt the retrieved 21st.dev components below into App Router pages.",
         "Do NOT invent a minimal placeholder scaffold when 21st source is provided.",
         "Import/adapt files under components/twenty-first/*; keep SiteSpec copy, CTAs, nav, SEO.",
+        "Dependencies and UI primitives are already installed — do not invent missing modules.",
         "You may call build.component.search / build.component.get only if a section is missing (cached).",
         briefToPlanningPrompt(
           brief ?? {
@@ -622,7 +703,7 @@ async function runWebsiteCreatePipeline(opts: {
         "",
         `SiteSpec JSON:\n${JSON.stringify(spec).slice(0, 12000)}`,
         "",
-        "Retrieved 21st.dev components:",
+        "Normalized 21st.dev components (ready to import):",
         formatRetrievedComponentsForCodex(retrieved),
       ].join("\n"),
       allowTools: true,
@@ -644,6 +725,7 @@ async function runWebsiteCreatePipeline(opts: {
         "21st MCP tools are available as build.component.search and build.component.get (server-side, cached).",
         "Write Next.js App Router files. Include header, footer, mobile nav, metadata, robots, sitemap.",
         "Leave a short comment near adapted sections: /* 21st: <id> */ so we can verify provenance.",
+        "package.json, lib/utils, and components/ui/* are already present — reuse them.",
       ].join("\n\n"),
     };
     const coding = await runCodingAgentLoop(composeRequest, turnOpts, {
@@ -666,8 +748,8 @@ async function runWebsiteCreatePipeline(opts: {
     console.info("[cander:21st-mcp] compose path", {
       reason: hasUsableTwentyFirst
         ? "codex produced no writes — merging catalog scaffold + vendor files"
-        : usedTwentyFirstFallback
-          ? "21st empty/unavailable — Cander catalog fallback"
+        : usedTwentyFirstFallbackAfterNormalize
+          ? "21st empty/unavailable/unnormalizable — Cander catalog fallback"
           : "no 21st code snippets — catalog scaffold",
       connected: twentyFirstMeta.connected,
       tools: twentyFirstMeta.tools,
@@ -676,7 +758,7 @@ async function runWebsiteCreatePipeline(opts: {
       phase: "thinking",
       label: "Building",
       detail: hasUsableTwentyFirst
-        ? "Merging catalog shell with retrieved 21st vendor files…"
+        ? "Merging catalog shell with normalized 21st vendor files…"
         : "Composing site files from the Cander design system…",
     });
     const merged = hasUsableTwentyFirst
@@ -815,14 +897,28 @@ async function runWebsiteCreatePipeline(opts: {
     const { ensureNextInPackageJson } = await import(
       "@/lib/ai/build/site-package"
     );
-    const toWrite = essentials.map((f) =>
-      f.path === "package.json"
-        ? {
-            ...f,
-            content: ensureNextInPackageJson(f.content, { name: "cander-site" }),
-          }
-        : f,
-    );
+    const toWrite = essentials.map((f) => {
+      if (f.path !== "package.json") return f;
+      let content = f.content;
+      if (Object.keys(normalizedPackageDeps).length) {
+        try {
+          const pkg = JSON.parse(content) as {
+            dependencies?: Record<string, string>;
+          };
+          pkg.dependencies = {
+            ...(pkg.dependencies ?? {}),
+            ...normalizedPackageDeps,
+          };
+          content = `${JSON.stringify(pkg, null, 2)}\n`;
+        } catch {
+          /* keep */
+        }
+      }
+      return {
+        ...f,
+        content: ensureNextInPackageJson(content, { name: "cander-site" }),
+      };
+    });
     report({
       phase: "thinking",
       label: "Building",
@@ -903,8 +999,8 @@ async function runWebsiteCreatePipeline(opts: {
                 ? ""
                 : "s"
             }`
-          : usedTwentyFirstFallback
-            ? " from the Cander design system (21st MCP unavailable or empty — fallback)"
+          : usedTwentyFirstFallbackAfterNormalize
+            ? " from the Cander design system (21st MCP unavailable, empty, or failed normalize — fallback)"
             : " from the design system"
       }, validated, and saved to GitHub.`,
       "Preview should unlock on your draft URL — use Reload if it’s still warming up.",
