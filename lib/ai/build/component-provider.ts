@@ -108,34 +108,96 @@ export function createCanderCacheComponentProvider(): ComponentProvider {
 }
 
 /**
- * 21st.dev adapter stub — enabled when NEXT_PUBLIC_AI_BUILD_21ST=1.
- * Does not call network unless explicitly implemented later.
+ * 21st.dev provider — real MCP when API_KEY_21ST / TWENTY_FIRST_API_KEY is set;
+ * otherwise falls back to Cander cache stand-ins.
  */
 export function createTwentyFirstDevProvider(): ComponentProvider {
-  const cache = createCanderCacheComponentProvider();
   return {
     id: "twenty_first_dev",
     async search(query, opts) {
-      // Stub: map to cache-tagged candidates as stand-ins; real MCP later.
+      try {
+        const {
+          getActiveTwentyFirstClient,
+          createTwentyFirstMcpClient,
+          setActiveTwentyFirstClient,
+          isTwentyFirstConfigured,
+        } = await import("@/lib/ai/build/twenty-first-mcp");
+        if (isTwentyFirstConfigured()) {
+          let client = getActiveTwentyFirstClient();
+          if (!client) {
+            client = await createTwentyFirstMcpClient();
+            if (client) setActiveTwentyFirstClient(client);
+          }
+          if (client) {
+            const hits = await client.search({
+              query,
+              role: opts?.role,
+              limit: opts?.limit ?? 5,
+            });
+            return hits.map((h) => ({
+              id: h.id,
+              name: h.name,
+              category: opts?.role || h.category,
+              compatibility: ["site", "app"],
+              dependencies: h.dependencies,
+              source: "twenty_first" as const,
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn("[cander:21st-mcp] provider search fallback", err);
+      }
+      const cache = createCanderCacheComponentProvider();
       const base = await cache.search(query, opts);
       return base.slice(0, 5).map((c) => ({
         ...c,
         id: `21st.${c.id}`,
         source: "twenty_first" as const,
-        name: `${c.name} (21st)`,
+        name: `${c.name} (21st unavailable — catalog stand-in)`,
       }));
     },
     async get(id) {
+      try {
+        const {
+          getActiveTwentyFirstClient,
+          createTwentyFirstMcpClient,
+          setActiveTwentyFirstClient,
+          isTwentyFirstConfigured,
+        } = await import("@/lib/ai/build/twenty-first-mcp");
+        if (isTwentyFirstConfigured()) {
+          let client = getActiveTwentyFirstClient();
+          if (!client) {
+            client = await createTwentyFirstMcpClient();
+            if (client) setActiveTwentyFirstClient(client);
+          }
+          if (client) {
+            const hit = await client.getComponent(id.replace(/^21st\./, ""));
+            if (hit) {
+              return {
+                id: hit.id,
+                name: hit.name,
+                category: hit.category,
+                compatibility: ["site", "app"],
+                dependencies: hit.dependencies,
+                source: "twenty_first" as const,
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[cander:21st-mcp] provider get fallback", err);
+      }
+      const cache = createCanderCacheComponentProvider();
       const inner = id.replace(/^21st\./, "");
       const c = await cache.get(inner);
       if (!c) return null;
       return { ...c, id, source: "twenty_first", name: `${c.name} (21st)` };
     },
     async install(id, ctx) {
+      const cache = createCanderCacheComponentProvider();
       const inner = id.replace(/^21st\./, "");
       const result = await cache.install(inner, ctx);
       if (!result.ok) return result;
-      // Normalize toward project tokens (placeholder marker file).
       return {
         ok: true,
         filesWritten: [
@@ -178,7 +240,9 @@ export async function searchComponentsBounded(opts: {
     opts.providers ??
     [
       createCanderCacheComponentProvider(),
-      ...(process.env.NEXT_PUBLIC_AI_BUILD_21ST === "1"
+      ...(process.env.NEXT_PUBLIC_AI_BUILD_21ST === "1" ||
+      process.env.API_KEY_21ST ||
+      process.env.TWENTY_FIRST_API_KEY
         ? [createTwentyFirstDevProvider()]
         : []),
     ];

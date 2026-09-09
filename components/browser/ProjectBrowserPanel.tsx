@@ -122,6 +122,7 @@ import {
   newMarkdownShareId,
 } from "@/lib/shared-markdown";
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
+import { useWebsiteSetupBrief } from "@/lib/hooks/use-website-setup-brief";
 import {
   deleteStudioProjectAsset,
   editStudioProjectImage,
@@ -351,8 +352,15 @@ export function ProjectBrowserPanel({
   );
   const [draftPreviewUrl, setDraftPreviewUrl] = useState<string | null>(null);
 
+  const { brief: websiteBrief, setupBlocksPreview } = useWebsiteSetupBrief({
+    projectId,
+    workspaceId: ctx.workspaceId,
+    kind: entity?.kind,
+  });
+
   // Build drafts: ensure infra/sandbox and point the pinned preview at draft--
   // (never load `{projectId}.cander.app`, which embeds the Cander login shell).
+  // Skip while guided website setup is incomplete / not ready.
   useEffect(() => {
     if (
       standalone ||
@@ -361,6 +369,13 @@ export function ProjectBrowserPanel({
       entity?.kind === "automation" ||
       entity?.kind === "research"
     ) {
+      return;
+    }
+    if (setupBlocksPreview) {
+      setSandboxEnvStatus(null);
+      setSandboxEnvMessage(null);
+      setSandboxPreviewSrc(null);
+      setDraftPreviewUrl(null);
       return;
     }
     // Keep ensuring draft sandbox even after publish — preview stays on draft.
@@ -438,8 +453,8 @@ export function ProjectBrowserPanel({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per project
-  }, [standalone, projectId, ctx.workspaceId, browserSpaceId, entity?.kind, entity?.publishedUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per project / setup gate
+  }, [standalone, projectId, ctx.workspaceId, browserSpaceId, entity?.kind, entity?.publishedUrl, setupBlocksPreview]);
 
   const session =
     hydrated && key
@@ -2437,8 +2452,16 @@ export function ProjectBrowserPanel({
           sandboxEnvMessage={sandboxEnvMessage}
           sandboxPreviewSrc={sandboxPreviewSrc}
           draftPreviewUrl={draftPreviewUrl}
+          websiteSetup={
+            setupBlocksPreview
+              ? {
+                  status: websiteBrief?.status ?? "setup",
+                  completedSteps: websiteBrief?.completedSteps ?? 0,
+                }
+              : null
+          }
           onSandboxRetry={() => {
-            if (!projectId || !ctx.workspaceId) return;
+            if (!projectId || !ctx.workspaceId || setupBlocksPreview) return;
             setSandboxEnvStatus("starting");
             void import("@/lib/api/project-sandbox-client").then(async (m) => {
               const result = await m.ensureProjectSandboxClient({
@@ -2770,6 +2793,7 @@ function ProjectBrowserBody({
   sandboxEnvMessage = null,
   sandboxPreviewSrc = null,
   draftPreviewUrl = null,
+  websiteSetup = null,
   onSandboxRetry,
   onSandboxReload,
 }: {
@@ -2789,6 +2813,10 @@ function ProjectBrowserBody({
   sandboxEnvMessage?: string | null;
   sandboxPreviewSrc?: string | null;
   draftPreviewUrl?: string | null;
+  websiteSetup?: {
+    status: "setup" | "building" | "ready" | "failed";
+    completedSteps: number;
+  } | null;
   onSandboxRetry?: () => void;
   onSandboxReload?: () => void;
 }) {
@@ -3049,6 +3077,7 @@ function ProjectBrowserBody({
         previewSrc={sandboxPreviewSrc}
         draftPreviewUrl={draftPreviewUrl}
         publishedUrl={published}
+        websiteSetup={websiteSetup}
         onRetryEnv={onSandboxRetry}
         onReloadPreview={onSandboxReload}
       />

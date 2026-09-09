@@ -30,6 +30,27 @@ import {
 import { composeSiteFromSpec } from "@/lib/ai/build/compose-site";
 import { planWebsite } from "@/lib/ai/build/plan-website";
 import type { ScaffoldFile } from "@/lib/ai/build/site-spec";
+import {
+  briefToPlanningPrompt,
+  isWebsiteSetupComplete,
+  mergeAnswersIntoBrief,
+  WEBSITE_SETUP_RESUME_TOOL,
+  type WebsiteSetupBrief,
+} from "@/lib/ai/build/website-setup-brief";
+import { validateWebsiteFiles } from "@/lib/ai/build/website-validate";
+import {
+  formatRetrievedComponentsForCodex,
+  isTwentyFirstConfigured,
+  retrieveComponentsForSiteSpec,
+  retrievedComponentsToScaffoldFiles,
+  setActiveTwentyFirstClient,
+  createTwentyFirstMcpClient,
+} from "@/lib/ai/build/twenty-first-mcp";
+import {
+  getProjectKindForSetup,
+  loadWebsiteSetupBrief,
+  saveWebsiteSetupBrief,
+} from "@/lib/build/website-setup-brief-store";
 
 const MAX_ROUNDS = 10;
 
@@ -37,7 +58,10 @@ const PLAN_INTENT_RE =
   /\b(plan|planning|brainstorm|outline|theme|themes|mood\s*board|wireframe|sitemap|ia\b|information\s*architecture|what\s+should|help\s+me\s+(decide|figure)|before\s+we\s+build|don'?t\s+build\s+yet|just\s+plan)\b/i;
 
 const IMPLEMENT_INTENT_RE =
-  /\b(implement|build\s+it|create\s+it|scaffold|ship\s+it|go\s+ahead|make\s+it|write\s+the\s+code|start\s+coding|let'?s\s+build|do\s+it|run\s+supabase|set\s+up\s+supabase)\b/i;
+  /\b(implement|build\s+it|create\s+it|scaffold|ship\s+it|go\s+ahead|make\s+it|write\s+the\s+code|start\s+coding|let'?s\s+build|do\s+it|run\s+supabase|set\s+up\s+supabase|build\s+my\s+site|website\.build_from_setup)\b/i;
+
+const GUIDED_SETUP_CONFIRM_RE =
+  /website\.build_from_setup|Build my site|Ready to build|confirm_build|Guided website setup brief/i;
 
 const BUILD_PLAN_INSTRUCTIONS = `You are Cander Build — planning partner for websites and apps.
 
@@ -412,6 +436,447 @@ async function runCodingAgentLoop(
   };
 }
 
+function parseSetupAnswersFromContent(
+  content: string,
+): Record<string, unknown> | null {
+  const answers: Record<string, unknown> = {};
+  const lines = content.split("\n");
+  for (const line of lines) {
+    const m = line.match(/^-\s*([^:]+):\s*(.+)$/);
+    if (!m) continue;
+    const label = m[1]!.trim().toLowerCase();
+    const value = m[2]!.trim();
+    if (label.includes("business")) answers.business_goal = value;
+    else if (label.includes("audience")) answers.audience_cta = value;
+    else if (label.includes("depth")) answers.site_depth = value;
+    else if (label.includes("visual")) answers.visual_style = value;
+    else if (label.includes("color")) answers.brand_colors = value;
+    else if (label.includes("layout")) {
+      answers.layout_shape = value.includes(",")
+        ? value.split(",").map((s) => s.trim())
+        : value;
+    } else if (label.includes("copy") || label.includes("tone")) {
+      answers.copy_tone = value;
+    } else if (label.includes("section") || label.includes("feature")) {
+      answers.sections_features = value.includes(",")
+        ? value.split(",").map((s) => s.trim())
+        : value;
+    }
+  }
+  // Also catch JSON-ish clarification dumps: `- business_goal: "..."`
+  for (const key of [
+    "business_goal",
+    "audience_cta",
+    "site_depth",
+    "visual_style",
+    "brand_colors",
+    "layout_shape",
+    "copy_tone",
+    "sections_features",
+    "confirm_build",
+  ]) {
+    const re = new RegExp(`${key}["']?\\s*[:=]\\s*["']?([^"'\\n]+)`, "i");
+    const hit = content.match(re);
+    if (hit?.[1] && !(key in answers)) {
+      answers[key] = hit[1].trim();
+    }
+  }
+  return Object.keys(answers).length ? answers : null;
+}
+
+async function runWebsiteCreatePipeline(opts: {
+  request: AiGenerateRequest;
+  opts?: AgentTurnOptions;
+  projectId: string;
+  workspaceId: string;
+  allowedTools: string[];
+  toolResults: AiToolCallResult[];
+  websiteBrief: WebsiteSetupBrief | null;
+  isSiteProject: boolean;
+  report: NonNullable<AgentTurnOptions["onProgress"]>;
+}): Promise<AgentTurnResult> {
+  const {
+    request,
+    opts: turnOpts,
+    projectId,
+    workspaceId,
+    allowedTools,
+    toolResults,
+    isSiteProject,
+    report,
+  } = opts;
+  let brief = opts.websiteBrief;
+
+  if (isSiteProject && brief) {
+    brief = {
+      ...brief,
+      status: "building",
+      updatedAt: new Date().toISOString(),
+    };
+    await saveWebsiteSetupBrief({ projectId, workspaceId, brief });
+  }
+
+  report({
+    phase: "thinking",
+    label: "Building",
+    detail: "Planning site design from your brief…",
+  });
+
+  const planRequest: AiGenerateRequest = {
+    ...request,
+    content: [
+      brief ? briefToPlanningPrompt(brief) : "",
+      "",
+      request.content,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  };
+  const spec = await planWebsite(planRequest, turnOpts);
+
+  report({
+    phase: "thinking",
+    label: "Building",
+    detail: isTwentyFirstConfigured()
+      ? "Connecting to 21st.dev MCP and retrieving matching components…"
+      : "Composing site from the design system…",
+  });
+
+  let retrieved =
+    brief?.retrievedComponents?.length ? brief.retrievedComponents : [];
+  let usedTwentyFirstFallback = true;
+  let twentyFirstMeta = {
+    connected: false,
+    tools: [] as string[],
+  };
+  try {
+    const mcpClient = await createTwentyFirstMcpClient();
+    const retrieval = await retrieveComponentsForSiteSpec(spec, mcpClient);
+    retrieved = retrieval.components;
+    usedTwentyFirstFallback = retrieval.usedFallback;
+    twentyFirstMeta = {
+      connected: retrieval.connected,
+      tools: retrieval.toolsDiscovered,
+    };
+    console.info("[cander:21st-mcp] pipeline retrieval", {
+      connected: retrieval.connected,
+      tools: retrieval.toolsDiscovered,
+      selected: retrieved.map((c) => `${c.category}:${c.id}`),
+      withCode: retrieved.filter((c) => c.codeSnippet?.trim()).length,
+      usedFallback: retrieval.usedFallback,
+      error: retrieval.error,
+    });
+  } catch (err) {
+    console.warn("[cander:21st-mcp] retrieve failed; catalog fallback", err);
+    usedTwentyFirstFallback = true;
+  }
+
+  if (brief) {
+    brief = {
+      ...brief,
+      siteSpec: spec,
+      retrievedComponents: retrieved,
+      status: "building",
+      updatedAt: new Date().toISOString(),
+    };
+    await saveWebsiteSetupBrief({ projectId, workspaceId, brief });
+  }
+
+  let files = composeSiteFromSpec(spec);
+  const vendorFiles = retrievedComponentsToScaffoldFiles(retrieved);
+  let usedCodex = false;
+  const hasUsableTwentyFirst = retrieved.some((c) => c.codeSnippet?.trim());
+
+  if (hasUsableTwentyFirst) {
+    report({
+      phase: "thinking",
+      label: "Building",
+      detail: "Writing retrieved 21st components, then Codex adapting them…",
+    });
+    // Persist vendor sources first so Codex adapts real code, not placeholders.
+    const vendorWritten = await writeScaffold({
+      projectId,
+      workspaceId,
+      files: vendorFiles,
+      report,
+    });
+    toolResults.push(...vendorWritten);
+
+    const composeRequest: AiGenerateRequest = {
+      ...request,
+      content: [
+        "Compose this marketing site in the sandbox using computer.files.* tools.",
+        "CRITICAL: Adapt the retrieved 21st.dev components below into App Router pages.",
+        "Do NOT invent a minimal placeholder scaffold when 21st source is provided.",
+        "Import/adapt files under components/twenty-first/*; keep SiteSpec copy, CTAs, nav, SEO.",
+        "You may call build.component.search / build.component.get only if a section is missing (cached).",
+        briefToPlanningPrompt(
+          brief ?? {
+            status: "building",
+            completedSteps: 8,
+            answers: {},
+            updatedAt: new Date().toISOString(),
+          },
+        ),
+        "",
+        `SiteSpec JSON:\n${JSON.stringify(spec).slice(0, 12000)}`,
+        "",
+        "Retrieved 21st.dev components:",
+        formatRetrievedComponentsForCodex(retrieved),
+      ].join("\n"),
+      allowTools: true,
+      allowedToolNames: [
+        ...allowedTools,
+        "build.component.search",
+        "build.component.get",
+      ],
+      modelMode: "coding",
+      toolContext: [
+        formatToolsForPrompt([
+          ...allowedTools,
+          "build.component.search",
+          "build.component.get",
+        ]),
+        BUILD_PROJECT_INSTRUCTIONS,
+        `Active projectId: ${projectId}`,
+        `workspaceId: ${workspaceId}`,
+        "21st MCP tools are available as build.component.search and build.component.get (server-side, cached).",
+        "Write Next.js App Router files. Include header, footer, mobile nav, metadata, robots, sitemap.",
+        "Leave a short comment near adapted sections: /* 21st: <id> */ so we can verify provenance.",
+      ].join("\n\n"),
+    };
+    const coding = await runCodingAgentLoop(composeRequest, turnOpts, {
+      projectId,
+      workspaceId,
+      allowedTools: [
+        ...allowedTools,
+        "build.component.search",
+        "build.component.get",
+      ],
+      priorResults: toolResults,
+    });
+    toolResults.push(...(coding.toolResults ?? []));
+    usedCodex = (coding.toolResults ?? []).some(
+      (r) => r.name === "computer.files.write" && r.ok,
+    );
+  }
+
+  if (!usedCodex) {
+    console.info("[cander:21st-mcp] compose path", {
+      reason: hasUsableTwentyFirst
+        ? "codex produced no writes — merging catalog scaffold + vendor files"
+        : usedTwentyFirstFallback
+          ? "21st empty/unavailable — Cander catalog fallback"
+          : "no 21st code snippets — catalog scaffold",
+      connected: twentyFirstMeta.connected,
+      tools: twentyFirstMeta.tools,
+    });
+    report({
+      phase: "thinking",
+      label: "Building",
+      detail: hasUsableTwentyFirst
+        ? "Merging catalog shell with retrieved 21st vendor files…"
+        : "Composing site files from the Cander design system…",
+    });
+    const merged = hasUsableTwentyFirst
+      ? [...vendorFiles, ...files]
+      : files;
+    const written = await writeScaffold({
+      projectId,
+      workspaceId,
+      files: merged,
+      report,
+    });
+    toolResults.push(...written);
+  }
+
+  // Clear MCP client after generation so the next turn does not reuse stale cache across projects.
+  setActiveTwentyFirstClient(null);
+
+  const okWrites = toolResults.filter(
+    (r) => r.name === "computer.files.write" && r.ok,
+  ).length;
+  if (okWrites === 0) {
+    if (brief) {
+      await saveWebsiteSetupBrief({
+        projectId,
+        workspaceId,
+        brief: { ...brief, status: "failed", updatedAt: new Date().toISOString() },
+      });
+    }
+    return {
+      content: "I couldn’t write files into the sandbox. Try confirming build again.",
+      runtime: "cloud",
+      offline: false,
+      condensationOccurred: false,
+      aiChatId: request.aiChatId ?? null,
+      toolResults,
+    };
+  }
+
+  // Re-compose files for validation when Codex wrote (best-effort from Spec + vendor).
+  if (usedCodex) {
+    files = [...vendorFiles, ...composeSiteFromSpec(spec)];
+  } else if (hasUsableTwentyFirst) {
+    files = [...vendorFiles, ...composeSiteFromSpec(spec)];
+  }
+
+  report({
+    phase: "thinking",
+    label: "Building",
+    detail: "Validating pages, nav, SEO, and forms…",
+  });
+  let validation = validateWebsiteFiles({ files, spec });
+  if (!validation.ok && usedCodex === false) {
+    // Deterministic compose should usually pass; still report.
+  }
+
+  if (!validation.ok) {
+    report({
+      phase: "thinking",
+      label: "Building",
+      detail: "Repairing validation issues…",
+    });
+    const repairRequest: AiGenerateRequest = {
+      ...request,
+      content: [
+        `Fix these website validation issues with computer.files.* tools:`,
+        ...validation.issues.map((i) => `- ${i}`),
+        "",
+        `SiteSpec: ${JSON.stringify(spec).slice(0, 8000)}`,
+      ].join("\n"),
+      allowTools: true,
+      allowedToolNames: allowedTools,
+      modelMode: "coding",
+      toolContext: [
+        formatToolsForPrompt(allowedTools),
+        BUILD_PROJECT_INSTRUCTIONS,
+        `Active projectId: ${projectId}`,
+        `workspaceId: ${workspaceId}`,
+      ].join("\n\n"),
+    };
+    const repair = await runCodingAgentLoop(repairRequest, turnOpts, {
+      projectId,
+      workspaceId,
+      allowedTools,
+      priorResults: toolResults,
+    });
+    toolResults.push(...(repair.toolResults ?? []));
+    // Re-validate against composed Spec files (proxy for structure).
+    validation = validateWebsiteFiles({ files: composeSiteFromSpec(spec), spec });
+  }
+
+  if (!validation.ok) {
+    if (brief) {
+      await saveWebsiteSetupBrief({
+        projectId,
+        workspaceId,
+        brief: {
+          ...brief,
+          status: "failed",
+          validationIssues: validation.issues,
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    }
+    return {
+      content: [
+        "Draft files were written, but validation failed — preview stays blank until this is fixed:",
+        ...validation.issues.map((i) => `- ${i}`),
+        "",
+        "Tell me to repair the site and I’ll take another pass.",
+      ].join("\n"),
+      runtime: "cloud",
+      offline: false,
+      condensationOccurred: false,
+      aiChatId: request.aiChatId ?? null,
+      toolResults,
+    };
+  }
+
+  await ensureSandboxReady({ projectId, workspaceId, forceRestart: false });
+
+  if (brief) {
+    await saveWebsiteSetupBrief({
+      projectId,
+      workspaceId,
+      brief: {
+        ...brief,
+        status: "ready",
+        siteSpec: spec,
+        retrievedComponents: retrieved,
+        validationIssues: [],
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  }
+
+  const gaps = spec.customGaps.filter(Boolean);
+  let gapNote = "";
+  if (gaps.length > 0) {
+    report({
+      phase: "thinking",
+      label: "Building",
+      detail: "Filling custom gaps with the coding agent…",
+    });
+    const gapRequest: AiGenerateRequest = {
+      ...request,
+      content: [
+        request.content,
+        "",
+        `Site scaffold for ${spec.businessName} is already written.`,
+        "Implement ONLY these custom gaps with computer.files.* tools:",
+        ...gaps.map((g) => `- ${g}`),
+      ].join("\n"),
+      allowTools: true,
+      allowedToolNames: allowedTools,
+      modelMode: "coding",
+      toolContext: [
+        formatToolsForPrompt(allowedTools),
+        BUILD_PROJECT_INSTRUCTIONS,
+        `Active projectId: ${projectId}`,
+        `workspaceId: ${workspaceId}`,
+        "Do not rewrite the whole site. Only address the listed gaps.",
+      ].join("\n\n"),
+    };
+    const coding = await runCodingAgentLoop(gapRequest, turnOpts, {
+      projectId,
+      workspaceId,
+      allowedTools,
+      priorResults: toolResults,
+    });
+    toolResults.push(...(coding.toolResults ?? []));
+    gapNote = coding.content
+      ? `\n\nCustom gaps: ${gaps.join("; ")}.\n${coding.content}`
+      : `\n\nCustom gaps noted for later: ${gaps.join("; ")}.`;
+  }
+
+  return {
+    content: [
+      `Created a production-ready draft site for **${spec.businessName}** (${okWrites} files)${
+        hasUsableTwentyFirst
+          ? ` using ${retrieved.filter((c) => c.codeSnippet?.trim()).length} 21st.dev MCP component${
+              retrieved.filter((c) => c.codeSnippet?.trim()).length === 1
+                ? ""
+                : "s"
+            }`
+          : usedTwentyFirstFallback
+            ? " from the Cander design system (21st MCP unavailable or empty — fallback)"
+            : " from the design system"
+      }, validated, and saved to GitHub.`,
+      "Preview should unlock on your draft URL — use Reload if it’s still warming up.",
+      gapNote,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    runtime: "cloud",
+    offline: false,
+    condensationOccurred: false,
+    aiChatId: request.aiChatId ?? null,
+    toolResults,
+  };
+}
+
 export async function runBuildProjectTurn(
   request: AiGenerateRequest,
   opts?: AgentTurnOptions,
@@ -439,6 +904,81 @@ export async function runBuildProjectTurn(
     return runBuildPlanTurn(request, opts);
   }
 
+  const projectKind =
+    (request.projectKind || "").trim().toLowerCase() ||
+    (await getProjectKindForSetup(projectId, workspaceId)) ||
+    "";
+  const isSiteProject = projectKind === "site";
+
+  let websiteBrief: WebsiteSetupBrief | null = null;
+  if (isSiteProject) {
+    websiteBrief = await loadWebsiteSetupBrief(projectId, workspaceId);
+    // Merge clarification answers embedded in the resume message when present.
+    if (
+      GUIDED_SETUP_CONFIRM_RE.test(request.content) ||
+      request.content.includes(WEBSITE_SETUP_RESUME_TOOL)
+    ) {
+      const parsed = parseSetupAnswersFromContent(request.content);
+      if (parsed) {
+        websiteBrief = mergeAnswersIntoBrief(websiteBrief, parsed);
+        websiteBrief = {
+          ...websiteBrief,
+          answers: {
+            ...websiteBrief.answers,
+            confirm_build: true,
+          },
+          confirmedAt: websiteBrief.confirmedAt ?? new Date().toISOString(),
+        };
+        await saveWebsiteSetupBrief({
+          projectId,
+          workspaceId,
+          brief: websiteBrief,
+        });
+      }
+    }
+  }
+
+  const wantsCreate =
+    isBuildCreateIntent(request.content) ||
+    IMPLEMENT_INTENT_RE.test(request.content) ||
+    GUIDED_SETUP_CONFIRM_RE.test(request.content);
+
+  // Sites: block generation until guided setup is complete + confirmed.
+  if (isSiteProject && wantsCreate && websiteBrief) {
+    if (
+      websiteBrief.status === "setup" &&
+      !isWebsiteSetupComplete(websiteBrief)
+    ) {
+      return {
+        content:
+          "Finish the website setup questions above the composer (all 8 steps), then confirm **Build my site**. I won’t generate a draft until then — the preview stays blank with the progress ring.",
+        runtime: "cloud",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+      };
+    }
+  }
+
+  // Soft sandbox only after generation is allowed to start (sites past setup).
+  const shouldStartSandbox =
+    !isSiteProject ||
+    !websiteBrief ||
+    websiteBrief.status === "ready" ||
+    websiteBrief.status === "building" ||
+    (wantsCreate && isWebsiteSetupComplete(websiteBrief));
+
+  if (!shouldStartSandbox && isSiteProject) {
+    return {
+      content:
+        "Your website project is in guided setup. Answer the questions in the card above the composer — the preview stays blank until we build.",
+      runtime: "cloud",
+      offline: false,
+      condensationOccurred: false,
+      aiChatId: request.aiChatId ?? null,
+    };
+  }
+
   report({
     phase: "thinking",
     label: "Preparing environment",
@@ -456,102 +996,19 @@ export async function runBuildProjectTurn(
     };
   }
 
-  // Deterministic create path — SiteSpec plan → compose → batched persist.
-  if (isBuildCreateIntent(request.content) || IMPLEMENT_INTENT_RE.test(request.content)) {
-    report({
-      phase: "thinking",
-      label: "Building",
-      detail: "Planning site design, then composing the project…",
-    });
-    const spec = await planWebsite(request, opts);
-    const files = composeSiteFromSpec(spec);
-    const written = await writeScaffold({
+  // Guided / create path — SiteSpec → 21st → Codex (compose fallback) → validate.
+  if (wantsCreate) {
+    return runWebsiteCreatePipeline({
+      request,
+      opts,
       projectId,
       workspaceId,
-      files,
+      allowedTools,
+      toolResults,
+      websiteBrief,
+      isSiteProject,
       report,
     });
-    toolResults.push(...written);
-    const okWrites = written.filter(
-      (r) => r.name === "computer.files.write" && r.ok,
-    ).length;
-    const failed = written.filter((r) => !r.ok);
-
-    if (okWrites === 0) {
-      return {
-        content: `I couldn’t write files into the sandbox${
-          failed[0]?.output ? `: ${failed[0].output}` : "."
-        }`,
-        runtime: "cloud",
-        offline: false,
-        condensationOccurred: false,
-        aiChatId: request.aiChatId ?? null,
-        toolResults,
-      };
-    }
-
-    // Soft refresh — do not destroy/reclone/npm-install unless needed.
-    await ensureSandboxReady({ projectId, workspaceId, forceRestart: false });
-
-    const gaps = spec.customGaps.filter(Boolean);
-    let gapNote = "";
-    if (gaps.length > 0) {
-      report({
-        phase: "thinking",
-        label: "Building",
-        detail: "Filling custom gaps with the coding agent…",
-      });
-      const gapRequest: AiGenerateRequest = {
-        ...request,
-        content: [
-          request.content,
-          "",
-          `Site scaffold for ${spec.businessName} is already written.`,
-          "Implement ONLY these custom gaps with computer.files.* tools:",
-          ...gaps.map((g) => `- ${g}`),
-        ].join("\n"),
-        allowTools: true,
-        allowedToolNames: allowedTools,
-        modelMode: "coding",
-        toolContext: [
-          formatToolsForPrompt(allowedTools),
-          BUILD_PROJECT_INSTRUCTIONS,
-          `Active projectId: ${projectId}`,
-          `workspaceId: ${workspaceId}`,
-          "Do not rewrite the whole site. Only address the listed gaps.",
-        ].join("\n\n"),
-      };
-      // Run a short coding pass by falling through via recursive-ish loop:
-      // mutate request path by executing one coding loop inline below.
-      const coding = await runCodingAgentLoop(gapRequest, opts, {
-        projectId,
-        workspaceId,
-        allowedTools,
-        priorResults: toolResults,
-      });
-      toolResults.push(...(coding.toolResults ?? []));
-      gapNote = coding.content
-        ? `\n\nCustom gaps: ${gaps.join("; ")}.\n${coding.content}`
-        : `\n\nCustom gaps noted for later: ${gaps.join("; ")}.`;
-    }
-
-    return {
-      content: [
-        `Created a production-ready draft site for **${spec.businessName}** (${okWrites} files) from a structured design plan, saved in one GitHub draft commit.`,
-        "Preview stays on your draft URL — use Reload if it’s still warming up.",
-        failed.length
-          ? `Some writes failed: ${failed.map((f) => f.output).join("; ")}`
-          : "",
-        gapNote,
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
-      runtime: "cloud",
-      offline: false,
-      condensationOccurred: false,
-      aiChatId: request.aiChatId ?? null,
-      toolResults,
-    };
   }
 
   report({

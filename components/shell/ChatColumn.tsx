@@ -89,7 +89,7 @@ function ComposerDock({
   hideSpaceTools?: boolean;
   autoFocus?: boolean;
 }) {
-  const { thread, continueAfterClarification } = useApp();
+  const { thread, continueAfterClarification, workspaceId } = useApp();
   const mobile = useMobileShell();
   const floating = useShellStyle() === "floating";
   const { centered, chatMaxWidthClass } = useChatCanvasCentered();
@@ -115,6 +115,7 @@ function ComposerDock({
       >
         <ClarificationCardSlot
           threadId={thread?.id}
+          workspaceId={workspaceId}
           onSubmitted={continueAfterClarification}
         />
         <Composer

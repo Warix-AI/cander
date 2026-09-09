@@ -124,6 +124,13 @@ export function normalizeToolArguments(
       // "Create" without a kind defaults to Build apps/sites/automations.
       if (s === "create") input.space = "build";
     }
+    // Website create → kind=site (guided setup path); otherwise Build defaults to app.
+    if (input.kind == null && typeof input.title === "string") {
+      const blob = `${input.title} ${input.summary ?? ""}`.toLowerCase();
+      if (/\b(website|landing\s*page|marketing\s*site)\b/.test(blob)) {
+        input.kind = "site";
+      }
+    }
   }
 
   if (toolName === "gmail.read") {
@@ -634,11 +641,22 @@ function registerBuildTools() {
     },
     {
       name: "build.component.search",
-      description: "Search for 3–5 component candidates by semantic role.",
+      description:
+        "Search 21st.dev (MCP) for 3–5 component candidates by query/role. Bounded + cached per build.",
       required: ["query"],
       properties: {
         query: { type: "string" },
         role: { type: "string" },
+      },
+    },
+    {
+      name: "build.component.get",
+      description:
+        "Fetch one 21st.dev component’s source via MCP get_component (cached per build).",
+      required: ["componentId"],
+      properties: {
+        componentId: { type: "string", description: "21st search/component id" },
+        id: { type: "string", description: "Alias for componentId" },
       },
     },
     {

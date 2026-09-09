@@ -16,6 +16,11 @@ import type {
   ClarificationQuestion,
   ClarificationSubmitResult,
 } from "@/lib/ai/clarification/schema";
+import {
+  WEBSITE_SETUP_RESUME_TOOL,
+  countCompletedSetupSteps,
+} from "@/lib/ai/build/website-setup-brief";
+import { persistWebsiteSetupProgress } from "@/lib/ai/clarification/website-setup-ui";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
@@ -274,13 +279,30 @@ function QuestionField({
 function ClarificationCardView({
   card,
   onSubmitted,
+  workspaceId,
 }: {
   card: ClarificationCardModel;
   onSubmitted?: (result: ClarificationSubmitResult) => void;
+  workspaceId?: string | null;
 }) {
   const q = card.questions[card.stepIndex];
   const isLast = card.stepIndex >= card.questions.length - 1;
   const isFirst = card.stepIndex <= 0;
+  const isWebsiteSetup = card.resumeTool === WEBSITE_SETUP_RESUME_TOOL;
+  const projectId =
+    typeof card.resumeArguments?.projectId === "string"
+      ? card.resumeArguments.projectId
+      : null;
+
+  const syncWebsiteBrief = (answers: Record<string, unknown>) => {
+    if (!isWebsiteSetup || !projectId || !workspaceId) return;
+    void persistWebsiteSetupProgress({
+      projectId,
+      workspaceId,
+      answers,
+      status: "setup",
+    });
+  };
 
   return (
     <div
@@ -301,7 +323,9 @@ function ClarificationCardView({
           ) : null}
           {card.questions.length > 1 ? (
             <p className="mt-1 text-[11px] text-muted-foreground">
-              {card.stepIndex + 1} of {card.questions.length}
+              {isWebsiteSetup
+                ? `${Math.min(8, countCompletedSetupSteps(card.answers))} of 8`
+                : `${card.stepIndex + 1} of ${card.questions.length}`}
             </p>
           ) : null}
         </div>
@@ -321,9 +345,11 @@ function ClarificationCardView({
             question={q}
             value={card.answers[q.id]}
             error={card.errors[q.id]}
-            onChange={(next) =>
-              patchClarificationAnswers(card.threadId, { [q.id]: next })
-            }
+            onChange={(next) => {
+              const patch = { [q.id]: next };
+              patchClarificationAnswers(card.threadId, patch);
+              syncWebsiteBrief({ ...card.answers, ...patch });
+            }}
           />
         ) : null}
       </div>
@@ -342,7 +368,11 @@ function ClarificationCardView({
           {!isLast ? (
             <button
               type="button"
-              onClick={() => clarificationNext(card.threadId)}
+              onClick={() => {
+                if (clarificationNext(card.threadId)) {
+                  syncWebsiteBrief(card.answers);
+                }
+              }}
               className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[12.5px] text-muted-foreground hover:bg-muted"
             >
               Next
@@ -351,31 +381,52 @@ function ClarificationCardView({
           ) : null}
         </div>
         <div className="flex gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              const result = submitClarification(card.threadId, {
-                skipRemaining: true,
-              });
-              if (result) onSubmitted?.(result);
-            }}
-            className="rounded-full px-2.5 py-1.5 text-[12.5px] text-muted-foreground hover:bg-muted"
-          >
-            Skip all
-          </button>
+          {!isWebsiteSetup ? (
+            <button
+              type="button"
+              onClick={() => {
+                const result = submitClarification(card.threadId, {
+                  skipRemaining: true,
+                });
+                if (result) onSubmitted?.(result);
+              }}
+              className="rounded-full px-2.5 py-1.5 text-[12.5px] text-muted-foreground hover:bg-muted"
+            >
+              Skip all
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => {
               if (!isLast) {
-                clarificationNext(card.threadId);
+                if (clarificationNext(card.threadId)) {
+                  syncWebsiteBrief(card.answers);
+                }
                 return;
               }
               const result = submitClarification(card.threadId);
-              if (result) onSubmitted?.(result);
+              if (result) {
+                if (isWebsiteSetup && projectId && workspaceId) {
+                  void persistWebsiteSetupProgress({
+                    projectId,
+                    workspaceId,
+                    answers: {
+                      ...result.answers,
+                      confirm_build: true,
+                    },
+                    status: "building",
+                  });
+                }
+                onSubmitted?.(result);
+              }
             }}
             className="rounded-full bg-foreground px-3 py-1.5 text-[12.5px] font-medium text-background"
           >
-            {isLast ? "Submit" : "Continue"}
+            {isLast
+              ? isWebsiteSetup
+                ? "Build my site"
+                : "Submit"
+              : "Continue"}
           </button>
         </div>
       </div>
@@ -386,9 +437,11 @@ function ClarificationCardView({
 /** Composer-adjacent clarification card for the active thread. */
 export function ClarificationCardSlot({
   threadId,
+  workspaceId,
   onSubmitted,
 }: {
   threadId: string | null | undefined;
+  workspaceId?: string | null;
   onSubmitted?: (result: ClarificationSubmitResult) => void;
 }) {
   const card = useSyncExternalStore(
@@ -397,5 +450,11 @@ export function ClarificationCardSlot({
     () => null,
   );
   if (!card) return null;
-  return <ClarificationCardView card={card} onSubmitted={onSubmitted} />;
+  return (
+    <ClarificationCardView
+      card={card}
+      workspaceId={workspaceId}
+      onSubmitted={onSubmitted}
+    />
+  );
 }

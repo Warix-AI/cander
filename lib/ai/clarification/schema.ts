@@ -436,3 +436,9 @@ export const CREATE_PROJECT_SPACE_QUESTIONS: ClarificationQuestion[] = [
   },
 ];
 
+/** Re-export guided website setup questions (see website-setup-brief). */
+export {
+  WEBSITE_SETUP_QUESTIONS,
+  WEBSITE_SETUP_RESUME_TOOL,
+} from "@/lib/ai/build/website-setup-brief";
+

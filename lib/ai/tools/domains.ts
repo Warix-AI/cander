@@ -83,6 +83,7 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "build.spec.patch",
     "build.page.add",
     "build.component.search",
+    "build.component.get",
     "build.component.replace",
     "build.recipe.apply",
     "build.auth.configure",

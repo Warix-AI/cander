@@ -23,8 +23,16 @@ import {
 } from "@/lib/ai/clarification/schema";
 import {
   clearClarification,
+  getActiveClarification,
   openClarificationCard,
+  patchClarificationAnswers,
 } from "@/lib/ai/clarification/store";
+import {
+  openWebsiteSetupClarification,
+  persistWebsiteSetupProgress,
+} from "@/lib/ai/clarification/website-setup-ui";
+import { WEBSITE_SETUP_RESUME_TOOL } from "@/lib/ai/build/website-setup-brief";
+import { fetchWebsiteSetupBrief } from "@/lib/api/website-setup-client";
 import {
   migrateThreadTaskState,
   upsertThreadTaskState,
@@ -2167,6 +2175,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         filesFromSend.length > 0 ? filesFromSend : (opts?.files ?? []);
       const trimmed = text.trim();
       if (!trimmed && !attachments.length && !fileAttachments.length) return;
+
+      // Guided website setup: free-text merges into the active step answer.
+      const clarifyThreadId = threadIdRef.current || thread?.id || null;
+      const activeClarify = getActiveClarification(clarifyThreadId);
+      if (
+        activeClarify?.resumeTool === WEBSITE_SETUP_RESUME_TOOL &&
+        trimmed &&
+        !attachments.length &&
+        !fileAttachments.length
+      ) {
+        const stepQ = activeClarify.questions[activeClarify.stepIndex];
+        if (stepQ && stepQ.type !== "boolean") {
+          const nextVal =
+            stepQ.type === "multi_choice"
+              ? trimmed.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
+              : trimmed;
+          patchClarificationAnswers(activeClarify.threadId, {
+            [stepQ.id]: nextVal,
+          });
+          const projectIdForSetup =
+            typeof activeClarify.resumeArguments?.projectId === "string"
+              ? activeClarify.resumeArguments.projectId
+              : projectId;
+          if (projectIdForSetup) {
+            void persistWebsiteSetupProgress({
+              projectId: projectIdForSetup,
+              workspaceId,
+              answers: {
+                ...activeClarify.answers,
+                [stepQ.id]: nextVal,
+              },
+              status: "setup",
+            });
+          }
+          return;
+        }
+      }
+
       const contentForIntent =
         trimmed ||
         (attachments.length
@@ -3476,6 +3522,94 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         : `${summary}\n\nContinue with the task using these answers.`;
 
       void (async () => {
+        if (result.resumeTool === WEBSITE_SETUP_RESUME_TOOL) {
+          const pid =
+            (typeof result.resumeArguments?.projectId === "string"
+              ? result.resumeArguments.projectId
+              : null) ||
+            projectId ||
+            "";
+          if (pid) {
+            await persistWebsiteSetupProgress({
+              projectId: pid,
+              workspaceId,
+              answers: {
+                ...result.answers,
+                confirm_build: true,
+              },
+              status: "building",
+            });
+          }
+          const buildContent = [
+            summary,
+            "",
+            "Build my site from guided setup (website.build_from_setup).",
+            "confirm_build: true",
+          ].join("\n");
+          const reply = await fetchPrivateAiReply({
+            aiChatId: live?.aiChatId ?? null,
+            threadId: activeId,
+            title: "Build my site",
+            content: buildContent,
+            workspaceId,
+            projectId: pid || projectId,
+            projectSpace: (spaceId as SpaceId | null) ?? null,
+            ...(() => {
+              const agentChat = resolveAgentChatContext({
+                profileId: actor.id,
+                workspaceId,
+                projectId: pid || projectId,
+              });
+              return {
+                projectKind: agentChat.projectKind ?? "site",
+                agentId: agentChat.agentId,
+              };
+            })(),
+            messages: historyMessages,
+            onProgress: (progress) => {
+              setThreads((current) =>
+                current.map((item) => ({
+                  ...item,
+                  messages: item.messages.map((m) => {
+                    if (m.id !== assistantId) return m;
+                    return patchMessageWithProgress(m, progress);
+                  }),
+                })),
+              );
+            },
+          });
+          const applyReply = (partial: string, done: boolean) => {
+            setThreads((current) =>
+              current.map((item) => {
+                if (item.id !== activeId) return item;
+                return {
+                  ...item,
+                  aiChatId: reply.aiChatId.startsWith("local-")
+                    ? item.aiChatId
+                    : reply.aiChatId || item.aiChatId,
+                  messages: item.messages.map((m) =>
+                    m.id === assistantId
+                      ? {
+                          ...m,
+                          content: partial,
+                          status: done
+                            ? ("complete" as const)
+                            : ("streaming" as const),
+                          activity: done ? null : m.activity,
+                        }
+                      : m,
+                  ),
+                };
+              }),
+            );
+          };
+          if (reply.runtime === "apple-local") {
+            applyReply(reply.content, true);
+            return;
+          }
+          typewriterReveal(reply.content, applyReply);
+          return;
+        }
         if (result.resumeTool) {
           const merged: Record<string, unknown> = {
             ...(result.resumeArguments ?? {}),
@@ -4155,6 +4289,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       jobId: null,
       skillId: null,
     });
+    if ("kind" in match && match.kind === "site" && tid) {
+      void (async () => {
+        const brief = await fetchWebsiteSetupBrief({
+          projectId: projectKey,
+          workspaceId: itemWorkspaceId,
+        });
+        if (!brief || brief.status === "setup") {
+          await persistWebsiteSetupProgress({
+            projectId: projectKey,
+            workspaceId: itemWorkspaceId,
+            answers: brief?.answers ?? {},
+            status: "setup",
+          });
+          openWebsiteSetupClarification({
+            threadId: tid,
+            projectId: projectKey,
+            answers: (brief?.answers as Record<string, unknown>) ?? {},
+          });
+        }
+      })();
+    }
     return tid;
   }, [workspaceId, actor.id, pushTarget]);
 
@@ -4490,7 +4645,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           };
         }
         const kind =
-          (opts.kind as "app" | "research" | "general" | undefined) ??
+          (opts.kind as
+            | "app"
+            | "site"
+            | "research"
+            | "general"
+            | undefined) ??
           (space === "research"
             ? "research"
             : space === "work"
@@ -4524,6 +4684,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               },
               pendingClarification: null,
               status: "completed",
+            });
+          }
+          if (kind === "site" && taskThreadId) {
+            void persistWebsiteSetupProgress({
+              projectId: project.id,
+              workspaceId,
+              answers: {},
+              status: "setup",
+            });
+            openWebsiteSetupClarification({
+              threadId: taskThreadId,
+              projectId: project.id,
             });
           }
           return {

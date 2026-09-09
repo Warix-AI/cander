@@ -296,7 +296,7 @@ git rev-parse --short HEAD`,
         opts.projectId,
         opts.workspaceId,
       );
-      if (binding?.status === "ready" && binding.ref) {
+      if (binding?.kind !== "site" && binding?.status === "ready" && binding.ref) {
         const { injectAppSupabaseIntoSandbox } = await import(
           "@/lib/build/supabase/inject"
         );
@@ -443,7 +443,7 @@ export async function ensureProjectSandbox(opts: {
           opts.projectId,
           opts.workspaceId,
         );
-        if (binding?.status === "ready" && binding.ref) {
+        if (binding?.kind !== "site" && binding?.status === "ready" && binding.ref) {
           const { injectAppSupabaseIntoSandbox } = await import(
             "@/lib/build/supabase/inject"
           );

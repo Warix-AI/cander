@@ -130,11 +130,12 @@ export async function loadAppSupabaseBinding(
   ref: string | null;
   status: AppSupabaseStatus;
   title: string;
+  kind: string | null;
 } | null> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("projects")
-    .select("title, supabase_project_ref, supabase_status")
+    .select("title, supabase_project_ref, supabase_status, kind")
     .eq("id", projectId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
@@ -143,6 +144,7 @@ export async function loadAppSupabaseBinding(
     title: String(data.title ?? "App"),
     ref: data.supabase_project_ref ? String(data.supabase_project_ref) : null,
     status: (data.supabase_status as AppSupabaseStatus) || "idle",
+    kind: data.kind ? String(data.kind) : null,
   };
 }
 
@@ -194,6 +196,17 @@ export async function ensureAppSupabaseProject(opts: {
       url: null,
       created: false,
       message: "Project not found.",
+    };
+  }
+
+  // Websites skip auto Supabase — SEO/forms/webhooks only unless converted to app.
+  if (binding.kind === "site") {
+    return {
+      status: "skipped",
+      projectRef: null,
+      url: null,
+      created: false,
+      message: "Websites do not auto-provision Supabase.",
     };
   }
 

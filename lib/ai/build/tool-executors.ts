@@ -96,16 +96,117 @@ export async function executeBuildTool(opts: {
 
   if (name === "build.component.search") {
     const query = String(args.query ?? args.role ?? "").trim();
+    const role = args.role ? String(args.role) : undefined;
+    try {
+      const {
+        getActiveTwentyFirstClient,
+        createTwentyFirstMcpClient,
+        setActiveTwentyFirstClient,
+      } = await import("@/lib/ai/build/twenty-first-mcp");
+      let client = getActiveTwentyFirstClient();
+      if (!client) {
+        client = await createTwentyFirstMcpClient();
+        if (client) setActiveTwentyFirstClient(client);
+      }
+      if (client) {
+        const hits = await client.search({ query, role, limit: 5 });
+        const candidates = hits.map((h) => ({
+          id: h.id,
+          name: h.name,
+          category: role || h.category,
+          source: "twenty_first" as const,
+          hasCode: Boolean(h.codeSnippet?.trim()),
+        }));
+        return {
+          name,
+          ok: true,
+          output: JSON.stringify({
+            provider: "21st-mcp",
+            query,
+            role,
+            candidates,
+          }),
+          data: { candidates, provider: "21st-mcp" },
+        };
+      }
+    } catch (err) {
+      console.warn(
+        "[cander:21st-mcp] build.component.search failed; catalog fallback",
+        err instanceof Error ? err.message : err,
+      );
+    }
     const candidates = await searchComponentsBounded({
       query,
-      role: args.role ? String(args.role) : undefined,
+      role,
     });
     return {
       name,
       ok: true,
-      output: JSON.stringify(candidates),
-      data: { candidates },
+      output: JSON.stringify({
+        provider: "cander-catalog-fallback",
+        query,
+        role,
+        candidates,
+      }),
+      data: { candidates, provider: "cander-catalog-fallback" },
     };
+  }
+
+  if (name === "build.component.get") {
+    const componentId = String(
+      args.componentId ?? args.id ?? "",
+    ).trim();
+    if (!componentId) {
+      return { name, ok: false, output: "componentId required" };
+    }
+    try {
+      const {
+        getActiveTwentyFirstClient,
+        createTwentyFirstMcpClient,
+        setActiveTwentyFirstClient,
+        vendorPathForComponent,
+      } = await import("@/lib/ai/build/twenty-first-mcp");
+      let client = getActiveTwentyFirstClient();
+      if (!client) {
+        client = await createTwentyFirstMcpClient();
+        if (client) setActiveTwentyFirstClient(client);
+      }
+      if (!client) {
+        return {
+          name,
+          ok: false,
+          output: "21st MCP unavailable (API_KEY_21ST not set or connect failed)",
+        };
+      }
+      const component = await client.getComponent(componentId);
+      if (!component) {
+        return { name, ok: false, output: `component not found: ${componentId}` };
+      }
+      const path = vendorPathForComponent(component);
+      return {
+        name,
+        ok: true,
+        output: JSON.stringify({
+          provider: "21st-mcp",
+          id: component.id,
+          name: component.name,
+          category: component.category,
+          pathHint: path,
+          code: component.codeSnippet?.slice(0, 12000) ?? null,
+          hasCode: Boolean(component.codeSnippet?.trim()),
+        }),
+        data: { component, pathHint: path, provider: "21st-mcp" },
+      };
+    } catch (err) {
+      return {
+        name,
+        ok: false,
+        output:
+          err instanceof Error
+            ? err.message
+            : `get_component failed for ${componentId}`,
+      };
+    }
   }
 
   if (name === "build.recipe.apply") {

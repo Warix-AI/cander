@@ -14,6 +14,7 @@ import {
   useSpaceProject,
 } from "@/lib/hooks/use-space-query";
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
+import { useWebsiteSetupBrief } from "@/lib/hooks/use-website-setup-brief";
 import { threadsForProject } from "@/lib/selectors";
 import type { BuildTool } from "@/lib/types";
 import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
@@ -63,8 +64,16 @@ export function BuildPanel() {
     fullName: string | null;
   }>({ branch: null, sha: null, fullName: null });
 
+  const entityKind = entityProject?.kind ?? null;
+  const { brief: websiteBrief, setupBlocksPreview } = useWebsiteSetupBrief({
+    projectId,
+    workspaceId: ctx.workspaceId,
+    kind: entityKind,
+  });
+
   const ensureSandbox = (forceRestart = false) => {
     if (!projectId || !ctx.workspaceId) return;
+    if (setupBlocksPreview) return;
     setEnvStatus("starting");
     setEnvMessage(null);
     void import("@/lib/api/project-sandbox-client").then(async (m) => {
@@ -98,8 +107,14 @@ export function BuildPanel() {
   };
 
   // Behind the existing Build open flow: ensure Warix repo + sandbox (idempotent).
+  // Skip sandbox while guided website setup is incomplete / building.
   useEffect(() => {
     if (!projectId || !ctx.workspaceId) return;
+    if (setupBlocksPreview) {
+      setEnvStatus(null);
+      setPreviewSrc(null);
+      return;
+    }
     void import("@/lib/api/project-infra-client").then((m) =>
       m.ensureProjectInfraClient({
         projectId,
@@ -107,8 +122,8 @@ export function BuildPanel() {
       }),
     );
     ensureSandbox(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per project
-  }, [projectId, ctx.workspaceId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per project / setup gate
+  }, [projectId, ctx.workspaceId, setupBlocksPreview]);
 
   const projectThreads = useMemo(
     () =>
@@ -278,6 +293,14 @@ export function BuildPanel() {
                 previewUrl && previewUrl.includes("draft--") ? previewUrl : null
               }
               publishedUrl={publishedUrl}
+              websiteSetup={
+                setupBlocksPreview
+                  ? {
+                      status: websiteBrief?.status ?? "setup",
+                      completedSteps: websiteBrief?.completedSteps ?? 0,
+                    }
+                  : null
+              }
               onReloadPreview={() => {
                 refreshPreview();
                 if (previewSrc) {

@@ -1,0 +1,123 @@
+/**
+ * GET/PATCH /api/projects/:id/website-setup
+ * Guided website create brief (answers + status).
+ */
+
+import { NextResponse } from "next/server";
+import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
+import { assertProjectAccess } from "@/lib/security/project-access";
+import {
+  countCompletedSetupSteps,
+  emptyWebsiteSetupBrief,
+  mergeAnswersIntoBrief,
+  normalizeWebsiteSetupBrief,
+  type WebsiteSetupStatus,
+} from "@/lib/ai/build/website-setup-brief";
+import {
+  loadWebsiteSetupBrief,
+  saveWebsiteSetupBrief,
+} from "@/lib/build/website-setup-brief-store";
+
+export const runtime = "nodejs";
+
+type RouteCtx = { params: Promise<{ projectId: string }> };
+
+export async function GET(request: Request, ctx: RouteCtx) {
+  const auth = await requireBearerUser(request);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const { projectId: rawId } = await ctx.params;
+  const projectId = rawId?.trim();
+  const workspaceId = new URL(request.url).searchParams
+    .get("workspaceId")
+    ?.trim();
+  if (!projectId || !workspaceId) {
+    return NextResponse.json(
+      { error: "projectId and workspaceId are required." },
+      { status: 400 },
+    );
+  }
+
+  const access = await assertProjectAccess({
+    projectId,
+    workspaceId,
+    userId: auth.user.id,
+  });
+  if (!access.ok) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
+  const brief = await loadWebsiteSetupBrief(projectId, workspaceId);
+  return NextResponse.json({ ok: true, brief });
+}
+
+export async function PATCH(request: Request, ctx: RouteCtx) {
+  const auth = await requireBearerUser(request);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const { projectId: rawId } = await ctx.params;
+  const projectId = rawId?.trim();
+
+  let body: {
+    workspaceId?: string;
+    answers?: Record<string, unknown>;
+    status?: WebsiteSetupStatus;
+    completedSteps?: number;
+    init?: boolean;
+  } = {};
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  }
+
+  const workspaceId = body.workspaceId?.trim();
+  if (!projectId || !workspaceId) {
+    return NextResponse.json(
+      { error: "projectId and workspaceId are required." },
+      { status: 400 },
+    );
+  }
+
+  const access = await assertProjectAccess({
+    projectId,
+    workspaceId,
+    userId: auth.user.id,
+  });
+  if (!access.ok) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
+  let brief = await loadWebsiteSetupBrief(projectId, workspaceId);
+  if (body.init && (!brief.answers || Object.keys(brief.answers).length === 0)) {
+    brief = emptyWebsiteSetupBrief({ status: "setup" });
+  }
+  if (body.answers) {
+    brief = mergeAnswersIntoBrief(brief, body.answers);
+  }
+  if (body.status) {
+    brief = { ...brief, status: body.status };
+  }
+  if (typeof body.completedSteps === "number") {
+    brief = {
+      ...brief,
+      completedSteps: Math.max(0, Math.min(8, body.completedSteps)),
+    };
+  } else {
+    brief = {
+      ...brief,
+      completedSteps: countCompletedSetupSteps(brief.answers),
+    };
+  }
+
+  const saved = await saveWebsiteSetupBrief({
+    projectId,
+    workspaceId,
+    brief: normalizeWebsiteSetupBrief(brief),
+  });
+  return NextResponse.json({ ok: true, brief: saved });
+}

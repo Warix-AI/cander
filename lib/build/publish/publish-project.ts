@@ -6,7 +6,10 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isGitHubAppConfigured } from "@/lib/build/config";
 import { vercelApiConfigured } from "@/lib/build/vercel/api";
-import { ensureAppVercelProject } from "@/lib/build/vercel/projects";
+import {
+  ensureAppVercelProject,
+  ensurePublicVercelProjectAccess,
+} from "@/lib/build/vercel/projects";
 import { createProductionDeployment } from "@/lib/build/vercel/deployments";
 import { promoteDraftShaToDefaultBranch } from "@/lib/build/git/promote-published";
 import { gitStoragePointer } from "@/lib/build/git/revision-pointers";
@@ -194,15 +197,45 @@ async function publishProjectWithRow(opts: {
     project.vercel_production_deployment_id &&
     project.published_url
   ) {
+    const existingVercelProjectId = project.vercel_project_id
+      ? String(project.vercel_project_id)
+      : null;
+    if (!existingVercelProjectId) {
+      return {
+        ok: false,
+        status: "error",
+        publishedSha: draftSha,
+        publishedUrl: String(project.published_url),
+        vercelDeploymentId: String(project.vercel_production_deployment_id),
+        vercelProjectId: null,
+        deploymentRecordId: null,
+        preferredUrl: opts.preferredUrl ?? null,
+        message:
+          "Published deployment is missing its Vercel project binding. Republish after ensuring project infrastructure.",
+      };
+    }
+    try {
+      await ensurePublicVercelProjectAccess(existingVercelProjectId);
+    } catch (err) {
+      return {
+        ok: false,
+        status: "error",
+        publishedSha: draftSha,
+        publishedUrl: String(project.published_url),
+        vercelDeploymentId: String(project.vercel_production_deployment_id),
+        vercelProjectId: existingVercelProjectId,
+        deploymentRecordId: null,
+        preferredUrl: opts.preferredUrl ?? null,
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
     return {
       ok: true,
       status: "published",
       publishedSha: draftSha,
       publishedUrl: String(project.published_url),
       vercelDeploymentId: String(project.vercel_production_deployment_id),
-      vercelProjectId: project.vercel_project_id
-        ? String(project.vercel_project_id)
-        : null,
+      vercelProjectId: existingVercelProjectId,
       deploymentRecordId: null,
       preferredUrl: opts.preferredUrl ?? null,
       message: `Already published at ${draftSha.slice(0, 7)}.`,

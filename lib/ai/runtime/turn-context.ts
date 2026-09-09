@@ -62,6 +62,9 @@ export function clearTurnContext() {
   turnAgentId = null;
   turnProjectKind = null;
   turnUserMessage = null;
+  void import("@/lib/ai/build/twenty-first-mcp")
+    .then((m) => m.setActiveTwentyFirstClient(null))
+    .catch(() => {});
 }
 
 export {

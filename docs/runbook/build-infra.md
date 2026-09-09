@@ -45,6 +45,7 @@ Token needs permission to create projects and read API keys in the Warix org.
 | `POST` | `/api/projects/:id/git/restore` | Move draft tip to SHA + restart sandbox |
 | `POST` | `/api/projects/:id/publish` | Promote draft → Vercel production |
 | `GET/POST/DELETE` | `/api/projects/:id/domains` | Custom domain attach / status / detach |
+| `GET/PATCH` | `/api/projects/:id/website-setup` | Guided website create brief (answers + status) |
 | `POST` | `/api/computer/build` | Durable work-task pipeline |
 
 ## Phase 4 behavior
@@ -98,6 +99,10 @@ Migration: `062_deployments_publish_meta.sql` (`vercel_deployment_id`, `git_sha`
 1. `https://{cander_subdomain}.cander.app` → `proxy.ts` → `/api/publish-host/{sub}/…` (public, no auth)
 2. Upstream is the pinned `projects.vercel_production_url` (Vercel deployment origin); falls back to deployment id lookup
 3. SSRF allowlist: https `*.vercel.app` only — never proxy to `*.cander.app` (loop) or arbitrary hosts
+4. Before every publish, Cander disables Vercel Authentication, password
+   protection, and trusted-IP protection on the tenant Vercel project. This is
+   also repaired by an idempotent republish, so the public Cander hostname
+   never renders a Vercel login page.
 4. Host precedence: markdown `m…` → `draft--…` (auth preview) → bare subdomain (production)
 5. Publish stores both friendly `published_url` and `vercel_production_url` (migration `063`)
 6. Matcher includes `/_next/static` so tenant hosts can proxy app assets; platform static short-circuits
@@ -119,6 +124,26 @@ DNS: platform wildcard `*.cander.app` must already point at the Cander deploymen
 2. Stores `custom_domain` + `custom_domain_status` (`pending|verified|error`) + verification jsonb (migration `064`)
 3. Domains sheet shows DNS hint + refresh verification; traffic is **Vercel-native** (CNAME → Vercel), not Cander reverse-proxy
 4. Only verified custom domains may become `published_url` on publish
+
+## Guided website setup
+
+Websites (`kind=site`) use an **8-step ClarificationCard** before any draft is generated:
+
+1. Business + goal → 2. Audience + CTA → 3. Site depth → 4. Visual style → 5. Colors → 6. Layout shape → 7. Copy tone → 8. Sections/features → confirm **Build my site**
+2. Preview stays blank with an 8-segment Cander progress ring (`setup` / spinning `building`) until brief `status=ready`
+3. Pipeline: brief → `planWebsite` SiteSpec → **21st.dev MCP** (`https://21st.dev/api/mcp`, server-only `API_KEY_21ST` via `x-api-key`) `tools/list` → bounded `search` + `get_component` (cached per build) → vendor files under `components/twenty-first/` → Codex adapt (`build.component.search` / `build.component.get`) → `website-validate` → sandbox preview. If MCP is down/empty, **Cander catalog compose** is the fallback (logged).
+4. Sites **skip** auto Supabase provision/inject; apps keep the heavier backend path
+
+Migration: `065_website_setup_brief.sql` (`projects.website_setup_brief` jsonb).
+
+Server env for 21st (never `NEXT_PUBLIC_`):
+
+```
+API_KEY_21ST=
+# TWENTY_FIRST_API_KEY=   # alias
+```
+
+Smoke: `API_KEY_21ST=… npx tsx scripts/test-21st-mcp.ts`
 
 ## Enable Phase 3+ flag
 

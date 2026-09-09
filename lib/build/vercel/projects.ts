@@ -25,6 +25,35 @@ export type EnsuredVercelProject = {
 };
 
 /**
+ * Published Cander sites are public products, even when the Warix Vercel team
+ * defaults new projects to protected deployments. The public *.cander.app
+ * proxy uses the deployment's *.vercel.app origin, so upstream protection
+ * would otherwise render Vercel's login page through the friendly hostname.
+ */
+export async function ensurePublicVercelProjectAccess(
+  vercelProjectId: string,
+): Promise<void> {
+  const res = await vercelFetch(
+    `/v9/projects/${encodeURIComponent(vercelProjectId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        ssoProtection: null,
+        passwordProtection: null,
+        trustedIps: null,
+      }),
+    },
+  );
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(
+      `Could not make the published site publicly accessible: ${detail}. ` +
+        "VERCEL_TOKEN must be allowed to manage deployment protection.",
+    );
+  }
+}
+
+/**
  * Create or reuse the per-app Vercel project linked to the GitHub repo.
  */
 export async function ensureAppVercelProject(opts: {
@@ -56,8 +85,10 @@ export async function ensureAppVercelProject(opts: {
     );
     if (res.ok) {
       const body = (await res.json()) as { id?: string; name?: string };
+      const vercelProjectId = body.id || existingId;
+      await ensurePublicVercelProjectAccess(vercelProjectId);
       return {
-        vercelProjectId: body.id || existingId,
+        vercelProjectId,
         name: body.name || existingId,
         created: false,
       };
@@ -100,6 +131,7 @@ export async function ensureAppVercelProject(opts: {
     );
     if (lookup.ok) {
       const body = (await lookup.json()) as { id: string; name: string };
+      await ensurePublicVercelProjectAccess(body.id);
       await admin
         .from("projects")
         .update({
@@ -123,6 +155,7 @@ export async function ensureAppVercelProject(opts: {
   }
 
   const body = (await res.json()) as { id: string; name: string };
+  await ensurePublicVercelProjectAccess(body.id);
   await admin
     .from("projects")
     .update({

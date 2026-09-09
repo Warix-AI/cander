@@ -2,6 +2,7 @@
 
 import { useApp } from "@/components/app/AppProvider";
 import { DefaultChatPreviewWash } from "@/components/spaces/BannerWash";
+import { WebsiteSetupProgress } from "@/components/preview/WebsiteSetupProgress";
 import { buildPreviews } from "@/lib/data";
 import type { BuildSandboxStatus } from "@/lib/build/sandbox/constants";
 import { displayHostFromUrl } from "@/lib/preview-url";
@@ -10,6 +11,7 @@ import { cn } from "@/lib/utils";
 /**
  * Build project preview — live iframe via Cander path proxy when ready.
  * Publish does not replace this draft surface; live URL is shown beside draft.
+ * During guided website setup: blank canvas + Cander 8-segment progress ring.
  */
 export function AppViewport({
   name,
@@ -21,6 +23,7 @@ export function AppViewport({
   draftPreviewUrl,
   publishedUrl,
   onReloadPreview,
+  websiteSetup,
 }: {
   name: string;
   summary: string;
@@ -34,6 +37,11 @@ export function AppViewport({
   /** Production URL after publish — shown alongside draft, does not replace iframe */
   publishedUrl?: string | null;
   onReloadPreview?: () => void;
+  /** Guided website setup progress (blank canvas until ready) */
+  websiteSetup?: {
+    status: "setup" | "building" | "ready" | "failed";
+    completedSteps: number;
+  } | null;
 }) {
   const { viewport, previewKey, project } = useApp();
 
@@ -42,13 +50,21 @@ export function AppViewport({
     project?.cover ??
     buildPreviews.find((item) => item.projectId === project?.id)?.image;
 
-  const showEnvOverlay =
-    envStatus === "starting" ||
-    envStatus === "error" ||
-    envStatus === "unavailable" ||
-    envStatus === "needs_repo";
+  const setupActive =
+    websiteSetup &&
+    (websiteSetup.status === "setup" ||
+      websiteSetup.status === "building" ||
+      websiteSetup.status === "failed");
 
-  const showLive = envStatus === "ready" && Boolean(previewSrc);
+  const showEnvOverlay =
+    !setupActive &&
+    (envStatus === "starting" ||
+      envStatus === "error" ||
+      envStatus === "unavailable" ||
+      envStatus === "needs_repo");
+
+  const showLive =
+    !setupActive && envStatus === "ready" && Boolean(previewSrc);
   const emptyCopy =
     summary?.trim() || "Start generating your website in chat.";
   const draftHost = draftPreviewUrl
@@ -76,7 +92,20 @@ export function AppViewport({
             "h-full w-auto max-w-full aspect-[9/19.5] rounded-[18px] shadow-[0_16px_40px_rgba(0,0,0,0.28)]",
         )}
       >
-        {showLive ? (
+        {setupActive ? (
+          <div className="absolute inset-0 bg-background">
+            <WebsiteSetupProgress
+              completedSteps={websiteSetup.completedSteps}
+              mode={
+                websiteSetup.status === "building"
+                  ? "building"
+                  : websiteSetup.status === "failed"
+                    ? "failed"
+                    : "setup"
+              }
+            />
+          </div>
+        ) : showLive ? (
           <iframe
             title={`${name} preview`}
             src={previewSrc!}
