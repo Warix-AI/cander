@@ -100,11 +100,13 @@ async function runCompilePreflight(opts: {
   draftSha: string;
 }): Promise<string[]> {
   const issues: string[] = [];
+  // Prefer forceRestart so the sandbox clones the current draft tip (includes
+  // recent SEO repair commits) before we pin the exact publish SHA.
   const sandbox = await ensureProjectSandbox({
     userId: opts.userId,
     projectId: opts.projectId,
     workspaceId: opts.workspaceId,
-    forceRestart: false,
+    forceRestart: true,
   });
   if (!sandbox.sessionId || sandbox.status === "unavailable") {
     return [
@@ -127,10 +129,20 @@ async function runCompilePreflight(opts: {
       "-c",
       [
         "set -e",
-        `git fetch --depth=1 origin ${sha} 2>/dev/null || git fetch origin ${sha} 2>/dev/null || true`,
-        `git reset --hard ${sha}`,
+        `SHA=${JSON.stringify(sha)}`,
+        'if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then',
+        '  git fetch --depth=1 origin "$SHA" 2>/dev/null || true',
+        '  git fetch origin "$SHA" 2>/dev/null || true',
+        '  git fetch --depth=30 origin cander/draft 2>/dev/null || true',
+        '  git fetch --depth=30 origin main 2>/dev/null || true',
+        "fi",
+        'if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then',
+        "  git fetch --unshallow 2>/dev/null || true",
+        '  git fetch origin "$SHA" 2>/dev/null || true',
+        "fi",
+        'git reset --hard "$SHA"',
         "git rev-parse HEAD",
-      ].join(" && "),
+      ].join("\n"),
     ],
   });
   if (pin.exitCode !== 0) {

@@ -461,10 +461,9 @@ async function publishProjectWithRow(opts: {
       userId: opts.userId,
     });
     if (!preflight.ok) {
-      const isDraftRepair =
-        /preflight|draft tip|robots|sitemap|package\.json|App Router|Typecheck|next build failed during publish preflight|Missing dependency|Unresolved import/i.test(
-          preflight.issues.join("\n"),
-        );
+      const isDraftRepair = !/VERCEL_TOKEN|GitHub App is not configured|not available|503|rate limit/i.test(
+        preflight.issues.join("\n"),
+      );
       const header = isDraftRepair
         ? "Publish blocked — the draft needs repair before it can go live (this is not a Vercel outage):"
         : "Publish blocked — draft tip failed preflight:";

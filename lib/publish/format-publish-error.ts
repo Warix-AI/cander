@@ -10,9 +10,13 @@ export function formatPublishUserError(raw: string): {
 } {
   const text = (raw || "").trim() || "Publish failed.";
   const draftNeedsRepair =
-    /draft needs repair|Publish blocked — the draft|preflight|robots|sitemap|package\.json|App Router|Typecheck|next build failed during publish preflight|Missing dependency|Unresolved import|Tell me to repair/i.test(
+    (/draft needs repair|Publish blocked|preflight|robots|sitemap|package\.json|App Router|Typecheck|next build failed|Missing dependency|Unresolved import|Could not pin sandbox|Ask Cander to repair/i.test(
       text,
-    ) && !/VERCEL_TOKEN|GitHub App is not configured|rate limit|503|unavailable/i.test(text);
+    ) ||
+      /Publish blocked/i.test(text)) &&
+    !/VERCEL_TOKEN|GitHub App is not configured|rate limit|503|unavailable/i.test(
+      text,
+    );
 
   if (draftNeedsRepair) {
     const cleaned = text
