@@ -88,8 +88,10 @@ Publish / `published_sha` remains Phase 7.
 2. Lazy-create a Warix-team Vercel project **without** Git auto-deploy
    (`gitProviderOptions.createDeployments=disabled`). Prefer create without
    `gitRepository`; if linked, disable auto-deploy immediately.
-3. Preflight the exact tip SHA, then create **one** production deployment via
-   Deployments API (`maxAttempts=1` — never retry the Deploy POST). Poll until `READY`
+3. Preflight the exact tip SHA (static App Router + deps, then SHA-pinned
+   sandbox `tsc --noEmit` + `next build`), then create **one** production
+   deployment via Deployments API (`maxAttempts=1` — never retry the Deploy POST).
+   Poll until `READY`. Preflight failure blocks Deploy and main promotion.
 4. On READY: set `published_sha` / `published_url` / `vercel_production_*`
    (does **not** overwrite `draft_sha`), insert `deployments` (`kind=production`)
 5. **Then** promote `main` to that SHA. If promote fails after READY, keep

@@ -20,6 +20,8 @@ export const BUILD_RETRY_BUDGETS = {
   /** Publish: one ensure-project + one deploy attempt. */
   publishEnsureProject: 1,
   publishDeploy: 1,
+  /** Publish compile preflight (tsc + next build) attempts per publish. */
+  publishPreflightCompile: 1,
 } as const;
 
 export type BuildRetryBudgetKey = keyof typeof BUILD_RETRY_BUDGETS;

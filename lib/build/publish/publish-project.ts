@@ -447,6 +447,7 @@ async function publishProjectWithRow(opts: {
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
       draftSha: publishSha,
+      userId: opts.userId,
     });
     if (!preflight.ok) {
       const msg = `Publish blocked — draft tip failed preflight:\n- ${preflight.issues.join("\n- ")}`;
@@ -455,12 +456,14 @@ async function publishProjectWithRow(opts: {
         projectId: opts.projectId,
         patch: {
           status: "failed",
-          error: msg,
+          error: msg.slice(0, 4000),
           completed_at: new Date().toISOString(),
+          meta: { preflightIssues: preflight.issues.slice(0, 20) },
         },
       });
       logPublish(publishAttemptId, "preflight_failed", {
-        issues: preflight.issues,
+        issueCount: preflight.issues.length,
+        compileOk: preflight.compileOk === true,
       });
       return {
         ok: false,
@@ -480,6 +483,11 @@ async function publishProjectWithRow(opts: {
       };
     }
 
+    logPublish(publishAttemptId, "preflight_ok", {
+      compileOk: preflight.compileOk === true,
+      pathCount: preflight.paths.length,
+    });
+
     await updatePublishAttempt({
       publishAttemptId,
       projectId: opts.projectId,
@@ -495,8 +503,10 @@ async function publishProjectWithRow(opts: {
 
     // Deploy exact draft SHA from draft branch. Git auto-deploy is disabled,
     // so promoting main later will not create a second build.
+    // Shorter poll budget after compile preflight (publish route maxDuration=300).
     const deployment = await createProductionDeployment({
       vercelProjectId,
+      timeoutMs: preflight.compileOk ? 120_000 : 240_000,
       projectName: vercelProject.name,
       githubRepoId,
       ref: draftBranch,
