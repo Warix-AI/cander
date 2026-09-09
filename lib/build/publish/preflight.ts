@@ -33,9 +33,9 @@ export {
   staticTipStructureIssues,
 } from "@/lib/build/publish/preflight-checks";
 
-const INSTALL_TIMEOUT_SEC = 75;
-const TSC_TIMEOUT_SEC = 40;
-const NEXT_BUILD_TIMEOUT_SEC = 75;
+const INSTALL_TIMEOUT_SEC = 90;
+const TSC_TIMEOUT_SEC = 60;
+const NEXT_BUILD_TIMEOUT_SEC = 180;
 
 async function listTipPaths(opts: {
   fullName: string;

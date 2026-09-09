@@ -10,7 +10,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { vercelFetch } from "@/lib/build/vercel/api";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 function authorize(request: Request): boolean {
   const secret = process.env.CANDER_VERCEL_DIAGNOSTIC_SECRET?.trim();

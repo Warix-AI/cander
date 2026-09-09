@@ -14,7 +14,7 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 type RouteCtx = { params: Promise<{ projectId: string }> };
 

@@ -527,7 +527,7 @@ async function publishProjectWithRow(opts: {
     // Shorter poll budget after compile preflight (publish route maxDuration=300).
     const deployment = await createProductionDeployment({
       vercelProjectId,
-      timeoutMs: preflight.compileOk ? 120_000 : 240_000,
+      timeoutMs: preflight.compileOk ? 150_000 : 240_000,
       projectName: vercelProject.name,
       githubRepoId,
       ref: draftBranch,
