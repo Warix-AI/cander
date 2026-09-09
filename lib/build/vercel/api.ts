@@ -16,8 +16,15 @@ async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
 }
 
+function isNonIdempotentDeployPost(path: string, method: string): boolean {
+  if (method.toUpperCase() !== "POST") return false;
+  // Never auto-retry creating deployments — retries spawn duplicate builds.
+  return /\/v\d+\/deployments(?:\?|$)/.test(path.replace(/^https?:\/\/[^/]+/, ""));
+}
+
 /**
  * Team-scoped fetch with bounded retries on 429 / 5xx.
+ * Exception: POST /v13/deployments is never retried (non-idempotent).
  */
 export async function vercelFetch(
   path: string,
@@ -32,7 +39,9 @@ export async function vercelFetch(
     url.searchParams.set("teamId", teamId);
   }
 
-  const maxAttempts = 4;
+  const method = String(init?.method || "GET");
+  const noRetry = isNonIdempotentDeployPost(url.pathname + url.search, method);
+  const maxAttempts = noRetry ? 1 : 4;
   let last: Response | null = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const res = await fetch(url, {

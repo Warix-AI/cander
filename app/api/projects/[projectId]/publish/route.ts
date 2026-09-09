@@ -1,6 +1,6 @@
 /**
  * POST /api/projects/[projectId]/publish
- * Promote draft tip → Vercel production deploy (Warix-managed).
+ * Promote draft tip → exactly one Vercel production deploy (API-only).
  */
 
 import { NextResponse } from "next/server";
@@ -11,6 +11,7 @@ import {
   enforceUsageForRequest,
   finalizeUsageReservation,
 } from "@/lib/usage/server/guard-route";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -56,11 +57,36 @@ export async function POST(request: Request, ctx: RouteCtx) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
-  const draftShaHint =
-    request.headers.get("X-Cander-Draft-Sha")?.trim().slice(0, 40) || "tip";
+  const publishAttemptId =
+    request.headers.get("X-Cander-Publish-Attempt-Id")?.trim() ||
+    crypto.randomUUID();
+
+  // Resolve server draft tip for durable idempotency (ignore client "tip").
+  const admin = createSupabaseAdminClient();
+  const { data: tipRow } = await admin
+    .from("projects")
+    .select("draft_sha")
+    .eq("id", projectId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  const draftSha =
+    tipRow?.draft_sha
+      ? String(tipRow.draft_sha).toLowerCase()
+      : request.headers.get("X-Cander-Draft-Sha")?.trim().toLowerCase() ||
+        "unknown";
+
   const idempotencyKey =
     request.headers.get("Idempotency-Key")?.trim() ||
-    `publish:${workspaceId}:${projectId}:${draftShaHint}`;
+    `publish:${projectId}:${draftSha}`;
+
+  console.info("[cander:publish]", {
+    publishAttemptId,
+    stage: "client_request",
+    projectId,
+    workspaceId,
+    draftSha: draftSha.slice(0, 12),
+    idempotencyKey,
+  });
 
   const usage = await enforceUsageForRequest({
     request,
@@ -70,7 +96,12 @@ export async function POST(request: Request, ctx: RouteCtx) {
     estimatedUnits: 1,
     provider: "vercel",
     allowCookieAuth: true,
-    metadata: { projectId, action: "publish" },
+    metadata: {
+      projectId,
+      action: "publish",
+      publishAttemptId,
+      draftSha,
+    },
   });
   if (!usage.ok) {
     return usage.response;
@@ -83,6 +114,7 @@ export async function POST(request: Request, ctx: RouteCtx) {
       workspaceId,
       preferredUrl: body.url ?? null,
       slug: body.slug ?? null,
+      publishAttemptId,
     });
 
     await finalizeUsageReservation({
@@ -102,6 +134,7 @@ export async function POST(request: Request, ctx: RouteCtx) {
       {
         ...result,
         url: result.publishedUrl,
+        publishAttemptId: result.publishAttemptId || publishAttemptId,
       },
       { status: httpStatus },
     );
@@ -111,6 +144,9 @@ export async function POST(request: Request, ctx: RouteCtx) {
       status: "failed",
     });
     const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: message, publishAttemptId },
+      { status: 500 },
+    );
   }
 }

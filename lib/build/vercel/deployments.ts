@@ -59,10 +59,14 @@ export async function createProductionDeployment(opts: {
   /** Branch name used as git ref (draft or main). */
   ref: string;
   sha: string;
+  /** Correlation id for logs / Vercel meta. */
+  publishAttemptId?: string;
   /** Max wait in ms (default 4 minutes). */
   timeoutMs?: number;
 }): Promise<VercelDeploymentResult> {
-  const res = await vercelFetch("/v13/deployments?forceNew=1", {
+  // No forceNew — duplicate POSTs for the same SHA must not mint new builds.
+  // vercelFetch also refuses to retry this POST on 5xx/429.
+  const res = await vercelFetch("/v13/deployments", {
     method: "POST",
     body: JSON.stringify({
       name: opts.projectName,
@@ -83,6 +87,9 @@ export async function createProductionDeployment(opts: {
       meta: {
         canderPublish: "1",
         gitSha: opts.sha.slice(0, 12),
+        ...(opts.publishAttemptId
+          ? { canderPublishAttemptId: opts.publishAttemptId }
+          : {}),
       },
     }),
   });

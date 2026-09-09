@@ -81,18 +81,31 @@ Upstream origins must match Vercel sandbox hosts (SSRF allowlist).
 
 Publish / `published_sha` remains Phase 7.
 
-## Phase 7 behavior
+## Phase 7 behavior (Option B — Deploy API only)
 
-1. `POST /api/projects/:id/publish` (Publish sheet → build runtime) deploys the current `draft_sha`
-2. Lazy-create a Warix-team Vercel project (`projects.vercel_project_id`) linked to the GitHub repo when possible
-3. Create a **production** deployment from the draft tip via Deployments API; poll until `READY`
-4. On success only: promote `main` (default branch) to that SHA, set `published_sha` / `published_url` / `vercel_production_deployment_id`, insert a `deployments` row (`kind=production`), and store `project_revisions` published pointer as `git:{sha}`
-5. On deploy failure: leave the previous published tip unchanged
-6. Preferred `{slug}.cander.app` URL is stored when provided; **Phase 8** routes that host to production
+1. `POST /api/projects/:id/publish` (Publish sheet → build runtime) locks a
+   durable `publish_attempts` row for `(project_id, draft_sha)`
+2. Lazy-create a Warix-team Vercel project **without** Git auto-deploy
+   (`gitProviderOptions.createDeployments=disabled`). Prefer create without
+   `gitRepository`; if linked, disable auto-deploy immediately.
+3. Preflight the exact tip SHA, then create **one** production deployment via
+   Deployments API (`maxAttempts=1` — never retry the Deploy POST). Poll until `READY`
+4. On READY: set `published_sha` / `published_url` / `vercel_production_*`
+   (does **not** overwrite `draft_sha`), insert `deployments` (`kind=production`)
+5. **Then** promote `main` to that SHA. If promote fails after READY, keep
+   published success and mark `git_sync_repair` / `publish_git_sync_needed`
+6. On deploy failure: leave the previous published tip unchanged
+7. Preferred `{slug}.cander.app` URL is stored when provided; **Phase 8** routes that host to production
 
-Requires `VERCEL_TOKEN` + `VERCEL_TEAM_ID`, GitHub App, and Vercel↔GitHub integration on the Warix team for git-based deploys.
+Requires a `VERCEL_TOKEN` whose scopes allow **creating projects** on the Warix
+team (`action=create` / `resource=project`), plus `VERCEL_TEAM_ID`, GitHub App,
+and Vercel↔GitHub integration for git-based deploys. `vercelFetch` always appends
+`?teamId=` from `VERCEL_TEAM_ID`.
 
-Migration: `062_deployments_publish_meta.sql` (`vercel_deployment_id`, `git_sha`, `kind` on `deployments`).
+Migrations: `062_deployments_publish_meta.sql`, `067_publish_attempts.sql`.
+
+Verify: `bash scripts/verify-option-b-deploy.sh` (Vercel layer) or
+`npx tsx --env-file=.env.local scripts/verify-single-publish-deploy.ts [projectId]`.
 
 ## Phase 8 behavior
 
