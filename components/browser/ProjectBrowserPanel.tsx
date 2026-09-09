@@ -410,10 +410,17 @@ export function ProjectBrowserPanel({
         }
         setSandboxEnvStatus(result.status);
         setSandboxEnvMessage(result.message ?? result.error ?? null);
-        if (result.status === "ready" && result.previewPath) {
+        if (
+          result.status === "ready" &&
+          result.hasPreviewUpstream &&
+          result.previewPath
+        ) {
           setSandboxPreviewSrc(`${result.previewPath}?_r=${Date.now()}`);
         } else {
           setSandboxPreviewSrc(null);
+          if (result.status === "ready" && !result.hasPreviewUpstream) {
+            setSandboxEnvStatus("starting");
+          }
         }
         const draftUrl = draftPreviewUrlForSubdomain(result.subdomain);
         setDraftPreviewUrl(draftUrl);
@@ -456,6 +463,63 @@ export function ProjectBrowserPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per project / setup gate
   }, [standalone, projectId, ctx.workspaceId, browserSpaceId, entity?.kind, entity?.publishedUrl, setupBlocksPreview]);
 
+  // Keep polling while the sandbox exists but the app port is not listening yet.
+  useEffect(() => {
+    if (
+      standalone ||
+      !projectId ||
+      !ctx.workspaceId ||
+      setupBlocksPreview ||
+      sandboxEnvStatus !== "starting"
+    ) {
+      return;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const sandbox = await import("@/lib/api/project-sandbox-client");
+        const result = await sandbox.ensureProjectSandboxClient({
+          projectId,
+          workspaceId: ctx.workspaceId,
+        });
+        if (cancelled || !result) return;
+        setSandboxEnvMessage(result.message ?? result.error ?? null);
+        if (
+          result.status === "ready" &&
+          result.hasPreviewUpstream &&
+          result.previewPath
+        ) {
+          setSandboxEnvStatus("ready");
+          setSandboxPreviewSrc(`${result.previewPath}?_r=${Date.now()}`);
+          const draftUrl = draftPreviewUrlForSubdomain(result.subdomain);
+          setDraftPreviewUrl(draftUrl);
+          return;
+        }
+        if (result.status === "error" || result.status === "unavailable") {
+          setSandboxEnvStatus(result.status);
+          setSandboxPreviewSrc(null);
+          return;
+        }
+        setSandboxEnvStatus("starting");
+      } catch {
+        /* keep polling */
+      }
+    };
+    const id = window.setInterval(() => {
+      void tick();
+    }, 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [
+    standalone,
+    projectId,
+    ctx.workspaceId,
+    setupBlocksPreview,
+    sandboxEnvStatus,
+  ]);
+
   // Instant draft preview after guided website build completes.
   useEffect(() => {
     if (standalone || !projectId || !ctx.workspaceId) return;
@@ -478,8 +542,17 @@ export function ProjectBrowserPanel({
           }
           setSandboxEnvStatus(result.status);
           setSandboxEnvMessage(result.message ?? result.error ?? null);
-          if (result.status === "ready" && result.previewPath) {
+          if (
+            result.status === "ready" &&
+            result.hasPreviewUpstream &&
+            result.previewPath
+          ) {
             setSandboxPreviewSrc(`${result.previewPath}?_r=${Date.now()}`);
+          } else {
+            setSandboxPreviewSrc(null);
+            if (result.status === "ready" && !result.hasPreviewUpstream) {
+              setSandboxEnvStatus("starting");
+            }
           }
           const draftUrl = draftPreviewUrlForSubdomain(result.subdomain);
           setDraftPreviewUrl(draftUrl);
@@ -2519,8 +2592,17 @@ export function ProjectBrowserPanel({
               }
               setSandboxEnvStatus(result.status);
               setSandboxEnvMessage(result.message ?? result.error ?? null);
-              if (result.status === "ready" && result.previewPath) {
+              if (
+                result.status === "ready" &&
+                result.hasPreviewUpstream &&
+                result.previewPath
+              ) {
                 setSandboxPreviewSrc(`${result.previewPath}?_r=${Date.now()}`);
+              } else {
+                setSandboxPreviewSrc(null);
+                if (result.status === "ready" && !result.hasPreviewUpstream) {
+                  setSandboxEnvStatus("starting");
+                }
               }
             });
           }}

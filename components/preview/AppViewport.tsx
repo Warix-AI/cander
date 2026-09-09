@@ -1,5 +1,6 @@
 "use client";
 
+import { CanderMark } from "@/components/brand/CanderMark";
 import { useApp } from "@/components/app/AppProvider";
 import { DefaultChatPreviewWash } from "@/components/spaces/BannerWash";
 import { WebsiteSetupProgress } from "@/components/preview/WebsiteSetupProgress";
@@ -61,7 +62,8 @@ export function AppViewport({
     (envStatus === "starting" ||
       envStatus === "error" ||
       envStatus === "unavailable" ||
-      envStatus === "needs_repo");
+      envStatus === "needs_repo" ||
+      (envStatus === "ready" && !previewSrc));
 
   const showLive =
     !setupActive && envStatus === "ready" && Boolean(previewSrc);
@@ -73,6 +75,15 @@ export function AppViewport({
   const liveHost = publishedUrl
     ? displayHostFromUrl(publishedUrl) || publishedUrl
     : null;
+
+  const envLabel =
+    envStatus === "starting" || (envStatus === "ready" && !previewSrc)
+      ? "Starting environment…"
+      : envStatus === "needs_repo"
+        ? "Preparing project repository…"
+        : envStatus === "unavailable"
+          ? "Environment unavailable"
+          : "Environment failed to start";
 
   return (
     <div
@@ -113,6 +124,37 @@ export function AppViewport({
             sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-modals"
             allow="clipboard-read; clipboard-write"
           />
+        ) : showEnvOverlay ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white px-6 text-center">
+            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center">
+              {(envStatus === "starting" ||
+                envStatus === "needs_repo" ||
+                (envStatus === "ready" && !previewSrc)) && (
+                <span
+                  aria-hidden
+                  className="absolute inset-0 rounded-full border-[1.5px] border-foreground/10 border-t-foreground/55 motion-reduce:animate-none animate-spin"
+                  style={{ animationDuration: "1.1s" }}
+                />
+              )}
+              <CanderMark tone="color" className="!h-5 !w-5" />
+            </div>
+            <p className="mt-4 text-[13px] text-neutral-500">{envLabel}</p>
+            {envMessage ? (
+              <p className="mt-2 max-w-sm text-[12.5px] leading-relaxed text-neutral-400">
+                {envMessage}
+              </p>
+            ) : null}
+            {(envStatus === "error" || envStatus === "unavailable") &&
+            onRetryEnv ? (
+              <button
+                type="button"
+                onClick={onRetryEnv}
+                className="mt-4 inline-flex h-9 items-center rounded-full bg-foreground px-4 text-[13px] font-medium text-background hover:opacity-90"
+              >
+                Retry
+              </button>
+            ) : null}
+          </div>
         ) : cover ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -133,35 +175,6 @@ export function AppViewport({
             </div>
           </>
         )}
-
-        {showEnvOverlay ? (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/55 px-6 text-center backdrop-blur-[2px]">
-            <p className="text-[14px] font-medium tracking-[-0.02em] text-white">
-              {envStatus === "starting"
-                ? "Starting environment…"
-                : envStatus === "needs_repo"
-                  ? "Preparing project repository…"
-                  : envStatus === "unavailable"
-                    ? "Environment unavailable"
-                    : "Environment failed to start"}
-            </p>
-            {envMessage ? (
-              <p className="mt-2 max-w-sm text-[12.5px] leading-relaxed text-white/70">
-                {envMessage}
-              </p>
-            ) : null}
-            {(envStatus === "error" || envStatus === "unavailable") &&
-            onRetryEnv ? (
-              <button
-                type="button"
-                onClick={onRetryEnv}
-                className="mt-4 inline-flex h-9 items-center rounded-full bg-white px-4 text-[13px] font-medium text-foreground hover:bg-white/90"
-              >
-                Retry
-              </button>
-            ) : null}
-          </div>
-        ) : null}
 
         <div className="absolute bottom-3 left-3 z-10 flex max-w-[min(100%-1.5rem,36rem)] flex-wrap items-center gap-2">
           {liveHost ? (

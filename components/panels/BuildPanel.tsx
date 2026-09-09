@@ -98,7 +98,11 @@ export function BuildPanel() {
       if (result.subdomain) {
         setPreviewUrl(`https://draft--${result.subdomain}.cander.app`);
       }
-      if (result.status === "ready" && result.previewPath) {
+      if (
+        result.status === "ready" &&
+        result.hasPreviewUpstream &&
+        result.previewPath
+      ) {
         setPreviewSrc(`${result.previewPath}?_r=${Date.now()}`);
       } else {
         setPreviewSrc(null);

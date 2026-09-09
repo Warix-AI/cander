@@ -16,11 +16,13 @@ async function portResponds(
     cmd: "sh",
     args: [
       "-c",
-      `curl -s -o /dev/null -w "%{http_code}" --max-time 2 http://127.0.0.1:${BUILD_APP_PORT}/ 2>/dev/null || echo 000`,
+      // Only treat real app responses as ready — connection failures print 000.
+      `code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:${BUILD_APP_PORT}/ 2>/dev/null || echo 000); echo "$code"`,
     ],
   });
-  const code = (result.stdout || "").trim();
-  return /^[12345]\d\d$/.test(code) && code !== "000";
+  const code = (result.stdout || "").trim().split(/\s+/).pop() || "";
+  // Next may return 200/404/500 while booting routes — any HTTP code means the port is open.
+  return /^[1-5]\d\d$/.test(code);
 }
 
 /**
@@ -53,7 +55,7 @@ export async function ensureSandboxDevServer(opts: {
       started: false,
       ready: false,
       message:
-        "No package.json dev/start script — preview idle until an app is scaffolded.",
+        "No package.json yet — preview stays blank until the draft is written.",
     };
   }
 
@@ -71,9 +73,15 @@ export async function ensureSandboxDevServer(opts: {
         cmd: "sh",
         args: [
           "-c",
-          `npm install --no-fund --no-audit >/tmp/cander-npm-install.log 2>&1 || true; ` +
-            `if npm run | grep -q " dev"; then exec npm run dev -- --hostname 0.0.0.0 --port ${BUILD_APP_PORT}; ` +
-            `else exec npx --yes next dev --hostname 0.0.0.0 --port ${BUILD_APP_PORT}; fi`,
+          `cd "$(pwd)"
+npm install --no-fund --no-audit >/tmp/cander-npm-install.log 2>&1 || true
+if npm run 2>/dev/null | grep -q " dev"; then
+  exec npm run dev -- --hostname 0.0.0.0 --port ${BUILD_APP_PORT}
+fi
+if npm run 2>/dev/null | grep -q " start"; then
+  exec npm run start -- --hostname 0.0.0.0 --port ${BUILD_APP_PORT}
+fi
+exec npx --yes next dev --hostname 0.0.0.0 --port ${BUILD_APP_PORT}`,
         ],
         detached: true,
       });
@@ -107,7 +115,8 @@ export async function ensureSandboxDevServer(opts: {
     }
   }
 
-  for (let i = 0; i < 45; i++) {
+  // npm install + Next boot can take a few minutes on a cold sandbox.
+  for (let i = 0; i < 90; i++) {
     await new Promise((r) => setTimeout(r, 2000));
     try {
       if (await portResponds(opts.sessionId, opts.userId)) {
@@ -118,10 +127,27 @@ export async function ensureSandboxDevServer(opts: {
     }
   }
 
+  let hint = "";
+  try {
+    const log = await runPrivilegedSandboxCommand({
+      sessionId: opts.sessionId,
+      userId: opts.userId,
+      cmd: "sh",
+      args: [
+        "-c",
+        `tail -n 40 /tmp/cander-dev-server.log 2>/dev/null || tail -n 40 /tmp/cander-npm-install.log 2>/dev/null || true`,
+      ],
+    });
+    hint = (log.stdout || "").trim().slice(0, 400);
+  } catch {
+    /* ignore */
+  }
+
   return {
     started: true,
     ready: false,
-    message:
-      "Dev server is starting — preview may take a moment. Use Retry if it stays blank.",
+    message: hint
+      ? `Preview is still starting. ${hint}`
+      : "Preview is still starting — Retry in a moment if it stays blank.",
   };
 }

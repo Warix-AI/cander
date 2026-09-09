@@ -98,16 +98,54 @@ function publicResult(
   },
 ): EnsureProjectSandboxResult {
   const { previewUpstream, workspaceId, ...rest } = partial;
+  const hasPreviewUpstream = Boolean(previewUpstream);
+  // Never hand the iframe a proxy URL until something is listening on APP_PORT.
+  // Stale stream_url alone caused SANDBOX_NOT_LISTENING 502s in the canvas.
   const previewPath =
-    rest.status === "ready" && rest.sessionId
+    rest.status === "ready" && rest.sessionId && hasPreviewUpstream
       ? projectPreviewPath(rest.projectId, workspaceId)
       : null;
   return {
     ...rest,
-    hasPreviewUpstream: Boolean(previewUpstream),
+    hasPreviewUpstream,
     previewPath,
     previewHost: rest.subdomain ? `draft--${rest.subdomain}.cander.app` : null,
   };
+}
+
+async function persistPreviewUpstream(opts: {
+  sessionId: string;
+  previewUpstream: string | null;
+  status: BuildSandboxStatus;
+  message: string;
+  githubFullName?: string;
+  draftBranch?: string;
+  draftSha?: string | null;
+}) {
+  const row = await getComputerSessionRowById(opts.sessionId);
+  const prev = (row?.build_state ?? null) as BuildSandboxState | null;
+  const state: BuildSandboxState = {
+    purpose: BUILD_SANDBOX_PURPOSE,
+    status: opts.status,
+    githubFullName: opts.githubFullName ?? prev?.githubFullName,
+    draftBranch: opts.draftBranch ?? prev?.draftBranch,
+    draftSha: opts.draftSha ?? prev?.draftSha ?? undefined,
+    previewUpstream: opts.previewUpstream,
+    message: opts.message,
+    updatedAt: nowIso(),
+  };
+  await writeBuildState(opts.sessionId, state);
+  await updateComputerSession(opts.sessionId, {
+    stream_url: opts.previewUpstream,
+    status:
+      opts.status === "ready"
+        ? "active"
+        : opts.status === "starting"
+          ? "starting"
+          : opts.status === "error"
+            ? "error"
+            : "idle",
+  });
 }
 
 async function tryResumeBuildSession(
@@ -431,10 +469,6 @@ export async function ensureProjectSandbox(opts: {
   } else if (existingIsBuild && existing) {
     const resumed = await tryResumeBuildSession(existing);
     if (resumed.ok) {
-      await patchProjectSandbox(opts.projectId, opts.workspaceId, {
-        sandbox_session_id: existing.id,
-        sandbox_status: "ready",
-      });
       try {
         const { loadAppSupabaseBinding } = await import(
           "@/lib/build/supabase/provision"
@@ -457,8 +491,9 @@ export async function ensureProjectSandbox(opts: {
       } catch (err) {
         console.warn("[cander] supabase inject on resume skipped", err);
       }
-      let message = "Environment resumed";
+      let message = "Starting preview…";
       let previewUpstream = resumed.previewUpstream;
+      let status: BuildSandboxStatus = "starting";
       try {
         const { ensureSandboxDevServer } = await import(
           "@/lib/build/preview/dev-server"
@@ -467,11 +502,26 @@ export async function ensureProjectSandbox(opts: {
           sessionId: existing.id,
           userId: opts.userId,
         });
-        if (!dev.ready) {
-          message = dev.message || "Preview idle until the app is scaffolded.";
+        if (dev.ready) {
+          status = "ready";
+          message = dev.message || "Environment ready";
+          if (!previewUpstream) {
+            try {
+              const { resolveSandboxForSession } = await import(
+                "@/lib/computer/session-runtime"
+              );
+              const resolved = await resolveSandboxForSession(
+                existing.id,
+                opts.userId,
+              );
+              previewUpstream = resolved?.sandbox.domain(BUILD_APP_PORT) ?? null;
+            } catch {
+              /* keep prior */
+            }
+          }
+        } else {
+          message = dev.message || "Starting preview…";
           previewUpstream = null;
-        } else if (dev.message) {
-          message = dev.message;
         }
       } catch (err) {
         console.warn("[cander] dev server on resume", err);
@@ -480,11 +530,25 @@ export async function ensureProjectSandbox(opts: {
             ? `Sandbox resumed; preview start failed: ${err.message}`
             : "Sandbox resumed; preview start failed.";
         previewUpstream = null;
+        status = "error";
       }
+      await persistPreviewUpstream({
+        sessionId: existing.id,
+        previewUpstream,
+        status,
+        message,
+        githubFullName: fullName,
+        draftBranch,
+        draftSha,
+      });
+      await patchProjectSandbox(opts.projectId, opts.workspaceId, {
+        sandbox_session_id: existing.id,
+        sandbox_status: status,
+      });
       return publicResult({
         projectId: opts.projectId,
         workspaceId: opts.workspaceId,
-        status: "ready",
+        status,
         sessionId: existing.id,
         subdomain: infra.subdomain,
         draftBranch,
@@ -517,8 +581,9 @@ export async function ensureProjectSandbox(opts: {
       draftBranch,
       draftSha,
     });
-    let message = "Environment ready";
+    let message = "Starting preview…";
     let previewUpstream = created.previewUpstream;
+    let status: BuildSandboxStatus = "starting";
     try {
       const { ensureSandboxDevServer } = await import(
         "@/lib/build/preview/dev-server"
@@ -527,11 +592,15 @@ export async function ensureProjectSandbox(opts: {
         sessionId: created.session.id,
         userId: opts.userId,
       });
-      if (!dev.ready) {
-        message = dev.message || "Preview idle until the app is scaffolded.";
+      if (dev.ready) {
+        status = "ready";
+        message = dev.message || "Environment ready";
+        if (!previewUpstream) {
+          previewUpstream = created.previewUpstream;
+        }
+      } else {
+        message = dev.message || "Starting preview…";
         previewUpstream = null;
-      } else if (dev.message) {
-        message = dev.message;
       }
     } catch (err) {
       console.warn("[cander] dev server on create", err);
@@ -540,11 +609,25 @@ export async function ensureProjectSandbox(opts: {
           ? `Sandbox ready; preview start failed: ${err.message}`
           : "Sandbox ready; preview start failed.";
       previewUpstream = null;
+      status = "error";
     }
+    await persistPreviewUpstream({
+      sessionId: created.session.id,
+      previewUpstream,
+      status,
+      message,
+      githubFullName: fullName,
+      draftBranch,
+      draftSha,
+    });
+    await patchProjectSandbox(opts.projectId, opts.workspaceId, {
+      sandbox_session_id: created.session.id,
+      sandbox_status: status,
+    });
     return publicResult({
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
-      status: "ready",
+      status,
       sessionId: created.session.id,
       subdomain: infra.subdomain,
       draftBranch,
