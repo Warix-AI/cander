@@ -226,28 +226,31 @@ async function createBuildSandboxFromGit(opts: {
 
     cacheSandboxHandle(sessionId, sandbox);
 
-    // Git source clones into a repo-named subdirectory — flatten to cwd so
-    // file ops, persist, and npm scripts run at the project root.
-    // Must use bash: dash `sh` ignores `shopt`/dotglob, so `.git` would be
-    // left behind and then deleted with the clone directory.
+    // Git source clones into a repo-named subdirectory — flatten to cwd.
+    // Use find -exec mv (works under dash/bash) so `.git` is not left behind.
     try {
       await sandbox.runCommand({
-        cmd: "bash",
+        cmd: "sh",
         args: [
           "-c",
-          `set -euo pipefail
+          `set -eu
 if [ ! -d .git ]; then
   git_dir=$(find . -maxdepth 2 -type d -name .git 2>/dev/null | head -1 || true)
-  if [ -n "\${git_dir}" ]; then
-    d=$(dirname "\${git_dir}")
-    if [ -n "\$d" ] && [ "\$d" != "." ]; then
-      shopt -s dotglob nullglob
-      mv "\$d"/* .
-      rmdir "\$d" 2>/dev/null || rm -rf "\$d"
+  if [ -n "$git_dir" ]; then
+    d=$(dirname "$git_dir")
+    if [ -n "$d" ] && [ "$d" != "." ]; then
+      find "$d" -mindepth 1 -maxdepth 1 -exec mv {} . \\;
+      rmdir "$d" 2>/dev/null || rm -rf "$d"
     fi
   fi
 fi
-test -d .git
+if [ ! -d .git ]; then
+  echo "FLATTEN_FAILED no .git at cwd" >&2
+  find . -maxdepth 2 -type d -name .git -print >&2 || true
+  ls -la >&2 || true
+  exit 1
+fi
+echo FLATTEN_OK
 ls -la
 git rev-parse --short HEAD`,
         ],

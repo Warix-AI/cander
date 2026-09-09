@@ -19,9 +19,23 @@ const SKIP_PREFIXES = [
   ".git/",
   ".turbo/",
   "coverage/",
+  ".cache/",
+  ".codex/",
+  ".config/",
+  ".global/",
+  ".local/",
+  ".npm/",
 ];
 
+const SKIP_NAMES = new Set([
+  ".npmrc",
+  ".sudo_as_admin_successful",
+  ".DS_Store",
+]);
+
 function shouldSkipPath(path: string): boolean {
+  const base = path.split("/").pop() || path;
+  if (SKIP_NAMES.has(base) || SKIP_NAMES.has(path)) return true;
   return SKIP_PREFIXES.some((p) => path === p.slice(0, -1) || path.startsWith(p));
 }
 
