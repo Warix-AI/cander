@@ -5,6 +5,7 @@
 
 import { packageJsonHasNext } from "@/lib/ai/build/site-package";
 import { duplicateAppRouterValidationIssues } from "@/lib/ai/build/routes/app-router-conflicts";
+import { seoConsistencyIssues } from "@/lib/ai/build/seo-consistency";
 
 const SOURCE_EXT = /\.(tsx?|jsx?|mjs|cjs)$/;
 const SKIP_PATH =
@@ -186,30 +187,12 @@ export function seoTipIssues(
   layoutContent: string | null,
   robotsContent: string | null,
 ): string[] {
-  const issues: string[] = [];
-  const hasSitemap = paths.some(
-    (p) =>
-      p === "sitemap.xml" ||
-      p === "app/sitemap.ts" ||
-      p === "app/sitemap.js" ||
-      p === "app/sitemap.tsx" ||
-      p === "app/sitemap.jsx",
-  );
-
-  if (layoutContent) {
-    if (
-      /sitemap\.xml|['"`]\/sitemap['"`]|generateSitemaps/.test(layoutContent) &&
-      !hasSitemap
-    ) {
-      issues.push(
-        "Layout references a sitemap but tip has no app/sitemap.* or sitemap.xml.",
-      );
-    }
-  }
-  if (robotsContent && /Sitemap\s*:/i.test(robotsContent) && !hasSitemap) {
-    issues.push("robots declares Sitemap but tip has no sitemap file.");
-  }
-  return issues;
+  return seoConsistencyIssues({
+    paths,
+    layoutContent,
+    robotsContent,
+    requireBoth: false,
+  });
 }
 
 export function staticTipStructureIssues(

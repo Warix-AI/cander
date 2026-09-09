@@ -6,6 +6,7 @@ import type { ScaffoldFile } from "@/lib/ai/build/site-spec";
 import type { SiteSpec } from "@/lib/ai/build/site-spec";
 import { packageJsonHasNext } from "@/lib/ai/build/site-package";
 import { duplicateAppRouterValidationIssues } from "@/lib/ai/build/routes/app-router-conflicts";
+import { seoConsistencyIssues } from "@/lib/ai/build/seo-consistency";
 
 export type WebsiteValidationResult = {
   ok: boolean;
@@ -121,6 +122,24 @@ export function validateWebsiteFiles(opts: {
   ]);
   if (!hasRobots) issues.push("Missing robots (app/robots.ts)");
   if (!hasSitemap) issues.push("Missing sitemap (app/sitemap.ts)");
+
+  const robotsPath = [
+    "app/robots.ts",
+    "app/robots.js",
+    "app/robots.txt",
+    "public/robots.txt",
+  ].find((p) => map.has(p));
+  const layoutPath = ["app/layout.tsx", "app/layout.ts", "app/layout.jsx", "app/layout.js"].find(
+    (p) => map.has(p),
+  );
+  issues.push(
+    ...seoConsistencyIssues({
+      paths: [...map.keys()],
+      robotsContent: robotsPath ? map.get(robotsPath) ?? null : null,
+      layoutContent: layoutPath ? map.get(layoutPath) ?? null : null,
+      requireBoth: false, // presence already checked above
+    }),
+  );
 
   const hasMetadata =
     /export\s+const\s+metadata\b|generateMetadata\b/.test(blob);

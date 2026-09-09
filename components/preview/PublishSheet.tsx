@@ -9,6 +9,7 @@ import {
 } from "@/components/preview/PublishDomainPicker";
 import { resolvePublishUrl } from "@/lib/publish-domain";
 import { useSpaceMutation } from "@/lib/hooks/use-space-query";
+import { formatPublishUserError } from "@/lib/publish/format-publish-error";
 
 export function PublishSheet() {
   const { overlay, closeOverlay, publishApp, liveUrl, projectId } = useApp();
@@ -21,6 +22,11 @@ export function PublishSheet() {
   const url = useMemo(
     () => resolvePublishUrl(options, selected, liveUrl),
     [options, selected, liveUrl],
+  );
+
+  const formattedError = useMemo(
+    () => (error ? formatPublishUserError(error) : null),
+    [error],
   );
 
   if (overlay !== "publish") return null;
@@ -70,10 +76,26 @@ export function PublishSheet() {
         <p className="mt-1 text-[13px] text-muted-foreground">
           Production — deploys the current draft tip via Vercel
         </p>
-        {error ? (
-          <p className="mt-3 text-[13px] leading-relaxed text-red-600 dark:text-red-400">
-            {error}
-          </p>
+        {formattedError ? (
+          <div
+            className={`mt-3 rounded-[10px] border px-3 py-2.5 text-[13px] leading-relaxed ${
+              formattedError.draftNeedsRepair
+                ? "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100"
+                : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300"
+            }`}
+            role="alert"
+          >
+            <p className="font-medium">{formattedError.title}</p>
+            <p className="mt-1 whitespace-pre-wrap opacity-90">
+              {formattedError.body}
+            </p>
+            {formattedError.draftNeedsRepair ? (
+              <p className="mt-2 text-[12px] opacity-80">
+                This is a draft problem, not a Vercel outage. Ask Cander to repair
+                the site, then publish again.
+              </p>
+            ) : null}
+          </div>
         ) : null}
         <button
           type="button"

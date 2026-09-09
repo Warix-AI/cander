@@ -99,6 +99,15 @@ describe("publish preflight seo", () => {
     assert.ok(issues.some((i) => i.toLowerCase().includes("sitemap")));
   });
 
+  it("fails when robots declares sitemap without file", () => {
+    const issues = seoTipIssues(
+      ["app/layout.tsx", "app/page.tsx", "app/robots.ts"],
+      null,
+      `export default function robots(){ return { sitemap: "/sitemap.xml" }; }`,
+    );
+    assert.ok(issues.some((i) => /robots declares Sitemap/i.test(i)));
+  });
+
   it("does not require robots when unreferenced", () => {
     const issues = seoTipIssues(
       ["app/layout.tsx", "app/page.tsx"],

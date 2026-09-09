@@ -15,6 +15,7 @@ import { disableGitAutoDeployments } from "@/lib/build/vercel/git-autodeploy";
 import { createProductionDeployment } from "@/lib/build/vercel/deployments";
 import { promoteDraftShaToDefaultBranch } from "@/lib/build/git/promote-published";
 import { ensureDraftSitePackageJson } from "@/lib/build/git/ensure-site-package";
+import { ensureDraftSeoArtifacts } from "@/lib/build/git/ensure-draft-seo";
 import { gitStoragePointer } from "@/lib/build/git/revision-pointers";
 import { ensureProjectInfra } from "@/lib/build/ensure-project-infra";
 import { assertNoConcurrentBuild } from "@/lib/build/sandbox/lock";
@@ -418,7 +419,15 @@ async function publishProjectWithRow(opts: {
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
     });
-    const publishSha = (ensuredPkg.draftSha || draftSha).toLowerCase();
+    const ensuredSeo = await ensureDraftSeoArtifacts({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+    });
+    const publishSha = (
+      ensuredSeo.draftSha ||
+      ensuredPkg.draftSha ||
+      draftSha
+    ).toLowerCase();
     const draftBranch = String(project.draft_branch || "cander/draft");
 
     if (publishSha !== draftSha.toLowerCase()) {
@@ -432,6 +441,8 @@ async function publishProjectWithRow(opts: {
     logPublish(publishAttemptId, "validated_draft_sha", {
       publishSha: publishSha.slice(0, 12),
       draftBranch,
+      seoRepaired: ensuredSeo.repaired,
+      packageRepaired: ensuredPkg.repaired,
     });
 
     await updatePublishAttempt({
@@ -450,7 +461,14 @@ async function publishProjectWithRow(opts: {
       userId: opts.userId,
     });
     if (!preflight.ok) {
-      const msg = `Publish blocked — draft tip failed preflight:\n- ${preflight.issues.join("\n- ")}`;
+      const isDraftRepair =
+        /preflight|draft tip|robots|sitemap|package\.json|App Router|Typecheck|next build failed during publish preflight|Missing dependency|Unresolved import/i.test(
+          preflight.issues.join("\n"),
+        );
+      const header = isDraftRepair
+        ? "Publish blocked — the draft needs repair before it can go live (this is not a Vercel outage):"
+        : "Publish blocked — draft tip failed preflight:";
+      const msg = `${header}\n- ${preflight.issues.join("\n- ")}\n\nAsk Cander to repair the site, then try Publish again.`;
       await updatePublishAttempt({
         publishAttemptId,
         projectId: opts.projectId,
@@ -458,12 +476,16 @@ async function publishProjectWithRow(opts: {
           status: "failed",
           error: msg.slice(0, 4000),
           completed_at: new Date().toISOString(),
-          meta: { preflightIssues: preflight.issues.slice(0, 20) },
+          meta: {
+            preflightIssues: preflight.issues.slice(0, 20),
+            draftNeedsRepair: isDraftRepair,
+          },
         },
       });
       logPublish(publishAttemptId, "preflight_failed", {
         issueCount: preflight.issues.length,
         compileOk: preflight.compileOk === true,
+        draftNeedsRepair: isDraftRepair,
       });
       return {
         ok: false,

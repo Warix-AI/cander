@@ -999,6 +999,15 @@ async function runCreateWebsitePipeline(opts: {
     label: "Building",
     detail: "Validating pages, nav, SEO, and forms…",
   });
+  {
+    const { repairSeoConsistencyFiles } = await import(
+      "@/lib/ai/build/seo-consistency"
+    );
+    const seoEarly = repairSeoConsistencyFiles({ files, spec });
+    if (seoEarly.repaired) {
+      files = seoEarly.files;
+    }
+  }
   let validation = planFirst
     ? validatePlanFirstTip({
         files,
@@ -1102,6 +1111,19 @@ async function runCreateWebsitePipeline(opts: {
   // Codex often writes layout/components but skips package.json / routes.
   // Always re-assert a runnable Next scaffold after a successful compose.
   {
+    const { repairSeoConsistencyFiles } = await import(
+      "@/lib/ai/build/seo-consistency"
+    );
+    const seoPass = repairSeoConsistencyFiles({ files, spec });
+    if (seoPass.repaired) {
+      files = seoPass.files;
+      report({
+        phase: "thinking",
+        label: "Building",
+        detail: "Repairing robots/sitemap SEO consistency…",
+      });
+    }
+
     const composed = composeSiteFromSpec(spec);
     const essentials = composed.filter((f) =>
       [
@@ -1120,7 +1142,7 @@ async function runCreateWebsitePipeline(opts: {
     const { ensureNextInPackageJson } = await import(
       "@/lib/ai/build/site-package"
     );
-    const toWrite = essentials.map((f) => {
+    let toWrite = essentials.map((f) => {
       if (f.path !== "package.json") return f;
       let content = f.content;
       if (Object.keys(normalizedPackageDeps).length) {
@@ -1142,6 +1164,30 @@ async function runCreateWebsitePipeline(opts: {
         content: ensureNextInPackageJson(content, { name: "cander-site" }),
       };
     });
+    // Prefer SEO-repaired robots/sitemap over compose defaults when present.
+    for (const p of ["app/robots.ts", "app/sitemap.ts"] as const) {
+      const fixed = files.find((f) => f.path === p);
+      if (fixed) {
+        toWrite = [...toWrite.filter((f) => f.path !== p), fixed];
+      }
+    }
+    // Final SEO pass on the exact write set.
+    {
+      const merged = repairSeoConsistencyFiles({
+        files: [
+          ...files.filter((f) => !toWrite.some((w) => w.path === f.path)),
+          ...toWrite,
+        ],
+        spec,
+      });
+      files = merged.files;
+      for (const p of ["app/robots.ts", "app/sitemap.ts"] as const) {
+        const fixed = merged.files.find((f) => f.path === p);
+        if (fixed) {
+          toWrite = [...toWrite.filter((f) => f.path !== p), fixed];
+        }
+      }
+    }
     report({
       phase: "thinking",
       label: "Building",
@@ -1242,6 +1288,48 @@ async function runCreateWebsitePipeline(opts: {
         content: [
           "Draft failed to start — duplicate App Router files must be removed before preview:",
           ...dupIssues.map((i) => `- ${i}`),
+        ].join("\n"),
+        runtime: "cloud",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+        toolResults,
+      };
+    }
+  }
+
+  // Fail closed if SEO artifacts still disagree after deterministic repair.
+  {
+    const { seoConsistencyIssues } = await import(
+      "@/lib/ai/build/seo-consistency"
+    );
+    const robots = files.find((f) => f.path.startsWith("app/robots."));
+    const layout = files.find((f) => /^app\/layout\.(tsx|ts|jsx|js)$/.test(f.path));
+    const seoIssues = seoConsistencyIssues({
+      paths: files.map((f) => f.path),
+      robotsContent: robots?.content ?? null,
+      layoutContent: layout?.content ?? null,
+      requireBoth: true,
+    });
+    if (seoIssues.length) {
+      if (brief) {
+        await saveWebsiteSetupBrief({
+          projectId,
+          workspaceId,
+          brief: {
+            ...brief,
+            status: "failed",
+            validationIssues: seoIssues,
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      }
+      return {
+        content: [
+          "Draft failed to start — SEO metadata is inconsistent (robots/sitemap):",
+          ...seoIssues.map((i) => `- ${i}`),
+          "",
+          "Tell me to repair the site and I’ll fix robots/sitemap, then retry.",
         ].join("\n"),
         runtime: "cloud",
         offline: false,
