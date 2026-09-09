@@ -135,6 +135,8 @@ export async function runRawOpenAITurn(
         threadId: request.threadId,
         workspaceId: request.workspaceId,
         title: request.title,
+        projectId: request.projectId,
+        projectSpace: request.projectSpace,
       }),
       signal: opts?.signal,
     });

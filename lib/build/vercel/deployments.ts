@@ -110,8 +110,28 @@ export async function createProductionDeployment(opts: {
   }
 
   if (latest.readyState !== "READY") {
+    let detail = "";
+    try {
+      const eventsRes = await vercelFetch(
+        `/v3/deployments/${encodeURIComponent(created.id)}/events?limit=30&direction=backward`,
+      );
+      if (eventsRes.ok) {
+        const events = (await eventsRes.json()) as Array<{
+          type?: string;
+          text?: string;
+          payload?: { text?: string };
+        }>;
+        const lines = (Array.isArray(events) ? events : [])
+          .map((e) => e.text || e.payload?.text || "")
+          .filter(Boolean)
+          .slice(0, 8);
+        if (lines.length) detail = ` Build log: ${lines.join(" | ").slice(0, 500)}`;
+      }
+    } catch {
+      /* best-effort */
+    }
     throw new Error(
-      `Production deploy did not become ready (state=${latest.readyState}). Previous published site was left unchanged.`,
+      `Production deploy did not become ready (state=${latest.readyState}).${detail} Previous published site was left unchanged.`,
     );
   }
   if (!latest.url) {

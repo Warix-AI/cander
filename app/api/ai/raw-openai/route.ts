@@ -34,7 +34,7 @@ import { extractOpenAICitations } from "@/lib/ai/raw-openai/citations";
 import {
   didOpenAIUseWebSearch,
   isOpenAIWebSearchEnabled,
-  resolveOpenAIModel,
+  resolveOpenAIModelForTurn,
 } from "@/lib/ai/raw-openai/web-search";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -61,6 +61,8 @@ type Body = {
   threadId?: string | null;
   workspaceId?: string | null;
   title?: string;
+  projectId?: string | null;
+  projectSpace?: string | null;
 };
 
 function newAttachmentId(): string {
@@ -136,7 +138,10 @@ export async function POST(request: Request) {
       idempotencyKey,
       estimatedUnits: 1,
       provider: "openai",
-      model: resolveOpenAIModel(),
+      model: resolveOpenAIModelForTurn({
+        spaceId: body.projectSpace,
+        projectId: body.projectId,
+      }),
     });
     if (!usage.ok) {
       return usage.response;
@@ -156,7 +161,10 @@ export async function POST(request: Request) {
     }
   }
 
-  const model = resolveOpenAIModel();
+  const model = resolveOpenAIModelForTurn({
+    spaceId: body.projectSpace,
+    projectId: body.projectId,
+  });
   const webSearchEnabled = isOpenAIWebSearchEnabled();
   const system =
     (body.system || "").trim() ||
