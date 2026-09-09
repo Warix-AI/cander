@@ -27,6 +27,9 @@ import {
   isBuildCreateIntent,
   isBuildIntent,
 } from "@/lib/ai/build/capabilities";
+import { composeSiteFromSpec } from "@/lib/ai/build/compose-site";
+import { planWebsite } from "@/lib/ai/build/plan-website";
+import type { ScaffoldFile } from "@/lib/ai/build/site-spec";
 
 const MAX_ROUNDS = 10;
 
@@ -82,6 +85,7 @@ function buildToolNames(): string[] {
     "computer.files.write",
     "computer.files.patch",
     "computer.files.list",
+    "computer.files.persist",
     "computer.exec",
   ];
 }
@@ -175,242 +179,11 @@ async function ensureSandboxReady(opts: {
   }
 }
 
-function escapeJsString(value: string): string {
-  return JSON.stringify(value).slice(1, -1);
-}
-
-type FunnelCopy = {
-  businessName: string;
-  tagline: string;
-  hero: string;
-  description: string;
-  phone: string;
-  rating: string;
-  problem: string;
-  solution: string;
-  services: string[];
-  cta: string;
-};
-
-function defaultFunnelCopy(prompt: string): FunnelCopy {
-  const lower = prompt.toLowerCase();
-  const tree = /tree|trim|arbor/i.test(lower);
-  const name = tree ? "Summit Tree Trimming Co." : "Northline Studio";
-  return {
-    businessName: name,
-    tagline: tree
-      ? "Safe, fast tree care for homes & businesses"
-      : "A simple site that converts visitors",
-    hero: tree
-      ? "Safe, Fast Tree Trimming in Your Area"
-      : "Built for your next customer",
-    description: tree
-      ? "Licensed tree trimming, crown reduction, and storm cleanup. Request a free quote."
-      : "Clear offer, proof, and one call-to-action for your next customer.",
-    phone: "(555) 014-2288",
-    rating: "4.9/5 from local homeowners",
-    problem: tree
-      ? "Overgrown limbs, storm damage, and risky DIY cuts."
-      : "Visitors leave before they take action.",
-    solution: tree
-      ? "Licensed crews, clean finish, and same-week availability."
-      : "Clear offer, proof, and one obvious call-to-action.",
-    services: tree
-      ? ["Tree Trimming", "Crown Reduction", "Storm Cleanup"]
-      : ["Strategy", "Design", "Launch"],
-    cta: tree ? "Get a free quote" : "Book a call",
-  };
-}
-
-async function inventFunnelCopy(
-  request: AiGenerateRequest,
-  opts?: AgentTurnOptions,
-): Promise<FunnelCopy> {
-  const fallback = defaultFunnelCopy(request.content);
-  try {
-    const generated = await runRawOpenAITurn(
-      {
-        ...request,
-        allowTools: false,
-        toolContext: undefined,
-        modelMode: "chat",
-        content: [
-          "Return ONLY compact JSON (no markdown) with keys:",
-          "businessName, tagline, hero, description, phone, rating, problem, solution, services (string array of 3), cta.",
-          "Invent realistic details for this request:",
-          request.content,
-        ].join("\n"),
-      },
-      { ...opts, suppressContentDelta: true },
-    );
-    const raw = (generated.content || "").trim();
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    if (start < 0 || end <= start) return fallback;
-    const parsed = JSON.parse(raw.slice(start, end + 1)) as Partial<FunnelCopy>;
-    return {
-      businessName: String(parsed.businessName || fallback.businessName),
-      tagline: String(parsed.tagline || fallback.tagline),
-      hero: String(parsed.hero || fallback.hero),
-      description: String(parsed.description || fallback.description),
-      phone: String(parsed.phone || fallback.phone),
-      rating: String(parsed.rating || fallback.rating),
-      problem: String(parsed.problem || fallback.problem),
-      solution: String(parsed.solution || fallback.solution),
-      services: Array.isArray(parsed.services)
-        ? parsed.services.map((s) => String(s)).filter(Boolean).slice(0, 5)
-        : fallback.services,
-      cta: String(parsed.cta || fallback.cta),
-    };
-  } catch {
-    return fallback;
-  }
-}
-
-/**
- * Crawlable Next App Router scaffold — server components, metadata, robots, sitemap.
- */
-function scaffoldFiles(copy: FunnelCopy): Array<{ path: string; content: string }> {
-  const servicesJs = copy.services
-    .map((s) => `"${escapeJsString(s)}"`)
-    .join(", ");
-  const page = `const services = [${servicesJs}];
-
-export default function HomePage() {
-  return (
-    <main style={styles.main}>
-      <header style={styles.header}>
-        <strong>${escapeJsString(copy.businessName)}</strong>
-        <a href="tel:${escapeJsString(copy.phone.replace(/[^\d+]/g, ""))}" style={styles.phone}>
-          ${escapeJsString(copy.phone)}
-        </a>
-      </header>
-      <section style={styles.hero}>
-        <p style={styles.eyebrow}>${escapeJsString(copy.tagline)}</p>
-        <h1 style={styles.h1}>${escapeJsString(copy.hero)}</h1>
-        <p style={styles.rating}>${escapeJsString(copy.rating)}</p>
-        <a href="#contact" style={styles.cta}>${escapeJsString(copy.cta)}</a>
-      </section>
-      <section style={styles.section}>
-        <h2>The problem</h2>
-        <p>${escapeJsString(copy.problem)}</p>
-        <h2>Our approach</h2>
-        <p>${escapeJsString(copy.solution)}</p>
-      </section>
-      <section style={styles.section}>
-        <h2>Services</h2>
-        <ul>
-          {services.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      </section>
-      <section id="contact" style={styles.section}>
-        <h2>Ready to start?</h2>
-        <p>Call ${escapeJsString(copy.phone)} or request a callback — we respond the same day.</p>
-        <a href="tel:${escapeJsString(copy.phone.replace(/[^\d+]/g, ""))}" style={styles.cta}>
-          ${escapeJsString(copy.cta)}
-        </a>
-      </section>
-    </main>
-  );
-}
-
-const styles = {
-  main: { fontFamily: "Georgia, serif", color: "#14231a", background: "#f7f4ee", margin: 0 },
-  header: { display: "flex", justifyContent: "space-between", padding: "18px 24px", borderBottom: "1px solid #ddd4c6" },
-  phone: { color: "#14231a", textDecoration: "none", fontWeight: 600 },
-  hero: { padding: "64px 24px 48px", maxWidth: 780 },
-  eyebrow: { textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 12, opacity: 0.7 },
-  h1: { fontSize: "clamp(2rem, 5vw, 3.4rem)", lineHeight: 1.1, margin: "12px 0 16px" },
-  rating: { marginBottom: 24, opacity: 0.85 },
-  cta: { display: "inline-block", background: "#1f6b3a", color: "#fff", padding: "12px 18px", borderRadius: 999, textDecoration: "none", fontWeight: 600 },
-  section: { padding: "28px 24px", maxWidth: 780, borderTop: "1px solid #ddd4c6" },
-};
-`;
-
-  return [
-    {
-      path: ".gitignore",
-      content: ["node_modules", ".next", ".npm", "package-lock.json", ".DS_Store", ""].join(
-        "\n",
-      ),
-    },
-    {
-      path: "package.json",
-      content: JSON.stringify(
-        {
-          name: "cander-site",
-          private: true,
-          scripts: {
-            dev: "next dev --hostname 0.0.0.0 --port 3000",
-            build: "next build",
-            start: "next start -p 3000",
-          },
-          dependencies: {
-            next: "16.3.1",
-            react: "19.1.0",
-            "react-dom": "19.1.0",
-          },
-        },
-        null,
-        2,
-      ),
-    },
-    {
-      path: "next.config.mjs",
-      content: "export default {};\n",
-    },
-    {
-      path: "app/layout.js",
-      content: `export const metadata = {
-  title: ${JSON.stringify(copy.businessName)},
-  description: ${JSON.stringify(copy.description)},
-  openGraph: {
-    title: ${JSON.stringify(copy.businessName)},
-    description: ${JSON.stringify(copy.description)},
-    type: "website",
-  },
-  robots: { index: true, follow: true },
-};
-
-export default function RootLayout({ children }) {
-  return (
-    <html lang="en">
-      <body style={{ margin: 0 }}>{children}</body>
-    </html>
-  );
-}
-`,
-    },
-    {
-      path: "app/page.js",
-      content: page,
-    },
-    {
-      path: "app/robots.js",
-      content: `export default function robots() {
-  return {
-    rules: { userAgent: "*", allow: "/" },
-    sitemap: "/sitemap.xml",
-  };
-}
-`,
-    },
-    {
-      path: "app/sitemap.js",
-      content: `export default function sitemap() {
-  return [{ url: "/", lastModified: new Date(), changeFrequency: "weekly", priority: 1 }];
-}
-`,
-    },
-  ];
-}
 
 async function writeScaffold(opts: {
   projectId: string;
   workspaceId: string;
-  files: Array<{ path: string; content: string }>;
+  files: ScaffoldFile[];
   report: NonNullable<AgentTurnOptions["onProgress"]>;
 }): Promise<AiToolCallResult[]> {
   const results: AiToolCallResult[] = [];
@@ -429,7 +202,7 @@ async function writeScaffold(opts: {
         workspaceId: opts.workspaceId,
         path: file.path,
         content: file.content,
-        persist: true,
+        persist: false,
       },
     });
     results.push(result);
@@ -442,6 +215,34 @@ async function writeScaffold(opts: {
       contentStreaming: true,
     });
   }
+
+  const okWrites = results.filter((r) => r.ok).length;
+  if (okWrites > 0) {
+    opts.report({
+      phase: "tool",
+      label: "Building",
+      detail: "Saving draft to GitHub…",
+      toolName: "computer.files.persist",
+      contentStreaming: true,
+    });
+    const persist = await executeAuthorizedTool({
+      name: "computer.files.persist",
+      arguments: {
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+      },
+    });
+    results.push(persist);
+    opts.report({
+      phase: "follow_up",
+      label: "Building",
+      detail: "Saving draft to GitHub…",
+      toolName: "computer.files.persist",
+      toolOk: persist.ok,
+      contentStreaming: true,
+    });
+  }
+
   return results;
 }
 
@@ -485,6 +286,129 @@ async function runBuildPlanTurn(
     condensationOccurred: Boolean(generated.condensationOccurred),
     aiChatId: generated.aiChatId ?? request.aiChatId ?? null,
     blocks: generated.blocks,
+  };
+}
+
+async function runCodingAgentLoop(
+  request: AiGenerateRequest,
+  opts: AgentTurnOptions | undefined,
+  ctx: {
+    projectId: string;
+    workspaceId: string;
+    allowedTools: string[];
+    priorResults?: AiToolCallResult[];
+    maxRounds?: number;
+  },
+): Promise<AgentTurnResult> {
+  const report = opts?.onProgress ?? (() => {});
+  const toolResults: AiToolCallResult[] = [...(ctx.priorResults ?? [])];
+  const rounds = ctx.maxRounds ?? 4;
+  let forcedToolRetry = false;
+  let working: AiGenerateRequest = {
+    ...request,
+    allowTools: true,
+    allowedToolNames: ctx.allowedTools,
+    modelMode: "coding",
+    toolContext:
+      request.toolContext ||
+      [
+        formatToolsForPrompt(ctx.allowedTools),
+        BUILD_PROJECT_INSTRUCTIONS,
+        `Active projectId: ${ctx.projectId}`,
+        `workspaceId: ${ctx.workspaceId}`,
+      ].join("\n\n"),
+  };
+
+  for (let round = 0; round < rounds; round++) {
+    if (opts?.signal?.aborted) {
+      return {
+        content: "",
+        runtime: "cloud",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+        toolResults,
+      };
+    }
+    const generated = await runRawOpenAITurn(working, {
+      ...opts,
+      suppressContentDelta: true,
+    });
+    const { text, call } = parseToolCallFromContent(generated.content);
+    let toolCall = call;
+    if (toolCall && !ctx.allowedTools.includes(toolCall.name)) toolCall = null;
+    if (toolCall && !isBuildToolName(toolCall.name)) toolCall = null;
+
+    if (!toolCall) {
+      const visible =
+        sanitizeAssistantVisibleText(text || generated.content).trim() || "";
+      const writes = toolResults.filter(
+        (r) => r.name === "computer.files.write" && r.ok,
+      ).length;
+      if (
+        !forcedToolRetry &&
+        writes === (ctx.priorResults?.filter((r) => r.name === "computer.files.write" && r.ok).length ?? 0) &&
+        looksLikeCodeDump(visible)
+      ) {
+        forcedToolRetry = true;
+        working = {
+          ...working,
+          content: `${request.content}\n\nUse computer.files.write only. No code dumps.`,
+        };
+        continue;
+      }
+      return {
+        content: visible || (writes > 0 ? `Updated project files for custom gaps.` : ""),
+        runtime: generated.runtime ?? "cloud",
+        offline: Boolean(generated.offline),
+        condensationOccurred: Boolean(generated.condensationOccurred),
+        aiChatId: generated.aiChatId ?? request.aiChatId ?? null,
+        toolResults,
+      };
+    }
+
+    report({
+      phase: "tool",
+      label: "Building",
+      detail: labelForBuildTool(toolCall.name),
+      toolName: toolCall.name,
+      contentStreaming: true,
+    });
+    const result = await executeAuthorizedTool({
+      name: toolCall.name,
+      arguments: {
+        projectId: ctx.projectId,
+        workspaceId: ctx.workspaceId,
+        ...(toolCall.arguments ?? {}),
+      },
+    });
+    toolResults.push(result);
+    working = {
+      ...working,
+      messages: [
+        ...(request.messages ?? []),
+        { role: "assistant", content: generated.content },
+        {
+          role: "user",
+          content: `Tool result for ${result.name}: ${result.ok ? "ok" : "failed"}\n${result.output}`,
+        },
+      ],
+      toolContext: [
+        formatToolsForPrompt(ctx.allowedTools),
+        BUILD_PROJECT_INSTRUCTIONS,
+        formatToolResultsNote(toolResults),
+        "Continue only if more gap work remains, then summarize briefly.",
+      ].join("\n\n"),
+    };
+  }
+
+  return {
+    content: "Finished the custom-gap pass.",
+    runtime: "cloud",
+    offline: false,
+    condensationOccurred: false,
+    aiChatId: request.aiChatId ?? null,
+    toolResults,
   };
 }
 
@@ -532,15 +456,15 @@ export async function runBuildProjectTurn(
     };
   }
 
-  // Deterministic create path — invent copy with chat model, write SSR scaffold.
+  // Deterministic create path — SiteSpec plan → compose → batched persist.
   if (isBuildCreateIntent(request.content) || IMPLEMENT_INTENT_RE.test(request.content)) {
     report({
       phase: "thinking",
       label: "Building",
-      detail: "Planning copy, then scaffolding a crawlable Next.js site…",
+      detail: "Planning site design, then composing the project…",
     });
-    const copy = await inventFunnelCopy(request, opts);
-    const files = scaffoldFiles(copy);
+    const spec = await planWebsite(request, opts);
+    const files = composeSiteFromSpec(spec);
     const written = await writeScaffold({
       projectId,
       workspaceId,
@@ -548,7 +472,9 @@ export async function runBuildProjectTurn(
       report,
     });
     toolResults.push(...written);
-    const okWrites = written.filter((r) => r.ok).length;
+    const okWrites = written.filter(
+      (r) => r.name === "computer.files.write" && r.ok,
+    ).length;
     const failed = written.filter((r) => !r.ok);
 
     if (okWrites === 0) {
@@ -564,16 +490,59 @@ export async function runBuildProjectTurn(
       };
     }
 
-    // Refresh sandbox so draft preview can pick up the new files (silent).
-    await ensureSandboxReady({ projectId, workspaceId, forceRestart: true });
+    // Soft refresh — do not destroy/reclone/npm-install unless needed.
+    await ensureSandboxReady({ projectId, workspaceId, forceRestart: false });
+
+    const gaps = spec.customGaps.filter(Boolean);
+    let gapNote = "";
+    if (gaps.length > 0) {
+      report({
+        phase: "thinking",
+        label: "Building",
+        detail: "Filling custom gaps with the coding agent…",
+      });
+      const gapRequest: AiGenerateRequest = {
+        ...request,
+        content: [
+          request.content,
+          "",
+          `Site scaffold for ${spec.businessName} is already written.`,
+          "Implement ONLY these custom gaps with computer.files.* tools:",
+          ...gaps.map((g) => `- ${g}`),
+        ].join("\n"),
+        allowTools: true,
+        allowedToolNames: allowedTools,
+        modelMode: "coding",
+        toolContext: [
+          formatToolsForPrompt(allowedTools),
+          BUILD_PROJECT_INSTRUCTIONS,
+          `Active projectId: ${projectId}`,
+          `workspaceId: ${workspaceId}`,
+          "Do not rewrite the whole site. Only address the listed gaps.",
+        ].join("\n\n"),
+      };
+      // Run a short coding pass by falling through via recursive-ish loop:
+      // mutate request path by executing one coding loop inline below.
+      const coding = await runCodingAgentLoop(gapRequest, opts, {
+        projectId,
+        workspaceId,
+        allowedTools,
+        priorResults: toolResults,
+      });
+      toolResults.push(...(coding.toolResults ?? []));
+      gapNote = coding.content
+        ? `\n\nCustom gaps: ${gaps.join("; ")}.\n${coding.content}`
+        : `\n\nCustom gaps noted for later: ${gaps.join("; ")}.`;
+    }
 
     return {
       content: [
-        `Created a draft site for **${copy.businessName}** (${okWrites} files) and saved it to your project’s GitHub draft.`,
-        "Live preview will load on your draft URL when the sandbox is ready — use Reload if it’s still blank.",
+        `Created a production-ready draft site for **${spec.businessName}** (${okWrites} files) from a structured design plan, saved in one GitHub draft commit.`,
+        "Preview stays on your draft URL — use Reload if it’s still warming up.",
         failed.length
           ? `Some writes failed: ${failed.map((f) => f.output).join("; ")}`
           : "",
+        gapNote,
       ]
         .filter(Boolean)
         .join("\n\n"),
@@ -667,15 +636,15 @@ export async function runBuildProjectTurn(
         continue;
       }
 
-      // Still dumped code with no writes — fall back to deterministic scaffold.
+      // Still dumped code with no writes — fall back to SiteSpec compose.
       if (writes === 0 && looksLikeCodeDump(visible)) {
         report({
           phase: "thinking",
           label: "Building",
-          detail: "Writing files into the sandbox instead of chatting code…",
+          detail: "Composing site files into the sandbox instead of chatting code…",
         });
-        const copy = await inventFunnelCopy(request, opts);
-        const files = scaffoldFiles(copy);
+        const spec = await planWebsite(request, opts);
+        const files = composeSiteFromSpec(spec);
         const written = await writeScaffold({
           projectId,
           workspaceId,
@@ -683,18 +652,20 @@ export async function runBuildProjectTurn(
           report,
         });
         toolResults.push(...written);
-        const okWrites = written.filter((r) => r.ok).length;
+        const okWrites = written.filter(
+          (r) => r.name === "computer.files.write" && r.ok,
+        ).length;
         if (okWrites > 0) {
           await ensureSandboxReady({
             projectId,
             workspaceId,
-            forceRestart: true,
+            forceRestart: false,
           });
         }
         return {
           content:
             okWrites > 0
-              ? `Created a draft site for **${copy.businessName}** (${okWrites} files) and saved it to GitHub. Live preview will appear when ready — Reload if blank.`
+              ? `Created a draft site for **${spec.businessName}** (${okWrites} files) and saved it to GitHub. Reload Preview if blank.`
               : written.find((r) => !r.ok)?.output ||
                 "Couldn’t write files. Try again.",
           runtime: "cloud",
@@ -773,7 +744,7 @@ export async function runBuildProjectTurn(
 
   if (writes > 0) {
     try {
-      await ensureSandboxReady({ projectId, workspaceId, forceRestart: true });
+      await ensureSandboxReady({ projectId, workspaceId, forceRestart: false });
     } catch {
       /* best-effort */
     }

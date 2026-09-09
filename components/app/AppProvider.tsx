@@ -3675,7 +3675,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [threadId]);
 
   const publishApp = useCallback((url: string) => {
-    setLiveUrl(url);
+    // Publish is a backend deployment state change — stay in the project UI.
+    // Do not swap the draft preview iframe to the production URL.
     setOverlay(null);
     setBuildTool("preview");
     setThreads((current) =>
@@ -3689,9 +3690,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 {
                   id: nextId("a"),
                   role: "assistant" as const,
-                  content: "Your app is live.",
+                  content: `Published. Live URL: ${url}`,
                   at: nowTime(),
-                  blocks: [{ type: "deploy" as const, url, status: "live" as const }],
+                  blocks: [
+                    { type: "deploy" as const, url, status: "live" as const },
+                  ],
                 },
               ],
             },

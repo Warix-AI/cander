@@ -158,7 +158,7 @@ export function BuildPanel() {
   // Draft/sandbox hosts stay out of the address chrome until publish.
   const publishedUrl = entityProject?.publishedUrl?.trim() || null;
   const chromeTitle = publishedUrl
-    ? `${displayName} · live`
+    ? `${displayName} · published`
     : `${displayName} · draft`;
 
   return (
@@ -275,11 +275,9 @@ export function BuildPanel() {
               onRetryEnv={() => ensureSandbox(true)}
               previewSrc={previewSrc}
               draftPreviewUrl={
-                publishedUrl ||
-                (previewUrl && previewUrl.includes("draft--")
-                  ? previewUrl
-                  : null)
+                previewUrl && previewUrl.includes("draft--") ? previewUrl : null
               }
+              publishedUrl={publishedUrl}
               onReloadPreview={() => {
                 refreshPreview();
                 if (previewSrc) {

@@ -707,6 +707,7 @@ function registerBuildTools() {
         path: { type: "string" },
         content: { type: "string" },
         sessionId: { type: "string" },
+        persist: { type: "boolean" },
       },
       capability: "sandbox",
     },
@@ -718,6 +719,7 @@ function registerBuildTools() {
         path: { type: "string" },
         patch: { type: "string" },
         sessionId: { type: "string" },
+        persist: { type: "boolean" },
       },
       capability: "sandbox",
     },
@@ -728,6 +730,13 @@ function registerBuildTools() {
         path: { type: "string" },
         sessionId: { type: "string" },
       },
+      capability: "sandbox",
+    },
+    {
+      name: "computer.files.persist",
+      description:
+        "Commit all dirty sandbox files to the project GitHub draft branch in one persist.",
+      properties: { sessionId: { type: "string" } },
       capability: "sandbox",
     },
     {

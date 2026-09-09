@@ -359,11 +359,11 @@ export function ProjectBrowserPanel({
       !projectId ||
       !ctx.workspaceId ||
       entity?.kind === "automation" ||
-      entity?.kind === "research" ||
-      Boolean(entity?.publishedUrl)
+      entity?.kind === "research"
     ) {
       return;
     }
+    // Keep ensuring draft sandbox even after publish — preview stays on draft.
     const looksLikeBuild =
       browserSpaceId === "build" ||
       entity?.kind === "site" ||
@@ -2436,9 +2436,7 @@ export function ProjectBrowserPanel({
           sandboxEnvStatus={sandboxEnvStatus}
           sandboxEnvMessage={sandboxEnvMessage}
           sandboxPreviewSrc={sandboxPreviewSrc}
-          draftPreviewUrl={
-            entity?.publishedUrl?.trim() || draftPreviewUrl || null
-          }
+          draftPreviewUrl={draftPreviewUrl}
           onSandboxRetry={() => {
             if (!projectId || !ctx.workspaceId) return;
             setSandboxEnvStatus("starting");
@@ -3037,44 +3035,8 @@ function ProjectBrowserBody({
       match?.publishedUrl && isHttpUrl(match.publishedUrl)
         ? match.publishedUrl
         : null;
-    // Never embed platform hosts like `{uuid}.cander.app` (Cander login-in-iframe).
-    const looksLikePlatformEmbed =
-      Boolean(tab.url) &&
-      /https?:\/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.cander\.app/i.test(
-        tab.url,
-      );
-    const draftOrHttp =
-      !looksLikePlatformEmbed &&
-      tab.url &&
-      isHttpUrl(tab.url) &&
-      !isGoogleUrl(tab.url)
-        ? tab.url
-        : null;
-    const previewUrl = published ?? draftOrHttp;
 
-    if (published && previewUrl) {
-      return (
-        <div className="relative h-full min-h-0">
-          <BrowserSurfaceHost
-            tabId={tab.id}
-            url={previewUrl}
-            previewOnly
-            isolatedPartition
-            reloadKey={reloadKey}
-            title={tab.title}
-            userId={userId}
-            projectId={tab.projectId ?? null}
-            active={surfaceActive}
-            onUrlChange={(nextUrl) => syncSurfaceMeta({ url: nextUrl })}
-            onTitleChange={(nextTitle) => syncSurfaceMeta({ title: nextTitle })}
-            onFaviconChange={(faviconUrl) => syncSurfaceMeta({ faviconUrl })}
-            onOpenNewTab={openNewInAppTab}
-          />
-        </div>
-      );
-    }
-
-    // Draft: same-origin path proxy iframe (or empty AppViewport while starting).
+    // Always keep draft AppViewport after publish — publishing is state only.
     return (
       <AppViewport
         name={match?.title ?? fallbackName}
@@ -3086,6 +3048,7 @@ function ProjectBrowserBody({
         envMessage={sandboxEnvMessage}
         previewSrc={sandboxPreviewSrc}
         draftPreviewUrl={draftPreviewUrl}
+        publishedUrl={published}
         onRetryEnv={onSandboxRetry}
         onReloadPreview={onSandboxReload}
       />

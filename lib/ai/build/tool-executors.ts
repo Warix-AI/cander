@@ -285,6 +285,22 @@ export async function executeBuildTool(opts: {
       };
     }
 
+    if (name === "computer.files.persist") {
+      const result = await sandboxFilesApi({
+        projectId,
+        workspaceId,
+        body: { action: "persist" },
+      });
+      return {
+        name,
+        ok: result.ok,
+        output: result.ok
+          ? `Persisted draft${result.data?.draftSha ? ` ${String(result.data.draftSha).slice(0, 7)}` : ""}`
+          : result.output,
+        data: result.data,
+      };
+    }
+
     if (name === "computer.exec") {
       const command = String(args.command ?? args.cmd ?? "").trim();
       if (!command) return { name, ok: false, output: "command required" };

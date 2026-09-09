@@ -109,6 +109,9 @@ export async function executeAuthorizedTool(
   ).trim();
   if (injectProjectId) args.projectId = injectProjectId;
   if (injectWorkspaceId) args.workspaceId = injectWorkspaceId;
+  if ("persist" in rawArgs && !("persist" in args)) {
+    args.persist = rawArgs.persist;
+  }
 
   // Build / sandbox tools (gated by capability compiler domains).
   if (

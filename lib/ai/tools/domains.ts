@@ -45,6 +45,7 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "computer.files.write",
     "computer.files.patch",
     "computer.files.list",
+    "computer.files.persist",
     "computer.exec",
     "computer.port.expose",
   ],

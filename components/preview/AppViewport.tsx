@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Build project preview — live iframe via Cander path proxy when ready.
+ * Publish does not replace this draft surface; live URL is shown beside draft.
  */
 export function AppViewport({
   name,
@@ -18,6 +19,7 @@ export function AppViewport({
   onRetryEnv,
   previewSrc,
   draftPreviewUrl,
+  publishedUrl,
   onReloadPreview,
 }: {
   name: string;
@@ -29,6 +31,8 @@ export function AppViewport({
   previewSrc?: string | null;
   /** Draft host shown in the live-preview badge (e.g. draft--sub.cander.app) */
   draftPreviewUrl?: string | null;
+  /** Production URL after publish — shown alongside draft, does not replace iframe */
+  publishedUrl?: string | null;
   onReloadPreview?: () => void;
 }) {
   const { viewport, previewKey, project } = useApp();
@@ -47,8 +51,11 @@ export function AppViewport({
   const showLive = envStatus === "ready" && Boolean(previewSrc);
   const emptyCopy =
     summary?.trim() || "Start generating your website in chat.";
-  const liveHost = draftPreviewUrl
+  const draftHost = draftPreviewUrl
     ? displayHostFromUrl(draftPreviewUrl) || draftPreviewUrl
+    : null;
+  const liveHost = publishedUrl
+    ? displayHostFromUrl(publishedUrl) || publishedUrl
     : null;
 
   return (
@@ -74,7 +81,6 @@ export function AppViewport({
             title={`${name} preview`}
             src={previewSrc!}
             className="absolute inset-0 h-full w-full border-0 bg-white"
-            // sandbox: allow scripts/forms/same-origin for Next apps; no top-nav
             sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-modals"
             allow="clipboard-read; clipboard-write"
           />
@@ -128,22 +134,29 @@ export function AppViewport({
           </div>
         ) : null}
 
-        {showLive ? (
-          <div className="absolute bottom-3 left-3 z-10 flex max-w-[min(100%-1.5rem,28rem)] items-center gap-2">
-            <span className="min-w-0 truncate rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium tracking-[-0.01em] text-white/90">
-              {liveHost ? `Live preview · ${liveHost}` : "Live preview"}
+        <div className="absolute bottom-3 left-3 z-10 flex max-w-[min(100%-1.5rem,36rem)] flex-wrap items-center gap-2">
+          {liveHost ? (
+            <span className="min-w-0 truncate rounded-full bg-emerald-700/90 px-3 py-1 text-[11px] font-medium tracking-[-0.01em] text-white">
+              Published · {liveHost}
             </span>
-            {onReloadPreview ? (
-              <button
-                type="button"
-                onClick={onReloadPreview}
-                className="shrink-0 rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium text-white/90 hover:bg-black/70"
-              >
-                Reload
-              </button>
-            ) : null}
-          </div>
-        ) : null}
+          ) : null}
+          {showLive ? (
+            <>
+              <span className="min-w-0 truncate rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium tracking-[-0.01em] text-white/90">
+                {draftHost ? `Draft · ${draftHost}` : "Draft preview"}
+              </span>
+              {onReloadPreview ? (
+                <button
+                  type="button"
+                  onClick={onReloadPreview}
+                  className="shrink-0 rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium text-white/90 hover:bg-black/70"
+                >
+                  Reload
+                </button>
+              ) : null}
+            </>
+          ) : null}
+        </div>
       </div>
     </div>
   );
