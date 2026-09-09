@@ -100,7 +100,7 @@ describe("plan-first types normalize", () => {
     assert.equal(research.packageDependencies["framer-motion"], "^11");
 
     const impl = normalizeImplementationManifest({
-      files: [{ path: "package.json" }, "app/page.js"],
+      files: [{ path: "package.json" }, "app/page.tsx"],
       routes: [{ path: "/", pageId: "home" }],
       tasks: ["scaffold"],
       validation: { ok: false, technical: ["missing /contact"], visual: [] },

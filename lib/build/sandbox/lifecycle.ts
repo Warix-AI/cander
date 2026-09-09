@@ -738,11 +738,42 @@ export async function getProjectSandboxStatus(opts: {
           cmd: "sh",
           args: [
             "-c",
-            `code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:${BUILD_APP_PORT}/ 2>/dev/null || echo 000); echo "$code"`,
+            [
+              `code=$(curl -sS -o /tmp/cander_preview_probe.html -w "%{http_code}" --max-time 3 http://127.0.0.1:${BUILD_APP_PORT}/ 2>/dev/null || echo 000)`,
+              `body=$(head -c 8000 /tmp/cander_preview_probe.html 2>/dev/null || true)`,
+              `if echo "$code" | grep -Eq '^[45]'; then echo "FAIL $code"; exit 0; fi`,
+              `if echo "$body" | grep -Eqi '__next_error|Application error'; then echo "FAIL next_error $code"; exit 0; fi`,
+              `if echo "$code" | grep -Eq '^[123]'; then echo "OK $code"; exit 0; fi`,
+              `echo "WAIT $code"`,
+            ].join("; "),
           ],
         });
-        const code = (probe.stdout || "").trim().split(/\s+/).pop() || "";
-        if (/^[1-5]\d\d$/.test(code)) {
+        const out = (probe.stdout || "").trim();
+        const codeMatch = out.match(/\b(\d{3})\b/);
+        const code = codeMatch?.[1] || "";
+        if (/^FAIL\b/.test(out)) {
+          status = "error";
+          message = out.includes("next_error")
+            ? "Draft failed to start (Next.js runtime error)."
+            : `Draft failed to start (HTTP ${code || "error"}).`;
+          await persistPreviewUpstream({
+            sessionId,
+            previewUpstream,
+            status,
+            message,
+            githubFullName: project.github_full_name
+              ? String(project.github_full_name)
+              : undefined,
+            draftBranch: project.draft_branch
+              ? String(project.draft_branch)
+              : undefined,
+            draftSha: project.draft_sha ? String(project.draft_sha) : null,
+          });
+          await patchProjectSandbox(opts.projectId, opts.workspaceId, {
+            sandbox_session_id: sessionId,
+            sandbox_status: "error",
+          });
+        } else if (/^OK\b/.test(out) && /^[1-3]\d\d$/.test(code)) {
           if (!previewUpstream) {
             try {
               const session = await getComputerSessionById(

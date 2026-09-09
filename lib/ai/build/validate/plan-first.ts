@@ -14,6 +14,7 @@ import {
   type WebsiteValidationResult,
 } from "@/lib/ai/build/website-validate";
 import type { SiteSpec } from "@/lib/ai/build/site-spec";
+import { duplicateAppRouterValidationIssues } from "@/lib/ai/build/routes/app-router-conflicts";
 
 export function validateNavRoutesAgainstFiles(
   plan: BuildPlanJson,
@@ -28,10 +29,13 @@ export function validateNavRoutesAgainstFiles(
     if (!href || href.startsWith("#") || href.startsWith("http")) continue;
     const candidates =
       href === "/"
-        ? ["app/page.js", "app/page.tsx", "app/page.jsx"]
+        ? ["app/page.tsx", "app/page.ts", "app/page.jsx", "app/page.js"]
         : [
-            `app${href}/page.js`,
             `app${href}/page.tsx`,
+            `app${href}/page.ts`,
+            `app${href}/page.jsx`,
+            `app${href}/page.js`,
+            `app${href.replace(/^\//, "")}/page.tsx`,
             `app${href.replace(/^\//, "")}/page.js`,
           ];
     if (!candidates.some((p) => paths.has(p))) {
@@ -50,7 +54,10 @@ export function validatePlanFirstTip(opts: {
     files: opts.files,
     spec: opts.spec,
   });
-  const issues = [...base.issues];
+  const issues = [
+    ...base.issues,
+    ...duplicateAppRouterValidationIssues(opts.files.map((f) => f.path)),
+  ];
   const pkg = opts.files.find((f) => f.path === "package.json");
   if (!pkg || !packageJsonHasNext(pkg.content)) {
     issues.push("package.json missing next dependency");

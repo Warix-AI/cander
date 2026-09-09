@@ -143,6 +143,7 @@ export async function commitProjectDraftFilesClient(opts: {
   projectId: string;
   workspaceId: string;
   files: Array<{ path: string; content: string }>;
+  deletePaths?: string[];
   message?: string;
 }): Promise<{
   ok: boolean;
@@ -153,7 +154,7 @@ export async function commitProjectDraftFilesClient(opts: {
   if (!isSupabaseConfigured()) return null;
   const token = await authToken();
   if (!token) return null;
-  if (!opts.files.length) {
+  if (!opts.files.length && !(opts.deletePaths?.length ?? 0)) {
     return { ok: true, filesCommitted: 0 };
   }
 
@@ -170,6 +171,7 @@ export async function commitProjectDraftFilesClient(opts: {
           workspaceId: opts.workspaceId,
           message: opts.message || "Cander: save draft scaffold",
           files: opts.files,
+          deletePaths: opts.deletePaths,
         }),
       },
     );

@@ -83,7 +83,9 @@ export function AppViewport({
         ? "Preparing project repository…"
         : envStatus === "unavailable"
           ? "Environment unavailable"
-          : "Environment failed to start";
+          : envMessage?.startsWith("Draft failed")
+            ? "Draft failed to start"
+            : "Environment failed to start";
 
   return (
     <div

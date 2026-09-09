@@ -5,6 +5,7 @@
 import type { ScaffoldFile } from "@/lib/ai/build/site-spec";
 import type { SiteSpec } from "@/lib/ai/build/site-spec";
 import { packageJsonHasNext } from "@/lib/ai/build/site-package";
+import { duplicateAppRouterValidationIssues } from "@/lib/ai/build/routes/app-router-conflicts";
 
 export type WebsiteValidationResult = {
   ok: boolean;
@@ -39,16 +40,18 @@ export function validateWebsiteFiles(opts: {
   const blob = joinContent(map);
 
   for (const page of opts.spec.pages) {
-    const path = page.path === "/" ? "app/page.js" : null;
     const altPaths =
       page.path === "/"
-        ? ["app/page.js", "app/page.tsx", "app/page.jsx"]
+        ? ["app/page.tsx", "app/page.ts", "app/page.jsx", "app/page.js"]
         : [
-            `app${page.path}/page.js`,
             `app${page.path}/page.tsx`,
+            `app${page.path}/page.ts`,
+            `app${page.path}/page.jsx`,
+            `app${page.path}/page.js`,
+            `app${page.path.replace(/^\//, "")}/page.tsx`,
             `app${page.path.replace(/^\//, "")}/page.js`,
           ];
-    if (path) {
+    if (page.path === "/" || page.path === "") {
       if (!hasAny(map, altPaths)) {
         issues.push(`Missing page file for ${page.path || "/"}`);
       }
@@ -106,18 +109,18 @@ export function validateWebsiteFiles(opts: {
   }
 
   const hasRobots = hasAny(map, [
-    "app/robots.js",
     "app/robots.ts",
+    "app/robots.js",
     "app/robots.txt",
     "public/robots.txt",
   ]);
   const hasSitemap = hasAny(map, [
-    "app/sitemap.js",
     "app/sitemap.ts",
+    "app/sitemap.js",
     "public/sitemap.xml",
   ]);
-  if (!hasRobots) issues.push("Missing robots (app/robots.js)");
-  if (!hasSitemap) issues.push("Missing sitemap (app/sitemap.js)");
+  if (!hasRobots) issues.push("Missing robots (app/robots.ts)");
+  if (!hasSitemap) issues.push("Missing sitemap (app/sitemap.ts)");
 
   const hasMetadata =
     /export\s+const\s+metadata\b|generateMetadata\b/.test(blob);
@@ -208,6 +211,10 @@ export function validateWebsiteFiles(opts: {
       );
     }
   }
+
+  issues.push(
+    ...duplicateAppRouterValidationIssues([...map.keys()]),
+  );
 
   return { ok: issues.length === 0, issues };
 }

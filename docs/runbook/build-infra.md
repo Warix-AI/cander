@@ -160,11 +160,13 @@ Opt-in until Phase 7 default-on. When enabled, site create persists `project_spe
 
 ```
 CANDER_BUILD_PLAN_FIRST=1
-# optional UI gate:
+# Required for browser create (plan-first runs client-side):
 NEXT_PUBLIC_CANDER_BUILD_PLAN_FIRST=1
 ```
 
 Apply migration `066_plan_first_build_artifacts.sql` before relying on persistence.
+
+When the public flag is on, create enters `runPlanFirstCreatePipeline` and must persist `project_spec` / `build_plan` / `research_manifest` / `implementation_manifest` — it does not silently fall back to the legacy SiteSpec-only path.
 
 Retry budgets live in `lib/ai/build/retry-budgets.ts`. Sandbox ensure is single-flight (`lib/build/sandbox/ensure-coalesce.ts`); publish hard-fails if `vercel_project_id` cannot be persisted.
 

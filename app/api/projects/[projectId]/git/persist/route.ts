@@ -20,6 +20,8 @@ type Body = {
   message?: string;
   /** Optional explicit files (skip sandbox dirty scan). */
   files?: Array<{ path: string; content: string }>;
+  /** Optional paths to delete in the same commit (e.g. legacy app/page.js). */
+  deletePaths?: string[];
 };
 
 export async function POST(request: Request, ctx: RouteCtx) {
@@ -59,12 +61,18 @@ export async function POST(request: Request, ctx: RouteCtx) {
     const message =
       body.message?.trim() || "Cander: persist project draft";
 
-    if (Array.isArray(body.files) && body.files.length > 0) {
+    if (
+      (Array.isArray(body.files) && body.files.length > 0) ||
+      (Array.isArray(body.deletePaths) && body.deletePaths.length > 0)
+    ) {
       const result = await commitFilesToDraftBranch({
         projectId,
         workspaceId,
         message,
-        files: body.files,
+        files: Array.isArray(body.files) ? body.files : [],
+        deletePaths: Array.isArray(body.deletePaths)
+          ? body.deletePaths
+          : undefined,
       });
       return NextResponse.json({ ok: true, ...result });
     }

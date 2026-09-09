@@ -35,6 +35,11 @@ export async function commitFilesToDraftBranch(opts: {
   workspaceId: string;
   message: string;
   files: DraftFileChange[];
+  /**
+   * Repo-relative paths to remove in the same commit (GitHub tree `sha: null`).
+   * Use when replacing `app/page.js` with `app/page.tsx` so Next never sees both.
+   */
+  deletePaths?: string[];
   authorName?: string;
   authorEmail?: string;
 }): Promise<CommitDraftResult> {
@@ -68,8 +73,13 @@ export async function commitFilesToDraftBranch(opts: {
     content: f.content,
     encoding: f.encoding ?? ("utf-8" as const),
   }));
+  const deletePaths = [
+    ...new Set(
+      (opts.deletePaths ?? []).map((p) => safeRepoRelativePath(p)),
+    ),
+  ].filter((p) => !files.some((f) => f.path === p));
 
-  if (files.length === 0) {
+  if (files.length === 0 && deletePaths.length === 0) {
     const sha = project.draft_sha ? String(project.draft_sha) : "";
     return {
       draftSha: sha,
@@ -119,7 +129,7 @@ export async function commitFilesToDraftBranch(opts: {
     path: string;
     mode: "100644";
     type: "blob";
-    sha: string;
+    sha: string | null;
   }> = [];
 
   for (const file of files) {
@@ -137,6 +147,16 @@ export async function commitFilesToDraftBranch(opts: {
       mode: "100644",
       type: "blob",
       sha: blob.sha,
+    });
+  }
+
+  // GitHub Git Data API: sha null deletes the path from the new tree.
+  for (const path of deletePaths) {
+    treeItems.push({
+      path,
+      mode: "100644",
+      type: "blob",
+      sha: null,
     });
   }
 
@@ -191,7 +211,7 @@ export async function commitFilesToDraftBranch(opts: {
     draftSha,
     draftBranch,
     fullName,
-    filesCommitted: files.length,
+    filesCommitted: files.length + deletePaths.length,
     noop: false,
   };
 }

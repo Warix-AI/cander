@@ -425,7 +425,17 @@ export function ProjectBrowserPanel({
           result.hasPreviewUpstream &&
           result.previewPath
         ) {
-          setSandboxPreviewSrc(`${result.previewPath}?_r=${Date.now()}`);
+          const { probeDraftPreviewPath } = await import(
+            "@/lib/build/preview/client-health"
+          );
+          const probed = await probeDraftPreviewPath(result.previewPath);
+          if (!probed.ok) {
+            setSandboxEnvStatus("error");
+            setSandboxEnvMessage(probed.message);
+            setSandboxPreviewSrc(null);
+          } else {
+            setSandboxPreviewSrc(probed.previewSrc);
+          }
         } else {
           setSandboxPreviewSrc(null);
           if (result.status === "ready" && !result.hasPreviewUpstream) {
@@ -503,7 +513,17 @@ export function ProjectBrowserPanel({
           result.previewPath
         ) {
           setSandboxEnvStatus("ready");
-          setSandboxPreviewSrc(`${result.previewPath}?_r=${Date.now()}`);
+          const { probeDraftPreviewPath } = await import(
+            "@/lib/build/preview/client-health"
+          );
+          const probed = await probeDraftPreviewPath(result.previewPath);
+          if (!probed.ok) {
+            setSandboxEnvStatus("error");
+            setSandboxEnvMessage(probed.message);
+            setSandboxPreviewSrc(null);
+          } else {
+            setSandboxPreviewSrc(probed.previewSrc);
+          }
           const draftUrl = draftPreviewUrlForSubdomain(result.subdomain);
           setDraftPreviewUrl(draftUrl);
           return;
@@ -528,7 +548,17 @@ export function ProjectBrowserPanel({
             restarted.previewPath
           ) {
             setSandboxEnvStatus("ready");
-            setSandboxPreviewSrc(`${restarted.previewPath}?_r=${Date.now()}`);
+            const { probeDraftPreviewPath } = await import(
+              "@/lib/build/preview/client-health"
+            );
+            const probed = await probeDraftPreviewPath(restarted.previewPath);
+            if (!probed.ok) {
+              setSandboxEnvStatus("error");
+              setSandboxEnvMessage(probed.message);
+              setSandboxPreviewSrc(null);
+            } else {
+              setSandboxPreviewSrc(probed.previewSrc);
+            }
             setDraftPreviewUrl(
               draftPreviewUrlForSubdomain(restarted.subdomain),
             );
@@ -566,7 +596,17 @@ export function ProjectBrowserPanel({
             resumed.previewPath
           ) {
             setSandboxEnvStatus("ready");
-            setSandboxPreviewSrc(`${resumed.previewPath}?_r=${Date.now()}`);
+            const { probeDraftPreviewPath } = await import(
+              "@/lib/build/preview/client-health"
+            );
+            const probed = await probeDraftPreviewPath(resumed.previewPath);
+            if (!probed.ok) {
+              setSandboxEnvStatus("error");
+              setSandboxEnvMessage(probed.message);
+              setSandboxPreviewSrc(null);
+            } else {
+              setSandboxPreviewSrc(probed.previewSrc);
+            }
             setDraftPreviewUrl(draftPreviewUrlForSubdomain(resumed.subdomain));
             return;
           }
@@ -627,7 +667,17 @@ export function ProjectBrowserPanel({
             result.hasPreviewUpstream &&
             result.previewPath
           ) {
-            setSandboxPreviewSrc(`${result.previewPath}?_r=${Date.now()}`);
+            const { probeDraftPreviewPath } = await import(
+              "@/lib/build/preview/client-health"
+            );
+            const probed = await probeDraftPreviewPath(result.previewPath);
+            if (!probed.ok) {
+              setSandboxEnvStatus("error");
+              setSandboxEnvMessage(probed.message);
+              setSandboxPreviewSrc(null);
+            } else {
+              setSandboxPreviewSrc(probed.previewSrc);
+            }
           } else {
             setSandboxPreviewSrc(null);
             if (result.status === "ready" && !result.hasPreviewUpstream) {
@@ -2677,7 +2727,17 @@ export function ProjectBrowserPanel({
                 result.hasPreviewUpstream &&
                 result.previewPath
               ) {
-                setSandboxPreviewSrc(`${result.previewPath}?_r=${Date.now()}`);
+                const { probeDraftPreviewPath } = await import(
+                  "@/lib/build/preview/client-health"
+                );
+                const probed = await probeDraftPreviewPath(result.previewPath);
+                if (!probed.ok) {
+                  setSandboxEnvStatus("error");
+                  setSandboxEnvMessage(probed.message);
+                  setSandboxPreviewSrc(null);
+                } else {
+                  setSandboxPreviewSrc(probed.previewSrc);
+                }
               } else {
                 setSandboxPreviewSrc(null);
                 if (result.status === "ready" && !result.hasPreviewUpstream) {

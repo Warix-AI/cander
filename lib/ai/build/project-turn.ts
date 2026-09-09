@@ -95,13 +95,14 @@ Rules:
 - No "use client" on the main landing page unless interactivity is required.
 - After scaffolding, persist files (computer.files.write persists by default).
 - Keep user-facing replies short: what you built + how to preview. No giant code dumps.
-- Call tools as JSON: {"tool":"computer.files.write","arguments":{"path":"app/page.js","content":"..."}}
+- Call tools as JSON: {"tool":"computer.files.write","arguments":{"path":"app/page.tsx","content":"..."}}
 - Supabase / databases: only when the user asks or the plan clearly needs them — use build.* tools when available.
 
 Workflow for "create a website/app":
 1. computer.files.list to see current files (optional).
-2. computer.files.write for package.json, next.config.mjs, app/layout.js, app/page.js, app/robots.js, app/sitemap.js, .gitignore.
-3. Summarize briefly.`;
+2. computer.files.write for package.json, next.config.mjs, app/layout.tsx, app/page.tsx, app/robots.ts, app/sitemap.ts, .gitignore.
+3. Prefer TypeScript/TSX App Router files. Never leave both app/page.js and app/page.tsx (or any sibling extension) for the same route.
+4. Summarize briefly.`;
 
 function isBuildPlanIntent(text: string): boolean {
   const t = text.trim();
@@ -216,10 +217,22 @@ async function writeScaffold(opts: {
   projectId: string;
   workspaceId: string;
   files: ScaffoldFile[];
+  /** Explicit deletes (legacy competing routes). Auto-derived when omitted. */
+  deletePaths?: string[];
   report: NonNullable<AgentTurnOptions["onProgress"]>;
 }): Promise<AiToolCallResult[]> {
   const results: AiToolCallResult[] = [];
-  if (opts.files.length === 0) return results;
+  if (opts.files.length === 0 && !(opts.deletePaths?.length ?? 0)) return results;
+
+  const { deletePathsForPreferredWrites } = await import(
+    "@/lib/ai/build/routes/app-router-conflicts"
+  );
+  const deletePaths = [
+    ...new Set([
+      ...(opts.deletePaths ?? []),
+      ...deletePathsForPreferredWrites(opts.files),
+    ]),
+  ];
 
   // Git-first only — never treat sandbox writes as success for create/scaffold.
   // Empty-repo chicken-and-egg: sandbox cannot be "ready" without package.json.
@@ -238,6 +251,7 @@ async function writeScaffold(opts: {
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
       files: opts.files,
+      deletePaths,
       message: `Cander: write ${opts.files.length} scaffold files`,
     });
     if (committed?.ok) {
@@ -246,6 +260,13 @@ async function writeScaffold(opts: {
           name: "computer.files.write",
           ok: true,
           output: `Wrote ${file.path} → draft ${committed.draftSha?.slice(0, 7) || ""}`,
+        });
+      }
+      for (const path of deletePaths) {
+        results.push({
+          name: "computer.files.write",
+          ok: true,
+          output: `Removed conflicting route ${path}`,
         });
       }
       results.push({
@@ -297,6 +318,19 @@ async function writeScaffold(opts: {
     });
     return results;
   }
+}
+
+async function runPlanFirstCreatePipeline(
+  opts: Omit<Parameters<typeof runCreateWebsitePipeline>[0], "planFirst">,
+): Promise<AgentTurnResult> {
+  return runCreateWebsitePipeline({ ...opts, planFirst: true });
+}
+
+/** Legacy create when `CANDER_BUILD_PLAN_FIRST` / `NEXT_PUBLIC_…` is off. */
+async function runWebsiteCreatePipeline(
+  opts: Omit<Parameters<typeof runCreateWebsitePipeline>[0], "planFirst">,
+): Promise<AgentTurnResult> {
+  return runCreateWebsitePipeline({ ...opts, planFirst: false });
 }
 
 async function runBuildPlanTurn(
@@ -513,7 +547,7 @@ function parseSetupAnswersFromContent(
   return Object.keys(answers).length ? answers : null;
 }
 
-async function runWebsiteCreatePipeline(opts: {
+async function runCreateWebsitePipeline(opts: {
   request: AiGenerateRequest;
   opts?: AgentTurnOptions;
   projectId: string;
@@ -523,6 +557,8 @@ async function runWebsiteCreatePipeline(opts: {
   websiteBrief: WebsiteSetupBrief | null;
   isSiteProject: boolean;
   report: NonNullable<AgentTurnOptions["onProgress"]>;
+  /** When true, plan artifacts are required — no silent legacy fallback. */
+  planFirst: boolean;
 }): Promise<AgentTurnResult> {
   const {
     request,
@@ -533,6 +569,7 @@ async function runWebsiteCreatePipeline(opts: {
     toolResults,
     isSiteProject,
     report,
+    planFirst,
   } = opts;
   let brief = opts.websiteBrief;
 
@@ -551,9 +588,9 @@ async function runWebsiteCreatePipeline(opts: {
     detail: "Planning site design from your brief…",
   });
 
-  // Phase 2+: persist ProjectSpec + private BuildPlan before retrieval (flagged).
+  // Persist ProjectSpec + private BuildPlan before retrieval (required when planFirst).
   let activeBuildPlan: BuildPlanRecord | null = null;
-  if (isPlanFirstBuildEnabled()) {
+  if (planFirst) {
     report({
       phase: "thinking",
       label: "Building",
@@ -573,7 +610,58 @@ async function runWebsiteCreatePipeline(opts: {
         buildPlan: activeBuildPlan,
       });
     } catch (err) {
-      console.warn("[cander:plan] plan-first persist failed; continuing", err);
+      const detail =
+        err instanceof Error ? err.message : "Plan-first persist failed.";
+      console.error("[cander:plan] plan-first persist failed", err);
+      if (brief) {
+        await saveWebsiteSetupBrief({
+          projectId,
+          workspaceId,
+          brief: {
+            ...brief,
+            status: "failed",
+            validationIssues: [`Plan-first create failed: ${detail}`],
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      }
+      return {
+        content: [
+          "Could not start plan-first website creation — preview stays locked.",
+          detail,
+          "Fix the plan pipeline and try again.",
+        ].join("\n"),
+        runtime: "cloud",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+        toolResults,
+      };
+    }
+    if (!activeBuildPlan?.json) {
+      if (brief) {
+        await saveWebsiteSetupBrief({
+          projectId,
+          workspaceId,
+          brief: {
+            ...brief,
+            status: "failed",
+            validationIssues: [
+              "Build plan was empty after plan-first generate.",
+            ],
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      }
+      return {
+        content:
+          "Plan-first create produced an empty build plan. Preview stays locked until this is fixed.",
+        runtime: "cloud",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+        toolResults,
+      };
     }
   }
 
@@ -605,7 +693,7 @@ async function runWebsiteCreatePipeline(opts: {
   try {
     // Build turn runs in the browser — MCP must go through the server API
     // so API_KEY_21ST never ships to the client.
-    if (isPlanFirstBuildEnabled() && activeBuildPlan?.json) {
+    if (planFirst && activeBuildPlan?.json) {
       const retrieval = await retrieveTwentyFirstForBuildPlanClient({
         workspaceId,
         projectId,
@@ -744,7 +832,7 @@ async function runWebsiteCreatePipeline(opts: {
       });
       toolResults.push(...written);
 
-      if (isPlanFirstBuildEnabled()) {
+      if (planFirst) {
         await savePlanFirstArtifacts({
           projectId,
           workspaceId,
@@ -911,7 +999,7 @@ async function runWebsiteCreatePipeline(opts: {
     label: "Building",
     detail: "Validating pages, nav, SEO, and forms…",
   });
-  let validation = isPlanFirstBuildEnabled()
+  let validation = planFirst
     ? validatePlanFirstTip({
         files,
         spec,
@@ -954,7 +1042,7 @@ async function runWebsiteCreatePipeline(opts: {
     });
     toolResults.push(...(repair.toolResults ?? []));
     // Re-validate against composed Spec files (proxy for structure).
-    validation = isPlanFirstBuildEnabled()
+    validation = planFirst
       ? validatePlanFirstTip({
           files: composeSiteFromSpec(spec),
           spec,
@@ -964,12 +1052,21 @@ async function runWebsiteCreatePipeline(opts: {
   }
 
   if (!validation.ok) {
-    if (isPlanFirstBuildEnabled()) {
+    if (planFirst) {
       await savePlanFirstArtifacts({
         projectId,
         workspaceId,
         implementationManifest: mergeValidationIntoManifest(
-          null,
+          {
+            version: 1,
+            files: files.map((f) => ({ path: f.path })),
+            routes: (activeBuildPlan?.json.sitemap ?? spec.pages).map((p) => ({
+              path: "path" in p ? p.path : "/",
+              pageId: "id" in p ? p.id : undefined,
+            })),
+            tasks: ["validate"],
+            validation: { ok: false, technical: validation.issues, visual: [] },
+          },
           validation.issues,
           [],
         ),
@@ -1011,10 +1108,11 @@ async function runWebsiteCreatePipeline(opts: {
         "package.json",
         "next.config.mjs",
         ".gitignore",
-        "app/robots.js",
-        "app/sitemap.js",
+        "app/robots.ts",
+        "app/sitemap.ts",
         "app/globals.css",
-        "app/page.js",
+        "app/page.tsx",
+        "app/layout.tsx",
         "tsconfig.json",
         "lib/utils.ts",
       ].includes(f.path) || f.path.startsWith("components/ui/"),
@@ -1056,6 +1154,12 @@ async function runWebsiteCreatePipeline(opts: {
       report,
     });
     toolResults.push(...ensured);
+    // Essentials are canonical — merge into the file list used for the manifest.
+    {
+      const byPath = new Map(files.map((f) => [f.path, f]));
+      for (const f of toWrite) byPath.set(f.path, f);
+      files = [...byPath.values()];
+    }
     const essentialsOk = ensured.some(
       (r) => r.name === "computer.files.persist" && r.ok,
     );
@@ -1089,14 +1193,83 @@ async function runWebsiteCreatePipeline(opts: {
     }
   }
 
+  // Fail closed before sandbox boot if duplicate App Router files remain in the tip set.
+  {
+    const { duplicateAppRouterValidationIssues } = await import(
+      "@/lib/ai/build/routes/app-router-conflicts"
+    );
+    const dupIssues = duplicateAppRouterValidationIssues(
+      files.map((f) => f.path),
+    );
+    if (dupIssues.length) {
+      if (planFirst) {
+        await savePlanFirstArtifacts({
+          projectId,
+          workspaceId,
+          implementationManifest: mergeValidationIntoManifest(
+            {
+              version: 1,
+              files: files.map((f) => ({ path: f.path })),
+              routes: (activeBuildPlan?.json.sitemap ?? spec.pages).map((p) => ({
+                path: "path" in p ? p.path : "/",
+                pageId: "id" in p ? p.id : undefined,
+              })),
+              tasks: ["route-conflict-check"],
+              validation: {
+                ok: false,
+                technical: dupIssues,
+                visual: [],
+              },
+            },
+            dupIssues,
+            [],
+          ),
+        });
+      }
+      if (brief) {
+        await saveWebsiteSetupBrief({
+          projectId,
+          workspaceId,
+          brief: {
+            ...brief,
+            status: "failed",
+            validationIssues: dupIssues,
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      }
+      return {
+        content: [
+          "Draft failed to start — duplicate App Router files must be removed before preview:",
+          ...dupIssues.map((i) => `- ${i}`),
+        ].join("\n"),
+        runtime: "cloud",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+        toolResults,
+      };
+    }
+  }
+
   // One forceRestart after tip has package.json (retry budget: 1).
   await ensureSandboxReady({ projectId, workspaceId, forceRestart: true });
 
-  if (isPlanFirstBuildEnabled()) {
+  if (planFirst) {
     await savePlanFirstArtifacts({
       projectId,
       workspaceId,
-      implementationManifest: mergeValidationIntoManifest(null, [], []),
+      implementationManifest: {
+        version: 1,
+        files: files.map((f) => ({ path: f.path })),
+        routes: (activeBuildPlan?.json.sitemap ?? spec.pages).map((p) => ({
+          path: "path" in p ? p.path : "/",
+          pageId: "id" in p ? p.id : undefined,
+        })),
+        tasks: ["compose", "validate", "ensure-essentials", "sandbox"],
+        validation: { ok: true, technical: [], visual: [] },
+        updatedAt: new Date().toISOString(),
+      },
     });
     // visualQaChecklist() documents desktop/tablet/mobile expectations for
     // the next Codex visual repair pass (budget: BUILD_RETRY_BUDGETS.codexVisualRepair).
@@ -1303,8 +1476,21 @@ export async function runBuildProjectTurn(
     };
   }
 
-  // Guided / create path — SiteSpec → 21st → Codex (compose fallback) → validate.
+  // Guided / create path — plan-first (flag on) or legacy SiteSpec compose.
   if (wantsCreate) {
+    if (isPlanFirstBuildEnabled()) {
+      return runPlanFirstCreatePipeline({
+        request,
+        opts,
+        projectId,
+        workspaceId,
+        allowedTools,
+        toolResults,
+        websiteBrief,
+        isSiteProject,
+        report,
+      });
+    }
     return runWebsiteCreatePipeline({
       request,
       opts,
@@ -1389,7 +1575,7 @@ export async function runBuildProjectTurn(
             formatToolsForPrompt(allowedTools),
             BUILD_PROJECT_INSTRUCTIONS,
             formatToolResultsNote(toolResults),
-            "CRITICAL: Do not paste code in chat. Call computer.files.write now for package.json, app/layout.js, and app/page.js.",
+            "CRITICAL: Do not paste code in chat. Call computer.files.write now for package.json, app/layout.tsx, and app/page.tsx. Prefer TSX; delete any competing app/page.js sibling.",
           ].join("\n\n"),
           content: [
             request.content,

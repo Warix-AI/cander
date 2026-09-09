@@ -336,9 +336,9 @@ function emitPageComponent(spec: SiteSpec, pageIndex: number): string {
 }
 
 function pathToAppFile(path: string): string {
-  if (path === "/" || path === "") return "app/page.js";
+  if (path === "/" || path === "") return "app/page.tsx";
   const clean = path.replace(/^\//, "").replace(/\/$/, "");
-  return `app/${clean}/page.js`;
+  return `app/${clean}/page.tsx`;
 }
 
 export function composeSiteFromSpec(spec: SiteSpec): ScaffoldFile[] {
@@ -363,10 +363,12 @@ export function composeSiteFromSpec(spec: SiteSpec): ScaffoldFile[] {
       content: emitGlobalsCss(spec.theme),
     },
     {
-      path: "app/layout.js",
-      content: `import "./globals.css";
+      path: "app/layout.tsx",
+      content: `import type { ReactNode } from "react";
+import type { Metadata } from "next";
+import "./globals.css";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: ${jsStr(spec.businessName)},
   description: ${jsStr(spec.tagline)},
   openGraph: {
@@ -377,7 +379,7 @@ export const metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function RootLayout({ children }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>{children}</body>
@@ -387,8 +389,10 @@ export default function RootLayout({ children }) {
 `,
     },
     {
-      path: "app/robots.js",
-      content: `export default function robots() {
+      path: "app/robots.ts",
+      content: `import type { MetadataRoute } from "next";
+
+export default function robots(): MetadataRoute.Robots {
   return {
     rules: { userAgent: "*", allow: "/" },
     sitemap: "/sitemap.xml",
@@ -397,8 +401,10 @@ export default function RootLayout({ children }) {
 `,
     },
     {
-      path: "app/sitemap.js",
-      content: `export default function sitemap() {
+      path: "app/sitemap.ts",
+      content: `import type { MetadataRoute } from "next";
+
+export default function sitemap(): MetadataRoute.Sitemap {
   return ${JSON.stringify(
     spec.pages.map((p) => ({
       url: p.path,
@@ -408,7 +414,7 @@ export default function RootLayout({ children }) {
     })),
     null,
     2,
-  )};
+  )} as MetadataRoute.Sitemap;
 }
 `,
     },
