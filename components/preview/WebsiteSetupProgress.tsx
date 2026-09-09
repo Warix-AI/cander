@@ -28,7 +28,8 @@ function arcPath(
 
 /**
  * Blank-preview progress for guided website setup.
- * 8 arcs fill with completed answers; spins while building.
+ * White canvas; color mark stays still; only the ring spins while building
+ * (same pattern as ConnectorLoadingState).
  */
 export function WebsiteSetupProgress({
   completedSteps = 0,
@@ -63,49 +64,54 @@ export function WebsiteSetupProgress({
       aria-live="polite"
       aria-label={aria}
       className={cn(
-        "flex h-full w-full min-h-0 min-w-0 flex-1 flex-col items-center justify-center self-stretch px-6 py-16",
+        "flex h-full w-full min-h-0 min-w-0 flex-1 flex-col items-center justify-center self-stretch bg-white px-6 py-16 dark:bg-white",
         className,
       )}
     >
-      <div
-        className={cn(
-          "relative flex h-11 w-11 shrink-0 items-center justify-center",
-          spinning && "motion-reduce:animate-none animate-spin",
+      <div className="relative flex h-11 w-11 shrink-0 items-center justify-center">
+        {spinning || mode === "failed" ? (
+          <span
+            aria-hidden
+            className={cn(
+              "absolute inset-0 rounded-full border-[1.5px]",
+              mode === "failed"
+                ? "border-destructive/20 border-t-destructive/70"
+                : "border-foreground/10 border-t-foreground/55",
+              spinning && "motion-reduce:animate-none animate-spin",
+            )}
+            style={spinning ? { animationDuration: "1.1s" } : undefined}
+          />
+        ) : (
+          <svg
+            width={size}
+            height={size}
+            viewBox={`0 0 ${size} ${size}`}
+            className="absolute inset-0"
+            aria-hidden
+          >
+            {Array.from({ length: SEGMENTS }, (_, i) => {
+              const start = i * (SWEEP + GAP_DEG);
+              const active = i < filled;
+              return (
+                <path
+                  key={i}
+                  d={arcPath(cx, cy, r, start, SWEEP)}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  className={
+                    active ? "text-foreground/55" : "text-foreground/10"
+                  }
+                />
+              );
+            })}
+          </svg>
         )}
-        style={spinning ? { animationDuration: "1.1s" } : undefined}
-      >
-        <svg
-          width={size}
-          height={size}
-          viewBox={`0 0 ${size} ${size}`}
-          className="absolute inset-0"
-          aria-hidden
-        >
-          {Array.from({ length: SEGMENTS }, (_, i) => {
-            const start = i * (SWEEP + GAP_DEG);
-            const active = spinning ? true : i < filled;
-            return (
-              <path
-                key={i}
-                d={arcPath(cx, cy, r, start, SWEEP)}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.5}
-                strokeLinecap="round"
-                className={
-                  active
-                    ? mode === "failed"
-                      ? "text-destructive/70"
-                      : "text-foreground/55"
-                    : "text-foreground/10"
-                }
-              />
-            );
-          })}
-        </svg>
-        <CanderMark className="!h-5 !w-[21px]" />
+        {/* Mark stays stationary — only the ring animates. */}
+        <CanderMark tone="color" className="!h-5 !w-5" />
       </div>
-      <p className="mt-4 max-w-[16rem] text-center text-[13px] text-muted-foreground">
+      <p className="mt-4 max-w-[16rem] text-center text-[13px] text-neutral-500">
         {spinning
           ? "Building your draft…"
           : mode === "failed"

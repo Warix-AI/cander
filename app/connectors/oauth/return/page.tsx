@@ -139,7 +139,7 @@ export default function ConnectorOAuthReturnPage() {
             SHELL_G3_RADIUS,
           )}
         >
-          <CanderMark className="mx-auto h-8 w-8" />
+          <CanderMark tone="color" className="mx-auto h-8 w-8" />
           <p className="mt-6 text-[14px] text-muted-foreground">
             {phase === "success"
               ? "Connected. Returning to Cander…"
@@ -159,7 +159,7 @@ export default function ConnectorOAuthReturnPage() {
             SHELL_G3_RADIUS,
           )}
         >
-          <CanderMark className="mx-auto h-8 w-8" />
+          <CanderMark tone="color" className="mx-auto h-8 w-8" />
           <h1 className="mt-6 text-[17px] font-medium tracking-[-0.02em]">
             Authorization succeeded
           </h1>
@@ -200,7 +200,7 @@ export default function ConnectorOAuthReturnPage() {
           SHELL_G3_RADIUS,
         )}
       >
-        <CanderMark className="mx-auto h-8 w-8" />
+        <CanderMark tone="color" className="mx-auto h-8 w-8" />
         <h1 className="mt-6 text-[17px] font-medium tracking-[-0.02em]">
           {phase === "denied"
             ? `Failed to connect Cander to ${label}`

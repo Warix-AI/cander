@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { cn } from "@/lib/utils";
 
-const MARK_VERSION = "12";
+const MARK_VERSION = "13";
 
 function subscribeHtmlDark(onStoreChange: () => void) {
   if (typeof document === "undefined") return () => {};
@@ -19,14 +19,14 @@ function getHtmlDark(): boolean {
   return document.documentElement.classList.contains("dark");
 }
 
-/** White mark for dark surfaces; black mark for light surfaces. */
+/** Brand mark — mono for chrome, color for splash / draft loading. */
 export function CanderMark({
   className,
   tone = "auto",
 }: {
   className?: string;
-  /** Force white or black; default follows theme / `html.dark`. */
-  tone?: "auto" | "white" | "black";
+  /** Force white, black, or brand color; default follows theme / `html.dark`. */
+  tone?: "auto" | "white" | "black" | "color";
 }) {
   const { theme } = useTheme();
   const htmlDark = useSyncExternalStore(
@@ -34,12 +34,13 @@ export function CanderMark({
     getHtmlDark,
     () => false,
   );
-  const useWhite =
-    tone === "white" ||
-    (tone === "auto" && (htmlDark || theme === "dark"));
-  const src = useWhite
-    ? `/cander-mark-dark.png?v=${MARK_VERSION}`
-    : `/cander-mark-light.png?v=${MARK_VERSION}`;
+  const src =
+    tone === "color"
+      ? `/cander-mark-color.png?v=${MARK_VERSION}`
+      : tone === "white" ||
+          (tone === "auto" && (htmlDark || theme === "dark"))
+        ? `/cander-mark-dark.png?v=${MARK_VERSION}`
+        : `/cander-mark-light.png?v=${MARK_VERSION}`;
 
   return (
     <img

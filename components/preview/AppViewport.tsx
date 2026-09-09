@@ -93,7 +93,7 @@ export function AppViewport({
         )}
       >
         {setupActive ? (
-          <div className="absolute inset-0 bg-background">
+          <div className="absolute inset-0 bg-white">
             <WebsiteSetupProgress
               completedSteps={websiteSetup.completedSteps}
               mode={
