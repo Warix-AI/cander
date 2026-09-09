@@ -221,18 +221,19 @@ async function publishProjectWithRow(opts: {
       workspaceId: opts.workspaceId,
     });
 
-    const draftBranch = String(project.draft_branch || "cander/draft");
+    // Promote draft → default branch first. Production deploys from a
+    // non-production ref (cander/draft) often build then land in ERROR.
+    const promoted = await promoteDraftShaToDefaultBranch({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+      sha: draftSha,
+    });
+
     const deployment = await createProductionDeployment({
       vercelProjectId: vercelProject.vercelProjectId,
       projectName: vercelProject.name,
       githubRepoId,
-      ref: draftBranch,
-      sha: draftSha,
-    });
-
-    await promoteDraftShaToDefaultBranch({
-      projectId: opts.projectId,
-      workspaceId: opts.workspaceId,
+      ref: promoted.defaultBranch,
       sha: draftSha,
     });
 

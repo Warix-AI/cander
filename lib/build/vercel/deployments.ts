@@ -21,7 +21,9 @@ function normalizeUrl(hostOrUrl: string | undefined | null): string | null {
   return `https://${raw}`;
 }
 
-async function readDeployment(id: string): Promise<VercelDeploymentResult> {
+async function readDeployment(id: string): Promise<
+  VercelDeploymentResult & { errorMessage?: string | null }
+> {
   const res = await vercelFetch(`/v13/deployments/${encodeURIComponent(id)}`);
   if (!res.ok) {
     const detail = await res.text().catch(() => res.statusText);
@@ -34,6 +36,7 @@ async function readDeployment(id: string): Promise<VercelDeploymentResult> {
     readyState?: string;
     status?: string;
     target?: string;
+    errorMessage?: string | null;
   };
   const readyState = String(body.readyState || body.status || "UNKNOWN");
   return {
@@ -42,6 +45,7 @@ async function readDeployment(id: string): Promise<VercelDeploymentResult> {
     inspectorUrl: normalizeUrl(body.inspectorUrl),
     readyState,
     target: body.target ?? null,
+    errorMessage: body.errorMessage ?? null,
   };
 }
 
@@ -98,19 +102,23 @@ export async function createProductionDeployment(opts: {
   const started = Date.now();
   let latest = await readDeployment(created.id);
 
-  while (
-    (latest.readyState === "QUEUED" ||
-      latest.readyState === "INITIALIZING" ||
-      latest.readyState === "BUILDING" ||
-      latest.readyState === "UPLOADING") &&
-    Date.now() - started < timeoutMs
-  ) {
+  const inFlight = new Set([
+    "QUEUED",
+    "INITIALIZING",
+    "BUILDING",
+    "UPLOADING",
+    "DEPLOYING",
+  ]);
+  while (inFlight.has(latest.readyState) && Date.now() - started < timeoutMs) {
     await new Promise((r) => setTimeout(r, 4000));
     latest = await readDeployment(created.id);
   }
 
   if (latest.readyState !== "READY") {
     let detail = "";
+    if (latest.errorMessage) {
+      detail = ` ${latest.errorMessage}`;
+    }
     try {
       const eventsRes = await vercelFetch(
         `/v3/deployments/${encodeURIComponent(created.id)}/events?limit=30&direction=backward`,
@@ -125,7 +133,9 @@ export async function createProductionDeployment(opts: {
           .map((e) => e.text || e.payload?.text || "")
           .filter(Boolean)
           .slice(0, 8);
-        if (lines.length) detail = ` Build log: ${lines.join(" | ").slice(0, 500)}`;
+        if (lines.length) {
+          detail = `${detail} Build log: ${lines.join(" | ").slice(0, 500)}`;
+        }
       }
     } catch {
       /* best-effort */
