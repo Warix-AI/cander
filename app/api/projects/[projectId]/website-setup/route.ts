@@ -68,6 +68,8 @@ export async function PATCH(request: Request, ctx: RouteCtx) {
     status?: WebsiteSetupStatus;
     completedSteps?: number;
     init?: boolean;
+    /** Full brief replace/merge from client build turns. */
+    brief?: Record<string, unknown>;
   } = {};
   try {
     body = await request.json();
@@ -93,6 +95,16 @@ export async function PATCH(request: Request, ctx: RouteCtx) {
   }
 
   let brief = await loadWebsiteSetupBrief(projectId, workspaceId);
+  if (body.brief && typeof body.brief === "object") {
+    brief = normalizeWebsiteSetupBrief({
+      ...brief,
+      ...body.brief,
+      answers: {
+        ...(brief.answers ?? {}),
+        ...((body.brief.answers as Record<string, unknown> | undefined) ?? {}),
+      },
+    });
+  }
   if (body.init && (!brief.answers || Object.keys(brief.answers).length === 0)) {
     brief = emptyWebsiteSetupBrief({ status: "setup" });
   }

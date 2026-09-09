@@ -27,7 +27,14 @@ export function useWebsiteSetupBrief(opts: {
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
     });
-    setBrief(next);
+    setBrief((prev) => {
+      if (!next) return prev;
+      // Never regress ready → building from a stale poll after unlock.
+      if (prev?.status === "ready" && next.status === "building") {
+        return prev;
+      }
+      return next;
+    });
     return next;
   }, [opts.projectId, opts.workspaceId, isSite]);
 
