@@ -8,6 +8,8 @@ import {
 import { toGuardFailure, usageFeatureLabel } from "./messages.ts";
 import {
   capabilityForUsageFeature,
+  isBuildSandboxInfraEnabled,
+  isSandboxUsageFeature,
   resolveModelRoute,
 } from "./model-routing.ts";
 import type { UsageStore } from "./store/memory-store.ts";
@@ -160,27 +162,32 @@ export async function guardUsage(
 
   const capability = capabilityForUsageFeature(input.feature);
   if (capability === "coding_agent") {
-    const route = resolveModelRoute("coding_agent");
-    if (!route.enabled) {
-      const failure = toGuardFailure(
-        {
-          ok: false,
-          status: 403,
-          code: "feature_disabled",
-          message: route.reason,
-        },
-        plan,
-        input.feature,
-      );
-      await store.writeAudit({
-        workspaceId: input.workspaceId,
-        profileId: input.profileId,
-        feature: input.feature,
-        decision: "blocked",
-        reason: failure.message,
-        metadata: input.metadata ?? {},
-      });
-      return failure;
+    // Sandbox infra is gated by CANDER_BUILD_SANDBOX, not CODING_AGENT_ENABLED.
+    const sandboxInfraAllowed =
+      isSandboxUsageFeature(input.feature) && isBuildSandboxInfraEnabled();
+    if (!sandboxInfraAllowed) {
+      const route = resolveModelRoute("coding_agent");
+      if (!route.enabled) {
+        const failure = toGuardFailure(
+          {
+            ok: false,
+            status: 403,
+            code: "feature_disabled",
+            message: route.reason,
+          },
+          plan,
+          input.feature,
+        );
+        await store.writeAudit({
+          workspaceId: input.workspaceId,
+          profileId: input.profileId,
+          feature: input.feature,
+          decision: "blocked",
+          reason: failure.message,
+          metadata: input.metadata ?? {},
+        });
+        return failure;
+      }
     }
   }
 

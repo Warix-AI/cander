@@ -19,7 +19,14 @@ export async function supabaseManagementFetch(
   if (!config) {
     throw new Error("Supabase Management API is not configured.");
   }
-  const url = path.startsWith("http") ? path : `${MANAGEMENT_API}${path}`;
+  let relative = path;
+  if (!relative.startsWith("http")) {
+    // Callers may pass "/projects" or legacy "/v1/projects" — base already includes /v1.
+    if (relative.startsWith("/v1/")) relative = relative.slice(3);
+    else if (relative.startsWith("v1/")) relative = `/${relative.slice(3)}`;
+    if (!relative.startsWith("/")) relative = `/${relative}`;
+  }
+  const url = relative.startsWith("http") ? relative : `${MANAGEMENT_API}${relative}`;
   return fetch(url, {
     ...init,
     headers: {

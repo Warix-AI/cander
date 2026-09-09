@@ -85,7 +85,9 @@ export function getSupabaseManagementConfig(): SupabaseManagementConfig | null {
   const accessToken =
     trim(process.env.SUPABASE_MANAGEMENT_ACCESS_TOKEN) ??
     trim(process.env.SUPABASE_ACCESS_TOKEN);
+  // Management create uses organization_slug; accept slug or id as the org handle.
   const orgId =
+    trim(process.env.SUPABASE_MANAGEMENT_ORG_SLUG) ??
     trim(process.env.SUPABASE_MANAGEMENT_ORG_ID) ??
     trim(process.env.SUPABASE_ORG_ID);
   if (!accessToken || !orgId) return null;

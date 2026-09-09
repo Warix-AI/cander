@@ -435,6 +435,7 @@ export async function ensureProjectSandbox(opts: {
         console.warn("[cander] supabase inject on resume skipped", err);
       }
       let message = "Environment resumed";
+      let previewUpstream = resumed.previewUpstream;
       try {
         const { ensureSandboxDevServer } = await import(
           "@/lib/build/preview/dev-server"
@@ -443,9 +444,19 @@ export async function ensureProjectSandbox(opts: {
           sessionId: existing.id,
           userId: opts.userId,
         });
-        if (!dev.ready && dev.message) message = dev.message;
+        if (!dev.ready) {
+          message = dev.message || "Preview idle until the app is scaffolded.";
+          previewUpstream = null;
+        } else if (dev.message) {
+          message = dev.message;
+        }
       } catch (err) {
         console.warn("[cander] dev server on resume", err);
+        message =
+          err instanceof Error
+            ? `Sandbox resumed; preview start failed: ${err.message}`
+            : "Sandbox resumed; preview start failed.";
+        previewUpstream = null;
       }
       return publicResult({
         projectId: opts.projectId,
@@ -456,7 +467,7 @@ export async function ensureProjectSandbox(opts: {
         draftBranch,
         draftSha,
         githubFullName: fullName,
-        previewUpstream: resumed.previewUpstream,
+        previewUpstream,
         reused: true,
         message,
       });
@@ -484,6 +495,7 @@ export async function ensureProjectSandbox(opts: {
       draftSha,
     });
     let message = "Environment ready";
+    let previewUpstream = created.previewUpstream;
     try {
       const { ensureSandboxDevServer } = await import(
         "@/lib/build/preview/dev-server"
@@ -492,9 +504,19 @@ export async function ensureProjectSandbox(opts: {
         sessionId: created.session.id,
         userId: opts.userId,
       });
-      if (!dev.ready && dev.message) message = dev.message;
+      if (!dev.ready) {
+        message = dev.message || "Preview idle until the app is scaffolded.";
+        previewUpstream = null;
+      } else if (dev.message) {
+        message = dev.message;
+      }
     } catch (err) {
       console.warn("[cander] dev server on create", err);
+      message =
+        err instanceof Error
+          ? `Sandbox ready; preview start failed: ${err.message}`
+          : "Sandbox ready; preview start failed.";
+      previewUpstream = null;
     }
     return publicResult({
       projectId: opts.projectId,
@@ -505,7 +527,7 @@ export async function ensureProjectSandbox(opts: {
       draftBranch,
       draftSha,
       githubFullName: fullName,
-      previewUpstream: created.previewUpstream,
+      previewUpstream,
       reused: false,
       message,
     });

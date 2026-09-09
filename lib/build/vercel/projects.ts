@@ -115,7 +115,11 @@ export async function ensureAppVercelProject(opts: {
       };
     }
     const detail = await res.text().catch(() => res.statusText);
-    throw new Error(`Could not create Vercel project: ${detail}`);
+    throw new Error(
+      `Could not create Vercel project: ${detail}. ` +
+        "VERCEL_TOKEN must be a team token with permission to create projects " +
+        "(not a single-project token).",
+    );
   }
 
   const body = (await res.json()) as { id: string; name: string };

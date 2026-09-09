@@ -6,7 +6,10 @@ import {
   isValidSubdomainLabel,
   subdomainCandidates,
 } from "../lib/build/subdomain.ts";
-import { normalizePemKey } from "../lib/build/config.ts";
+import {
+  normalizePemKey,
+  getSupabaseManagementConfig,
+} from "../lib/build/config.ts";
 
 describe("build subdomain", () => {
   it("slugifies titles", () => {
@@ -50,5 +53,32 @@ describe("normalizePemKey", () => {
       "-----BEGIN RSA PRIVATE KEY-----\\nABC\\n-----END RSA PRIVATE KEY-----",
     );
     assert.ok(pem.includes("\nABC\n"));
+  });
+});
+
+describe("getSupabaseManagementConfig", () => {
+  it("accepts ORG_SLUG without ORG_ID", () => {
+    const prevToken = process.env.SUPABASE_MANAGEMENT_ACCESS_TOKEN;
+    const prevSlug = process.env.SUPABASE_MANAGEMENT_ORG_SLUG;
+    const prevId = process.env.SUPABASE_MANAGEMENT_ORG_ID;
+    const prevLegacy = process.env.SUPABASE_ORG_ID;
+    try {
+      process.env.SUPABASE_MANAGEMENT_ACCESS_TOKEN = "sbp_test";
+      process.env.SUPABASE_MANAGEMENT_ORG_SLUG = "warix-org";
+      delete process.env.SUPABASE_MANAGEMENT_ORG_ID;
+      delete process.env.SUPABASE_ORG_ID;
+      const cfg = getSupabaseManagementConfig();
+      assert.ok(cfg);
+      assert.equal(cfg?.orgId, "warix-org");
+    } finally {
+      if (prevToken === undefined) delete process.env.SUPABASE_MANAGEMENT_ACCESS_TOKEN;
+      else process.env.SUPABASE_MANAGEMENT_ACCESS_TOKEN = prevToken;
+      if (prevSlug === undefined) delete process.env.SUPABASE_MANAGEMENT_ORG_SLUG;
+      else process.env.SUPABASE_MANAGEMENT_ORG_SLUG = prevSlug;
+      if (prevId === undefined) delete process.env.SUPABASE_MANAGEMENT_ORG_ID;
+      else process.env.SUPABASE_MANAGEMENT_ORG_ID = prevId;
+      if (prevLegacy === undefined) delete process.env.SUPABASE_ORG_ID;
+      else process.env.SUPABASE_ORG_ID = prevLegacy;
+    }
   });
 });

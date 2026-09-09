@@ -30,6 +30,24 @@ export function isCodingAgentFeatureEnabled(): boolean {
   return false;
 }
 
+/** Build sandbox infra (runtime/build/deploy) — independent of Codex coding-agent flag. */
+export function isBuildSandboxInfraEnabled(): boolean {
+  const v =
+    process.env.NEXT_PUBLIC_CANDER_BUILD_SANDBOX?.trim().toLowerCase() ||
+    process.env.CANDER_BUILD_SANDBOX?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "on" || v === "yes";
+}
+
+export function isSandboxUsageFeature(
+  feature: import("./types").UsageFeatureCategory,
+): boolean {
+  return (
+    feature === "sandbox_runtime" ||
+    feature === "sandbox_build" ||
+    feature === "sandbox_deploy"
+  );
+}
+
 export function resolveModelRoute(capability: ModelCapability): ModelRouteDecision {
   switch (capability) {
     case "coding_agent": {

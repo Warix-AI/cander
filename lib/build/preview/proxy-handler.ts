@@ -73,6 +73,22 @@ export async function proxyToPreviewUpstream(opts: {
   let upstreamRes: Response;
   try {
     upstreamRes = await fetch(target, init);
+    // Follow same-origin redirects (e.g. Next trailing-slash 308) without leaking
+    // the browser off the proxy path.
+    for (let hop = 0; hop < 5; hop++) {
+      if (upstreamRes.status < 300 || upstreamRes.status >= 400) break;
+      const location = upstreamRes.headers.get("location");
+      if (!location) break;
+      let next: URL;
+      try {
+        next = new URL(location, target);
+      } catch {
+        break;
+      }
+      if (next.origin !== target.origin) break;
+      upstreamRes = await fetch(next, init);
+      target.href = next.href;
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return new Response(
