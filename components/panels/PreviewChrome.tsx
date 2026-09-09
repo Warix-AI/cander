@@ -22,7 +22,10 @@ import { useApp } from "@/components/app/AppProvider";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { Dropdown } from "@/components/ui/Controls";
 import { useMobileShell } from "@/lib/use-media-query";
-import { displayHostFromUrl } from "@/lib/preview-url";
+import {
+  displayHostFromUrl,
+  isDraftPreviewUrl,
+} from "@/lib/preview-url";
 import type { BuildTool, ViewportId } from "@/lib/types";
 import {
   BROWSER_CHROME_BG,
@@ -82,8 +85,17 @@ export function PreviewChrome({
   const mobile = useMobileShell();
   const previewing = tool === "preview";
   const changing = tool === "activity";
-  const address = liveUrl ?? url;
-  const addressLabel = displayHostFromUrl(address) || address;
+  // Prefer a non-draft live URL; never show draft-- / unpublished hosts as live.
+  const preferred =
+    liveUrl && !isDraftPreviewUrl(liveUrl) ? liveUrl : url;
+  const address =
+    !preferred ||
+    preferred === "about:blank" ||
+    isDraftPreviewUrl(preferred)
+      ? ""
+      : preferred;
+  const addressLabel =
+    displayHostFromUrl(address) || address || "Not published yet";
 
   return (
     <div className={cn("min-w-0 shrink-0 overflow-hidden", BROWSER_CHROME_BG)}>
@@ -158,7 +170,9 @@ export function PreviewChrome({
         </RailBtn>
 
         <div className="mx-1 flex h-7 min-w-0 flex-1 items-center overflow-hidden rounded-lg border border-border bg-white px-2.5 font-mono text-[11.5px] text-muted-foreground dark:bg-muted/60 dark:border-transparent">
-          <span className="truncate">{address}</span>
+          <span className="truncate">
+            {address || "Not published yet"}
+          </span>
         </div>
 
         <span className="ml-0.5 flex shrink-0 items-center gap-0.5">

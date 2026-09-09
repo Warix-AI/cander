@@ -27,6 +27,52 @@ export function draftPreviewUrlForSubdomain(subdomain: string | null | undefined
   return draftPreviewUrl(sub);
 }
 
+/** True when a URL is an unpublished draft/sandbox host that must not look “live”. */
+export function isDraftPreviewUrl(url: string | null | undefined): boolean {
+  const raw = (url || "").trim();
+  if (!raw || raw === "about:blank") return false;
+  try {
+    const host = new URL(raw).hostname.toLowerCase();
+    if (host.startsWith("draft--") && host.endsWith(".cander.app")) return true;
+    // Legacy bad fallback: uuid.cander.app
+    if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.cander\.app$/i.test(
+        host,
+      )
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Address-bar value for Build projects.
+ * Draft/sandbox hosts stay hidden until the project is published.
+ */
+export function chromeUrlForBuildProject(opts: {
+  publishedUrl?: string | null;
+  candidateUrl?: string | null;
+}): string {
+  const published = opts.publishedUrl?.trim();
+  if (published && isHttpUrl(published) && !isDraftPreviewUrl(published)) {
+    return published;
+  }
+  const candidate = opts.candidateUrl?.trim() || "";
+  if (!candidate || candidate === "about:blank") return "";
+  if (isDraftPreviewUrl(candidate)) return "";
+  // Unpublished production-looking hosts also stay hidden.
+  try {
+    const host = new URL(candidate).hostname.toLowerCase();
+    if (host.endsWith(".cander.app") && !published) return "";
+  } catch {
+    /* ignore */
+  }
+  return candidate;
+}
+
 export function titleFromUrl(url: string) {
   try {
     const parsed = new URL(url);

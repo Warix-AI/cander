@@ -16,6 +16,7 @@ import {
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
 import { threadsForProject } from "@/lib/selectors";
 import type { BuildTool } from "@/lib/types";
+import { chromeUrlForBuildProject } from "@/lib/preview-url";
 import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
@@ -155,14 +156,16 @@ export function BuildPanel() {
     execute && buildTool === "overview" && !project ? "preview" : buildTool;
   const address = previewAddress(displayName);
   const locked = ADVANCED_TOOLS.includes(tool) && !advancedMode;
-  const publishedUrl =
-    entityProject?.publishedUrl ?? deployments[0]?.url ?? liveUrl;
-  const chromeUrl = publishedUrl ?? previewUrl ?? address.url;
-  const chromeTitle = previewUrl
-    ? `${displayName} · draft`
-    : publishedUrl
-      ? `${displayName} · live`
-      : address.tab;
+  // Draft/sandbox hosts stay out of the address chrome until publish.
+  const publishedUrl = entityProject?.publishedUrl?.trim() || null;
+  const chromeUrl =
+    chromeUrlForBuildProject({
+      publishedUrl,
+      candidateUrl: publishedUrl ?? deployments[0]?.url ?? liveUrl,
+    }) || "";
+  const chromeTitle = publishedUrl
+    ? `${displayName} · live`
+    : `${displayName} · draft`;
 
   return (
     <div className={SHELL_PANEL_BODY}>

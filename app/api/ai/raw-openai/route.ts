@@ -63,6 +63,7 @@ type Body = {
   title?: string;
   projectId?: string | null;
   projectSpace?: string | null;
+  modelMode?: "chat" | "coding" | null;
 };
 
 function newAttachmentId(): string {
@@ -141,6 +142,7 @@ export async function POST(request: Request) {
       model: resolveOpenAIModelForTurn({
         spaceId: body.projectSpace,
         projectId: body.projectId,
+        modelMode: body.modelMode,
       }),
     });
     if (!usage.ok) {
@@ -164,6 +166,7 @@ export async function POST(request: Request) {
   const model = resolveOpenAIModelForTurn({
     spaceId: body.projectSpace,
     projectId: body.projectId,
+    modelMode: body.modelMode,
   });
   const webSearchEnabled = isOpenAIWebSearchEnabled();
   const system =

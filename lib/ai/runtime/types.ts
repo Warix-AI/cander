@@ -37,6 +37,11 @@ export type AiGenerateRequest = {
   projectKind?: string | null;
   /** Active agent id for Agent Builder tools. */
   agentId?: string | null;
+  /**
+   * Force chat (planning) vs coding/Codex (implement) model selection
+   * for Build project turns.
+   */
+  modelMode?: "chat" | "coding" | null;
   /** Existing private ai_chats id when cloud path is used. */
   aiChatId?: string | null;
   /** UI thread id — used by on-device context (Recents / “this chat”). */

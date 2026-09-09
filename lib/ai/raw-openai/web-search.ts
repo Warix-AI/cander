@@ -33,7 +33,18 @@ export function resolveOpenAICodingModel(): string {
 export function resolveOpenAIModelForTurn(opts?: {
   spaceId?: string | null;
   projectId?: string | null;
+  /** Force chat model (planning) or coding model (Codex implement). */
+  modelMode?: "chat" | "coding" | null;
 }): string {
+  if (opts?.modelMode === "chat") return resolveOpenAIModel();
+  if (opts?.modelMode === "coding") {
+    const raw = process.env.CODING_AGENT_ENABLED?.trim().toLowerCase();
+    if (raw === "1" || raw === "true" || raw === "yes" || raw === "on") {
+      return resolveOpenAICodingModel();
+    }
+    // Still prefer coding model id when explicitly requested for Build implement.
+    return resolveOpenAICodingModel();
+  }
   const space = opts?.spaceId?.trim().toLowerCase();
   const preferCoding =
     Boolean(opts?.projectId?.trim()) &&

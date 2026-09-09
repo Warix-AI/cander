@@ -119,23 +119,35 @@ export async function runAssistantTurn(
     }
 
     // Build site/app projects: write into sandbox instead of dumping HTML in chat.
+    // Canvas nav hosts Build under studio — still route by projectId + intent.
     const space = request.projectSpace?.trim().toLowerCase();
+    const kind = (request.projectKind || "").trim().toLowerCase();
     const isBuildProject =
       Boolean(request.projectId?.trim()) &&
-      (space === "build" || space === "create") &&
-      request.projectKind !== "automation";
+      kind !== "automation" &&
+      kind !== "research";
     if (isBuildProject) {
-      const { resolveBuildCapabilities } = await import(
+      const { resolveBuildCapabilities, isBuildIntent } = await import(
         "@/lib/ai/build/capabilities"
       );
       const caps = resolveBuildCapabilities({
         content: request.content,
-        activeSpace: request.projectSpace,
+        activeSpace:
+          space === "studio" || space === "create" ? "build" : request.projectSpace,
         projectId: request.projectId,
-        projectKind: request.projectKind ?? "site",
+        projectKind:
+          kind === "app" || kind === "site" || kind === "general"
+            ? kind
+            : "site",
         hasBuildSpec: Boolean(request.projectId),
       });
-      if (caps.requiresBuildCapabilities) {
+      if (
+        caps.requiresBuildCapabilities ||
+        isBuildIntent(request.content) ||
+        space === "build" ||
+        kind === "site" ||
+        kind === "app"
+      ) {
         latency?.mark("agent_probe_end");
         latency?.setTransport("agent");
         latency?.setSignals({ agentV2: false });

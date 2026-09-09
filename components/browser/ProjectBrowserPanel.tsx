@@ -169,6 +169,7 @@ import {
 import { peekCachedProjectAgents } from "@/lib/agents/cache";
 import { applyAgentsToBrowserSession } from "@/lib/agents/prime-browser-session";
 import {
+  chromeUrlForBuildProject,
   isGoogleUrl,
   isHttpUrl,
   normalizeBrowserUrl,
@@ -948,7 +949,7 @@ export function ProjectBrowserPanel({
   const surfaceActive =
     panelMode !== "collapsed" &&
     (!mobile || (mobileSurface === "panel" && panelRevealReady));
-  const address =
+  const navigationUrl =
     active.kind === "studio-document" &&
     decodeTextDataUrl(active.url) != null &&
     active.shareId
@@ -960,6 +961,21 @@ export function ProjectBrowserPanel({
           : (liveUrl ??
             active.url ??
             previewUrlForProject(projectId ?? "project", entity?.publishedUrl));
+  // Site/app drafts: hide draft-- / unpublished hosts in the chrome until publish.
+  const isBuildSiteOrApp =
+    !standalone &&
+    (entity?.kind === "site" ||
+      entity?.kind === "app" ||
+      browserSpaceId === "build");
+  const address =
+    active.kind === "studio-document" || active.kind === "agent-browser"
+      ? navigationUrl
+      : isBuildSiteOrApp
+        ? chromeUrlForBuildProject({
+            publishedUrl: entity?.publishedUrl,
+            candidateUrl: navigationUrl,
+          })
+        : navigationUrl;
   const isMarkdownDocTab =
     active.kind === "studio-document" &&
     decodeTextDataUrl(active.url) != null;
@@ -1567,7 +1583,7 @@ export function ProjectBrowserPanel({
     const url =
       active.kind === "agent-browser"
         ? (computerSession?.currentUrl ?? active.url)
-        : address;
+        : navigationUrl || address;
     const canNative =
       (typeof window !== "undefined" &&
         isDesktopShell() &&
@@ -1590,6 +1606,7 @@ export function ProjectBrowserPanel({
     active?.url,
     active?.projectId,
     active?.computerSessionId,
+    navigationUrl,
     address,
     projectId,
     computerSession?.currentUrl,
@@ -1980,7 +1997,11 @@ export function ProjectBrowserPanel({
                 onCommit={commitUrl}
                 onNavigateTo={navigateAddressTo}
                 showFavicon={false}
-                placeholder="Search"
+                placeholder={
+                  isBuildSiteOrApp && !entity?.publishedUrl
+                    ? "Not published yet"
+                    : "Search"
+                }
                 autoEditKey={
                   active.kind === "web" &&
                   (address === "about:blank" || active.url === "about:blank")
@@ -2167,7 +2188,11 @@ export function ProjectBrowserPanel({
                 onCommit={commitUrl}
                 onNavigateTo={navigateAddressTo}
                 showFavicon={false}
-                placeholder="Search"
+                placeholder={
+                  isBuildSiteOrApp && !entity?.publishedUrl
+                    ? "Not published yet"
+                    : "Search"
+                }
                 autoEditKey={
                   active.kind === "web" &&
                   (address === "about:blank" || active.url === "about:blank")
@@ -2400,7 +2425,10 @@ export function ProjectBrowserPanel({
               ? shareCopied
                 ? "Link copied"
                 : displayHostFromUrl(address) || "Generating share link…"
-              : displayHostFromUrl(address) || "Enter URL"}
+              : displayHostFromUrl(address) ||
+                (isBuildSiteOrApp && !entity?.publishedUrl
+                  ? "Not published yet"
+                  : "Enter URL")}
           </span>
         </button>
       ) : null}

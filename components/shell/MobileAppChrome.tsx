@@ -32,7 +32,10 @@ import {
   PRIMARY_NAV_SPACES,
   resolveNavSpaceId,
 } from "@/lib/spaces";
-import { previewUrlForProject } from "@/lib/preview-url";
+import {
+  chromeUrlForBuildProject,
+  previewUrlForProject,
+} from "@/lib/preview-url";
 import {
   findWorkCollectionItem,
   isWorkItemBrowserProjectId,
@@ -312,11 +315,17 @@ export function MobileAppChrome({ className }: { className?: string }) {
     (inConnector && mobileSurface === "panel") ||
     Boolean(panelActions?.connector?.back);
   const preview = previewAddress(project?.name);
-  const address = liveUrl ?? previewUrlForProject(projectId ?? "project") ?? preview.url;
-  const published = Boolean(
-    entityProject?.publishedUrl ||
-      (liveUrl && !liveUrl.includes("localhost")),
-  );
+  const address = chromeUrlForBuildProject({
+    publishedUrl: entityProject?.publishedUrl,
+    candidateUrl:
+      liveUrl ??
+      previewUrlForProject(
+        projectId ?? "project",
+        entityProject?.publishedUrl,
+      ) ??
+      preview.url,
+  });
+  const published = Boolean(entityProject?.publishedUrl?.trim());
   const canRename =
     spaceId === "build" || spaceId === "research" || spaceId === "studio";
   const projectTitle =
