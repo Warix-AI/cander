@@ -71,7 +71,18 @@ export async function ensureProjectSandboxClient(opts: {
     }
     return {
       ok: data.ok !== false && data.status !== "error",
-      status: data.status ?? "error",
+      status: (() => {
+        const status = data.status ?? "error";
+        const msg = `${data.message || ""} ${data.error || ""}`;
+        // Rate/concurrency soft-fail should not hard-error the preview chrome.
+        if (
+          (status === "error" || !data.ok) &&
+          /busy|several sandbox|try again shortly/i.test(msg)
+        ) {
+          return "starting";
+        }
+        return status;
+      })(),
       sessionId: data.sessionId ?? null,
       subdomain: data.subdomain ?? null,
       draftBranch: data.draftBranch ?? null,
@@ -97,5 +108,48 @@ export async function ensureProjectSandboxClient(opts: {
       error: err instanceof Error ? err.message : String(err),
       message: err instanceof Error ? err.message : String(err),
     };
+  }
+}
+
+/** Lightweight status poll — does not reserve sandbox_runtime usage. */
+export async function getProjectSandboxStatusClient(opts: {
+  projectId: string;
+  workspaceId: string;
+}): Promise<ProjectSandboxClientResult | null> {
+  if (!isSupabaseConfigured()) return null;
+  const token = await authToken();
+  if (!token) return null;
+
+  try {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(opts.projectId)}/sandbox?workspaceId=${encodeURIComponent(opts.workspaceId)}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      },
+    );
+    const data = (await res.json().catch(() => ({}))) as ProjectSandboxClientResult & {
+      error?: string;
+    };
+    if (!res.ok && !data.status) {
+      return null;
+    }
+    return {
+      ok: data.ok !== false && data.status !== "error",
+      status: data.status ?? "idle",
+      sessionId: data.sessionId ?? null,
+      subdomain: data.subdomain ?? null,
+      draftBranch: data.draftBranch ?? null,
+      draftSha: data.draftSha ?? null,
+      githubFullName: data.githubFullName ?? null,
+      hasPreviewUpstream: Boolean(data.hasPreviewUpstream),
+      previewPath: data.previewPath ?? null,
+      previewHost: data.previewHost ?? null,
+      message: data.message,
+      reused: data.reused,
+      error: data.error,
+    };
+  } catch {
+    return null;
   }
 }

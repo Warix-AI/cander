@@ -463,7 +463,7 @@ export function ProjectBrowserPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per project / setup gate
   }, [standalone, projectId, ctx.workspaceId, browserSpaceId, entity?.kind, entity?.publishedUrl, setupBlocksPreview]);
 
-  // Keep polling while the sandbox exists but the app port is not listening yet.
+  // Poll status only — never call ensure in a loop (burns sandbox_runtime concurrency).
   useEffect(() => {
     if (
       standalone ||
@@ -475,10 +475,11 @@ export function ProjectBrowserPanel({
       return;
     }
     let cancelled = false;
+    let recreateAttempted = false;
     const tick = async () => {
       try {
         const sandbox = await import("@/lib/api/project-sandbox-client");
-        const result = await sandbox.ensureProjectSandboxClient({
+        const result = await sandbox.getProjectSandboxStatusClient({
           projectId,
           workspaceId: ctx.workspaceId,
         });
@@ -495,19 +496,53 @@ export function ProjectBrowserPanel({
           setDraftPreviewUrl(draftUrl);
           return;
         }
+        // Empty/stale sandbox while draft exists — one recreate ensure, not a loop.
+        if (
+          !recreateAttempted &&
+          result.draftSha &&
+          /No package\.json/i.test(result.message || "")
+        ) {
+          recreateAttempted = true;
+          const restarted = await sandbox.ensureProjectSandboxClient({
+            projectId,
+            workspaceId: ctx.workspaceId,
+            forceRestart: true,
+          });
+          if (cancelled || !restarted) return;
+          setSandboxEnvMessage(restarted.message ?? restarted.error ?? null);
+          if (
+            restarted.status === "ready" &&
+            restarted.hasPreviewUpstream &&
+            restarted.previewPath
+          ) {
+            setSandboxEnvStatus("ready");
+            setSandboxPreviewSrc(`${restarted.previewPath}?_r=${Date.now()}`);
+            setDraftPreviewUrl(
+              draftPreviewUrlForSubdomain(restarted.subdomain),
+            );
+            return;
+          }
+          if (
+            restarted.status === "error" ||
+            restarted.status === "unavailable"
+          ) {
+            setSandboxEnvStatus(restarted.status);
+            setSandboxPreviewSrc(null);
+          }
+          return;
+        }
         if (result.status === "error" || result.status === "unavailable") {
           setSandboxEnvStatus(result.status);
           setSandboxPreviewSrc(null);
-          return;
         }
-        setSandboxEnvStatus("starting");
       } catch {
-        /* keep polling */
+        /* keep polling status */
       }
     };
+    void tick();
     const id = window.setInterval(() => {
       void tick();
-    }, 4000);
+    }, 5000);
     return () => {
       cancelled = true;
       window.clearInterval(id);

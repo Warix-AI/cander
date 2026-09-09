@@ -50,9 +50,12 @@ export async function POST(request: Request, ctx: RouteCtx) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
+  const forceRestart = Boolean(body.forceRestart);
+  // Stable key so overlapping ensure calls from the same project reuse the
+  // in-flight reservation instead of tripping rate/concurrency limits.
   const idempotencyKey =
     request.headers.get("Idempotency-Key")?.trim() ||
-    `sandbox-ensure:${workspaceId}:${projectId}:${body.forceRestart ? "restart" : "reuse"}`;
+    `sandbox-ensure:${workspaceId}:${projectId}:${forceRestart ? "restart" : "reuse"}`;
 
   const usage = await enforceUsageForRequest({
     request,
@@ -62,10 +65,34 @@ export async function POST(request: Request, ctx: RouteCtx) {
     estimatedUnits: 1,
     provider: "vercel",
     allowCookieAuth: true,
-    metadata: { projectId, forceRestart: Boolean(body.forceRestart) },
+    metadata: { projectId, forceRestart },
   });
   if (!usage.ok) {
-    return usage.response;
+    // Soft-fail so the UI stays on "starting" with Retry instead of a hard error.
+    let detail = "Sandbox runtime is busy. Wait a few seconds, then Retry.";
+    try {
+      const cloned = usage.response.clone();
+      const payload = (await cloned.json()) as { error?: string; message?: string };
+      detail = payload.error || payload.message || detail;
+    } catch {
+      /* keep default */
+    }
+    return NextResponse.json(
+      {
+        ok: false,
+        status: "starting",
+        sessionId: null,
+        subdomain: null,
+        draftBranch: null,
+        draftSha: null,
+        githubFullName: null,
+        hasPreviewUpstream: false,
+        previewPath: null,
+        message: detail,
+        error: detail,
+      },
+      { status: 200 },
+    );
   }
 
   try {
@@ -73,7 +100,7 @@ export async function POST(request: Request, ctx: RouteCtx) {
       userId: auth.user.id,
       projectId,
       workspaceId,
-      forceRestart: Boolean(body.forceRestart),
+      forceRestart,
     });
 
     await finalizeUsageReservation({
@@ -89,15 +116,8 @@ export async function POST(request: Request, ctx: RouteCtx) {
       actualUnits: result.status === "ready" ? 1 : 0,
     });
 
-    const httpStatus =
-      result.status === "error"
-        ? 503
-        : result.status === "unavailable"
-          ? 200
-          : 200;
-
     return NextResponse.json({ ok: result.status !== "error", ...result }, {
-      status: httpStatus,
+      status: 200,
     });
   } catch (err) {
     await finalizeUsageReservation({

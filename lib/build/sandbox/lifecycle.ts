@@ -491,9 +491,12 @@ export async function ensureProjectSandbox(opts: {
       } catch (err) {
         console.warn("[cander] supabase inject on resume skipped", err);
       }
+
       let message = "Starting preview…";
       let previewUpstream = resumed.previewUpstream;
       let status: BuildSandboxStatus = "starting";
+      let recreateFromGit = false;
+
       try {
         const { ensureSandboxDevServer } = await import(
           "@/lib/build/preview/dev-server"
@@ -519,6 +522,8 @@ export async function ensureProjectSandbox(opts: {
               /* keep prior */
             }
           }
+        } else if (draftSha && /No package\.json/i.test(dev.message || "")) {
+          recreateFromGit = true;
         } else {
           message = dev.message || "Starting preview…";
           previewUpstream = null;
@@ -532,43 +537,58 @@ export async function ensureProjectSandbox(opts: {
         previewUpstream = null;
         status = "error";
       }
-      await persistPreviewUpstream({
-        sessionId: existing.id,
-        previewUpstream,
-        status,
-        message,
-        githubFullName: fullName,
-        draftBranch,
-        draftSha,
-      });
+
+      if (recreateFromGit) {
+        try {
+          await stopSessionRecordById(existing.id, existing.userId);
+        } catch {
+          await updateComputerSession(existing.id, { status: "stopped" });
+        }
+        await patchProjectSandbox(opts.projectId, opts.workspaceId, {
+          sandbox_session_id: null,
+          sandbox_status: "idle",
+        });
+        // Fall through to createBuildSandboxFromGit.
+      } else {
+        await persistPreviewUpstream({
+          sessionId: existing.id,
+          previewUpstream,
+          status,
+          message,
+          githubFullName: fullName,
+          draftBranch,
+          draftSha,
+        });
+        await patchProjectSandbox(opts.projectId, opts.workspaceId, {
+          sandbox_session_id: existing.id,
+          sandbox_status: status,
+        });
+        return publicResult({
+          projectId: opts.projectId,
+          workspaceId: opts.workspaceId,
+          status,
+          sessionId: existing.id,
+          subdomain: infra.subdomain,
+          draftBranch,
+          draftSha,
+          githubFullName: fullName,
+          previewUpstream,
+          reused: true,
+          message,
+        });
+      }
+    } else {
+      // Resume failed — GC stale sandbox before recreate.
+      try {
+        await stopSessionRecordById(existing.id, existing.userId);
+      } catch {
+        await updateComputerSession(existing.id, { status: "stopped" });
+      }
       await patchProjectSandbox(opts.projectId, opts.workspaceId, {
-        sandbox_session_id: existing.id,
-        sandbox_status: status,
-      });
-      return publicResult({
-        projectId: opts.projectId,
-        workspaceId: opts.workspaceId,
-        status,
-        sessionId: existing.id,
-        subdomain: infra.subdomain,
-        draftBranch,
-        draftSha,
-        githubFullName: fullName,
-        previewUpstream,
-        reused: true,
-        message,
+        sandbox_session_id: null,
+        sandbox_status: "idle",
       });
     }
-    // Phase 9: GC stale sandbox before recreate
-    try {
-      await stopSessionRecordById(existing.id, existing.userId);
-    } catch {
-      await updateComputerSession(existing.id, { status: "stopped" });
-    }
-    await patchProjectSandbox(opts.projectId, opts.workspaceId, {
-      sandbox_session_id: null,
-      sandbox_status: "idle",
-    });
   }
 
   try {
