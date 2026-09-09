@@ -795,38 +795,47 @@ async function runWebsiteCreatePipeline(opts: {
     };
   }
 
-  // Always re-assert a Vercel-detectable package.json (Codex may overwrite it).
+  // Codex often writes layout/components but skips package.json / routes.
+  // Always re-assert a runnable Next scaffold after a successful compose.
   {
-    const pkgFile = files.find((f) => f.path === "package.json");
-    const { ensureNextInPackageJson, packageJsonHasNext } = await import(
+    const composed = composeSiteFromSpec(spec);
+    const essentials = composed.filter((f) =>
+      [
+        "package.json",
+        "next.config.mjs",
+        ".gitignore",
+        "app/robots.js",
+        "app/sitemap.js",
+        "app/globals.css",
+        "app/page.js",
+      ].includes(f.path),
+    );
+    const { ensureNextInPackageJson } = await import(
       "@/lib/ai/build/site-package"
     );
-    const pkgContent = ensureNextInPackageJson(pkgFile?.content, {
-      name: "cander-site",
+    const toWrite = essentials.map((f) =>
+      f.path === "package.json"
+        ? {
+            ...f,
+            content: ensureNextInPackageJson(f.content, { name: "cander-site" }),
+          }
+        : f,
+    );
+    report({
+      phase: "thinking",
+      label: "Building",
+      detail: "Ensuring Next.js package and core site files…",
     });
-    if (!pkgFile || !packageJsonHasNext(pkgFile.content)) {
-      report({
-        phase: "tool",
-        label: "Building",
-        detail: "Writing package.json…",
-        toolName: "computer.files.write",
-        contentStreaming: true,
-      });
-      const pkgWrite = await executeAuthorizedTool({
-        name: "computer.files.write",
-        arguments: {
-          projectId,
-          workspaceId,
-          path: "package.json",
-          content: pkgContent,
-          persist: true,
-        },
-      });
-      toolResults.push(pkgWrite);
-    }
+    const ensured = await writeScaffold({
+      projectId,
+      workspaceId,
+      files: toWrite,
+      report,
+    });
+    toolResults.push(...ensured);
   }
 
-  await ensureSandboxReady({ projectId, workspaceId, forceRestart: false });
+  await ensureSandboxReady({ projectId, workspaceId, forceRestart: true });
 
   if (brief) {
     await saveWebsiteSetupBrief({
