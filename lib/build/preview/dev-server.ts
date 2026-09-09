@@ -107,7 +107,7 @@ export async function ensureSandboxDevServer(opts: {
     }
   }
 
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 45; i++) {
     await new Promise((r) => setTimeout(r, 2000));
     try {
       if (await portResponds(opts.sessionId, opts.userId)) {
