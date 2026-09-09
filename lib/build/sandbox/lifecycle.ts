@@ -228,22 +228,28 @@ async function createBuildSandboxFromGit(opts: {
 
     // Git source clones into a repo-named subdirectory — flatten to cwd so
     // file ops, persist, and npm scripts run at the project root.
+    // Must use bash: dash `sh` ignores `shopt`/dotglob, so `.git` would be
+    // left behind and then deleted with the clone directory.
     try {
       await sandbox.runCommand({
-        cmd: "sh",
+        cmd: "bash",
         args: [
           "-c",
-          `if [ ! -d .git ]; then
-  d=$(find . -maxdepth 2 -type d -name .git 2>/dev/null | head -1 | xargs -r dirname)
-  if [ -n "$d" ] && [ "$d" != "." ]; then
-    # move tracked + hidden files from clone dir to cwd
-    shopt -s dotglob nullglob
-    mv "$d"/* .
-    rmdir "$d" 2>/dev/null || rm -rf "$d"
+          `set -euo pipefail
+if [ ! -d .git ]; then
+  git_dir=$(find . -maxdepth 2 -type d -name .git 2>/dev/null | head -1 || true)
+  if [ -n "\${git_dir}" ]; then
+    d=$(dirname "\${git_dir}")
+    if [ -n "\$d" ] && [ "\$d" != "." ]; then
+      shopt -s dotglob nullglob
+      mv "\$d"/* .
+      rmdir "\$d" 2>/dev/null || rm -rf "\$d"
+    fi
   fi
 fi
+test -d .git
 ls -la
-git rev-parse --short HEAD || true`,
+git rev-parse --short HEAD`,
         ],
       });
     } catch (err) {

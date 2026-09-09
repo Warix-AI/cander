@@ -54,8 +54,19 @@ export async function persistSandboxToDraft(opts: {
   const status = await runPrivilegedSandboxCommand({
     sessionId: opts.sessionId,
     userId: opts.userId,
-    cmd: "sh",
-    args: ["-c", "git status --porcelain 2>/dev/null || true"],
+    cmd: "bash",
+    args: [
+      "-c",
+      `set -euo pipefail
+# Prefer repo root even if flatten missed; never run porcelain from a non-git cwd.
+if [ ! -d .git ]; then
+  git_dir=$(find . -maxdepth 3 -type d -name .git 2>/dev/null | head -1 || true)
+  if [ -n "\${git_dir}" ]; then
+    cd "$(dirname "\${git_dir}")"
+  fi
+fi
+git status --porcelain 2>/dev/null || true`,
+    ],
   });
 
   let paths = parsePorcelain(status.stdout);
