@@ -5,6 +5,7 @@
 import type { ScaffoldFile, SiteSection, SiteSpec } from "@/lib/ai/build/site-spec";
 import { resolveHeroVariant } from "@/lib/ai/build/site-spec";
 import { emitGlobalsCss } from "@/lib/ai/build/design-system/tokens";
+import { canonicalSitePackageJsonText } from "@/lib/ai/build/site-package";
 
 function esc(value: string): string {
   return JSON.stringify(value).slice(1, -1);
@@ -349,24 +350,7 @@ export function composeSiteFromSpec(spec: SiteSpec): ScaffoldFile[] {
     },
     {
       path: "package.json",
-      content: JSON.stringify(
-        {
-          name: "cander-site",
-          private: true,
-          scripts: {
-            dev: "next dev --hostname 0.0.0.0 --port 3000",
-            build: "next build",
-            start: "next start -p 3000",
-          },
-          dependencies: {
-            next: "16.3.1",
-            react: "19.1.0",
-            "react-dom": "19.1.0",
-          },
-        },
-        null,
-        2,
-      ),
+      content: canonicalSitePackageJsonText({ name: "cander-site" }),
     },
     {
       path: "next.config.mjs",

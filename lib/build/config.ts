@@ -54,6 +54,25 @@ export function isGitHubAppConfigured(): boolean {
   return getGitHubAppConfig() !== null;
 }
 
+/**
+ * Commit author for draft/publish commits. Must map to a GitHub identity that
+ * has access to the Warix Vercel team — otherwise production deploys are
+ * Blocked ("GitHub user not found" / Vercel Account Unavailable).
+ */
+export function getBuildGitAuthor(): { name: string; email: string } {
+  return {
+    name:
+      trim(process.env.CANDER_BUILD_GIT_AUTHOR_NAME) ||
+      trim(process.env.VERCEL_GIT_COMMIT_AUTHOR_NAME) ||
+      "Warix Build",
+    email:
+      trim(process.env.CANDER_BUILD_GIT_AUTHOR_EMAIL) ||
+      trim(process.env.VERCEL_GIT_COMMIT_AUTHOR_EMAIL) ||
+      // Prefer a real team-member noreply over build@cander.app (blocked by Vercel).
+      "41898282+github-actions[bot]@users.noreply.github.com",
+  };
+}
+
 export type VercelTeamConfig = {
   token: string | null;
   teamId: string | null;

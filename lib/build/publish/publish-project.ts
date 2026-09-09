@@ -12,6 +12,7 @@ import {
 } from "@/lib/build/vercel/projects";
 import { createProductionDeployment } from "@/lib/build/vercel/deployments";
 import { promoteDraftShaToDefaultBranch } from "@/lib/build/git/promote-published";
+import { ensureDraftSitePackageJson } from "@/lib/build/git/ensure-site-package";
 import { gitStoragePointer } from "@/lib/build/git/revision-pointers";
 import { ensureProjectInfra } from "@/lib/build/ensure-project-infra";
 import { assertNoConcurrentBuild } from "@/lib/build/sandbox/lock";
@@ -254,12 +255,19 @@ async function publishProjectWithRow(opts: {
       workspaceId: opts.workspaceId,
     });
 
+    // Vercel errors with "No Next.js version detected" if package.json lacks next.
+    const ensuredPkg = await ensureDraftSitePackageJson({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+    });
+    const publishSha = ensuredPkg.draftSha || draftSha;
+
     // Promote draft → default branch first. Production deploys from a
     // non-production ref (cander/draft) often build then land in ERROR.
     const promoted = await promoteDraftShaToDefaultBranch({
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
-      sha: draftSha,
+      sha: publishSha,
     });
 
     const deployment = await createProductionDeployment({
@@ -267,7 +275,7 @@ async function publishProjectWithRow(opts: {
       projectName: vercelProject.name,
       githubRepoId,
       ref: promoted.defaultBranch,
-      sha: draftSha,
+      sha: publishSha,
     });
 
     const vercelOrigin = (() => {
@@ -295,7 +303,7 @@ async function publishProjectWithRow(opts: {
 
     const projectUpdate: Record<string, string> = {
       status: "published",
-      published_sha: draftSha,
+      published_sha: publishSha,
       published_url: publishedUrl,
       vercel_project_id: vercelProject.vercelProjectId,
       vercel_production_deployment_id: deployment.id,
@@ -342,7 +350,7 @@ async function publishProjectWithRow(opts: {
       created_at: now,
       updated_at: now,
       vercel_deployment_id: deployment.id,
-      git_sha: draftSha,
+      git_sha: publishSha,
       kind: "production",
     };
     const { error: depErr } = await admin.from("deployments").insert(deployRow);
@@ -363,7 +371,7 @@ async function publishProjectWithRow(opts: {
     }
 
     try {
-      const pointer = gitStoragePointer(draftSha);
+      const pointer = gitStoragePointer(publishSha);
       const { data: tip } = await admin
         .from("project_revisions")
         .select("id")
@@ -399,13 +407,13 @@ async function publishProjectWithRow(opts: {
     return {
       ok: true,
       status: "published",
-      publishedSha: draftSha,
+      publishedSha: publishSha,
       publishedUrl,
       vercelDeploymentId: deployment.id,
       vercelProjectId: vercelProject.vercelProjectId,
       deploymentRecordId,
       preferredUrl: opts.preferredUrl ?? null,
-      message: `Published ${draftSha.slice(0, 7)} → ${publishedUrl}`,
+      message: `Published ${publishSha.slice(0, 7)} → ${publishedUrl}`,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

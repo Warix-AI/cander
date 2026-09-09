@@ -76,6 +76,9 @@ export async function createProductionDeployment(opts: {
       },
       projectSettings: {
         framework: "nextjs",
+        rootDirectory: null,
+        buildCommand: "next build",
+        installCommand: "npm install",
       },
       meta: {
         canderPublish: "1",

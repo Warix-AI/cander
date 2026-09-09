@@ -4,6 +4,7 @@
  */
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getBuildGitAuthor } from "@/lib/build/config";
 import { getInstallationOctokit } from "@/lib/build/git/github-app";
 import { DRAFT_BRANCH } from "@/lib/build/git/project-git-service";
 import { safeRepoRelativePath } from "@/lib/build/git/path-safe";
@@ -149,6 +150,11 @@ export async function commitFilesToDraftBranch(opts: {
     },
   );
 
+  const buildAuthor = getBuildGitAuthor();
+  const author = {
+    name: opts.authorName ?? buildAuthor.name,
+    email: opts.authorEmail ?? buildAuthor.email,
+  };
   const { data: newCommit } = await octokit.request(
     "POST /repos/{owner}/{repo}/git/commits",
     {
@@ -157,10 +163,8 @@ export async function commitFilesToDraftBranch(opts: {
       message: opts.message.slice(0, 500),
       tree: newTree.sha,
       parents: [baseCommitSha],
-      author: {
-        name: opts.authorName ?? "Cander",
-        email: opts.authorEmail ?? "build@cander.app",
-      },
+      author,
+      committer: author,
     },
   );
 

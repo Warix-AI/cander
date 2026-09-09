@@ -41,6 +41,8 @@ export async function ensurePublicVercelProjectAccess(
         ssoProtection: null,
         passwordProtection: null,
         trustedIps: null,
+        // Prefer root package.json for Next detection.
+        rootDirectory: null,
       }),
     },
   );

@@ -795,6 +795,37 @@ async function runWebsiteCreatePipeline(opts: {
     };
   }
 
+  // Always re-assert a Vercel-detectable package.json (Codex may overwrite it).
+  {
+    const pkgFile = files.find((f) => f.path === "package.json");
+    const { ensureNextInPackageJson, packageJsonHasNext } = await import(
+      "@/lib/ai/build/site-package"
+    );
+    const pkgContent = ensureNextInPackageJson(pkgFile?.content, {
+      name: "cander-site",
+    });
+    if (!pkgFile || !packageJsonHasNext(pkgFile.content)) {
+      report({
+        phase: "tool",
+        label: "Building",
+        detail: "Writing package.json…",
+        toolName: "computer.files.write",
+        contentStreaming: true,
+      });
+      const pkgWrite = await executeAuthorizedTool({
+        name: "computer.files.write",
+        arguments: {
+          projectId,
+          workspaceId,
+          path: "package.json",
+          content: pkgContent,
+          persist: true,
+        },
+      });
+      toolResults.push(pkgWrite);
+    }
+  }
+
   await ensureSandboxReady({ projectId, workspaceId, forceRestart: false });
 
   if (brief) {

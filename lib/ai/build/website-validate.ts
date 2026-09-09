@@ -4,6 +4,7 @@
 
 import type { ScaffoldFile } from "@/lib/ai/build/site-spec";
 import type { SiteSpec } from "@/lib/ai/build/site-spec";
+import { packageJsonHasNext } from "@/lib/ai/build/site-package";
 
 export type WebsiteValidationResult = {
   ok: boolean;
@@ -121,6 +122,16 @@ export function validateWebsiteFiles(opts: {
   const hasMetadata =
     /export\s+const\s+metadata\b|generateMetadata\b/.test(blob);
   if (!hasMetadata) issues.push("Missing Next.js metadata export");
+
+  const pkgRaw =
+    map.get("package.json") ||
+    map.get("./package.json") ||
+    "";
+  if (!packageJsonHasNext(pkgRaw)) {
+    issues.push(
+      'package.json must list "next", "react", and "react-dom" in dependencies (Vercel cannot detect Next.js otherwise)',
+    );
+  }
 
   // When 21st vendor files are present, require provenance markers / paths.
   const twentyFirstFiles = [...map.keys()].filter((p) =>
