@@ -226,21 +226,35 @@ async function createBuildSandboxFromGit(opts: {
 
     cacheSandboxHandle(sessionId, sandbox);
 
+    // Git source clones into a repo-named subdirectory — flatten to cwd so
+    // file ops, persist, and npm scripts run at the project root.
+    try {
+      await sandbox.runCommand({
+        cmd: "sh",
+        args: [
+          "-c",
+          `if [ ! -d .git ]; then
+  d=$(find . -maxdepth 2 -type d -name .git 2>/dev/null | head -1 | xargs -r dirname)
+  if [ -n "$d" ] && [ "$d" != "." ]; then
+    # move tracked + hidden files from clone dir to cwd
+    shopt -s dotglob nullglob
+    mv "$d"/* .
+    rmdir "$d" 2>/dev/null || rm -rf "$d"
+  fi
+fi
+ls -la
+git rev-parse --short HEAD || true`,
+        ],
+      });
+    } catch (err) {
+      console.warn("[cander] flatten git clone", err);
+    }
+
     let previewUpstream: string | null = null;
     try {
       previewUpstream = sandbox.domain(BUILD_APP_PORT);
     } catch {
       previewUpstream = null;
-    }
-
-    // Confirm tree exists (git clone root).
-    try {
-      await sandbox.runCommand({
-        cmd: "sh",
-        args: ["-c", "ls -la && git rev-parse --short HEAD || true"],
-      });
-    } catch {
-      /* non-fatal */
     }
 
     const readyState: BuildSandboxState = {

@@ -209,22 +209,52 @@ export async function ensureAppSupabaseProject(opts: {
     const dbPass = generateDbPassword();
     const regionGroup =
       trim(process.env.SUPABASE_MANAGEMENT_REGION_GROUP) ?? "americas";
-    const instanceSize =
-      trim(process.env.SUPABASE_MANAGEMENT_INSTANCE_SIZE) ?? "micro";
+    // Free-plan orgs reject desired_instance_size — only send when explicitly set.
+    const instanceSize = trim(process.env.SUPABASE_MANAGEMENT_INSTANCE_SIZE);
 
-    const res = await supabaseManagementFetch("/v1/projects", {
+    const createBody: Record<string, unknown> = {
+      name,
+      organization_slug: orgSlug,
+      db_pass: dbPass,
+      region_selection: {
+        type: "smartGroup",
+        code: regionGroup,
+      },
+    };
+    if (instanceSize) {
+      createBody.desired_instance_size = instanceSize;
+    }
+
+    let res = await supabaseManagementFetch("/v1/projects", {
       method: "POST",
-      body: JSON.stringify({
-        name,
-        organization_slug: orgSlug,
-        db_pass: dbPass,
-        region_selection: {
-          type: "smartGroup",
-          code: regionGroup,
-        },
-        desired_instance_size: instanceSize,
-      }),
+      body: JSON.stringify(createBody),
     });
+
+    // Retry without instance size if the org is on the free plan.
+    if (!res.ok && instanceSize) {
+      const text = await res.text().catch(() => "");
+      if (
+        res.status === 402 ||
+        /instance size cannot be specified/i.test(text)
+      ) {
+        delete createBody.desired_instance_size;
+        res = await supabaseManagementFetch("/v1/projects", {
+          method: "POST",
+          body: JSON.stringify(createBody),
+        });
+      } else {
+        await patchBinding(opts.projectId, opts.workspaceId, {
+          supabase_status: "error",
+        });
+        return {
+          status: "error",
+          projectRef: null,
+          url: null,
+          created: false,
+          message: `Supabase create failed (${res.status}): ${text.slice(0, 400)}`,
+        };
+      }
+    }
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
