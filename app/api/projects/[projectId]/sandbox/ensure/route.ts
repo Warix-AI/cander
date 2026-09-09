@@ -1,12 +1,9 @@
-/**
- * POST /api/projects/[projectId]/sandbox/ensure
- * Start or resume the project's disposable build sandbox (clone from GitHub draft).
- */
-
 import { NextResponse } from "next/server";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import { assertProjectAccess } from "@/lib/security/project-access";
 import { ensureProjectSandbox } from "@/lib/build/sandbox/lifecycle";
+import { coalesceEnsureProjectSandbox } from "@/lib/build/sandbox/ensure-coalesce";
+import { BUILD_RETRY_BUDGETS } from "@/lib/ai/build/retry-budgets";
 import {
   enforceUsageForRequest,
   finalizeUsageReservation,
@@ -16,6 +13,35 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 type RouteCtx = { params: Promise<{ projectId: string }> };
+
+/** Per-project forceRestart budget within a short window (process-local). */
+const restartBudgetKey = "__cander_sandbox_restart_budget__";
+function restartBudgetStore(): Map<string, { count: number; resetAt: number }> {
+  const g = globalThis as typeof globalThis & {
+    [restartBudgetKey]?: Map<string, { count: number; resetAt: number }>;
+  };
+  if (!g[restartBudgetKey]) g[restartBudgetKey] = new Map();
+  return g[restartBudgetKey]!;
+}
+
+function takeForceRestartSlot(projectId: string, workspaceId: string): boolean {
+  const k = `${workspaceId}:${projectId}`;
+  const map = restartBudgetStore();
+  const now = Date.now();
+  const row = map.get(k);
+  if (!row || now > row.resetAt) {
+    map.set(k, {
+      count: 1,
+      resetAt: now + 15 * 60_000,
+    });
+    return true;
+  }
+  if (row.count >= BUILD_RETRY_BUDGETS.sandboxForceRestart) {
+    return false;
+  }
+  row.count += 1;
+  return true;
+}
 
 export async function POST(request: Request, ctx: RouteCtx) {
   const auth = await requireBearerUser(request);
@@ -50,7 +76,12 @@ export async function POST(request: Request, ctx: RouteCtx) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
-  const forceRestart = Boolean(body.forceRestart);
+  let forceRestart = Boolean(body.forceRestart);
+  if (forceRestart && !takeForceRestartSlot(projectId, workspaceId)) {
+    // Budget exhausted — resume/reuse instead of spawning another VM.
+    forceRestart = false;
+  }
+
   // Stable key so overlapping ensure calls from the same project reuse the
   // in-flight reservation instead of tripping rate/concurrency limits.
   const idempotencyKey =
@@ -72,7 +103,10 @@ export async function POST(request: Request, ctx: RouteCtx) {
     let detail = "Sandbox runtime is busy. Wait a few seconds, then Retry.";
     try {
       const cloned = usage.response.clone();
-      const payload = (await cloned.json()) as { error?: string; message?: string };
+      const payload = (await cloned.json()) as {
+        error?: string;
+        message?: string;
+      };
       detail = payload.error || payload.message || detail;
     } catch {
       /* keep default */
@@ -96,11 +130,17 @@ export async function POST(request: Request, ctx: RouteCtx) {
   }
 
   try {
-    const result = await ensureProjectSandbox({
-      userId: auth.user.id,
+    const result = await coalesceEnsureProjectSandbox({
       projectId,
       workspaceId,
       forceRestart,
+      run: () =>
+        ensureProjectSandbox({
+          userId: auth.user.id,
+          projectId,
+          workspaceId,
+          forceRestart,
+        }),
     });
 
     await finalizeUsageReservation({

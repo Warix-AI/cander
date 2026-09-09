@@ -133,10 +133,30 @@ export async function saveWebsiteSetupBrief(opts: {
   workspaceId: string;
   brief: WebsiteSetupBrief;
 }): Promise<WebsiteSetupBrief> {
-  const next: WebsiteSetupBrief = {
+  let next: WebsiteSetupBrief = {
     ...opts.brief,
     updatedAt: new Date().toISOString(),
   };
+
+  // Server-side fail-closed: never persist ready without a runnable tip.
+  if (!isBrowser() && next.status === "ready") {
+    try {
+      const { draftTipHasNextPackage } = await import(
+        "@/lib/build/git/draft-tip"
+      );
+      const runnable = await draftTipHasNextPackage({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+      });
+      if (!runnable) {
+        next = { ...next, status: "building" };
+      }
+    } catch (err) {
+      console.warn("[cander] draft tip ready-gate failed; keeping building", err);
+      next = { ...next, status: "building" };
+    }
+  }
+
   const key = memoryKey(opts.projectId, opts.workspaceId);
   memoryBriefs.set(key, next);
 

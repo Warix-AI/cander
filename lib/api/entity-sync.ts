@@ -51,9 +51,13 @@ export async function hydrateEntityStoreFromRemote(
     seeded: true,
   });
 
+  // Only hydrate deployments for Build projects (sites/apps) — not every entity.
+  const buildProjects = projects.filter(
+    (p) => p.space === "build" || p.kind === "site" || p.kind === "app",
+  );
   const deployments = (
     await Promise.all(
-      projects.map((project) => api.listDeployments(ctx, project.id)),
+      buildProjects.map((project) => api.listDeployments(ctx, project.id)),
     )
   ).flat();
 
@@ -69,13 +73,18 @@ export async function hydrateEntityStoreFromRemote(
   }
 }
 
-/** Realtime — bump revision so hooks refetch. */
+/** Realtime — bump revision so hooks refetch (debounced by subscriber). */
 export function startEntityRealtimePull(api: SpaceEntityApi, ctx: WorkspaceCtx) {
   let pulling = false;
+  let lastPull = 0;
 
   const pull = () => {
     if (pulling) return;
+    const now = Date.now();
+    // Hard floor: at most one full hydrate / 2s even if subscriber fires often.
+    if (now - lastPull < 2000) return;
     pulling = true;
+    lastPull = now;
     void hydrateEntityStoreFromRemote(api, ctx)
       .catch((err) => {
         console.warn("[cander] entity hydrate failed", err);

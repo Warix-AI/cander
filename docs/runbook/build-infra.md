@@ -153,3 +153,19 @@ Smoke (deployed): `GET /api/ai/twenty-first` → `{ configured: true }`
 CANDER_BUILD_SANDBOX=1
 NEXT_PUBLIC_CANDER_BUILD_SANDBOX=1
 ```
+
+## Plan-first create pipeline (dogfood)
+
+Opt-in until Phase 7 default-on. When enabled, site create persists `project_spec` / `build_plan` (markdown DB-only) / `research_manifest` / `implementation_manifest`, retrieves 21st via role+designIntent (not business nouns), and gates preview on a runnable draft tip (`package.json` + `next`).
+
+```
+CANDER_BUILD_PLAN_FIRST=1
+# optional UI gate:
+NEXT_PUBLIC_CANDER_BUILD_PLAN_FIRST=1
+```
+
+Apply migration `066_plan_first_build_artifacts.sql` before relying on persistence.
+
+Retry budgets live in `lib/ai/build/retry-budgets.ts`. Sandbox ensure is single-flight (`lib/build/sandbox/ensure-coalesce.ts`); publish hard-fails if `vercel_project_id` cannot be persisted.
+
+Legacy `runWebsiteCreatePipeline` remains the default when the flag is off.

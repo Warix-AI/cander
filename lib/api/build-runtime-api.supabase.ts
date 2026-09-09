@@ -37,14 +37,15 @@ export function createSupabaseBuildRuntimeApi(
 
     async listProjectFiles(ctx, projectId) {
       const supabase = createSupabaseBrowserClient();
+      const cols = "path, label, sort_order, content";
       const { data, error } = await supabase
         .from("project_files")
-        .select("*")
+        .select(cols)
         .eq("workspace_id", ctx.workspaceId)
         .eq("project_id", projectId)
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      const rows = (data ?? []) as ProjectFileRow[];
+      const rows = (data ?? []) as unknown as ProjectFileRow[];
       if (!rows.length) {
         await ensureDefaultFiles(ctx, projectId);
         return DEFAULT_PROJECT_FILES;

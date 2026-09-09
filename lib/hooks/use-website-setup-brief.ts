@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchWebsiteSetupBrief,
   type WebsiteSetupBriefClient,
@@ -8,6 +8,8 @@ import {
 
 /**
  * Poll website setup brief for site projects (preview gating + progress ring).
+ * Preview unlocks only when status is ready AND draft tip is runnable (has Next).
+ * Stops polling on terminal ready+runnable / failed; backoff while building.
  */
 export function useWebsiteSetupBrief(opts: {
   projectId: string | null | undefined;
@@ -17,6 +19,7 @@ export function useWebsiteSetupBrief(opts: {
 }) {
   const isSite = opts.kind === "site" || opts.enabled === true;
   const [brief, setBrief] = useState<WebsiteSetupBriefClient | null>(null);
+  const backoffRef = useRef(1000);
 
   const refresh = useCallback(async () => {
     if (!opts.projectId || !opts.workspaceId || !isSite) {
@@ -29,8 +32,11 @@ export function useWebsiteSetupBrief(opts: {
     });
     setBrief((prev) => {
       if (!next) return prev;
-      // Never regress ready → building from a stale poll after unlock.
-      if (prev?.status === "ready" && next.status === "building") {
+      if (
+        prev?.status === "ready" &&
+        prev.draftRunnable &&
+        next.status === "building"
+      ) {
         return prev;
       }
       return next;
@@ -47,36 +53,55 @@ export function useWebsiteSetupBrief(opts: {
         | { projectId?: string }
         | undefined;
       if (detail?.projectId && detail.projectId !== opts.projectId) return;
-      // Optimistically unlock while we refetch — avoids stuck "building" ring.
-      setBrief((prev) =>
-        prev
-          ? { ...prev, status: "ready" }
-          : {
-              status: "ready",
-              completedSteps: 8,
-              answers: {},
-              updatedAt: new Date().toISOString(),
-            },
-      );
+      backoffRef.current = 1000;
       void refresh();
     };
     window.addEventListener("cander:website-setup-ready", onReady);
 
-    const building = brief?.status === "building";
-    const id = window.setInterval(
-      () => {
-        void refresh();
-      },
-      building ? 1000 : 2500,
-    );
+    let cancelled = false;
+    let timer: number | null = null;
+
+    const terminal =
+      brief?.status === "failed" ||
+      (brief?.status === "ready" && brief.draftRunnable === true);
+
+    const tick = async () => {
+      if (cancelled) return;
+      const next = await refresh();
+      if (cancelled) return;
+      const done =
+        next?.status === "failed" ||
+        (next?.status === "ready" && next.draftRunnable === true);
+      if (done) {
+        backoffRef.current = 1000;
+        return;
+      }
+      if (next?.status === "building") {
+        backoffRef.current = Math.min(10_000, Math.floor(backoffRef.current * 1.5));
+      } else {
+        backoffRef.current = 2500;
+      }
+      timer = window.setTimeout(() => {
+        void tick();
+      }, backoffRef.current);
+    };
+
+    if (!terminal) {
+      timer = window.setTimeout(() => {
+        void tick();
+      }, brief?.status === "building" ? 1000 : 2500);
+    }
+
     return () => {
-      window.clearInterval(id);
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
       window.removeEventListener("cander:website-setup-ready", onReady);
     };
-  }, [refresh, isSite, opts.projectId, brief?.status]);
+  }, [refresh, isSite, opts.projectId, brief?.status, brief?.draftRunnable]);
 
   const setupBlocksPreview =
-    isSite && (!brief || brief.status !== "ready");
+    isSite &&
+    (!brief || brief.status !== "ready" || brief.draftRunnable !== true);
 
   return { brief, refresh, setupBlocksPreview, isSite };
 }

@@ -570,7 +570,9 @@ export async function retrieveComponentsForSiteSpec(
 
   setActiveTwentyFirstClient(mcp);
   const needed = rolesNeededFromSpec(spec);
-  const styleHint = `${spec.theme.layoutStyle} ${spec.industry} ${spec.businessName}`.trim();
+  const styleHint = String(spec.theme.layoutStyle || "").trim();
+  // Do not append industry/businessName — those bias 21st toward unrelated
+  // packages (e.g. "tree" → @headless-tree). Role queries stay UI-shaped.
   const out: RetrievedComponentRef[] = [];
   const seen = new Set<string>();
 

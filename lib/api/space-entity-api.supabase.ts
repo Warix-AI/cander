@@ -43,6 +43,10 @@ import {
   type WorkspaceCtx,
 } from "@/lib/space-entities";
 import type { SpaceId } from "@/lib/types";
+import {
+  noteSupabaseEgress,
+  PROJECT_ENTITY_COLUMNS,
+} from "@/lib/supabase/egress";
 
 function projectKindFromSpace(space: SpaceId): SpaceProject["kind"] {
   if (space === "build") return "app";
@@ -84,12 +88,17 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
       const supabase = createSupabaseBrowserClient();
       const { data, error } = await supabase
         .from("projects")
-        .select("*")
+        .select(PROJECT_ENTITY_COLUMNS)
         .eq("workspace_id", ctx.workspaceId)
         .eq("space_id", space)
         .order("updated_at", { ascending: false });
       if (error) throw error;
-      const items = ((data ?? []) as ProjectRow[]).map(projectRowToEntity);
+      noteSupabaseEgress({
+        route: "projects.list",
+        columns: PROJECT_ENTITY_COLUMNS,
+        rowCount: data?.length ?? 0,
+      });
+      const items = ((data ?? []) as unknown as ProjectRow[]).map(projectRowToEntity);
       return filterProjects(items, ctx, space, filter);
     },
 
@@ -97,23 +106,33 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
       const supabase = createSupabaseBrowserClient();
       const { data, error } = await supabase
         .from("projects")
-        .select("*")
+        .select(PROJECT_ENTITY_COLUMNS)
         .eq("workspace_id", ctx.workspaceId)
         .order("updated_at", { ascending: false });
       if (error) throw error;
-      return ((data ?? []) as ProjectRow[]).map(projectRowToEntity);
+      noteSupabaseEgress({
+        route: "projects.listAll",
+        columns: PROJECT_ENTITY_COLUMNS,
+        rowCount: data?.length ?? 0,
+      });
+      return ((data ?? []) as unknown as ProjectRow[]).map(projectRowToEntity);
     },
 
     async getProject(ctx, id) {
       const supabase = createSupabaseBrowserClient();
       const { data, error } = await supabase
         .from("projects")
-        .select("*")
+        .select(PROJECT_ENTITY_COLUMNS)
         .eq("workspace_id", ctx.workspaceId)
         .eq("id", id)
         .maybeSingle();
       if (error) throw error;
-      return data ? projectRowToEntity(data as ProjectRow) : null;
+      noteSupabaseEgress({
+        route: "projects.get",
+        columns: PROJECT_ENTITY_COLUMNS,
+        rowCount: data ? 1 : 0,
+      });
+      return data ? projectRowToEntity(data as unknown as ProjectRow) : null;
     },
 
     async createProject(ctx, input: CreateProjectInput) {
@@ -186,7 +205,7 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
         .eq("id", id)
         .eq("workspace_id", ctx.workspaceId)
         .eq("version", current.version)
-        .select()
+        .select(PROJECT_ENTITY_COLUMNS)
         .maybeSingle();
       if (error) {
         if (/projects_workspace_title_unique|23505/i.test(error.message)) {
@@ -196,7 +215,7 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
       }
       if (!data) throw new Error("Project version conflict — refresh and retry");
       notifyEntityStoreChange();
-      return projectRowToEntity(data as ProjectRow);
+      return projectRowToEntity(data as unknown as ProjectRow);
     },
 
     async deleteProject(ctx, id) {
@@ -415,14 +434,21 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
 
     async listDeployments(ctx, projectId) {
       const supabase = createSupabaseBrowserClient();
+      const cols =
+        "id, workspace_id, project_id, url, status, version, created_at, updated_at";
       const { data, error } = await supabase
         .from("deployments")
-        .select("*")
+        .select(cols)
         .eq("workspace_id", ctx.workspaceId)
         .eq("project_id", projectId)
         .order("updated_at", { ascending: false });
       if (error) throw error;
-      return ((data ?? []) as DeploymentRow[]).map(deploymentRowToEntity);
+      noteSupabaseEgress({
+        route: "deployments.list",
+        columns: cols,
+        rowCount: data?.length ?? 0,
+      });
+      return ((data ?? []) as unknown as DeploymentRow[]).map(deploymentRowToEntity);
     },
 
     async createDeployment(ctx, projectId, input: CreateDeploymentInput) {
@@ -515,6 +541,15 @@ export async function importEntitiesToSupabase(
 
 export function subscribeEntityRealtime(ctx: WorkspaceCtx, onChange: () => void) {
   const supabase = createSupabaseBrowserClient();
+  // Debounce hydrate storms from Build jsonb/sandbox writes.
+  let timer: number | null = null;
+  const schedule = () => {
+    if (timer != null) return;
+    timer = window.setTimeout(() => {
+      timer = null;
+      onChange();
+    }, 750);
+  };
   const channel = supabase
     .channel(`entities:${ctx.workspaceId}`)
     .on(
@@ -525,7 +560,29 @@ export function subscribeEntityRealtime(ctx: WorkspaceCtx, onChange: () => void)
         table: "projects",
         filter: `workspace_id=eq.${ctx.workspaceId}`,
       },
-      () => onChange(),
+      (payload) => {
+        // Ignore Build-only infra/jsonb noise when title/status/kind unchanged.
+        const next = (payload.new || {}) as Record<string, unknown>;
+        const prev = (payload.old || {}) as Record<string, unknown>;
+        const publicKeys = [
+          "title",
+          "summary",
+          "status",
+          "kind",
+          "cover",
+          "published_url",
+          "instructions",
+          "version",
+        ];
+        const publicChanged = publicKeys.some(
+          (k) => JSON.stringify(next[k]) !== JSON.stringify(prev[k]),
+        );
+        const isInsertOrDelete =
+          payload.eventType === "INSERT" || payload.eventType === "DELETE";
+        if (isInsertOrDelete || publicChanged || !prev.id) {
+          schedule();
+        }
+      },
     )
     .on(
       "postgres_changes",
@@ -570,6 +627,7 @@ export function subscribeEntityRealtime(ctx: WorkspaceCtx, onChange: () => void)
     .subscribe();
 
   return () => {
+    if (timer != null) window.clearTimeout(timer);
     void supabase.removeChannel(channel);
   };
 }

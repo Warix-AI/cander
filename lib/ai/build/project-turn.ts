@@ -29,6 +29,10 @@ import {
 } from "@/lib/ai/build/capabilities";
 import { composeSiteFromSpec } from "@/lib/ai/build/compose-site";
 import { planWebsite } from "@/lib/ai/build/plan-website";
+import { isPlanFirstBuildEnabled } from "@/lib/ai/build/plan/flag";
+import { buildProjectSpecFromBrief } from "@/lib/ai/build/plan/project-spec";
+import { generateBuildPlan } from "@/lib/ai/build/plan/generate-plan";
+import { savePlanFirstArtifacts } from "@/lib/ai/build/plan/store";
 import type { ScaffoldFile } from "@/lib/ai/build/site-spec";
 import {
   briefToPlanningPrompt,
@@ -39,16 +43,22 @@ import {
 } from "@/lib/ai/build/website-setup-brief";
 import { validateWebsiteFiles } from "@/lib/ai/build/website-validate";
 import {
+  mergeValidationIntoManifest,
+  validatePlanFirstTip,
+  visualQaChecklist,
+} from "@/lib/ai/build/validate/plan-first";
+import {
   formatRetrievedComponentsForCodex,
   retrievedComponentsToScaffoldFiles,
   setActiveTwentyFirstClient,
 } from "@/lib/ai/build/twenty-first-mcp";
-import { retrieveTwentyFirstForSiteSpecClient } from "@/lib/api/twenty-first-client";
+import { retrieveTwentyFirstForSiteSpecClient, retrieveTwentyFirstForBuildPlanClient } from "@/lib/api/twenty-first-client";
 import {
   getProjectKindForSetup,
   loadWebsiteSetupBrief,
   saveWebsiteSetupBrief,
 } from "@/lib/build/website-setup-brief-store";
+import type { BuildPlanRecord } from "@/lib/ai/build/plan/types";
 
 const MAX_ROUNDS = 10;
 
@@ -211,8 +221,8 @@ async function writeScaffold(opts: {
   const results: AiToolCallResult[] = [];
   if (opts.files.length === 0) return results;
 
-  // Prefer GitHub draft commits — works even when the sandbox VM is "starting"
-  // because Next isn't listening yet (empty repos have no package.json).
+  // Git-first only — never treat sandbox writes as success for create/scaffold.
+  // Empty-repo chicken-and-egg: sandbox cannot be "ready" without package.json.
   opts.report({
     phase: "tool",
     label: "Building",
@@ -253,74 +263,40 @@ async function writeScaffold(opts: {
       });
       return results;
     }
-    console.warn(
-      "[cander:build] git scaffold persist failed; falling back to sandbox writes",
-      committed?.error,
-    );
-  } catch (err) {
-    console.warn(
-      "[cander:build] git scaffold persist threw; falling back to sandbox writes",
-      err,
-    );
-  }
-
-  for (const file of opts.files) {
-    opts.report({
-      phase: "tool",
-      label: "Building",
-      detail: `Writing ${file.path}…`,
-      toolName: "computer.files.write",
-      contentStreaming: true,
-    });
-    const result = await executeAuthorizedTool({
-      name: "computer.files.write",
-      arguments: {
-        projectId: opts.projectId,
-        workspaceId: opts.workspaceId,
-        path: file.path,
-        content: file.content,
-        persist: false,
-      },
-    });
-    results.push(result);
-    opts.report({
-      phase: "follow_up",
-      label: "Building",
-      detail: `Writing ${file.path}…`,
-      toolName: "computer.files.write",
-      toolOk: result.ok,
-      contentStreaming: true,
-    });
-  }
-
-  const okWrites = results.filter((r) => r.ok).length;
-  if (okWrites > 0) {
-    opts.report({
-      phase: "tool",
-      label: "Building",
-      detail: "Saving draft to GitHub…",
-      toolName: "computer.files.persist",
-      contentStreaming: true,
-    });
-    const persist = await executeAuthorizedTool({
+    const errMsg = committed?.error || "Git draft persist failed.";
+    console.warn("[cander:build] git scaffold persist failed (no sandbox fallback)", errMsg);
+    results.push({
       name: "computer.files.persist",
-      arguments: {
-        projectId: opts.projectId,
-        workspaceId: opts.workspaceId,
-      },
+      ok: false,
+      output: errMsg,
     });
-    results.push(persist);
     opts.report({
       phase: "follow_up",
       label: "Building",
-      detail: "Saving draft to GitHub…",
+      detail: errMsg,
       toolName: "computer.files.persist",
-      toolOk: persist.ok,
+      toolOk: false,
       contentStreaming: true,
     });
+    return results;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn("[cander:build] git scaffold persist threw (no sandbox fallback)", err);
+    results.push({
+      name: "computer.files.persist",
+      ok: false,
+      output: errMsg,
+    });
+    opts.report({
+      phase: "follow_up",
+      label: "Building",
+      detail: errMsg,
+      toolName: "computer.files.persist",
+      toolOk: false,
+      contentStreaming: true,
+    });
+    return results;
   }
-
-  return results;
 }
 
 async function runBuildPlanTurn(
@@ -575,6 +551,32 @@ async function runWebsiteCreatePipeline(opts: {
     detail: "Planning site design from your brief…",
   });
 
+  // Phase 2+: persist ProjectSpec + private BuildPlan before retrieval (flagged).
+  let activeBuildPlan: BuildPlanRecord | null = null;
+  if (isPlanFirstBuildEnabled()) {
+    report({
+      phase: "thinking",
+      label: "Building",
+      detail: "Writing product spec and build plan…",
+    });
+    try {
+      const projectSpec = await buildProjectSpecFromBrief(
+        request,
+        brief,
+        turnOpts,
+      );
+      activeBuildPlan = await generateBuildPlan(request, projectSpec, turnOpts);
+      await savePlanFirstArtifacts({
+        projectId,
+        workspaceId,
+        projectSpec,
+        buildPlan: activeBuildPlan,
+      });
+    } catch (err) {
+      console.warn("[cander:plan] plan-first persist failed; continuing", err);
+    }
+  }
+
   const planRequest: AiGenerateRequest = {
     ...request,
     content: [
@@ -603,25 +605,52 @@ async function runWebsiteCreatePipeline(opts: {
   try {
     // Build turn runs in the browser — MCP must go through the server API
     // so API_KEY_21ST never ships to the client.
-    const retrieval = await retrieveTwentyFirstForSiteSpecClient({
-      workspaceId,
-      projectId,
-      spec,
-    });
-    retrieved = retrieval.components;
-    usedTwentyFirstFallback = retrieval.usedFallback;
-    twentyFirstMeta = {
-      connected: retrieval.connected,
-      tools: retrieval.toolsDiscovered,
-    };
-    console.info("[cander:21st-mcp] pipeline retrieval", {
-      connected: retrieval.connected,
-      tools: retrieval.toolsDiscovered,
-      selected: retrieved.map((c) => `${c.category}:${c.id}`),
-      withCode: retrieved.filter((c) => c.codeSnippet?.trim()).length,
-      usedFallback: retrieval.usedFallback,
-      error: retrieval.error,
-    });
+    if (isPlanFirstBuildEnabled() && activeBuildPlan?.json) {
+      const retrieval = await retrieveTwentyFirstForBuildPlanClient({
+        workspaceId,
+        projectId,
+        buildPlan: activeBuildPlan.json,
+      });
+      retrieved = retrieval.components;
+      usedTwentyFirstFallback = retrieval.usedFallback;
+      twentyFirstMeta = {
+        connected: retrieval.connected,
+        tools: retrieval.toolsDiscovered,
+      };
+      if (retrieval.researchManifest) {
+        await savePlanFirstArtifacts({
+          projectId,
+          workspaceId,
+          researchManifest: retrieval.researchManifest,
+        });
+      }
+      console.info("[cander:21st-mcp] plan-first retrieval", {
+        connected: retrieval.connected,
+        selected: retrieved.map((c) => `${c.category}:${c.id}`),
+        usedFallback: retrieval.usedFallback,
+        error: retrieval.error,
+      });
+    } else {
+      const retrieval = await retrieveTwentyFirstForSiteSpecClient({
+        workspaceId,
+        projectId,
+        spec,
+      });
+      retrieved = retrieval.components;
+      usedTwentyFirstFallback = retrieval.usedFallback;
+      twentyFirstMeta = {
+        connected: retrieval.connected,
+        tools: retrieval.toolsDiscovered,
+      };
+      console.info("[cander:21st-mcp] pipeline retrieval", {
+        connected: retrieval.connected,
+        tools: retrieval.toolsDiscovered,
+        selected: retrieved.map((c) => `${c.category}:${c.id}`),
+        withCode: retrieved.filter((c) => c.codeSnippet?.trim()).length,
+        usedFallback: retrieval.usedFallback,
+        error: retrieval.error,
+      });
+    }
   } catch (err) {
     console.warn("[cander:21st-mcp] retrieve failed; catalog fallback", err);
     usedTwentyFirstFallback = true;
@@ -714,6 +743,24 @@ async function runWebsiteCreatePipeline(opts: {
         report,
       });
       toolResults.push(...written);
+
+      if (isPlanFirstBuildEnabled()) {
+        await savePlanFirstArtifacts({
+          projectId,
+          workspaceId,
+          implementationManifest: {
+            version: 1,
+            files: toWrite.map((f) => ({ path: f.path })),
+            routes: (activeBuildPlan?.json.sitemap ?? spec.pages).map((p) => ({
+              path: "path" in p ? p.path : "/",
+              pageId: "id" in p ? p.id : undefined,
+            })),
+            tasks: ["normalize-twenty-first", "git-scaffold"],
+            validation: { ok: false, technical: [], visual: [] },
+            packageJson: { dependencies: mergedDeps },
+          },
+        });
+      }
 
       // Force sandbox recreate so npm install sees the new package.json.
       await ensureSandboxReady({ projectId, workspaceId, forceRestart: true });
@@ -864,7 +911,13 @@ async function runWebsiteCreatePipeline(opts: {
     label: "Building",
     detail: "Validating pages, nav, SEO, and forms…",
   });
-  let validation = validateWebsiteFiles({ files, spec });
+  let validation = isPlanFirstBuildEnabled()
+    ? validatePlanFirstTip({
+        files,
+        spec,
+        plan: activeBuildPlan?.json,
+      })
+    : validateWebsiteFiles({ files, spec });
   if (!validation.ok && usedCodex === false) {
     // Deterministic compose should usually pass; still report.
   }
@@ -901,10 +954,27 @@ async function runWebsiteCreatePipeline(opts: {
     });
     toolResults.push(...(repair.toolResults ?? []));
     // Re-validate against composed Spec files (proxy for structure).
-    validation = validateWebsiteFiles({ files: composeSiteFromSpec(spec), spec });
+    validation = isPlanFirstBuildEnabled()
+      ? validatePlanFirstTip({
+          files: composeSiteFromSpec(spec),
+          spec,
+          plan: activeBuildPlan?.json,
+        })
+      : validateWebsiteFiles({ files: composeSiteFromSpec(spec), spec });
   }
 
   if (!validation.ok) {
+    if (isPlanFirstBuildEnabled()) {
+      await savePlanFirstArtifacts({
+        projectId,
+        workspaceId,
+        implementationManifest: mergeValidationIntoManifest(
+          null,
+          validation.issues,
+          [],
+        ),
+      });
+    }
     if (brief) {
       await saveWebsiteSetupBrief({
         projectId,
@@ -986,9 +1056,52 @@ async function runWebsiteCreatePipeline(opts: {
       report,
     });
     toolResults.push(...ensured);
+    const essentialsOk = ensured.some(
+      (r) => r.name === "computer.files.persist" && r.ok,
+    );
+    if (!essentialsOk) {
+      if (brief) {
+        await saveWebsiteSetupBrief({
+          projectId,
+          workspaceId,
+          brief: {
+            ...brief,
+            status: "failed",
+            validationIssues: [
+              "Could not save the Next.js scaffold to the GitHub draft tip.",
+            ],
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      }
+      return {
+        content: [
+          "Could not write the runnable scaffold into the draft repository.",
+          "Preview stays locked until package.json lands on the draft tip.",
+          "Try again in a moment, or ask me to repair the draft.",
+        ].join("\n"),
+        runtime: "cloud",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+        toolResults,
+      };
+    }
   }
 
+  // One forceRestart after tip has package.json (retry budget: 1).
   await ensureSandboxReady({ projectId, workspaceId, forceRestart: true });
+
+  if (isPlanFirstBuildEnabled()) {
+    await savePlanFirstArtifacts({
+      projectId,
+      workspaceId,
+      implementationManifest: mergeValidationIntoManifest(null, [], []),
+    });
+    // visualQaChecklist() documents desktop/tablet/mobile expectations for
+    // the next Codex visual repair pass (budget: BUILD_RETRY_BUDGETS.codexVisualRepair).
+    void visualQaChecklist;
+  }
 
   if (brief) {
     await saveWebsiteSetupBrief({

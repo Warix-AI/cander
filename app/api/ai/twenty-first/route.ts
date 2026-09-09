@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import { assertProjectAccess } from "@/lib/security/project-access";
 import type { SiteSpec } from "@/lib/ai/build/site-spec";
+import type { BuildPlanJson } from "@/lib/ai/build/plan/types";
 import {
   createTwentyFirstMcpClient,
   getTwentyFirstApiKey,
@@ -16,6 +17,7 @@ import {
   setActiveTwentyFirstClient,
   type TwentyFirstMcpClient,
 } from "@/lib/ai/build/twenty-first-mcp";
+import { retrieveComponentsForBuildPlan } from "@/lib/ai/build/research/from-build-plan";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -75,6 +77,7 @@ export async function POST(request: Request) {
     id?: string;
     componentId?: string;
     spec?: SiteSpec;
+    buildPlan?: BuildPlanJson;
   } = {};
   try {
     body = await request.json();
@@ -199,6 +202,30 @@ export async function POST(request: Request) {
         selected: retrieval.components.map((c) => `${c.category}:${c.id}`),
         withCode: retrieval.components.filter((c) => c.codeSnippet?.trim())
           .length,
+        usedFallback: retrieval.usedFallback,
+      });
+      return NextResponse.json({
+        ok: !retrieval.usedFallback || retrieval.components.length > 0,
+        ...retrieval,
+      });
+    }
+
+    if (action === "retrieve_for_build_plan") {
+      if (!body.buildPlan || typeof body.buildPlan !== "object") {
+        return NextResponse.json(
+          { error: "buildPlan required" },
+          { status: 400 },
+        );
+      }
+      const client = await getOrCreateClient(projectId, workspaceId);
+      const retrieval = await retrieveComponentsForBuildPlan(
+        body.buildPlan as BuildPlanJson,
+        client,
+      );
+      console.info("[cander:21st-mcp] api retrieve_for_build_plan", {
+        projectId,
+        roles: retrieval.researchManifest.roles.map((r) => r.role),
+        selected: retrieval.components.map((c) => `${c.category}:${c.id}`),
         usedFallback: retrieval.usedFallback,
       });
       return NextResponse.json({

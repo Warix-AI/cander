@@ -4,6 +4,7 @@
  */
 
 import { ensureProjectSandbox } from "@/lib/build/sandbox/lifecycle";
+import { coalesceEnsureProjectSandbox } from "@/lib/build/sandbox/ensure-coalesce";
 import { getComputerProvider } from "@/lib/computer/providers/vercel-sandbox-computer-provider";
 import { safeRepoRelativePath } from "@/lib/build/git/commit-draft";
 import { runPrivilegedSandboxCommand } from "@/lib/build/sandbox/privileged";
@@ -18,7 +19,12 @@ export async function ensureBuildSandboxSession(opts: {
   projectId: string;
   workspaceId: string;
 }): Promise<{ sessionId: string }> {
-  const ensured = await ensureProjectSandbox(opts);
+  const ensured = await coalesceEnsureProjectSandbox({
+    projectId: opts.projectId,
+    workspaceId: opts.workspaceId,
+    forceRestart: false,
+    run: () => ensureProjectSandbox(opts),
+  });
   // File/exec ops only need a live VM. "starting" is normal before package.json
   // exists / Next is listening — blocking writes here caused empty drafts
   // ("couldn't write files into the sandbox") and endless preview spin.

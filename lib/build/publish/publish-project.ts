@@ -254,6 +254,62 @@ async function publishProjectWithRow(opts: {
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
     });
+    const vercelProjectId = vercelProject.vercelProjectId?.trim() || "";
+    if (!vercelProjectId) {
+      return {
+        ok: false,
+        status: "error",
+        publishedSha: null,
+        publishedUrl: null,
+        vercelDeploymentId: null,
+        vercelProjectId: null,
+        deploymentRecordId: null,
+        preferredUrl: opts.preferredUrl ?? null,
+        message:
+          "Publish failed: Vercel project was not bound (missing vercel_project_id). Retry after infrastructure is ready.",
+      };
+    }
+
+    // Confirm the id landed on the project row (never deploy with a null binding).
+    const { data: bound } = await admin
+      .from("projects")
+      .select("vercel_project_id")
+      .eq("id", opts.projectId)
+      .eq("workspace_id", opts.workspaceId)
+      .maybeSingle();
+    const storedId = bound?.vercel_project_id
+      ? String(bound.vercel_project_id).trim()
+      : "";
+    if (!storedId) {
+      await admin
+        .from("projects")
+        .update({
+          vercel_project_id: vercelProjectId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", opts.projectId)
+        .eq("workspace_id", opts.workspaceId);
+      const { data: recheck } = await admin
+        .from("projects")
+        .select("vercel_project_id")
+        .eq("id", opts.projectId)
+        .eq("workspace_id", opts.workspaceId)
+        .maybeSingle();
+      if (!recheck?.vercel_project_id) {
+        return {
+          ok: false,
+          status: "error",
+          publishedSha: null,
+          publishedUrl: null,
+          vercelDeploymentId: null,
+          vercelProjectId: null,
+          deploymentRecordId: null,
+          preferredUrl: opts.preferredUrl ?? null,
+          message:
+            "Publish failed: could not persist vercel_project_id on the project.",
+        };
+      }
+    }
 
     // Vercel errors with "No Next.js version detected" if package.json lacks next.
     const ensuredPkg = await ensureDraftSitePackageJson({
@@ -271,7 +327,7 @@ async function publishProjectWithRow(opts: {
     });
 
     const deployment = await createProductionDeployment({
-      vercelProjectId: vercelProject.vercelProjectId,
+      vercelProjectId,
       projectName: vercelProject.name,
       githubRepoId,
       ref: promoted.defaultBranch,
@@ -305,7 +361,7 @@ async function publishProjectWithRow(opts: {
       status: "published",
       published_sha: publishSha,
       published_url: publishedUrl,
-      vercel_project_id: vercelProject.vercelProjectId,
+      vercel_project_id: vercelProjectId,
       vercel_production_deployment_id: deployment.id,
       vercel_production_url: vercelOrigin,
       updated_at: now,
@@ -332,7 +388,7 @@ async function publishProjectWithRow(opts: {
           "@/lib/build/vercel/domains"
         );
         await ensureCustomDomainOnVercelProject({
-          vercelProjectId: vercelProject.vercelProjectId,
+          vercelProjectId,
           domain: verifiedCustom,
         });
       } catch (err) {
@@ -410,7 +466,7 @@ async function publishProjectWithRow(opts: {
       publishedSha: publishSha,
       publishedUrl,
       vercelDeploymentId: deployment.id,
-      vercelProjectId: vercelProject.vercelProjectId,
+      vercelProjectId,
       deploymentRecordId,
       preferredUrl: opts.preferredUrl ?? null,
       message: `Published ${publishSha.slice(0, 7)} → ${publishedUrl}`,

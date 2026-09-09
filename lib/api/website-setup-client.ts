@@ -12,6 +12,8 @@ export type WebsiteSetupBriefClient = {
   confirmedAt?: string;
   validationIssues?: string[];
   updatedAt: string;
+  /** True when draft tip has package.json with next — required for preview unlock. */
+  draftRunnable?: boolean;
 };
 
 async function authToken() {
@@ -41,8 +43,13 @@ export async function fetchWebsiteSetupBrief(opts: {
     const data = (await res.json()) as {
       ok?: boolean;
       brief?: WebsiteSetupBriefClient;
+      draftRunnable?: boolean;
     };
-    return data.brief ?? null;
+    if (!data.brief) return null;
+    return {
+      ...data.brief,
+      draftRunnable: Boolean(data.draftRunnable),
+    };
   } catch {
     return null;
   }

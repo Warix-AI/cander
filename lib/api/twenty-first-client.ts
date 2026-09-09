@@ -71,6 +71,45 @@ export async function retrieveTwentyFirstForSiteSpecClient(opts: {
   };
 }
 
+export async function retrieveTwentyFirstForBuildPlanClient(opts: {
+  workspaceId: string;
+  projectId: string;
+  buildPlan: import("@/lib/ai/build/plan/types").BuildPlanJson;
+}): Promise<
+  SiteSpecRetrievalResult & {
+    researchManifest?: import("@/lib/ai/build/plan/types").ResearchManifest;
+  }
+> {
+  const data = await postTwentyFirst<
+    SiteSpecRetrievalResult & {
+      ok?: boolean;
+      researchManifest?: import("@/lib/ai/build/plan/types").ResearchManifest;
+    }
+  >({
+    action: "retrieve_for_build_plan",
+    workspaceId: opts.workspaceId,
+    projectId: opts.projectId,
+    buildPlan: opts.buildPlan,
+  });
+  if (!data) {
+    return {
+      components: [],
+      usedFallback: true,
+      connected: false,
+      toolsDiscovered: [],
+      error: "21st API unreachable",
+    };
+  }
+  return {
+    components: (data.components ?? []) as RetrievedComponentRef[],
+    usedFallback: Boolean(data.usedFallback),
+    connected: Boolean(data.connected),
+    toolsDiscovered: data.toolsDiscovered ?? [],
+    error: data.error,
+    researchManifest: data.researchManifest,
+  };
+}
+
 export async function searchTwentyFirstClient(opts: {
   workspaceId: string;
   projectId?: string | null;

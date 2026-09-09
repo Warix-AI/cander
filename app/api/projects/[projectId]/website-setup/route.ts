@@ -17,6 +17,7 @@ import {
   loadWebsiteSetupBrief,
   saveWebsiteSetupBrief,
 } from "@/lib/build/website-setup-brief-store";
+import { draftTipHasNextPackage } from "@/lib/build/git/draft-tip";
 
 export const runtime = "nodejs";
 
@@ -50,7 +51,20 @@ export async function GET(request: Request, ctx: RouteCtx) {
   }
 
   const brief = await loadWebsiteSetupBrief(projectId, workspaceId);
-  return NextResponse.json({ ok: true, brief });
+  const draftRunnable = await draftTipHasNextPackage({
+    projectId,
+    workspaceId,
+  });
+  // Never expose "ready" to clients when the tip cannot boot Next.
+  const gatedBrief =
+    brief.status === "ready" && !draftRunnable
+      ? { ...brief, status: "building" as const }
+      : brief;
+  return NextResponse.json({
+    ok: true,
+    brief: gatedBrief,
+    draftRunnable,
+  });
 }
 
 export async function PATCH(request: Request, ctx: RouteCtx) {
@@ -112,7 +126,18 @@ export async function PATCH(request: Request, ctx: RouteCtx) {
     brief = mergeAnswersIntoBrief(brief, body.answers);
   }
   if (body.status) {
-    brief = { ...brief, status: body.status };
+    let nextStatus = body.status;
+    // Fail closed: do not persist ready without a runnable Next tip.
+    if (nextStatus === "ready") {
+      const draftRunnable = await draftTipHasNextPackage({
+        projectId,
+        workspaceId,
+      });
+      if (!draftRunnable) {
+        nextStatus = "building";
+      }
+    }
+    brief = { ...brief, status: nextStatus };
   }
   if (typeof body.completedSteps === "number") {
     brief = {

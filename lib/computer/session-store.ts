@@ -1,4 +1,8 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import {
+  COMPUTER_SESSION_STATUS_COLUMNS,
+  noteSupabaseEgress,
+} from "@/lib/supabase/egress";
 import type {
   ComputerScopeType,
   ComputerSessionRecord,
@@ -58,7 +62,7 @@ export async function findActiveSessionByScope(
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("computer_sessions")
-    .select("*")
+    .select(COMPUTER_SESSION_STATUS_COLUMNS)
     .eq("user_id", userId)
     .eq("scope_type", scopeType)
     .eq("scope_id", scopeId)
@@ -67,10 +71,15 @@ export async function findActiveSessionByScope(
     .limit(1)
     .maybeSingle();
 
+  noteSupabaseEgress({
+    route: "computer_sessions.findActiveByScope",
+    columns: COMPUTER_SESSION_STATUS_COLUMNS,
+    rowCount: data ? 1 : 0,
+  });
   if (error || !data) {
     return null;
   }
-  return mapRow(data as ComputerSessionRow);
+  return mapRow(data as unknown as ComputerSessionRow);
 }
 
 /** Latest active build_app session for a project (any collaborator). */
@@ -80,17 +89,23 @@ export async function findActiveBuildSessionForProject(
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("computer_sessions")
-    .select("*")
+    .select(COMPUTER_SESSION_STATUS_COLUMNS)
     .eq("project_id", projectId)
     .eq("scope_type", "project")
     .in("status", ["starting", "active", "idle"])
     .order("last_active_at", { ascending: false })
     .limit(12);
 
+  noteSupabaseEgress({
+    route: "computer_sessions.findActiveBuild",
+    columns: COMPUTER_SESSION_STATUS_COLUMNS,
+    rowCount: data?.length ?? 0,
+  });
+
   if (error || !data?.length) {
     return null;
   }
-  const rows = data as ComputerSessionRow[];
+  const rows = data as unknown as ComputerSessionRow[];
   const build = rows.find((r) => r.build_state?.purpose === "build_app");
   return build ? mapRow(build) : null;
 }
@@ -101,11 +116,16 @@ export async function getComputerSessionRowById(
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("computer_sessions")
-    .select("*")
+    .select(COMPUTER_SESSION_STATUS_COLUMNS)
     .eq("id", sessionId)
     .maybeSingle();
+  noteSupabaseEgress({
+    route: "computer_sessions.getById",
+    columns: COMPUTER_SESSION_STATUS_COLUMNS,
+    rowCount: data ? 1 : 0,
+  });
   if (error || !data) return null;
-  return data as ComputerSessionRow;
+  return data as unknown as ComputerSessionRow;
 }
 
 export async function insertComputerSession(
@@ -124,12 +144,12 @@ export async function insertComputerSession(
   const { data, error } = await admin
     .from("computer_sessions")
     .insert(payload)
-    .select("*")
+    .select(COMPUTER_SESSION_STATUS_COLUMNS)
     .single();
   if (error || !data) {
     throw new Error(error?.message ?? "Failed to insert computer session.");
   }
-  return mapRow(data as ComputerSessionRow);
+  return mapRow(data as unknown as ComputerSessionRow);
 }
 
 export async function updateComputerSession(
@@ -154,7 +174,7 @@ export async function updateComputerSession(
     .from("computer_sessions")
     .update({ ...patch, last_active_at: patch.last_active_at ?? new Date().toISOString() })
     .eq("id", sessionId)
-    .select("*")
+    .select(COMPUTER_SESSION_STATUS_COLUMNS)
     .single();
   if (error || !data) {
     console.error("[computer] updateComputerSession failed", {
@@ -164,7 +184,7 @@ export async function updateComputerSession(
     });
     return null;
   }
-  return mapRow(data as ComputerSessionRow);
+  return mapRow(data as unknown as ComputerSessionRow);
 }
 
 export async function getComputerSessionById(
@@ -174,14 +194,14 @@ export async function getComputerSessionById(
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("computer_sessions")
-    .select("*")
+    .select(COMPUTER_SESSION_STATUS_COLUMNS)
     .eq("id", sessionId)
     .eq("user_id", userId)
     .maybeSingle();
   if (error || !data) {
     return null;
   }
-  return mapRow(data as ComputerSessionRow);
+  return mapRow(data as unknown as ComputerSessionRow);
 }
 
 export async function markComputerSessionStopped(sessionId: string): Promise<void> {
