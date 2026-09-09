@@ -38,6 +38,20 @@ export function sanitizeTwentyFirstVendorSource(source: string): string {
   );
   // Remove prior suppression if present — components must compile for real.
   out = out.replace(/^\s*\/\/\s*@ts-nocheck\s*\n?/m, "");
+
+  // embla-carousel-react no longer exports EmblaCarouselType / EmblaOptionsType.
+  if (
+    /EmblaCarouselType|EmblaOptionsType/.test(out) &&
+    /from\s+["']embla-carousel-react["']/.test(out)
+  ) {
+    out = out.replace(
+      /import\s+useEmblaCarousel\s*,\s*\{[\s\S]*?\}\s*from\s*["']embla-carousel-react["'];?/,
+      `import useEmblaCarousel from "embla-carousel-react";
+
+type EmblaCarouselType = NonNullable<ReturnType<typeof useEmblaCarousel>[1]>;
+type EmblaOptionsType = NonNullable<Parameters<typeof useEmblaCarousel>[0]>;`,
+    );
+  }
   return out;
 }
 
