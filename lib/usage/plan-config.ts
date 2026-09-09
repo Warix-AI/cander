@@ -162,7 +162,7 @@ function maxFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
       costWeightMicrosPerUnit: 800,
     }),
     coding_agent: feature({
-      enabled: false,
+      enabled: true,
       monthlyUnits: null,
       rateLimits: { perDay: 50, perHour: 10 },
       concurrentJobs: 1,

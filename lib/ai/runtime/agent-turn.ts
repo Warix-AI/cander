@@ -118,6 +118,34 @@ export async function runAssistantTurn(
       return runAgentBuilderTurn(request, opts);
     }
 
+    // Build site/app projects: write into sandbox instead of dumping HTML in chat.
+    const space = request.projectSpace?.trim().toLowerCase();
+    const isBuildProject =
+      Boolean(request.projectId?.trim()) &&
+      (space === "build" || space === "create") &&
+      request.projectKind !== "automation";
+    if (isBuildProject) {
+      const { resolveBuildCapabilities } = await import(
+        "@/lib/ai/build/capabilities"
+      );
+      const caps = resolveBuildCapabilities({
+        content: request.content,
+        activeSpace: request.projectSpace,
+        projectId: request.projectId,
+        projectKind: request.projectKind ?? "site",
+        hasBuildSpec: Boolean(request.projectId),
+      });
+      if (caps.requiresBuildCapabilities) {
+        latency?.mark("agent_probe_end");
+        latency?.setTransport("agent");
+        latency?.setSignals({ agentV2: false });
+        const { runBuildProjectTurn } = await import(
+          "@/lib/ai/build/project-turn"
+        );
+        return runBuildProjectTurn(request, opts);
+      }
+    }
+
     // Default chat uses streamed raw OpenAI (ChatGPT-style tokens).
     // Connector-scoped / calendar / Gmail turns must use the agent loop with tools.
     const preferRawChat = isRawOpenAIModeEnabled() && !needsConnectorTools;

@@ -173,9 +173,11 @@ import {
   isHttpUrl,
   normalizeBrowserUrl,
   previewUrlForProject,
+  draftPreviewUrlForSubdomain,
   displayHostFromUrl,
   titleFromUrl,
 } from "@/lib/preview-url";
+import type { BuildSandboxStatus } from "@/lib/build/sandbox/constants";
 import { recordBrowserVisit } from "@/lib/browser-recent-history";
 import type { ProjectKind, SpaceProject } from "@/lib/space-entities";
 import { DESKTOP_NO_DRAG, useDesktopShell } from "@/lib/desktop-shell";
@@ -332,6 +334,96 @@ export function ProjectBrowserPanel({
   useEffect(() => {
     setHydrated(true);
   }, []);
+
+  const [sandboxEnvStatus, setSandboxEnvStatus] =
+    useState<BuildSandboxStatus | null>(null);
+  const [sandboxEnvMessage, setSandboxEnvMessage] = useState<string | null>(
+    null,
+  );
+  const [sandboxPreviewSrc, setSandboxPreviewSrc] = useState<string | null>(
+    null,
+  );
+
+  // Build drafts: ensure infra/sandbox and point the pinned preview at draft--
+  // (never load `{projectId}.cander.app`, which embeds the Cander login shell).
+  useEffect(() => {
+    if (
+      standalone ||
+      !projectId ||
+      !ctx.workspaceId ||
+      browserSpaceId !== "build" ||
+      entity?.kind === "automation" ||
+      Boolean(entity?.publishedUrl)
+    ) {
+      return;
+    }
+    let cancelled = false;
+    setSandboxEnvStatus("starting");
+    setSandboxEnvMessage(null);
+    void (async () => {
+      try {
+        const infra = await import("@/lib/api/project-infra-client");
+        await infra.ensureProjectInfraClient({
+          projectId,
+          workspaceId: ctx.workspaceId,
+        });
+        const sandbox = await import("@/lib/api/project-sandbox-client");
+        const result = await sandbox.ensureProjectSandboxClient({
+          projectId,
+          workspaceId: ctx.workspaceId,
+        });
+        if (cancelled) return;
+        if (!result) {
+          setSandboxEnvStatus("unavailable");
+          setSandboxEnvMessage("Sign in required to start the build environment.");
+          setSandboxPreviewSrc(null);
+          return;
+        }
+        setSandboxEnvStatus(result.status);
+        setSandboxEnvMessage(result.message ?? result.error ?? null);
+        if (result.status === "ready" && result.previewPath) {
+          setSandboxPreviewSrc(`${result.previewPath}?_r=${Date.now()}`);
+        } else {
+          setSandboxPreviewSrc(null);
+        }
+        const draftUrl = draftPreviewUrlForSubdomain(result.subdomain);
+        if (draftUrl && key) {
+          const current = getProjectBrowserSession(key, fallback);
+          const pinnedId = current.tabs.find(
+            (t) => t.kind === "build-preview" && t.projectId === projectId,
+          )?.id;
+          if (pinnedId) {
+            const nextTabs = current.tabs.map((t) =>
+              t.id === pinnedId &&
+              (!isHttpUrl(t.url) || t.url.includes(`${projectId}.cander.app`))
+                ? {
+                    ...t,
+                    url: draftUrl,
+                    history: [draftUrl],
+                    historyIndex: 0,
+                  }
+                : t,
+            );
+            setProjectBrowserSession(key, {
+              ...current,
+              tabs: nextTabs,
+            });
+          }
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setSandboxEnvStatus("error");
+        setSandboxEnvMessage(
+          err instanceof Error ? err.message : "Failed to start sandbox",
+        );
+        setSandboxPreviewSrc(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per project
+  }, [standalone, projectId, ctx.workspaceId, browserSpaceId, entity?.kind, entity?.publishedUrl]);
 
   const session =
     hydrated && key
@@ -2236,6 +2328,38 @@ export function ProjectBrowserPanel({
           projectId={projectId}
           chatImageFallbackSrc={activeStudioChatImage.src}
           chatImageGenerating={activeStudioChatImage.generating}
+          sandboxEnvStatus={sandboxEnvStatus}
+          sandboxEnvMessage={sandboxEnvMessage}
+          sandboxPreviewSrc={sandboxPreviewSrc}
+          onSandboxRetry={() => {
+            if (!projectId || !ctx.workspaceId) return;
+            setSandboxEnvStatus("starting");
+            void import("@/lib/api/project-sandbox-client").then(async (m) => {
+              const result = await m.ensureProjectSandboxClient({
+                projectId,
+                workspaceId: ctx.workspaceId,
+                forceRestart: true,
+              });
+              if (!result) {
+                setSandboxEnvStatus("unavailable");
+                setSandboxEnvMessage("Sign in required.");
+                return;
+              }
+              setSandboxEnvStatus(result.status);
+              setSandboxEnvMessage(result.message ?? result.error ?? null);
+              if (result.status === "ready" && result.previewPath) {
+                setSandboxPreviewSrc(`${result.previewPath}?_r=${Date.now()}`);
+              }
+            });
+          }}
+          onSandboxReload={() => {
+            if (sandboxPreviewSrc) {
+              setSandboxPreviewSrc(
+                sandboxPreviewSrc.replace(/\?_r=\d+/, "") + `?_r=${Date.now()}`,
+              );
+            }
+            refreshPreview();
+          }}
           />
         </div>
         {mobile && mobileNavOpen ? (
@@ -2533,6 +2657,11 @@ function ProjectBrowserBody({
   projectId,
   chatImageFallbackSrc = null,
   chatImageGenerating = false,
+  sandboxEnvStatus = null,
+  sandboxEnvMessage = null,
+  sandboxPreviewSrc = null,
+  onSandboxRetry,
+  onSandboxReload,
 }: {
   tab: ProjectBrowserTab;
   projects: SpaceProject[];
@@ -2546,6 +2675,11 @@ function ProjectBrowserBody({
   projectId: string | null;
   chatImageFallbackSrc?: string | null;
   chatImageGenerating?: boolean;
+  sandboxEnvStatus?: BuildSandboxStatus | null;
+  sandboxEnvMessage?: string | null;
+  sandboxPreviewSrc?: string | null;
+  onSandboxRetry?: () => void;
+  onSandboxReload?: () => void;
 }) {
   const tab = repairAgentSurfaceTab(rawTab);
   const computerSession = useSyncExternalStore(
@@ -2786,11 +2920,26 @@ function ProjectBrowserBody({
   if (tab.kind === "build-preview" || tab.kind === "project-preview") {
     const match =
       projects.find((item) => item.id === tab.projectId) ?? null;
-    const previewUrl =
+    const published =
       match?.publishedUrl && isHttpUrl(match.publishedUrl)
         ? match.publishedUrl
-        : tab.url;
-    if (previewUrl && isHttpUrl(previewUrl) && !isGoogleUrl(previewUrl)) {
+        : null;
+    // Never embed platform hosts like `{uuid}.cander.app` (Cander login-in-iframe).
+    const looksLikePlatformEmbed =
+      Boolean(tab.url) &&
+      /https?:\/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.cander\.app/i.test(
+        tab.url,
+      );
+    const draftOrHttp =
+      !looksLikePlatformEmbed &&
+      tab.url &&
+      isHttpUrl(tab.url) &&
+      !isGoogleUrl(tab.url)
+        ? tab.url
+        : null;
+    const previewUrl = published ?? draftOrHttp;
+
+    if (published && previewUrl) {
       return (
         <div className="relative h-full min-h-0">
           <BrowserSurfaceHost
@@ -2811,10 +2960,17 @@ function ProjectBrowserBody({
         </div>
       );
     }
+
+    // Draft: same-origin path proxy iframe (or empty AppViewport while starting).
     return (
       <AppViewport
         name={match?.title ?? fallbackName}
         summary={match?.summary ?? fallbackSummary}
+        envStatus={sandboxEnvStatus}
+        envMessage={sandboxEnvMessage}
+        previewSrc={sandboxPreviewSrc}
+        onRetryEnv={onSandboxRetry}
+        onReloadPreview={onSandboxReload}
       />
     );
   }

@@ -1,14 +1,30 @@
-import { buildPreviews } from "@/lib/data";
+import {
+  draftPreviewUrl,
+  productionAppUrl,
+} from "@/lib/build/preview/urls";
 
+/**
+ * Resolve the browser tab URL for a project.
+ * Never invent `{projectId}.cander.app` — that loads the Cander platform
+ * inside the embedded preview (login/welcome). Unpublished drafts stay blank
+ * until sandbox ensure supplies a draft-- host or path preview.
+ */
 export function previewUrlForProject(
-  projectId: string,
+  _projectId: string,
   publishedUrl?: string | null,
+  opts?: { canderSubdomain?: string | null },
 ) {
-  if (publishedUrl) return publishedUrl;
-  const preview = buildPreviews.find((item) => item.projectId === projectId);
-  if (!preview) return `https://${projectId}.cander.app`;
-  const slug = preview.name.toLowerCase().replace(/\s+/g, "-");
-  return `https://${slug}.cander.app`;
+  if (publishedUrl?.trim()) return publishedUrl.trim();
+  const sub = opts?.canderSubdomain?.trim().toLowerCase();
+  if (sub) return productionAppUrl(sub);
+  return "about:blank";
+}
+
+/** Draft sandbox host once subdomain is known (from infra/sandbox ensure). */
+export function draftPreviewUrlForSubdomain(subdomain: string | null | undefined) {
+  const sub = subdomain?.trim().toLowerCase();
+  if (!sub) return null;
+  return draftPreviewUrl(sub);
 }
 
 export function titleFromUrl(url: string) {
