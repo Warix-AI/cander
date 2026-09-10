@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import { assertProjectAccess } from "@/lib/security/project-access";
 import { restoreDraftToSha } from "@/lib/build/git/draft-history";
-import { ensureProjectSandbox } from "@/lib/build/sandbox/lifecycle";
+import { connectProjectRuntime } from "@/lib/build/sandbox/runtime";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -62,13 +62,14 @@ export async function POST(request: Request, ctx: RouteCtx) {
       sha,
     });
 
-    let sandbox: Awaited<ReturnType<typeof ensureProjectSandbox>> | null = null;
+    // Connect fast-forwards the existing VM to the restored tip; the VM is
+    // only recreated when it is genuinely dead.
+    let sandbox: Awaited<ReturnType<typeof connectProjectRuntime>> | null = null;
     if (body.restartSandbox !== false) {
-      sandbox = await ensureProjectSandbox({
+      sandbox = await connectProjectRuntime({
         userId: auth.user.id,
         projectId,
         workspaceId,
-        forceRestart: !restored.alreadyAtTip,
       });
     }
 

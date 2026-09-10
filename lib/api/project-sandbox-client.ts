@@ -2,7 +2,17 @@
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/data-backend";
-import type { BuildSandboxStatus } from "@/lib/build/sandbox/constants";
+import type {
+  BuildSandboxStatus,
+  ProjectRuntimeState,
+} from "@/lib/build/sandbox/constants";
+
+/**
+ * connect: resume / first-create, never destroys.
+ * repair:  escalating fix (restart dev server → reinstall → recreate).
+ * reset:   explicit fresh clone (user-intended only).
+ */
+export type ProjectRuntimeMode = "connect" | "repair" | "reset";
 
 async function authToken() {
   const supabase = createSupabaseBrowserClient();
@@ -15,6 +25,8 @@ async function authToken() {
 export type ProjectSandboxClientResult = {
   ok: boolean;
   status: BuildSandboxStatus;
+  /** User-safe runtime state (present on new servers). */
+  state?: ProjectRuntimeState;
   sessionId: string | null;
   subdomain: string | null;
   draftBranch: string | null;
@@ -31,12 +43,16 @@ export type ProjectSandboxClientResult = {
 export async function ensureProjectSandboxClient(opts: {
   projectId: string;
   workspaceId: string;
+  /** @deprecated use `mode: "repair"` — kept for older callers; maps to repair. */
   forceRestart?: boolean;
+  mode?: ProjectRuntimeMode;
 }): Promise<ProjectSandboxClientResult | null> {
   if (!isSupabaseConfigured()) return null;
   const token = await authToken();
   if (!token) return null;
 
+  const mode: ProjectRuntimeMode =
+    opts.mode ?? (opts.forceRestart ? "repair" : "connect");
   try {
     const res = await fetch(
       `/api/projects/${encodeURIComponent(opts.projectId)}/sandbox/ensure`,
@@ -48,7 +64,7 @@ export async function ensureProjectSandboxClient(opts: {
         },
         body: JSON.stringify({
           workspaceId: opts.workspaceId,
-          forceRestart: opts.forceRestart,
+          mode,
         }),
       },
     );
@@ -88,6 +104,7 @@ export async function ensureProjectSandboxClient(opts: {
       draftBranch: data.draftBranch ?? null,
       draftSha: data.draftSha ?? null,
       githubFullName: data.githubFullName ?? null,
+      state: data.state,
       hasPreviewUpstream: Boolean(data.hasPreviewUpstream),
       previewPath: data.previewPath ?? null,
       previewHost: data.previewHost ?? null,
@@ -142,6 +159,7 @@ export async function getProjectSandboxStatusClient(opts: {
       draftBranch: data.draftBranch ?? null,
       draftSha: data.draftSha ?? null,
       githubFullName: data.githubFullName ?? null,
+      state: data.state,
       hasPreviewUpstream: Boolean(data.hasPreviewUpstream),
       previewPath: data.previewPath ?? null,
       previewHost: data.previewHost ?? null,

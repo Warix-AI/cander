@@ -198,10 +198,23 @@ export async function getComputerSessionById(
     .eq("id", sessionId)
     .eq("user_id", userId)
     .maybeSingle();
-  if (error || !data) {
-    return null;
+  if (!error && data) {
+    return mapRow(data as unknown as ComputerSessionRow);
   }
-  return mapRow(data as unknown as ComputerSessionRow);
+  // Build sandboxes are one-per-project and shared by every collaborator
+  // (callers already asserted project access). Browser/spike sessions stay
+  // strictly per-user.
+  const { data: shared } = await admin
+    .from("computer_sessions")
+    .select(COMPUTER_SESSION_STATUS_COLUMNS)
+    .eq("id", sessionId)
+    .eq("scope_type", "project")
+    .maybeSingle();
+  const row = shared as unknown as ComputerSessionRow | null;
+  if (row && row.build_state?.purpose === "build_app") {
+    return mapRow(row);
+  }
+  return null;
 }
 
 export async function markComputerSessionStopped(sessionId: string): Promise<void> {

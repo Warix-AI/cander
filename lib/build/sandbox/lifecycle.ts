@@ -12,10 +12,14 @@ import { getGitHubInstallationToken } from "@/lib/build/git/installation-token";
 import {
   BUILD_APP_PORT,
   BUILD_SANDBOX_PURPOSE,
+  BUILD_SANDBOX_RECORD_TTL_MS,
+  BUILD_SANDBOX_SNAPSHOT_EXPIRATION_MS,
   BUILD_SANDBOX_TTL_MS,
   type BuildSandboxState,
   type BuildSandboxStatus,
 } from "@/lib/build/sandbox/constants";
+import { configureSandboxGitAuth, refreshSandboxGitAuth } from "@/lib/build/sandbox/git-auth";
+import { withProjectSandboxLease } from "@/lib/build/sandbox/lease";
 import { projectPreviewPath } from "@/lib/build/preview/urls";
 import type { AgentBrowserSandbox } from "@/lib/computer/spike/agent-browser-bootstrap";
 import type { ComputerSessionRecord } from "@/lib/computer/computer-provider";
@@ -26,6 +30,7 @@ import {
   stopSessionRecordById,
 } from "@/lib/computer/session-runtime";
 import {
+  findActiveBuildSessionForProject,
   findActiveSessionByScope,
   getComputerSessionById,
   getComputerSessionRowById,
@@ -168,6 +173,34 @@ async function persistPreviewUpstream(opts: {
   });
 }
 
+/**
+ * Retire a build VM for good (reset / dead / replaced). Persistent sandboxes
+ * are deleted so their snapshots do not accumulate on the Vercel team.
+ */
+async function retireBuildSession(session: ComputerSessionRecord): Promise<void> {
+  try {
+    const row = await getComputerSessionRowById(session.id);
+    const state = (row?.build_state ?? null) as BuildSandboxState | null;
+    if (state?.persistent) {
+      try {
+        const sandbox = await resumeSandbox(session);
+        const sb = sandbox as unknown as { delete?: () => Promise<unknown> };
+        if (sb.delete) {
+          await sb.delete();
+          const { markComputerSessionStopped } = await import("@/lib/computer/session-store");
+          await markComputerSessionStopped(session.id);
+          return;
+        }
+      } catch (err) {
+        console.warn("[cander:sandbox] persistent delete failed; stopping", err instanceof Error ? err.message : err);
+      }
+    }
+    await stopSessionRecordById(session.id, session.userId);
+  } catch {
+    await updateComputerSession(session.id, { status: "stopped" });
+  }
+}
+
 async function tryResumeBuildSession(
   session: ComputerSessionRecord,
 ): Promise<{
@@ -198,7 +231,11 @@ async function tryResumeBuildSession(
     };
     await writeBuildState(session.id, state);
     await updateComputerSession(session.id, {
-      expires_at: new Date(Date.now() + BUILD_SANDBOX_TTL_MS).toISOString(),
+      // Persistent sandboxes restore their filesystem on the next session, so
+      // the record outlives any single running session.
+      expires_at: new Date(
+        Date.now() + (prev?.persistent ? BUILD_SANDBOX_RECORD_TTL_MS : BUILD_SANDBOX_TTL_MS),
+      ).toISOString(),
       stream_url: previewUpstream,
     });
     return { ok: true, previewUpstream, state };
@@ -223,6 +260,10 @@ async function createBuildSandboxFromGit(opts: {
   const sessionId = createComputerSessionId();
   const token = await getGitHubInstallationToken();
   const cloneUrl = `https://github.com/${opts.fullName}.git`;
+  // One persistent VM per project. The name is stable per *generation*: a
+  // reset creates a new generation; everything else resumes this one.
+  const sandboxName = `cbx-${opts.projectId.replace(/-/g, "").slice(0, 20)}-${sessionId.slice(3, 9)}`;
+  const persistentEnabled = process.env.CANDER_SANDBOX_PERSISTENT !== "0";
 
   const startingState: BuildSandboxState = {
     purpose: BUILD_SANDBOX_PURPOSE,
@@ -231,6 +272,7 @@ async function createBuildSandboxFromGit(opts: {
     draftBranch: opts.draftBranch,
     draftSha: opts.draftSha ?? undefined,
     previewUpstream: null,
+    persistent: persistentEnabled,
     message: "Cloning repository…",
     updatedAt: nowIso(),
   };
@@ -245,14 +287,16 @@ async function createBuildSandboxFromGit(opts: {
     workspace_id: opts.workspaceId,
     task_id: null,
     provider: "vercel_sandbox",
-    provider_session_id: sessionId,
+    provider_session_id: sandboxName,
     status: "starting",
     control_mode: "agent",
     current_url: null,
     stream_url: null,
     browser_state: null,
     build_state: startingState,
-    expires_at: new Date(Date.now() + BUILD_SANDBOX_TTL_MS).toISOString(),
+    expires_at: new Date(
+      Date.now() + (persistentEnabled ? BUILD_SANDBOX_RECORD_TTL_MS : BUILD_SANDBOX_TTL_MS),
+    ).toISOString(),
   });
 
   await patchProjectSandbox(opts.projectId, opts.workspaceId, {
@@ -262,11 +306,11 @@ async function createBuildSandboxFromGit(opts: {
 
   try {
     const creds = getSandboxCredentials();
-    const sandbox = (await Sandbox.create({
+    const baseParams = {
       ...creds,
-      name: sessionId,
+      name: sandboxName,
       source: {
-        type: "git",
+        type: "git" as const,
         url: cloneUrl,
         username: "x-access-token",
         password: token,
@@ -282,7 +326,34 @@ async function createBuildSandboxFromGit(opts: {
         // Vercel tag values are short; use truncated ids
         project: opts.projectId.replace(/-/g, "").slice(0, 24),
       },
-    })) as unknown as AgentBrowserSandbox;
+    };
+    let sandbox: AgentBrowserSandbox;
+    let persistent = persistentEnabled;
+    try {
+      sandbox = (await Sandbox.create(
+        persistentEnabled
+          ? {
+              ...baseParams,
+              persistent: true,
+              snapshotExpiration: BUILD_SANDBOX_SNAPSHOT_EXPIRATION_MS,
+              keepLastSnapshots: { count: 1 },
+            }
+          : baseParams,
+      )) as unknown as AgentBrowserSandbox;
+    } catch (err) {
+      if (!persistentEnabled) throw err;
+      // Plan without persistence / snapshots: fall back to a plain VM.
+      console.warn(
+        "[cander:sandbox] persistent create failed; falling back",
+        err instanceof Error ? err.message : err,
+      );
+      persistent = false;
+      sandbox = (await Sandbox.create(baseParams)) as unknown as AgentBrowserSandbox;
+      await writeBuildState(sessionId, { ...startingState, persistent: false });
+      await updateComputerSession(sessionId, {
+        expires_at: new Date(Date.now() + BUILD_SANDBOX_TTL_MS).toISOString(),
+      });
+    }
 
     cacheSandboxHandle(sessionId, sandbox);
 
@@ -319,6 +390,10 @@ git rev-parse --short HEAD`,
       console.warn("[cander] flatten git clone", err);
     }
 
+    // Token-free remote + refreshable credential store, so git fetches keep
+    // working for the whole life of the VM (installation tokens expire in 1h).
+    await configureSandboxGitAuth(sandbox, opts.fullName);
+
     let previewUpstream: string | null = null;
     try {
       previewUpstream = sandbox.domain(BUILD_APP_PORT);
@@ -333,6 +408,7 @@ git rev-parse --short HEAD`,
       draftBranch: opts.draftBranch,
       draftSha: opts.draftSha ?? undefined,
       previewUpstream,
+      persistent,
       message: "Environment ready",
       updatedAt: nowIso(),
     };
@@ -340,7 +416,7 @@ git rev-parse --short HEAD`,
     await updateComputerSession(sessionId, {
       status: "active",
       stream_url: previewUpstream,
-      provider_session_id: sessionId,
+      provider_session_id: sandboxName,
     });
     await patchProjectSandbox(opts.projectId, opts.workspaceId, {
       sandbox_session_id: sessionId,
@@ -474,16 +550,30 @@ export async function ensureProjectSandbox(opts: {
   const scopeId = `build:${opts.projectId}`;
   // Serialize concurrent ensures for the same project within this instance
   // (preview panel, build panel, publish and the job runner all call this).
-  const inflightKey = `${opts.userId}:${opts.projectId}:${opts.forceRestart ? "force" : "ensure"}`;
+  // Restart requests join an in-flight ensure too: a second VM is never the
+  // answer to "someone else is already working on this project's VM".
+  const inflightKey = `${opts.projectId}`;
   const inflight = ENSURE_INFLIGHT.get(inflightKey);
   if (inflight) return inflight;
-  const run = ensureProjectSandboxInner(opts, {
-    infra,
-    fullName,
-    draftBranch,
-    draftSha,
-    scopeId,
-  }).finally(() => {
+  const ctx = { infra, fullName, draftBranch, draftSha, scopeId };
+  const run = withProjectSandboxLease(
+    { projectId: opts.projectId },
+    () => ensureProjectSandboxInner(opts, ctx),
+    // Another instance holds the lease past our wait — report, don't race.
+    async () =>
+      publicResult({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+        status: "starting",
+        sessionId: null,
+        subdomain: infra.subdomain,
+        draftBranch,
+        draftSha,
+        githubFullName: fullName,
+        reused: true,
+        message: "Starting preview…",
+      }),
+  ).finally(() => {
     ENSURE_INFLIGHT.delete(inflightKey);
   });
   ENSURE_INFLIGHT.set(inflightKey, run);
@@ -491,6 +581,26 @@ export async function ensureProjectSandbox(opts: {
 }
 
 const ENSURE_INFLIGHT = new Map<string, Promise<EnsureProjectSandboxResult>>();
+
+/**
+ * Keep the project's running session alive after a user interaction and
+ * record the touch for idle GC. Cheap; safe to call often.
+ */
+export async function touchProjectSandbox(opts: {
+  sessionId: string;
+  userId: string;
+}): Promise<void> {
+  try {
+    const { resolveSandboxForSession } = await import("@/lib/computer/session-runtime");
+    const resolved = await resolveSandboxForSession(opts.sessionId, opts.userId);
+    const sb = resolved?.sandbox as unknown as { extendTimeout?: (ms: number) => Promise<void> } | undefined;
+    // Extend by the idle window; Vercel caps at the plan maximum.
+    await sb?.extendTimeout?.(BUILD_SANDBOX_TTL_MS / 2).catch(() => undefined);
+    await updateComputerSession(opts.sessionId, { last_active_at: nowIso() });
+  } catch (err) {
+    console.warn("[cander:sandbox] touch failed", err instanceof Error ? err.message : err);
+  }
+}
 
 /**
  * Move a live sandbox checkout to the project tip without recreating the VM.
@@ -501,11 +611,17 @@ async function fastForwardSandboxToTip(opts: {
   sessionId: string;
   userId: string;
   tipSha: string;
+  fullName: string;
 }): Promise<boolean> {
   try {
     const { runPrivilegedSandboxCommand } = await import(
       "@/lib/build/sandbox/privileged"
     );
+    await refreshSandboxGitAuth({
+      sessionId: opts.sessionId,
+      userId: opts.userId,
+      fullName: opts.fullName,
+    });
     const res = await runPrivilegedSandboxCommand({
       sessionId: opts.sessionId,
       userId: opts.userId,
@@ -518,9 +634,9 @@ async function fastForwardSandboxToTip(opts: {
           '[ -d .git ] || { echo NO_GIT; exit 2; }',
           'if [ -n "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]; then echo DIRTY; exit 3; fi',
           'if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then',
-          '  git fetch --depth=1 origin "$SHA" 2>/dev/null || git fetch origin "$SHA" 2>/dev/null || git fetch --depth=30 origin cander/draft 2>/dev/null || true',
+          '  git fetch --depth=1 origin "$SHA" 2>>/tmp/cander-git-fetch.log || git fetch origin "$SHA" 2>>/tmp/cander-git-fetch.log || git fetch --depth=30 origin cander/draft 2>>/tmp/cander-git-fetch.log || true',
           "fi",
-          'git cat-file -e "${SHA}^{commit}" 2>/dev/null || { echo NO_COMMIT; exit 4; }',
+          'git cat-file -e "${SHA}^{commit}" 2>/dev/null || { echo NO_COMMIT; tail -n 5 /tmp/cander-git-fetch.log 2>/dev/null; exit 4; }',
           'git reset --hard "$SHA" >/dev/null',
           'git clean -fd -e node_modules -e .next -e .cander -e .env -e .env.local >/dev/null 2>&1 || true',
           "git rev-parse HEAD",
@@ -566,16 +682,36 @@ async function ensureProjectSandboxInner(
   },
 ): Promise<EnsureProjectSandboxResult> {
   const { infra, fullName, draftBranch, draftSha, scopeId } = ctx;
-  const existing = await findActiveSessionByScope(
-    opts.userId,
-    "project",
-    scopeId,
-  );
+  // One VM per project, shared by all collaborators.
+  const existing =
+    (await findActiveBuildSessionForProject(opts.projectId)) ??
+    (await findActiveSessionByScope(opts.userId, "project", scopeId));
   const existingRowForGuards = existing
     ? await getComputerSessionRowById(existing.id)
     : null;
   const existingState = (existingRowForGuards?.build_state ?? null) as BuildSandboxState | null;
   const existingIsBuild = Boolean(existing && existingState?.purpose === BUILD_SANDBOX_PURPOSE);
+
+  // A build job is working inside this VM: no caller (Retry, probe recovery,
+  // finalize heal, publish) may destroy it. Downgrade restart to reuse.
+  if (existingIsBuild && existing && opts.forceRestart) {
+    try {
+      const { findActiveBuildJob } = await import("@/lib/build/jobs/store");
+      const job = await findActiveBuildJob({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+      });
+      if (job && job.facts.sessionId === existing.id) {
+        console.info("[cander:sandbox] restart refused — build job active in VM", {
+          projectId: opts.projectId,
+          jobId: job.id,
+        });
+        opts = { ...opts, forceRestart: false };
+      }
+    } catch (err) {
+      console.warn("[cander:sandbox] restart job guard skipped", err instanceof Error ? err.message : err);
+    }
+  }
 
   if (existingIsBuild && existing && !opts.forceRestart) {
     // Guard 1: someone else is already creating this project's sandbox
@@ -629,7 +765,7 @@ async function ensureProjectSandboxInner(
 
   if (existingIsBuild && existing && opts.forceRestart) {
     try {
-      await stopSessionRecordById(existing.id, existing.userId);
+      await retireBuildSession(existing);
     } catch {
       await updateComputerSession(existing.id, { status: "stopped" });
     }
@@ -665,6 +801,7 @@ async function ensureProjectSandboxInner(
         sessionId: existing.id,
         userId: opts.userId,
         tipSha,
+        fullName,
       });
       if (synced) {
         console.info("[cander:sandbox] tip moved; fast-forwarded checkout", {
@@ -681,7 +818,7 @@ async function ensureProjectSandboxInner(
         tipSha: tipSha.slice(0, 12),
       });
       try {
-        await stopSessionRecordById(existing.id, existing.userId);
+        await retireBuildSession(existing);
       } catch {
         await updateComputerSession(existing.id, { status: "stopped" });
       }
@@ -760,7 +897,7 @@ async function ensureProjectSandboxInner(
 
         if (recreateFromGit) {
           try {
-            await stopSessionRecordById(existing.id, existing.userId);
+            await retireBuildSession(existing);
           } catch {
             await updateComputerSession(existing.id, { status: "stopped" });
           }
@@ -800,7 +937,7 @@ async function ensureProjectSandboxInner(
       } else {
         // Resume failed — GC stale sandbox before recreate.
         try {
-          await stopSessionRecordById(existing.id, existing.userId);
+          await retireBuildSession(existing);
         } catch {
           await updateComputerSession(existing.id, { status: "stopped" });
         }

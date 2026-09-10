@@ -6,6 +6,7 @@ import {
   assessPreviewHealth,
   formatDraftFailedMessage,
 } from "@/lib/build/preview/health";
+import { RUNTIME_STATE_COPY } from "@/lib/build/sandbox/constants";
 
 export type ApplyDraftPreviewResult =
   | { ok: true; previewSrc: string }
@@ -39,13 +40,16 @@ export async function probeDraftPreviewPath(
       bodyText: probeBody.slice(0, 8000),
     });
     if (!health.ok) {
+      // Diagnostics go to the console; the user sees state copy only.
+      console.info("[cander:preview] probe unhealthy", {
+        status: probeRes.status,
+        reason: formatDraftFailedMessage(health.reason || "Preview returned an error."),
+      });
       return {
         ok: false,
         status: probeRes.status,
         recoverable: RECOVERABLE_STATUSES.has(probeRes.status),
-        message: formatDraftFailedMessage(
-          health.reason || "Preview returned an error.",
-        ),
+        message: RUNTIME_STATE_COPY.needs_retry,
       };
     }
     // Keep the src stable across probes so a remounted (or re-probed) draft
@@ -55,14 +59,12 @@ export async function probeDraftPreviewPath(
       : previewPath;
     return { ok: true, previewSrc };
   } catch (err) {
+    console.info("[cander:preview] probe failed", err instanceof Error ? err.message : err);
     return {
       ok: false,
       status: null,
       recoverable: true,
-      message:
-        err instanceof Error
-          ? `Draft failed to start: ${err.message}`
-          : "Draft failed to start: preview probe failed.",
+      message: RUNTIME_STATE_COPY.starting,
     };
   }
 }

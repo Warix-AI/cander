@@ -204,7 +204,16 @@ done | head -n 100`,
   });
 
   try {
-    await runPrivilegedSandboxCommand({
+    // Fresh installation token first — the clone-time token expires in 1h.
+    if (committed.fullName) {
+      const { refreshSandboxGitAuth } = await import("@/lib/build/sandbox/git-auth");
+      await refreshSandboxGitAuth({
+        sessionId: opts.sessionId,
+        userId: opts.userId,
+        fullName: committed.fullName,
+      });
+    }
+    const sync = await runPrivilegedSandboxCommand({
       sessionId: opts.sessionId,
       userId: opts.userId,
       cmd: "sh",
@@ -213,11 +222,17 @@ done | head -n 100`,
         // The commit was created through the GitHub API, so fetch it before
         // moving HEAD — otherwise the checkout stays "dirty" forever and the
         // next tip move forces a VM recreate instead of a fast-forward.
-        `SHA=${JSON.stringify(committed.draftSha)}; (git fetch --depth=1 origin "$SHA" 2>/dev/null || git fetch origin "$SHA" 2>/dev/null || true); git add -A >/dev/null 2>&1; git reset --hard "$SHA" >/dev/null 2>&1 || true`,
+        `SHA=${JSON.stringify(committed.draftSha)}; (git fetch --depth=1 origin "$SHA" 2>>/tmp/cander-git-fetch.log || git fetch origin "$SHA" 2>>/tmp/cander-git-fetch.log || true); git add -A >/dev/null 2>&1; git reset --hard "$SHA" >/dev/null 2>&1 || { echo RESET_FAILED; tail -n 5 /tmp/cander-git-fetch.log 2>/dev/null; }`,
       ],
     });
-  } catch {
-    /* optional */
+    if (/RESET_FAILED/.test(sync.stdout || "")) {
+      console.warn("[cander:persist] in-VM sync to tip failed", {
+        sessionId: opts.sessionId,
+        detail: (sync.stdout || "").slice(0, 400),
+      });
+    }
+  } catch (err) {
+    console.warn("[cander:persist] in-VM sync skipped", err instanceof Error ? err.message : err);
   }
 
   // The working tree is now the draft tip — pin it so the next ensure() reuses

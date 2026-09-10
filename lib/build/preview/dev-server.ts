@@ -107,7 +107,9 @@ export async function ensureSandboxDevServer(opts: {
     cmd: "sh",
     args: [
       "-c",
-      `npm install --no-fund --no-audit > /tmp/cander-npm-install.log 2>&1; echo "__CANDER_NPM_EXIT:$?"`,
+      // Warm (persistent) VMs already have node_modules: prefer the local cache
+      // so a resumed session is back in seconds instead of a full install.
+      `if [ -d node_modules ]; then npm install --no-fund --no-audit --prefer-offline > /tmp/cander-npm-install.log 2>&1; else npm install --no-fund --no-audit > /tmp/cander-npm-install.log 2>&1; fi; echo "__CANDER_NPM_EXIT:$?"`,
     ],
   });
   const installOut = install.stdout || "";

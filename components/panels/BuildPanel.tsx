@@ -83,7 +83,7 @@ export function BuildPanel() {
     enabled: entityKind === "site",
   });
 
-  const ensureSandbox = (forceRestart = false) => {
+  const ensureSandbox = (repair = false) => {
     if (!projectId || !ctx.workspaceId) return;
     if (setupBlocksPreview) return;
     setEnvStatus("starting");
@@ -92,7 +92,7 @@ export function BuildPanel() {
       const result = await m.ensureProjectSandboxClient({
         projectId,
         workspaceId: ctx.workspaceId,
-        forceRestart,
+        mode: repair ? "repair" : "connect",
       });
       if (!result) {
         setEnvStatus("unavailable");

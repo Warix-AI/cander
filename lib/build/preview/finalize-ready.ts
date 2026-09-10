@@ -10,6 +10,7 @@ import {
 } from "@/lib/build/build-phase";
 import { draftTipHasNextPackage } from "@/lib/build/git/draft-tip";
 import { ensureProjectSandbox } from "@/lib/build/sandbox/lifecycle";
+import { repairProjectRuntime } from "@/lib/build/sandbox/runtime";
 import { getComputerSessionRowById } from "@/lib/computer/session-store";
 import { runSandboxPreviewCheck } from "@/lib/build/preview/preview-check";
 import {
@@ -138,16 +139,16 @@ export async function finalizeBuildReady(opts: {
       projectDraftSha: draftSha,
     })
   ) {
-    console.info("[cander:build-ready] SHA mismatch; force recreating sandbox", {
+    console.info("[cander:build-ready] SHA mismatch; repairing sandbox", {
       projectId: opts.projectId,
       sandboxSha: (sandboxSha || "").slice(0, 12),
       tipSha: draftSha.slice(0, 12),
     });
-    sandbox = await ensureProjectSandbox({
+    // Repair fast-forwards the VM to the tip and only recreates if it is dead.
+    sandbox = await repairProjectRuntime({
       userId: opts.userId,
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
-      forceRestart: true,
     });
     if (sandbox.status === "error" || !sandbox.sessionId) {
       await setProjectBuildPhase({
@@ -221,11 +222,10 @@ export async function finalizeBuildReady(opts: {
       console.warn("[cander:build-ready] heal ensure failed", err);
     }
 
-    const healedSandbox = await ensureProjectSandbox({
+    const healedSandbox = await repairProjectRuntime({
       userId: opts.userId,
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
-      forceRestart: true,
     });
     const healedSessionId = healedSandbox.sessionId;
     if (healedSandbox.status !== "error" && healedSessionId) {

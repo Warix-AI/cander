@@ -3689,7 +3689,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               await sandbox.ensureProjectSandboxClient({
                 projectId: projectForPreview,
                 workspaceId,
-                forceRestart: false,
+                mode: "connect",
               });
               window.dispatchEvent(
                 new CustomEvent("cander:website-preview-reload", {

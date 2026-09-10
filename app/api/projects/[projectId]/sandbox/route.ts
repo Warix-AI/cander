@@ -6,7 +6,7 @@
 import { NextResponse } from "next/server";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import { assertProjectAccess } from "@/lib/security/project-access";
-import { getProjectSandboxStatus } from "@/lib/build/sandbox/lifecycle";
+import { getProjectRuntimeStatus } from "@/lib/build/sandbox/runtime";
 
 export const runtime = "nodejs";
 
@@ -39,6 +39,6 @@ export async function GET(request: Request, ctx: RouteCtx) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
-  const result = await getProjectSandboxStatus({ projectId, workspaceId });
+  const result = await getProjectRuntimeStatus({ projectId, workspaceId });
   return NextResponse.json({ ok: true, ...result });
 }

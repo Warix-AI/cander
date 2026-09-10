@@ -377,7 +377,7 @@ export function ProjectBrowserPanel({
             const result = await sandbox.ensureProjectSandboxClient({
               projectId,
               workspaceId: ctx.workspaceId,
-              forceRestart: true,
+              mode: "repair",
             });
             if (!result) return;
             setSandboxEnvMessage(result.message ?? result.error ?? null);
@@ -494,15 +494,11 @@ export function ProjectBrowserPanel({
           projectId,
           workspaceId: ctx.workspaceId,
         });
-        const needsFresh =
-          !status?.sessionId ||
-          status.status === "idle" ||
-          status.status === "error" ||
-          /No package\.json/i.test(status.message || "");
+        // Errored runtimes get an escalating repair; everything else resumes.
         const result = await sandbox.ensureProjectSandboxClient({
           projectId,
           workspaceId: ctx.workspaceId,
-          forceRestart: needsFresh,
+          mode: status?.status === "error" ? "repair" : "connect",
         });
         if (cancelled) return;
         if (!result) {
@@ -561,10 +557,9 @@ export function ProjectBrowserPanel({
         }
       } catch (err) {
         if (cancelled) return;
+        console.info("[cander:preview] start failed", err instanceof Error ? err.message : err);
         setSandboxEnvStatus("error");
-        setSandboxEnvMessage(
-          err instanceof Error ? err.message : "Failed to start sandbox",
-        );
+        setSandboxEnvMessage("The preview didn’t start. Try again.");
         setSandboxPreviewSrc(null);
         setDraftPreviewUrl(null);
       }
@@ -618,17 +613,17 @@ export function ProjectBrowserPanel({
           setDraftPreviewUrl(draftUrl);
           return;
         }
-        // Empty/stale sandbox while draft exists — one recreate ensure, not a loop.
+        // Runtime reported an error while we wait — one repair pass, not a loop.
         if (
           !recreateAttempted &&
           result.draftSha &&
-          /No package\.json/i.test(result.message || "")
+          result.status === "error"
         ) {
           recreateAttempted = true;
           const restarted = await sandbox.ensureProjectSandboxClient({
             projectId,
             workspaceId: ctx.workspaceId,
-            forceRestart: true,
+            mode: "repair",
           });
           if (cancelled || !restarted) return;
           setSandboxEnvMessage(restarted.message ?? restarted.error ?? null);
@@ -674,7 +669,7 @@ export function ProjectBrowserPanel({
           const resumed = await sandbox.ensureProjectSandboxClient({
             projectId,
             workspaceId: ctx.workspaceId,
-            forceRestart: !result.sessionId,
+            mode: "connect",
           });
           if (cancelled || !resumed) return;
           setSandboxEnvMessage(resumed.message ?? resumed.error ?? null);
@@ -2848,23 +2843,18 @@ export function ProjectBrowserPanel({
                     }),
                   );
                 } else if (finalized && finalized.ok === false) {
+                  console.info("[cander:preview] finalize failed", {
+                    reason: finalized.reason || finalized.error,
+                    diagnostics: finalized.diagnostics,
+                  });
                   setSandboxEnvStatus("error");
-                  setSandboxEnvMessage(
-                    [
-                      finalized.reason ||
-                        finalized.error ||
-                        "Preview finalization failed.",
-                      finalized.diagnostics,
-                    ]
-                      .filter(Boolean)
-                      .join("\n"),
-                  );
+                  setSandboxEnvMessage("The preview didn’t start. Try again.");
                 }
                 const m = await import("@/lib/api/project-sandbox-client");
                 const result = await m.ensureProjectSandboxClient({
                   projectId,
                   workspaceId: ctx.workspaceId,
-                  forceRestart: true,
+                  mode: "repair",
                 });
                 if (!result) {
                   setSandboxEnvStatus("unavailable");
@@ -2872,13 +2862,7 @@ export function ProjectBrowserPanel({
                   return;
                 }
                 setSandboxEnvStatus(result.status);
-                setSandboxEnvMessage(
-                  result.message ??
-                    result.error ??
-                    (finalized && !finalized.ok
-                      ? finalized.reason || finalized.error || null
-                      : null),
-                );
+                setSandboxEnvMessage(result.message ?? result.error ?? null);
                 const draftUrl = draftPreviewUrlForSubdomain(result.subdomain);
                 if (draftUrl) setDraftPreviewUrl(draftUrl);
                 if (
