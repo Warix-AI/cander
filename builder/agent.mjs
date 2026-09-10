@@ -27,6 +27,8 @@ export async function runAgent(opts) {
   let lastText = "";
   let idleTurns = 0;
   let finishRejections = 0;
+  /** Consecutive check_preview rounds where every route failed (0/5xx). */
+  let deadPreviewStreak = 0;
 
   for (;;) {
     if (Date.now() > budget.deadlineMs) {
@@ -128,7 +130,7 @@ export async function runAgent(opts) {
             call_id: call.callId,
             output: `finish REJECTED — fix these before finishing:\n${verdict.feedback || "verification failed"}`,
           });
-          if (finishRejections >= 6) {
+          if (finishRejections >= 3) {
             return {
               finished: false,
               summary: finish.summary,
@@ -141,10 +143,40 @@ export async function runAgent(opts) {
         continue;
       }
       const result = await tools.call(call.name, call.arguments);
+      let output = result.output;
+      if (call.name === "check_preview") {
+        const text = String(output || "");
+        const lines = text.split("\n").filter((l) => /→ HTTP\s+\d+/.test(l));
+        const allDead =
+          lines.length > 0 &&
+          lines.every((l) => /→ HTTP\s+(0|[45]\d\d)\b/.test(l));
+        if (allDead) {
+          deadPreviewStreak += 1;
+          if (deadPreviewStreak >= 3) {
+            output +=
+              "\n\nSTOP: the preview has failed " +
+              deadPreviewStreak +
+              " times in a row. Do NOT run npm run dev / next dev / pkill. " +
+              "Fix code with edit_file if you see a clear compile error; otherwise call finish(summary, routes) and let final verification restart the preview.";
+          }
+          if (deadPreviewStreak >= 5) {
+            return {
+              finished: false,
+              summary: "",
+              routes: [],
+              reason: "verification_failed",
+              lastText:
+                "Preview stayed down after repeated checks. Stopped to avoid burning more tokens — hit Retry.",
+            };
+          }
+        } else if (lines.length) {
+          deadPreviewStreak = 0;
+        }
+      }
       outputs.push({
         type: "function_call_output",
         call_id: call.callId,
-        output: result.output,
+        output,
       });
     }
 

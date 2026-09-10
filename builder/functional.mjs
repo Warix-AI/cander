@@ -48,28 +48,18 @@ export function ensurePlaywright(opts) {
         opts.log.emit("verify", "Preparing the browser for functional checks…");
         const install = await execShell(
           `cd ${JSON.stringify(pwDir)} && (test -f package.json || npm init -y >/dev/null 2>&1) && npm i --no-audit --no-fund --silent playwright-core@1 @playwright/browser-chromium@1`,
-          { cwd: pwDir, timeoutMs: 240_000, env },
+          { cwd: pwDir, timeoutMs: 90_000, env },
         );
         if (install.exitCode !== 0) throw new Error(`npm install failed: ${(install.stderr || install.stdout).slice(-400)}`);
       }
       const require = createRequire(join(pwDir, "package.json"));
       const pw = require("playwright-core");
-      // Sanity launch — pulls missing system libs via dnf when we are allowed to.
+      // Sanity launch — if system libs are missing, skip (don't sudo-install for minutes).
       let browser;
       try {
         browser = await pw.chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
       } catch (err) {
-        const msg = String(err?.message || err);
-        if (/error while loading shared libraries|cannot open shared object/i.test(msg)) {
-          opts.log.emit("verify", "Installing browser system libraries…");
-          await execShell(
-            "sudo -n dnf install -y nss atk at-spi2-atk cups-libs libdrm libxkbcommon libXcomposite libXdamage libXrandr mesa-libgbm alsa-lib pango libXfixes libXext libX11 libxcb 2>&1 | tail -3 || true",
-            { cwd: pwDir, timeoutMs: 240_000 },
-          );
-          browser = await pw.chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
-        } else {
-          throw err;
-        }
+        throw new Error(`Chromium launch failed (skipping functional checks): ${String(err?.message || err).slice(0, 200)}`);
       }
       await browser.close();
       opts.log.emit("verify", `Browser ready (${Math.round((Date.now() - started) / 1000)}s)`);

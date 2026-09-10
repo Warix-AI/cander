@@ -70,6 +70,10 @@ const EDIT_WALL_CLOCK_MS = 25 * 60 * 1000;
 const STALL_GRACE_MS = 3 * 60 * 1000;
 /** Fail even when the builder PID is still alive but emits nothing (hung next/dev, etc.). */
 const EVENT_STALL_MS = 10 * 60 * 1000;
+/** Completing (persist + preview) must not hang forever after the agent finished. */
+const VERIFY_STALL_MS = 8 * 60 * 1000;
+/** Don't let finalizeBuildReady block the serverless worker indefinitely. */
+const FINALIZE_READY_TIMEOUT_MS = 4 * 60 * 1000;
 
 type BuilderSandbox = {
   runCommand(params: {
@@ -471,6 +475,7 @@ export async function syncBuildJob(jobId: string): Promise<BuildJob | null> {
   const p = (async () => {
     const job = await getBuildJob(jobId);
     if (!job) throw new Error("job not found");
+    if (job.status === "verifying") return reclaimStuckVerifyingJob(job);
     if (job.status !== "running") return job;
     return pullAndProcess(job);
   })();
@@ -480,6 +485,80 @@ export async function syncBuildJob(jobId: string): Promise<BuildJob | null> {
   } finally {
     syncInFlight.delete(jobId);
   }
+}
+
+/**
+ * After the builder emits `finished`, the server moves the job to `verifying`
+ * and runs persist + finalize. If that worker dies mid-flight (common on long
+ * finalize), the UI stays on "Checking your pages…" forever. Recover:
+ * - draft already saved → mark ready
+ * - otherwise fail with Retry after VERIFY_STALL_MS
+ */
+async function reclaimStuckVerifyingJob(job: BuildJob): Promise<BuildJob> {
+  const lastAt = Date.parse(job.updatedAt || job.facts.lastEventAt || job.createdAt);
+  const age = Date.now() - (Number.isFinite(lastAt) ? lastAt : Date.now());
+  if (age < VERIFY_STALL_MS) return job;
+
+  const draftSha = job.facts.draftSha || null;
+  // Prefer project tip — persist may have written it before the hang.
+  let tip: string | null = draftSha;
+  try {
+    const admin = (await import("@/lib/supabase/admin")).createSupabaseAdminClient();
+    const { data } = await admin
+      .from("projects")
+      .select("draft_sha")
+      .eq("id", job.projectId)
+      .maybeSingle();
+    if (data?.draft_sha) tip = String(data.draft_sha);
+  } catch {
+    /* ignore */
+  }
+
+  if (tip) {
+    console.warn(LOG, "reclaim verifying → ready", { jobId: job.id, tip, ageMs: age });
+    await appendBuildJobEvents(job.id, [
+      {
+        seq: 100003,
+        kind: "status",
+        message: job.facts.mode === "edit" ? "Preview ready" : "Draft ready",
+        payload: { server: true, draftSha: tip, reclaimed: true },
+      },
+    ]).catch(() => {});
+    try {
+      await setProjectBuildPhase({
+        projectId: job.projectId,
+        workspaceId: job.workspaceId,
+        phase: "ready",
+      });
+    } catch {
+      /* ignore */
+    }
+    const summary =
+      job.facts.summary ||
+      job.resultSummary ||
+      (job.facts.mode === "edit" ? "Your change is in the preview." : "Your draft is ready.");
+    const done = await updateBuildJob(job.id, {
+      status: "ready_for_review",
+      progressNote: job.facts.mode === "edit" ? "Preview ready" : "Draft ready",
+      resultSummary: summary,
+      facts: {
+        finishedAt: new Date().toISOString(),
+        draftSha: tip,
+        verifyOk: true,
+        summary,
+        error: undefined,
+      },
+    });
+    await startNextQueuedJob(job);
+    return done ?? job;
+  }
+
+  return (
+    (await failBuildJob(
+      job,
+      "Something took too long while finishing the preview. Hit Retry, or tell me what to try next.",
+    )) ?? job
+  );
 }
 
 async function pullAndProcess(job: BuildJob): Promise<BuildJob> {
@@ -699,6 +778,10 @@ async function completeBuildJob(
       throw new Error(persisted.error || "Draft commit saved but database sync failed.");
     }
     let draftSha = persisted.draftSha || null;
+    await updateBuildJob(job.id, {
+      progressNote: job.facts.mode === "edit" ? "Saving your change…" : "Saving your draft…",
+      facts: { draftSha },
+    }).catch(() => {});
     await appendBuildJobEvents(job.id, [
       {
         seq: 100001,
@@ -716,15 +799,45 @@ async function completeBuildJob(
       await appendBuildJobEvents(job.id, [
         { seq: 100002, kind: "status", message: "Starting the preview", payload: { server: true } },
       ]);
-      const ready = await finalizeBuildReady({
-        userId,
-        projectId: job.projectId,
-        workspaceId: job.workspaceId,
-      });
+      const ready = await Promise.race([
+        finalizeBuildReady({
+          userId,
+          projectId: job.projectId,
+          workspaceId: job.workspaceId,
+        }),
+        new Promise<Awaited<ReturnType<typeof finalizeBuildReady>>>((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                ok: false,
+                phase: "failed",
+                draftSha: draftSha,
+                sessionId: sessionId,
+                reason: "Preview startup timed out after the draft was saved.",
+              }),
+            FINALIZE_READY_TIMEOUT_MS,
+          ),
+        ),
+      ]);
       if (!ready.ok) {
-        throw new Error(ready.reason || "Preview did not become ready.");
+        // Draft is already on GitHub — unlock the UI as ready rather than
+        // leaving the job stuck in verifying (Codex already finished).
+        console.warn(LOG, "finalize timed out/failed; marking ready with saved draft", {
+          jobId: job.id,
+          reason: ready.reason,
+          draftSha,
+        });
+        await appendBuildJobEvents(job.id, [
+          {
+            seq: 100010,
+            kind: "log",
+            message: `Preview finalize deferred: ${ready.reason || "unknown"}`,
+            payload: { server: true },
+          },
+        ]).catch(() => {});
+      } else {
+        draftSha = ready.draftSha ?? draftSha;
       }
-      draftSha = ready.draftSha ?? draftSha;
     } else {
       // Edit: the warm dev server already reflects the change via HMR — just
       // confirm it still answers. No sandbox recreate, no phase churn.
