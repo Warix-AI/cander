@@ -734,7 +734,40 @@ async function runCreateWebsitePipeline(opts: {
       .filter(Boolean)
       .join("\n"),
   };
-  const spec = await planWebsite(planRequest, turnOpts);
+  let spec = await planWebsite(planRequest, turnOpts);
+
+  // Plan-first: BuildPlan nav must match SiteSpec pages we actually compose.
+  // Landing briefs → hash nav; multi-page → expand SiteSpec pages from the plan.
+  if (planFirst && activeBuildPlan?.json) {
+    const { reconcilePlanNavWithSiteSpec } = await import(
+      "@/lib/ai/build/reconcile-plan-spec"
+    );
+    const reconciled = reconcilePlanNavWithSiteSpec({
+      plan: activeBuildPlan.json,
+      spec,
+      brief,
+      userContent: request.content,
+    });
+    spec = reconciled.spec;
+    activeBuildPlan = {
+      ...activeBuildPlan,
+      json: reconciled.plan,
+      updatedAt: new Date().toISOString(),
+    };
+    await savePlanFirstArtifacts({
+      projectId,
+      workspaceId,
+      buildPlan: activeBuildPlan,
+    });
+    report({
+      phase: "thinking",
+      label: "Building",
+      detail:
+        reconciled.mode === "landing"
+          ? "Aligned landing-page nav to on-page sections…"
+          : "Aligned multi-page nav with App Router pages…",
+    });
+  }
 
   report({
     phase: "thinking",
@@ -1109,14 +1142,15 @@ async function runCreateWebsitePipeline(opts: {
       priorResults: toolResults,
     });
     toolResults.push(...(repair.toolResults ?? []));
-    // Re-validate against composed Spec files (proxy for structure).
+    // Re-compose from the reconciled SiteSpec (not a stale copy) and re-check.
+    files = [...vendorFiles, ...composeSiteFromSpec(spec)];
     validation = planFirst
       ? validatePlanFirstTip({
-          files: composeSiteFromSpec(spec),
+          files,
           spec,
           plan: activeBuildPlan?.json,
         })
-      : validateWebsiteFiles({ files: composeSiteFromSpec(spec), spec });
+      : validateWebsiteFiles({ files, spec });
   }
 
   if (!validation.ok) {
