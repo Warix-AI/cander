@@ -18,6 +18,8 @@ const SKIP_PREFIXES = [
   ".local/",
   ".npm/",
   ".vercel/",
+  /** Builder runtime + job logs (Website Builder V2) — never committed. */
+  ".cander/",
 ];
 
 const SKIP_NAMES = new Set([
@@ -30,7 +32,14 @@ const SKIP_NAMES = new Set([
 export function shouldSkipPersistPath(path: string): boolean {
   const base = path.split("/").pop() || path;
   if (SKIP_NAMES.has(base) || SKIP_NAMES.has(path)) return true;
-  if (path === "node_modules" || path === ".next" || path === ".codex") return true;
+  if (
+    path === "node_modules" ||
+    path === ".next" ||
+    path === ".codex" ||
+    path === ".cander"
+  ) {
+    return true;
+  }
   return SKIP_PREFIXES.some(
     (p) => path === p.slice(0, -1) || path.startsWith(p) || path === p.replace(/\/$/, ""),
   );

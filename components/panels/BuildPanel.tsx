@@ -15,6 +15,7 @@ import {
 } from "@/lib/hooks/use-space-query";
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
 import { useWebsiteSetupBrief } from "@/lib/hooks/use-website-setup-brief";
+import { useBuildJob } from "@/lib/hooks/use-build-job";
 import { threadsForProject } from "@/lib/selectors";
 import type { BuildTool } from "@/lib/types";
 import { SHELL_PANEL_BODY, SHELL_PANEL_SCROLL } from "@/lib/shell-chrome";
@@ -74,6 +75,12 @@ export function BuildPanel() {
     projectId,
     workspaceId: ctx.workspaceId,
     kind: entityKind,
+  });
+  // Website Builder V2: live progress from the sandbox builder job.
+  const buildJob = useBuildJob({
+    projectId,
+    workspaceId: ctx.workspaceId,
+    enabled: entityKind === "site" && websiteBrief?.status === "building",
   });
 
   const ensureSandbox = (forceRestart = false) => {
@@ -373,7 +380,13 @@ export function BuildPanel() {
                       status: websiteBrief?.status ?? "setup",
                       completedSteps: websiteBrief?.completedSteps ?? 0,
                       detail:
-                        websiteBrief?.validationIssues?.[0] || envMessage || null,
+                        websiteBrief?.status === "building" && buildJob.latestProgress
+                          ? buildJob.latestProgress
+                          : websiteBrief?.validationIssues?.[0] || envMessage || null,
+                      steps:
+                        websiteBrief?.status === "building" && buildJob.isActive
+                          ? buildJob.progressLines
+                          : null,
                     }
                   : null
               }

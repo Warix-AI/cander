@@ -123,6 +123,7 @@ import {
 } from "@/lib/shared-markdown";
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import { useWebsiteSetupBrief } from "@/lib/hooks/use-website-setup-brief";
+import { useBuildJob } from "@/lib/hooks/use-build-job";
 import {
   deleteStudioProjectAsset,
   editStudioProjectImage,
@@ -359,6 +360,12 @@ export function ProjectBrowserPanel({
       kind: entity?.kind,
       enabled: entity?.kind === "site" || browserSpaceId === "build",
     });
+  // Website Builder V2: live progress from the sandbox builder job.
+  const buildJob = useBuildJob({
+    projectId,
+    workspaceId: ctx.workspaceId,
+    enabled: entity?.kind === "site" && websiteBrief?.status === "building",
+  });
 
   // Build drafts: ensure infra/sandbox and point the pinned preview at draft--
   // (never load `{projectId}.cander.app`, which embeds the Cander login shell).
@@ -2720,9 +2727,15 @@ export function ProjectBrowserPanel({
                   status: websiteBrief?.status ?? "setup",
                   completedSteps: websiteBrief?.completedSteps ?? 0,
                   detail:
-                    websiteBrief?.validationIssues?.[0] ||
-                    sandboxEnvMessage ||
-                    null,
+                    websiteBrief?.status === "building" && buildJob.latestProgress
+                      ? buildJob.latestProgress
+                      : websiteBrief?.validationIssues?.[0] ||
+                        sandboxEnvMessage ||
+                        null,
+                  steps:
+                    websiteBrief?.status === "building" && buildJob.isActive
+                      ? buildJob.progressLines
+                      : null,
                 }
               : null
           }
@@ -3147,6 +3160,7 @@ function ProjectBrowserBody({
     status: "setup" | "building" | "ready" | "failed";
     completedSteps: number;
     detail?: string | null;
+    steps?: string[] | null;
   } | null;
   onSandboxRetry?: () => void;
   onSandboxReload?: () => void;

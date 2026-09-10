@@ -43,6 +43,7 @@ export function AppViewport({
     status: "setup" | "building" | "ready" | "failed";
     completedSteps: number;
     detail?: string | null;
+    steps?: string[] | null;
   } | null;
 }) {
   const { viewport, previewKey, project } = useApp();
@@ -138,6 +139,7 @@ export function AppViewport({
                     : "setup"
               }
               detail={websiteSetup.detail}
+              steps={websiteSetup.steps}
               onRetry={
                 websiteSetup.status === "failed" ? onRetryEnv : undefined
               }

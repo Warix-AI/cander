@@ -31,6 +31,7 @@ import { composeSiteFromSpec } from "@/lib/ai/build/compose-site";
 import { planWebsite } from "@/lib/ai/build/plan-website";
 import { isPlanFirstBuildEnabled } from "@/lib/ai/build/plan/flag";
 import { BUILD_RETRY_BUDGETS } from "@/lib/ai/build/retry-budgets";
+import { isBuildV2Enabled } from "@/lib/build/jobs/flag";
 import {
   classifyBuildMessageIntent,
   looksLikeCodeDump,
@@ -554,6 +555,73 @@ async function runSitePublishCommandTurn(
           ? "publish_requested:ready"
           : "publish_requested:not_ready",
         pauseForUser: true,
+      },
+    ],
+  };
+}
+
+/**
+ * V2 create: start a builder job in the sandbox. The chat reply is immediate;
+ * the preview panel shows "Drafting your website" fed by the job's events and
+ * the job itself commits + finalizes the draft when done.
+ */
+async function runBuildV2CreateTurn(
+  request: AiGenerateRequest,
+  opts: AgentTurnOptions | undefined,
+  ctx: { projectId: string; workspaceId: string },
+): Promise<AgentTurnResult> {
+  const report = opts?.onProgress ?? (() => {});
+  report({
+    phase: "thinking",
+    label: "Building",
+    detail: "Starting your website build…",
+  });
+  const { startBuildJobClient } = await import("@/lib/api/build-jobs-client");
+  const started = await startBuildJobClient({
+    projectId: ctx.projectId,
+    workspaceId: ctx.workspaceId,
+    mode: "create",
+    threadId: request.aiChatId ?? null,
+  });
+  if (!started.ok) {
+    const alreadyRunning = started.status === 409;
+    return {
+      content: alreadyRunning
+        ? "Your website is already being drafted — hang tight, the preview will update as soon as it’s ready."
+        : `I couldn’t start the build: ${started.error || "unknown error"}. Try **Build my site** again in a moment.`,
+      runtime: "cloud",
+      offline: false,
+      condensationOccurred: false,
+      aiChatId: request.aiChatId ?? null,
+      toolResults: [
+        {
+          name: "build.job.start",
+          ok: false,
+          output: started.error || `HTTP ${started.status}`,
+        },
+      ],
+    };
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("cander:build-job-started", {
+        detail: { projectId: ctx.projectId, jobId: started.job?.id },
+      }),
+    );
+  }
+  return {
+    content:
+      "Drafting your website — hang tight. I’m planning the pages, writing the copy and components, and checking every route. You’ll see the draft appear on the right when it’s ready; this can take a while for a full site.",
+    runtime: "cloud",
+    offline: false,
+    condensationOccurred: false,
+    aiChatId: request.aiChatId ?? null,
+    toolResults: [
+      {
+        name: "build.job.start",
+        ok: true,
+        output: `job ${started.job?.id ?? "?"} started`,
+        data: { jobId: started.job?.id ?? null, mode: "create" },
       },
     ],
   };
@@ -1954,6 +2022,11 @@ export async function runBuildProjectTurn(
           updatedAt: new Date().toISOString(),
         },
       });
+    }
+    // Website Builder V2: hand the whole create to a sandbox builder job and
+    // return immediately; the right panel streams progress from the job.
+    if (isSiteProject && isBuildV2Enabled()) {
+      return runBuildV2CreateTurn(request, opts, { projectId, workspaceId });
     }
     report({
       phase: "thinking",

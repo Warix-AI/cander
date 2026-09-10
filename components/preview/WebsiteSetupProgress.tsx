@@ -38,6 +38,7 @@ export function WebsiteSetupProgress({
   label,
   onRetry,
   detail,
+  steps,
 }: {
   /** 0–8 filled segments during setup */
   completedSteps?: number;
@@ -47,6 +48,8 @@ export function WebsiteSetupProgress({
   /** Failed: re-run /build/ready finalization */
   onRetry?: () => void;
   detail?: string | null;
+  /** Building (V2): recent progress lines from the builder job, oldest first. */
+  steps?: string[] | null;
 }) {
   const filled = Math.max(0, Math.min(SEGMENTS, Math.floor(completedSteps)));
   const spinning = mode === "building";
@@ -116,15 +119,32 @@ export function WebsiteSetupProgress({
         {/* Mark stays stationary — only the ring animates. */}
         <CanderMark tone="color" className="!h-5 !w-5" />
       </div>
-      <p className="mt-4 max-w-[16rem] text-center text-[13px] text-neutral-500">
+      <p className="mt-4 max-w-[18rem] text-center text-[13px] text-neutral-500">
         {spinning
-          ? "Building your draft…"
+          ? steps?.length
+            ? "Drafting your website — hang tight."
+            : "Building your draft…"
           : mode === "failed"
             ? "Draft preview failed to start."
             : filled >= SEGMENTS
               ? "Confirm in chat to build."
               : "Answer the setup questions in chat."}
       </p>
+      {spinning && (detail || steps?.length) ? (
+        <div className="mt-3 flex max-w-sm flex-col items-center gap-1 text-center">
+          {(steps?.length ? steps.slice(-4, -1) : []).map((line, i) => (
+            <p
+              key={`${i}-${line}`}
+              className="max-w-sm truncate text-[12px] leading-relaxed text-neutral-300"
+            >
+              {line}
+            </p>
+          ))}
+          <p className="max-w-sm text-[12.5px] leading-relaxed text-neutral-400">
+            {steps?.length ? steps[steps.length - 1] : detail}
+          </p>
+        </div>
+      ) : null}
       {mode === "failed" && detail ? (
         <p className="mt-2 max-w-sm text-center text-[12.5px] leading-relaxed text-neutral-400">
           {detail}
