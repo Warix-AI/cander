@@ -16,8 +16,8 @@ import {
   Download,
   ExternalLink,
   Globe,
-  MousePointer2,
   Pencil,
+  RotateCw,
   Trash2,
   Upload,
   X,
@@ -296,6 +296,7 @@ export function ProjectActionsSheetBody({
   onSelectElement,
   onRename,
   onDelete,
+  onReload,
   compact = false,
 }: {
   published?: boolean;
@@ -305,6 +306,7 @@ export function ProjectActionsSheetBody({
   onSelectElement: () => void;
   onRename?: () => void;
   onDelete?: () => void;
+  onReload?: () => void;
   /** Tighter padding when embedded in the header popover. */
   compact?: boolean;
 }) {
@@ -360,12 +362,9 @@ export function ProjectActionsSheetBody({
               label="Open in new tab"
               onClick={onOpenExternal}
             />
-            <SheetAction
-              icon={MousePointer2}
-              label="Select element"
-              active={selectMode}
-              onClick={onSelectElement}
-            />
+            {onReload ? (
+              <SheetAction icon={RotateCw} label="Reload" onClick={onReload} />
+            ) : null}
             {canRename && onRename ? (
               <SheetAction
                 icon={Pencil}

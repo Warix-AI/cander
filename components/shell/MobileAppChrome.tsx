@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore, type TouchEventHandler } from "react";
-import { Blocks, ChevronLeft, Ellipsis, ExternalLink, Globe, Hammer, Image as ImageIcon, PanelsTopLeft, Plus, RotateCw, Search, Share, SquarePen, Trash2 } from "lucide-react";
+import { Blocks, ChevronLeft, Ellipsis, ExternalLink, Globe, Hammer, Image as ImageIcon, PanelsTopLeft, Plus, Search, Share, SquarePen, Trash2 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
@@ -631,40 +631,18 @@ export function MobileAppChrome({ className }: { className?: string }) {
 
           <div className="relative z-10 flex items-center justify-self-end gap-0.5">
             {showProjectTools ? (
-              <>
+              actionsOpen ? (
+                <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
+              ) : (
                 <button
                   type="button"
-                  aria-label="Reload"
-                  onClick={() => {
-                    refreshPreview();
-                    window.dispatchEvent(
-                      new CustomEvent("cander:website-preview-reload", {
-                        detail: { projectId },
-                      }),
-                    );
-                    try {
-                      getNativeCapabilities().haptics.impact("select");
-                    } catch {
-                      /* never block */
-                    }
-                  }}
+                  aria-label="Project tools"
+                  onClick={openProjectActions}
                   className={mobileChromeButtonClass}
                 >
-                  <RotateCw className="h-5 w-5" strokeWidth={1.8} />
+                  <Ellipsis className="h-5 w-5" strokeWidth={1.8} />
                 </button>
-                {actionsOpen ? (
-                  <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
-                ) : (
-                  <button
-                    type="button"
-                    aria-label="Project tools"
-                    onClick={openProjectActions}
-                    className={mobileChromeButtonClass}
-                  >
-                    <Ellipsis className="h-5 w-5" strokeWidth={1.8} />
-                  </button>
-                )}
-              </>
+              )
             ) : showCreateWorkspace ? (
               <button
                 type="button"
@@ -790,6 +768,15 @@ export function MobileAppChrome({ className }: { className?: string }) {
                 setSelectMode(!selectMode);
                 setPanelMode("split");
                 setMobileSurface("panel");
+                setActionsOpen(false);
+              }}
+              onReload={() => {
+                refreshPreview();
+                window.dispatchEvent(
+                  new CustomEvent("cander:website-preview-reload", {
+                    detail: { projectId },
+                  }),
+                );
                 setActionsOpen(false);
               }}
             />

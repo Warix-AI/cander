@@ -1329,6 +1329,18 @@ export function ProjectBrowserPanel({
     !isBuildSiteOrApp &&
     session.tabs.length > 0 &&
     (session.tabs.length > 1 || spaceId === "research" || standalone);
+  // Mobile website/app: always the draft surface (no live-domain address bar / web tab).
+  useEffect(() => {
+    if (!mobile || !isBuildSiteOrApp || !key) return;
+    const draft = session.tabs.find(
+      (tab) => tab.kind === "build-preview" || tab.kind === "project-preview",
+    );
+    if (!draft || session.activeTabId === draft.id) return;
+    write({
+      tabs: session.tabs,
+      activeTabId: draft.id,
+    });
+  }, [mobile, isBuildSiteOrApp, key, session.activeTabId, session.tabs, write]);
   const address =
     active.kind === "studio-document" || active.kind === "agent-browser"
       ? navigationUrl
@@ -1431,7 +1443,10 @@ export function ProjectBrowserPanel({
     isBuildSiteOrApp &&
     (active?.kind === "build-preview" || active?.kind === "project-preview");
   const showBrowserNavChrome = isBuildSiteOrApp
-    ? active?.kind === "web"
+    ? // Mobile stays on the draft tab only — no live-site address chrome.
+      mobile
+      ? false
+      : active?.kind === "web"
     : isAgentSurfaceTab || isAgentProject
       ? active?.kind === "web" && !isAgentSurfaceTab
       : isMarkdownDocTab

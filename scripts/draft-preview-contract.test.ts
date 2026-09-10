@@ -141,6 +141,24 @@ describe("persist porcelain + patch", () => {
 });
 
 describe("setup gate + draft chrome", () => {
+  it("pending brief does not flash guided-setup overlay or block sandbox", () => {
+    const pending = websiteSetupPreviewGate({
+      isSite: true,
+      status: null,
+      briefPending: true,
+    });
+    assert.equal(pending.setupBlocksPreview, false);
+    assert.equal(pending.showSetupOverlay, false);
+    assert.equal(pending.isPreviewReady, false);
+
+    const unknown = websiteSetupPreviewGate({
+      isSite: true,
+      status: null,
+    });
+    assert.equal(unknown.setupBlocksPreview, false);
+    assert.equal(unknown.showSetupOverlay, false);
+  });
+
   it("failed does not use setupBlocksPreview; overlay + retry path remain", () => {
     const failed = websiteSetupPreviewGate({
       isSite: true,
