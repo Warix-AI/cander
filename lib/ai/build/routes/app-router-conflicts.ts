@@ -35,7 +35,29 @@ export type AppRouteFileRef = {
   ext: AppRouterExtension;
   /** Stable key: `app/page` or `app/about/page` */
   key: string;
+  /**
+   * URL path this file serves after route groups are stripped:
+   * `app/(marketing)/page.tsx` → `/`, `app/(shop)/pricing/page.tsx` → `/pricing`.
+   */
+  urlPath: string;
 };
+
+/** Strip `(group)` segments and map an app dir to the URL it serves. */
+export function appDirToUrlPath(dir: string): string {
+  const segs = dir
+    .replace(/^app\/?/, "")
+    .split("/")
+    .filter((s) => s && !/^\(.*\)$/.test(s) && !/^@/.test(s));
+  return `/${segs.join("/")}`.replace(/\/+$/, "") || "/";
+}
+
+/** True when some `page.*` resolves to `/` (root page, possibly inside a route group). */
+export function hasRootPage(paths: string[]): boolean {
+  return paths.some((p) => {
+    const ref = parseAppRouterFile(p);
+    return ref?.segment === "page" && ref.urlPath === "/";
+  });
+}
 
 export function parseAppRouterFile(path: string): AppRouteFileRef | null {
   const normalized = path.replace(/^\.\//, "").replace(/\\/g, "/");
@@ -50,6 +72,7 @@ export function parseAppRouterFile(path: string): AppRouteFileRef | null {
     segment,
     ext,
     key: `${dir}/${segment}`,
+    urlPath: appDirToUrlPath(dir),
   };
 }
 
@@ -144,6 +167,28 @@ export function findDuplicateAppRouterRoutes(
         key,
         paths: unique,
         message: `Duplicate App Router files for ${key}: ${unique.join(", ")}`,
+      });
+    }
+  }
+  // Pages in different route groups that serve the same URL
+  // (`app/page.tsx` + `app/(marketing)/page.tsx`) — Next refuses to build
+  // these, and a "repair" that re-adds app/page.tsx creates exactly this.
+  const byUrl = new Map<string, string[]>();
+  for (const raw of paths) {
+    const ref = parseAppRouterFile(raw);
+    if (!ref || ref.segment !== "page") continue;
+    const list = byUrl.get(ref.urlPath) ?? [];
+    list.push(ref.path);
+    byUrl.set(ref.urlPath, list);
+  }
+  const reported = new Set(issues.map((i) => i.paths.join("|")));
+  for (const [url, files] of byUrl) {
+    const unique = [...new Set(files)].sort();
+    if (unique.length > 1 && !reported.has(unique.join("|"))) {
+      issues.push({
+        key: `route:${url}`,
+        paths: unique,
+        message: `Two pages resolve to ${url}: ${unique.join(", ")} — keep one.`,
       });
     }
   }

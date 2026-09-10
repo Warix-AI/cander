@@ -26,7 +26,7 @@ Tone, vocabulary to use/avoid, 3 headline options for the hero, tagline.
 ## Components
 Shared components to build (Header, MobileNav, Footer, Section, CTA band, Testimonial card, FAQ accordion, ContactForm…). Then a line per 21st.dev search worth running, formatted exactly: \`search: <query>\` (max 6).
 ## SEO
-Title template, meta description per page (one line each), Organization/LocalBusiness JSON-LD fields.
+Title template, meta description per page (one line each), canonical = SITE_URL + route, OG image concept (headline + brand colors for the generated 1200×630 image), Organization/LocalBusiness JSON-LD fields using SITE_URL.
 
 No code. No placeholders — invent realistic, specific details when the brief is thin, and mark them "(assumed)".`;
 
@@ -62,7 +62,7 @@ No placeholder colors — pick real values.`;
 const RESEARCH_INSTRUCTIONS = `You are a market researcher for a web agency. Using web search, gather what a best-in-class website in this exact niche does today: 4–6 competitor or exemplar sites (name + URL + what they do well), typical page structure, trust signals customers expect (certifications, guarantees, reviews), pricing presentation norms, and 5 industry-specific phrases/terms to use. Output terse Markdown (max ~500 words). Cite URLs inline.`;
 
 /**
- * @param {{ llm: import("./llm.mjs").LlmClient, log: import("./events.mjs").EventLog, model: string, projectKind?: "site"|"app", projectName?: string, brief: Record<string, unknown>|null, instruction?: string|null, twentyFirst?: import("./twenty-first.mjs").TwentyFirstClient|null, webSearch?: boolean, deadlineMs: number }} opts
+ * @param {{ llm: import("./llm.mjs").LlmClient, log: import("./events.mjs").EventLog, model: string, projectKind?: "site"|"app", projectName?: string, siteUrl?: string|null, brief: Record<string, unknown>|null, instruction?: string|null, twentyFirst?: import("./twenty-first.mjs").TwentyFirstClient|null, webSearch?: boolean, deadlineMs: number }} opts
  * @returns {Promise<{ markdown: string, routes: string[] }|null>}
  */
 export async function runPlanningPhase(opts) {
@@ -79,6 +79,7 @@ export async function runPlanningPhase(opts) {
   const briefText = opts.brief ? formatBrief(opts.brief) : "(none provided)";
   const input = [
     `Project name: ${opts.projectName || "Untitled"}`,
+    opts.siteUrl ? `SITE_URL: ${opts.siteUrl}` : "",
     isApp ? "" : `Onboarding brief:\n${briefText}`,
     opts.instruction
       ? `${isApp ? "Product request from the user" : "Extra instruction from the user"}:\n${opts.instruction}`

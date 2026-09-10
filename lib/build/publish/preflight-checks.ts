@@ -4,7 +4,10 @@
  */
 
 import { packageJsonHasNext } from "@/lib/ai/build/site-package";
-import { duplicateAppRouterValidationIssues } from "@/lib/ai/build/routes/app-router-conflicts";
+import {
+  duplicateAppRouterValidationIssues,
+  hasRootPage,
+} from "@/lib/ai/build/routes/app-router-conflicts";
 import { seoConsistencyIssues } from "@/lib/ai/build/seo-consistency";
 
 const SOURCE_EXT = /\.(tsx?|jsx?|mjs|cjs)$/;
@@ -206,11 +209,8 @@ export function staticTipStructureIssues(
     issues.push('package.json must list "next", "react", and "react-dom".');
   }
 
-  const hasPage =
-    paths.includes("app/page.tsx") ||
-    paths.includes("app/page.ts") ||
-    paths.includes("app/page.jsx") ||
-    paths.includes("app/page.js");
+  // Route-group aware: app/(marketing)/page.tsx is a valid root page.
+  const hasPage = hasRootPage(paths);
   const hasLayout =
     paths.includes("app/layout.tsx") ||
     paths.includes("app/layout.ts") ||

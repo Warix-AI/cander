@@ -14,9 +14,19 @@ import { execShell, fetchPreview, truncate } from "./tools.mjs";
  * @returns {string[]}
  */
 export function discoverRoutes(repoDir) {
+  return [...discoverRouteFiles(repoDir).keys()].sort();
+}
+
+/**
+ * URL route → page files serving it (route groups stripped). More than one
+ * file for a route is a Next build error.
+ * @param {string} repoDir
+ * @returns {Map<string, string[]>}
+ */
+export function discoverRouteFiles(repoDir) {
   const appDir = join(repoDir, "app");
-  if (!existsSync(appDir)) return ["/"];
-  const routes = new Set();
+  const routes = new Map();
+  if (!existsSync(appDir)) return routes;
   const walk = (dir, segs) => {
     let entries;
     try {
@@ -28,28 +38,45 @@ export function discoverRoutes(repoDir) {
       if (e.isDirectory()) {
         if (e.name.startsWith("_") || e.name === "api") continue;
         if (/^\[.*\]$/.test(e.name)) continue;
-        const next = /^\(.*\)$/.test(e.name) ? segs : [...segs, e.name];
+        const next = /^\(.*\)$/.test(e.name) || e.name.startsWith("@") ? segs : [...segs, e.name];
         walk(join(dir, e.name), next);
       } else if (/^page\.(tsx|jsx|ts|js|mdx)$/.test(e.name)) {
-        routes.add(`/${segs.join("/")}`.replace(/\/+$/, "") || "/");
+        const route = `/${segs.join("/")}`.replace(/\/+$/, "") || "/";
+        const rel = join(dir, e.name).slice(repoDir.length + 1);
+        routes.set(route, [...(routes.get(route) || []), rel]);
       }
     }
   };
   walk(appDir, []);
-  return [...routes].sort();
+  return routes;
 }
 
 const PLACEHOLDER_RE =
   /lorem ipsum|your (headline|company|business|tagline|text) here|\bTODO\b|\bTBD\b|\[insert[^\]]*\]|\[(company|business|name|city|phone|email|address)[^\]]*\]|placeholder text|coming soon…?$/i;
 
 /**
- * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], expectedRoutes?: string[], mode?: "create"|"edit", projectKind?: "site"|"app", timeoutMs?: number }} opts
+ * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], expectedRoutes?: string[], mode?: "create"|"edit", projectKind?: "site"|"app", siteUrl?: string|null, timeoutMs?: number }} opts
  * @returns {Promise<{ ok: boolean, issues: string[], routes: string[], report: string }>}
  */
 export async function runAcceptance(opts) {
   const issues = [];
   const repoDir = opts.repoDir;
-  const discovered = discoverRoutes(repoDir);
+  const routeFiles = discoverRouteFiles(repoDir);
+  const discovered = [...routeFiles.keys()].sort();
+  const siteOrigin = normalizeOrigin(opts.siteUrl);
+
+  // 0a. Route conflicts + home page location. Two files for one URL is a
+  // Next build error; a home page hidden in a route group leaves the boot
+  // skeleton app/page.tsx in place (or gets one re-added by publish repair).
+  for (const [route, files] of routeFiles) {
+    if (files.length > 1) {
+      issues.push(`Two pages resolve to ${route}: ${files.join(", ")} — delete one (delete_file).`);
+    }
+  }
+  const rootFiles = routeFiles.get("/") || [];
+  if (rootFiles.length === 1 && !/^app\/page\.(tsx|jsx|ts|js|mdx)$/.test(rootFiles[0])) {
+    issues.push(`The home page is ${rootFiles[0]} — move it to app/page.tsx (overwrite the skeleton; do not keep both).`);
+  }
   const routes = uniq([...(opts.routes || []), ...discovered]).filter((r) =>
     r.startsWith("/"),
   );
@@ -128,6 +155,20 @@ export async function runAcceptance(opts) {
     if (!isApp && !/<meta[^>]+name=["']description["'][^>]+content=["'][^"']{20,}/i.test(html)) {
       issues.push(`${r.path} has no meta description (≥20 chars) — add metadata.description.`);
     }
+    if (!isApp) {
+      const canonical = html.match(/<link[^>]+rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1] || "";
+      if (!canonical) {
+        issues.push(`${r.path} has no canonical link — add metadata.alternates.canonical (with metadataBase in app/layout.tsx).`);
+      } else if (siteOrigin && !canonical.startsWith(siteOrigin)) {
+        issues.push(`${r.path} canonical is ${canonical} — metadataBase must be ${siteOrigin} (SITE_URL).`);
+      }
+      const ogImage = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || "";
+      if (!ogImage) {
+        issues.push(`${r.path} has no og:image — add app/opengraph-image.tsx (ImageResponse from "next/og").`);
+      } else if (siteOrigin && /^https?:/i.test(ogImage) && !ogImage.startsWith(siteOrigin)) {
+        issues.push(`${r.path} og:image points at ${ogImage} — it must be served from ${siteOrigin}.`);
+      }
+    }
     const h1s = (html.match(/<h1[\s>]/gi) || []).length;
     if (isCreate && h1s !== 1 && !(isApp && h1s > 1 && r.path !== "/")) {
       issues.push(`${r.path} has ${h1s} <h1> elements — exactly one is required.`);
@@ -163,6 +204,18 @@ export async function runAcceptance(opts) {
     if (root?.ok && root.html && !/application\/ld\+json/i.test(root.html)) {
       issues.push("/ has no JSON-LD (<script type=\"application/ld+json\">) — add Organization/LocalBusiness schema in app/layout.tsx.");
     }
+    if (siteOrigin && root?.ok && root.html && !root.html.includes(siteOrigin)) {
+      issues.push(`/ never references ${siteOrigin} — set metadataBase: new URL("${siteOrigin}") in app/layout.tsx and use it in robots/sitemap/JSON-LD.`);
+    }
+    const ogFile = ["app/opengraph-image.tsx", "app/opengraph-image.ts", "app/opengraph-image.png", "app/opengraph-image.jpg"].find((f) =>
+      existsSync(join(repoDir, f)),
+    );
+    if (!ogFile) {
+      issues.push("app/opengraph-image.tsx is missing — generate the social image with ImageResponse from \"next/og\".");
+    } else if (/\.tsx?$/.test(ogFile)) {
+      const og = await fetchImage(`${opts.devServerUrl}/opengraph-image`, 90_000);
+      if (!og.ok) issues.push(`/opengraph-image → ${og.detail} (fix ${ogFile}).`);
+    }
   }
 
   // 6. Source-level placeholder scan (catches non-rendered pages / components)
@@ -184,6 +237,30 @@ export async function runAcceptance(opts) {
 
 function uniq(arr) {
   return [...new Set(arr)];
+}
+
+/** Generated metadata images return binary; only status + content-type matter. */
+async function fetchImage(url, timeoutMs) {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    const type = res.headers.get("content-type") || "";
+    const buf = await res.arrayBuffer();
+    if (res.status !== 200) return { ok: false, detail: `HTTP ${res.status}` };
+    if (!/^image\//i.test(type)) return { ok: false, detail: `content-type ${type || "unknown"} (expected image/*)` };
+    if (buf.byteLength < 1000) return { ok: false, detail: `only ${buf.byteLength} bytes` };
+    return { ok: true, detail: `${type}, ${buf.byteLength} bytes` };
+  } catch (err) {
+    return { ok: false, detail: `fetch failed: ${err?.message || err}` };
+  }
+}
+
+function normalizeOrigin(url) {
+  if (!url) return "";
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "";
+  }
 }
 
 /**

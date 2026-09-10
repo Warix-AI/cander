@@ -7,6 +7,7 @@
 export type LiveCheck = {
   id:
     | "home"
+    | "content"
     | "title"
     | "description"
     | "canonical"
@@ -87,12 +88,26 @@ export async function verifyLiveSite(rawUrl: string): Promise<LiveVerification> 
   const ogTitle = meta(html, "property", "og:title");
   const ogImage = meta(html, "property", "og:image");
 
+  const bodyText = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ");
+  const placeholder = bodyText.match(
+    /Draft is booting|Drafting your (website|app)|Your headline here|lorem ipsum/i,
+  );
+
   const checks: LiveCheck[] = [
     {
       id: "home",
       label: "Home page loads",
       ok: home.status >= 200 && home.status < 400 && html.length > 200,
       detail: home.status ? `HTTP ${home.status}` : home.error || "no response",
+    },
+    {
+      id: "content",
+      label: "Home page shows the real site",
+      ok: !placeholder,
+      detail: placeholder ? `placeholder text: "${placeholder[0]}"` : "ok",
     },
     {
       id: "https",

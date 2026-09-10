@@ -6,6 +6,7 @@
 import type { ScaffoldFile } from "@/lib/ai/build/site-spec";
 import { canonicalSitePackageJsonText } from "@/lib/ai/build/site-package";
 import { siteSupportScaffoldFiles } from "@/lib/ai/build/site-support-files";
+import { hasRootPage } from "@/lib/ai/build/routes/app-router-conflicts";
 
 export const RUNNABLE_CORE_PATHS = [
   "package.json",
@@ -18,9 +19,8 @@ export const RUNNABLE_CORE_PATHS = [
 export function tipLooksRunnable(paths: string[]): boolean {
   const set = new Set(paths.map((p) => p.replace(/^\.\//, "")));
   const hasPkg = set.has("package.json");
-  const hasPage = [...set].some((p) =>
-    /^app\/page\.(tsx|ts|jsx|js)$/.test(p),
-  );
+  // Route-group aware: app/(marketing)/page.tsx serves `/` too.
+  const hasPage = hasRootPage([...set]);
   const hasLayout = [...set].some((p) =>
     /^app\/layout\.(tsx|ts|jsx|js)$/.test(p),
   );

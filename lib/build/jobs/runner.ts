@@ -35,6 +35,7 @@ import {
 import { isTwentyFirstConfigured } from "@/lib/ai/build/twenty-first-mcp";
 import { BUILD_APP_PORT } from "@/lib/build/sandbox/constants";
 import { signBuildJobToken } from "@/lib/build/jobs/token";
+import { slugFromProjectName } from "@/lib/publish-domain";
 import {
   appendBuildJobEvents,
   findQueuedBuildJob,
@@ -177,10 +178,19 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
   const admin = createSupabaseAdminClient();
   const { data: project } = await admin
     .from("projects")
-    .select("name, kind")
+    .select("name, title, kind, cander_subdomain, custom_domain, published_url")
     .eq("id", job.projectId)
     .maybeSingle();
-  const projectName = String(project?.name ?? job.title ?? "New site");
+  const projectName = String(project?.name ?? project?.title ?? job.title ?? "New site");
+  // The URL the site will live at, so metadataBase / canonical / OG image
+  // URLs are right on the first publish instead of pointing at an invented
+  // domain.
+  const siteUrl = resolveProjectSiteUrl({
+    publishedUrl: project?.published_url ? String(project.published_url) : null,
+    customDomain: project?.custom_domain ? String(project.custom_domain) : null,
+    subdomain: project?.cander_subdomain ? String(project.cander_subdomain) : null,
+    title: projectName,
+  });
   // Sites and apps share the builder; the kind selects the prompt profile and
   // acceptance checklist inside the sandbox.
   const projectKind: "site" | "app" =
@@ -266,6 +276,7 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       mode: job.facts.mode,
       projectKind,
       projectName,
+      siteUrl,
       brief: job.facts.brief ?? null,
       instruction: job.facts.instruction ?? null,
       apiBase,
@@ -339,6 +350,22 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
     await failBuildJob(job, `Could not start the builder: ${message}`);
     throw err;
   }
+}
+
+function resolveProjectSiteUrl(opts: {
+  publishedUrl: string | null;
+  customDomain: string | null;
+  subdomain: string | null;
+  title: string;
+}): string {
+  if (opts.publishedUrl?.startsWith("http")) return opts.publishedUrl.replace(/\/+$/, "");
+  if (opts.customDomain) return `https://${opts.customDomain.replace(/^https?:\/\//, "").replace(/\/.*$/, "")}`;
+  const slug =
+    (opts.subdomain || slugFromProjectName(opts.title || "site"))
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "site";
+  return `https://${slug}.cander.app`;
 }
 
 function shellQuote(s: string): string {

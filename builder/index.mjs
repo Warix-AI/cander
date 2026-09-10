@@ -120,6 +120,7 @@ async function main() {
         model: models.planner,
         projectKind,
         projectName: config.projectName,
+        siteUrl: config.siteUrl || null,
         brief: config.brief || null,
         instruction: config.instruction || null,
         twentyFirst,
@@ -142,6 +143,7 @@ async function main() {
       expectedRoutes: plan?.routes || [],
       mode,
       projectKind,
+      siteUrl: config.siteUrl || null,
     });
     return result.ok
       ? { accept: true }
@@ -151,6 +153,7 @@ async function main() {
   const ctx = {
     projectKind,
     projectName: config.projectName || "",
+    siteUrl: config.siteUrl || null,
     brief: config.brief || null,
     instruction: config.instruction || null,
     plan: plan?.markdown || null,

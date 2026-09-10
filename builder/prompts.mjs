@@ -16,7 +16,9 @@ export const QUALITY_BAR = `Quality bar — this must look like a real, launch-r
 - Sections with visual rhythm: hero, social proof / stats, features or services, process, testimonials, FAQ, CTA band, contact form (server action or mailto fallback). Vary layouts — do not stack identical three-column grids.
 - Design system in app/globals.css: CSS variables for brand colors from the brief, typography scale, radius. Tailwind utilities everywhere else.
 - Accessible: semantic landmarks, one h1 per page, focus styles, alt text, sufficient contrast.
-- SEO: export metadata (title template, description, openGraph, twitter) from app/layout.tsx and per page; app/robots.ts and app/sitemap.ts listing every route; JSON-LD (Organization/LocalBusiness) in the root layout.
+- SEO: export metadata from app/layout.tsx with \`metadataBase: new URL(SITE_URL)\` (SITE_URL is given in the task — never invent a domain), title template, description, openGraph + twitter (with images), and per page \`alternates: { canonical: "<route>" }\` plus its own title/description. app/robots.ts and app/sitemap.ts must use SITE_URL and list every route. JSON-LD (Organization/LocalBusiness) in the root layout using SITE_URL.
+- Social image: create app/opengraph-image.tsx using \`ImageResponse\` from "next/og" (1200×630, brand colors, business name + tagline; export size/contentType/alt) and re-export it as app/twitter-image.tsx. Next serves it and wires og:image automatically — no external image hosting.
+- Routing: the home page MUST be app/page.tsx (the boot skeleton file — overwrite it). Route groups like app/(marketing)/... are fine for other pages, but never create a second page that resolves to "/" and never leave the skeleton placeholder.
 - Responsive from 360px to 1440px. Test with check_preview after each batch of pages.`;
 
 export const WORKFLOW_CREATE = `Workflow:
@@ -37,7 +39,8 @@ export const APP_QUALITY_BAR = `Quality bar — this must work like a real, usab
 - Auth when needed: /login and /signup pages using the Supabase client, a session-aware layout for the (app) route group that redirects signed-out users, and a sign-out action.
 - Design system in app/globals.css: CSS variables for brand colors, typography scale, radius. Tailwind utilities everywhere else; shadcn-style primitives from components/ui.
 - Accessible: semantic landmarks, one h1 per screen, labelled inputs, focus styles, keyboard-usable menus.
-- Metadata: export title/description from app/layout.tsx and per screen; app/not-found.tsx exists.
+- Metadata: export title/description from app/layout.tsx with \`metadataBase: new URL(SITE_URL)\` (given in the task) and per screen; app/opengraph-image.tsx via ImageResponse from "next/og"; app/not-found.tsx exists.
+- Routing: the root screen MUST be app/page.tsx (overwrite the boot skeleton). Route groups like app/(app)/... are fine for other screens, but never create a second page that resolves to "/".
 - Responsive from 360px to 1440px. Test with check_preview after each batch of screens.`;
 
 export const WORKFLOW_CREATE_APP = `Workflow:
@@ -59,7 +62,7 @@ export const WORKFLOW_EDIT = `Workflow for a change request:
 5. finish(summary) — summary is shown to the user verbatim, so write it as a friendly one- or two-sentence confirmation of what changed (no file paths unless useful).
 Never ask clarifying questions; make the most reasonable interpretation and mention any assumption in the summary.`;
 
-/** @typedef {{ projectKind?: "site"|"app", projectName: string, brief: Record<string, unknown>|null, instruction?: string|null, plan?: string|null }} BuildCtx */
+/** @typedef {{ projectKind?: "site"|"app", projectName: string, siteUrl?: string|null, brief: Record<string, unknown>|null, instruction?: string|null, plan?: string|null }} BuildCtx */
 
 /** @param {BuildCtx} ctx */
 export function createInstructions(ctx) {
@@ -84,6 +87,7 @@ export function createTask(ctx) {
   if (ctx.projectKind === "app") {
     return [
       `Project: ${ctx.projectName || "Untitled app"}`,
+      ctx.siteUrl ? `SITE_URL (the app will be published here; use it for metadataBase): ${ctx.siteUrl}` : "",
       `The user asked for this app:\n"""\n${ctx.instruction || "(no description — build a sensible starter dashboard app)"}\n"""`,
       ctx.plan
         ? `Build packet — follow it closely (data model, sitemap, screens, design system CSS, UI text, component shortlist):\n\n${ctx.plan}`
@@ -96,6 +100,7 @@ export function createTask(ctx) {
   const brief = ctx.brief ? formatBrief(ctx.brief) : "(no setup brief — infer a sensible small-business site)";
   return [
     `Project: ${ctx.projectName || "Untitled site"}`,
+    ctx.siteUrl ? `SITE_URL (the site will be published here; use it for metadataBase, canonical, sitemap, robots, JSON-LD): ${ctx.siteUrl}` : "",
     `Setup brief (from the user's 8-question onboarding):\n${brief}`,
     ctx.plan
       ? `Build packet — follow it closely (sitemap, sections, design system CSS, final copy, component shortlist):\n\n${ctx.plan}`
@@ -120,11 +125,12 @@ export function editInstructions(ctx = {}) {
 }
 
 /**
- * @param {{ projectKind?: "site"|"app", projectName: string, instruction: string, brief?: Record<string, unknown>|null }} ctx
+ * @param {{ projectKind?: "site"|"app", projectName: string, siteUrl?: string|null, instruction: string, brief?: Record<string, unknown>|null }} ctx
  */
 export function editTask(ctx) {
   return [
     `Project: ${ctx.projectName || (ctx.projectKind === "app" ? "Untitled app" : "Untitled site")}`,
+    ctx.siteUrl ? `SITE_URL (published at): ${ctx.siteUrl}` : "",
     ctx.brief && ctx.projectKind !== "app" ? `Original setup brief (for context on brand/tone):\n${formatBrief(ctx.brief)}` : "",
     `The user asked for this change:\n"""\n${ctx.instruction}\n"""`,
     "Apply it now, verify, and call finish with a friendly confirmation.",

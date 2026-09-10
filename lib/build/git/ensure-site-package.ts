@@ -17,6 +17,7 @@ import {
   siteSupportScaffoldFiles,
 } from "@/lib/ai/build/site-support-files";
 import { minimalRunnableScaffoldFiles } from "@/lib/ai/build/minimal-runnable-scaffold";
+import { hasRootPage } from "@/lib/ai/build/routes/app-router-conflicts";
 
 async function readRepoFile(
   octokit: NonNullable<Awaited<ReturnType<typeof getInstallationOctokit>>>,
@@ -101,10 +102,28 @@ export async function ensureDraftSitePackageJson(opts: {
     "tsconfig.json",
     tip,
   );
-  const page =
-    (await readRepoFile(octokit, owner, repo, "app/page.tsx", tip)) ||
-    (await readRepoFile(octokit, owner, repo, "app/page.jsx", tip)) ||
-    (await readRepoFile(octokit, owner, repo, "app/page.js", tip));
+  // Route-group aware: the builder may put the home page at
+  // app/(marketing)/page.tsx. Re-adding app/page.tsx on top of that creates
+  // two pages for "/" and ships the placeholder instead of the site.
+  let tipPaths: string[] = [];
+  try {
+    const { data: tree } = await octokit.request(
+      "GET /repos/{owner}/{repo}/git/trees/{tree_sha}",
+      { owner, repo, tree_sha: tip, recursive: "true" },
+    );
+    tipPaths = (tree.tree || [])
+      .filter((n) => n.type === "blob" && typeof n.path === "string")
+      .map((n) => String(n.path));
+  } catch (err) {
+    console.warn("[cander] tip tree list failed; falling back to app/page.tsx probe", err);
+  }
+  const page = tipPaths.length
+    ? hasRootPage(tipPaths)
+      ? "present"
+      : ""
+    : (await readRepoFile(octokit, owner, repo, "app/page.tsx", tip)) ||
+      (await readRepoFile(octokit, owner, repo, "app/page.jsx", tip)) ||
+      (await readRepoFile(octokit, owner, repo, "app/page.js", tip));
   const layout =
     (await readRepoFile(octokit, owner, repo, "app/layout.tsx", tip)) ||
     (await readRepoFile(octokit, owner, repo, "app/layout.jsx", tip)) ||
@@ -128,24 +147,9 @@ export async function ensureDraftSitePackageJson(opts: {
 
   const vendorRepairs: { path: string; content: string }[] = [];
   try {
-    const { data: tree } = await octokit.request(
-      "GET /repos/{owner}/{repo}/git/trees/{tree_sha}",
-      {
-        owner,
-        repo,
-        tree_sha: tip,
-        recursive: "true",
-      },
+    const vendorPaths = tipPaths.filter(
+      (p) => p.startsWith("components/twenty-first/") && /\.(tsx|ts|jsx|js)$/.test(p),
     );
-    const vendorPaths = (tree.tree || [])
-      .filter(
-        (n) =>
-          n.type === "blob" &&
-          typeof n.path === "string" &&
-          n.path.startsWith("components/twenty-first/") &&
-          /\.(tsx|ts|jsx|js)$/.test(n.path),
-      )
-      .map((n) => String(n.path));
     for (const path of vendorPaths.slice(0, 40)) {
       const raw = await readRepoFile(octokit, owner, repo, path, tip);
       if (!raw) continue;
@@ -210,6 +214,8 @@ export async function ensureDraftSitePackageJson(opts: {
       if (f.path === "package.json" && !needsPkg) continue;
       if (f.path === "lib/utils.ts" || f.path === "tsconfig.json") continue;
       if (f.path.startsWith("components/ui/")) continue;
+      // Never add a second "/" page next to a route-group home page.
+      if (/^app\/page\.(tsx|jsx|js)$/.test(f.path) && hasRootPage(tipPaths)) continue;
       const existing = await readRepoFile(octokit, owner, repo, f.path, tip);
       if (existing?.trim()) continue;
       files.push(f);
