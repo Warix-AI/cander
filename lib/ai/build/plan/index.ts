@@ -15,7 +15,6 @@ export {
   emptyImplementationManifest,
   emptyImplementationValidation,
 } from "@/lib/ai/build/plan/types";
-export { isPlanFirstBuildEnabled } from "@/lib/ai/build/plan/flag";
 export {
   assertNavCoveredBySitemap,
   normalizeBuildPlanJson,

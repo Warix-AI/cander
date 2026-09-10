@@ -30,6 +30,27 @@ export const WORKFLOW_CREATE = `Workflow:
 8. finish(summary, routes). finish is verified automatically; if rejected, fix the listed issues and call finish again.
 Work autonomously — never ask the user questions. Prefer many small, correct files over one giant file.`;
 
+export const APP_QUALITY_BAR = `Quality bar — this must work like a real, usable product, not a mockup:
+- Every screen in the plan exists and does its job: real forms with validation, lists with empty/loading/error states, and working navigation (AppShell with sidebar or top nav, active-link styling, mobile nav).
+- Data layer: if the plan needs persistence or auth, install @supabase/supabase-js (+ @supabase/ssr) and create lib/supabase/client.ts and lib/supabase/server.ts; write supabase/schema.sql with the tables + RLS policies; keep server actions in app/**/actions.ts. Read env via process.env.NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY and document EVERY env var you read in .env.example (KEY=… with a comment).
+- Never crash without env: when Supabase env is missing, fall back to seeded demo data (lib/demo-data.ts) so the preview always renders.
+- Auth when needed: /login and /signup pages using the Supabase client, a session-aware layout for the (app) route group that redirects signed-out users, and a sign-out action.
+- Design system in app/globals.css: CSS variables for brand colors, typography scale, radius. Tailwind utilities everywhere else; shadcn-style primitives from components/ui.
+- Accessible: semantic landmarks, one h1 per screen, labelled inputs, focus styles, keyboard-usable menus.
+- Metadata: export title/description from app/layout.tsx and per screen; app/not-found.tsx exists.
+- Responsive from 360px to 1440px. Test with check_preview after each batch of screens.`;
+
+export const WORKFLOW_CREATE_APP = `Workflow:
+1. list_tree, read package.json, app/layout.tsx, app/globals.css to see the boot skeleton.
+2. If a build packet is provided, it is the plan — implement its sitemap, data model, screens, design CSS and UI text. Otherwise decide screens, data model, and brand from the request yourself. Do not write plan files into the repo.
+3. Scaffolding first: .env.example, lib/supabase/* (if persistence/auth), supabase/schema.sql, lib/demo-data.ts fallback, lib/types.ts.
+4. Shared shell next: app/globals.css (paste the packet's CSS), components/app/AppShell.tsx, Sidebar/TopBar, EmptyState, forms.
+5. Write app/layout.tsx (metadata, fonts, providers), then app/page.tsx, then every other screen (auth routes, (app) group). emit_progress before each screen.
+6. Optional: search_components / get_component for standout UI (data tables, dashboards, auth forms). Adapt into components/ — never paste code with unresolved imports; install deps you use.
+7. Write app/not-found.tsx. run_command("npx --no-install tsc --noEmit --skipLibCheck") and check_preview on every route. Fix every error. Repeat until clean.
+8. finish(summary, routes). finish is verified automatically; if rejected, fix the listed issues and call finish again.
+Work autonomously — never ask the user questions. Prefer many small, correct files over one giant file.`;
+
 export const WORKFLOW_EDIT = `Workflow for a change request:
 1. list_tree and grep to find exactly the files involved. Read them before editing.
 2. Make the smallest correct change with edit_file (write_file only for new files). Preserve the existing design language and structure unless asked otherwise.
@@ -38,10 +59,18 @@ export const WORKFLOW_EDIT = `Workflow for a change request:
 5. finish(summary) — summary is shown to the user verbatim, so write it as a friendly one- or two-sentence confirmation of what changed (no file paths unless useful).
 Never ask clarifying questions; make the most reasonable interpretation and mention any assumption in the summary.`;
 
-/**
- * @param {{ projectName: string, brief: Record<string, unknown>|null, instruction?: string|null, plan?: string|null }} ctx
- */
+/** @typedef {{ projectKind?: "site"|"app", projectName: string, brief: Record<string, unknown>|null, instruction?: string|null, plan?: string|null }} BuildCtx */
+
+/** @param {BuildCtx} ctx */
 export function createInstructions(ctx) {
+  if (ctx.projectKind === "app") {
+    return [
+      `You are Cander Builder — an autonomous senior full-stack engineer and product designer. You are building a complete, working web app for a real user, inside their Next.js repo, using the tools provided.`,
+      STACK_RULES,
+      APP_QUALITY_BAR,
+      WORKFLOW_CREATE_APP,
+    ].join("\n\n");
+  }
   return [
     `You are Cander Builder — an autonomous senior front-end engineer and designer. You are building a complete, production-ready marketing website for a real business, inside their Next.js repo, using the tools provided.`,
     STACK_RULES,
@@ -50,10 +79,20 @@ export function createInstructions(ctx) {
   ].join("\n\n");
 }
 
-/**
- * @param {{ projectName: string, brief: Record<string, unknown>|null, instruction?: string|null, plan?: string|null }} ctx
- */
+/** @param {BuildCtx} ctx */
 export function createTask(ctx) {
+  if (ctx.projectKind === "app") {
+    return [
+      `Project: ${ctx.projectName || "Untitled app"}`,
+      `The user asked for this app:\n"""\n${ctx.instruction || "(no description — build a sensible starter dashboard app)"}\n"""`,
+      ctx.plan
+        ? `Build packet — follow it closely (data model, sitemap, screens, design system CSS, UI text, component shortlist):\n\n${ctx.plan}`
+        : "",
+      "Build the entire app now. Do not stop until every screen is written, typechecks, and renders on the dev server. Then call finish.",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
   const brief = ctx.brief ? formatBrief(ctx.brief) : "(no setup brief — infer a sensible small-business site)";
   return [
     `Project: ${ctx.projectName || "Untitled site"}`,
@@ -68,21 +107,25 @@ export function createTask(ctx) {
     .join("\n\n");
 }
 
-export function editInstructions() {
+/** @param {{ projectKind?: "site"|"app" }} [ctx] */
+export function editInstructions(ctx = {}) {
+  const isApp = ctx.projectKind === "app";
   return [
-    `You are Cander Builder — an autonomous senior front-end engineer working inside the user's existing Next.js website repo. You know the whole codebase via the tools; inspect before you change.`,
+    isApp
+      ? `You are Cander Builder — an autonomous senior full-stack engineer working inside the user's existing Next.js app repo. You know the whole codebase via the tools; inspect before you change. Keep the data layer and auth conventions already in the repo (Supabase clients, .env.example, demo-data fallback).`
+      : `You are Cander Builder — an autonomous senior front-end engineer working inside the user's existing Next.js website repo. You know the whole codebase via the tools; inspect before you change.`,
     STACK_RULES,
     WORKFLOW_EDIT,
   ].join("\n\n");
 }
 
 /**
- * @param {{ projectName: string, instruction: string, brief?: Record<string, unknown>|null }} ctx
+ * @param {{ projectKind?: "site"|"app", projectName: string, instruction: string, brief?: Record<string, unknown>|null }} ctx
  */
 export function editTask(ctx) {
   return [
-    `Project: ${ctx.projectName || "Untitled site"}`,
-    ctx.brief ? `Original setup brief (for context on brand/tone):\n${formatBrief(ctx.brief)}` : "",
+    `Project: ${ctx.projectName || (ctx.projectKind === "app" ? "Untitled app" : "Untitled site")}`,
+    ctx.brief && ctx.projectKind !== "app" ? `Original setup brief (for context on brand/tone):\n${formatBrief(ctx.brief)}` : "",
     `The user asked for this change:\n"""\n${ctx.instruction}\n"""`,
     "Apply it now, verify, and call finish with a friendly confirmation.",
   ]

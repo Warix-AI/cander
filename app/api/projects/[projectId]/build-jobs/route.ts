@@ -3,13 +3,12 @@
  * GET  /api/projects/:projectId/build-jobs  — latest job for the project (synced)
  *
  * Website Builder V2: the builder agent runs inside the project sandbox; this
- * route only orchestrates. Requires CANDER_BUILD_V2.
+ * route only orchestrates. Sites and apps share it.
  */
 
 import { NextResponse } from "next/server";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import { assertProjectAccess } from "@/lib/security/project-access";
-import { isBuildV2Enabled } from "@/lib/build/jobs/flag";
 import {
   createBuildJob,
   findActiveBuildJob,
@@ -30,9 +29,6 @@ export const maxDuration = 300;
 type RouteCtx = { params: Promise<{ projectId: string }> };
 
 export async function POST(request: Request, ctx: RouteCtx) {
-  if (!isBuildV2Enabled()) {
-    return NextResponse.json({ error: "Build V2 is not enabled." }, { status: 404 });
-  }
   const auth = await requireBearerUser(request);
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
@@ -110,8 +106,16 @@ export async function POST(request: Request, ctx: RouteCtx) {
     userId: auth.user.id,
     threadId: body.threadId ?? null,
     mode,
-    title: mode === "create" ? "Draft website" : instruction.slice(0, 80),
-    goal: mode === "create" ? "Build the full website from the setup brief" : instruction,
+    title:
+      mode === "create"
+        ? instruction
+          ? instruction.slice(0, 80)
+          : "Draft website"
+        : instruction.slice(0, 80),
+    goal:
+      mode === "create"
+        ? instruction || "Build the full website from the setup brief"
+        : instruction,
     instruction: instruction || undefined,
     brief: brief?.answers ?? null,
     ackMessageId: body.ackMessageId ?? null,

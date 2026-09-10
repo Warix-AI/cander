@@ -8,7 +8,6 @@ import {
   normalizeResearchManifest,
 } from "../lib/ai/build/plan/normalize.ts";
 import { renderBuildPlanMarkdown } from "../lib/ai/build/plan/markdown.ts";
-import { isPlanFirstBuildEnabled } from "../lib/ai/build/plan/flag.ts";
 
 describe("plan-first types normalize", () => {
   it("round-trips ProjectSpec", () => {
@@ -108,17 +107,6 @@ describe("plan-first types normalize", () => {
     assert.equal(impl.files.length, 2);
     assert.equal(impl.validation.ok, false);
     assert.ok(impl.validation.technical[0]?.includes("/contact"));
-  });
-
-  it("flag defaults off", () => {
-    const prev = process.env.CANDER_BUILD_PLAN_FIRST;
-    delete process.env.CANDER_BUILD_PLAN_FIRST;
-    delete process.env.NEXT_PUBLIC_CANDER_BUILD_PLAN_FIRST;
-    assert.equal(isPlanFirstBuildEnabled(), false);
-    process.env.CANDER_BUILD_PLAN_FIRST = "1";
-    assert.equal(isPlanFirstBuildEnabled(), true);
-    if (prev === undefined) delete process.env.CANDER_BUILD_PLAN_FIRST;
-    else process.env.CANDER_BUILD_PLAN_FIRST = prev;
   });
 });
 

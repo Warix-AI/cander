@@ -60,14 +60,14 @@ body {
 }
 `;
 
-function layoutTsx(title: string) {
+function layoutTsx(title: string, kind: "site" | "app") {
   return `import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: ${JSON.stringify(title)},
-  description: ${JSON.stringify(`${title} — website`)},
+  description: ${JSON.stringify(`${title} — ${kind === "app" ? "app" : "website"}`)},
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -80,13 +80,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 `;
 }
 
-function pageTsx(title: string) {
+function pageTsx(title: string, kind: "site" | "app") {
   return `export default function HomePage() {
   return (
     <main className="flex min-h-screen items-center justify-center p-8">
       <div className="text-center">
         <h1 className="text-2xl font-semibold tracking-tight">${escapeJsx(title)}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Drafting your website…</p>
+        <p className="mt-2 text-sm text-muted-foreground">Drafting your ${kind === "app" ? "app" : "website"}…</p>
       </div>
     </main>
   );
@@ -98,8 +98,13 @@ function escapeJsx(s: string) {
   return s.replace(/[{}<>]/g, "");
 }
 
-export function bootSkeletonFiles(opts: { name?: string; title?: string }): ScaffoldFile[] {
-  const title = (opts.title || "New site").slice(0, 80);
+export function bootSkeletonFiles(opts: {
+  name?: string;
+  title?: string;
+  kind?: "site" | "app";
+}): ScaffoldFile[] {
+  const kind = opts.kind === "app" ? "app" : "site";
+  const title = (opts.title || (kind === "app" ? "New app" : "New site")).slice(0, 80);
   const { files: ui } = resolveUiPrimitiveFiles(UI_PRIMITIVES);
   return [
     {
@@ -112,8 +117,8 @@ export function bootSkeletonFiles(opts: { name?: string; title?: string }): Scaf
     { path: "postcss.config.mjs", content: SITE_POSTCSS_CONFIG },
     { path: "lib/utils.ts", content: SITE_LIB_UTILS_TS },
     { path: "app/globals.css", content: GLOBALS_CSS },
-    { path: "app/layout.tsx", content: layoutTsx(title) },
-    { path: "app/page.tsx", content: pageTsx(title) },
+    { path: "app/layout.tsx", content: layoutTsx(title, kind) },
+    { path: "app/page.tsx", content: pageTsx(title, kind) },
     ...ui,
   ];
 }

@@ -10,7 +10,6 @@ import {
 import { assessPreviewHealth } from "../lib/build/preview/health.ts";
 import { composeSiteFromSpec } from "../lib/ai/build/compose-site.ts";
 import type { SiteSpec } from "../lib/ai/build/site-spec.ts";
-import { isPlanFirstBuildEnabled } from "../lib/ai/build/plan/flag.ts";
 
 const minimalSpec = {
   businessName: "Acme",
@@ -135,21 +134,5 @@ describe("preview health", () => {
       bodyText: "<!DOCTYPE html><html><body>ok</body></html>",
     });
     assert.equal(h.ok, true);
-  });
-});
-
-describe("plan-first flag", () => {
-  it("reads NEXT_PUBLIC_CANDER_BUILD_PLAN_FIRST", () => {
-    const prev = process.env.CANDER_BUILD_PLAN_FIRST;
-    const prevPub = process.env.NEXT_PUBLIC_CANDER_BUILD_PLAN_FIRST;
-    delete process.env.CANDER_BUILD_PLAN_FIRST;
-    process.env.NEXT_PUBLIC_CANDER_BUILD_PLAN_FIRST = "1";
-    assert.equal(isPlanFirstBuildEnabled(), true);
-    delete process.env.NEXT_PUBLIC_CANDER_BUILD_PLAN_FIRST;
-    assert.equal(isPlanFirstBuildEnabled(), false);
-    if (prev === undefined) delete process.env.CANDER_BUILD_PLAN_FIRST;
-    else process.env.CANDER_BUILD_PLAN_FIRST = prev;
-    if (prevPub === undefined) delete process.env.NEXT_PUBLIC_CANDER_BUILD_PLAN_FIRST;
-    else process.env.NEXT_PUBLIC_CANDER_BUILD_PLAN_FIRST = prevPub;
   });
 });

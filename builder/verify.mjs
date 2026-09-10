@@ -43,7 +43,7 @@ const PLACEHOLDER_RE =
   /lorem ipsum|your (headline|company|business|tagline|text) here|\bTODO\b|\bTBD\b|\[insert[^\]]*\]|\[(company|business|name|city|phone|email|address)[^\]]*\]|placeholder text|coming soon…?$/i;
 
 /**
- * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], expectedRoutes?: string[], mode?: "create"|"edit", timeoutMs?: number }} opts
+ * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], expectedRoutes?: string[], mode?: "create"|"edit", projectKind?: "site"|"app", timeoutMs?: number }} opts
  * @returns {Promise<{ ok: boolean, issues: string[], routes: string[], report: string }>}
  */
 export async function runAcceptance(opts) {
@@ -54,6 +54,7 @@ export async function runAcceptance(opts) {
     r.startsWith("/"),
   );
   const isCreate = (opts.mode || "create") === "create";
+  const isApp = opts.projectKind === "app";
 
   // 0. Planned routes that were never built (create only)
   if (isCreate && opts.expectedRoutes?.length) {
@@ -124,11 +125,11 @@ export async function runAcceptance(opts) {
     if (!r.ok || !r.html) continue;
     const html = r.html;
     if (!r.title) issues.push(`${r.path} has no <title> — export metadata.`);
-    if (!/<meta[^>]+name=["']description["'][^>]+content=["'][^"']{20,}/i.test(html)) {
+    if (!isApp && !/<meta[^>]+name=["']description["'][^>]+content=["'][^"']{20,}/i.test(html)) {
       issues.push(`${r.path} has no meta description (≥20 chars) — add metadata.description.`);
     }
     const h1s = (html.match(/<h1[\s>]/gi) || []).length;
-    if (isCreate && h1s !== 1) {
+    if (isCreate && h1s !== 1 && !(isApp && h1s > 1 && r.path !== "/")) {
       issues.push(`${r.path} has ${h1s} <h1> elements — exactly one is required.`);
     }
     const text = html
@@ -138,16 +139,21 @@ export async function runAcceptance(opts) {
     const ph = text.match(PLACEHOLDER_RE);
     if (ph) issues.push(`${r.path} contains placeholder copy: "${ph[0]}" — replace with real content.`);
     if (isCreate && r.path === "/") {
-      if (!/<(header|nav)[\s>]/i.test(html)) issues.push("/ has no <header>/<nav> landmark.");
-      if (!/<footer[\s>]/i.test(html)) issues.push("/ has no <footer> landmark.");
-      if (/Drafting your website/.test(text)) {
+      if (!/<(header|nav|aside)[\s>]/i.test(html)) issues.push("/ has no <header>/<nav> landmark.");
+      if (!isApp && !/<footer[\s>]/i.test(html)) issues.push("/ has no <footer> landmark.");
+      if (/Drafting your (website|app)/.test(text)) {
         issues.push("/ still shows the boot skeleton placeholder page.");
       }
     }
   }
 
-  // 5. SEO files (create only)
-  if (isCreate) {
+  // 5a. App scaffolding checklist (apps, create + edit)
+  if (isApp) {
+    for (const issue of appScaffoldingIssues(repoDir, isCreate)) issues.push(issue);
+  }
+
+  // 5. SEO files (website create only)
+  if (isCreate && !isApp) {
     if (!existsSync(join(repoDir, "app", "robots.ts")) && !existsSync(join(repoDir, "app", "robots.txt")))
       issues.push("app/robots.ts is missing.");
     if (!existsSync(join(repoDir, "app", "sitemap.ts")) && !existsSync(join(repoDir, "app", "sitemap.xml")))
@@ -178,6 +184,135 @@ export async function runAcceptance(opts) {
 
 function uniq(arr) {
   return [...new Set(arr)];
+}
+
+/**
+ * Deterministic checks for app projects: every env var the code reads is
+ * documented, Supabase usage comes with client files + schema, and auth routes
+ * come with a session-aware layout. Cheap, source-level, no network.
+ * @param {string} repoDir
+ * @param {boolean} isCreate
+ * @returns {string[]}
+ */
+function appScaffoldingIssues(repoDir, isCreate) {
+  const issues = [];
+  const files = listSourceFiles(repoDir, ["app", "lib", "components", "middleware.ts", "proxy.ts"]);
+  const read = (rel) => {
+    try {
+      return readFileSync(join(repoDir, rel), "utf8");
+    } catch {
+      return "";
+    }
+  };
+
+  // Env vars referenced anywhere in source.
+  const envVars = new Set();
+  for (const rel of files) {
+    const text = read(rel);
+    for (const m of text.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g)) {
+      const name = m[1];
+      if (/^(NODE_ENV|VERCEL(_.*)?|NEXT_RUNTIME|PORT|CI)$/.test(name)) continue;
+      envVars.add(name);
+    }
+  }
+  const envExample = read(".env.example");
+  if (envVars.size) {
+    if (!envExample) {
+      issues.push(`.env.example is missing — document ${[...envVars].join(", ")}.`);
+    } else {
+      const undocumented = [...envVars].filter((v) => !new RegExp(`^\\s*#?\\s*${v}\\s*=`, "m").test(envExample));
+      if (undocumented.length) {
+        issues.push(`.env.example does not document: ${undocumented.join(", ")}.`);
+      }
+    }
+  }
+
+  // Supabase usage → client helpers + schema + demo fallback.
+  let deps = {};
+  try {
+    const pkg = JSON.parse(read("package.json") || "{}");
+    deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+  } catch {
+    /* reported elsewhere */
+  }
+  const usesSupabase =
+    Boolean(deps["@supabase/supabase-js"] || deps["@supabase/ssr"]) ||
+    files.some((rel) => /@supabase\//.test(read(rel)));
+  if (usesSupabase) {
+    const hasClient = files.some(
+      (rel) => /^lib\/supabase\//.test(rel) && /create(Browser|Server)?Client/.test(read(rel)),
+    );
+    if (!hasClient) {
+      issues.push("Supabase is used but lib/supabase/client.ts / server.ts (createClient helpers) are missing.");
+    }
+    if (!envVars.has("NEXT_PUBLIC_SUPABASE_URL")) {
+      issues.push("Supabase is used but nothing reads process.env.NEXT_PUBLIC_SUPABASE_URL — wire the env-based client.");
+    }
+    const hasSchema =
+      existsSync(join(repoDir, "supabase", "schema.sql")) ||
+      (existsSync(join(repoDir, "supabase", "migrations")) &&
+        readdirSync(join(repoDir, "supabase", "migrations")).some((f) => f.endsWith(".sql")));
+    if (isCreate && !hasSchema) {
+      issues.push("Supabase is used but supabase/schema.sql (tables + RLS) is missing.");
+    }
+    const hasFallback = files.some((rel) => /demo-data|seed|fallback/i.test(rel) || /demo data|fallback/i.test(read(rel)));
+    if (isCreate && !hasFallback) {
+      issues.push("No demo-data fallback found — the preview must render without Supabase env (see lib/demo-data.ts).");
+    }
+  }
+
+  // Auth routes → session-aware layout / redirect somewhere.
+  const authRoutes = files.filter((rel) => /^app\/(\([^)]+\)\/)?(login|signup|sign-in|sign-up|register)\/page\.tsx$/.test(rel));
+  if (authRoutes.length) {
+    const hasGuard = files.some((rel) => {
+      const text = read(rel);
+      return /redirect\(/.test(text) && /(getUser|getSession|getClaims|auth\(|session)/i.test(text);
+    });
+    if (!hasGuard) {
+      issues.push(
+        `Auth pages exist (${authRoutes.join(", ")}) but no layout/proxy checks the session and redirects signed-out users.`,
+      );
+    }
+  }
+
+  if (isCreate && !existsSync(join(repoDir, "app", "not-found.tsx"))) {
+    issues.push("app/not-found.tsx is missing.");
+  }
+  return issues;
+}
+
+/**
+ * @param {string} repoDir
+ * @param {string[]} tops
+ * @returns {string[]} repo-relative paths of .ts/.tsx files
+ */
+function listSourceFiles(repoDir, tops) {
+  const out = [];
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (out.length >= 2000) return;
+      const p = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (["node_modules", ".next", ".git", ".cander", "public"].includes(e.name)) continue;
+        walk(p);
+      } else if (/\.(ts|tsx|mjs|js)$/.test(e.name)) {
+        out.push(p.slice(repoDir.length + 1));
+      }
+    }
+  };
+  for (const top of tops) {
+    const abs = join(repoDir, top);
+    if (!existsSync(abs)) continue;
+    if (/\.(ts|tsx)$/.test(top)) out.push(top);
+    else walk(abs);
+  }
+  return out;
 }
 
 function scanSourcePlaceholders(repoDir) {

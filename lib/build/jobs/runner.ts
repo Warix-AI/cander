@@ -129,14 +129,18 @@ export function resolveBuilderTransport(): {
 // Start
 // ---------------------------------------------------------------------------
 
-async function ensureBootSkeleton(job: BuildJob, title: string): Promise<void> {
+async function ensureBootSkeleton(
+  job: BuildJob,
+  title: string,
+  kind: "site" | "app",
+): Promise<void> {
   const tip = await inspectProjectDraftTip({
     projectId: job.projectId,
     workspaceId: job.workspaceId,
     maxPaths: 2000,
   });
   const have = new Set(tip.paths);
-  const skeleton = bootSkeletonFiles({ title });
+  const skeleton = bootSkeletonFiles({ title, kind });
   // Only fill gaps — never clobber existing work (edit mode, or a retried create).
   const missing = skeleton.filter((f) => !have.has(f.path));
   const mustHave = ["package.json", "app/layout.tsx", "app/page.tsx", "app/globals.css"];
@@ -173,10 +177,14 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
   const admin = createSupabaseAdminClient();
   const { data: project } = await admin
     .from("projects")
-    .select("name")
+    .select("name, kind")
     .eq("id", job.projectId)
     .maybeSingle();
   const projectName = String(project?.name ?? job.title ?? "New site");
+  // Sites and apps share the builder; the kind selects the prompt profile and
+  // acceptance checklist inside the sandbox.
+  const projectKind: "site" | "app" =
+    String(project?.kind ?? "").toLowerCase() === "app" ? "app" : "site";
 
   await updateBuildJob(job.id, {
     status: "running",
@@ -196,7 +204,7 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
   ]);
 
   try {
-    await ensureBootSkeleton(job, projectName);
+    await ensureBootSkeleton(job, projectName, projectKind);
 
     const sandbox = await ensureProjectSandbox({
       userId,
@@ -246,6 +254,7 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       projectId: job.projectId,
       workspaceId: job.workspaceId,
       mode: job.facts.mode,
+      projectKind,
       projectName,
       brief: job.facts.brief ?? null,
       instruction: job.facts.instruction ?? null,
@@ -299,7 +308,7 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
     });
 
     const updated = await updateBuildJob(job.id, {
-      progressNote: "Drafting your website…",
+      progressNote: projectKind === "app" ? "Drafting your app…" : "Drafting your website…",
       facts: {
         sessionId,
         transport,

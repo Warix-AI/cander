@@ -6,12 +6,11 @@ import {
   type BuildJobClient,
   type BuildJobEventClient,
 } from "@/lib/api/build-jobs-client";
-import { isBuildV2Enabled } from "@/lib/build/jobs/flag";
 
 const ACTIVE = new Set(["queued", "running", "verifying"]);
 
 /**
- * Follow the latest Website Builder V2 job for a project.
+ * Follow the latest builder job for a project (sites and apps).
  * Polls while a job is active (each GET also syncs the sandbox event log
  * server-side), stops when terminal, and re-arms on `cander:build-job-started`.
  * On completion it fires `cander:website-setup-ready` so the brief/preview
@@ -22,7 +21,7 @@ export function useBuildJob(opts: {
   workspaceId: string | null | undefined;
   enabled?: boolean;
 }) {
-  const enabled = Boolean(opts.enabled && opts.projectId && opts.workspaceId && isBuildV2Enabled());
+  const enabled = Boolean(opts.enabled && opts.projectId && opts.workspaceId);
   const [job, setJob] = useState<BuildJobClient | null>(null);
   const [events, setEvents] = useState<BuildJobEventClient[]>([]);
   const lastSeqRef = useRef(0);

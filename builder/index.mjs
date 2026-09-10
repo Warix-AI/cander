@@ -81,6 +81,7 @@ async function main() {
   const tools = new SandboxTools({ repoDir, devServerUrl, log, twentyFirst });
 
   const mode = config.mode === "edit" ? "edit" : "create";
+  const projectKind = config.projectKind === "app" ? "app" : "site";
   const models = {
     planner: config.models?.planner || "gpt-5.6-luna",
     coder: config.models?.coder || "gpt-5.3-codex",
@@ -90,12 +91,21 @@ async function main() {
     maxLlmCalls: Number(config.budget?.maxLlmCalls || (mode === "create" ? 400 : 120)),
   };
 
-  log.emit("status", mode === "create" ? "Drafting your website" : "Working on your change", {
-    mode,
-    models,
-    transport,
-    twentyFirst: Boolean(twentyFirst),
-  });
+  log.emit(
+    "status",
+    mode === "create"
+      ? projectKind === "app"
+        ? "Drafting your app"
+        : "Drafting your website"
+      : "Working on your change",
+    {
+      mode,
+      projectKind,
+      models,
+      transport,
+      twentyFirst: Boolean(twentyFirst),
+    },
+  );
 
   // Wait for the dev server so check_preview works from the first call.
   await waitForDevServer(devServerUrl, log);
@@ -108,6 +118,7 @@ async function main() {
         llm,
         log,
         model: models.planner,
+        projectKind,
         projectName: config.projectName,
         brief: config.brief || null,
         instruction: config.instruction || null,
@@ -122,7 +133,7 @@ async function main() {
 
   // ---- build -----------------------------------------------------------------
   const acceptance = async (finish) => {
-    log.emit("status", "Verifying the site", { routes: finish.routes });
+    log.emit("status", projectKind === "app" ? "Verifying the app" : "Verifying the site", { routes: finish.routes });
     const result = await runAcceptance({
       repoDir,
       devServerUrl,
@@ -130,6 +141,7 @@ async function main() {
       routes: finish.routes,
       expectedRoutes: plan?.routes || [],
       mode,
+      projectKind,
     });
     return result.ok
       ? { accept: true }
@@ -137,20 +149,28 @@ async function main() {
   };
 
   const ctx = {
+    projectKind,
     projectName: config.projectName || "",
     brief: config.brief || null,
     instruction: config.instruction || null,
     plan: plan?.markdown || null,
   };
 
-  log.emit("status", mode === "create" ? "Building pages and components" : "Making the change");
+  log.emit(
+    "status",
+    mode === "create"
+      ? projectKind === "app"
+        ? "Building screens and data layer"
+        : "Building pages and components"
+      : "Making the change",
+  );
   const result = await runAgent({
     llm,
     tools,
     log,
     model: models.coder,
     reasoning: config.reasoning || "medium",
-    instructions: mode === "create" ? createInstructions(ctx) : editInstructions(),
+    instructions: mode === "create" ? createInstructions(ctx) : editInstructions(ctx),
     task: mode === "create" ? createTask(ctx) : editTask({ ...ctx, instruction: config.instruction || "" }),
     budget,
     onFinishRequested: acceptance,
