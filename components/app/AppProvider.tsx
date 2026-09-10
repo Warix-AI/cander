@@ -2347,7 +2347,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         at: nowTime(),
       };
 
-      // Signed-in: live AI for chat + construction/skill/research turns.
+      // Signed-in: live AI for chat + construction/skill/research/repair turns.
       // Keep local mock UI only for special chrome kinds (undo, connect, …)
       // or when offline / unsigned.
       const canLiveAi =
@@ -2357,6 +2357,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         (kind === "chat" ||
           kind === "build" ||
           kind === "refine" ||
+          kind === "fix" ||
           kind === "skill" ||
           kind === "research");
 
@@ -2475,7 +2476,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             },
           ],
         };
-      } else if (kind === "fix") {
+      } else if (!useLiveAi && kind === "fix") {
+        // Offline/demo only — never short-circuit live Build repairs.
         assistantMsg = {
           ...assistantMsg,
           content: "I’ll repair Preview and keep your last good version nearby.",
