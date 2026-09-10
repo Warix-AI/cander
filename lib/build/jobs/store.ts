@@ -38,6 +38,8 @@ export type BuildJobFacts = {
   instruction?: string;
   /** Recent chat turns (compact) so follow-up edits keep their meaning. */
   conversation?: string | null;
+  /** Long-term chat memory (ai_chats.condensed_context rendered as text). */
+  condensedContext?: string | null;
   brief?: WebsiteSetupAnswers | null;
   models?: { planner: string; coder: string };
   transport?: BuildJobTransport;
@@ -144,6 +146,7 @@ export async function createBuildJob(opts: {
   goal: string;
   instruction?: string;
   conversation?: string | null;
+  condensedContext?: string | null;
   brief?: WebsiteSetupAnswers | null;
   ackMessageId?: string | null;
 }): Promise<BuildJob> {
@@ -156,6 +159,7 @@ export async function createBuildJob(opts: {
     eventSeq: 0,
     instruction: opts.instruction,
     conversation: opts.conversation ?? null,
+    condensedContext: opts.condensedContext ?? null,
     brief: opts.brief ?? null,
     ackMessageId: opts.ackMessageId ?? null,
   };

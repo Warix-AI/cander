@@ -32,6 +32,65 @@ export type ProjectSpec = {
   screens?: Array<{ id: string; title: string; route?: string }>;
   workflows?: Array<{ id: string; title: string; steps?: string[] }>;
   permissions?: Array<{ role: string; actions?: string[] }>;
+
+  // ---- durable project memory (website projects) ----------------------------
+  /** Pages the site should have (kept in sync by the builder). */
+  pages?: Array<{ path: string; title: string; purpose?: string }>;
+  /** Product/site features the user asked for (forms, booking, blog…). */
+  features?: string[];
+  /** Visual direction and the component language the builder must honour. */
+  visual?: ProjectVisualSpec;
+  /** Summaries of inspiration sites the user pointed at. */
+  inspiration?: Array<{ url: string; summary: string }>;
+  /** Brand assets stored in the repo (public/...) or project-assets storage. */
+  brand?: {
+    logoPath?: string;
+    faviconPath?: string;
+    ogImagePath?: string;
+    /** Public URLs when the assets live in storage rather than the repo. */
+    logoUrl?: string;
+    faviconUrl?: string;
+    ogImageUrl?: string;
+  };
+  /** Technical conventions the codebase follows (fonts via <link>, tokens in globals.css…). */
+  technical?: string[];
+  /** Standing instructions from the user that apply to every future edit. */
+  userInstructions?: string[];
+  /** Lasting decisions log — newest last. */
+  decisions?: ProjectSpecDecision[];
+  /** Friendly summary of the most recent edit job. */
+  lastEditSummary?: string;
+  updatedAt?: string;
+};
+
+export type ProjectVisualSpec = {
+  direction?: string;
+  palette?: {
+    primary?: string;
+    accent?: string;
+    background?: string;
+    foreground?: string;
+    muted?: string;
+    [key: string]: string | undefined;
+  };
+  typography?: { display?: string; body?: string; scale?: string };
+  components?: {
+    radius?: string;
+    shadow?: string;
+    density?: string;
+    buttons?: string;
+    cards?: string;
+    nav?: string;
+  };
+  layout?: string;
+  mood?: string[];
+};
+
+export type ProjectSpecDecision = {
+  at: string;
+  summary: string;
+  /** Where the decision came from. */
+  source: "setup" | "planner" | "user" | "builder" | "system";
 };
 
 export type BuildPlanComponentNeed = {

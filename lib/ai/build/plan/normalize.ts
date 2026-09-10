@@ -7,6 +7,7 @@ import type {
   BuildPlanRecord,
   ImplementationManifest,
   ProjectSpec,
+  ProjectSpecDecision,
   ResearchManifest,
 } from "./types.ts";
 import { emptyImplementationManifest } from "./types.ts";
@@ -122,7 +123,110 @@ export function normalizeProjectSpec(raw: unknown): ProjectSpec | null {
           }))
           .filter((p) => p.role)
       : undefined,
+    ...normalizeProjectSpecMemory(o),
   };
+}
+
+function asStringMap(v: unknown): Record<string, string | undefined> | undefined {
+  const r = asRecord(v);
+  if (!r) return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, val] of Object.entries(r)) {
+    if (typeof val === "string" && val.trim()) out[k] = val;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** Durable-memory fields; all optional so legacy rows keep validating. */
+function normalizeProjectSpecMemory(o: Record<string, unknown>): Partial<ProjectSpec> {
+  const out: Partial<ProjectSpec> = {};
+  if (Array.isArray(o.pages)) {
+    const pages = o.pages
+      .map((p) => asRecord(p))
+      .filter(Boolean)
+      .map((p) => ({
+        path: asString(p!.path),
+        title: asString(p!.title),
+        purpose: asString(p!.purpose) || undefined,
+      }))
+      .filter((p) => p.path.startsWith("/") && p.title);
+    if (pages.length) out.pages = pages;
+  }
+  const features = asStringArray(o.features);
+  if (features.length) out.features = features;
+  const visual = asRecord(o.visual);
+  if (visual) {
+    const typography = asRecord(visual.typography);
+    const components = asRecord(visual.components);
+    const v: NonNullable<ProjectSpec["visual"]> = {
+      direction: asString(visual.direction) || undefined,
+      palette: asStringMap(visual.palette),
+      typography: typography
+        ? {
+            display: asString(typography.display) || undefined,
+            body: asString(typography.body) || undefined,
+            scale: asString(typography.scale) || undefined,
+          }
+        : undefined,
+      components: components
+        ? {
+            radius: asString(components.radius) || undefined,
+            shadow: asString(components.shadow) || undefined,
+            density: asString(components.density) || undefined,
+            buttons: asString(components.buttons) || undefined,
+            cards: asString(components.cards) || undefined,
+            nav: asString(components.nav) || undefined,
+          }
+        : undefined,
+      layout: asString(visual.layout) || undefined,
+      mood: asStringArray(visual.mood),
+    };
+    if (!v.mood?.length) delete v.mood;
+    out.visual = v;
+  }
+  if (Array.isArray(o.inspiration)) {
+    const insp = o.inspiration
+      .map((i) => asRecord(i))
+      .filter(Boolean)
+      .map((i) => ({ url: asString(i!.url), summary: asString(i!.summary) }))
+      .filter((i) => i.url);
+    if (insp.length) out.inspiration = insp;
+  }
+  const brand = asRecord(o.brand);
+  if (brand) {
+    const b: NonNullable<ProjectSpec["brand"]> = {};
+    for (const k of ["logoPath", "faviconPath", "ogImagePath", "logoUrl", "faviconUrl", "ogImageUrl"] as const) {
+      const val = asString(brand[k]);
+      if (val) b[k] = val;
+    }
+    if (Object.keys(b).length) out.brand = b;
+  }
+  const technical = asStringArray(o.technical);
+  if (technical.length) out.technical = technical;
+  const userInstructions = asStringArray(o.userInstructions);
+  if (userInstructions.length) out.userInstructions = userInstructions;
+  if (Array.isArray(o.decisions)) {
+    const decisions = o.decisions
+      .map((d) => asRecord(d))
+      .filter(Boolean)
+      .map((d) => {
+        const src = asString(d!.source);
+        return {
+          at: asString(d!.at) || new Date(0).toISOString(),
+          summary: asString(d!.summary),
+          source: (["setup", "planner", "user", "builder", "system"].includes(src)
+            ? src
+            : "system") as ProjectSpecDecision["source"],
+        };
+      })
+      .filter((d) => d.summary);
+    if (decisions.length) out.decisions = decisions.slice(-60);
+  }
+  const lastEditSummary = asString(o.lastEditSummary);
+  if (lastEditSummary) out.lastEditSummary = lastEditSummary;
+  const updatedAt = asString(o.updatedAt);
+  if (updatedAt) out.updatedAt = updatedAt;
+  return out;
 }
 
 export function normalizeBuildPlanJson(raw: unknown): BuildPlanJson | null {

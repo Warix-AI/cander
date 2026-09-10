@@ -29,7 +29,8 @@ export const WORKFLOW_CREATE = `Workflow:
 5. Optional: search_components / get_component for standout sections (hero, pricing, testimonials). Adapt into components/ — never paste code with unresolved imports; install deps you use.
 6. Write app/robots.ts, app/sitemap.ts, app/not-found.tsx.
 7. run_command("npx --no-install tsc --noEmit --skipLibCheck") and check_preview on every route. Fix every error. Repeat until clean.
-8. finish(summary, routes). finish is verified automatically; if rejected, fix the listed issues and call finish again.
+8. Call update_project_spec once with the final decisions (pages [{path,title,purpose}], visual {palette hex values, typography, components {radius, shadow, density, buttons, cards, nav}, layout, mood}, features, brand asset paths) so future edits inherit them. Do not commit any other plan files.
+9. finish(summary, routes). finish is verified automatically; if rejected, fix the listed issues and call finish again.
 Work autonomously — never ask the user questions. Prefer many small, correct files over one giant file.`;
 
 export const APP_QUALITY_BAR = `Quality bar — this must work like a real, usable product, not a mockup:
@@ -56,6 +57,10 @@ Work autonomously — never ask the user questions. Prefer many small, correct f
 
 export const WORKFLOW_EDIT = `Your job right now: apply ONE change the user asked for to their existing, already-built site. You are not rebuilding or redesigning it, not auditing SEO, not "improving" unrelated pages. Scope = the request (plus anything it directly breaks).
 
+The project spec (cander.spec.json / DESIGN.md, also summarised in the task) is the site's durable memory: purpose, audience, pages, visual language, standing instructions. Respect it. Decide which kind of change this is:
+- LASTING decision ("make all cards more rounded", "use a warmer palette", "always write in British English", "the primary CTA is Book a call"): change the design tokens in app/globals.css (or the shared component), AND call update_project_spec with the new value + a one-line decision so future edits keep it.
+- CONTENT / one-off edit ("change the hero headline", "add a testimonial", "fix the typo on /about"): edit the files only. Do not touch the spec unless the request adds a page, feature or asset (then record it under pages/features/brand).
+
 Workflow for a change request:
 1. Use the route map in the task to go straight to the files involved (grep/read_file). Read them before editing.
 2. Make the smallest correct change with edit_file (write_file only for new files). Preserve the existing design language and structure unless asked otherwise.
@@ -64,7 +69,9 @@ Workflow for a change request:
 5. finish(summary) — summary is shown to the user verbatim, so write it as a friendly one- or two-sentence confirmation of what changed (no file paths unless useful).
 Never ask clarifying questions; make the most reasonable interpretation and mention any assumption in the summary.`;
 
-/** @typedef {{ projectKind?: "site"|"app", projectName: string, siteUrl?: string|null, brief: Record<string, unknown>|null, instruction?: string|null, plan?: string|null, conversation?: string|null, routeMap?: string|null }} BuildCtx */
+export const WORKFLOW_REPAIR = `The site was just built but did not pass verification. Your only job now: fix the listed problems so tsc is clean and every route renders. Do not redesign, add pages, or rewrite copy. Read the failing files, make minimal fixes, re-run tsc and check_preview, then call finish(summary, routes) with the same routes.`;
+
+/** @typedef {{ projectKind?: "site"|"app", projectName: string, siteUrl?: string|null, brief: Record<string, unknown>|null, projectSpec?: Record<string, unknown>|null, instruction?: string|null, plan?: string|null, conversation?: string|null, routeMap?: string|null }} BuildCtx */
 
 /** @param {BuildCtx} ctx */
 export function createInstructions(ctx) {
@@ -103,7 +110,9 @@ export function createTask(ctx) {
   return [
     `Project: ${ctx.projectName || "Untitled site"}`,
     ctx.siteUrl ? `SITE_URL (the site will be published here; use it for metadataBase, canonical, sitemap, robots, JSON-LD): ${ctx.siteUrl}` : "",
-    `Setup brief (from the user's 8-question onboarding):\n${brief}`,
+    ctx.projectSpec
+      ? `Project spec (durable memory — the source of truth for purpose, audience, pages and visual language; also at cander.spec.json / DESIGN.md):\n${formatProjectSpec(ctx.projectSpec)}`
+      : `Setup brief (from the user's 8-question onboarding):\n${brief}`,
     ctx.plan
       ? `Build packet — follow it closely (sitemap, sections, design system CSS, final copy, component shortlist):\n\n${ctx.plan}`
       : "",
@@ -127,14 +136,21 @@ export function editInstructions(ctx = {}) {
 }
 
 /**
- * @param {{ projectKind?: "site"|"app", projectName: string, siteUrl?: string|null, instruction: string, brief?: Record<string, unknown>|null }} ctx
+ * @param {{ projectKind?: "site"|"app", projectName: string, siteUrl?: string|null, instruction: string, brief?: Record<string, unknown>|null, projectSpec?: Record<string, unknown>|null, condensedContext?: string|null, conversation?: string|null, routeMap?: string|null }} ctx
  */
 export function editTask(ctx) {
   return [
     `Project: ${ctx.projectName || (ctx.projectKind === "app" ? "Untitled app" : "Untitled site")}`,
     ctx.siteUrl ? `SITE_URL (published at): ${ctx.siteUrl}` : "",
     ctx.routeMap ? `Site map at the current draft (URL → file):\n${ctx.routeMap}` : "",
-    ctx.brief && ctx.projectKind !== "app" ? `Original setup brief (for context on brand/tone):\n${formatBrief(ctx.brief)}` : "",
+    ctx.projectSpec
+      ? `Project spec (durable memory — respect it; update it with update_project_spec only for lasting decisions):\n${formatProjectSpec(ctx.projectSpec)}`
+      : ctx.brief && ctx.projectKind !== "app"
+        ? `Original setup brief (for context on brand/tone):\n${formatBrief(ctx.brief)}`
+        : "",
+    ctx.condensedContext
+      ? `Long-term conversation memory (summarised earlier turns):\n${ctx.condensedContext}`
+      : "",
     ctx.conversation
       ? `Recent conversation with the user (context only — earlier requests are already done unless the new request says otherwise):\n${ctx.conversation}`
       : "",
@@ -167,5 +183,66 @@ export function formatBrief(brief) {
     if (k in BRIEF_LABELS || k === "confirm_build" || v == null || v === "") continue;
     lines.push(`- ${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`);
   }
+  return lines.join("\n") || "(empty)";
+}
+
+/**
+ * Compact, prompt-friendly rendering of the project spec (cander.spec.json).
+ * @param {Record<string, unknown>} spec
+ */
+export function formatProjectSpec(spec) {
+  if (!spec || typeof spec !== "object") return "(none)";
+  const lines = [];
+  const str = (v) => (v == null || v === "" ? null : Array.isArray(v) ? v.join(", ") : String(v));
+  const push = (label, v) => {
+    const s = str(v);
+    if (s) lines.push(`- ${label}: ${s}`);
+  };
+  push("Business", spec.businessName);
+  push("Purpose", spec.intent);
+  push("Tagline", spec.tagline);
+  push("Industry", spec.industry);
+  push("Audience", spec.audience);
+  push("Goals", spec.goals);
+  if (Array.isArray(spec.ctas) && spec.ctas.length) {
+    push(
+      "CTAs",
+      spec.ctas.map((c) => `${c.primary ? "[primary] " : ""}${c.label}${c.href ? ` → ${c.href}` : ""}`),
+    );
+  }
+  if (Array.isArray(spec.pages) && spec.pages.length) {
+    push("Pages", spec.pages.map((p) => `${p.path} (${p.title}${p.purpose ? `: ${p.purpose}` : ""})`));
+  }
+  push("Features", spec.features);
+  push("Tone", spec.tone);
+  const v = spec.visual;
+  if (v && typeof v === "object") {
+    push("Visual direction", v.direction);
+    push("Mood", v.mood);
+    push("Layout", v.layout);
+    if (v.palette && typeof v.palette === "object") {
+      push("Palette", Object.entries(v.palette).filter(([, x]) => x).map(([k, x]) => `${k} ${x}`));
+    }
+    if (v.typography && typeof v.typography === "object") {
+      push("Typography", Object.entries(v.typography).filter(([, x]) => x).map(([k, x]) => `${k} ${x}`));
+    }
+    if (v.components && typeof v.components === "object") {
+      push("Component language", Object.entries(v.components).filter(([, x]) => x).map(([k, x]) => `${k}: ${x}`));
+    }
+  }
+  if (spec.brand && typeof spec.brand === "object") {
+    push("Brand assets", Object.entries(spec.brand).filter(([, x]) => x).map(([k, x]) => `${k}=${x}`));
+  }
+  if (Array.isArray(spec.inspiration) && spec.inspiration.length) {
+    push("Inspiration", spec.inspiration.map((i) => `${i.url}${i.summary ? ` — ${i.summary}` : ""}`));
+  }
+  push("Contact", [spec.location, spec.phone, spec.email].filter(Boolean));
+  push("Technical conventions", spec.technical);
+  push("Standing instructions", spec.userInstructions);
+  push("Constraints", spec.constraints);
+  if (Array.isArray(spec.decisions) && spec.decisions.length) {
+    push("Recent decisions", spec.decisions.slice(-8).map((d) => d.summary));
+  }
+  push("Last change", spec.lastEditSummary);
   return lines.join("\n") || "(empty)";
 }

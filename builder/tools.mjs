@@ -203,6 +203,23 @@ export class SandboxTools {
         },
       },
       {
+        name: "update_project_spec",
+        description:
+          "Record a LASTING decision in the project spec (cander.spec.json — the site's durable memory). Use for design-language changes (palette, typography, radius/shadow/density, buttons, cards, nav), new pages/features, brand assets, or standing user instructions. Not for one-off content edits. `patch` is merged into the spec (arrays replace; visual/brand merge); `decision` is a one-line log entry.",
+        parameters: {
+          type: "object",
+          properties: {
+            patch: {
+              type: "object",
+              description:
+                "Partial spec. Keys: tagline, intent, audience, goals[], ctas[{label,href,primary}], pages[{path,title,purpose}], features[], tone, visual{direction,mood[],layout,palette{primary,accent,background,foreground,muted,...hex},typography{display,body,scale},components{radius,shadow,density,buttons,cards,nav}}, brand{logoPath,faviconPath,ogImagePath}, technical[], userInstructions[], constraints[].",
+            },
+            decision: { type: "string", description: "One sentence: what was decided and why." },
+          },
+          required: ["patch", "decision"],
+        },
+      },
+      {
         name: "finish",
         description:
           "Call when the site is complete and verified. Provide a 1–3 sentence user-facing summary and the list of routes.",
@@ -279,6 +296,8 @@ export class SandboxTools {
         case "emit_progress":
           this.log.emit("progress", String(a.message ?? "").slice(0, 200));
           return { output: "ok" };
+        case "update_project_spec":
+          return { output: this.updateProjectSpec(a.patch, a.decision) };
         case "search_components":
           return { output: await this.searchComponents(a.query, a.limit) };
         case "get_component":
@@ -300,6 +319,57 @@ export class SandboxTools {
   }
 
   // ---- implementations ------------------------------------------------------
+
+  /**
+   * Merge a patch into cander.spec.json locally (so read_file sees it) and
+   * emit a spec_update event; the server merges it into projects.project_spec
+   * and re-renders DESIGN.md before the draft is committed.
+   */
+  updateProjectSpec(patch, decision) {
+    if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+      return "ERROR: patch must be an object";
+    }
+    const specPath = join(this.repoDir, "cander.spec.json");
+    let current = {};
+    try {
+      if (existsSync(specPath)) current = JSON.parse(readFileSync(specPath, "utf8")) || {};
+    } catch {
+      current = {};
+    }
+    const next = { ...current };
+    for (const [k, v] of Object.entries(patch)) {
+      if (k === "version" || k === "kind" || k === "decisions" || v === undefined) continue;
+      if ((k === "visual" || k === "brand") && v && typeof v === "object" && !Array.isArray(v)) {
+        const prev = current[k] && typeof current[k] === "object" ? current[k] : {};
+        const merged = { ...prev };
+        for (const [sk, sv] of Object.entries(v)) {
+          merged[sk] =
+            sv && typeof sv === "object" && !Array.isArray(sv)
+              ? { ...(prev[sk] && typeof prev[sk] === "object" ? prev[sk] : {}), ...sv }
+              : sv;
+        }
+        next[k] = merged;
+      } else if (["userInstructions", "technical", "features"].includes(k)) {
+        const prev = Array.isArray(current[k]) ? current[k] : [];
+        const add = Array.isArray(v) ? v.map(String) : typeof v === "string" ? [v] : [];
+        next[k] = [...new Set([...prev, ...add.map((x) => x.trim()).filter(Boolean)])].slice(0, 40);
+      } else {
+        next[k] = v;
+      }
+    }
+    const now = new Date().toISOString();
+    const summary = String(decision ?? "").trim().slice(0, 300);
+    next.decisions = [
+      ...(Array.isArray(current.decisions) ? current.decisions : []),
+      ...(summary ? [{ at: now, summary, source: "builder" }] : []),
+    ].slice(-60);
+    next.updatedAt = now;
+    mkdirSync(dirname(specPath), { recursive: true });
+    writeFileSync(specPath, `${JSON.stringify(next, null, 2)}\n`);
+    this.writtenPaths.add("cander.spec.json");
+    this.log.emit("spec_update", summary || "Project spec updated", { patch, decision: summary });
+    return "ok — spec updated (cander.spec.json). DESIGN.md is regenerated when the draft is saved.";
+  }
 
   listTree(dir, depth) {
     const root = dir ? this.safePath(dir).abs : this.repoDir;

@@ -4,6 +4,7 @@
 
 import type { ClarificationQuestion } from "@/lib/ai/clarification/schema";
 import type { SiteSpec } from "@/lib/ai/build/site-spec";
+import { cleanBriefAnswers } from "@/lib/ai/build/plan/spec-memory";
 
 export type WebsiteSetupStatus = "setup" | "building" | "ready" | "failed";
 
@@ -281,9 +282,10 @@ export function mergeAnswersIntoBrief(
   const nextAnswers: WebsiteSetupAnswers = {
     ...brief.answers,
   };
+  const cleaned = cleanBriefAnswers(answers);
   for (const key of WEBSITE_SETUP_ANSWER_KEYS) {
-    if (key in answers) {
-      const v = answers[key];
+    if (key in cleaned) {
+      const v = cleaned[key];
       if (typeof v === "string" || Array.isArray(v)) {
         nextAnswers[key] = v as never;
       }
@@ -319,7 +321,7 @@ export function normalizeWebsiteSetupBrief(raw: unknown): WebsiteSetupBrief {
       : "setup";
   const answers =
     o.answers && typeof o.answers === "object"
-      ? (o.answers as WebsiteSetupAnswers)
+      ? cleanBriefAnswers(o.answers as Record<string, unknown>) as WebsiteSetupAnswers
       : {};
   return emptyWebsiteSetupBrief({
     status,

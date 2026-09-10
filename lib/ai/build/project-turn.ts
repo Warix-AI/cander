@@ -15,6 +15,7 @@ import type {
   AgentTurnOptions,
   AgentTurnResult,
 } from "@/lib/ai/runtime/agent-turn";
+import { unwrapDoubleEncodedString } from "@/lib/ai/build/plan/spec-memory";
 import { runRawOpenAITurn } from "@/lib/ai/raw-openai/run-turn";
 import type { AiGenerateRequest } from "@/lib/ai/runtime/types";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
@@ -465,7 +466,7 @@ function parseSetupAnswersFromContent(
     const m = line.match(/^-\s*([^:]+):\s*(.+)$/);
     if (!m) continue;
     const label = m[1]!.trim().toLowerCase();
-    const value = m[2]!.trim();
+    const value = unwrapDoubleEncodedString(m[2]!.trim());
     if (label.includes("business")) answers.business_goal = value;
     else if (label.includes("audience")) answers.audience_cta = value;
     else if (label.includes("depth")) answers.site_depth = value;
@@ -498,7 +499,7 @@ function parseSetupAnswersFromContent(
     const re = new RegExp(`${key}["']?\\s*[:=]\\s*["']?([^"'\\n]+)`, "i");
     const hit = content.match(re);
     if (hit?.[1] && !(key in answers)) {
-      answers[key] = hit[1].trim();
+      answers[key] = unwrapDoubleEncodedString(hit[1].trim());
     }
   }
   return Object.keys(answers).length ? answers : null;

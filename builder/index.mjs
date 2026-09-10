@@ -18,6 +18,8 @@ import {
   createTask,
   editInstructions,
   editTask,
+  STACK_RULES,
+  WORKFLOW_REPAIR,
 } from "./prompts.mjs";
 import { runPlanningPhase } from "./planner.mjs";
 
@@ -122,6 +124,7 @@ async function main() {
         projectName: config.projectName,
         siteUrl: config.siteUrl || null,
         brief: config.brief || null,
+        projectSpec: config.projectSpec || null,
         instruction: config.instruction || null,
         twentyFirst,
         webSearch: Boolean(config.webSearch),
@@ -155,8 +158,10 @@ async function main() {
     projectName: config.projectName || "",
     siteUrl: config.siteUrl || null,
     brief: config.brief || null,
+    projectSpec: config.projectSpec || null,
     instruction: config.instruction || null,
     conversation: config.conversation || null,
+    condensedContext: config.condensedContext || null,
     routeMap: config.routeMap || null,
     plan: plan?.markdown || null,
   };
@@ -169,7 +174,7 @@ async function main() {
         : "Building pages and components"
       : "Making the change",
   );
-  const result = await runAgent({
+  let result = await runAgent({
     llm,
     tools,
     log,
@@ -181,6 +186,44 @@ async function main() {
     onFinishRequested: acceptance,
     label: "coder",
   });
+
+  // ---- one bounded self-repair round -----------------------------------------
+  // Verification failures after finish() are usually a handful of type errors
+  // or one route that 500s. Instead of surfacing "Retry" to the user, grant a
+  // short, fresh-context repair pass with the concrete report before failing.
+  if (!result.finished && result.reason === "verification_failed" && tools.writtenPaths.size > 0) {
+    log.emit("status", "Fixing verification issues", { repair: true });
+    const repairBudget = {
+      deadlineMs: Math.max(budget.deadlineMs, Date.now()) + Number(config.budget?.repairMs || 8 * 60_000),
+      maxLlmCalls: Number(config.budget?.repairLlmCalls || 40),
+    };
+    const repair = await runAgent({
+      llm,
+      tools,
+      log,
+      model: models.coder,
+      reasoning: "medium",
+      instructions: [
+        `You are Cander Builder — an autonomous senior front-end engineer fixing a Next.js repo so it passes verification.`,
+        STACK_RULES,
+        WORKFLOW_REPAIR,
+      ].join("\n\n"),
+      task: [
+        `Project: ${config.projectName || "Untitled"}`,
+        `Routes that must render: ${(result.routes || []).join(", ") || "(see report)"}`,
+        `Verification report:\n${(result.lastText || "").slice(0, 6000)}`,
+        "Fix these problems now, re-run tsc and check_preview, then call finish.",
+      ].join("\n\n"),
+      budget: repairBudget,
+      onFinishRequested: acceptance,
+      label: "repair",
+    });
+    if (repair.finished) {
+      result = { ...repair, summary: result.summary || repair.summary };
+    } else {
+      result = { ...result, lastText: repair.lastText || result.lastText };
+    }
+  }
 
   const stats = {
     llmCalls: llm.calls,

@@ -192,7 +192,19 @@ export function formatClarificationAnswersForModel(
 ): string {
   const lines = [`Clarification submitted for “${result.title}”:`];
   for (const row of formatClarificationAnswersForDisplay(result.answers)) {
-    lines.push(`- ${row.label}: ${JSON.stringify(row.raw)}`);
+    // Plain text for strings/arrays — JSON.stringify here used to wrap every
+    // answer in quotes, which then got stored verbatim in the setup brief
+    // ("\"Sell shoes\"") and leaked into prompts and the UI.
+    const raw = row.raw;
+    const text =
+      typeof raw === "string"
+        ? raw
+        : Array.isArray(raw) && raw.every((x) => typeof x === "string")
+          ? raw.join(", ")
+          : typeof raw === "boolean" || typeof raw === "number"
+            ? String(raw)
+            : JSON.stringify(raw);
+    lines.push(`- ${row.label}: ${text}`);
   }
   if (result.skipped) lines.push("(User skipped remaining optional fields.)");
   return lines.join("\n");

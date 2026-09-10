@@ -49,6 +49,14 @@ import {
   type BuildJobTransport,
 } from "@/lib/build/jobs/store";
 import { bootSkeletonFiles } from "@/lib/build/jobs/boot-skeleton";
+import { loadPlanFirstArtifacts, savePlanFirstArtifacts } from "@/lib/ai/build/plan/store";
+import {
+  cleanBriefAnswers,
+  mergeProjectSpecPatch,
+  projectSpecFromSetupBrief,
+  projectSpecRepoFiles,
+} from "@/lib/ai/build/plan/spec-memory";
+import type { ProjectSpec } from "@/lib/ai/build/plan/types";
 
 const LOG = "[cander:build-job]";
 const BUILDER_DIR_IN_SANDBOX = ".cander/builder";
@@ -305,6 +313,17 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
     const repoDir = pwd.stdout.trim() || "/vercel/sandbox";
     const jobDir = `${repoDir}/.cander/jobs/${job.id}`;
 
+    // Durable memory: projects.project_spec. First build seeds it from the
+    // setup brief; every job hands it to the builder and mirrors it into the
+    // repo (cander.spec.json / DESIGN.md) so the coder can read_file it.
+    const brief = job.facts.brief ? cleanBriefAnswers(job.facts.brief as Record<string, unknown>) : null;
+    const projectSpec = await loadOrSeedProjectSpec({
+      job,
+      projectName,
+      projectKind,
+      brief,
+    });
+
     const config = {
       jobId: job.id,
       projectId: job.projectId,
@@ -313,9 +332,11 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       projectKind,
       projectName,
       siteUrl,
-      brief: job.facts.brief ?? null,
+      brief,
+      projectSpec,
       instruction: job.facts.instruction ?? null,
       conversation: job.facts.conversation ?? null,
+      condensedContext: job.facts.condensedContext ?? null,
       routeMap: job.facts.mode === "edit" ? routeMapFromPaths(tipPaths) : null,
       apiBase,
       transport,
@@ -336,6 +357,9 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
     await sb.writeFiles([
       ...sources.map((f) => ({ path: `${repoDir}/${f.path}`, content: f.content })),
       { path: `${jobDir}/config.json`, content: JSON.stringify(config, null, 2) },
+      ...(projectSpec
+        ? projectSpecRepoFiles(projectSpec).map((f) => ({ path: `${repoDir}/${f.path}`, content: f.content }))
+        : []),
     ]);
     // Keep .cander out of git status (persist also skips it defensively).
     await runPrivilegedSandboxCommand({
@@ -613,6 +637,9 @@ async function completeBuildJob(
     await appendBuildJobEvents(job.id, [
       { seq: 100000, kind: "status", message: "Saving your draft", payload: { server: true } },
     ]);
+    // Fold the builder's spec updates into projects.project_spec and refresh
+    // the repo mirror before the commit so DESIGN.md never lags the code.
+    await applySpecUpdatesFromJob({ job, summary, sessionId, userId });
     const persisted = await persistSandboxToDraft({
       sessionId,
       userId,
@@ -685,6 +712,94 @@ async function completeBuildJob(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return failBuildJob({ ...job, status: "verifying" }, message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Project spec (durable memory)
+// ---------------------------------------------------------------------------
+
+async function loadOrSeedProjectSpec(opts: {
+  job: BuildJob;
+  projectName: string;
+  projectKind: "site" | "app";
+  brief: Record<string, unknown> | null;
+}): Promise<ProjectSpec | null> {
+  const { job } = opts;
+  try {
+    const existing = await loadPlanFirstArtifacts(job.projectId, job.workspaceId);
+    if (existing.projectSpec) {
+      // Standing instruction on a create job with an explicit prompt.
+      return existing.projectSpec;
+    }
+    if (job.facts.mode !== "create" && !opts.brief) return null;
+    const seeded = projectSpecFromSetupBrief({
+      answers: opts.brief,
+      projectName: opts.projectName,
+      kind: opts.projectKind,
+      instruction: job.facts.mode === "create" ? job.facts.instruction ?? null : null,
+    });
+    await savePlanFirstArtifacts({
+      projectId: job.projectId,
+      workspaceId: job.workspaceId,
+      projectSpec: seeded,
+    });
+    return seeded;
+  } catch (err) {
+    console.warn(LOG, "project spec load/seed failed", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+async function applySpecUpdatesFromJob(opts: {
+  job: BuildJob;
+  summary: string;
+  sessionId: string;
+  userId: string;
+}): Promise<void> {
+  const { job } = opts;
+  try {
+    const events = await listBuildJobEvents({ jobId: job.id, limit: 500 });
+    const updates = events.filter((e) => e.kind === "spec_update");
+    const current = (await loadPlanFirstArtifacts(job.projectId, job.workspaceId)).projectSpec;
+    if (!current) return;
+    let next = current;
+    for (const ev of updates) {
+      const patch = ev.payload?.patch;
+      if (!patch || typeof patch !== "object" || Array.isArray(patch)) continue;
+      const decision = typeof ev.payload?.decision === "string" ? ev.payload.decision : ev.message;
+      next = mergeProjectSpecPatch(next, patch as Record<string, unknown>, {
+        summary: decision,
+        source: "builder",
+      });
+    }
+    if (job.facts.mode === "edit") {
+      next = mergeProjectSpecPatch(
+        next,
+        { lastEditSummary: opts.summary.slice(0, 400) },
+        job.facts.instruction
+          ? { summary: `Edit: ${job.facts.instruction.slice(0, 200)}`, source: "user" }
+          : undefined,
+      );
+    } else {
+      next = mergeProjectSpecPatch(next, { lastEditSummary: opts.summary.slice(0, 400) });
+    }
+    await savePlanFirstArtifacts({
+      projectId: job.projectId,
+      workspaceId: job.workspaceId,
+      projectSpec: next,
+    });
+    const resolved = await resolveSandboxForSession(opts.sessionId, opts.userId);
+    if (!resolved) return;
+    const sb = resolved.sandbox as unknown as BuilderSandbox;
+    const pwd = await runPrivilegedSandboxCommand({ sessionId: opts.sessionId, userId: opts.userId, cmd: "pwd" });
+    const repoDir = pwd.stdout.trim() || "/vercel/sandbox";
+    await sb.writeFiles(
+      projectSpecRepoFiles(next).map((f) => ({ path: `${repoDir}/${f.path}`, content: f.content })),
+    );
+  } catch (err) {
+    // Memory is best-effort; the draft itself must still be saved.
+    console.warn(LOG, "spec update failed", { jobId: job.id, error: err instanceof Error ? err.message : err });
   }
 }
 

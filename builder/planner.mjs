@@ -8,7 +8,7 @@
 //                                 ▼
 //                          build packet (markdown) → coder
 
-import { formatBrief } from "./prompts.mjs";
+import { formatBrief, formatProjectSpec } from "./prompts.mjs";
 
 const PLANNER_INSTRUCTIONS = `You are Cander's website planner. Turn a short onboarding brief into a concrete, opinionated site plan a senior front-end engineer will implement in one pass (Next.js App Router + Tailwind).
 
@@ -62,7 +62,7 @@ No placeholder colors — pick real values.`;
 const RESEARCH_INSTRUCTIONS = `You are a market researcher for a web agency. Using web search, gather what a best-in-class website in this exact niche does today: 4–6 competitor or exemplar sites (name + URL + what they do well), typical page structure, trust signals customers expect (certifications, guarantees, reviews), pricing presentation norms, and 5 industry-specific phrases/terms to use. Output terse Markdown (max ~500 words). Cite URLs inline.`;
 
 /**
- * @param {{ llm: import("./llm.mjs").LlmClient, log: import("./events.mjs").EventLog, model: string, projectKind?: "site"|"app", projectName?: string, siteUrl?: string|null, brief: Record<string, unknown>|null, instruction?: string|null, twentyFirst?: import("./twenty-first.mjs").TwentyFirstClient|null, webSearch?: boolean, deadlineMs: number }} opts
+ * @param {{ llm: import("./llm.mjs").LlmClient, log: import("./events.mjs").EventLog, model: string, projectKind?: "site"|"app", projectName?: string, siteUrl?: string|null, brief: Record<string, unknown>|null, projectSpec?: Record<string, unknown>|null, instruction?: string|null, twentyFirst?: import("./twenty-first.mjs").TwentyFirstClient|null, webSearch?: boolean, deadlineMs: number }} opts
  * @returns {Promise<{ markdown: string, routes: string[] }|null>}
  */
 export async function runPlanningPhase(opts) {
@@ -76,11 +76,15 @@ export async function runPlanningPhase(opts) {
       : "Reading your answers and planning pages, sections, and brand…",
   );
 
-  const briefText = opts.brief ? formatBrief(opts.brief) : "(none provided)";
+  const briefText = opts.projectSpec
+    ? formatProjectSpec(opts.projectSpec)
+    : opts.brief
+      ? formatBrief(opts.brief)
+      : "(none provided)";
   const input = [
     `Project name: ${opts.projectName || "Untitled"}`,
     opts.siteUrl ? `SITE_URL: ${opts.siteUrl}` : "",
-    isApp ? "" : `Onboarding brief:\n${briefText}`,
+    isApp ? "" : `${opts.projectSpec ? "Project spec (durable memory)" : "Onboarding brief"}:\n${briefText}`,
     opts.instruction
       ? `${isApp ? "Product request from the user" : "Extra instruction from the user"}:\n${opts.instruction}`
       : "",

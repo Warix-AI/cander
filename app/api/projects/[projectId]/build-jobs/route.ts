@@ -101,6 +101,8 @@ export async function POST(request: Request, ctx: RouteCtx) {
   if (!usage.ok) return usage.response;
 
   const brief = await loadWebsiteSetupBrief(projectId, workspaceId);
+  const condensedContext =
+    mode === "edit" && body.threadId ? await loadCondensedChatContext(body.threadId) : null;
   const job = await createBuildJob({
     projectId,
     workspaceId,
@@ -122,6 +124,7 @@ export async function POST(request: Request, ctx: RouteCtx) {
       typeof body.conversation === "string" && body.conversation.trim()
         ? body.conversation.trim().slice(0, 6000)
         : null,
+    condensedContext,
     brief: brief?.answers ?? null,
     ackMessageId: body.ackMessageId ?? null,
   });
@@ -197,4 +200,34 @@ export async function GET(request: Request, ctx: RouteCtx) {
   }
   const events = await listBuildJobEvents({ jobId: job.id, afterSeq, limit: 300 });
   return NextResponse.json({ ok: true, job, events });
+}
+
+/**
+ * Long-term chat memory for the builder: the same condensed summary the chat
+ * model sees (ai_chats.condensed_context), rendered as text. Replaces relying
+ * only on the last few clipped turns.
+ */
+async function loadCondensedChatContext(chatId: string): Promise<string | null> {
+  try {
+    const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createSupabaseAdminClient();
+    const { data } = await admin
+      .from("ai_chats")
+      .select("condensed_context")
+      .eq("id", chatId)
+      .maybeSingle();
+    const c = data?.condensed_context as Record<string, unknown> | null | undefined;
+    if (!c || typeof c !== "object") return null;
+    const list = (v: unknown) => (Array.isArray(v) && v.length ? v.map(String).join("; ") : null);
+    const lines = [
+      typeof c.conversation_summary === "string" ? `Summary: ${c.conversation_summary}` : null,
+      typeof c.current_state === "string" ? `Current state: ${c.current_state}` : null,
+      list(c.decisions) ? `Decisions: ${list(c.decisions)}` : null,
+      list(c.open_tasks) ? `Open tasks: ${list(c.open_tasks)}` : null,
+      list(c.preferences_constraints) ? `Preferences/constraints: ${list(c.preferences_constraints)}` : null,
+    ].filter(Boolean);
+    return lines.length ? lines.join("\n").slice(0, 4000) : null;
+  } catch {
+    return null;
+  }
 }
