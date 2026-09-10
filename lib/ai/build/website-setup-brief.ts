@@ -195,6 +195,19 @@ export function isWebsiteSetupComplete(brief: WebsiteSetupBrief): boolean {
   );
 }
 
+/**
+ * True only while guided setup is still required.
+ * Once the user confirms Build (or status leaves setup), chat/edits must not
+ * be blocked by the setup card again.
+ */
+export function needsWebsiteGuidedSetup(
+  brief: WebsiteSetupBrief | null | undefined,
+): boolean {
+  if (!brief) return true;
+  if (brief.status !== "setup") return false;
+  return !isWebsiteSetupComplete(brief);
+}
+
 export function briefToPlanningPrompt(brief: WebsiteSetupBrief): string {
   const a = brief.answers;
   const sections = Array.isArray(a.sections_features)

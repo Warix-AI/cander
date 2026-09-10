@@ -36,8 +36,8 @@ import { savePlanFirstArtifacts } from "@/lib/ai/build/plan/store";
 import type { ScaffoldFile } from "@/lib/ai/build/site-spec";
 import {
   briefToPlanningPrompt,
-  isWebsiteSetupComplete,
   mergeAnswersIntoBrief,
+  needsWebsiteGuidedSetup,
   WEBSITE_SETUP_RESUME_TOOL,
   type WebsiteSetupBrief,
 } from "@/lib/ai/build/website-setup-brief";
@@ -58,6 +58,10 @@ import {
   loadWebsiteSetupBrief,
   saveWebsiteSetupBrief,
 } from "@/lib/build/website-setup-brief-store";
+import {
+  briefStatusFromBuildPhase,
+  getProjectBuildPhase,
+} from "@/lib/build/build-phase";
 import type { BuildPlanRecord } from "@/lib/ai/build/plan/types";
 
 const MAX_ROUNDS = 10;
@@ -1572,6 +1576,14 @@ export async function runBuildProjectTurn(
   let websiteBrief: WebsiteSetupBrief | null = null;
   if (isSiteProject) {
     websiteBrief = await loadWebsiteSetupBrief(projectId, workspaceId);
+    // build_phase is source of truth when present (same as GET /website-setup).
+    const buildPhase = await getProjectBuildPhase({ projectId, workspaceId });
+    if (buildPhase) {
+      websiteBrief = {
+        ...websiteBrief,
+        status: briefStatusFromBuildPhase(buildPhase),
+      };
+    }
     // Merge clarification answers embedded in the resume message when present.
     if (
       GUIDED_SETUP_CONFIRM_RE.test(request.content) ||
@@ -1602,35 +1614,13 @@ export async function runBuildProjectTurn(
     IMPLEMENT_INTENT_RE.test(request.content) ||
     GUIDED_SETUP_CONFIRM_RE.test(request.content);
 
-  // Sites: block generation until guided setup is complete + confirmed.
-  if (isSiteProject && wantsCreate && websiteBrief) {
-    if (
-      websiteBrief.status === "setup" &&
-      !isWebsiteSetupComplete(websiteBrief)
-    ) {
-      return {
-        content:
-          "Finish the website setup questions above the composer (all 8 steps), then confirm **Build my site**. I won’t generate a draft until then — the preview stays blank with the progress ring.",
-        runtime: "cloud",
-        offline: false,
-        condensationOccurred: false,
-        aiChatId: request.aiChatId ?? null,
-      };
-    }
-  }
-
-  // Soft sandbox only after generation is allowed to start (sites past setup).
-  const shouldStartSandbox =
-    !isSiteProject ||
-    !websiteBrief ||
-    websiteBrief.status === "ready" ||
-    websiteBrief.status === "building" ||
-    (wantsCreate && isWebsiteSetupComplete(websiteBrief));
-
-  if (!shouldStartSandbox && isSiteProject) {
+  // Only unfinished guided setup blocks turns. Completed confirm / past-setup
+  // status (including build_phase overlay) must allow repair/edit chat.
+  if (isSiteProject && needsWebsiteGuidedSetup(websiteBrief)) {
     return {
-      content:
-        "Your website project is in guided setup. Answer the questions in the card above the composer — the preview stays blank until we build.",
+      content: wantsCreate
+        ? "Finish the website setup questions above the composer (all 8 steps), then confirm **Build my site**. I won’t generate a draft until then — the preview stays blank with the progress ring."
+        : "Your website project is in guided setup. Answer the questions in the card above the composer — the preview stays blank until we build.",
       runtime: "cloud",
       offline: false,
       condensationOccurred: false,

@@ -31,8 +31,11 @@ import {
   openWebsiteSetupClarification,
   persistWebsiteSetupProgress,
 } from "@/lib/ai/clarification/website-setup-ui";
-import { WEBSITE_SETUP_RESUME_TOOL } from "@/lib/ai/build/website-setup-brief";
-import { formatWebsiteSetupUserSummary } from "@/lib/ai/build/website-setup-brief";
+import {
+  WEBSITE_SETUP_RESUME_TOOL,
+  formatWebsiteSetupUserSummary,
+  needsWebsiteGuidedSetup,
+} from "@/lib/ai/build/website-setup-brief";
 import { fetchWebsiteSetupBrief } from "@/lib/api/website-setup-client";
 import {
   migrateThreadTaskState,
@@ -4346,19 +4349,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectId: projectKey,
           workspaceId: itemWorkspaceId,
         });
-        if (!brief || brief.status === "setup") {
-          await persistWebsiteSetupProgress({
-            projectId: projectKey,
-            workspaceId: itemWorkspaceId,
-            answers: brief?.answers ?? {},
-            status: "setup",
-          });
-          openWebsiteSetupClarification({
-            threadId: tid,
-            projectId: projectKey,
-            answers: (brief?.answers as Record<string, unknown>) ?? {},
-          });
-        }
+        // Fetch failure → do not wipe or reopen setup.
+        if (!brief) return;
+        // Only reopen the card while setup is actually unfinished.
+        if (!needsWebsiteGuidedSetup(brief)) return;
+        await persistWebsiteSetupProgress({
+          projectId: projectKey,
+          workspaceId: itemWorkspaceId,
+          answers: brief.answers ?? {},
+          status: "setup",
+        });
+        openWebsiteSetupClarification({
+          threadId: tid,
+          projectId: projectKey,
+          answers: (brief.answers as Record<string, unknown>) ?? {},
+        });
       })();
     }
     return tid;

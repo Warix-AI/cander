@@ -192,10 +192,8 @@ export async function saveWebsiteSetupBrief(opts: {
 
   try {
     const admin = createSupabaseAdminClient();
-    const { buildPhaseFromBriefStatus, isBuildPhase } = await import(
-      "@/lib/build/build-phase"
-    );
-    const mapped = buildPhaseFromBriefStatus(next.status);
+    const { buildPhaseFromBriefStatus, briefStatusFromBuildPhase, isBuildPhase } =
+      await import("@/lib/build/build-phase");
     const { data: row } = await admin
       .from("projects")
       .select("build_phase")
@@ -203,6 +201,19 @@ export async function saveWebsiteSetupBrief(opts: {
       .eq("workspace_id", opts.workspaceId)
       .maybeSingle();
     const current = isBuildPhase(row?.build_phase) ? row!.build_phase : null;
+    // Never regress an in-progress / ready machine back to setup via brief sync.
+    if (
+      next.status === "setup" &&
+      current &&
+      current !== "setup"
+    ) {
+      next = {
+        ...next,
+        status: briefStatusFromBuildPhase(current),
+      };
+      memoryBriefs.set(key, next);
+    }
+    const mapped = buildPhaseFromBriefStatus(next.status);
     const fineGrained =
       current === "booting" ||
       current === "preview_check" ||
@@ -216,7 +227,7 @@ export async function saveWebsiteSetupBrief(opts: {
     if (
       next.status === "ready" ||
       next.status === "failed" ||
-      next.status === "setup" ||
+      (next.status === "setup" && (!current || current === "setup")) ||
       !(fineGrained && next.status === "building")
     ) {
       patch.build_phase = mapped;
