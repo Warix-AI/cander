@@ -37,6 +37,7 @@ import { BUILD_APP_PORT } from "@/lib/build/sandbox/constants";
 import { signBuildJobToken } from "@/lib/build/jobs/token";
 import {
   appendBuildJobEvents,
+  findQueuedBuildJob,
   getBuildJob,
   listBuildJobEvents,
   transitionBuildJob,
@@ -182,11 +183,14 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
     progressNote: "Preparing your workspace…",
     facts: { startedAt: new Date().toISOString() },
   });
-  await setProjectBuildPhase({
-    projectId: job.projectId,
-    workspaceId: job.workspaceId,
-    phase: "planning",
-  });
+  // Edit jobs keep the preview visible (phase stays ready; HMR shows changes).
+  if (job.facts.mode === "create") {
+    await setProjectBuildPhase({
+      projectId: job.projectId,
+      workspaceId: job.workspaceId,
+      phase: "planning",
+    });
+  }
   await appendBuildJobEvents(job.id, [
     { seq: 0, kind: "status", message: "Preparing your workspace", payload: { server: true } },
   ]);
@@ -402,7 +406,7 @@ async function pullAndProcess(job: BuildJob): Promise<BuildJob> {
     const lastProgress = [...events]
       .reverse()
       .find((e) => e.kind === "progress" || e.kind === "status");
-    const phase = phaseForEvents(events);
+    const phase = job.facts.mode === "create" ? phaseForEvents(events) : null;
     if (phase) {
       await setProjectBuildPhase({
         projectId: job.projectId,
@@ -472,7 +476,7 @@ export async function ingestPushedBuildJobEvents(
   const lastProgress = [...clean]
     .reverse()
     .find((e) => e.kind === "progress" || e.kind === "status");
-  const phase = phaseForEvents(clean);
+  const phase = job.facts.mode === "create" ? phaseForEvents(clean) : null;
   if (phase) {
     await setProjectBuildPhase({
       projectId: job.projectId,
@@ -535,7 +539,7 @@ async function completeBuildJob(
     if (persisted.outcome === "db_sync_failed") {
       throw new Error(persisted.error || "Draft commit saved but database sync failed.");
     }
-    const draftSha = persisted.draftSha || null;
+    let draftSha = persisted.draftSha || null;
     await appendBuildJobEvents(job.id, [
       {
         seq: 100001,
@@ -546,20 +550,34 @@ async function completeBuildJob(
             : `Saved ${persisted.filesCommitted} file(s) to the draft`,
         payload: { server: true, outcome: persisted.outcome, draftSha },
       },
-      { seq: 100002, kind: "status", message: "Starting the preview", payload: { server: true } },
     ]);
 
-    const ready = await finalizeBuildReady({
-      userId,
-      projectId: job.projectId,
-      workspaceId: job.workspaceId,
-    });
-    if (!ready.ok) {
-      throw new Error(ready.reason || "Preview did not become ready.");
+    if (job.facts.mode === "create") {
+      // First build: boot + preview_check + ready (server-authoritative).
+      await appendBuildJobEvents(job.id, [
+        { seq: 100002, kind: "status", message: "Starting the preview", payload: { server: true } },
+      ]);
+      const ready = await finalizeBuildReady({
+        userId,
+        projectId: job.projectId,
+        workspaceId: job.workspaceId,
+      });
+      if (!ready.ok) {
+        throw new Error(ready.reason || "Preview did not become ready.");
+      }
+      draftSha = ready.draftSha ?? draftSha;
+    } else {
+      // Edit: the warm dev server already reflects the change via HMR — just
+      // confirm it still answers. No sandbox recreate, no phase churn.
+      const { runSandboxPreviewCheck } = await import("@/lib/build/preview/preview-check");
+      const health = await runSandboxPreviewCheck({ sessionId, userId });
+      if (!health.ok) {
+        throw new Error(health.reason || "Preview stopped responding after the change.");
+      }
     }
 
     await appendBuildJobEvents(job.id, [
-      { seq: 100003, kind: "status", message: "Draft ready", payload: { server: true, draftSha: ready.draftSha } },
+      { seq: 100003, kind: "status", message: "Draft ready", payload: { server: true, draftSha } },
     ]);
     const done = await updateBuildJob(job.id, {
       status: "ready_for_review",
@@ -567,15 +585,31 @@ async function completeBuildJob(
       resultSummary: summary,
       facts: {
         finishedAt: new Date().toISOString(),
-        draftSha: ready.draftSha ?? draftSha,
+        draftSha,
         summary,
       },
     });
-    console.info(LOG, "ready", { jobId: job.id, draftSha: ready.draftSha });
+    console.info(LOG, "ready", { jobId: job.id, draftSha });
+    await startNextQueuedJob(job);
     return done;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return failBuildJob({ ...job, status: "verifying" }, message);
+  }
+}
+
+/** DB-backed coalescing: edits sent while a job runs wait in `queued`. */
+async function startNextQueuedJob(after: BuildJob): Promise<void> {
+  try {
+    const next = await findQueuedBuildJob({
+      projectId: after.projectId,
+      workspaceId: after.workspaceId,
+    });
+    if (!next) return;
+    console.info(LOG, "starting queued job", { jobId: next.id, after: after.id });
+    await startBuildJob(next);
+  } catch (err) {
+    console.warn(LOG, "queued job start failed", err instanceof Error ? err.message : err);
   }
 }
 
@@ -584,32 +618,38 @@ async function failBuildJob(job: BuildJob, error: string): Promise<BuildJob | nu
   await appendBuildJobEvents(job.id, [
     { seq: 100009, kind: "failed", message: error.slice(0, 2000), payload: { server: true } },
   ]);
-  await setProjectBuildPhase({
-    projectId: job.projectId,
-    workspaceId: job.workspaceId,
-    phase: "failed",
-  });
-  try {
-    const brief = await loadWebsiteSetupBrief(job.projectId, job.workspaceId);
-    await saveWebsiteSetupBrief({
+  if (job.facts.mode === "create") {
+    // A failed edit leaves the (still working) draft alone — only creates
+    // flip the project into the failed state.
+    await setProjectBuildPhase({
       projectId: job.projectId,
       workspaceId: job.workspaceId,
-      brief: {
-        ...brief,
-        status: "failed",
-        validationIssues: [error.slice(0, 500)],
-        updatedAt: new Date().toISOString(),
-      },
+      phase: "failed",
     });
-  } catch {
-    /* best-effort */
+    try {
+      const brief = await loadWebsiteSetupBrief(job.projectId, job.workspaceId);
+      await saveWebsiteSetupBrief({
+        projectId: job.projectId,
+        workspaceId: job.workspaceId,
+        brief: {
+          ...brief,
+          status: "failed",
+          validationIssues: [error.slice(0, 500)],
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    } catch {
+      /* best-effort */
+    }
   }
-  return updateBuildJob(job.id, {
+  const failed = await updateBuildJob(job.id, {
     status: "failed",
     progressNote: "Build failed",
     resultSummary: error.slice(0, 2000),
     facts: { finishedAt: new Date().toISOString(), error: error.slice(0, 2000) },
   });
+  await startNextQueuedJob(job);
+  return failed;
 }
 
 // ---------------------------------------------------------------------------

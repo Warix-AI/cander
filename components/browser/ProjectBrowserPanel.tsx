@@ -364,7 +364,7 @@ export function ProjectBrowserPanel({
   const buildJob = useBuildJob({
     projectId,
     workspaceId: ctx.workspaceId,
-    enabled: entity?.kind === "site" && websiteBrief?.status === "building",
+    enabled: entity?.kind === "site",
   });
 
   // Build drafts: ensure infra/sandbox and point the pinned preview at draft--

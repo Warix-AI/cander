@@ -3862,6 +3862,106 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   }, [threadId]);
 
+  // Website Builder V2: a finished sandbox job posts its result into the chat
+  // that belongs to the project (the active thread when it matches).
+  useEffect(() => {
+    const onFinished = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail as
+        | {
+            projectId?: string;
+            jobId?: string;
+            status?: string;
+            mode?: "create" | "edit";
+            summary?: string | null;
+            error?: string | null;
+          }
+        | undefined;
+      if (!detail?.projectId || !detail.jobId) return;
+      const ok = detail.status === "ready_for_review";
+      const content = ok
+        ? detail.mode === "create"
+          ? `${detail.summary?.trim() || "Your first draft is up."}\n\nTake a look on the right — tell me anything you’d like changed, or say **publish** when it’s ready to go live.`
+          : detail.summary?.trim() || "Done — the change is in the preview."
+        : detail.mode === "create"
+          ? `The build didn’t finish cleanly: ${detail.error || detail.summary || "unknown error"}\n\nHit **Retry** in the preview panel, or tell me what to adjust and I’ll try again.`
+          : `I couldn’t complete that change: ${detail.error || detail.summary || "unknown error"}. The previous version is still in the preview — want me to try a different approach?`;
+      const marker = `build-job:${detail.jobId}`;
+      const progressMarker = `${marker}:progress`;
+      setThreads((current) => {
+        const candidates = current.filter((t) => t.projectId === detail.projectId);
+        if (!candidates.length) return current;
+        const target =
+          candidates.find((t) => t.messages.some((m) => m.id === progressMarker)) ??
+          candidates.find((t) => t.id === threadId) ??
+          [...candidates].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]!;
+        if (target.messages.some((m) => m.id === marker)) return current;
+        return current.map((t) =>
+          t.id !== target.id
+            ? t
+            : {
+                ...t,
+                updatedAt: new Date().toISOString(),
+                snippet: content.slice(0, 80),
+                messages: [
+                  // Replace the transient progress line with the result.
+                  ...t.messages.filter((m) => m.id !== progressMarker),
+                  { id: marker, role: "assistant" as const, content, at: nowTime() },
+                ],
+              },
+        );
+      });
+    };
+    // Edit jobs: keep one live "working…" line in the chat while they run.
+    const onProgress = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail as
+        | { projectId?: string; jobId?: string; message?: string }
+        | undefined;
+      if (!detail?.projectId || !detail.jobId || !detail.message) return;
+      const progressMarker = `build-job:${detail.jobId}:progress`;
+      const resultMarker = `build-job:${detail.jobId}`;
+      setThreads((current) => {
+        const candidates = current.filter((t) => t.projectId === detail.projectId);
+        if (!candidates.length) return current;
+        const target =
+          candidates.find((t) => t.messages.some((m) => m.id === progressMarker)) ??
+          candidates.find((t) => t.id === threadId) ??
+          [...candidates].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]!;
+        if (target.messages.some((m) => m.id === resultMarker)) return current;
+        const existing = target.messages.find((m) => m.id === progressMarker);
+        if (existing?.activity?.detail === detail.message) return current;
+        const line = {
+          id: progressMarker,
+          role: "assistant" as const,
+          content: "",
+          at: existing?.at ?? nowTime(),
+          status: "pending" as const,
+          activity: {
+            phase: "updating" as const,
+            startedAt: existing?.activity?.startedAt ?? Date.now(),
+            detail: detail.message,
+            kind: "work" as const,
+          },
+        };
+        return current.map((t) =>
+          t.id !== target.id
+            ? t
+            : {
+                ...t,
+                messages: existing
+                  ? t.messages.map((m) => (m.id === progressMarker ? { ...m, ...line } : m))
+                  : [...t.messages, line],
+              },
+        );
+      });
+    };
+    window.addEventListener("cander:build-job-finished", onFinished);
+    window.addEventListener("cander:build-job-progress", onProgress);
+    return () => {
+      window.removeEventListener("cander:build-job-finished", onFinished);
+      window.removeEventListener("cander:build-job-progress", onProgress);
+    };
+  }, [threadId, setThreads]);
+
   const publishApp = useCallback((url: string) => {
     // Publish is a backend deployment state change — stay in the project UI.
     // Do not swap the draft preview iframe to the production URL.

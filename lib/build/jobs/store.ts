@@ -199,6 +199,30 @@ export async function findActiveBuildJob(opts: {
     .eq("task_type", BUILD_JOB_TASK_TYPE)
     .in("status", ACTIVE_BUILD_JOB_STATUSES)
     .order("created_at", { ascending: false })
+    .limit(5);
+  const rows = (data ?? []) as AiTaskRow[];
+  // Prefer the job actually doing work over queued followers.
+  const running =
+    rows.find((r) => r.status === "running") ??
+    rows.find((r) => r.status === "verifying") ??
+    rows[0];
+  return running ? rowToJob(running) : null;
+}
+
+/** Oldest job still waiting to start (coalesced edits). */
+export async function findQueuedBuildJob(opts: {
+  projectId: string;
+  workspaceId: string;
+}): Promise<BuildJob | null> {
+  const admin = createSupabaseAdminClient();
+  const { data } = await admin
+    .from("ai_tasks")
+    .select(SELECT)
+    .eq("project_id", opts.projectId)
+    .eq("workspace_id", opts.workspaceId)
+    .eq("task_type", BUILD_JOB_TASK_TYPE)
+    .eq("status", "queued")
+    .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
   return data ? rowToJob(data as AiTaskRow) : null;

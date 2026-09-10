@@ -27,6 +27,9 @@ export function useBuildJob(opts: {
   const [events, setEvents] = useState<BuildJobEventClient[]>([]);
   const lastSeqRef = useRef(0);
   const jobIdRef = useRef<string | null>(null);
+  /** Job id announced by `cander:build-job-started` before we saw it running. */
+  const watchingRef = useRef<string | null>(null);
+  const announcedRef = useRef<Set<string>>(new Set());
   const [armed, setArmed] = useState(0);
 
   const refresh = useCallback(async () => {
@@ -54,10 +57,35 @@ export function useBuildJob(opts: {
       if (e.seq > lastSeqRef.current && e.seq < 100000) lastSeqRef.current = e.seq;
     }
     setJob((prev) => {
-      if (prev && next && !ACTIVE.has(next.status) && ACTIVE.has(prev.status) && typeof window !== "undefined") {
+      const finishedNow =
+        next &&
+        !ACTIVE.has(next.status) &&
+        ((prev && prev.id === next.id && ACTIVE.has(prev.status)) ||
+          // Job we watched from the start event but never saw as running.
+          (!prev && watchingRef.current === next.id));
+      if (finishedNow && typeof window !== "undefined" && !announcedRef.current.has(next.id)) {
+        announcedRef.current.add(next.id);
         window.dispatchEvent(
           new CustomEvent("cander:website-setup-ready", {
             detail: { projectId: opts.projectId, jobId: next.id, status: next.status },
+          }),
+        );
+        window.dispatchEvent(
+          new CustomEvent("cander:website-preview-reload", {
+            detail: { projectId: opts.projectId, workspaceId: opts.workspaceId },
+          }),
+        );
+        window.dispatchEvent(
+          new CustomEvent("cander:build-job-finished", {
+            detail: {
+              projectId: opts.projectId,
+              workspaceId: opts.workspaceId,
+              jobId: next.id,
+              status: next.status,
+              mode: next.facts?.mode ?? "create",
+              summary: next.resultSummary || next.facts?.summary || null,
+              error: next.facts?.error || null,
+            },
           }),
         );
       }
@@ -86,8 +114,11 @@ export function useBuildJob(opts: {
     void tick();
 
     const onStarted = (ev: Event) => {
-      const detail = (ev as CustomEvent).detail as { projectId?: string } | undefined;
+      const detail = (ev as CustomEvent).detail as
+        | { projectId?: string; jobId?: string }
+        | undefined;
       if (detail?.projectId && detail.projectId !== opts.projectId) return;
+      watchingRef.current = detail?.jobId ?? null;
       if (timer != null) window.clearTimeout(timer);
       setArmed((n) => n + 1);
     };
@@ -98,6 +129,20 @@ export function useBuildJob(opts: {
       window.removeEventListener("cander:build-job-started", onStarted);
     };
   }, [enabled, refresh, opts.projectId, armed]);
+
+  // Edit jobs run with the preview visible, so surface progress in chat.
+  const lastProgressSentRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!enabled || !job || !ACTIVE.has(job.status) || job.facts?.mode !== "edit") return;
+    const line = job.progressNote?.trim();
+    if (!line || line === lastProgressSentRef.current) return;
+    lastProgressSentRef.current = line;
+    window.dispatchEvent(
+      new CustomEvent("cander:build-job-progress", {
+        detail: { projectId: opts.projectId, jobId: job.id, message: line },
+      }),
+    );
+  }, [enabled, job, opts.projectId]);
 
   const progressLines = useMemo(() => {
     const lines: string[] = [];

@@ -627,6 +627,70 @@ async function runBuildV2CreateTurn(
   };
 }
 
+/**
+ * V2 edit: start (or queue) a builder job for a change request. Replies with a
+ * short acknowledgement; the finished job posts its own result message via
+ * `cander:build-job-finished` (see useBuildJob + AppProvider).
+ */
+async function runBuildV2EditTurn(
+  request: AiGenerateRequest,
+  opts: AgentTurnOptions | undefined,
+  ctx: { projectId: string; workspaceId: string },
+): Promise<AgentTurnResult> {
+  const report = opts?.onProgress ?? (() => {});
+  report({
+    phase: "thinking",
+    label: "Editing",
+    detail: "Handing your change to the builder…",
+  });
+  const instruction = request.content.trim();
+  const { startBuildJobClient } = await import("@/lib/api/build-jobs-client");
+  const started = await startBuildJobClient({
+    projectId: ctx.projectId,
+    workspaceId: ctx.workspaceId,
+    mode: "edit",
+    instruction,
+    threadId: request.aiChatId ?? null,
+  });
+  if (!started.ok) {
+    return {
+      content: `I couldn’t start that change: ${started.error || "unknown error"}. Try again in a moment.`,
+      runtime: "cloud",
+      offline: false,
+      condensationOccurred: false,
+      aiChatId: request.aiChatId ?? null,
+      toolResults: [
+        { name: "build.job.start", ok: false, output: started.error || `HTTP ${started.status}` },
+      ],
+    };
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("cander:build-job-started", {
+        detail: { projectId: ctx.projectId, jobId: started.job?.id, mode: "edit" },
+      }),
+    );
+  }
+  const queued = started.status === 202;
+  return {
+    content: queued
+      ? "Got it — I’m finishing the current build first, then I’ll do this one. I’ll confirm here when it’s in the preview."
+      : "On it — making that change now. I’ll confirm here when it’s in the preview.",
+    runtime: "cloud",
+    offline: false,
+    condensationOccurred: false,
+    aiChatId: request.aiChatId ?? null,
+    toolResults: [
+      {
+        name: "build.job.start",
+        ok: true,
+        output: `job ${started.job?.id ?? "?"} ${queued ? "queued" : "started"}`,
+        data: { jobId: started.job?.id ?? null, mode: "edit", queued },
+      },
+    ],
+  };
+}
+
 /** Paths the coding agent successfully wrote/patched during this turn. */
 function agentWrittenPaths(results: AiToolCallResult[]): Set<string> {
   const paths = new Set<string>();
@@ -2012,6 +2076,37 @@ export async function runBuildProjectTurn(
 
   // Guided / create path — git-first: no sandbox until tip is complete.
   if (wantsCreate) {
+    // Website Builder V2: hand the whole create to a sandbox builder job and
+    // return immediately; the right panel streams progress from the job.
+    if (isSiteProject && isBuildV2Enabled()) {
+      const alreadyBuilt = websiteBrief?.status === "ready";
+      if (alreadyBuilt && GUIDED_SETUP_CONFIRM_RE.test(request.content)) {
+        return {
+          content:
+            "Your website draft is already built. Tell me what you’d like to change, or say **publish** when you’re ready to go live.",
+          runtime: "cloud",
+          offline: false,
+          condensationOccurred: false,
+          aiChatId: request.aiChatId ?? null,
+        };
+      }
+      if (alreadyBuilt) {
+        // "build it / go ahead" on a finished site is a change request.
+        return runBuildV2EditTurn(request, opts, { projectId, workspaceId });
+      }
+      if (websiteBrief) {
+        await saveWebsiteSetupBrief({
+          projectId,
+          workspaceId,
+          brief: {
+            ...websiteBrief,
+            status: "building",
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      }
+      return runBuildV2CreateTurn(request, opts, { projectId, workspaceId });
+    }
     if (isSiteProject && websiteBrief) {
       await saveWebsiteSetupBrief({
         projectId,
@@ -2022,11 +2117,6 @@ export async function runBuildProjectTurn(
           updatedAt: new Date().toISOString(),
         },
       });
-    }
-    // Website Builder V2: hand the whole create to a sandbox builder job and
-    // return immediately; the right panel streams progress from the job.
-    if (isSiteProject && isBuildV2Enabled()) {
-      return runBuildV2CreateTurn(request, opts, { projectId, workspaceId });
     }
     report({
       phase: "thinking",
@@ -2076,6 +2166,10 @@ export async function runBuildProjectTurn(
         workspaceId,
         websiteBrief,
       });
+    }
+    // V2: change requests run as a sandbox edit job (ack now, result later).
+    if (isBuildV2Enabled()) {
+      return runBuildV2EditTurn(request, opts, { projectId, workspaceId });
     }
     const { runEditWebsitePipeline } = await import(
       "@/lib/ai/build/edit-pipeline"

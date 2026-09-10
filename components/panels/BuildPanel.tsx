@@ -80,7 +80,7 @@ export function BuildPanel() {
   const buildJob = useBuildJob({
     projectId,
     workspaceId: ctx.workspaceId,
-    enabled: entityKind === "site" && websiteBrief?.status === "building",
+    enabled: entityKind === "site",
   });
 
   const ensureSandbox = (forceRestart = false) => {

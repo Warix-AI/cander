@@ -75,14 +75,19 @@ export async function POST(request: Request, ctx: RouteCtx) {
   }
 
   const active = await findActiveBuildJob({ projectId, workspaceId });
+  let queueBehind: string | null = null;
   if (active) {
     // Nudge a sync so a finished job doesn't block the next one.
     const synced = active.status === "running" ? await syncBuildJob(active.id) : active;
     if (synced && ["queued", "running", "verifying"].includes(synced.status)) {
-      return NextResponse.json(
-        { ok: false, error: "A build is already running for this project.", job: synced },
-        { status: 409 },
-      );
+      if (mode === "create") {
+        return NextResponse.json(
+          { ok: false, error: "A build is already running for this project.", job: synced },
+          { status: 409 },
+        );
+      }
+      // Edits coalesce: queue behind the running job; started on completion.
+      queueBehind = synced.id;
     }
   }
 
@@ -111,6 +116,18 @@ export async function POST(request: Request, ctx: RouteCtx) {
     brief: brief?.answers ?? null,
     ackMessageId: body.ackMessageId ?? null,
   });
+
+  if (queueBehind) {
+    await finalizeUsageReservation({
+      reservationId: usage.reservationId,
+      status: "confirmed",
+      actualUnits: 1,
+    });
+    return NextResponse.json(
+      { ok: true, job, queued: true, behind: queueBehind },
+      { status: 202 },
+    );
+  }
 
   try {
     const started = await startBuildJob(job);
@@ -155,7 +172,9 @@ export async function GET(request: Request, ctx: RouteCtx) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
-  let job = await findLatestBuildJob({ projectId, workspaceId });
+  let job =
+    (await findActiveBuildJob({ projectId, workspaceId })) ??
+    (await findLatestBuildJob({ projectId, workspaceId }));
   if (!job) return NextResponse.json({ ok: true, job: null, events: [] });
   if (job.status === "running") {
     job = (await syncBuildJob(job.id)) ?? job;
