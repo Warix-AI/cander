@@ -62,4 +62,12 @@ describe("formatPublishUserError", () => {
     assert.equal(f.draftNeedsRepair, false);
     assert.equal(f.title, "Publish failed");
   });
+
+  it("labels author identity mismatches as draft repair", () => {
+    const f = formatPublishUserError(
+      "Publish blocked — draft tip failed preflight:\n- Draft tip commit author must be the Warix Build identity",
+    );
+    assert.equal(f.draftNeedsRepair, true);
+    assert.equal(f.title, "Draft needs repair");
+  });
 });

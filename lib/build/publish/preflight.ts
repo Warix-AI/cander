@@ -16,6 +16,16 @@ import {
   seoTipIssues,
   staticTipStructureIssues,
 } from "@/lib/build/publish/preflight-checks";
+import {
+  buildIdentityConfigIssues,
+  tipCommitIdentityIssues,
+} from "@/lib/build/publish/identity-preflight";
+import {
+  getBuildGitAuthor,
+  getGitHubAppConfig,
+  getVercelTeamConfig,
+  isGitHubAppConfigured,
+} from "@/lib/build/config";
 
 export type PublishPreflightResult = {
   ok: boolean;
@@ -246,6 +256,51 @@ export async function preflightPublishTip(opts: {
   }
 
   const fullName = String(project.github_full_name);
+
+  // Phase 5 — Warix identity: App + team token + tip commit author.
+  {
+    const gh = getGitHubAppConfig();
+    const vercel = getVercelTeamConfig();
+    issues.push(
+      ...buildIdentityConfigIssues({
+        githubAppConfigured: isGitHubAppConfigured(),
+        githubOrg: gh?.org ?? null,
+        vercelTokenConfigured: Boolean(vercel.token),
+        vercelTeamIdConfigured: Boolean(vercel.teamId),
+      }),
+    );
+
+    try {
+      const octokit = await getInstallationOctokit();
+      if (octokit) {
+        const [owner, repo] = fullName.split("/");
+        if (owner && repo) {
+          const { data: tipCommit } = await octokit.request(
+            "GET /repos/{owner}/{repo}/git/commits/{commit_sha}",
+            { owner, repo, commit_sha: draftSha },
+          );
+          issues.push(
+            ...tipCommitIdentityIssues(
+              {
+                authorName: tipCommit.author?.name ?? null,
+                authorEmail: tipCommit.author?.email ?? null,
+                committerName: tipCommit.committer?.name ?? null,
+                committerEmail: tipCommit.committer?.email ?? null,
+              },
+              getBuildGitAuthor(),
+            ),
+          );
+        }
+      }
+    } catch (err) {
+      issues.push(
+        err instanceof Error
+          ? `Could not verify draft tip commit author: ${err.message}`
+          : "Could not verify draft tip commit author.",
+      );
+    }
+  }
+
   let paths: string[] = [];
   try {
     paths = await listTipPaths({ fullName, draftSha });
@@ -254,6 +309,7 @@ export async function preflightPublishTip(opts: {
       ok: false,
       draftSha,
       issues: [
+        ...issues,
         err instanceof Error
           ? err.message
           : "Could not read draft tip tree for preflight.",

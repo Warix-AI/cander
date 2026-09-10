@@ -16,6 +16,32 @@ Cander Apps and Websites provision durable code and runtime resources **under th
 
 See `.env.example`.
 
+## Identity (Warix-only — Harden Phase 5)
+
+Build **never** uses a customer’s GitHub or Vercel account. Draft commits and
+Publish always run as platform identity:
+
+| Concern | Source of truth |
+|---------|-----------------|
+| GitHub API | GitHub App installation on **Warix-AI** (`GITHUB_APP_*`) |
+| Draft commit author/committer | `getBuildGitAuthor()` → `CANDER_BUILD_GIT_AUTHOR_NAME` / `CANDER_BUILD_GIT_AUTHOR_EMAIL` |
+| Vercel Deploy / Domains / Sandbox | `VERCEL_TOKEN` + `VERCEL_TEAM_ID` (Warix team) |
+
+**Required for production Publish:** set explicit `CANDER_BUILD_GIT_AUTHOR_*` to a
+GitHub user that is a member of the Warix Vercel team. The fallback
+`github-actions[bot]` noreply address is rejected by publish preflight — Vercel
+would otherwise show **Blocked** / “GitHub user not found” / Account Unavailable.
+
+Publish preflight (`preflightPublishTip`) fails closed before the Deploy API when:
+
+1. GitHub App or `VERCEL_TOKEN` / `VERCEL_TEAM_ID` is missing
+2. App org is not Warix-AI
+3. Tip commit author/committer email ≠ configured Build author
+4. Author is still the weak bot default
+
+`commitFilesToDraftBranch` always stamps author/committer from `getBuildGitAuthor()`
+(no per-call overrides). Promote-to-`main` reuses the tip SHA (no new commit).
+
 ### Phase 4 — Supabase Management
 
 ```
@@ -88,10 +114,11 @@ Publish / `published_sha` remains Phase 7.
 2. Lazy-create a Warix-team Vercel project **without** Git auto-deploy
    (`gitProviderOptions.createDeployments=disabled`). Prefer create without
    `gitRepository`; if linked, disable auto-deploy immediately.
-3. Preflight the exact tip SHA (static App Router + deps, then SHA-pinned
-   sandbox `tsc --noEmit` + `next build`), then create **one** production
+3. Preflight the exact tip SHA (Warix identity + static App Router + deps, then
+   SHA-pinned sandbox `tsc --noEmit` + `next build`), then create **one** production
    deployment via Deployments API (`maxAttempts=1` — never retry the Deploy POST).
-   Poll until `READY`. Preflight failure blocks Deploy and main promotion.
+   Poll until `READY`. Preflight failure (including author identity mismatch)
+   blocks Deploy and main promotion.
 4. On READY: set `published_sha` / `published_url` / `vercel_production_*`
    (does **not** overwrite `draft_sha`), insert `deployments` (`kind=production`)
 5. **Then** promote `main` to that SHA. If promote fails after READY, keep

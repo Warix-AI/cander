@@ -40,8 +40,6 @@ export async function commitFilesToDraftBranch(opts: {
    * Use when replacing `app/page.js` with `app/page.tsx` so Next never sees both.
    */
   deletePaths?: string[];
-  authorName?: string;
-  authorEmail?: string;
 }): Promise<CommitDraftResult> {
   const octokit = await getInstallationOctokit();
   if (!octokit) {
@@ -171,9 +169,10 @@ export async function commitFilesToDraftBranch(opts: {
   );
 
   const buildAuthor = getBuildGitAuthor();
+  // Phase 5: only Warix Build identity — no per-call author overrides.
   const author = {
-    name: opts.authorName ?? buildAuthor.name,
-    email: opts.authorEmail ?? buildAuthor.email,
+    name: buildAuthor.name,
+    email: buildAuthor.email,
   };
   const { data: newCommit } = await octokit.request(
     "POST /repos/{owner}/{repo}/git/commits",
