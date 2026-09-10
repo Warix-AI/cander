@@ -673,6 +673,9 @@ async function completeBuildJob(
       facts: {
         finishedAt: new Date().toISOString(),
         draftSha,
+        // A non-partial finish means the in-sandbox acceptance (tsc + every
+        // route) passed for this exact tip; publish preflight reuses it.
+        verifyOk: !partial,
         summary,
       },
     });

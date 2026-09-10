@@ -225,18 +225,19 @@ export async function ensureProjectInfra(opts: {
     });
 
     infraStatus = "ready";
-    await admin
-      .from("projects")
-      .update({
-        github_repo_id: repo.repoId,
-        github_full_name: repo.fullName,
-        github_default_branch: repo.defaultBranch,
-        draft_branch: repo.draftBranch,
-        draft_sha: repo.draftSha,
-        infra_status: infraStatus,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", project.id);
+    // draft_sha is owned by the persist/commit path. Only seed it when the
+    // project has none yet — rewriting it from the GitHub tip mid-publish made
+    // the deployed SHA drift from the one the user saw.
+    const infraPatch: Record<string, unknown> = {
+      github_repo_id: repo.repoId,
+      github_full_name: repo.fullName,
+      github_default_branch: repo.defaultBranch,
+      draft_branch: repo.draftBranch,
+      infra_status: infraStatus,
+      updated_at: new Date().toISOString(),
+    };
+    if (!project.draft_sha && repo.draftSha) infraPatch.draft_sha = repo.draftSha;
+    await admin.from("projects").update(infraPatch).eq("id", project.id);
 
     // Align draft revision pointer to git SHA (Phase 6).
     try {

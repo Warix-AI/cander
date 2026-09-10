@@ -119,7 +119,7 @@ export async function ensureAppVercelProject(opts: {
 
   // Prefer create WITHOUT gitRepository so pushes never auto-deploy.
   // Deployments still use gitSource.repoId + sha via the Deployments API.
-  let res = await vercelFetch("/v11/projects", {
+  const res = await vercelFetch("/v11/projects", {
     method: "POST",
     body: JSON.stringify({
       name,
@@ -127,21 +127,12 @@ export async function ensureAppVercelProject(opts: {
     }),
   });
 
-  // If create failed, try with git link then immediately disable auto-deploy.
+  // Never fall back to a git-linked project: a link makes every push to the
+  // draft branch (and every main promotion) mint a second production build.
+  // Deployments always come from the Deployments API with an explicit SHA.
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    console.warn("[cander] vercel project create without git failed", errText);
-    res = await vercelFetch("/v11/projects", {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        framework: "nextjs",
-        gitRepository: {
-          type: "github",
-          repo: fullName,
-        },
-      }),
-    });
+    console.warn("[cander] vercel project create failed", { name, status: res.status, errText: errText.slice(0, 300) });
   }
 
   if (!res.ok) {

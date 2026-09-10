@@ -45,6 +45,8 @@ export type BuildJobFacts = {
   finishedAt?: string;
   lastEventAt?: string;
   draftSha?: string | null;
+  /** True when the builder's in-sandbox acceptance (tsc + routes) passed for `draftSha`. */
+  verifyOk?: boolean;
   /** Assistant-facing summary from the builder's finish() call. */
   summary?: string;
   error?: string;

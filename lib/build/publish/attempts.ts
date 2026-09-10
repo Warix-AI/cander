@@ -33,7 +33,52 @@ export type PublishAttemptRow = {
   meta: Record<string, unknown>;
   started_at: string;
   completed_at: string | null;
+  heartbeat_at?: string | null;
+  updated_at?: string | null;
 };
+
+/** An in-flight attempt whose worker has not written for this long is dead. */
+export const PUBLISH_ATTEMPT_STALE_MS = 10 * 60 * 1000;
+
+export const IN_FLIGHT_PUBLISH_STATUSES: PublishAttemptStatus[] = [
+  "pending",
+  "preflight",
+  "deploying",
+];
+
+export function isPublishAttemptStale(row: PublishAttemptRow, now = Date.now()): boolean {
+  if (!IN_FLIGHT_PUBLISH_STATUSES.includes(row.status)) return false;
+  const last = Date.parse(row.heartbeat_at || row.updated_at || row.started_at || "") || 0;
+  return now - last > PUBLISH_ATTEMPT_STALE_MS;
+}
+
+export async function findLatestPublishAttempt(
+  projectId: string,
+): Promise<PublishAttemptRow | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("publish_attempts")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as PublishAttemptRow;
+}
+
+export async function findPublishAttemptById(
+  publishAttemptId: string,
+): Promise<PublishAttemptRow | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("publish_attempts")
+    .select("*")
+    .eq("publish_attempt_id", publishAttemptId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as PublishAttemptRow;
+}
 
 export async function findPublishAttemptByKey(
   idempotencyKey: string,
@@ -95,6 +140,7 @@ export async function beginPublishAttempt(opts: {
       meta: opts.meta ?? {},
       started_at: now,
       updated_at: now,
+      heartbeat_at: now,
     })
     .select("*")
     .single();
@@ -110,7 +156,9 @@ export async function beginPublishAttempt(opts: {
       draftSha,
     }));
 
-  if (existing?.status === "failed") {
+  // Reclaim failed rows, and in-flight rows whose worker stopped heartbeating
+  // (function timeout / crash) — otherwise the project is locked forever.
+  if (existing && (existing.status === "failed" || isPublishAttemptStale(existing))) {
     const { data: reclaimed, error: reclaimError } = await admin
       .from("publish_attempts")
       .update({
@@ -122,12 +170,17 @@ export async function beginPublishAttempt(opts: {
         git_sync_error: null,
         promoted_main_sha: null,
         completed_at: null,
-        meta: opts.meta ?? {},
+        meta: {
+          ...(opts.meta ?? {}),
+          reclaimedFrom: existing.publish_attempt_id,
+          reclaimedStatus: existing.status,
+        },
         started_at: now,
         updated_at: now,
+        heartbeat_at: now,
       })
       .eq("id", existing.id)
-      .eq("status", "failed")
+      .eq("status", existing.status)
       .select("*")
       .maybeSingle();
     if (!reclaimError && reclaimed) {
@@ -163,9 +216,11 @@ export async function updatePublishAttempt(opts: {
   }>;
 }): Promise<PublishAttemptRow | null> {
   const admin = createSupabaseAdminClient();
+  const now = new Date().toISOString();
   const patch: Record<string, unknown> = {
     ...opts.patch,
-    updated_at: new Date().toISOString(),
+    updated_at: now,
+    heartbeat_at: now,
   };
   if (opts.patch.draft_sha) {
     const sha = opts.patch.draft_sha.toLowerCase();
@@ -183,4 +238,14 @@ export async function updatePublishAttempt(opts: {
     return null;
   }
   return (data as PublishAttemptRow) ?? null;
+}
+
+/** Cheap liveness write for long stages (deploy polling). */
+export async function heartbeatPublishAttempt(publishAttemptId: string): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  await admin
+    .from("publish_attempts")
+    .update({ heartbeat_at: new Date().toISOString() })
+    .eq("publish_attempt_id", publishAttemptId)
+    .then(() => undefined, () => undefined);
 }

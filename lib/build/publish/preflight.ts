@@ -8,6 +8,8 @@ import { getInstallationOctokit } from "@/lib/build/git/github-app";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { ensureProjectSandbox } from "@/lib/build/sandbox/lifecycle";
 import { runPrivilegedSandboxCommand } from "@/lib/build/sandbox/privileged";
+import { refreshSandboxGitAuth } from "@/lib/build/sandbox/git-auth";
+import { getGitHubInstallationToken } from "@/lib/build/git/installation-token";
 import { BUILD_RETRY_BUDGETS } from "@/lib/ai/build/retry-budgets";
 import {
   collectMissingAliasPaths,
@@ -103,11 +105,40 @@ function trimCmdOutput(text: string, max = 1200): string {
   return `…${t.slice(-max)}`;
 }
 
+/**
+ * The builder already ran tsc + route checks inside the sandbox for this exact
+ * tip when the last job finished cleanly. Publishing the same SHA need not
+ * compile it again.
+ */
+async function jobAlreadyVerifiedSha(opts: {
+  projectId: string;
+  workspaceId: string;
+  draftSha: string;
+}): Promise<boolean> {
+  try {
+    const { findLatestBuildJob } = await import("@/lib/build/jobs/store");
+    const job = await findLatestBuildJob({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+    });
+    return Boolean(
+      job &&
+        job.status === "ready_for_review" &&
+        job.facts.verifyOk === true &&
+        job.facts.draftSha &&
+        job.facts.draftSha.toLowerCase() === opts.draftSha.toLowerCase(),
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function runCompilePreflight(opts: {
   userId: string;
   projectId: string;
   workspaceId: string;
   draftSha: string;
+  fullName: string;
 }): Promise<string[]> {
   const issues: string[] = [];
   // Reuse the warm draft sandbox. Restarting it here used to kill the user's
@@ -132,52 +163,92 @@ async function runCompilePreflight(opts: {
   // One compile attempt per publish (budget documentation).
   void BUILD_RETRY_BUDGETS.publishPreflightCompile;
 
+  // Installation tokens expire hourly; refresh before any network git call.
+  await refreshSandboxGitAuth({ sessionId, userId, fullName: opts.fullName });
+
   // Check out the exact publish SHA in a detached worktree so the dev server's
   // working tree (and any in-progress edit) is never touched. node_modules is
   // shared when the dependency manifest is unchanged; otherwise install fresh.
-  const pin = await runPrivilegedSandboxCommand({
+  // stderr is captured to a log and echoed on failure — never blank errors.
+  const pinScript = [
+    "set -e",
+    `SHA=${JSON.stringify(sha)}`,
+    `WT=${JSON.stringify(worktree)}`,
+    "LOG=/tmp/cander-preflight-git.log; : > $LOG",
+    'if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then',
+    '  git fetch --depth=1 origin "$SHA" >>$LOG 2>&1 || true',
+    '  git fetch origin "$SHA" >>$LOG 2>&1 || true',
+    '  git fetch --depth=30 origin cander/draft >>$LOG 2>&1 || true',
+    "fi",
+    'if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then',
+    "  git fetch --unshallow >>$LOG 2>&1 || true",
+    '  git fetch origin "$SHA" >>$LOG 2>&1 || true',
+    "fi",
+    'if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then echo FETCH_FAILED; tail -n 20 $LOG; exit 5; fi',
+    'git worktree remove --force "$WT" 2>/dev/null || rm -rf "$WT"',
+    'git worktree prune 2>/dev/null || true',
+    'mkdir -p "$(dirname "$WT")"',
+    'git worktree add --detach "$WT" "$SHA" >>$LOG 2>&1 || { echo WORKTREE_FAILED; tail -n 20 $LOG; exit 6; }',
+    'DEPS_CHANGED=0',
+    'if [ -d node_modules ]; then',
+    '  if git diff --quiet HEAD "$SHA" -- package.json package-lock.json 2>/dev/null; then',
+    '    ln -s "$(pwd)/node_modules" "$WT/node_modules"',
+    '  else DEPS_CHANGED=1; fi',
+    'else DEPS_CHANGED=1; fi',
+    'if [ "$DEPS_CHANGED" = "1" ]; then',
+    `  (cd "$WT" && timeout ${INSTALL_TIMEOUT_SEC} npm install --no-fund --no-audit > /tmp/cander-preflight-npm.log 2>&1) || { echo INSTALL_FAILED; tail -n 40 /tmp/cander-preflight-npm.log; exit 3; }`,
+    "fi",
+    'cd "$WT" && git rev-parse HEAD',
+  ].join("\n");
+
+  let pin = await runPrivilegedSandboxCommand({
     sessionId,
     userId,
     cmd: "sh",
-    args: [
-      "-c",
-      [
-        "set -e",
-        `SHA=${JSON.stringify(sha)}`,
-        `WT=${JSON.stringify(worktree)}`,
-        'if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then',
-        '  git fetch --depth=1 origin "$SHA" 2>/dev/null || true',
-        '  git fetch origin "$SHA" 2>/dev/null || true',
-        '  git fetch --depth=30 origin cander/draft 2>/dev/null || true',
-        "fi",
-        'if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then',
-        "  git fetch --unshallow 2>/dev/null || true",
-        '  git fetch origin "$SHA" 2>/dev/null || true',
-        "fi",
-        'git worktree remove --force "$WT" 2>/dev/null || rm -rf "$WT"',
-        'git worktree prune 2>/dev/null || true',
-        'mkdir -p "$(dirname "$WT")"',
-        'git worktree add --detach "$WT" "$SHA" >/dev/null 2>&1',
-        'DEPS_CHANGED=0',
-        'if [ -d node_modules ]; then',
-        '  if git diff --quiet HEAD "$SHA" -- package.json package-lock.json 2>/dev/null; then',
-        '    ln -s "$(pwd)/node_modules" "$WT/node_modules"',
-        '  else DEPS_CHANGED=1; fi',
-        'else DEPS_CHANGED=1; fi',
-        'if [ "$DEPS_CHANGED" = "1" ]; then',
-        `  (cd "$WT" && timeout ${INSTALL_TIMEOUT_SEC} npm install --no-fund --no-audit > /tmp/cander-preflight-npm.log 2>&1) || { echo INSTALL_FAILED; tail -n 40 /tmp/cander-preflight-npm.log; exit 3; }`,
-        "fi",
-        'cd "$WT" && git rev-parse HEAD',
-      ].join("\n"),
-    ],
+    args: ["-c", pinScript],
   });
+
+  if (pin.exitCode !== 0 && /FETCH_FAILED|WORKTREE_FAILED/.test(pin.stdout || "")) {
+    // The VM's repo is unusable for this SHA (corrupt shallow clone, stale
+    // objects). Fall back to a fresh shallow clone of the exact SHA into the
+    // worktree path — same result, no VM recreate.
+    console.warn("[cander:publish] preflight checkout failed; fresh clone fallback", {
+      projectId: opts.projectId,
+      detail: trimCmdOutput(pin.stdout || pin.stderr, 600),
+    });
+    const token = await getGitHubInstallationToken();
+    const cloneScript = [
+      "set -e",
+      `SHA=${JSON.stringify(sha)}`,
+      `WT=${JSON.stringify(worktree)}`,
+      "LOG=/tmp/cander-preflight-git.log; : > $LOG",
+      'rm -rf "$WT"; mkdir -p "$WT"',
+      'cd "$WT"',
+      "git init -q .",
+      `git remote add origin ${JSON.stringify(`https://x-access-token:${token}@github.com/${opts.fullName}.git`)}`,
+      'git fetch --depth=1 origin "$SHA" >>$LOG 2>&1 || { echo CLONE_FAILED; sed "s#x-access-token:[^@]*@#x-access-token:***@#g" $LOG | tail -n 20; exit 7; }',
+      'git checkout -q FETCH_HEAD',
+      `git remote set-url origin ${JSON.stringify(`https://github.com/${opts.fullName}.git`)}`,
+      `timeout ${INSTALL_TIMEOUT_SEC} npm install --no-fund --no-audit > /tmp/cander-preflight-npm.log 2>&1 || { echo INSTALL_FAILED; tail -n 40 /tmp/cander-preflight-npm.log; exit 3; }`,
+      "git rev-parse HEAD",
+    ].join("\n");
+    pin = await runPrivilegedSandboxCommand({
+      sessionId,
+      userId,
+      cmd: "sh",
+      args: ["-c", cloneScript],
+    });
+  }
+
   if (pin.exitCode !== 0) {
-    const out = `${pin.stdout || ""}\n${pin.stderr || ""}`;
+    const out = `${pin.stdout || ""}\n${pin.stderr || ""}`.trim();
     if (/INSTALL_FAILED/.test(out)) {
       return [`npm install failed during publish preflight: ${trimCmdOutput(out)}`];
     }
     return [
-      `Could not check out draft SHA ${sha.slice(0, 7)} for preflight: ${trimCmdOutput(pin.stderr || pin.stdout)}`,
+      `Could not check out draft SHA ${sha.slice(0, 7)} for preflight (exit ${pin.exitCode}): ${
+        trimCmdOutput(out) || "git produced no output"
+      }`,
     ];
   }
   const head = (pin.stdout || "").trim().split(/\s+/).pop()?.toLowerCase() || "";
@@ -402,11 +473,25 @@ export async function preflightPublishTip(opts: {
         compileOk: false,
       };
     }
+    if (
+      await jobAlreadyVerifiedSha({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+        draftSha,
+      })
+    ) {
+      console.info("[cander:publish] compile preflight skipped — job already verified tip", {
+        projectId: opts.projectId,
+        draftSha: draftSha.slice(0, 12),
+      });
+      return { ok: true, draftSha, issues: [], paths, compileOk: true };
+    }
     const compileIssues = await runCompilePreflight({
       userId: opts.userId,
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
       draftSha,
+      fullName,
     });
     if (compileIssues.length > 0) {
       return {

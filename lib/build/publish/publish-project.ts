@@ -25,6 +25,7 @@ import { ensureDraftTipAuthor } from "@/lib/build/git/ensure-tip-author";
 import {
   beginPublishAttempt,
   findSuccessfulPublishForSha,
+  heartbeatPublishAttempt,
   updatePublishAttempt,
   type PublishAttemptRow,
 } from "@/lib/build/publish/attempts";
@@ -553,12 +554,15 @@ async function publishProjectWithRow(opts: {
     // Shorter poll budget after compile preflight (publish route maxDuration=300).
     const deployment = await createProductionDeployment({
       vercelProjectId,
-      timeoutMs: preflight.compileOk ? 150_000 : 240_000,
+      // Publish runs in the background (after()), so the poll budget can cover
+      // a full cold build.
+      timeoutMs: 600_000,
       projectName: vercelProject.name,
       githubRepoId,
       ref: draftBranch,
       sha: publishSha,
       publishAttemptId,
+      onTick: () => heartbeatPublishAttempt(publishAttemptId),
     });
 
     logPublish(publishAttemptId, "deploy_api_ready", {
@@ -768,6 +772,9 @@ async function publishProjectWithRow(opts: {
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // A Vercel build that errored is a code problem the agent can fix; a
+    // deploy that never started / API failure is a transient retry.
+    const draftNeedsRepair = /state=ERROR|Build log:/i.test(message);
     await updatePublishAttempt({
       publishAttemptId,
       projectId: opts.projectId,
@@ -775,6 +782,7 @@ async function publishProjectWithRow(opts: {
         status: "failed",
         error: message,
         completed_at: new Date().toISOString(),
+        meta: { userId: opts.userId, draftNeedsRepair },
       },
     });
     logPublish(publishAttemptId, "failed", { error: message });

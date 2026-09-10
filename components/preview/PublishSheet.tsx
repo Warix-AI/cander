@@ -27,6 +27,9 @@ export function PublishSheet() {
   });
   const isRepublish = Boolean(publishStatus?.published);
   const upToDate = Boolean(publishStatus?.published && !publishStatus.aheadOfLive);
+  // A publish already running (this tab, another tab, or a previous request
+  // that outlived the sheet) shows as busy — the button never fires twice.
+  const publishing = busy || Boolean(publishStatus?.publishing);
 
   const url = useMemo(
     () => resolvePublishUrl(options, selected, liveUrl),
@@ -41,7 +44,7 @@ export function PublishSheet() {
   if (overlay !== "publish") return null;
 
   const handlePublish = async () => {
-    if (!projectId || busy || !url) return;
+    if (!projectId || publishing || !url) return;
     setBusy(true);
     setError(null);
     try {
@@ -100,9 +103,9 @@ export function PublishSheet() {
           onSelect={setSelected}
           className="mt-2"
         />
-        <p className="mt-4 text-[13px] font-medium">Environment</p>
+        <p className="mt-4 text-[13px] font-medium">What gets published</p>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Production — deploys the current draft tip via Vercel
+          The latest version of your draft, exactly as it looks in the preview.
         </p>
         {formattedError ? (
           <div
@@ -119,19 +122,18 @@ export function PublishSheet() {
             </p>
             {formattedError.draftNeedsRepair ? (
               <p className="mt-2 text-[12px] opacity-80">
-                This is a draft problem, not a Vercel outage. Ask Cander to repair
-                the site, then publish again.
+                Tell Cander what you noticed in the chat and it will fix the draft.
               </p>
             ) : null}
           </div>
         ) : null}
         <button
           type="button"
-          disabled={busy || !projectId}
+          disabled={publishing || !projectId}
           onClick={() => void handlePublish()}
           className="mt-6 inline-flex h-10 w-full items-center justify-center rounded-full bg-primary text-[13.5px] font-medium text-primary-foreground hover:bg-foreground disabled:opacity-50"
         >
-          {busy
+          {publishing
             ? isRepublish
               ? "Republishing…"
               : "Publishing…"

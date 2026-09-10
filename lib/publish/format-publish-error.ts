@@ -1,40 +1,40 @@
 /**
- * Format publish API errors for the Publish sheet.
- * Distinguishes draft-repair failures from Vercel/platform failures.
+ * Format publish outcomes for the Publish sheet.
+ * Only user-safe copy from `lib/build/publish/user-copy` reaches this point;
+ * anything else (legacy / unexpected text) collapses to the generic retry copy
+ * so provider, git or build details never render in the UI.
  */
+
+import {
+  PUBLISH_STATE_COPY,
+  publishUserStateFromError,
+} from "@/lib/build/publish/user-copy";
 
 export function formatPublishUserError(raw: string): {
   title: string;
   body: string;
   draftNeedsRepair: boolean;
 } {
-  const text = (raw || "").trim() || "Publish failed.";
-  const draftNeedsRepair =
-    (/draft needs repair|Publish blocked|preflight|robots|sitemap|package\.json|App Router|Typecheck|next build failed|Missing dependency|Unresolved import|Could not pin sandbox|Ask Cander to repair|Warix Build identity|git author|CANDER_BUILD_GIT_AUTHOR|GitHub user not found|Blocked/i.test(
-      text,
-    ) ||
-      /Publish blocked/i.test(text)) &&
-    !/VERCEL_TOKEN is not configured|GitHub App is not configured|rate limit|503|unavailable/i.test(
-      text,
-    );
-
-  if (draftNeedsRepair) {
-    const cleaned = text
-      .replace(/^Publish blocked — the draft needs repair before it can go live \(this is not a Vercel outage\):\s*/i, "")
-      .replace(/^Publish blocked — draft tip failed preflight:\s*/i, "")
-      .trim();
+  const text = (raw || "").trim();
+  if (text === PUBLISH_STATE_COPY.needs_fix) {
+    return { title: "Your draft needs a fix", body: text, draftNeedsRepair: true };
+  }
+  if (text === PUBLISH_STATE_COPY.busy) {
+    return { title: "Almost there", body: text, draftNeedsRepair: false };
+  }
+  if (text === PUBLISH_STATE_COPY.needs_retry || !text) {
     return {
-      title: "Draft needs repair",
-      body:
-        cleaned ||
-        "The current draft tip is not publishable yet. Ask Cander to repair the site, then try again.",
-      draftNeedsRepair: true,
+      title: "Publish didn’t finish",
+      body: PUBLISH_STATE_COPY.needs_retry,
+      draftNeedsRepair: false,
     };
   }
-
+  // Legacy / unexpected raw text: classify, then show only the safe copy.
+  const state = publishUserStateFromError(text);
+  const draftNeedsRepair = state === "needs_fix";
   return {
-    title: "Publish failed",
-    body: text,
-    draftNeedsRepair: false,
+    title: draftNeedsRepair ? "Your draft needs a fix" : "Publish didn’t finish",
+    body: PUBLISH_STATE_COPY[state],
+    draftNeedsRepair,
   };
 }

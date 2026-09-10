@@ -512,9 +512,9 @@ function PublishPaneBody({ published = false }: { published?: boolean }) {
         onSelect={setSelected}
         className="mt-2 [&_button]:rounded-[12px]"
       />
-      <p className="mt-4 text-[13px] font-medium">Environment</p>
+      <p className="mt-4 text-[13px] font-medium">What gets published</p>
       <p className="mt-1 text-[13px] text-muted-foreground">
-        Production — deploys the current draft tip via Vercel
+        The latest version of your draft, exactly as it looks in the preview.
       </p>
       {error ? (
         <p className="mt-3 text-[13px] leading-relaxed text-red-600 dark:text-red-400">

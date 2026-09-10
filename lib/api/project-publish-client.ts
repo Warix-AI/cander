@@ -12,6 +12,10 @@ async function authToken() {
 }
 
 import type { PublishVerification } from "@/lib/api/build-runtime-api";
+import {
+  PUBLISH_STATE_COPY,
+  type PublishUserState,
+} from "@/lib/build/publish/user-copy";
 
 export type PublishProjectClientResult = {
   ok: boolean;
@@ -23,7 +27,18 @@ export type PublishProjectClientResult = {
   message?: string;
   error?: string;
   status?: string;
+  state?: PublishUserState;
   verification?: PublishVerification | null;
+};
+
+export type PublishAttemptClient = {
+  publishAttemptId: string;
+  state: PublishUserState;
+  message: string;
+  draftSha: string;
+  publishedUrl: string | null;
+  startedAt: string;
+  completedAt: string | null;
 };
 
 export type PublishStatusClient = {
@@ -33,6 +48,10 @@ export type PublishStatusClient = {
   published: boolean;
   /** Draft tip differs from what is live → Republish needed. */
   aheadOfLive: boolean;
+  /** A publish is currently running for this project. */
+  publishing?: boolean;
+  /** Latest attempt (user-safe state + copy). */
+  attempt?: PublishAttemptClient | null;
   customDomain: string | null;
   customDomainStatus: string | null;
   verification?: PublishVerification | null;
@@ -111,17 +130,29 @@ export async function publishProjectClient(opts: {
       error?: string;
       publishedUrl?: string | null;
       verification?: PublishVerification | null;
+      state?: PublishUserState;
     };
-    if (!res.ok) {
+    if (!res.ok && res.status !== 202) {
+      // Quota / auth style failures arrive synchronously; keep their copy.
+      const state: PublishUserState = data.state ?? "needs_retry";
       return {
         ok: false,
         url: data.url ?? data.publishedUrl ?? null,
         publishedSha: data.publishedSha ?? null,
         publishAttemptId: data.publishAttemptId ?? publishAttemptId,
-        error: data.error || data.message || `publish failed (${res.status})`,
-        message: data.message || data.error,
-        status: data.status,
+        error: data.error || data.message || PUBLISH_STATE_COPY[state],
+        message: data.message || data.error || PUBLISH_STATE_COPY[state],
+        status: data.status ?? "error",
+        state,
       };
+    }
+    if (res.status === 202 || data.state === "publishing") {
+      // Background publish: wait for the attempt to reach a terminal state.
+      return waitForPublishOutcome({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+        publishAttemptId: data.publishAttemptId ?? publishAttemptId,
+      });
     }
     return {
       ok: data.ok !== false,
@@ -132,14 +163,75 @@ export async function publishProjectClient(opts: {
       gitSyncRepairNeeded: data.gitSyncRepairNeeded,
       message: data.message,
       status: data.status,
+      state: data.state,
       verification: data.verification ?? null,
     };
   } catch (err) {
+    console.info("[cander:publish] request failed", err instanceof Error ? err.message : err);
     return {
       ok: false,
       url: null,
       publishAttemptId,
-      error: err instanceof Error ? err.message : String(err),
+      state: "needs_retry",
+      error: PUBLISH_STATE_COPY.needs_retry,
+      message: PUBLISH_STATE_COPY.needs_retry,
     };
   }
+}
+
+const PUBLISH_POLL_MS = 3000;
+const PUBLISH_POLL_MAX_MS = 15 * 60 * 1000;
+
+/**
+ * Poll publish status until the latest attempt finishes. Resolves with the
+ * same shape as a synchronous publish so callers do not care which path ran.
+ */
+export async function waitForPublishOutcome(opts: {
+  projectId: string;
+  workspaceId: string;
+  publishAttemptId: string;
+  onState?: (state: PublishUserState) => void;
+}): Promise<PublishProjectClientResult> {
+  const started = Date.now();
+  let lastState: PublishUserState | null = null;
+  while (Date.now() - started < PUBLISH_POLL_MAX_MS) {
+    await new Promise((r) => setTimeout(r, PUBLISH_POLL_MS));
+    const status = await fetchPublishStatusClient(opts);
+    const attempt = status?.attempt ?? null;
+    if (attempt && attempt.state !== lastState) {
+      lastState = attempt.state;
+      opts.onState?.(attempt.state);
+    }
+    if (!attempt) continue;
+    if (attempt.state === "publishing") continue;
+    // Only accept attempts started after (or as) ours; an older terminal row
+    // means ours has not been written yet.
+    if (
+      attempt.publishAttemptId !== opts.publishAttemptId &&
+      Date.now() - started < 20_000 &&
+      Date.parse(attempt.startedAt) < started - 60_000
+    ) {
+      continue;
+    }
+    const live = attempt.state === "live";
+    return {
+      ok: live,
+      url: live ? attempt.publishedUrl ?? status?.publishedUrl ?? null : null,
+      publishedSha: live ? attempt.draftSha : null,
+      publishAttemptId: attempt.publishAttemptId,
+      status: live ? "published" : "error",
+      state: attempt.state,
+      message: attempt.message,
+      error: live ? undefined : attempt.message,
+    };
+  }
+  return {
+    ok: false,
+    url: null,
+    publishAttemptId: opts.publishAttemptId,
+    state: "needs_retry",
+    status: "error",
+    message: PUBLISH_STATE_COPY.needs_retry,
+    error: PUBLISH_STATE_COPY.needs_retry,
+  };
 }
