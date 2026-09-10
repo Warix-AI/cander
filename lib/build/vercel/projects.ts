@@ -116,9 +116,35 @@ export async function ensureAppVercelProject(opts: {
 
   const fullName = String(project.github_full_name);
   const name = vercelProjectName(opts.projectId, fullName);
+  const persist = async (patch: Record<string, unknown>) => {
+    await admin
+      .from("projects")
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq("id", opts.projectId)
+      .eq("workspace_id", opts.workspaceId);
+  };
+  const adopt = async (id: string, projName: string, created: boolean): Promise<EnsuredVercelProject> => {
+    // Persist the id before any secondary call so a crash here never orphans
+    // the Vercel project (the next ensure finds it by id).
+    await persist({ vercel_project_id: id, vercel_status: "ready" });
+    await ensurePublicVercelProjectAccess(id);
+    await disableGitAutoDeployments(id);
+    return { vercelProjectId: id, name: projName, created };
+  };
 
-  // Prefer create WITHOUT gitRepository so pushes never auto-deploy.
-  // Deployments still use gitSource.repoId + sha via the Deployments API.
+  // Idempotent: the name is deterministic, so look it up BEFORE creating. A
+  // previous attempt that timed out after Vercel created the project (but
+  // before we saved the id) is found here instead of duplicated.
+  const existing = await vercelFetch(`/v9/projects/${encodeURIComponent(name)}`);
+  if (existing.ok) {
+    const body = (await existing.json()) as { id: string; name: string };
+    return adopt(body.id, body.name || name, false);
+  }
+
+  await persist({ vercel_status: "creating" });
+
+  // Create WITHOUT gitRepository so pushes never auto-deploy. Deployments
+  // always come from the Deployments API with an explicit SHA.
   const res = await vercelFetch("/v11/projects", {
     method: "POST",
     body: JSON.stringify({
@@ -127,60 +153,23 @@ export async function ensureAppVercelProject(opts: {
     }),
   });
 
-  // Never fall back to a git-linked project: a link makes every push to the
-  // draft branch (and every main promotion) mint a second production build.
-  // Deployments always come from the Deployments API with an explicit SHA.
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     console.warn("[cander] vercel project create failed", { name, status: res.status, errText: errText.slice(0, 300) });
-  }
-
-  if (!res.ok) {
-    // Maybe name collision — look up by name
-    const lookup = await vercelFetch(
-      `/v9/projects/${encodeURIComponent(name)}`,
-    );
+    // Raced with a concurrent ensure — adopt whichever project now exists.
+    const lookup = await vercelFetch(`/v9/projects/${encodeURIComponent(name)}`);
     if (lookup.ok) {
       const body = (await lookup.json()) as { id: string; name: string };
-      await ensurePublicVercelProjectAccess(body.id);
-      await disableGitAutoDeployments(body.id);
-      await admin
-        .from("projects")
-        .update({
-          vercel_project_id: body.id,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", opts.projectId)
-        .eq("workspace_id", opts.workspaceId);
-      return {
-        vercelProjectId: body.id,
-        name: body.name,
-        created: false,
-      };
+      return adopt(body.id, body.name || name, false);
     }
-    const detail = await res.text().catch(() => res.statusText);
+    await persist({ vercel_status: "failed" });
     throw new Error(
-      `Could not create Vercel project: ${detail}. ` +
+      `Could not create Vercel project: ${errText || res.statusText}. ` +
         "VERCEL_TOKEN must allow action=create on resource=project for this team " +
         "(check token scopes / team role; teamId is passed as a query param).",
     );
   }
 
   const body = (await res.json()) as { id: string; name: string };
-  await ensurePublicVercelProjectAccess(body.id);
-  await disableGitAutoDeployments(body.id);
-  await admin
-    .from("projects")
-    .update({
-      vercel_project_id: body.id,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", opts.projectId)
-    .eq("workspace_id", opts.workspaceId);
-
-  return {
-    vercelProjectId: body.id,
-    name: body.name,
-    created: true,
-  };
+  return adopt(body.id, body.name || name, true);
 }

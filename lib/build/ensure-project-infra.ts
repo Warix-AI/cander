@@ -217,6 +217,15 @@ export async function ensureProjectInfra(opts: {
   }
 
   try {
+    if (!project.github_repo_id) {
+      // State machine: not_created → creating → ready|failed. The repo name is
+      // deterministic (cander-<projectId>), so a crash mid-create is recovered
+      // by ensureProjectRepository's lookup on the next call.
+      await admin
+        .from("projects")
+        .update({ github_status: "creating", updated_at: new Date().toISOString() })
+        .eq("id", project.id);
+    }
     const repo = await ensureProjectRepository({
       projectId: project.id,
       title: project.title,
@@ -231,8 +240,11 @@ export async function ensureProjectInfra(opts: {
     const infraPatch: Record<string, unknown> = {
       github_repo_id: repo.repoId,
       github_full_name: repo.fullName,
+      github_repo_url: `https://github.com/${repo.fullName}`,
       github_default_branch: repo.defaultBranch,
+      production_branch: repo.defaultBranch,
       draft_branch: repo.draftBranch,
+      github_status: "ready",
       infra_status: infraStatus,
       updated_at: new Date().toISOString(),
     };
@@ -275,6 +287,7 @@ export async function ensureProjectInfra(opts: {
       .from("projects")
       .update({
         infra_status: infraStatus,
+        ...(project.github_repo_id ? {} : { github_status: "failed" }),
         updated_at: new Date().toISOString(),
       })
       .eq("id", project.id);
