@@ -13,10 +13,10 @@ import { extractFunctionCalls, extractText } from "./llm.mjs";
  *   task: string,
  *   reasoning?: string,
  *   budget: { deadlineMs: number, maxLlmCalls: number },
- *   onFinishRequested?: (finish: { summary: string, routes: string[] }) => Promise<{ accept: boolean, feedback?: string }>,
+ *   onFinishRequested?: (finish: { summary: string, routes: string[] }) => Promise<{ accept: boolean, feedback?: string, infra?: boolean, classification?: string }>,
  *   label?: string,
  * }} opts
- * @returns {Promise<{ finished: boolean, summary: string, routes: string[], reason: string, lastText: string }>}
+ * @returns {Promise<{ finished: boolean, summary: string, routes: string[], reason: string, lastText: string, unverified?: boolean, classification?: string }>}
  */
 export async function runAgent(opts) {
   const { llm, tools, log, model, instructions, task, budget } = opts;
@@ -29,6 +29,9 @@ export async function runAgent(opts) {
   let finishRejections = 0;
   /** Consecutive check_preview rounds where every route failed (0/5xx). */
   let deadPreviewStreak = 0;
+  /** Consecutive check_preview calls answered with "PREVIEW UNAVAILABLE — INFRASTRUCTURE". */
+  let infraStreak = 0;
+  let writesSinceInfra = 0;
 
   for (;;) {
     if (Date.now() > budget.deadlineMs) {
@@ -123,6 +126,20 @@ export async function runAgent(opts) {
             call_id: call.callId,
             output: "finish accepted",
           });
+        } else if (verdict.infra) {
+          // The preview cannot be verified from inside this sandbox and that is
+          // not the coder's problem. Accept the code as-is and hand the draft
+          // to the server, which owns the stronger recovery path.
+          log.emit("log", `${label}: finish accepted unverified (${verdict.classification || "preview_unavailable"})`);
+          return {
+            finished: true,
+            summary: finish.summary,
+            routes: finish.routes,
+            reason: "finished_unverified",
+            lastText: verdict.feedback || lastText,
+            unverified: true,
+            classification: verdict.classification || "preview_unavailable",
+          };
         } else {
           finishRejections += 1;
           outputs.push({
@@ -144,8 +161,32 @@ export async function runAgent(opts) {
       }
       const result = await tools.call(call.name, call.arguments);
       let output = result.output;
+      if (/^(write_file|edit_file|delete_file)$/.test(call.name)) writesSinceInfra += 1;
       if (call.name === "check_preview") {
         const text = String(output || "");
+        if (/^PREVIEW UNAVAILABLE — INFRASTRUCTURE/.test(text)) {
+          // Supervisor already tried to recover. Re-checking without new code
+          // is pure token burn: nudge, then end the run as an unverified
+          // handoff so the server can bring the preview up.
+          infraStreak += 1;
+          const idle = writesSinceInfra === 0 && infraStreak > 1;
+          writesSinceInfra = 0;
+          if (infraStreak >= 2) {
+            output += `\n\nYou have now checked ${infraStreak} times with the preview down. Stop calling check_preview. Finish the remaining files, run tsc, then call finish(summary, routes).`;
+          }
+          if (infraStreak >= 4 || (idle && infraStreak >= 3)) {
+            return {
+              finished: false,
+              summary: lastText,
+              routes: [],
+              reason: "preview_unavailable",
+              lastText: text,
+              classification: "preview_unavailable",
+            };
+          }
+          outputs.push({ type: "function_call_output", call_id: call.callId, output });
+          continue;
+        }
         const lines = text.split("\n").filter((l) => /→ HTTP\s+\d+/.test(l));
         const allDead =
           lines.length > 0 &&

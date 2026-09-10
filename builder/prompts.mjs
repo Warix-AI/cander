@@ -7,7 +7,11 @@ export const STACK_RULES = `Stack (already booted in this sandbox; the preview s
 - Never use \`next/font/google\` in a sandbox without network guarantees — load fonts via a <link> in app/layout.tsx or use system font stacks.
 - Images: for hero/section photography use download_image to save real photos (e.g. https://images.unsplash.com/photo-… with ?auto=format&fit=crop&w=1600&q=80) into public/images/ and reference them as src="/images/…" with descriptive alt. next/image needs width/height (or fill inside a sized relative parent); <img> is fine. Never leave gradient placeholder boxes where a photo belongs.
 - Keep package.json valid; run \`npm install <pkg>\` via run_command if you add a dependency, then re-check the preview.
-- Do NOT start or restart the preview with \`npm run dev\` / \`next dev\` / \`npm start\` yourself — the sandbox owns that process. Use check_preview. If preview is down, keep writing files; final verification restarts acceptance for you.
+- Do NOT start or restart the preview with \`npm run dev\` / \`next dev\` / \`npm start\` yourself — Cander supervises that process and restarts it for you. Use check_preview. Read its output carefully:
+  • "PREVIEW DOWN — APPLICATION ERROR": the server cannot start because of YOUR code (compile/runtime error shown). Fix exactly that, then check again.
+  • "PREVIEW UNAVAILABLE — INFRASTRUCTURE": the environment is the problem, not your pages. Never edit routes, layouts or app/opengraph-image.tsx in response. Keep building, run tsc, and call finish — Cander's server verifies every route afterwards.
+  • Per-route "HTTP 500 / error:" lines are real page bugs — fix them.
+- Avoid editing next.config.* unless truly required (it restarts the preview server). Remote images: use plain <img> tags or download_image into public/ instead of configuring images.remotePatterns.
 - Do not create pages/ (Pages Router). Do not touch .git, node_modules, or .cander.`;
 
 export const QUALITY_BAR = `Quality bar — this must look like a real, launch-ready website, not a template:
@@ -72,7 +76,8 @@ Workflow for a change request:
 5. finish(summary) — summary is shown to the user verbatim, so write it as a friendly one- or two-sentence confirmation of what changed (no file paths unless useful).
 Never ask clarifying questions; make the most reasonable interpretation and mention any assumption in the summary.`;
 
-export const WORKFLOW_REPAIR = `The site was just built but did not pass verification. Your only job now: fix the listed problems so tsc is clean and every route renders. Do not redesign, add pages, or rewrite copy. Read the failing files, make minimal fixes, re-run tsc and check_preview, then call finish(summary, routes) with the same routes.`;
+export const WORKFLOW_REPAIR = `The site was just built but did not pass verification. Your only job now: fix the listed problems so tsc is clean and every route renders. Do not redesign, add pages, or rewrite copy. Read the failing files, make minimal fixes, re-run tsc and check_preview, then call finish(summary, routes) with the same routes.
+The report only lists application problems (compile errors, routes that 500, missing metadata, placeholder copy). If check_preview ever says "PREVIEW UNAVAILABLE — INFRASTRUCTURE", that is not something you can fix: stop checking, make sure tsc is clean, and call finish.`;
 
 /** @typedef {{ projectKind?: "site"|"app", projectName: string, siteUrl?: string|null, brief: Record<string, unknown>|null, projectSpec?: Record<string, unknown>|null, instruction?: string|null, plan?: string|null, conversation?: string|null, routeMap?: string|null }} BuildCtx */
 

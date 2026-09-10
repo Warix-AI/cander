@@ -2857,6 +2857,22 @@ export function ProjectBrowserPanel({
             setSandboxEnvMessage(null);
             void (async () => {
               try {
+                // Resume the failed build in place (diagnose → verify/repair
+                // or rebuild with the saved plan). Fall back to finalize +
+                // repair only when there is no failed build to resume.
+                if (websiteBrief?.status === "failed") {
+                  const { retryBuildJobClient } = await import(
+                    "@/lib/api/build-jobs-client"
+                  );
+                  const resumed = await retryBuildJobClient({
+                    projectId,
+                    workspaceId: ctx.workspaceId,
+                  });
+                  if (resumed.ok || resumed.status === 409) {
+                    await refreshWebsiteBrief();
+                    return;
+                  }
+                }
                 const { requestBuildReadyClient } = await import(
                   "@/lib/api/build-ready-client"
                 );

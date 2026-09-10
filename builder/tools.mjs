@@ -49,13 +49,15 @@ function autoDetachLongServer(cmd) {
 
 export class SandboxTools {
   /**
-   * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, twentyFirst?: import("./twenty-first.mjs").TwentyFirstClient|null }} opts
+   * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, twentyFirst?: import("./twenty-first.mjs").TwentyFirstClient|null, preview?: import("./preview.mjs").PreviewSupervisor|null }} opts
    */
   constructor(opts) {
     this.repoDir = resolve(opts.repoDir);
     this.devServerUrl = opts.devServerUrl.replace(/\/$/, "");
     this.log = opts.log;
     this.twentyFirst = opts.twentyFirst ?? null;
+    /** Owns dev-server reachability; null disables the health gate (tests). */
+    this.preview = opts.preview ?? null;
     this.writtenPaths = new Set();
     this.toolCalls = 0;
   }
@@ -574,6 +576,19 @@ export class SandboxTools {
       Array.isArray(paths) && paths.length
         ? paths.map((p) => String(p || "/")).slice(0, 25)
         : ["/"];
+    // Health gate: a dead server is one infrastructure problem, not N route
+    // bugs. Recover it here (bounded) instead of reporting HTTP 0 per route.
+    if (this.preview) {
+      const health = await this.preview.ensure({ reason: "check_preview" });
+      if (!health.ok) {
+        this.log.emit("verify", `Preview check skipped: server unreachable (${health.cause})`, {
+          unreachable: true,
+          cause: health.cause,
+          kind: health.kind,
+        });
+        return this.preview.agentMessage(health);
+      }
+    }
     const results = [];
     for (const route of routes) {
       const path = route.startsWith("/") ? route : `/${route}`;
@@ -585,6 +600,13 @@ export class SandboxTools {
       `Preview check: ${results.map((r) => `${r.path} ${r.status}`).join(", ")}`,
       { results: results.map((r) => ({ path: r.path, status: r.status, ok: r.ok })) },
     );
+    // Every route failed to connect mid-check → the server died while we were
+    // fetching. Say so once instead of listing per-route "HTTP 0".
+    if (results.length && results.every((r) => r.status === 0) && this.preview) {
+      const health = await this.preview.ensure({ reason: "check_preview_all_zero" });
+      if (!health.ok) return this.preview.agentMessage(health);
+      return "The preview server restarted during the check. Call check_preview again for these routes.";
+    }
     return results
       .map((r) => {
         const head = `${r.path} → HTTP ${r.status}${r.ok ? "" : " (PROBLEM)"} title=${JSON.stringify(r.title)}`;

@@ -128,6 +128,23 @@ export function BuildPanel() {
     setEnvMessage(null);
     void (async () => {
       try {
+        // Resume the failed build first (server diagnoses the previous failure
+        // and continues from the last good phase). Only when there is no
+        // build to resume do we fall back to re-finalizing the saved draft.
+        const { retryBuildJobClient } = await import("@/lib/api/build-jobs-client");
+        const resumed = await retryBuildJobClient({
+          projectId,
+          workspaceId: ctx.workspaceId,
+        });
+        if (resumed.ok) {
+          await refreshWebsiteBrief();
+          return;
+        }
+        if (resumed.status === 409) {
+          // Already running — just let the poller catch up.
+          await refreshWebsiteBrief();
+          return;
+        }
         const { requestBuildReadyClient } = await import(
           "@/lib/api/build-ready-client"
         );

@@ -9,6 +9,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { EventLog } from "./events.mjs";
 import { LlmClient } from "./llm.mjs";
+import { PreviewSupervisor } from "./preview.mjs";
 import { SandboxTools } from "./tools.mjs";
 import { TwentyFirstClient } from "./twenty-first.mjs";
 import { runAgent } from "./agent.mjs";
@@ -80,10 +81,14 @@ async function main() {
     ? new TwentyFirstClient({ transport, apiBase: config.apiBase, jobId, token, log })
     : null;
   const devServerUrl = config.devServerUrl || "http://localhost:3000";
-  const tools = new SandboxTools({ repoDir, devServerUrl, log, twentyFirst });
+  const preview = new PreviewSupervisor({ repoDir, devServerUrl, log });
+  const tools = new SandboxTools({ repoDir, devServerUrl, log, twentyFirst, preview });
 
   const mode = config.mode === "edit" ? "edit" : "create";
   const projectKind = config.projectKind === "app" ? "app" : "site";
+  // Retry of a failed create: resume from the last good phase in the SAME
+  // sandbox (files, plan and logs are still here) instead of starting over.
+  const resume = normalizeResume(config.resume, repoDir);
   const models = {
     planner: config.models?.planner || "gpt-5.6-luna",
     coder: config.models?.coder || "gpt-5.3-codex",
@@ -109,13 +114,31 @@ async function main() {
     },
   );
 
-  // Edits need the live preview immediately. Creates do most writing first and
-  // accept at the end — only wait briefly so a cold sandbox doesn't burn 3 min.
-  await waitForDevServer(devServerUrl, log, mode === "create" ? 12_000 : 180_000);
+  // ---- phase: workspace / preview -------------------------------------------
+  // Edits need the live preview immediately (HMR-driven verification). Creates
+  // write most files first, so the preview only has to be up by acceptance:
+  // bring it up in the background while planning runs.
+  let previewBoot;
+  if (mode === "edit") {
+    const up = await waitForDevServer(devServerUrl, log, 90_000);
+    previewBoot = up ? Promise.resolve(preview.last) : preview.ensure({ reason: "edit_start" });
+  } else {
+    previewBoot = (async () => {
+      const up = await waitForDevServer(devServerUrl, log, 12_000);
+      return up ? preview.last : preview.ensure({ reason: "create_start" });
+    })();
+  }
+  previewBoot = previewBoot.catch((err) => {
+    log.emit("log", `Preview boot failed: ${err?.message || err}`);
+    return null;
+  });
 
-  // ---- plan (create only) ----------------------------------------------------
+  // ---- phase: plan (create only; reused on resume) ----------------------------
   let plan = null;
-  if (mode === "create") {
+  if (mode === "create" && resume?.plan) {
+    plan = resume.plan;
+    log.emit("plan", "Reusing the plan from the previous attempt", { resumed: true, chars: plan.markdown.length });
+  } else if (mode === "create" && resume?.phase !== "verify") {
     try {
       plan = await runPlanningPhase({
         llm,
@@ -135,16 +158,27 @@ async function main() {
       log.emit("log", `Planning skipped: ${err?.message || err}`);
     }
   }
+  if (plan?.markdown) {
+    // Durable in the sandbox so a retry can skip planning.
+    try {
+      writeFileSync(join(jobDir, "plan.md"), plan.markdown);
+      writeFileSync(join(jobDir, "plan.json"), JSON.stringify({ routes: plan.routes || [] }));
+    } catch {
+      /* best-effort */
+    }
+  }
 
-  // ---- build -----------------------------------------------------------------
+  // ---- acceptance ------------------------------------------------------------
+  let lastVerification = null;
   const acceptance = async (finish) => {
     log.emit("status", projectKind === "app" ? "Verifying the app" : "Verifying the site", { routes: finish.routes });
     const result = await runAcceptance({
       repoDir,
       devServerUrl,
       log,
+      preview,
       routes: finish.routes,
-      expectedRoutes: plan?.routes || [],
+      expectedRoutes: plan?.routes || resume?.routes || [],
       mode,
       projectKind,
       siteUrl: config.siteUrl || null,
@@ -156,9 +190,18 @@ async function main() {
       deadlineMs: budget.deadlineMs,
       writtenPaths: mode === "edit" ? [...tools.writtenPaths] : null,
     });
-    return result.ok
-      ? { accept: true }
-      : { accept: false, feedback: result.report };
+    lastVerification = result;
+    try {
+      writeFileSync(join(jobDir, "verify-report.txt"), result.report);
+    } catch {
+      /* best-effort */
+    }
+    if (result.ok) return { accept: true };
+    if (result.classification === "preview_unavailable") {
+      // Not the coder's problem: accept unverified and let the server recover.
+      return { accept: false, infra: true, classification: "preview_unavailable", feedback: result.report };
+    }
+    return { accept: false, feedback: result.report, classification: "app" };
   };
 
   const ctx = {
@@ -174,33 +217,83 @@ async function main() {
     plan: plan?.markdown || null,
   };
 
-  log.emit(
-    "status",
-    mode === "create"
-      ? projectKind === "app"
-        ? "Building screens and data layer"
-        : "Building pages and components"
-      : "Making the change",
-  );
-  let result = await runAgent({
-    llm,
-    tools,
-    log,
-    model: models.coder,
-    reasoning: config.reasoning || "medium",
-    instructions: mode === "create" ? createInstructions(ctx) : editInstructions(ctx),
-    task: mode === "create" ? createTask(ctx) : editTask({ ...ctx, instruction: config.instruction || "" }),
-    budget,
-    onFinishRequested: acceptance,
-    label: "coder",
-  });
+  // Make sure the preview boot finished (or gave up) before the coder starts
+  // checking routes; planning usually covers the whole boot time.
+  const boot = await previewBoot;
+  if (boot && !boot.ok) {
+    log.emit("log", `Preview not up at build start (${boot.cause}); coder proceeds, recovery continues on demand.`, {
+      cause: boot.cause,
+      kind: boot.kind,
+    });
+  }
 
-  // ---- one bounded self-repair round -----------------------------------------
+  // ---- phase: build -----------------------------------------------------------
+  let result;
+  if (mode === "create" && resume?.phase === "verify") {
+    // Files already exist from the previous attempt: verify first, code only
+    // if verification actually finds application problems.
+    log.emit("status", "Checking the previous draft", { resumed: true });
+    const routes = resume.routes?.length ? resume.routes : [];
+    const verdict = await acceptance({ summary: resume.summary || "", routes });
+    if (verdict.accept) {
+      result = {
+        finished: true,
+        summary: resume.summary || "Your draft is ready.",
+        routes: lastVerification?.routes || routes,
+        reason: "finished",
+        lastText: "",
+      };
+    } else if (verdict.infra) {
+      result = {
+        finished: true,
+        summary: resume.summary || "Your draft is ready.",
+        routes,
+        reason: "finished_unverified",
+        lastText: verdict.feedback || "",
+        unverified: true,
+        classification: "preview_unavailable",
+      };
+    } else {
+      result = {
+        finished: false,
+        summary: resume.summary || "",
+        routes: lastVerification?.routes || routes,
+        reason: "verification_failed",
+        lastText: verdict.feedback || "",
+      };
+      // Mark something as written so the repair round below runs.
+      tools.writtenPaths.add(".cander/resume");
+    }
+  } else {
+    log.emit(
+      "status",
+      mode === "create"
+        ? projectKind === "app"
+          ? "Building screens and data layer"
+          : "Building pages and components"
+        : "Making the change",
+    );
+    result = await runAgent({
+      llm,
+      tools,
+      log,
+      model: models.coder,
+      reasoning: config.reasoning || "medium",
+      instructions: mode === "create" ? createInstructions(ctx) : editInstructions(ctx),
+      task: mode === "create" ? createTask(ctx) : editTask({ ...ctx, instruction: config.instruction || "" }),
+      budget,
+      onFinishRequested: acceptance,
+      label: "coder",
+    });
+  }
+
+  // ---- phase: repair (bounded; application failures only) --------------------
   // Verification failures after finish() are usually a handful of type errors
-  // or one route that 500s. Instead of surfacing "Retry" to the user, grant a
-  // short, fresh-context repair pass with the concrete report before failing.
+  // or one route that 500s. Grant a short, fresh-context repair pass with the
+  // concrete report. Infrastructure failures never reach the coder.
+  const realWrites = [...tools.writtenPaths].filter((p) => !p.startsWith(".cander/")).length;
   if (!result.finished && result.reason === "verification_failed" && tools.writtenPaths.size > 0) {
-    log.emit("status", "Fixing verification issues", { repair: true });
+    log.emit("status", "Repairing build", { repair: true });
     const repairBudget = {
       deadlineMs: Math.max(budget.deadlineMs, Date.now()) + Number(config.budget?.repairMs || 8 * 60_000),
       maxLlmCalls: Number(config.budget?.repairLlmCalls || 40),
@@ -229,8 +322,23 @@ async function main() {
     if (repair.finished) {
       result = { ...repair, summary: result.summary || repair.summary };
     } else {
-      result = { ...result, lastText: repair.lastText || result.lastText };
+      result = { ...result, reason: repair.reason === "preview_unavailable" ? repair.reason : result.reason, lastText: repair.lastText || result.lastText };
     }
+  }
+
+  // The coder gave up because the preview was down (not because of its code):
+  // that is a handoff, not a failure, as long as there is a draft to hand over.
+  if (!result.finished && result.reason === "preview_unavailable" && realWrites > 0) {
+    result = {
+      ...result,
+      finished: true,
+      reason: "finished_unverified",
+      unverified: true,
+      classification: "preview_unavailable",
+      summary:
+        result.summary?.slice(0, 600) ||
+        (projectKind === "app" ? "Your app draft is ready." : "Your website draft is ready."),
+    };
   }
 
   const stats = {
@@ -238,18 +346,31 @@ async function main() {
     inputTokens: llm.inputTokens,
     outputTokens: llm.outputTokens,
     toolCalls: tools.toolCalls,
-    filesTouched: tools.writtenPaths.size,
+    filesTouched: realWrites,
   };
+  const recovery = preview.summary();
+  const files = [...tools.writtenPaths].filter((p) => !p.startsWith(".cander/")).slice(0, 200);
 
   if (result.finished) {
+    const unverified = Boolean(result.unverified);
     log.emit("finished", result.summary || "Done", {
       summary: result.summary,
       routes: result.routes,
-      files: [...tools.writtenPaths].slice(0, 200),
+      files,
       stats,
+      ...(unverified
+        ? {
+            partial: true,
+            unverified: true,
+            classification: result.classification || "preview_unavailable",
+            cause: recovery.last?.cause || null,
+            verification: (result.lastText || "").slice(0, 3000),
+            recovery,
+          }
+        : {}),
     });
-    finishFile("finished", { summary: result.summary, routes: result.routes, stats });
-  } else if (tools.writtenPaths.size > 0 && result.reason !== "verification_failed") {
+    finishFile("finished", { summary: result.summary, routes: result.routes, stats, unverified, recovery });
+  } else if (realWrites > 0 && result.reason !== "verification_failed") {
     // Budget ran out but work exists — hand it over as a partial draft so the
     // user sees something and can iterate, instead of losing everything.
     const summary =
@@ -260,21 +381,84 @@ async function main() {
       routes: result.routes,
       partial: true,
       reason: result.reason,
-      files: [...tools.writtenPaths].slice(0, 200),
+      files,
       stats,
+      recovery,
     });
     finishFile("finished", { summary, partial: true, reason: result.reason, stats });
   } else {
+    const classification = classifyFailure(result.reason, recovery);
     const message =
       result.reason === "verification_failed"
         ? `The site did not pass verification:\n${result.lastText?.slice(0, 1500) || ""}`
         : `Builder stopped (${result.reason}).${result.lastText ? ` ${result.lastText.slice(0, 500)}` : ""}`;
-    log.emit("failed", message, { reason: result.reason, stats });
-    finishFile("failed", { error: message, reason: result.reason, stats });
+    log.emit("failed", message, {
+      reason: result.reason,
+      classification,
+      cause: recovery.last?.cause || null,
+      diagnostics: (recovery.last?.detail || result.lastText || "").slice(0, 1500),
+      recovery,
+      routes: result.routes,
+      files,
+      stats,
+      verification: lastVerification ? lastVerification.report.slice(0, 3000) : null,
+    });
+    finishFile("failed", { error: message, reason: result.reason, classification, stats, recovery });
   }
 
   await log.close();
   process.exit(0);
+}
+
+/**
+ * Root-cause bucket for a failed run. `infra` = environment/runtime, `app` =
+ * generated code failed checks, `budget` = out of time/calls, `agent` = the
+ * model stopped cooperating.
+ */
+function classifyFailure(reason, recovery) {
+  if (reason === "preview_unavailable") return "infra";
+  if (reason === "verification_failed") {
+    return recovery?.last && recovery.last.ok === false && recovery.last.kind === "infra" ? "infra" : "app";
+  }
+  if (reason === "deadline" || reason === "llm_budget") return "budget";
+  if (reason === "no_tool_calls") return "agent";
+  return "unknown";
+}
+
+/**
+ * @param {unknown} raw config.resume from the server
+ * @param {string} repoDir
+ * @returns {{ fromJobId: string, phase: "build"|"verify", plan: { markdown: string, routes: string[] }|null, routes: string[], summary: string|null, report: string|null }|null}
+ */
+function normalizeResume(raw, repoDir) {
+  if (!raw || typeof raw !== "object" || !raw.fromJobId) return null;
+  const fromJobId = String(raw.fromJobId);
+  const prevDir = join(repoDir, ".cander", "jobs", fromJobId);
+  const read = (name) => {
+    try {
+      const p = join(prevDir, name);
+      return existsSync(p) ? readFileSync(p, "utf8") : null;
+    } catch {
+      return null;
+    }
+  };
+  const planMd = read("plan.md");
+  let routes = [];
+  try {
+    const j = JSON.parse(read("plan.json") || "{}");
+    if (Array.isArray(j.routes)) routes = j.routes.map(String);
+  } catch {
+    /* ignore */
+  }
+  if (Array.isArray(raw.routes) && raw.routes.length) routes = raw.routes.map(String);
+  return {
+    fromJobId,
+    phase: raw.phase === "verify" ? "verify" : "build",
+    plan: planMd ? { markdown: planMd, routes } : null,
+    routes,
+    summary: typeof raw.summary === "string" ? raw.summary : null,
+    report: read("verify-report.txt") || (typeof raw.report === "string" ? raw.report : null),
+  };
 }
 
 function routesFromWrittenPaths(paths, fallback) {

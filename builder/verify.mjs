@@ -56,12 +56,44 @@ const PLACEHOLDER_RE =
   /lorem ipsum|your (headline|company|business|tagline|text) here|\bTODO\b|\bTBD\b|\[insert[^\]]*\]|\[(company|business|name|city|phone|email|address)[^\]]*\]|placeholder text|coming soon…?$/i;
 
 /**
- * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], expectedRoutes?: string[], mode?: "create"|"edit", projectKind?: "site"|"app", siteUrl?: string|null, timeoutMs?: number, features?: string[], scopeRoutes?: string[]|null, functional?: boolean, deadlineMs?: number, writtenPaths?: string[]|null }} opts
- * @returns {Promise<{ ok: boolean, issues: string[], routes: string[], report: string }>}
+ * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], expectedRoutes?: string[], mode?: "create"|"edit", projectKind?: "site"|"app", siteUrl?: string|null, timeoutMs?: number, features?: string[], scopeRoutes?: string[]|null, functional?: boolean, deadlineMs?: number, writtenPaths?: string[]|null, preview?: import("./preview.mjs").PreviewSupervisor|null }} opts
+ * @returns {Promise<{ ok: boolean, issues: string[], routes: string[], report: string, classification: "passed"|"app"|"preview_unavailable", preview?: import("./preview.mjs").EnsureResult|null }>}
  */
 export async function runAcceptance(opts) {
   const issues = [];
   const repoDir = opts.repoDir;
+
+  // Phase 0: is the preview server reachable at all? Route verification is
+  // meaningless against a dead server — recover it first, and if that is not
+  // possible here, report ONE infrastructure problem instead of N route bugs.
+  let previewHealth = null;
+  if (opts.preview) {
+    opts.log.emit("verify", "Checking the preview server…");
+    previewHealth = await opts.preview.ensure({ reason: "acceptance" });
+    if (!previewHealth.ok) {
+      const infra = previewHealth.kind !== "app";
+      const line = infra
+        ? `Preview server unreachable (${previewHealth.cause}) — infrastructure problem, not a page bug. ${previewHealth.detail || ""}`.trim()
+        : `The app fails to start: ${previewHealth.detail || previewHealth.cause}. Fix this compile/runtime error first.`;
+      const report = [
+        `Preview: down (${previewHealth.cause}, ${previewHealth.attempts} recovery attempt${previewHealth.attempts === 1 ? "" : "s"})`,
+        `Issues (1):\n- ${line}`,
+      ].join("\n");
+      opts.log.emit(
+        "verify",
+        infra ? "Verification blocked: preview server unavailable" : "Verification found 1 issue (app fails to start)",
+        { issues: [line], routes: opts.routes || [], classification: infra ? "preview_unavailable" : "app", cause: previewHealth.cause },
+      );
+      return {
+        ok: false,
+        issues: [line],
+        routes: opts.routes || [],
+        report,
+        classification: infra ? "preview_unavailable" : "app",
+        preview: previewHealth,
+      };
+    }
+  }
   const routeFiles = discoverRouteFiles(repoDir);
   const discovered = [...routeFiles.keys()].sort();
   const siteOrigin = normalizeOrigin(opts.siteUrl);
@@ -141,10 +173,22 @@ export async function runAcceptance(opts) {
   // 3. Every route renders
   opts.log.emit("verify", `Checking ${routes.length} route(s) on the dev server…`);
   const results = [];
+  let serverDied = false;
   for (const route of routes.slice(0, 40)) {
     // First hit compiles the route in dev; be patient.
     let r = await fetchPreview(`${opts.devServerUrl}${route}`, 90_000);
     if (!r.ok && r.status === 0) {
+      // Connection failure: is the server gone (global) or was this one
+      // route slow to compile? Re-probe the root before retrying.
+      if (opts.preview) {
+        const h = await opts.preview.ensure({ reason: `acceptance:${route}` });
+        if (!h.ok) {
+          serverDied = true;
+          previewHealth = h;
+          results.push(r);
+          break;
+        }
+      }
       r = await fetchPreview(`${opts.devServerUrl}${route}`, 90_000);
     }
     results.push(r);
@@ -153,6 +197,27 @@ export async function runAcceptance(opts) {
         `${route} → HTTP ${r.status}${r.error ? ` — ${r.error}` : ""}`,
       );
     }
+  }
+  // The server went away mid-verification (or every route failed to connect):
+  // one infrastructure issue, no per-route noise, no OG/HTML checks.
+  const allDead = results.length > 0 && results.every((r) => r.status === 0);
+  if (serverDied || allDead) {
+    const h = previewHealth && !previewHealth.ok ? previewHealth : { cause: "not_running", kind: "infra", detail: "", attempts: 0 };
+    const infra = h.kind !== "app";
+    const line = infra
+      ? `Preview server stopped responding during verification (${h.cause}) — infrastructure problem, not a page bug.${h.detail ? ` ${h.detail}` : ""}`
+      : `The app fails to start: ${h.detail || h.cause}. Fix this compile/runtime error first.`;
+    const report = [
+      `Routes: ${results.map((r) => `${r.path}=${r.status}`).join(" ")}`,
+      `Issues (1):\n- ${line}`,
+    ].join("\n");
+    opts.log.emit("verify", infra ? "Verification blocked: preview server unavailable" : "Verification found 1 issue (app fails to start)", {
+      issues: [line],
+      routes,
+      classification: infra ? "preview_unavailable" : "app",
+      cause: h.cause,
+    });
+    return { ok: false, issues: [line], routes, report, classification: infra ? "preview_unavailable" : "app", preview: h };
   }
 
   // 4. Per-page HTML quality: title, description, exactly one h1, no placeholders
@@ -234,9 +299,15 @@ export async function runAcceptance(opts) {
     );
     if (!ogFile) {
       issues.push("app/opengraph-image.tsx is missing — generate the social image with ImageResponse from \"next/og\".");
-    } else if (/\.tsx?$/.test(ogFile)) {
+    } else if (/\.tsx?$/.test(ogFile) && results.some((r) => r.ok)) {
+      // Only judge the OG route when the app itself is serving pages — a
+      // connection failure here is the server, not this file.
       const og = await fetchImage(`${opts.devServerUrl}/opengraph-image`, 90_000);
-      if (!og.ok) issues.push(`/opengraph-image → ${og.detail} (fix ${ogFile}).`);
+      if (!og.ok && !/^fetch failed/.test(og.detail)) {
+        issues.push(`/opengraph-image → ${og.detail} (fix ${ogFile}).`);
+      } else if (!og.ok) {
+        opts.log.emit("log", `opengraph-image fetch did not connect (${og.detail}); not attributing to ${ogFile}.`);
+      }
     }
   }
 
@@ -274,9 +345,16 @@ export async function runAcceptance(opts) {
   opts.log.emit(
     "verify",
     issues.length ? `Verification found ${issues.length} issue(s)` : "Verification passed",
-    { issues: issues.slice(0, 10), routes },
+    { issues: issues.slice(0, 10), routes, classification: issues.length ? "app" : "passed" },
   );
-  return { ok: issues.length === 0, issues, routes, report };
+  return {
+    ok: issues.length === 0,
+    issues,
+    routes,
+    report,
+    classification: issues.length ? "app" : "passed",
+    preview: previewHealth,
+  };
 }
 
 function uniq(arr) {

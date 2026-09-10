@@ -112,6 +112,49 @@ export async function startBuildJobClient(opts: {
   };
 }
 
+/**
+ * Resume a failed website build (server diagnoses the previous failure and
+ * continues from the last good phase in the same sandbox). Returns the new
+ * job, or `null` when there is nothing to retry (caller falls back to a plain
+ * preview finalize/repair).
+ */
+export async function retryBuildJobClient(opts: {
+  projectId: string;
+  workspaceId: string;
+}): Promise<{ ok: boolean; job?: BuildJobClient | null; error?: string; status: number }> {
+  const token = await authToken();
+  if (!token) return { ok: false, error: "Not signed in.", status: 401 };
+  try {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(opts.projectId)}/build-jobs/retry`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ workspaceId: opts.workspaceId }),
+      },
+    );
+    const data = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      job?: BuildJobClient | null;
+      error?: string;
+    };
+    const ok = Boolean(res.ok && data.ok !== false && data.job);
+    if (ok && data.job && typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("cander:build-job-started", {
+          detail: { projectId: opts.projectId, jobId: data.job.id, mode: "create", retry: true },
+        }),
+      );
+    }
+    return { ok, job: data.job ?? null, error: data.error, status: res.status };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error", status: 0 };
+  }
+}
+
 const ACTIVE_STATUSES = new Set(["queued", "running", "verifying"]);
 
 async function recoverJustStartedJob(

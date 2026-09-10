@@ -39,6 +39,9 @@ import { slugFromProjectName } from "@/lib/publish-domain";
 import { appDirToUrlPath, hasRootPage } from "@/lib/ai/build/routes/app-router-conflicts";
 import {
   appendBuildJobEvents,
+  createBuildJob,
+  findActiveBuildJob,
+  findLatestBuildJob,
   findQueuedBuildJob,
   getBuildJob,
   listBuildJobEvents,
@@ -46,6 +49,9 @@ import {
   updateBuildJob,
   type BuildJob,
   type BuildJobEvent,
+  type BuildJobFailure,
+  type BuildJobFailureKind,
+  type BuildJobResume,
   type BuildJobTransport,
 } from "@/lib/build/jobs/store";
 import { bootSkeletonFiles } from "@/lib/build/jobs/boot-skeleton";
@@ -372,6 +378,8 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       budget: {
         wallClockMs: job.facts.mode === "create" ? CREATE_WALL_CLOCK_MS : EDIT_WALL_CLOCK_MS,
       },
+      // Retry: pick up in the same sandbox from the last good phase.
+      resume: job.facts.resume ?? null,
     };
 
     const sources = await readBuilderSources();
@@ -418,9 +426,11 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       progressNote:
         job.facts.mode === "edit"
           ? "Updating your site…"
-          : projectKind === "app"
-            ? "Drafting your app…"
-            : "Drafting your website…",
+          : job.facts.resume
+            ? "Picking up where we left off…"
+            : projectKind === "app"
+              ? "Drafting your app…"
+              : "Drafting your website…",
       facts: {
         sessionId,
         transport,
@@ -438,7 +448,13 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
     return updated ?? job;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await failBuildJob(job, `Could not start the builder: ${message}`);
+    await failBuildJob(job, `Could not start the builder: ${message}`, {
+      kind: "infra",
+      reason: "start_failed",
+      phase: "start",
+      detail: message.slice(0, 1500),
+      at: new Date().toISOString(),
+    });
     throw err;
   }
 }
@@ -554,10 +570,13 @@ async function reclaimStuckVerifyingJob(job: BuildJob): Promise<BuildJob> {
   }
 
   return (
-    (await failBuildJob(
-      job,
-      "Something took too long while finishing the preview. Hit Retry, or tell me what to try next.",
-    )) ?? job
+    (await failBuildJob(job, "Verifying worker stalled before the draft was saved.", {
+      kind: "infra",
+      reason: "verify_stall",
+      phase: "finalize",
+      detail: `No progress for ${Math.round(age / 1000)}s in verifying`,
+      at: new Date().toISOString(),
+    })) ?? job
   );
 }
 
@@ -584,7 +603,15 @@ async function pullAndProcess(job: BuildJob): Promise<BuildJob> {
     const message = err instanceof Error ? err.message : String(err);
     // Sandbox gone (expired / stopped) — the job cannot complete.
     if (/not found|expired|stopped|410|404/i.test(message)) {
-      return (await failBuildJob(job, `The build environment stopped before finishing (${message}).`)) ?? job;
+      return (
+        (await failBuildJob(job, `The build environment stopped before finishing (${message}).`, {
+          kind: "infra",
+          reason: "sandbox_gone",
+          phase: "running",
+          detail: message.slice(0, 800),
+          at: new Date().toISOString(),
+        })) ?? job
+      );
     }
     console.warn(LOG, "sync read failed", message);
     return job;
@@ -645,7 +672,7 @@ async function pullAndProcess(job: BuildJob): Promise<BuildJob> {
     return (await completeBuildJob(current, finished)) ?? current;
   }
   if (failed) {
-    return (await failBuildJob(current, failed.message || "Builder failed.")) ?? current;
+    return (await failBuildJob(current, failed.message || "Builder failed.", failureFromEvent(failed))) ?? current;
   }
 
   const lastAt = Date.parse(
@@ -659,10 +686,13 @@ async function pullAndProcess(job: BuildJob): Promise<BuildJob> {
     if (silentMs > STALL_GRACE_MS) {
       const tail = meta.split("\n").slice(-12).join("\n").trim();
       return (
-        (await failBuildJob(
-          current,
-          `The builder process exited unexpectedly.${tail ? `\n${tail.slice(0, 800)}` : ""}`,
-        )) ?? current
+        (await failBuildJob(current, "The builder process exited unexpectedly.", {
+          kind: "infra",
+          reason: "builder_exited",
+          phase: "running",
+          detail: tail.slice(0, 800) || null,
+          at: new Date().toISOString(),
+        })) ?? current
       );
     }
   }
@@ -670,10 +700,13 @@ async function pullAndProcess(job: BuildJob): Promise<BuildJob> {
   // Alive but silent for too long (e.g. hung on `npm run dev`) — unlock the UI.
   if (!hasResult && silentMs > EVENT_STALL_MS) {
     return (
-      (await failBuildJob(
-        current,
-        "Something took too long while drafting. Hit Retry in the preview, or tell me what to try next.",
-      )) ?? current
+      (await failBuildJob(current, "Something took too long while drafting.", {
+        kind: "infra",
+        reason: "event_stall",
+        phase: "running",
+        detail: `No builder events for ${Math.round(silentMs / 1000)}s`,
+        at: new Date().toISOString(),
+      })) ?? current
     );
   }
   return current;
@@ -686,9 +719,38 @@ function phaseForEvents(events: BuildJobEvent[]): BuildPhase | null {
     const m = e.message.toLowerCase();
     if (m.startsWith("planning")) phase = "planning";
     else if (m.startsWith("building") || m.startsWith("making")) phase = "implementing";
-    else if (m.startsWith("verifying")) phase = "validating";
+    else if (
+      m.startsWith("verifying") ||
+      m.startsWith("preparing preview") ||
+      m.startsWith("repairing") ||
+      m.startsWith("checking the previous")
+    )
+      phase = "validating";
   }
   return phase;
+}
+
+/** Turn the builder's `failed` event payload into a stored failure record. */
+function failureFromEvent(e: BuildJobEvent): BuildJobFailure {
+  const p = (e.payload ?? {}) as Record<string, unknown>;
+  const kindRaw = String(p.classification ?? "unknown");
+  const kind: BuildJobFailureKind = (["infra", "app", "budget", "agent"] as const).includes(
+    kindRaw as BuildJobFailureKind & ("infra" | "app" | "budget" | "agent"),
+  )
+    ? (kindRaw as BuildJobFailureKind)
+    : "unknown";
+  const stats = (p.stats ?? {}) as Record<string, unknown>;
+  return {
+    kind,
+    reason: typeof p.reason === "string" ? p.reason : null,
+    cause: typeof p.cause === "string" ? p.cause : null,
+    detail: e.message?.slice(0, 1500) || null,
+    diagnostics: typeof p.diagnostics === "string" ? p.diagnostics.slice(0, 1500) : null,
+    phase: "builder",
+    at: new Date().toISOString(),
+    recovery: p.recovery ?? null,
+    filesTouched: typeof stats.filesTouched === "number" ? stats.filesTouched : undefined,
+  };
 }
 
 /** Push path: builder POSTed events directly. */
@@ -725,7 +787,7 @@ export async function ingestPushedBuildJobEvents(
   const finished = clean.find((e) => e.kind === "finished");
   const failed = clean.find((e) => e.kind === "failed");
   if (finished) await completeBuildJob(updated, finished);
-  else if (failed) await failBuildJob(updated, failed.message || "Builder failed.");
+  else if (failed) await failBuildJob(updated, failed.message || "Builder failed.", failureFromEvent(failed));
 }
 
 // ---------------------------------------------------------------------------
@@ -750,6 +812,18 @@ async function completeBuildJob(
   const summary =
     (finished.payload?.summary as string | undefined) || finished.message || "Draft updated.";
   const partial = Boolean(finished.payload?.partial);
+  // The builder wrote the site but could not bring the preview up inside the
+  // sandbox. The code is not suspected — the server now owns preview recovery.
+  const unverified = Boolean(finished.payload?.unverified);
+  const stats = (finished.payload?.stats ?? null) as Record<string, unknown> | null;
+  if (unverified) {
+    await updateBuildJob(job.id, {
+      facts: {
+        unverified: true,
+        ...(stats ? { stats } : {}),
+      },
+    }).catch(() => {});
+  }
 
   try {
     if (!sessionId) throw new Error("job has no sandbox session");
@@ -796,8 +870,15 @@ async function completeBuildJob(
 
     if (job.facts.mode === "create") {
       // First build: boot + preview_check + ready (server-authoritative).
+      // For an unverified handoff this IS the preview-recovery phase: finalize
+      // fast-forwards the VM, restarts the dev server, reinstalls or recreates.
       await appendBuildJobEvents(job.id, [
-        { seq: 100002, kind: "status", message: "Starting the preview", payload: { server: true } },
+        {
+          seq: 100002,
+          kind: "status",
+          message: unverified ? "Preparing preview" : "Starting the preview",
+          payload: { server: true, unverified },
+        },
       ]);
       const ready = await Promise.race([
         finalizeBuildReady({
@@ -820,12 +901,30 @@ async function completeBuildJob(
         ),
       ]);
       if (!ready.ok) {
-        // Draft is already on GitHub — unlock the UI as ready rather than
-        // leaving the job stuck in verifying (Codex already finished).
+        const timedOut = /timed out after the draft was saved/i.test(ready.reason || "");
+        if (unverified && !timedOut) {
+          // Nobody has seen this site render: the sandbox could not start it
+          // and the server's escalating repair (restart → reinstall →
+          // recreate) failed too. That is a genuine platform failure — say so
+          // plainly and keep the draft so Retry resumes at verification.
+          throw new BuildFailure("The preview couldn’t be started for your draft.", {
+            kind: "infra",
+            reason: "preview_recovery_failed",
+            phase: "finalize",
+            cause: ready.reason || null,
+            detail: ready.reason || null,
+            diagnostics: ready.diagnostics || null,
+            at: new Date().toISOString(),
+          });
+        }
+        // Draft is already on GitHub and (for verified runs) every route
+        // rendered inside the sandbox — unlock the UI as ready rather than
+        // leaving the job stuck; the preview panel keeps repairing on its own.
         console.warn(LOG, "finalize timed out/failed; marking ready with saved draft", {
           jobId: job.id,
           reason: ready.reason,
           draftSha,
+          unverified,
         });
         await appendBuildJobEvents(job.id, [
           {
@@ -866,16 +965,41 @@ async function completeBuildJob(
         draftSha,
         // A non-partial finish means the in-sandbox acceptance (tsc + every
         // route) passed for this exact tip; publish preflight reuses it.
-        verifyOk: !partial,
+        verifyOk: !partial && !unverified,
+        unverified,
         summary,
+        ...(stats ? { stats } : {}),
       },
     });
-    console.info(LOG, "ready", { jobId: job.id, draftSha });
+    console.info(LOG, "ready", { jobId: job.id, draftSha, unverified });
     await startNextQueuedJob(job);
     return done;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return failBuildJob({ ...job, status: "verifying" }, message);
+    const failure: BuildJobFailure =
+      err instanceof BuildFailure
+        ? err.failure
+        : {
+            kind: "infra",
+            reason: "finalize_error",
+            phase: "finalize",
+            detail: message.slice(0, 1500),
+            at: new Date().toISOString(),
+          };
+    return failBuildJob(
+      { ...job, status: "verifying" },
+      err instanceof BuildFailure ? err.message : "Something went wrong while saving your draft.",
+      failure,
+    );
+  }
+}
+
+/** Failure with an attached operator-facing classification. */
+class BuildFailure extends Error {
+  failure: BuildJobFailure;
+  constructor(message: string, failure: BuildJobFailure) {
+    super(message);
+    this.failure = failure;
   }
 }
 
@@ -1004,14 +1128,81 @@ async function startNextQueuedJob(after: BuildJob): Promise<void> {
   }
 }
 
-async function failBuildJob(job: BuildJob, error: string): Promise<BuildJob | null> {
-  console.warn(LOG, "failed", { jobId: job.id, error: error.slice(0, 300) });
+/**
+ * Terminal failure. `error` is the raw/internal message; users only ever see
+ * the plain-English line derived from `failure.kind`. For create jobs the
+ * sandbox working tree is committed first so nothing is lost and Retry can
+ * resume from verification instead of rebuilding.
+ */
+async function failBuildJob(
+  job: BuildJob,
+  error: string,
+  failure?: BuildJobFailure,
+): Promise<BuildJob | null> {
+  const f: BuildJobFailure = failure ?? {
+    kind: "unknown",
+    reason: null,
+    detail: error.slice(0, 1500),
+    at: new Date().toISOString(),
+  };
+  console.warn(LOG, "failed", {
+    jobId: job.id,
+    kind: f.kind,
+    reason: f.reason,
+    cause: f.cause,
+    phase: f.phase,
+    error: error.slice(0, 300),
+  });
+
+  // Save what the builder produced (create only). A failed edit leaves the
+  // still-working draft alone.
+  const fresh = await getBuildJob(job.id).catch(() => null);
+  let draftSha: string | null = fresh?.facts.draftSha ?? job.facts.draftSha ?? null;
+  let saved = false;
+  const wroteFiles = (f.filesTouched ?? 0) > 0 || f.phase === "finalize";
+  if (job.facts.mode === "create" && job.facts.sessionId && job.facts.userId && wroteFiles && !draftSha) {
+    try {
+      const persisted = await persistSandboxToDraft({
+        sessionId: job.facts.sessionId,
+        userId: job.facts.userId,
+        projectId: job.projectId,
+        workspaceId: job.workspaceId,
+        message: "Cander: draft website (unverified — build did not finish)",
+      });
+      if (persisted.outcome === "committed" || persisted.outcome === "partial") {
+        draftSha = persisted.draftSha || draftSha;
+        saved = Boolean(draftSha);
+      } else if (persisted.outcome === "noop" && persisted.draftSha) {
+        draftSha = persisted.draftSha;
+        saved = true;
+      }
+    } catch (err) {
+      console.warn(LOG, "persist on failure skipped", { jobId: job.id, error: err instanceof Error ? err.message : err });
+    }
+  } else if (draftSha) {
+    saved = true;
+  }
+
+  const userCopy = userFacingFailure(f.kind, saved);
   await appendBuildJobEvents(job.id, [
-    { seq: 100009, kind: "failed", message: error.slice(0, 2000), payload: { server: true } },
+    {
+      seq: 100009,
+      kind: "failed",
+      message: userCopy,
+      payload: {
+        server: true,
+        classification: f.kind,
+        reason: f.reason ?? null,
+        cause: f.cause ?? null,
+        phase: f.phase ?? null,
+        internal: error.slice(0, 2000),
+        diagnostics: f.diagnostics ?? null,
+        draftSaved: saved,
+        draftSha,
+      },
+    },
   ]);
   if (job.facts.mode === "create") {
-    // A failed edit leaves the (still working) draft alone — only creates
-    // flip the project into the failed state.
     await setProjectBuildPhase({
       projectId: job.projectId,
       workspaceId: job.workspaceId,
@@ -1025,7 +1216,7 @@ async function failBuildJob(job: BuildJob, error: string): Promise<BuildJob | nu
         brief: {
           ...brief,
           status: "failed",
-          validationIssues: [error.slice(0, 500)],
+          validationIssues: [userCopy],
           updatedAt: new Date().toISOString(),
         },
       });
@@ -1036,11 +1227,120 @@ async function failBuildJob(job: BuildJob, error: string): Promise<BuildJob | nu
   const failed = await updateBuildJob(job.id, {
     status: "failed",
     progressNote: "Build failed",
-    resultSummary: error.slice(0, 2000),
-    facts: { finishedAt: new Date().toISOString(), error: error.slice(0, 2000) },
+    resultSummary: userCopy,
+    facts: {
+      finishedAt: new Date().toISOString(),
+      error: userCopy,
+      draftSha,
+      failure: { ...f, detail: (f.detail ?? error).slice(0, 1500) },
+    },
   });
   await startNextQueuedJob(job);
   return failed;
+}
+
+/** The only failure text a user sees. No stacks, ports, HTTP codes or file names. */
+function userFacingFailure(kind: BuildJobFailureKind, draftSaved: boolean): string {
+  const saved = draftSaved ? " Your work so far is saved and I can pick up where I left off." : "";
+  switch (kind) {
+    case "infra":
+      return `The preview environment hit a problem on our side, not in your site.${saved}`;
+    case "app":
+      return `The draft didn’t pass all of my checks yet.${draftSaved ? " It’s saved — I can pick up and fix what’s left." : ""}`;
+    case "budget":
+      return `This took longer than expected, so I paused${draftSaved ? " and saved what’s done" : ""}.`;
+    case "agent":
+    case "unknown":
+    default:
+      return `I hit a snag while drafting.${saved}`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Retry (resume, don't restart)
+// ---------------------------------------------------------------------------
+
+/**
+ * Smart retry for a failed create job: diagnose why it failed and continue in
+ * the same sandbox from the last good phase.
+ *
+ *  infra (preview never came up, builder died)   → verify: files exist; check
+ *                                                   the preview, repair only if
+ *                                                   verification finds app bugs
+ *  app (verification failed)                     → verify → repair with report
+ *  budget / agent / unknown                      → build: re-run the coder,
+ *                                                   reusing the saved plan
+ *  nothing written                               → build from scratch
+ */
+export async function retryBuildJob(opts: {
+  projectId: string;
+  workspaceId: string;
+  userId: string;
+}): Promise<{ ok: true; job: BuildJob; resume: BuildJobResume } | { ok: false; error: string; status: number; job?: BuildJob | null }> {
+  const active = await findActiveBuildJob({ projectId: opts.projectId, workspaceId: opts.workspaceId });
+  if (active) {
+    const synced = active.status === "running" ? await syncBuildJob(active.id) : active;
+    if (synced && ["queued", "running", "verifying"].includes(synced.status)) {
+      return { ok: false, error: "A build is already running for this project.", status: 409, job: synced };
+    }
+  }
+  const previous = await findLatestBuildJob({ projectId: opts.projectId, workspaceId: opts.workspaceId });
+  if (!previous || previous.status !== "failed" || previous.facts.mode !== "create") {
+    return { ok: false, error: "There is no failed build to retry.", status: 404, job: previous };
+  }
+
+  const f = previous.facts.failure;
+  const filesTouched =
+    f?.filesTouched ??
+    (typeof previous.facts.stats?.filesTouched === "number" ? (previous.facts.stats.filesTouched as number) : 0);
+  const hasWork = Boolean(previous.facts.draftSha) || filesTouched > 0;
+  const kind = f?.kind ?? "unknown";
+  const phase: BuildJobResume["phase"] = hasWork && (kind === "infra" || kind === "app") ? "verify" : "build";
+  const attempt = (previous.facts.resume?.attempt ?? 0) + 1;
+
+  // Routes the previous run reported (finish() / failed payload) so verify
+  // covers the whole site even if the plan file is gone.
+  let routes: string[] = [];
+  try {
+    const events = await listBuildJobEvents({ jobId: previous.id, limit: 500 });
+    const terminal = [...events].reverse().find((e) => e.kind === "failed" || e.kind === "finished");
+    const r = terminal?.payload?.routes;
+    if (Array.isArray(r)) routes = r.map(String).filter((x) => x.startsWith("/"));
+  } catch {
+    /* optional */
+  }
+  const resume: BuildJobResume = {
+    fromJobId: previous.id,
+    phase,
+    routes,
+    summary: previous.facts.summary ?? null,
+    attempt,
+  };
+  console.info(LOG, "retry", {
+    projectId: opts.projectId,
+    fromJobId: previous.id,
+    kind,
+    reason: f?.reason,
+    phase,
+    attempt,
+  });
+
+  const brief = await loadWebsiteSetupBrief(opts.projectId, opts.workspaceId);
+  const job = await createBuildJob({
+    projectId: opts.projectId,
+    workspaceId: opts.workspaceId,
+    userId: opts.userId,
+    threadId: previous.threadId,
+    mode: "create",
+    title: previous.title,
+    goal: previous.goal,
+    instruction: previous.facts.instruction,
+    conversation: previous.facts.conversation ?? null,
+    condensedContext: previous.facts.condensedContext ?? null,
+    brief: brief?.answers ?? previous.facts.brief ?? null,
+    resume,
+  });
+  return { ok: true, job, resume };
 }
 
 // ---------------------------------------------------------------------------

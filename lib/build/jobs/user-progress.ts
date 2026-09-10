@@ -26,12 +26,14 @@ const RULES: { re: RegExp; out: string | null }[] = [
   { re: /header|footer|navigation|mobile nav/i, out: "Building your menu and footer…" },
   { re: /robots|sitemap|opengraph|twitter image|structured data|metadata|not-found/i, out: "Finishing site details…" },
   { re: /imagery|download(ed)?.*image|photos?/i, out: "Adding photos…" },
-  { re: /preview check|check_preview|checking your pages|verifying/i, out: "Checking your pages…" },
-  { re: /fixing verification|repair/i, out: "Fixing a few issues…" },
+  { re: /preparing preview|preview recovery|preview unreachable|preview server unavailable|preview (server )?(restart|recover)|starting the preview|npm install failed/i, out: "Preparing preview…" },
+  { re: /checking the previous draft|picking up where/i, out: "Picking up where I left off…" },
+  { re: /repairing build|fixing verification|repair/i, out: "Repairing build…" },
+  { re: /preview check|check_preview|checking your pages|verifying|verification/i, out: "Checking your pages…" },
   { re: /saving your (draft|change)|draft ready|preview ready/i, out: "Almost ready…" },
   { re: /updating your site|working on your change/i, out: "Updating your site…" },
   { re: /waiting for the current change/i, out: "Waiting for the current change to finish…" },
-  { re: /something took too long|build failed|could not/i, out: "Something went wrong — you can Retry." },
+  { re: /something took too long|build failed|could not|hit a problem on our side|didn.t pass all of my checks|hit a snag/i, out: "Something went wrong — you can Retry." },
   { re: /testing the site in a browser|checking the change in a browser|playwright|functional/i, out: "Double-checking the site…" },
 ];
 

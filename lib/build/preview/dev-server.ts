@@ -137,9 +137,14 @@ export async function ensureSandboxDevServer(opts: {
       opts.userId,
     );
     if (resolved) {
+      // Always log: when the server later dies (config change, OOM, crash)
+      // the builder's preview supervisor and finalize diagnostics read this.
       await resolved.sandbox.runCommand({
         cmd: "sh",
-        args: ["-c", `cd "$(pwd)"\n${startCmd}`],
+        args: [
+          "-c",
+          `cd "$(pwd)"; rm -f .next/dev/lock .next/lock 2>/dev/null; (${startCmd}) >/tmp/cander-dev-server.log 2>&1`,
+        ],
         detached: true,
       });
     } else {

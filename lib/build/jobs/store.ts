@@ -51,11 +51,52 @@ export type BuildJobFacts = {
   verifyOk?: boolean;
   /** Assistant-facing summary from the builder's finish() call. */
   summary?: string;
+  /** Plain-English, user-facing failure line (never raw infrastructure text). */
   error?: string;
+  /**
+   * Operator-facing root cause of a failed job. `kind` drives Retry:
+   * infra → resume at verify (code is fine), app → repair, budget/agent/unknown → rebuild.
+   */
+  failure?: BuildJobFailure;
+  /** True when the draft was saved without in-sandbox route verification. */
+  unverified?: boolean;
+  /** Builder run stats (llm calls, tokens, files touched). */
+  stats?: Record<string, unknown>;
+  /** Set on Retry: continue the previous job in the same sandbox. */
+  resume?: BuildJobResume | null;
   /** Chat thread + message the job should report back to (edit mode). */
   ackMessageId?: string | null;
   /** Number of follow-up requests folded into this job while it waited. */
   coalescedCount?: number;
+};
+
+export type BuildJobFailureKind = "infra" | "app" | "budget" | "agent" | "unknown";
+
+export type BuildJobFailure = {
+  kind: BuildJobFailureKind;
+  /** Builder-level reason token (verification_failed, preview_unavailable, deadline…). */
+  reason?: string | null;
+  /** Preview supervisor cause (not_running, compile_error, missing_deps…). */
+  cause?: string | null;
+  /** Raw (sanitized) detail for operators. */
+  detail?: string | null;
+  diagnostics?: string | null;
+  /** Server phase where the failure surfaced. */
+  phase?: string | null;
+  at: string;
+  /** Preview recovery history from the sandbox supervisor. */
+  recovery?: unknown;
+  /** Number of files the builder wrote before failing. */
+  filesTouched?: number;
+};
+
+export type BuildJobResume = {
+  fromJobId: string;
+  /** verify = files exist, check + repair; build = re-run the coder (plan reused when present). */
+  phase: "build" | "verify";
+  routes?: string[];
+  summary?: string | null;
+  attempt: number;
 };
 
 export type BuildJob = {
@@ -151,6 +192,7 @@ export async function createBuildJob(opts: {
   condensedContext?: string | null;
   brief?: WebsiteSetupAnswers | null;
   ackMessageId?: string | null;
+  resume?: BuildJobResume | null;
 }): Promise<BuildJob> {
   const admin = createSupabaseAdminClient();
   const facts: BuildJobFacts = {
@@ -164,6 +206,7 @@ export async function createBuildJob(opts: {
     condensedContext: opts.condensedContext ?? null,
     brief: opts.brief ?? null,
     ackMessageId: opts.ackMessageId ?? null,
+    ...(opts.resume ? { resume: opts.resume } : {}),
   };
   const { data, error } = await admin
     .from("ai_tasks")
