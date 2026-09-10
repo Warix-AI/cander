@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   briefStatusFromBuildPhase,
   buildPhaseFromBriefStatus,
+  getProjectBuildPhase,
   sandboxMatchesProjectTip,
   normalizeSha,
   isBuildPhase,
@@ -29,6 +30,20 @@ describe("build_phase helpers", () => {
     assert.ok(isBuildPhase("preview_check"));
     assert.ok(isBuildPhase("ready"));
     assert.equal(isBuildPhase("done"), false);
+  });
+
+  it("getProjectBuildPhase fails soft when admin env is missing", async () => {
+    const prev = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    try {
+      const phase = await getProjectBuildPhase({
+        projectId: "p",
+        workspaceId: "w",
+      });
+      assert.equal(phase, null);
+    } finally {
+      if (prev !== undefined) process.env.SUPABASE_SERVICE_ROLE_KEY = prev;
+    }
   });
 });
 

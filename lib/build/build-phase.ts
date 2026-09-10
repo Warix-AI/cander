@@ -53,16 +53,29 @@ export async function getProjectBuildPhase(opts: {
   projectId: string;
   workspaceId: string;
 }): Promise<BuildPhase | null> {
-  const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from("projects")
-    .select("build_phase")
-    .eq("id", opts.projectId)
-    .eq("workspace_id", opts.workspaceId)
-    .maybeSingle();
-  if (error || !data) return null;
-  return isBuildPhase(data.build_phase) ? data.build_phase : null;
+  // Build turns can run in the browser — never touch the service-role client there.
+  // Client callers should use GET /website-setup (already overlays build_phase).
+  if (typeof window !== "undefined") {
+    return null;
+  }
+  try {
+    const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createSupabaseAdminClient();
+    const { data, error } = await admin
+      .from("projects")
+      .select("build_phase")
+      .eq("id", opts.projectId)
+      .eq("workspace_id", opts.workspaceId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return isBuildPhase(data.build_phase) ? data.build_phase : null;
+  } catch (err) {
+    console.warn("[cander:build-phase] get failed", {
+      projectId: opts.projectId,
+      detail: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }
 
 /**

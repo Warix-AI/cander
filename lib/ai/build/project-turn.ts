@@ -1575,14 +1575,17 @@ export async function runBuildProjectTurn(
 
   let websiteBrief: WebsiteSetupBrief | null = null;
   if (isSiteProject) {
+    // Browser load goes through GET /website-setup, which already overlays
+    // build_phase onto brief.status. Server load needs an explicit overlay.
     websiteBrief = await loadWebsiteSetupBrief(projectId, workspaceId);
-    // build_phase is source of truth when present (same as GET /website-setup).
-    const buildPhase = await getProjectBuildPhase({ projectId, workspaceId });
-    if (buildPhase) {
-      websiteBrief = {
-        ...websiteBrief,
-        status: briefStatusFromBuildPhase(buildPhase),
-      };
+    if (typeof window === "undefined") {
+      const buildPhase = await getProjectBuildPhase({ projectId, workspaceId });
+      if (buildPhase) {
+        websiteBrief = {
+          ...websiteBrief,
+          status: briefStatusFromBuildPhase(buildPhase),
+        };
+      }
     }
     // Merge clarification answers embedded in the resume message when present.
     if (
