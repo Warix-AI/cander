@@ -25,6 +25,7 @@ const RECOVERABLE_STATUSES = new Set([0, 404, 410, 502, 503, 504]);
 
 export async function probeDraftPreviewPath(
   previewPath: string,
+  opts?: { bustCache?: boolean },
 ): Promise<ApplyDraftPreviewResult> {
   try {
     const join = previewPath.includes("?") ? "&" : "?";
@@ -47,7 +48,12 @@ export async function probeDraftPreviewPath(
         ),
       };
     }
-    return { ok: true, previewSrc: `${previewPath}?_r=${Date.now()}` };
+    // Keep the src stable across probes so a remounted (or re-probed) draft
+    // tab does not hard-reload the iframe. Cache-bust only on explicit reload.
+    const previewSrc = opts?.bustCache
+      ? `${previewPath}${join}_r=${Date.now()}`
+      : previewPath;
+    return { ok: true, previewSrc };
   } catch (err) {
     return {
       ok: false,

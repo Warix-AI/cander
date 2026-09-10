@@ -17,7 +17,7 @@ export function AppViewport({
   name,
   summary,
   envStatus,
-  envMessage,
+  envMessage: _envMessage,
   onRetryEnv,
   previewSrc,
   draftPreviewUrl: _draftPreviewUrl,
@@ -45,7 +45,7 @@ export function AppViewport({
     steps?: string[] | null;
   } | null;
 }) {
-  const { viewport, previewKey, project } = useApp();
+  const { viewport, project } = useApp();
 
   const framed = viewport !== "desktop";
   const cover =
@@ -71,17 +71,6 @@ export function AppViewport({
   const emptyCopy =
     summary?.trim() || "Start generating your website in chat.";
 
-  const envLabel =
-    envStatus === "starting" || (envStatus === "ready" && !previewSrc)
-      ? "Starting environment…"
-      : envStatus === "needs_repo"
-        ? "Preparing project repository…"
-        : envStatus === "unavailable"
-          ? "Environment unavailable"
-          : envMessage?.startsWith("Draft failed")
-            ? "Draft failed to start"
-            : "Environment failed to start";
-
   return (
     <div
       className={cn(
@@ -90,7 +79,6 @@ export function AppViewport({
       )}
     >
       <div
-        key={previewKey}
         className={cn(
           "relative overflow-hidden",
           viewport === "desktop" && "h-full min-h-0 w-full rounded-none",
@@ -131,7 +119,9 @@ export function AppViewport({
             <div className="relative flex h-11 w-11 shrink-0 items-center justify-center">
               {(envStatus === "starting" ||
                 envStatus === "needs_repo" ||
-                (envStatus === "ready" && !previewSrc)) && (
+                (envStatus === "ready" && !previewSrc) ||
+                envStatus === "error" ||
+                envStatus === "unavailable") && (
                 <span
                   aria-hidden
                   className="absolute inset-0 rounded-full border-[1.5px] border-foreground/10 border-t-foreground/55 motion-reduce:animate-none animate-spin"
@@ -140,15 +130,7 @@ export function AppViewport({
               )}
               <CanderMark tone="color" className="!h-5 !w-5" />
             </div>
-            <p className="mt-4 text-[13px] text-neutral-500">{envLabel}</p>
-            {envMessage ? (
-              <p className="mt-2 max-w-sm text-[12.5px] leading-relaxed text-neutral-400">
-                {envMessage}
-              </p>
-            ) : null}
-            {(envStatus === "error" ||
-              envStatus === "unavailable" ||
-              envStatus === "starting") &&
+            {(envStatus === "error" || envStatus === "unavailable") &&
             onRetryEnv ? (
               <button
                 type="button"

@@ -82,14 +82,15 @@ function CoverBleedImage({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-[10px] bg-muted",
+        "relative overflow-hidden rounded-[10px]",
         compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
       )}
     >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
         alt=""
-        className="h-full w-full object-cover object-top"
+        className="absolute inset-0 h-full w-full object-cover object-top"
         onError={() => {
           setFailed(true);
           if (!brokenOnce.current) {
@@ -100,6 +101,87 @@ function CoverBleedImage({
       />
       {badge ? (
         <span className="absolute bottom-3 left-3 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium tracking-[-0.01em] text-foreground">
+          {badge}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Live site thumbnail for canvas cards — OG image when available, else embed. */
+function CoverLiveSite({
+  url,
+  compact,
+  badge,
+}: {
+  url: string;
+  compact?: boolean;
+  badge?: string;
+}) {
+  const ogSrc = (() => {
+    try {
+      return `${new URL(url).origin}/opengraph-image`;
+    } catch {
+      return null;
+    }
+  })();
+  const [mode, setMode] = useState<"og" | "iframe" | "wash">(
+    ogSrc ? "og" : "iframe",
+  );
+
+  if (mode === "wash") {
+    return (
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-[10px]",
+          compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
+        )}
+      >
+        <DefaultChatPreviewWash />
+        {!compact && badge ? (
+          <span className="absolute bottom-3 left-3 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium tracking-[-0.01em] text-foreground">
+            {badge}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (mode === "og" && ogSrc) {
+    return (
+      <CoverBleedImage
+        src={ogSrc}
+        compact={compact}
+        badge={!compact ? badge : undefined}
+        onBroken={() => setMode("iframe")}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-[10px] bg-white",
+        compact ? "h-11 w-[4.4rem] shrink-0" : "aspect-[16/9]",
+      )}
+    >
+      <iframe
+        title="Site preview"
+        src={url}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        className="pointer-events-none absolute left-0 top-0 origin-top-left border-0"
+        style={{
+          width: "400%",
+          height: "400%",
+          transform: "scale(0.25)",
+        }}
+        sandbox="allow-scripts allow-same-origin"
+        tabIndex={-1}
+        onError={() => setMode("wash")}
+      />
+      {!compact && badge ? (
+        <span className="absolute bottom-3 left-3 z-10 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium tracking-[-0.01em] text-foreground">
           {badge}
         </span>
       ) : null}
@@ -119,6 +201,8 @@ export type PreviewEntry = {
   image?: string;
   /** Raw project cover (may be gradient:… or image URL). */
   cover?: string;
+  /** Published site URL — used for live canvas thumbnails when no cover image. */
+  publishedUrl?: string | null;
   paperPreview?: { title: string; lines: string[] };
   /** When set, empty preview faces use this space’s banner wash. */
   bannerKey?: BannerKey;
@@ -365,8 +449,37 @@ function PreviewFace({
   // Build / product: full-bleed live preview cover (no paper frame).
   const coverGradient = projectCoverGradientClass(item.cover ?? item.image);
   const coverImage = resolvedStudioCover ?? staticCover;
+  const liveUrl =
+    item.publishedUrl &&
+    /^https?:\/\//i.test(item.publishedUrl) &&
+    (item.space === "build" ||
+      item.detail === "Website" ||
+      item.detail === "App")
+      ? item.publishedUrl
+      : null;
 
-  if (coverGradient && !coverImage) {
+  if (coverImage) {
+    return (
+      <CoverBleedImage
+        src={coverImage}
+        compact={compact}
+        badge={!compact ? item.badge : undefined}
+        onBroken={refreshBrokenStudioCover}
+      />
+    );
+  }
+
+  if (liveUrl) {
+    return (
+      <CoverLiveSite
+        url={liveUrl}
+        compact={compact}
+        badge={!compact ? item.badge : undefined}
+      />
+    );
+  }
+
+  if (coverGradient) {
     return (
       <div
         className={cn(
@@ -381,17 +494,6 @@ function PreviewFace({
           </span>
         ) : null}
       </div>
-    );
-  }
-
-  if (coverImage) {
-    return (
-      <CoverBleedImage
-        src={coverImage}
-        compact={compact}
-        badge={!compact ? item.badge : undefined}
-        onBroken={refreshBrokenStudioCover}
-      />
     );
   }
 

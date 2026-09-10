@@ -92,6 +92,7 @@ export function CreateDashboard() {
       cover: item.cover,
       space: item.space,
       badge: item.status === "published" ? "Published" : undefined,
+      publishedUrl: item.publishedUrl ?? null,
     }));
   }, [studioProjects, buildProjects, researchProjects, showCreator, actor.id]);
 

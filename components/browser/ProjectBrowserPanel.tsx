@@ -1107,10 +1107,6 @@ export function ProjectBrowserPanel({
     }
     return closeConfirmTab.title || "Tab";
   })();
-  const showMobileTabBar =
-    mobile &&
-    session.tabs.length > 0 &&
-    (session.tabs.length > 1 || spaceId === "research" || standalone);
 
   const addAgentTab = () => {
     if (!projectId || !key) return;
@@ -1327,6 +1323,12 @@ export function ProjectBrowserPanel({
     (entity?.kind === "site" ||
       entity?.kind === "app" ||
       browserSpaceId === "build");
+  // Floating tab bar covers the draft on mobile — hide it inside website/app projects.
+  const showMobileTabBar =
+    mobile &&
+    !isBuildSiteOrApp &&
+    session.tabs.length > 0 &&
+    (session.tabs.length > 1 || spaceId === "research" || standalone);
   const address =
     active.kind === "studio-document" || active.kind === "agent-browser"
       ? navigationUrl
@@ -2296,7 +2298,62 @@ export function ProjectBrowserPanel({
         mobile ? "bg-white dark:bg-black" : BROWSER_CHROME_BG,
       )}
     >
-      {mobile ? null : standalone ? (
+      {mobile ? (
+        isBuildSiteOrApp ? (
+          <div
+            className={cn(
+              "flex h-11 min-w-0 shrink-0 items-center justify-end gap-0.5 px-2",
+              BROWSER_CHROME_BG,
+            )}
+          >
+            <RailBtn
+              label="Reload"
+              onClick={() => {
+                if (isBuildDraftTab) {
+                  refreshPreview();
+                  if (sandboxPreviewSrc) {
+                    setSandboxPreviewSrc(
+                      sandboxPreviewSrc.replace(/\?_r=\d+/, "") +
+                        `?_r=${Date.now()}`,
+                    );
+                  }
+                }
+                runBrowserNav("reload");
+              }}
+            >
+              <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
+            </RailBtn>
+            <DesktopProjectToolsMenu
+              canRename={canRename}
+              publishLabel={draftAheadOfLive ? "Republish" : "Publish"}
+              viewport={isBuildDraftTab ? viewport : undefined}
+              onCycleViewport={
+                isBuildDraftTab
+                  ? () => setViewport(VIEWPORT_CYCLE[viewport].next)
+                  : undefined
+              }
+              onRename={() => {
+                setRenameTarget("project");
+                setMobileSheet("rename");
+              }}
+              onPublish={() => openOverlay("publish")}
+              onDomain={() => openOverlay("domains")}
+              onOpenExternal={() =>
+                addUrlTab(draftPreviewUrl || navigationUrl || address)
+              }
+              onOpenSystemBrowser={() => {
+                void openUrlInSystemBrowser(
+                  draftPreviewUrl || active.url || address,
+                );
+              }}
+              onRefresh={() => {
+                refreshPreview();
+                runBrowserNav("reload");
+              }}
+            />
+          </div>
+        ) : null
+      ) : standalone ? (
         <>
           <div
             className={cn(
@@ -2751,16 +2808,39 @@ export function ProjectBrowserPanel({
 
       <div className="relative min-h-0 flex-1 overflow-hidden bg-white dark:bg-neutral-950">
         <div className="absolute inset-0 min-h-0">
+          {/* Keep the draft preview mounted across tab switches so the iframe
+              does not hard-reload every time the user leaves and comes back. */}
+          {session.tabs
+            .filter(
+              (tab) =>
+                tab.id === active.id ||
+                tab.kind === "build-preview" ||
+                tab.kind === "project-preview",
+            )
+            .filter(
+              (tab, index, tabs) =>
+                tabs.findIndex((candidate) => candidate.id === tab.id) === index,
+            )
+            .map((tab) => {
+              const isActiveTab = tab.id === active.id;
+              return (
+                <div
+                  key={tab.id}
+                  className={cn(
+                    "absolute inset-0 min-h-0",
+                    !isActiveTab && "invisible pointer-events-none",
+                  )}
+                  aria-hidden={!isActiveTab}
+                >
           <ProjectBrowserBody
-            key={active.id}
-            tab={active}
+            tab={tab}
             projects={allProjects}
             fallbackName={previewFallbackName}
           fallbackSummary={previewFallbackSummary}
           reloadKey={reloadKey}
           userId={actor.id}
           browserKey={key}
-          surfaceActive={surfaceActive}
+          surfaceActive={surfaceActive && isActiveTab}
           workspaceId={workspaceId}
           projectId={projectId}
           chatImageFallbackSrc={activeStudioChatImage.src}
@@ -2770,7 +2850,7 @@ export function ProjectBrowserPanel({
           sandboxPreviewSrc={sandboxPreviewSrc}
           draftPreviewUrl={draftPreviewUrl}
           websiteSetup={
-            showSetupOverlay
+            showSetupOverlay && isActiveTab
               ? {
                   status: websiteBrief?.status ?? "setup",
                   completedSteps: websiteBrief?.completedSteps ?? 0,
@@ -2850,7 +2930,9 @@ export function ProjectBrowserPanel({
                   const { probeDraftPreviewPath } = await import(
                     "@/lib/build/preview/client-health"
                   );
-                  const probed = await probeDraftPreviewPath(result.previewPath);
+                  const probed = await probeDraftPreviewPath(result.previewPath, {
+                    bustCache: true,
+                  });
                   if (!probed.ok) {
                     setSandboxEnvStatus("error");
                     setSandboxEnvMessage(probed.message);
@@ -2881,6 +2963,9 @@ export function ProjectBrowserPanel({
             refreshPreview();
           }}
           />
+                </div>
+              );
+            })}
         </div>
         {mobile && mobileNavOpen ? (
           <MobileBrowserNavSheet
