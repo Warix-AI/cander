@@ -16,6 +16,33 @@ Cander Apps and Websites provision durable code and runtime resources **under th
 
 See `.env.example`.
 
+## Phase 6 — Harden regression + dogfood
+
+Automated (no live Vercel):
+
+```bash
+node --test --experimental-strip-types scripts/harden-phase6.test.ts
+```
+
+Covers dual-trigger contract, publish_attempts idempotency policy, preflight→promote
+ordering, ready gates (preview_check + SHA pin), and draft-edit isolation from
+`published_sha`.
+
+Live dogfood (optional):
+
+```bash
+# Fresh tip (no Unworthy):
+npx tsx --env-file=.env.local scripts/plan-first-create-e2e.ts
+
+# Publish acceptance on a site with draft_sha:
+CANDER_DOGFOOD=1 npx tsx --env-file=.env.local scripts/dogfood-website-publish.ts [projectId]
+
+# Option B dual-trigger empirics:
+bash scripts/verify-option-b-deploy.sh
+```
+
+Acceptance = GitHub tip + Vercel deployment list + DB columns — not chat copy.
+
 ## Identity (Warix-only — Harden Phase 5)
 
 Build **never** uses a customer’s GitHub or Vercel account. Draft commits and

@@ -16,6 +16,7 @@ import {
   loadWebsiteSetupBrief,
   saveWebsiteSetupBrief,
 } from "@/lib/build/website-setup-brief-store";
+import { canMarkBuildReady } from "@/lib/build/preview/ready-gates";
 
 export type FinalizeBuildReadyResult = {
   ok: boolean;
@@ -203,6 +204,28 @@ export async function finalizeBuildReady(opts: {
       draftSha,
       sessionId: sandbox.sessionId,
       reason: health.reason || "Preview health check failed.",
+      previewStatus: health.status,
+    };
+  }
+
+  const gate = canMarkBuildReady({
+    projectDraftSha: draftSha,
+    sandboxDraftSha: sandbox.draftSha,
+    previewCheckOk: true,
+    phaseBeforeReady: "preview_check",
+  });
+  if (!gate.ok) {
+    await setProjectBuildPhase({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+      phase: "failed",
+    });
+    return {
+      ok: false,
+      phase: "failed",
+      draftSha,
+      sessionId: sandbox.sessionId,
+      reason: gate.reason || "Ready gate failed.",
       previewStatus: health.status,
     };
   }

@@ -4,14 +4,17 @@
  */
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import {
+  publishIdempotencyKey,
+  type PublishAttemptStatusLite,
+} from "@/lib/build/publish/attempt-policy";
 
-export type PublishAttemptStatus =
-  | "pending"
-  | "preflight"
-  | "deploying"
-  | "published"
-  | "failed"
-  | "git_sync_repair";
+export {
+  publishIdempotencyKey,
+  resolvePublishAttemptConflict,
+} from "@/lib/build/publish/attempt-policy";
+
+export type PublishAttemptStatus = PublishAttemptStatusLite;
 
 export type PublishAttemptRow = {
   id: string;
@@ -31,13 +34,6 @@ export type PublishAttemptRow = {
   started_at: string;
   completed_at: string | null;
 };
-
-export function publishIdempotencyKey(
-  projectId: string,
-  draftSha: string,
-): string {
-  return `publish:${projectId}:${draftSha.toLowerCase()}`;
-}
 
 export async function findPublishAttemptByKey(
   idempotencyKey: string,
@@ -140,6 +136,7 @@ export async function beginPublishAttempt(opts: {
   }
 
   if (existing) {
+    // In-flight or successful → idempotent reuse (see resolvePublishAttemptConflict).
     return { attempt: existing, created: false };
   }
 
