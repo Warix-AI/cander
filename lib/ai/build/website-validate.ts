@@ -70,14 +70,29 @@ export function validateWebsiteFiles(opts: {
       issues.push(`Nav item “${nav.label}” has empty href`);
       continue;
     }
-    if (href.startsWith("http") || href.startsWith("mailto:")) continue;
-    if (href.startsWith("#")) {
-      if (!blob.includes(`id="${href.slice(1)}"`) && !blob.includes(`id='${href.slice(1)}'`)) {
-        // anchors may be generated dynamically — warn lightly
-        if (!blob.includes(href)) {
-          issues.push(`Nav anchor ${href} may not resolve`);
+    if (href.startsWith("http") || href.startsWith("mailto:") || href.startsWith("tel:")) {
+      continue;
+    }
+    // Same-page anchors: #section or /#section
+    const hashIdx = href.indexOf("#");
+    if (hashIdx >= 0) {
+      const id = href.slice(hashIdx + 1).trim();
+      const pathOnly = href.slice(0, hashIdx) || "/";
+      if (id) {
+        if (
+          !blob.includes(`id="${id}"`) &&
+          !blob.includes(`id='${id}'`) &&
+          !blob.includes(`#${id}`)
+        ) {
+          // Soft: anchors may be added during compose — only flag if path isn't home-only
+          if (pathOnly !== "/" && pathOnly !== "") {
+            issues.push(`Nav anchor ${href} may not resolve`);
+          }
         }
       }
+      continue;
+    }
+    if (href.startsWith("#")) {
       continue;
     }
     if (!blob.includes(href) && href !== "/") {

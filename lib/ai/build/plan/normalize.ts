@@ -10,6 +10,7 @@ import type {
   ResearchManifest,
 } from "./types.ts";
 import { emptyImplementationManifest } from "./types.ts";
+import { navHrefRoutePath } from "./nav-href.ts";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
@@ -405,9 +406,9 @@ export function assertNavCoveredBySitemap(plan: BuildPlanJson): string[] {
   );
   const issues: string[] = [];
   for (const item of plan.nav) {
-    const href = item.href.replace(/\/$/, "") || "/";
-    if (href.startsWith("#") || href.startsWith("http")) continue;
-    if (!paths.has(href)) {
+    const routePath = navHrefRoutePath(item.href);
+    if (!routePath) continue;
+    if (!paths.has(routePath)) {
       issues.push(`Nav href ${item.href} has no sitemap/page entry.`);
     }
   }

@@ -15,6 +15,7 @@ import {
 } from "@/lib/ai/build/website-validate";
 import type { SiteSpec } from "@/lib/ai/build/site-spec";
 import { duplicateAppRouterValidationIssues } from "@/lib/ai/build/routes/app-router-conflicts";
+import { navHrefRoutePath } from "@/lib/ai/build/plan/nav-href";
 
 export function validateNavRoutesAgainstFiles(
   plan: BuildPlanJson,
@@ -25,21 +26,22 @@ export function validateNavRoutesAgainstFiles(
   );
   const issues: string[] = [];
   for (const item of plan.nav) {
-    const href = item.href.trim();
-    if (!href || href.startsWith("#") || href.startsWith("http")) continue;
+    const routePath = navHrefRoutePath(item.href);
+    // Skip externals and hash-only / same-page anchors (`#x`, `/#x`).
+    if (!routePath) continue;
     const candidates =
-      href === "/"
+      routePath === "/"
         ? ["app/page.tsx", "app/page.ts", "app/page.jsx", "app/page.js"]
         : [
-            `app${href}/page.tsx`,
-            `app${href}/page.ts`,
-            `app${href}/page.jsx`,
-            `app${href}/page.js`,
-            `app${href.replace(/^\//, "")}/page.tsx`,
-            `app${href.replace(/^\//, "")}/page.js`,
+            `app${routePath}/page.tsx`,
+            `app${routePath}/page.ts`,
+            `app${routePath}/page.jsx`,
+            `app${routePath}/page.js`,
+            `app${routePath.replace(/^\//, "")}/page.tsx`,
+            `app${routePath.replace(/^\//, "")}/page.js`,
           ];
     if (!candidates.some((p) => paths.has(p))) {
-      issues.push(`Nav href ${href} has no App Router page file`);
+      issues.push(`Nav href ${item.href} has no App Router page file`);
     }
   }
   return issues;

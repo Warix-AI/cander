@@ -10,6 +10,7 @@ import type {
 } from "./types.ts";
 import { renderBuildPlanMarkdown } from "./markdown.ts";
 import { assertNavCoveredBySitemap } from "./normalize.ts";
+import { navHrefRoutePath } from "./nav-href.ts";
 
 export function projectSpecFromBriefHeuristic(
   brief: {
@@ -68,13 +69,12 @@ function ensureNavRoutes(plan: BuildPlanJson): BuildPlanJson {
   const pages = [...plan.pages];
   const sitemap = [...plan.sitemap];
   for (const item of plan.nav) {
-    const href = item.href.replace(/\/$/, "") || "/";
-    if (href.startsWith("#") || href.startsWith("http")) continue;
+    const href = navHrefRoutePath(item.href);
+    if (!href || href === "/") continue;
     if (pathSet.has(href)) continue;
     const id = href.replace(/^\//, "").replace(/\//g, "-") || "home";
     const title = item.label || id;
-    const path =
-      href === "" ? "/" : item.href.startsWith("/") ? item.href : `/${item.href}`;
+    const path = href;
     pages.push({
       id,
       path,
