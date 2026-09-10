@@ -54,6 +54,8 @@ export type BuildJobFacts = {
   error?: string;
   /** Chat thread + message the job should report back to (edit mode). */
   ackMessageId?: string | null;
+  /** Number of follow-up requests folded into this job while it waited. */
+  coalescedCount?: number;
 };
 
 export type BuildJob = {
@@ -174,7 +176,7 @@ export async function createBuildJob(opts: {
       kind: "multi_step",
       task_type: BUILD_JOB_TASK_TYPE,
       status: "queued",
-      progress_note: "Queued",
+      progress_note: opts.mode === "edit" ? "Waiting for the current change to finish…" : "Queued",
       facts,
     })
     .select(SELECT)
@@ -217,6 +219,48 @@ export async function findActiveBuildJob(opts: {
     rows.find((r) => r.status === "verifying") ??
     rows[0];
   return running ? rowToJob(running) : null;
+}
+
+/**
+ * Fold a follow-up edit request into a job that has not started yet, so rapid
+ * successive messages become one builder run instead of a queue of runs.
+ * Returns null when the job already left `queued` (caller then creates a new
+ * job as usual).
+ */
+export async function coalesceIntoQueuedBuildJob(opts: {
+  jobId: string;
+  instruction: string;
+  conversation?: string | null;
+  condensedContext?: string | null;
+}): Promise<BuildJob | null> {
+  const admin = createSupabaseAdminClient();
+  const current = await getBuildJob(opts.jobId);
+  if (!current || current.status !== "queued" || current.facts.mode !== "edit") return null;
+  const n = (current.facts.coalescedCount ?? 0) + 1;
+  const base = current.facts.instruction?.trim() || current.goal.trim();
+  const merged = base.startsWith("Apply ALL of these requests")
+    ? `${base}\n${n + 1}. ${opts.instruction}`
+    : `Apply ALL of these requests together (they arrived in quick succession; treat later ones as refinements of earlier ones when they overlap):\n1. ${base}\n2. ${opts.instruction}`;
+  const facts: BuildJobFacts = {
+    ...current.facts,
+    instruction: merged,
+    conversation: opts.conversation ?? current.facts.conversation ?? null,
+    condensedContext: opts.condensedContext ?? current.facts.condensedContext ?? null,
+    coalescedCount: n,
+  };
+  const { data } = await admin
+    .from("ai_tasks")
+    .update({
+      goal: merged.slice(0, 4000),
+      title: `${current.title.replace(/ \(\+\d+\)$/, "")} (+${n})`.slice(0, 120),
+      facts,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", opts.jobId)
+    .eq("status", "queued")
+    .select(SELECT)
+    .maybeSingle();
+  return data ? rowToJob(data as AiTaskRow) : null;
 }
 
 /** Oldest job still waiting to start (coalesced edits). */

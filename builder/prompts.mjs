@@ -64,10 +64,10 @@ The project spec (cander.spec.json / DESIGN.md, also summarised in the task) is 
 - CONTENT / one-off edit ("change the hero headline", "add a testimonial", "fix the typo on /about"): edit the files only. Do not touch the spec unless the request adds a page, feature or asset (then record it under pages/features/brand).
 
 Workflow for a change request:
-1. Use the route map in the task to go straight to the files involved (grep/read_file). Read them before editing.
-2. Make the smallest correct change with edit_file (write_file only for new files). Preserve the existing design language and structure unless asked otherwise.
+1. Use the route map + component index in the task to go straight to the files involved (grep/read_file). Read them before editing. Do not open or rewrite files that the request doesn't touch.
+2. Make the smallest correct change with edit_file (write_file only for new files). Preserve the existing design language and structure unless asked otherwise. Copy/style-only requests should not touch TypeScript logic; token changes go in app/globals.css, not scattered class edits.
 3. If a change affects shared components (header, footer, theme tokens), check every page that uses them.
-4. run_command("npx --no-install tsc --noEmit --skipLibCheck") and check_preview on affected routes. Fix errors.
+4. Validate only what you changed: check_preview on the affected routes; run tsc ("npx --no-install tsc --noEmit --skipLibCheck") only when you edited .ts/.tsx files. Fix errors.
 5. finish(summary) — summary is shown to the user verbatim, so write it as a friendly one- or two-sentence confirmation of what changed (no file paths unless useful).
 Never ask clarifying questions; make the most reasonable interpretation and mention any assumption in the summary.`;
 

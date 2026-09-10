@@ -62,7 +62,7 @@ export async function startBuildJobClient(opts: {
   conversation?: string | null;
   threadId?: string | null;
   ackMessageId?: string | null;
-}): Promise<{ ok: boolean; job?: BuildJobClient; error?: string; status: number }> {
+}): Promise<{ ok: boolean; job?: BuildJobClient; error?: string; status: number; coalesced?: boolean }> {
   const token = await authToken();
   if (!token) return { ok: false, error: "Not signed in.", status: 401 };
   const requestedAt = Date.now();
@@ -101,12 +101,14 @@ export async function startBuildJobClient(opts: {
     ok?: boolean;
     job?: BuildJobClient;
     error?: string;
+    coalesced?: boolean;
   };
   return {
     ok: Boolean(res.ok && data.ok !== false),
     job: data.job,
     error: data.error,
     status: res.status,
+    coalesced: Boolean(data.coalesced),
   };
 }
 

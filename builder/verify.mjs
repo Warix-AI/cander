@@ -56,7 +56,7 @@ const PLACEHOLDER_RE =
   /lorem ipsum|your (headline|company|business|tagline|text) here|\bTODO\b|\bTBD\b|\[insert[^\]]*\]|\[(company|business|name|city|phone|email|address)[^\]]*\]|placeholder text|coming soon…?$/i;
 
 /**
- * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], expectedRoutes?: string[], mode?: "create"|"edit", projectKind?: "site"|"app", siteUrl?: string|null, timeoutMs?: number, features?: string[], scopeRoutes?: string[]|null, functional?: boolean, deadlineMs?: number }} opts
+ * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], expectedRoutes?: string[], mode?: "create"|"edit", projectKind?: "site"|"app", siteUrl?: string|null, timeoutMs?: number, features?: string[], scopeRoutes?: string[]|null, functional?: boolean, deadlineMs?: number, writtenPaths?: string[]|null }} opts
  * @returns {Promise<{ ok: boolean, issues: string[], routes: string[], report: string }>}
  */
 export async function runAcceptance(opts) {
@@ -109,8 +109,15 @@ export async function runAcceptance(opts) {
     }
   }
 
-  // 2. Typecheck (only when a tsconfig exists; skip lib check for speed)
-  if (existsSync(join(repoDir, "tsconfig.json"))) {
+  // 2. Typecheck (only when a tsconfig exists; skip lib check for speed).
+  // Edits that only touched styles/content/assets can't change types — skip
+  // the whole-repo tsc so a copy tweak doesn't pay for a full typecheck.
+  const written = Array.isArray(opts.writtenPaths) ? opts.writtenPaths : null;
+  const codeTouched =
+    !written || written.length === 0 || written.some((p) => /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(p) || /(^|\/)(package\.json|tsconfig\.json|next\.config\.[a-z]+)$/.test(p));
+  if (!codeTouched) {
+    opts.log.emit("verify", "Only styles/content changed — skipping typecheck.");
+  } else if (existsSync(join(repoDir, "tsconfig.json"))) {
     opts.log.emit("verify", "Typechecking (tsc --noEmit)…");
     const tsc = await execShell("npx --no-install tsc --noEmit --pretty false --skipLibCheck", {
       cwd: repoDir,

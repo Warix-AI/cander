@@ -10,9 +10,11 @@ import { NextResponse, after } from "next/server";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import { assertProjectAccess } from "@/lib/security/project-access";
 import {
+  coalesceIntoQueuedBuildJob,
   createBuildJob,
   findActiveBuildJob,
   findLatestBuildJob,
+  findQueuedBuildJob,
   listBuildJobEvents,
   type BuildJobMode,
 } from "@/lib/build/jobs/store";
@@ -103,6 +105,35 @@ export async function POST(request: Request, ctx: RouteCtx) {
   const brief = await loadWebsiteSetupBrief(projectId, workspaceId);
   const condensedContext =
     mode === "edit" && body.threadId ? await loadCondensedChatContext(body.threadId) : null;
+
+  // Coalesce: a second edit sent while one is already waiting joins it, so a
+  // burst of messages becomes a single builder run.
+  if (queueBehind) {
+    const waiting = await findQueuedBuildJob({ projectId, workspaceId });
+    if (waiting && waiting.id !== queueBehind && waiting.facts.mode === "edit") {
+      const merged = await coalesceIntoQueuedBuildJob({
+        jobId: waiting.id,
+        instruction,
+        conversation:
+          typeof body.conversation === "string" && body.conversation.trim()
+            ? body.conversation.trim().slice(0, 6000)
+            : null,
+        condensedContext,
+      });
+      if (merged) {
+        await finalizeUsageReservation({
+          reservationId: usage.reservationId,
+          status: "confirmed",
+          actualUnits: 1,
+        });
+        return NextResponse.json(
+          { ok: true, job: merged, queued: true, coalesced: true, behind: queueBehind },
+          { status: 202 },
+        );
+      }
+    }
+  }
+
   const job = await createBuildJob({
     projectId,
     workspaceId,

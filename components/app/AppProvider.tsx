@@ -634,7 +634,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const threadIdRef = useRef<string | null>(null);
   threadIdRef.current = threadId;
   /** Edit-job ack bubbles we keep open until Done replaces them. */
-  const buildJobAckByJobIdRef = useRef(new Map<string, string>());
+  // jobId → ack message ids (several when rapid edits were coalesced into one job).
+  const buildJobAckByJobIdRef = useRef(new Map<string, string[]>());
   const [spaceId, setSpaceId] = useState<NavDestinationId | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>("collapsed");
@@ -3281,7 +3282,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               // Keep the "On it…" bubble open so progress sits under it and
               // the final Done line replaces it instead of stacking below.
               if (done && editJobId) {
-                buildJobAckByJobIdRef.current.set(editJobId, assistantId);
+                const acks = buildJobAckByJobIdRef.current.get(editJobId) ?? [];
+                if (!acks.includes(assistantId)) acks.push(assistantId);
+                buildJobAckByJobIdRef.current.set(editJobId, acks);
                 setThreads((current) =>
                   current.map((item) => {
                     const apply = (thread: Thread): Thread => ({
@@ -3934,7 +3937,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           : `I couldn’t complete that change: ${detail.error || detail.summary || "unknown error"}. The previous version is still in the preview — want me to try a different approach?`;
       const marker = `build-job:${detail.jobId}`;
       const progressMarker = `${marker}:progress`;
-      const ackId = buildJobAckByJobIdRef.current.get(detail.jobId) ?? null;
+      const ackIds = buildJobAckByJobIdRef.current.get(detail.jobId) ?? [];
+      const ackId = ackIds[ackIds.length - 1] ?? null;
+      const earlierAcks = new Set(ackIds.slice(0, -1));
       buildJobAckByJobIdRef.current.delete(detail.jobId);
       setThreads((current) => {
         const candidates = current.filter((t) => t.projectId === detail.projectId);
@@ -3966,7 +3971,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                             status: "complete" as const,
                             activity: null,
                           }
-                        : m,
+                        : earlierAcks.has(m.id)
+                          ? { ...m, status: "complete" as const, activity: null }
+                          : m,
                     ),
                 },
           );
@@ -4012,7 +4019,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!detail?.projectId || !detail.jobId || !detail.message) return;
       const progressMarker = `build-job:${detail.jobId}:progress`;
       const resultMarker = `build-job:${detail.jobId}`;
-      const ackId = buildJobAckByJobIdRef.current.get(detail.jobId) ?? null;
+      const ackList = buildJobAckByJobIdRef.current.get(detail.jobId) ?? [];
+      const ackId = ackList[ackList.length - 1] ?? null;
       setThreads((current) => {
         const candidates = current.filter((t) => t.projectId === detail.projectId);
         if (!candidates.length) return current;

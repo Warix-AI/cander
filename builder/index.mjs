@@ -153,6 +153,7 @@ async function main() {
       scopeRoutes: mode === "edit" ? routesFromWrittenPaths([...tools.writtenPaths], finish.routes) : null,
       functional: config.functionalChecks !== false,
       deadlineMs: budget.deadlineMs,
+      writtenPaths: mode === "edit" ? [...tools.writtenPaths] : null,
     });
     return result.ok
       ? { accept: true }

@@ -193,11 +193,20 @@ function routeMapFromPaths(paths: string[]): string {
     lines.push(`${appDirToUrlPath(dir)} → ${p}`);
   }
   const layouts = paths.filter((p) => /^app\/(.*\/)?layout\.(tsx|jsx)$/.test(p));
-  const components = paths.filter((p) => /^components\//.test(p)).length;
+  const components = paths.filter((p) => /^components\/.*\.(tsx|jsx)$/.test(p)).sort();
   const out: string[] = [];
   if (lines.length) out.push(lines.sort().join("\n"));
   if (layouts.length) out.push(`Layouts: ${layouts.join(", ")}`);
-  if (components) out.push(`${components} file(s) under components/`);
+  if (components.length) {
+    // Component index so edits go straight to the right file instead of
+    // grepping the whole repo (shared UI first, then sections).
+    const shown = components.slice(0, 80);
+    out.push(
+      `Components (${components.length}):\n${shown.join("\n")}${components.length > shown.length ? `\n… ${components.length - shown.length} more` : ""}`,
+    );
+  }
+  const globals = paths.find((p) => /^app\/globals\.css$/.test(p));
+  if (globals) out.push("Design tokens: app/globals.css");
   return out.join("\n");
 }
 
@@ -247,7 +256,7 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
     jobId: job.id,
     from: ["queued"],
     to: "running",
-    progressNote: "Preparing your workspace…",
+    progressNote: job.facts.mode === "edit" ? "Updating your site…" : "Preparing your workspace…",
   });
   if (!claimed) {
     console.info(LOG, "start skipped; job already claimed", { jobId: job.id });
@@ -399,7 +408,12 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
     });
 
     const updated = await updateBuildJob(job.id, {
-      progressNote: projectKind === "app" ? "Drafting your app…" : "Drafting your website…",
+      progressNote:
+        job.facts.mode === "edit"
+          ? "Updating your site…"
+          : projectKind === "app"
+            ? "Drafting your app…"
+            : "Drafting your website…",
       facts: {
         sessionId,
         transport,
@@ -627,7 +641,7 @@ async function completeBuildJob(
     jobId: job.id,
     from: ["running"],
     to: "verifying",
-    progressNote: "Saving your draft…",
+    progressNote: job.facts.mode === "edit" ? "Saving your change…" : "Saving your draft…",
   });
   if (!won) return getBuildJob(job.id);
 
@@ -640,7 +654,12 @@ async function completeBuildJob(
   try {
     if (!sessionId) throw new Error("job has no sandbox session");
     await appendBuildJobEvents(job.id, [
-      { seq: 100000, kind: "status", message: "Saving your draft", payload: { server: true } },
+      {
+        seq: 100000,
+        kind: "status",
+        message: job.facts.mode === "edit" ? "Saving your change" : "Saving your draft",
+        payload: { server: true },
+      },
     ]);
     // Fold the builder's spec updates into projects.project_spec and refresh
     // the repo mirror before the commit so DESIGN.md never lags the code.
@@ -696,11 +715,17 @@ async function completeBuildJob(
     }
 
     await appendBuildJobEvents(job.id, [
-      { seq: 100003, kind: "status", message: "Draft ready", payload: { server: true, draftSha } },
+      {
+        seq: 100003,
+        kind: "status",
+        message: job.facts.mode === "edit" ? "Preview ready" : "Draft ready",
+        payload: { server: true, draftSha },
+      },
     ]);
+    const readyNote = job.facts.mode === "edit" ? "Preview ready" : "Draft ready";
     const done = await updateBuildJob(job.id, {
       status: "ready_for_review",
-      progressNote: partial ? "Draft ready (partial)" : "Draft ready",
+      progressNote: partial ? `${readyNote} (partial)` : readyNote,
       resultSummary: summary,
       facts: {
         finishedAt: new Date().toISOString(),

@@ -437,10 +437,13 @@ async function runBuildV2EditTurn(
     );
   }
   const queued = started.status === 202;
+  const coalesced = Boolean(started.coalesced);
   return {
-    content: queued
-      ? "Got it — I’m finishing the current build first, then I’ll do this one. I’ll confirm here when it’s in the preview."
-      : "On it — making that change now. I’ll confirm here when it’s in the preview.",
+    content: coalesced
+      ? "Added that to the change I’m about to make — I’ll do both together and confirm here when they’re in the preview."
+      : queued
+        ? "Got it — I’m finishing the current change first, then I’ll do this one. I’ll confirm here when it’s in the preview."
+        : "On it — updating your site now. I’ll confirm here when it’s in the preview.",
     runtime: "cloud",
     offline: false,
     condensationOccurred: false,
@@ -449,8 +452,8 @@ async function runBuildV2EditTurn(
       {
         name: "build.job.start",
         ok: true,
-        output: `job ${started.job?.id ?? "?"} ${queued ? "queued" : "started"}`,
-        data: { jobId: started.job?.id ?? null, mode: "edit", queued },
+        output: `job ${started.job?.id ?? "?"} ${coalesced ? "coalesced" : queued ? "queued" : "started"}`,
+        data: { jobId: started.job?.id ?? null, mode: "edit", queued, coalesced },
       },
     ],
   };
