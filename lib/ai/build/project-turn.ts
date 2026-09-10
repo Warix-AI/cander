@@ -1340,8 +1340,108 @@ async function runCreateWebsitePipeline(opts: {
     }
   }
 
-  // One forceRestart after tip has package.json (retry budget: 1).
-  await ensureSandboxReady({ projectId, workspaceId, forceRestart: true });
+  // Phase 3: tip is complete — boot sandbox, then server preview_check → ready.
+  // Client cannot mark ready; only /api/.../build/ready after SHA pin + health.
+  if (brief) {
+    await saveWebsiteSetupBrief({
+      projectId,
+      workspaceId,
+      brief: {
+        ...brief,
+        status: "building",
+        siteSpec: spec,
+        retrievedComponents: retrieved,
+        validationIssues: [],
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  }
+
+  report({
+    phase: "thinking",
+    label: "Building",
+    detail: "Booting draft preview…",
+  });
+  const sandboxBoot = await ensureSandboxReady({
+    projectId,
+    workspaceId,
+    forceRestart: true,
+  });
+  if (!sandboxBoot.ok) {
+    if (brief) {
+      await saveWebsiteSetupBrief({
+        projectId,
+        workspaceId,
+        brief: {
+          ...brief,
+          status: "failed",
+          siteSpec: spec,
+          retrievedComponents: retrieved,
+          validationIssues: [
+            sandboxBoot.detail || "Sandbox failed to boot after tip write.",
+          ],
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    }
+    return {
+      content: [
+        `Draft files were saved, but the preview environment failed to start: ${sandboxBoot.detail}`,
+        "Tell me to retry the preview boot — I won’t mark the site ready until it passes.",
+      ].join("\n"),
+      runtime: "cloud",
+      offline: false,
+      condensationOccurred: false,
+      aiChatId: request.aiChatId ?? null,
+      toolResults,
+    };
+  }
+
+  report({
+    phase: "thinking",
+    label: "Building",
+    detail: "Checking draft preview health…",
+  });
+  {
+    const { requestBuildReadyClient } = await import(
+      "@/lib/api/build-ready-client"
+    );
+    const finalized = await requestBuildReadyClient({
+      projectId,
+      workspaceId,
+    });
+    if (!finalized?.ok) {
+      const reason =
+        finalized?.reason ||
+        finalized?.error ||
+        "Preview health check failed.";
+      if (brief) {
+        await saveWebsiteSetupBrief({
+          projectId,
+          workspaceId,
+          brief: {
+            ...brief,
+            status: "failed",
+            siteSpec: spec,
+            retrievedComponents: retrieved,
+            validationIssues: [reason],
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      }
+      return {
+        content: [
+          `Draft was written, but preview check failed before ready: ${reason}`,
+          "Tell me to repair the site and I’ll fix it, then re-check preview.",
+        ].join("\n"),
+        runtime: "cloud",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+        toolResults,
+      };
+    }
+  }
 
   if (planFirst) {
     await savePlanFirstArtifacts({
@@ -1354,7 +1454,13 @@ async function runCreateWebsitePipeline(opts: {
           path: "path" in p ? p.path : "/",
           pageId: "id" in p ? p.id : undefined,
         })),
-        tasks: ["compose", "validate", "ensure-essentials", "sandbox"],
+        tasks: [
+          "compose",
+          "validate",
+          "ensure-essentials",
+          "sandbox",
+          "preview_check",
+        ],
         validation: { ok: true, technical: [], visual: [] },
         updatedAt: new Date().toISOString(),
       },
@@ -1362,21 +1468,6 @@ async function runCreateWebsitePipeline(opts: {
     // visualQaChecklist() documents desktop/tablet/mobile expectations for
     // the next Codex visual repair pass (budget: BUILD_RETRY_BUDGETS.codexVisualRepair).
     void visualQaChecklist;
-  }
-
-  if (brief) {
-    await saveWebsiteSetupBrief({
-      projectId,
-      workspaceId,
-      brief: {
-        ...brief,
-        status: "ready",
-        siteSpec: spec,
-        retrievedComponents: retrieved,
-        validationIssues: [],
-        updatedAt: new Date().toISOString(),
-      },
-    });
   }
 
   const gaps = spec.customGaps.filter(Boolean);
@@ -1547,25 +1638,24 @@ export async function runBuildProjectTurn(
     };
   }
 
-  report({
-    phase: "thinking",
-    label: "Preparing environment",
-    detail: "Starting project sandbox…",
-  });
-
-  const sandbox = await ensureSandboxReady({ projectId, workspaceId });
-  if (!sandbox.ok) {
-    return {
-      content: `I couldn’t start the project environment: ${sandbox.detail}`,
-      runtime: "cloud",
-      offline: false,
-      condensationOccurred: false,
-      aiChatId: request.aiChatId ?? null,
-    };
-  }
-
-  // Guided / create path — plan-first (flag on) or legacy SiteSpec compose.
+  // Guided / create path — git-first: no sandbox until tip is complete.
   if (wantsCreate) {
+    if (isSiteProject && websiteBrief) {
+      await saveWebsiteSetupBrief({
+        projectId,
+        workspaceId,
+        brief: {
+          ...websiteBrief,
+          status: "building",
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    }
+    report({
+      phase: "thinking",
+      label: "Building",
+      detail: "Writing draft to GitHub first…",
+    });
     if (isPlanFirstBuildEnabled()) {
       return runPlanFirstCreatePipeline({
         request,
@@ -1590,6 +1680,23 @@ export async function runBuildProjectTurn(
       isSiteProject,
       report,
     });
+  }
+
+  report({
+    phase: "thinking",
+    label: "Preparing environment",
+    detail: "Starting project sandbox…",
+  });
+
+  const sandbox = await ensureSandboxReady({ projectId, workspaceId });
+  if (!sandbox.ok) {
+    return {
+      content: `I couldn’t start the project environment: ${sandbox.detail}`,
+      runtime: "cloud",
+      offline: false,
+      condensationOccurred: false,
+      aiChatId: request.aiChatId ?? null,
+    };
   }
 
   report({

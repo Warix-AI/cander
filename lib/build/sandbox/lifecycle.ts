@@ -469,78 +469,151 @@ export async function ensureProjectSandbox(opts: {
       await updateComputerSession(existing.id, { status: "stopped" });
     }
   } else if (existingIsBuild && existing) {
-    const resumed = await tryResumeBuildSession(existing);
-    if (resumed.ok) {
+    // SHA pin: stale sandbox tip cannot be reused as "ready".
+    const existingRow = await getComputerSessionRowById(existing.id);
+    const sandboxSha =
+      existingRow?.build_state &&
+      typeof existingRow.build_state === "object"
+        ? String(
+            (existingRow.build_state as { draftSha?: string }).draftSha || "",
+          )
+        : "";
+    const tipSha = draftSha || "";
+    const {
+      sandboxMatchesProjectTip,
+    } = await import("@/lib/build/build-phase");
+    if (
+      tipSha &&
+      sandboxSha &&
+      !sandboxMatchesProjectTip({
+        sandboxDraftSha: sandboxSha,
+        projectDraftSha: tipSha,
+      })
+    ) {
+      console.info("[cander:sandbox] tip SHA mismatch; recreating", {
+        projectId: opts.projectId,
+        sandboxSha: sandboxSha.slice(0, 12),
+        tipSha: tipSha.slice(0, 12),
+      });
       try {
-        const { loadAppSupabaseBinding } = await import(
-          "@/lib/build/supabase/provision"
-        );
-        const binding = await loadAppSupabaseBinding(
-          opts.projectId,
-          opts.workspaceId,
-        );
-        if (binding?.kind !== "site" && binding?.status === "ready" && binding.ref) {
-          const { injectAppSupabaseIntoSandbox } = await import(
-            "@/lib/build/supabase/inject"
+        await stopSessionRecordById(existing.id, existing.userId);
+      } catch {
+        await updateComputerSession(existing.id, { status: "stopped" });
+      }
+      // Fall through to createBuildSandboxFromGit.
+    } else {
+      const resumed = await tryResumeBuildSession(existing);
+      if (resumed.ok) {
+        try {
+          const { loadAppSupabaseBinding } = await import(
+            "@/lib/build/supabase/provision"
           );
-          await injectAppSupabaseIntoSandbox({
+          const binding = await loadAppSupabaseBinding(
+            opts.projectId,
+            opts.workspaceId,
+          );
+          if (binding?.kind !== "site" && binding?.status === "ready" && binding.ref) {
+            const { injectAppSupabaseIntoSandbox } = await import(
+              "@/lib/build/supabase/inject"
+            );
+            await injectAppSupabaseIntoSandbox({
+              userId: opts.userId,
+              projectId: opts.projectId,
+              workspaceId: opts.workspaceId,
+              sessionId: existing.id,
+            });
+          }
+        } catch (err) {
+          console.warn("[cander] supabase inject on resume skipped", err);
+        }
+
+        let message = "Starting preview…";
+        let previewUpstream = resumed.previewUpstream;
+        let status: BuildSandboxStatus = "starting";
+        let recreateFromGit = false;
+
+        try {
+          const { ensureSandboxDevServer } = await import(
+            "@/lib/build/preview/dev-server"
+          );
+          const dev = await ensureSandboxDevServer({
+            sessionId: existing.id,
             userId: opts.userId,
+          });
+          if (dev.ready) {
+            status = "ready";
+            message = dev.message || "Environment ready";
+            if (!previewUpstream) {
+              try {
+                const { resolveSandboxForSession } = await import(
+                  "@/lib/computer/session-runtime"
+                );
+                const resolved = await resolveSandboxForSession(
+                  existing.id,
+                  opts.userId,
+                );
+                previewUpstream = resolved?.sandbox.domain(BUILD_APP_PORT) ?? null;
+              } catch {
+                /* keep prior */
+              }
+            }
+          } else if (draftSha && /No package\.json/i.test(dev.message || "")) {
+            recreateFromGit = true;
+          } else {
+            message = dev.message || "Starting preview…";
+            previewUpstream = null;
+          }
+        } catch (err) {
+          console.warn("[cander] dev server on resume", err);
+          message =
+            err instanceof Error
+              ? `Sandbox resumed; preview start failed: ${err.message}`
+              : "Sandbox resumed; preview start failed.";
+          previewUpstream = null;
+          status = "error";
+        }
+
+        if (recreateFromGit) {
+          try {
+            await stopSessionRecordById(existing.id, existing.userId);
+          } catch {
+            await updateComputerSession(existing.id, { status: "stopped" });
+          }
+          await patchProjectSandbox(opts.projectId, opts.workspaceId, {
+            sandbox_session_id: null,
+            sandbox_status: "idle",
+          });
+          // Fall through to createBuildSandboxFromGit.
+        } else {
+          await persistPreviewUpstream({
+            sessionId: existing.id,
+            previewUpstream,
+            status,
+            message,
+            githubFullName: fullName,
+            draftBranch,
+            draftSha,
+          });
+          await patchProjectSandbox(opts.projectId, opts.workspaceId, {
+            sandbox_session_id: existing.id,
+            sandbox_status: status,
+          });
+          return publicResult({
             projectId: opts.projectId,
             workspaceId: opts.workspaceId,
+            status,
             sessionId: existing.id,
+            subdomain: infra.subdomain,
+            draftBranch,
+            draftSha,
+            githubFullName: fullName,
+            previewUpstream,
+            reused: true,
+            message,
           });
         }
-      } catch (err) {
-        console.warn("[cander] supabase inject on resume skipped", err);
-      }
-
-      let message = "Starting preview…";
-      let previewUpstream = resumed.previewUpstream;
-      let status: BuildSandboxStatus = "starting";
-      let recreateFromGit = false;
-
-      try {
-        const { ensureSandboxDevServer } = await import(
-          "@/lib/build/preview/dev-server"
-        );
-        const dev = await ensureSandboxDevServer({
-          sessionId: existing.id,
-          userId: opts.userId,
-        });
-        if (dev.ready) {
-          status = "ready";
-          message = dev.message || "Environment ready";
-          if (!previewUpstream) {
-            try {
-              const { resolveSandboxForSession } = await import(
-                "@/lib/computer/session-runtime"
-              );
-              const resolved = await resolveSandboxForSession(
-                existing.id,
-                opts.userId,
-              );
-              previewUpstream = resolved?.sandbox.domain(BUILD_APP_PORT) ?? null;
-            } catch {
-              /* keep prior */
-            }
-          }
-        } else if (draftSha && /No package\.json/i.test(dev.message || "")) {
-          recreateFromGit = true;
-        } else {
-          message = dev.message || "Starting preview…";
-          previewUpstream = null;
-        }
-      } catch (err) {
-        console.warn("[cander] dev server on resume", err);
-        message =
-          err instanceof Error
-            ? `Sandbox resumed; preview start failed: ${err.message}`
-            : "Sandbox resumed; preview start failed.";
-        previewUpstream = null;
-        status = "error";
-      }
-
-      if (recreateFromGit) {
+      } else {
+        // Resume failed — GC stale sandbox before recreate.
         try {
           await stopSessionRecordById(existing.id, existing.userId);
         } catch {
@@ -550,47 +623,8 @@ export async function ensureProjectSandbox(opts: {
           sandbox_session_id: null,
           sandbox_status: "idle",
         });
-        // Fall through to createBuildSandboxFromGit.
-      } else {
-        await persistPreviewUpstream({
-          sessionId: existing.id,
-          previewUpstream,
-          status,
-          message,
-          githubFullName: fullName,
-          draftBranch,
-          draftSha,
-        });
-        await patchProjectSandbox(opts.projectId, opts.workspaceId, {
-          sandbox_session_id: existing.id,
-          sandbox_status: status,
-        });
-        return publicResult({
-          projectId: opts.projectId,
-          workspaceId: opts.workspaceId,
-          status,
-          sessionId: existing.id,
-          subdomain: infra.subdomain,
-          draftBranch,
-          draftSha,
-          githubFullName: fullName,
-          previewUpstream,
-          reused: true,
-          message,
-        });
       }
-    } else {
-      // Resume failed — GC stale sandbox before recreate.
-      try {
-        await stopSessionRecordById(existing.id, existing.userId);
-      } catch {
-        await updateComputerSession(existing.id, { status: "stopped" });
-      }
-      await patchProjectSandbox(opts.projectId, opts.workspaceId, {
-        sandbox_session_id: null,
-        sandbox_status: "idle",
-      });
-    }
+    } // end SHA-match else (resume path)
   }
 
   try {

@@ -1,6 +1,7 @@
 /**
  * GET/PATCH /api/projects/:id/website-setup
  * Guided website create brief (answers + status).
+ * Client cannot set status=ready — only POST /build/ready after preview_check.
  */
 
 import { NextResponse } from "next/server";
@@ -18,6 +19,10 @@ import {
   saveWebsiteSetupBrief,
 } from "@/lib/build/website-setup-brief-store";
 import { draftTipHasNextPackage } from "@/lib/build/git/draft-tip";
+import {
+  briefStatusFromBuildPhase,
+  getProjectBuildPhase,
+} from "@/lib/build/build-phase";
 
 export const runtime = "nodejs";
 
@@ -55,15 +60,26 @@ export async function GET(request: Request, ctx: RouteCtx) {
     projectId,
     workspaceId,
   });
-  // Never expose "ready" to clients when the tip cannot boot Next.
-  const gatedBrief =
-    brief.status === "ready" && !draftRunnable
-      ? { ...brief, status: "building" as const }
-      : brief;
+  const buildPhase = await getProjectBuildPhase({ projectId, workspaceId });
+
+  // build_phase is source of truth when present.
+  let gatedBrief = brief;
+  if (buildPhase) {
+    gatedBrief = {
+      ...brief,
+      status: briefStatusFromBuildPhase(buildPhase),
+    };
+  }
+  // Never expose "ready" when tip cannot boot Next.
+  if (gatedBrief.status === "ready" && !draftRunnable) {
+    gatedBrief = { ...gatedBrief, status: "building" as const };
+  }
+
   return NextResponse.json({
     ok: true,
     brief: gatedBrief,
     draftRunnable,
+    buildPhase: buildPhase ?? null,
   });
 }
 
@@ -110,12 +126,17 @@ export async function PATCH(request: Request, ctx: RouteCtx) {
 
   let brief = await loadWebsiteSetupBrief(projectId, workspaceId);
   if (body.brief && typeof body.brief === "object") {
+    const incoming = { ...body.brief };
+    // Client cannot promote to ready via brief merge.
+    if (incoming.status === "ready") {
+      incoming.status = "building";
+    }
     brief = normalizeWebsiteSetupBrief({
       ...brief,
-      ...body.brief,
+      ...incoming,
       answers: {
         ...(brief.answers ?? {}),
-        ...((body.brief.answers as Record<string, unknown> | undefined) ?? {}),
+        ...((incoming.answers as Record<string, unknown> | undefined) ?? {}),
       },
     });
   }
@@ -127,15 +148,9 @@ export async function PATCH(request: Request, ctx: RouteCtx) {
   }
   if (body.status) {
     let nextStatus = body.status;
-    // Fail closed: do not persist ready without a runnable Next tip.
+    // Phase 3: client never sets ready — only /build/ready after preview_check.
     if (nextStatus === "ready") {
-      const draftRunnable = await draftTipHasNextPackage({
-        projectId,
-        workspaceId,
-      });
-      if (!draftRunnable) {
-        nextStatus = "building";
-      }
+      nextStatus = "building";
     }
     brief = { ...brief, status: nextStatus };
   }
@@ -151,10 +166,21 @@ export async function PATCH(request: Request, ctx: RouteCtx) {
     };
   }
 
+  // Never persist ready through this route.
+  if (brief.status === "ready") {
+    brief = { ...brief, status: "building" };
+  }
+
   const saved = await saveWebsiteSetupBrief({
     projectId,
     workspaceId,
     brief: normalizeWebsiteSetupBrief(brief),
   });
-  return NextResponse.json({ ok: true, brief: saved });
+
+  const buildPhase = await getProjectBuildPhase({ projectId, workspaceId });
+  return NextResponse.json({
+    ok: true,
+    brief: saved,
+    buildPhase: buildPhase ?? null,
+  });
 }

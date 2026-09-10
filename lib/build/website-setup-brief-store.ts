@@ -132,11 +132,21 @@ export async function saveWebsiteSetupBrief(opts: {
   projectId: string;
   workspaceId: string;
   brief: WebsiteSetupBrief;
+  /**
+   * Server-only: allow persisting status=ready after preview_check.
+   * Browser / PATCH must never set ready — use /build/ready instead.
+   */
+  allowServerReady?: boolean;
 }): Promise<WebsiteSetupBrief> {
   let next: WebsiteSetupBrief = {
     ...opts.brief,
     updatedAt: new Date().toISOString(),
   };
+
+  // Fail closed: ready only via server finalize (preview_check + SHA pin).
+  if (next.status === "ready" && !opts.allowServerReady) {
+    next = { ...next, status: "building" };
+  }
 
   // Server-side fail-closed: never persist ready without a runnable tip.
   if (!isBrowser() && next.status === "ready") {
@@ -182,9 +192,38 @@ export async function saveWebsiteSetupBrief(opts: {
 
   try {
     const admin = createSupabaseAdminClient();
+    const { buildPhaseFromBriefStatus, isBuildPhase } = await import(
+      "@/lib/build/build-phase"
+    );
+    const mapped = buildPhaseFromBriefStatus(next.status);
+    const { data: row } = await admin
+      .from("projects")
+      .select("build_phase")
+      .eq("id", opts.projectId)
+      .eq("workspace_id", opts.workspaceId)
+      .maybeSingle();
+    const current = isBuildPhase(row?.build_phase) ? row!.build_phase : null;
+    const fineGrained =
+      current === "booting" ||
+      current === "preview_check" ||
+      current === "visual_review" ||
+      current === "ready";
+    // Don't clobber server machine phases with coarse "building" → implementing.
+    const patch: Record<string, unknown> = {
+      website_setup_brief: next,
+      updated_at: next.updatedAt,
+    };
+    if (
+      next.status === "ready" ||
+      next.status === "failed" ||
+      next.status === "setup" ||
+      !(fineGrained && next.status === "building")
+    ) {
+      patch.build_phase = mapped;
+    }
     const { error } = await admin
       .from("projects")
-      .update({ website_setup_brief: next })
+      .update(patch)
       .eq("id", opts.projectId)
       .eq("workspace_id", opts.workspaceId);
     if (error) {

@@ -3623,21 +3623,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const finalizePreview = async () => {
             const projectForPreview = pid || projectId;
             if (!projectForPreview) return;
-            // Persist ready via API (build turn may have only updated memory before).
-            try {
-              await persistWebsiteSetupProgress({
-                projectId: projectForPreview,
-                workspaceId,
-                answers: {
-                  ...result.answers,
-                  confirm_build: true,
-                },
-                status: "ready",
-              });
-            } catch (err) {
-              console.warn("[cander] post-build brief ready save failed", err);
-            }
-            // Unlock progress ring + ensure sandbox immediately (panels listen).
+            // Phase 3: client never persists ready — poll server build_phase.
+            // Nudge pollers; ensure sandbox for iframe only (ready comes from /build/ready).
             window.dispatchEvent(
               new CustomEvent("cander:website-setup-ready", {
                 detail: { projectId: projectForPreview, workspaceId },
