@@ -2298,62 +2298,7 @@ export function ProjectBrowserPanel({
         mobile ? "bg-white dark:bg-black" : BROWSER_CHROME_BG,
       )}
     >
-      {mobile ? (
-        isBuildSiteOrApp ? (
-          <div
-            className={cn(
-              "flex h-11 min-w-0 shrink-0 items-center justify-end gap-0.5 px-2",
-              BROWSER_CHROME_BG,
-            )}
-          >
-            <RailBtn
-              label="Reload"
-              onClick={() => {
-                if (isBuildDraftTab) {
-                  refreshPreview();
-                  if (sandboxPreviewSrc) {
-                    setSandboxPreviewSrc(
-                      sandboxPreviewSrc.replace(/\?_r=\d+/, "") +
-                        `?_r=${Date.now()}`,
-                    );
-                  }
-                }
-                runBrowserNav("reload");
-              }}
-            >
-              <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
-            </RailBtn>
-            <DesktopProjectToolsMenu
-              canRename={canRename}
-              publishLabel={draftAheadOfLive ? "Republish" : "Publish"}
-              viewport={isBuildDraftTab ? viewport : undefined}
-              onCycleViewport={
-                isBuildDraftTab
-                  ? () => setViewport(VIEWPORT_CYCLE[viewport].next)
-                  : undefined
-              }
-              onRename={() => {
-                setRenameTarget("project");
-                setMobileSheet("rename");
-              }}
-              onPublish={() => openOverlay("publish")}
-              onDomain={() => openOverlay("domains")}
-              onOpenExternal={() =>
-                addUrlTab(draftPreviewUrl || navigationUrl || address)
-              }
-              onOpenSystemBrowser={() => {
-                void openUrlInSystemBrowser(
-                  draftPreviewUrl || active.url || address,
-                );
-              }}
-              onRefresh={() => {
-                refreshPreview();
-                runBrowserNav("reload");
-              }}
-            />
-          </div>
-        ) : null
-      ) : standalone ? (
+      {mobile ? null : standalone ? (
         <>
           <div
             className={cn(
