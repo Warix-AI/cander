@@ -30,6 +30,11 @@ import {
 import { composeSiteFromSpec } from "@/lib/ai/build/compose-site";
 import { planWebsite } from "@/lib/ai/build/plan-website";
 import { isPlanFirstBuildEnabled } from "@/lib/ai/build/plan/flag";
+import { BUILD_RETRY_BUDGETS } from "@/lib/ai/build/retry-budgets";
+import {
+  classifyBuildMessageIntent,
+  looksLikeCodeDump,
+} from "@/lib/ai/build/intent";
 import { buildProjectSpecFromBrief } from "@/lib/ai/build/plan/project-spec";
 import { generateBuildPlan } from "@/lib/ai/build/plan/generate-plan";
 import { savePlanFirstArtifacts } from "@/lib/ai/build/plan/store";
@@ -139,30 +144,6 @@ function isBuildToolName(name: string): boolean {
     name.startsWith("computer.files") ||
     name === "computer.exec"
   );
-}
-
-function looksLikeCodeDump(text: string): boolean {
-  const t = (text || "").trim();
-  if (!t) return false;
-  if (/<!DOCTYPE\s+html/i.test(t)) return true;
-  if (/<html[\s>]/i.test(t) && /<style[\s>]/i.test(t)) return true;
-  if (/```(?:html|javascript|tsx|jsx|css|typescript)/i.test(t) && t.length > 280) {
-    return true;
-  }
-  if (
-    /\b(?:app\/page\.(?:js|tsx)|package\.json)\b/i.test(t) &&
-    /export\s+default\s+function/i.test(t)
-  ) {
-    return true;
-  }
-  if (
-    /export\s+default\s+function\s+\w+/i.test(t) &&
-    /return\s*\(\s*</.test(t) &&
-    t.length > 400
-  ) {
-    return true;
-  }
-  return false;
 }
 
 function labelForBuildTool(name: string): string {
@@ -435,6 +416,166 @@ async function runBuildPlanTurn(
   };
 }
 
+const SITE_CHAT_INSTRUCTIONS = `You are Cander — the user's website builder, talking about THEIR site.
+
+You are answering a question or reacting to feedback. Do NOT write code and do NOT paste files.
+- Use the site context below (brief + current file tree) to answer concretely.
+- If the user is asking for a change, confirm what you'd change in one sentence and invite them to say so ("Want me to make that change?").
+- If they want to go live, tell them to press Publish (or say "publish").
+- Keep it short and friendly. No headings unless listing pages.`;
+
+/**
+ * Questions / feedback inside a site project: chat model, no tools, no writes.
+ * Context = setup brief + draft tip file list so answers are about THIS site.
+ */
+async function runSiteChatTurn(
+  request: AiGenerateRequest,
+  opts: AgentTurnOptions | undefined,
+  ctx: {
+    projectId: string;
+    workspaceId: string;
+    websiteBrief: WebsiteSetupBrief | null;
+  },
+): Promise<AgentTurnResult> {
+  const report = opts?.onProgress ?? (() => {});
+  report({
+    phase: "thinking",
+    label: "Thinking",
+    detail: "Looking at your site…",
+  });
+
+  let tipPaths: string[] = [];
+  let tipSha: string | null = null;
+  try {
+    const { inspectProjectDraftTipClient } = await import(
+      "@/lib/api/project-git-client"
+    );
+    const tip = await inspectProjectDraftTipClient({
+      projectId: ctx.projectId,
+      workspaceId: ctx.workspaceId,
+    });
+    tipPaths = tip?.paths ?? [];
+    tipSha = tip?.draftSha ?? null;
+  } catch {
+    /* context is best-effort */
+  }
+
+  const pages = tipPaths
+    .filter((p) => /^app\/.*page\.tsx$/.test(p))
+    .map((p) => {
+      const route = p.replace(/^app/, "").replace(/\/page\.tsx$/, "") || "/";
+      return route.replace(/\/\([^)]+\)/g, "") || "/";
+    });
+
+  const context = [
+    SITE_CHAT_INSTRUCTIONS,
+    ctx.websiteBrief?.answers
+      ? `Setup brief:\n${JSON.stringify(ctx.websiteBrief.answers).slice(0, 4000)}`
+      : "Setup brief: (none yet)",
+    tipSha
+      ? `Draft tip ${tipSha.slice(0, 7)} — routes: ${pages.join(", ") || "(none)"}\nFiles (${tipPaths.length}): ${tipPaths.slice(0, 120).join(", ")}`
+      : "Draft: no files committed yet.",
+  ].join("\n\n");
+
+  const generated = await runRawOpenAITurn(
+    {
+      ...request,
+      allowTools: false,
+      allowedToolNames: undefined,
+      toolContext: context,
+      modelMode: "chat",
+    },
+    opts,
+  );
+
+  let content =
+    sanitizeAssistantVisibleText(generated.content || "").trim() ||
+    generated.content ||
+    "";
+  if (looksLikeCodeDump(content)) {
+    content =
+      "Happy to make that change — just tell me what to update (for example “make the header sticky” or “swap the hero photo”) and I’ll edit the draft.";
+  }
+
+  return {
+    content,
+    runtime: generated.runtime ?? "cloud",
+    offline: Boolean(generated.offline),
+    condensationOccurred: Boolean(generated.condensationOccurred),
+    aiChatId: generated.aiChatId ?? request.aiChatId ?? null,
+    toolResults: [],
+  };
+}
+
+/**
+ * "publish" / "republish" typed in chat. Publishing is a user-confirmed
+ * action, so we hand off to the Publish flow instead of writing files.
+ */
+async function runSitePublishCommandTurn(
+  request: AiGenerateRequest,
+  opts: AgentTurnOptions | undefined,
+  ctx: {
+    projectId: string;
+    workspaceId: string;
+    websiteBrief: WebsiteSetupBrief | null;
+  },
+): Promise<AgentTurnResult> {
+  const report = opts?.onProgress ?? (() => {});
+  report({
+    phase: "thinking",
+    label: "Publishing",
+    detail: "Checking the draft…",
+  });
+  // Browser turns cannot read build_phase directly; the brief status is the
+  // build_phase mirror (GET /website-setup overlays it).
+  let ready = ctx.websiteBrief?.status === "ready";
+  try {
+    const phase = await getProjectBuildPhase({
+      projectId: ctx.projectId,
+      workspaceId: ctx.workspaceId,
+    });
+    if (phase) ready = phase === "ready";
+  } catch {
+    /* fall through */
+  }
+  return {
+    content: ready
+      ? "Ready to go live. Press **Publish** in the top-right to push this draft to your live site — I’ll confirm the URL once it’s up."
+      : "The draft isn’t ready to publish yet — let it finish building (or ask me to fix what’s blocking it) and then press **Publish**.",
+    runtime: "cloud",
+    offline: false,
+    condensationOccurred: false,
+    aiChatId: request.aiChatId ?? null,
+    toolResults: [
+      {
+        name: "build.publish",
+        ok: true,
+        output: ready
+          ? "publish_requested:ready"
+          : "publish_requested:not_ready",
+        pauseForUser: true,
+      },
+    ],
+  };
+}
+
+/** Paths the coding agent successfully wrote/patched during this turn. */
+function agentWrittenPaths(results: AiToolCallResult[]): Set<string> {
+  const paths = new Set<string>();
+  for (const r of results) {
+    if (!r.ok) continue;
+    if (r.name !== "computer.files.write" && r.name !== "computer.files.patch") {
+      continue;
+    }
+    const m = /^(?:Wrote|Patched)\s+(\S+)/.exec(r.output ?? "");
+    if (m?.[1]) paths.add(m[1].replace(/^\.?\//, ""));
+  }
+  return paths;
+}
+
+/** Codex rounds per pass. Wall-clock is bounded by the route; rounds were the real cap. */
+const CODEX_MAX_ROUNDS = 12;
+
 async function runCodingAgentLoop(
   request: AiGenerateRequest,
   opts: AgentTurnOptions | undefined,
@@ -448,7 +589,7 @@ async function runCodingAgentLoop(
 ): Promise<AgentTurnResult> {
   const report = opts?.onProgress ?? (() => {});
   const toolResults: AiToolCallResult[] = [...(ctx.priorResults ?? [])];
-  const rounds = ctx.maxRounds ?? 4;
+  const rounds = ctx.maxRounds ?? CODEX_MAX_ROUNDS;
   let forcedToolRetry = false;
   let working: AiGenerateRequest = {
     ...request,
@@ -1111,11 +1252,18 @@ async function runCreateWebsitePipeline(opts: {
     // Deterministic compose should usually pass; still report.
   }
 
-  if (!validation.ok) {
+  for (
+    let attempt = 0;
+    !validation.ok && attempt < BUILD_RETRY_BUDGETS.codexTechnicalRepair;
+    attempt++
+  ) {
     report({
       phase: "thinking",
       label: "Building",
-      detail: "Repairing validation issues…",
+      detail:
+        attempt === 0
+          ? "Repairing validation issues…"
+          : `Repairing validation issues (pass ${attempt + 1})…`,
     });
     const repairRequest: AiGenerateRequest = {
       ...request,
@@ -1218,20 +1366,47 @@ async function runCreateWebsitePipeline(opts: {
     }
 
     const composed = composeSiteFromSpec(spec);
-    const essentials = composed.filter((f) =>
-      [
-        "package.json",
-        "next.config.mjs",
-        ".gitignore",
-        "app/robots.ts",
-        "app/sitemap.ts",
-        "app/globals.css",
-        "app/page.tsx",
-        "app/layout.tsx",
-        "tsconfig.json",
-        "lib/utils.ts",
-      ].includes(f.path) || f.path.startsWith("components/ui/"),
+    // Config files are canonical (Vercel/Next detection depends on them).
+    // UI files (`app/page.tsx`, `app/layout.tsx`, `app/globals.css`,
+    // `components/ui/*`) are the agent's — the template only fills gaps.
+    // Previously this block overwrote Codex's pages with the template.
+    const CANONICAL_CONFIG = new Set([
+      "package.json",
+      "next.config.mjs",
+      ".gitignore",
+      "tsconfig.json",
+      "postcss.config.mjs",
+      "lib/utils.ts",
+    ]);
+    const FILL_IF_MISSING = new Set([
+      "app/robots.ts",
+      "app/sitemap.ts",
+      "app/globals.css",
+      "app/page.tsx",
+      "app/layout.tsx",
+    ]);
+    // `files` was re-composed from the template for validation, so derive the
+    // agent's real output from its successful write/patch tool results.
+    const authored = agentWrittenPaths(toolResults);
+    const essentials = composed.filter(
+      (f) =>
+        CANONICAL_CONFIG.has(f.path) ||
+        ((FILL_IF_MISSING.has(f.path) || f.path.startsWith("components/ui/")) &&
+          !authored.has(f.path)),
     );
+    // Agent-authored globals.css must still load Tailwind for utility classes.
+    if (authored.has("app/globals.css")) {
+      const read = await executeAuthorizedTool({
+        name: "computer.files.read",
+        arguments: { projectId, workspaceId, path: "app/globals.css" },
+      });
+      if (read.ok && !read.output.includes('@import "tailwindcss"')) {
+        essentials.push({
+          path: "app/globals.css",
+          content: `@import "tailwindcss";\n\n${read.output}`,
+        });
+      }
+    }
     const { ensureNextInPackageJson } = await import(
       "@/lib/ai/build/site-package"
     );
@@ -1811,8 +1986,24 @@ export async function runBuildProjectTurn(
     });
   }
 
-  // Phase 4 — conversational draft-only edits (sites).
+  // Conversational draft-only edits (sites). Route by intent first so
+  // questions and feedback never trigger forced file writes.
   if (isSiteProject) {
+    const intent = classifyBuildMessageIntent(request.content);
+    if (intent === "chat_question") {
+      return runSiteChatTurn(request, opts, {
+        projectId,
+        workspaceId,
+        websiteBrief,
+      });
+    }
+    if (intent === "publish_command") {
+      return runSitePublishCommandTurn(request, opts, {
+        projectId,
+        workspaceId,
+        websiteBrief,
+      });
+    }
     const { runEditWebsitePipeline } = await import(
       "@/lib/ai/build/edit-pipeline"
     );

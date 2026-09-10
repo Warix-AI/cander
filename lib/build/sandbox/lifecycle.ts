@@ -88,6 +88,26 @@ async function writeBuildState(
   });
 }
 
+/**
+ * Record that the sandbox working tree now equals `draftSha` (called after a
+ * persist commit). Without this, `ensureProjectSandbox` sees a tip mismatch on
+ * the next turn and recreates the VM (clone + npm install) for every edit.
+ */
+export async function pinBuildSandboxDraftSha(
+  sessionId: string,
+  draftSha: string,
+): Promise<void> {
+  if (!draftSha) return;
+  const row = await getComputerSessionRowById(sessionId);
+  const prev = (row?.build_state ?? null) as BuildSandboxState | null;
+  if (!prev || prev.purpose !== BUILD_SANDBOX_PURPOSE) return;
+  await writeBuildState(sessionId, {
+    ...prev,
+    draftSha,
+    updatedAt: nowIso(),
+  });
+}
+
 function publicResult(
   partial: Omit<
     EnsureProjectSandboxResult,

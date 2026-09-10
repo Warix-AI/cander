@@ -7,7 +7,9 @@ export function emitGlobalsCss(theme: SiteTheme): string {
       : theme.spacingScale === "compact"
         ? "3.25rem"
         : "4.5rem";
-  return `/* Cander site tokens — generated from SiteSpec */
+  return `@import "tailwindcss";
+
+/* Cander site tokens — generated from SiteSpec */
 :root {
   --c-primary: ${theme.primary};
   --c-primary-fg: ${theme.primaryForeground};

@@ -197,6 +197,19 @@ done | head -n 100`,
     /* optional */
   }
 
+  // The working tree is now the draft tip — pin it so the next ensure() reuses
+  // this VM instead of recreating it (clone + npm install) on tip mismatch.
+  if (committed.draftSha) {
+    try {
+      const { pinBuildSandboxDraftSha } = await import(
+        "@/lib/build/sandbox/lifecycle"
+      );
+      await pinBuildSandboxDraftSha(opts.sessionId, committed.draftSha);
+    } catch (err) {
+      console.warn("[cander] pin sandbox draftSha failed", err);
+    }
+  }
+
   const partial = skippedPaths.length > 0;
   const outcome =
     committed.dbSyncOk === false

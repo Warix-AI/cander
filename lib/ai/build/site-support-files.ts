@@ -10,11 +10,17 @@
 import type { ScaffoldFile } from "@/lib/ai/build/site-spec";
 import {
   SITE_LIB_UTILS_TS,
+  SITE_POSTCSS_CONFIG,
   SITE_TSCONFIG_JSON,
   resolveUiPrimitiveFiles,
 } from "@/lib/ai/build/twenty-first/ui-primitives";
 
 export const SITE_COMMON_DEPENDENCIES: Record<string, string> = {
+  // Tailwind v4 is part of the base kit: shadcn primitives and Codex/21st.dev
+  // output use utility classes, so globals.css imports tailwind by default.
+  tailwindcss: "^4.1.12",
+  "@tailwindcss/postcss": "^4.1.12",
+  postcss: "^8.5.6",
   clsx: "^2.1.1",
   "tailwind-merge": "^3.3.1",
   "class-variance-authority": "^0.7.1",
@@ -73,6 +79,7 @@ export function siteSupportScaffoldFiles(): ScaffoldFile[] {
   const { files: ui } = resolveUiPrimitiveFiles(DEFAULT_UI);
   return [
     { path: "tsconfig.json", content: SITE_TSCONFIG_JSON },
+    { path: "postcss.config.mjs", content: SITE_POSTCSS_CONFIG },
     { path: "lib/utils.ts", content: SITE_LIB_UTILS_TS },
     ...ui,
   ];

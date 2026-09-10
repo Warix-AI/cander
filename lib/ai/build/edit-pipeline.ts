@@ -39,6 +39,7 @@ import {
   editPathAllowsPublish,
   editToolNamesFromBuildDomain,
 } from "@/lib/ai/build/edit-guards";
+import { looksLikeCodeDump } from "@/lib/ai/build/intent";
 
 const EDIT_MAX_ROUNDS = 8;
 
@@ -454,7 +455,10 @@ export async function runEditWebsitePipeline(opts: {
           r.ok,
       ).length;
 
-      if (!forcedToolRetry && writes === 0) {
+      // Only force a tool retry when the model dumped code into chat instead
+      // of using tools. A plain-language reply (clarifying question, "that's
+      // already the case", etc.) is a valid answer — never force a write for it.
+      if (!forcedToolRetry && writes === 0 && looksLikeCodeDump(visible)) {
         forcedToolRetry = true;
         working = {
           ...working,
