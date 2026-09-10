@@ -36,6 +36,7 @@ import { isTwentyFirstConfigured } from "@/lib/ai/build/twenty-first-mcp";
 import { BUILD_APP_PORT } from "@/lib/build/sandbox/constants";
 import { signBuildJobToken } from "@/lib/build/jobs/token";
 import { slugFromProjectName } from "@/lib/publish-domain";
+import { hasRootPage } from "@/lib/ai/build/routes/app-router-conflicts";
 import {
   appendBuildJobEvents,
   findQueuedBuildJob,
@@ -142,12 +143,26 @@ async function ensureBootSkeleton(
   });
   const have = new Set(tip.paths);
   const skeleton = bootSkeletonFiles({ title, kind });
-  // Only fill gaps — never clobber existing work (edit mode, or a retried create).
-  const missing = skeleton.filter((f) => !have.has(f.path));
-  const mustHave = ["package.json", "app/layout.tsx", "app/page.tsx", "app/globals.css"];
-  const needsCommit =
-    !tip.draftSha || mustHave.some((p) => !have.has(p)) || (job.facts.mode === "create" && missing.length > 0);
-  if (!needsCommit) return;
+  // Route-group aware: a home page at app/(marketing)/page.tsx counts, and we
+  // must never add app/page.tsx next to it (two pages for "/").
+  const rootPageOk = hasRootPage(tip.paths);
+  const runnable =
+    Boolean(tip.draftSha) &&
+    have.has("package.json") &&
+    have.has("app/layout.tsx") &&
+    have.has("app/globals.css") &&
+    rootPageOk;
+  // Edit jobs work on an existing site: only touch the tip when it cannot
+  // boot at all. Any commit here moves the tip and forces a sandbox rebuild.
+  if (job.facts.mode === "edit" && runnable) return;
+  // Only fill gaps — never clobber existing work (or a retried create).
+  const missing = skeleton.filter((f) => {
+    if (have.has(f.path)) return false;
+    if (/^app\/page\.tsx$/.test(f.path) && rootPageOk) return false;
+    return true;
+  });
+  if (runnable && missing.length === 0) return;
+  if (missing.length === 0) return;
   await commitFilesToDraftBranch({
     projectId: job.projectId,
     workspaceId: job.workspaceId,
@@ -284,7 +299,10 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       twentyFirstEnabled,
       webSearch: isOpenAIWebSearchEnabled(),
       models,
-      reasoning: process.env.CANDER_BUILDER_REASONING?.trim() || "medium",
+      // Edits are small, targeted changes — low effort keeps them snappy.
+      reasoning:
+        process.env.CANDER_BUILDER_REASONING?.trim() ||
+        (job.facts.mode === "edit" ? "low" : "medium"),
       devServerUrl: `http://localhost:${BUILD_APP_PORT}`,
       budget: {
         wallClockMs: job.facts.mode === "create" ? CREATE_WALL_CLOCK_MS : EDIT_WALL_CLOCK_MS,

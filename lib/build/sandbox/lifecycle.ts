@@ -472,15 +472,160 @@ export async function ensureProjectSandbox(opts: {
   const draftSha = infra.github.draftSha ?? null;
 
   const scopeId = `build:${opts.projectId}`;
+  // Serialize concurrent ensures for the same project within this instance
+  // (preview panel, build panel, publish and the job runner all call this).
+  const inflightKey = `${opts.userId}:${opts.projectId}:${opts.forceRestart ? "force" : "ensure"}`;
+  const inflight = ENSURE_INFLIGHT.get(inflightKey);
+  if (inflight) return inflight;
+  const run = ensureProjectSandboxInner(opts, {
+    infra,
+    fullName,
+    draftBranch,
+    draftSha,
+    scopeId,
+  }).finally(() => {
+    ENSURE_INFLIGHT.delete(inflightKey);
+  });
+  ENSURE_INFLIGHT.set(inflightKey, run);
+  return run;
+}
+
+const ENSURE_INFLIGHT = new Map<string, Promise<EnsureProjectSandboxResult>>();
+
+/**
+ * Move a live sandbox checkout to the project tip without recreating the VM.
+ * Only succeeds when the working tree is clean (nothing in-progress to lose)
+ * and the tip commit can be fetched; the dev server picks the change up via HMR.
+ */
+async function fastForwardSandboxToTip(opts: {
+  sessionId: string;
+  userId: string;
+  tipSha: string;
+}): Promise<boolean> {
+  try {
+    const { runPrivilegedSandboxCommand } = await import(
+      "@/lib/build/sandbox/privileged"
+    );
+    const res = await runPrivilegedSandboxCommand({
+      sessionId: opts.sessionId,
+      userId: opts.userId,
+      cmd: "sh",
+      args: [
+        "-c",
+        [
+          "set -e",
+          `SHA=${JSON.stringify(opts.tipSha)}`,
+          '[ -d .git ] || { echo NO_GIT; exit 2; }',
+          'if [ -n "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]; then echo DIRTY; exit 3; fi',
+          'if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then',
+          '  git fetch --depth=1 origin "$SHA" 2>/dev/null || git fetch origin "$SHA" 2>/dev/null || git fetch --depth=30 origin cander/draft 2>/dev/null || true',
+          "fi",
+          'git cat-file -e "${SHA}^{commit}" 2>/dev/null || { echo NO_COMMIT; exit 4; }',
+          'git reset --hard "$SHA" >/dev/null',
+          'git clean -fd -e node_modules -e .next -e .cander -e .env -e .env.local >/dev/null 2>&1 || true',
+          "git rev-parse HEAD",
+        ].join("\n"),
+      ],
+    });
+    const head = (res.stdout || "").trim().split(/\s+/).pop()?.toLowerCase() || "";
+    if (res.exitCode !== 0 || head !== opts.tipSha.toLowerCase()) return false;
+    // Dependencies may have changed with the tip; a cheap install is a no-op
+    // when the lockfile is unchanged and keeps the dev server honest otherwise.
+    await runPrivilegedSandboxCommand({
+      sessionId: opts.sessionId,
+      userId: opts.userId,
+      cmd: "sh",
+      args: [
+        "-c",
+        "if [ -f package.json ]; then timeout 120 npm install --no-fund --no-audit --prefer-offline >/dev/null 2>&1 || true; fi",
+      ],
+    }).catch(() => {});
+    await pinBuildSandboxDraftSha(opts.sessionId, opts.tipSha);
+    return true;
+  } catch (err) {
+    console.warn("[cander:sandbox] fast-forward failed", err instanceof Error ? err.message : err);
+    return false;
+  }
+}
+/** A sandbox that has been "starting" for less than this is still being built by someone. */
+const STARTING_GRACE_MS = 6 * 60 * 1000;
+
+async function ensureProjectSandboxInner(
+  opts: {
+    userId: string;
+    projectId: string;
+    workspaceId: string;
+    forceRestart?: boolean;
+  },
+  ctx: {
+    infra: Awaited<ReturnType<typeof ensureProjectInfra>>;
+    fullName: string;
+    draftBranch: string;
+    draftSha: string | null;
+    scopeId: string;
+  },
+): Promise<EnsureProjectSandboxResult> {
+  const { infra, fullName, draftBranch, draftSha, scopeId } = ctx;
   const existing = await findActiveSessionByScope(
     opts.userId,
     "project",
     scopeId,
   );
-  const existingIsBuild =
-    existing &&
-    (await getComputerSessionRowById(existing.id))?.build_state?.purpose ===
-      BUILD_SANDBOX_PURPOSE;
+  const existingRowForGuards = existing
+    ? await getComputerSessionRowById(existing.id)
+    : null;
+  const existingState = (existingRowForGuards?.build_state ?? null) as BuildSandboxState | null;
+  const existingIsBuild = Boolean(existing && existingState?.purpose === BUILD_SANDBOX_PURPOSE);
+
+  if (existingIsBuild && existing && !opts.forceRestart) {
+    // Guard 1: someone else is already creating this project's sandbox
+    // (cross-instance). Report "starting" instead of racing a second VM.
+    const startedAt = Date.parse(existingState?.updatedAt || existing.createdAt || "") || 0;
+    if (existingState?.status === "starting" && Date.now() - startedAt < STARTING_GRACE_MS) {
+      return publicResult({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+        status: "starting",
+        sessionId: existing.id,
+        subdomain: infra.subdomain,
+        draftBranch,
+        draftSha,
+        githubFullName: fullName,
+        previewUpstream: null,
+        reused: true,
+        message: existingState.message || "Starting preview…",
+      });
+    }
+    // Guard 2: a build job is running inside this sandbox. The tip legitimately
+    // moves mid-job (skeleton commit, persist), so a SHA mismatch here must not
+    // destroy the VM the builder is working in.
+    try {
+      const { findActiveBuildJob } = await import("@/lib/build/jobs/store");
+      const job = await findActiveBuildJob({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+      });
+      if (job && job.facts.sessionId === existing.id) {
+        const status: BuildSandboxStatus =
+          existingState?.status === "ready" ? "ready" : "starting";
+        return publicResult({
+          projectId: opts.projectId,
+          workspaceId: opts.workspaceId,
+          status,
+          sessionId: existing.id,
+          subdomain: infra.subdomain,
+          draftBranch,
+          draftSha,
+          githubFullName: fullName,
+          previewUpstream: existingState?.previewUpstream ?? null,
+          reused: true,
+          message: existingState?.message || "Build in progress…",
+        });
+      }
+    } catch (err) {
+      console.warn("[cander:sandbox] active-job guard skipped", err instanceof Error ? err.message : err);
+    }
+  }
 
   if (existingIsBuild && existing && opts.forceRestart) {
     try {
@@ -511,7 +656,25 @@ export async function ensureProjectSandbox(opts: {
           sandboxDraftSha: sandboxSha,
           projectDraftSha: tipSha,
         }));
+    let synced = false;
     if (tipMismatch) {
+      // Cheap path first: the tip moved (publish-time repair commit, persist
+      // from another sandbox, manual fix). Fast-forward the live checkout and
+      // let the dev server hot-reload instead of paying for a new VM.
+      synced = await fastForwardSandboxToTip({
+        sessionId: existing.id,
+        userId: opts.userId,
+        tipSha,
+      });
+      if (synced) {
+        console.info("[cander:sandbox] tip moved; fast-forwarded checkout", {
+          projectId: opts.projectId,
+          from: (sandboxSha || "").slice(0, 12) || "(empty)",
+          to: tipSha.slice(0, 12),
+        });
+      }
+    }
+    if (tipMismatch && !synced) {
       console.info("[cander:sandbox] tip SHA mismatch; recreating", {
         projectId: opts.projectId,
         sandboxSha: (sandboxSha || "").slice(0, 12) || "(empty)",

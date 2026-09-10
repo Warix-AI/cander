@@ -151,11 +151,14 @@ export async function runAcceptance(opts) {
   for (const r of results) {
     if (!r.ok || !r.html) continue;
     const html = r.html;
-    if (!r.title) issues.push(`${r.path} has no <title> — export metadata.`);
-    if (!isApp && !/<meta[^>]+name=["']description["'][^>]+content=["'][^"']{20,}/i.test(html)) {
+    if (isCreate && !r.title) issues.push(`${r.path} has no <title> — export metadata.`);
+    if (!isApp && isCreate && !/<meta[^>]+name=["']description["'][^>]+content=["'][^"']{20,}/i.test(html)) {
       issues.push(`${r.path} has no meta description (≥20 chars) — add metadata.description.`);
     }
-    if (!isApp) {
+    // Site-wide SEO contract is enforced when the site is created. Edits are
+    // judged on the change itself — otherwise a header tweak turns into an
+    // SEO refactor and takes 3 extra rounds.
+    if (!isApp && isCreate) {
       const canonical = html.match(/<link[^>]+rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1] || "";
       if (!canonical) {
         issues.push(`${r.path} has no canonical link — add metadata.alternates.canonical (with metadataBase in app/layout.tsx).`);

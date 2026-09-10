@@ -210,7 +210,10 @@ done | head -n 100`,
       cmd: "sh",
       args: [
         "-c",
-        `git add -A && git reset --hard ${JSON.stringify(committed.draftSha)} 2>/dev/null || true`,
+        // The commit was created through the GitHub API, so fetch it before
+        // moving HEAD — otherwise the checkout stays "dirty" forever and the
+        // next tip move forces a VM recreate instead of a fast-forward.
+        `SHA=${JSON.stringify(committed.draftSha)}; (git fetch --depth=1 origin "$SHA" 2>/dev/null || git fetch origin "$SHA" 2>/dev/null || true); git add -A >/dev/null 2>&1; git reset --hard "$SHA" >/dev/null 2>&1 || true`,
       ],
     });
   } catch {

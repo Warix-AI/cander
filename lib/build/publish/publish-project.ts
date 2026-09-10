@@ -47,16 +47,23 @@ function newDeploymentId() {
   return `dep-${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }
 
+const PUBLISH_CLOCKS = new Map<string, number>();
+
 function logPublish(
   publishAttemptId: string,
   stage: string,
   extra?: Record<string, unknown>,
 ) {
+  const started = PUBLISH_CLOCKS.get(publishAttemptId);
+  if (started === undefined) PUBLISH_CLOCKS.set(publishAttemptId, Date.now());
+  const elapsedMs = started === undefined ? 0 : Date.now() - started;
   console.info("[cander:publish]", {
     publishAttemptId,
     stage,
+    elapsedMs,
     ...extra,
   });
+  if (stage === "result" || stage === "error") PUBLISH_CLOCKS.delete(publishAttemptId);
 }
 
 function resultFromAttempt(

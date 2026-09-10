@@ -2,7 +2,7 @@
 
 import { MobileFloatingNav } from "@/components/shell/mobile/MobileFloatingNav";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from "react";
 import {
   AppWindow,
   Bot,
@@ -353,6 +353,69 @@ export function ProjectBrowserPanel({
   );
   const [draftPreviewUrl, setDraftPreviewUrl] = useState<string | null>(null);
 
+  // A probe that fails because the sandbox VM is gone (410 after a rebuild,
+  // 5xx while it restarts) is not a broken draft — bring it back automatically
+  // once, then fall back to the "starting" poll loop. Real errors stay errors.
+  const probeRecoveryAtRef = useRef(0);
+  const handleProbeFailure = useCallback(
+    (probed: { ok: false; message: string; recoverable?: boolean }) => {
+      const now = Date.now();
+      if (
+        probed.recoverable &&
+        projectId &&
+        ctx.workspaceId &&
+        now - probeRecoveryAtRef.current > 60_000
+      ) {
+        probeRecoveryAtRef.current = now;
+        setSandboxEnvStatus("starting");
+        setSandboxEnvMessage("Preview restarting…");
+        setSandboxPreviewSrc(null);
+        void (async () => {
+          try {
+            const sandbox = await import("@/lib/api/project-sandbox-client");
+            const result = await sandbox.ensureProjectSandboxClient({
+              projectId,
+              workspaceId: ctx.workspaceId,
+              forceRestart: true,
+            });
+            if (!result) return;
+            setSandboxEnvMessage(result.message ?? result.error ?? null);
+            if (
+              result.status === "ready" &&
+              result.hasPreviewUpstream &&
+              result.previewPath
+            ) {
+              const { probeDraftPreviewPath } = await import(
+                "@/lib/build/preview/client-health"
+              );
+              const again = await probeDraftPreviewPath(result.previewPath);
+              if (again.ok) {
+                setSandboxEnvStatus("ready");
+                setSandboxPreviewSrc(again.previewSrc);
+              } else {
+                setSandboxEnvStatus("error");
+                setSandboxEnvMessage(again.message);
+              }
+              return;
+            }
+            if (result.status === "error" || result.status === "unavailable") {
+              setSandboxEnvStatus(result.status);
+            }
+            // otherwise stay "starting" — the poll loop finishes the boot.
+          } catch {
+            setSandboxEnvStatus("error");
+            setSandboxEnvMessage(probed.message);
+          }
+        })();
+        return;
+      }
+      setSandboxEnvStatus("error");
+      setSandboxEnvMessage(probed.message);
+      setSandboxPreviewSrc(null);
+    },
+    [projectId, ctx.workspaceId],
+  );
+
   const { brief: websiteBrief, setupBlocksPreview, showSetupOverlay, refresh: refreshWebsiteBrief } =
     useWebsiteSetupBrief({
       projectId,
@@ -452,9 +515,7 @@ export function ProjectBrowserPanel({
           );
           const probed = await probeDraftPreviewPath(result.previewPath);
           if (!probed.ok) {
-            setSandboxEnvStatus("error");
-            setSandboxEnvMessage(probed.message);
-            setSandboxPreviewSrc(null);
+            handleProbeFailure(probed);
           } else {
             setSandboxPreviewSrc(probed.previewSrc);
           }
@@ -540,9 +601,7 @@ export function ProjectBrowserPanel({
           );
           const probed = await probeDraftPreviewPath(result.previewPath);
           if (!probed.ok) {
-            setSandboxEnvStatus("error");
-            setSandboxEnvMessage(probed.message);
-            setSandboxPreviewSrc(null);
+            handleProbeFailure(probed);
           } else {
             setSandboxPreviewSrc(probed.previewSrc);
           }
@@ -575,9 +634,7 @@ export function ProjectBrowserPanel({
             );
             const probed = await probeDraftPreviewPath(restarted.previewPath);
             if (!probed.ok) {
-              setSandboxEnvStatus("error");
-              setSandboxEnvMessage(probed.message);
-              setSandboxPreviewSrc(null);
+              handleProbeFailure(probed);
             } else {
               setSandboxPreviewSrc(probed.previewSrc);
             }
@@ -623,9 +680,7 @@ export function ProjectBrowserPanel({
             );
             const probed = await probeDraftPreviewPath(resumed.previewPath);
             if (!probed.ok) {
-              setSandboxEnvStatus("error");
-              setSandboxEnvMessage(probed.message);
-              setSandboxPreviewSrc(null);
+              handleProbeFailure(probed);
             } else {
               setSandboxPreviewSrc(probed.previewSrc);
             }
@@ -694,9 +749,7 @@ export function ProjectBrowserPanel({
             );
             const probed = await probeDraftPreviewPath(result.previewPath);
             if (!probed.ok) {
-              setSandboxEnvStatus("error");
-              setSandboxEnvMessage(probed.message);
-              setSandboxPreviewSrc(null);
+              handleProbeFailure(probed);
             } else {
               setSandboxPreviewSrc(probed.previewSrc);
             }

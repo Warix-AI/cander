@@ -110,15 +110,15 @@ async function runCompilePreflight(opts: {
   draftSha: string;
 }): Promise<string[]> {
   const issues: string[] = [];
-  // Prefer forceRestart so the sandbox clones the current draft tip (includes
-  // recent SEO repair commits) before we pin the exact publish SHA.
+  // Reuse the warm draft sandbox. Restarting it here used to kill the user's
+  // preview (HTTP 410 after every publish) and re-run a full clone + npm
+  // install, which was most of the "republish takes forever" time.
   const sandbox = await ensureProjectSandbox({
     userId: opts.userId,
     projectId: opts.projectId,
     workspaceId: opts.workspaceId,
-    forceRestart: true,
   });
-  if (!sandbox.sessionId || sandbox.status === "unavailable") {
+  if (!sandbox.sessionId || sandbox.status === "unavailable" || sandbox.status === "error") {
     return [
       sandbox.message ||
         "Could not ensure build sandbox for publish compile preflight.",
@@ -127,10 +127,14 @@ async function runCompilePreflight(opts: {
   const sessionId = sandbox.sessionId;
   const userId = opts.userId;
   const sha = opts.draftSha;
+  const worktree = `/tmp/cander-publish/${sha.slice(0, 12)}`;
 
   // One compile attempt per publish (budget documentation).
   void BUILD_RETRY_BUDGETS.publishPreflightCompile;
 
+  // Check out the exact publish SHA in a detached worktree so the dev server's
+  // working tree (and any in-progress edit) is never touched. node_modules is
+  // shared when the dependency manifest is unchanged; otherwise install fresh.
   const pin = await runPrivilegedSandboxCommand({
     sessionId,
     userId,
@@ -140,83 +144,104 @@ async function runCompilePreflight(opts: {
       [
         "set -e",
         `SHA=${JSON.stringify(sha)}`,
+        `WT=${JSON.stringify(worktree)}`,
         'if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then',
         '  git fetch --depth=1 origin "$SHA" 2>/dev/null || true',
         '  git fetch origin "$SHA" 2>/dev/null || true',
         '  git fetch --depth=30 origin cander/draft 2>/dev/null || true',
-        '  git fetch --depth=30 origin main 2>/dev/null || true',
         "fi",
         'if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then',
         "  git fetch --unshallow 2>/dev/null || true",
         '  git fetch origin "$SHA" 2>/dev/null || true',
         "fi",
-        'git reset --hard "$SHA"',
-        "git rev-parse HEAD",
+        'git worktree remove --force "$WT" 2>/dev/null || rm -rf "$WT"',
+        'git worktree prune 2>/dev/null || true',
+        'mkdir -p "$(dirname "$WT")"',
+        'git worktree add --detach "$WT" "$SHA" >/dev/null 2>&1',
+        'DEPS_CHANGED=0',
+        'if [ -d node_modules ]; then',
+        '  if git diff --quiet HEAD "$SHA" -- package.json package-lock.json 2>/dev/null; then',
+        '    ln -s "$(pwd)/node_modules" "$WT/node_modules"',
+        '  else DEPS_CHANGED=1; fi',
+        'else DEPS_CHANGED=1; fi',
+        'if [ "$DEPS_CHANGED" = "1" ]; then',
+        `  (cd "$WT" && timeout ${INSTALL_TIMEOUT_SEC} npm install --no-fund --no-audit > /tmp/cander-preflight-npm.log 2>&1) || { echo INSTALL_FAILED; tail -n 40 /tmp/cander-preflight-npm.log; exit 3; }`,
+        "fi",
+        'cd "$WT" && git rev-parse HEAD',
       ].join("\n"),
     ],
   });
   if (pin.exitCode !== 0) {
+    const out = `${pin.stdout || ""}\n${pin.stderr || ""}`;
+    if (/INSTALL_FAILED/.test(out)) {
+      return [`npm install failed during publish preflight: ${trimCmdOutput(out)}`];
+    }
     return [
-      `Could not pin sandbox to draft SHA ${sha.slice(0, 7)}: ${trimCmdOutput(pin.stderr || pin.stdout)}`,
+      `Could not check out draft SHA ${sha.slice(0, 7)} for preflight: ${trimCmdOutput(pin.stderr || pin.stdout)}`,
     ];
   }
   const head = (pin.stdout || "").trim().split(/\s+/).pop()?.toLowerCase() || "";
   if (head && head !== sha) {
     issues.push(
-      `Sandbox HEAD ${head.slice(0, 7)} ≠ publish SHA ${sha.slice(0, 7)} after reset.`,
+      `Preflight checkout HEAD ${head.slice(0, 7)} ≠ publish SHA ${sha.slice(0, 7)}.`,
     );
     return issues;
   }
 
-  const install = await runPrivilegedSandboxCommand({
-    sessionId,
-    userId,
-    cmd: "sh",
-    args: [
-      "-c",
-      `timeout ${INSTALL_TIMEOUT_SEC} npm install --no-fund --no-audit > /tmp/cander-preflight-npm.log 2>&1; echo EXIT:$?; tail -n 40 /tmp/cander-preflight-npm.log`,
-    ],
-  });
-  const installExit = /EXIT:(\d+)/.exec(install.stdout || "")?.[1];
-  if (installExit && installExit !== "0") {
-    return [
-      `npm install failed during publish preflight (exit ${installExit}): ${trimCmdOutput(install.stdout || install.stderr)}`,
-    ];
-  }
+  const cleanup = async () => {
+    try {
+      await runPrivilegedSandboxCommand({
+        sessionId,
+        userId,
+        cmd: "sh",
+        args: ["-c", `git worktree remove --force ${JSON.stringify(worktree)} 2>/dev/null || rm -rf ${JSON.stringify(worktree)}; git worktree prune 2>/dev/null || true`],
+      });
+    } catch {
+      /* best effort */
+    }
+  };
 
-  const tsc = await runPrivilegedSandboxCommand({
-    sessionId,
-    userId,
-    cmd: "sh",
-    args: [
-      "-c",
-      `if [ -f tsconfig.json ]; then timeout ${TSC_TIMEOUT_SEC} npx --yes tsc --noEmit > /tmp/cander-preflight-tsc.log 2>&1; echo EXIT:$?; tail -n 60 /tmp/cander-preflight-tsc.log; else echo EXIT:0; echo 'no tsconfig — skip tsc'; fi`,
-    ],
-  });
-  const tscExit = /EXIT:(\d+)/.exec(tsc.stdout || "")?.[1];
-  if (tscExit && tscExit !== "0") {
-    return [
-      `Typecheck failed (tsc --noEmit, exit ${tscExit}): ${trimCmdOutput(tsc.stdout || tsc.stderr)}`,
-    ];
-  }
+  try {
+    const tsc = await runPrivilegedSandboxCommand({
+      sessionId,
+      userId,
+      cmd: "sh",
+      args: [
+        "-c",
+        `cd ${JSON.stringify(worktree)} && if [ -f tsconfig.json ]; then timeout ${TSC_TIMEOUT_SEC} npx --yes tsc --noEmit > /tmp/cander-preflight-tsc.log 2>&1; echo EXIT:$?; tail -n 60 /tmp/cander-preflight-tsc.log; else echo EXIT:0; echo 'no tsconfig — skip tsc'; fi`,
+      ],
+    });
+    const tscExit = /EXIT:(\d+)/.exec(tsc.stdout || "")?.[1];
+    if (tscExit && tscExit !== "0") {
+      return [
+        `Typecheck failed (tsc --noEmit, exit ${tscExit}): ${trimCmdOutput(tsc.stdout || tsc.stderr)}`,
+      ];
+    }
 
-  const build = await runPrivilegedSandboxCommand({
-    sessionId,
-    userId,
-    cmd: "sh",
-    args: [
-      "-c",
-      `timeout ${NEXT_BUILD_TIMEOUT_SEC} npm run build > /tmp/cander-preflight-build.log 2>&1; echo EXIT:$?; tail -n 80 /tmp/cander-preflight-build.log`,
-    ],
-  });
-  const buildExit = /EXIT:(\d+)/.exec(build.stdout || "")?.[1];
-  if (buildExit && buildExit !== "0") {
-    return [
-      `next build failed during publish preflight (exit ${buildExit}): ${trimCmdOutput(build.stdout || build.stderr)}`,
-    ];
-  }
+    // A full `next build` doubles publish time and Vercel runs the exact same
+    // build (failures come back with the build log). Opt in when needed.
+    if (process.env.CANDER_PUBLISH_PREFLIGHT_BUILD === "1") {
+      const build = await runPrivilegedSandboxCommand({
+        sessionId,
+        userId,
+        cmd: "sh",
+        args: [
+          "-c",
+          `cd ${JSON.stringify(worktree)} && timeout ${NEXT_BUILD_TIMEOUT_SEC} npm run build > /tmp/cander-preflight-build.log 2>&1; echo EXIT:$?; tail -n 80 /tmp/cander-preflight-build.log`,
+        ],
+      });
+      const buildExit = /EXIT:(\d+)/.exec(build.stdout || "")?.[1];
+      if (buildExit && buildExit !== "0") {
+        return [
+          `next build failed during publish preflight (exit ${buildExit}): ${trimCmdOutput(build.stdout || build.stderr)}`,
+        ];
+      }
+    }
 
-  return issues;
+    return issues;
+  } finally {
+    await cleanup();
+  }
 }
 
 /**
