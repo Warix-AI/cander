@@ -5,6 +5,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execShell, fetchPreview, truncate } from "./tools.mjs";
+import { runFunctionalChecks } from "./functional.mjs";
 
 /**
  * Discover static App Router routes from the filesystem.
@@ -55,7 +56,7 @@ const PLACEHOLDER_RE =
   /lorem ipsum|your (headline|company|business|tagline|text) here|\bTODO\b|\bTBD\b|\[insert[^\]]*\]|\[(company|business|name|city|phone|email|address)[^\]]*\]|placeholder text|coming soon…?$/i;
 
 /**
- * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], expectedRoutes?: string[], mode?: "create"|"edit", projectKind?: "site"|"app", siteUrl?: string|null, timeoutMs?: number }} opts
+ * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], expectedRoutes?: string[], mode?: "create"|"edit", projectKind?: "site"|"app", siteUrl?: string|null, timeoutMs?: number, features?: string[], scopeRoutes?: string[]|null, functional?: boolean, deadlineMs?: number }} opts
  * @returns {Promise<{ ok: boolean, issues: string[], routes: string[], report: string }>}
  */
 export async function runAcceptance(opts) {
@@ -235,6 +236,28 @@ export async function runAcceptance(opts) {
   // 6. Source-level placeholder scan (catches non-rendered pages / components)
   const srcHits = scanSourcePlaceholders(repoDir);
   for (const hit of srcHits.slice(0, 5)) issues.push(`Placeholder in source: ${hit}`);
+
+  // 7. Functional checks in a real browser (console/hydration, overflow at
+  // 375/768/1280, mobile nav, links, forms, features). Only worth running once
+  // the static checks pass — otherwise the agent gets the cheap fixes first.
+  if (opts.functional !== false && !isApp && issues.length === 0 && results.some((r) => r.ok)) {
+    opts.log.emit("verify", isCreate ? "Testing the site in a browser (mobile, tablet, desktop)…" : "Checking the change in a browser…");
+    try {
+      const fx = await runFunctionalChecks({
+        devServerUrl: opts.devServerUrl,
+        routes: results.filter((r) => r.ok).map((r) => r.path),
+        log: opts.log,
+        mode: isCreate ? "create" : "edit",
+        projectKind: isApp ? "app" : "site",
+        features: opts.features || [],
+        scopeRoutes: opts.scopeRoutes || null,
+        deadlineMs: opts.deadlineMs ? Math.min(opts.deadlineMs - 60_000, Date.now() + 6 * 60_000) : undefined,
+      });
+      for (const issue of fx.issues.slice(0, 12)) issues.push(issue);
+    } catch (err) {
+      opts.log.emit("log", `Functional checks crashed: ${String(err?.message || err).slice(0, 200)}`);
+    }
+  }
 
   const report = [
     `Routes: ${results.map((r) => `${r.path}=${r.status}`).join(" ")}`,

@@ -346,6 +346,7 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       transport,
       twentyFirstEnabled,
       webSearch: isOpenAIWebSearchEnabled(),
+      functionalChecks: process.env.CANDER_FUNCTIONAL_CHECKS?.trim() !== "0",
       models,
       // Edits are small, targeted changes — low effort keeps them snappy.
       reasoning:

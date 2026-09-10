@@ -147,6 +147,12 @@ async function main() {
       mode,
       projectKind,
       siteUrl: config.siteUrl || null,
+      features: Array.isArray(config.projectSpec?.features) ? config.projectSpec.features : [],
+      // Edits: browser-test only what changed (page files → routes, else the
+      // routes the agent reported).
+      scopeRoutes: mode === "edit" ? routesFromWrittenPaths([...tools.writtenPaths], finish.routes) : null,
+      functional: config.functionalChecks !== false,
+      deadlineMs: budget.deadlineMs,
     });
     return result.ok
       ? { accept: true }
@@ -267,6 +273,21 @@ async function main() {
 
   await log.close();
   process.exit(0);
+}
+
+function routesFromWrittenPaths(paths, fallback) {
+  const routes = new Set();
+  for (const p of paths) {
+    const m = p.match(/^app\/(.*?)(?:\/)?page\.(tsx|jsx|ts|js|mdx)$/);
+    if (!m) continue;
+    const segs = m[1]
+      .split("/")
+      .filter((s) => s && !/^\(.*\)$/.test(s) && !s.startsWith("@"));
+    routes.add(`/${segs.join("/")}`.replace(/\/+$/, "") || "/");
+  }
+  if (!routes.size) for (const r of fallback || []) routes.add(r);
+  if (!routes.size) routes.add("/");
+  return [...routes];
 }
 
 async function waitForDevServer(url, log, maxMs = 180_000) {

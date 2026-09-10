@@ -28,6 +28,7 @@ Shared components to build (Header, MobileNav, Footer, Section, CTA band, Testim
 ## SEO
 Title template, meta description per page (one line each), canonical = SITE_URL + route, OG image concept (headline + brand colors for the generated 1200×630 image), Organization/LocalBusiness JSON-LD fields using SITE_URL.
 
+When a project spec is provided it is authoritative: use its pages, CTA, palette hex values, typography, component language (radius/shadow/density/buttons/cards/nav), layout and standing instructions exactly, and honour its inspiration notes (structure only). Fill only the gaps the user left to you.
 No code. No placeholders — invent realistic, specific details when the brief is thin, and mark them "(assumed)".`;
 
 const APP_PLANNER_INSTRUCTIONS = `You are Cander's product planner. Turn a short product request into a concrete, opinionated app plan a senior full-stack engineer will implement in one pass (Next.js App Router + Tailwind + Supabase when persistence/auth is needed).
@@ -245,15 +246,53 @@ function extractStructure(html) {
   ].join("\n\n");
 }
 
+/**
+ * Spec-driven component research on 21st.dev (single MCP proxy path).
+ * The visual direction + selected features + pages decide the categories;
+ * the planner's explicit `search:` lines are added on top. Results are a
+ * shortlist the coder adapts into the project's own tokens — never pasted.
+ */
 async function componentAgent(opts, plan) {
   if (!opts.twentyFirst) return null;
-  const queries = uniq(
-    [...plan.matchAll(/^\s*[-*]?\s*`?search:\s*([^`\n]+)`?\s*$/gim)].map((m) => m[1].trim()),
-  ).slice(0, 6);
+  const spec = opts.projectSpec || {};
+  const direction = String(spec.visual?.direction || "").toLowerCase();
+  const mood = /dark|premium|luxury/.test(direction)
+    ? "dark premium"
+    : /bold/.test(direction)
+      ? "bold modern"
+      : /warm|friendly/.test(direction)
+        ? "warm friendly"
+        : /editorial/.test(direction)
+          ? "editorial"
+          : /playful/.test(direction)
+            ? "playful colorful"
+            : "clean minimal";
+  const features = (Array.isArray(spec.features) ? spec.features : []).map((f) => String(f).toLowerCase());
+  const pages = (Array.isArray(spec.pages) ? spec.pages : []).map((p) => String(p.path || "").toLowerCase());
+  const layout = String(spec.visual?.layout || "").toLowerCase();
+
+  const categories = [
+    `${mood} navbar with mobile menu`,
+    /split/.test(layout) ? `${mood} split hero with image` : /bleed/.test(layout) ? `${mood} full-width hero background image` : `${mood} hero section`,
+    `${mood} features grid`,
+    `${mood} call to action band`,
+    `${mood} footer`,
+  ];
+  if (features.some((f) => /testimonial/.test(f))) categories.push(`${mood} testimonials`);
+  if (features.some((f) => /pricing/.test(f)) || pages.includes("/pricing")) categories.push(`${mood} pricing table`);
+  if (features.some((f) => /faq/.test(f))) categories.push(`${mood} faq accordion`);
+  if (features.some((f) => /contact form|booking|newsletter/.test(f))) categories.push(`${mood} contact form`);
+  if (features.some((f) => /gallery/.test(f)) || pages.includes("/work")) categories.push(`${mood} image gallery bento grid`);
+  if (pages.includes("/team")) categories.push(`${mood} team section`);
+  if (pages.includes("/blog") || features.some((f) => /blog/.test(f))) categories.push(`${mood} blog cards`);
+
+  const planQueries = [...plan.matchAll(/^\s*[-*]?\s*`?search:\s*([^`\n]+)`?\s*$/gim)].map((m) => m[1].trim());
+  const queries = uniq([...categories, ...planQueries]).slice(0, 10);
   if (!queries.length) return null;
   opts.log.emit("progress", `Searching 21st.dev for ${queries.length} section ideas…`);
   const lines = [];
   for (const q of queries) {
+    if (Date.now() > opts.deadlineMs - 3 * 60_000) break;
     const hits = await opts.twentyFirst.search(q, 3);
     if (!hits.length) continue;
     lines.push(`### ${q}`);
@@ -264,7 +303,7 @@ async function componentAgent(opts, plan) {
   if (!lines.length) return null;
   lines.push(
     "",
-    "Use get_component(id) to pull source for the ones that fit; adapt into components/ (fix imports, tokens, copy). Skip anything that needs unavailable packages.",
+    "Adaptation rules: get_component(id) for the ones that fit, then rewrite into components/ using THIS project's tokens (CSS variables from app/globals.css, the spec's radius/shadow/density/button style, its fonts and copy). Replace every hard-coded color/font/radius. Fix imports (components/ui/*, lib/utils cn), install only packages you actually use, and drop anything needing unavailable packages. Never paste a component verbatim.",
   );
   return lines.join("\n");
 }

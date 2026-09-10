@@ -1,4 +1,10 @@
 /**
+ * @deprecated Dormant V1 component path. Live website builds use the single
+ * 21st.dev MCP proxy path: builder/twenty-first.mjs → /api/build-jobs/[jobId]/twenty-first
+ * (server: lib/ai/build/twenty-first-mcp.ts). Kept only for the legacy
+ * tool-executor surface; do not extend.
+ */
+/**
  * 21st → analyze → resolve/install files → normalize → preflight.
  * Runs before Codex composes the site.
  */
