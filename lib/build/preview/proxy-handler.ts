@@ -6,6 +6,35 @@
 
 import type { ResolvedPreviewUpstream } from "@/lib/build/preview/upstream";
 import { rewriteHtmlForPreviewProxy } from "@/lib/build/preview/urls";
+import { injectPreviewBridge } from "@/lib/build/preview/bridge";
+import { PREVIEW_SESSION_COOKIE } from "@/lib/build/preview/preview-token";
+
+/** Strip Cander's own cookies before forwarding to the user's app. */
+function filterInboundCookies(header: string): string {
+  return header
+    .split(";")
+    .map((c) => c.trim())
+    .filter((c) => {
+      const name = c.split("=")[0]?.trim() || "";
+      if (name === PREVIEW_SESSION_COOKIE) return false;
+      // Supabase auth cookies never reach the sandbox app.
+      if (/^sb-/.test(name)) return false;
+      return Boolean(c);
+    })
+    .join("; ");
+}
+
+/**
+ * Upstream Set-Cookie for the draft host: drop Domain (the sandbox host is
+ * not ours) so the browser scopes the cookie to draft--{sub}.cander.app.
+ */
+function rewriteSetCookie(value: string): string {
+  return value
+    .split(";")
+    .map((p) => p.trim())
+    .filter((p) => p && !/^domain=/i.test(p))
+    .join("; ");
+}
 
 const HOP_BY_HOP = new Set([
   "connection",
@@ -40,6 +69,12 @@ export async function proxyToPreviewUpstream(opts: {
   rewritePrefix: string;
   /** Optional recovery when the sandbox port is dead. */
   onNotListening?: () => Promise<boolean>;
+  /**
+   * Host-proxy mode (draft--{sub}.cander.app): the iframe origin belongs to
+   * this one project, so the user's app may keep its own cookies. Off for the
+   * shared path proxy on the Cander origin.
+   */
+  passCookies?: boolean;
 }): Promise<Response> {
   if (opts.request.headers.get("upgrade")?.toLowerCase() === "websocket") {
     // Vercel/Node route handlers cannot reliably upgrade WS; client should refresh.
@@ -61,7 +96,13 @@ export async function proxyToPreviewUpstream(opts: {
     opts.request.headers.forEach((value, key) => {
       const lower = key.toLowerCase();
       if (HOP_BY_HOP.has(lower)) return;
-      if (lower === "cookie") return;
+      if (lower === "cookie") {
+        if (opts.passCookies) {
+          const filtered = filterInboundCookies(value);
+          if (filtered) headers.set("cookie", filtered);
+        }
+        return;
+      }
       if (lower === "authorization") return;
       if (lower.startsWith("x-forwarded-")) return;
       if (lower === "x-real-ip") return;
@@ -70,7 +111,7 @@ export async function proxyToPreviewUpstream(opts: {
     headers.set("host", new URL(opts.upstream.upstreamOrigin).host);
     headers.delete("accept-encoding");
     headers.delete("authorization");
-    headers.delete("cookie");
+    if (!opts.passCookies) headers.delete("cookie");
 
     const init: RequestInit = {
       method: opts.request.method,
@@ -157,6 +198,15 @@ export async function proxyToPreviewUpstream(opts: {
     if (lower === "x-frame-options") return;
     outHeaders.set(key, value);
   });
+  if (opts.passCookies) {
+    const setCookies =
+      typeof (upstreamRes.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie === "function"
+        ? (upstreamRes.headers as Headers & { getSetCookie: () => string[] }).getSetCookie()
+        : upstreamRes.headers.get("set-cookie")
+          ? [upstreamRes.headers.get("set-cookie") as string]
+          : [];
+    for (const c of setCookies) outHeaders.append("set-cookie", rewriteSetCookie(c));
+  }
   outHeaders.delete("x-frame-options");
   outHeaders.set(
     "content-security-policy",
@@ -170,9 +220,18 @@ export async function proxyToPreviewUpstream(opts: {
     upstreamRes.body
   ) {
     const html = await upstreamRes.text();
-    const rewritten = rewriteHtmlForPreviewProxy(html, opts.rewritePrefix);
+    const rewritten = injectPreviewBridge(rewriteHtmlForPreviewProxy(html, opts.rewritePrefix));
     outHeaders.delete("content-length");
     return new Response(rewritten, {
+      status: upstreamRes.status,
+      headers: outHeaders,
+    });
+  }
+  if (contentType.includes("text/html") && upstreamRes.body) {
+    // Host proxy (no prefix rewrite) still gets the shell bridge.
+    const html = await upstreamRes.text();
+    outHeaders.delete("content-length");
+    return new Response(injectPreviewBridge(html), {
       status: upstreamRes.status,
       headers: outHeaders,
     });

@@ -66,8 +66,11 @@ export function AppViewport({
       envStatus === "needs_repo" ||
       (envStatus === "ready" && !previewSrc));
 
-  const showLive =
-    !setupActive && envStatus === "ready" && Boolean(previewSrc);
+  // The iframe is kept mounted as long as we have a src, even while the
+  // runtime restarts — status overlays stack on top instead of unmounting the
+  // page (which would lose scroll, form state and client routing).
+  const showLive = !setupActive && Boolean(previewSrc);
+  const overlayDimsLive = showLive && envStatus !== "ready";
   const emptyCopy =
     summary?.trim() || "Start generating your website in chat.";
 
@@ -106,16 +109,24 @@ export function AppViewport({
               }
             />
           </div>
-        ) : showLive ? (
+        ) : null}
+        {!setupActive && showLive ? (
           <iframe
             title={`${name} preview`}
             src={previewSrc!}
+            data-cander-draft-preview=""
             className="absolute inset-0 h-full w-full border-0 bg-white"
             sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-modals"
             allow="clipboard-read; clipboard-write"
           />
-        ) : showEnvOverlay ? (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white px-6 text-center">
+        ) : null}
+        {setupActive ? null : showEnvOverlay || overlayDimsLive ? (
+          <div
+            className={cn(
+              "absolute inset-0 z-10 flex flex-col items-center justify-center px-6 text-center",
+              overlayDimsLive ? "bg-white/80 backdrop-blur-[2px]" : "bg-white",
+            )}
+          >
             <div className="relative flex h-11 w-11 shrink-0 items-center justify-center">
               {(envStatus === "starting" ||
                 envStatus === "needs_repo" ||
@@ -141,7 +152,7 @@ export function AppViewport({
               </button>
             ) : null}
           </div>
-        ) : cover ? (
+        ) : showLive ? null : cover ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={cover}

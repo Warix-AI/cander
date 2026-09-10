@@ -353,6 +353,31 @@ export function ProjectBrowserPanel({
     null,
   );
   const [draftPreviewUrl, setDraftPreviewUrl] = useState<string | null>(null);
+  const sandboxPreviewSrcRef = useRef<string | null>(null);
+  useEffect(() => {
+    sandboxPreviewSrcRef.current = sandboxPreviewSrc;
+  }, [sandboxPreviewSrc]);
+
+  // Healthy path-proxy URL → iframe src. In production this hands the iframe
+  // the project's draft host (own origin: cookies, forms, routing); a mounted
+  // draft-host document is kept as-is so restarts never blank the page.
+  const applyPreviewSrc = useCallback(
+    async (previewPath: string) => {
+      if (!projectId || !ctx.workspaceId) {
+        setSandboxPreviewSrc(previewPath);
+        return;
+      }
+      const { resolveDraftIframeSrc } = await import("@/lib/build/preview/client-iframe");
+      const next = await resolveDraftIframeSrc({
+        previewPath,
+        projectId,
+        workspaceId: ctx.workspaceId,
+        currentSrc: sandboxPreviewSrcRef.current,
+      });
+      setSandboxPreviewSrc(next);
+    },
+    [projectId, ctx.workspaceId],
+  );
 
   // A probe that fails because the sandbox VM is gone (410 after a rebuild,
   // 5xx while it restarts) is not a broken draft — bring it back automatically
@@ -392,7 +417,7 @@ export function ProjectBrowserPanel({
               const again = await probeDraftPreviewPath(result.previewPath);
               if (again.ok) {
                 setSandboxEnvStatus("ready");
-                setSandboxPreviewSrc(again.previewSrc);
+                void applyPreviewSrc(again.previewSrc);
               } else {
                 setSandboxEnvStatus("error");
                 setSandboxEnvMessage(again.message);
@@ -522,7 +547,7 @@ export function ProjectBrowserPanel({
           if (!probed.ok) {
             handleProbeFailure(probed);
           } else {
-            setSandboxPreviewSrc(probed.previewSrc);
+            void applyPreviewSrc(probed.previewSrc);
           }
         } else {
           setSandboxPreviewSrc(null);
@@ -607,7 +632,7 @@ export function ProjectBrowserPanel({
           if (!probed.ok) {
             handleProbeFailure(probed);
           } else {
-            setSandboxPreviewSrc(probed.previewSrc);
+            void applyPreviewSrc(probed.previewSrc);
           }
           const draftUrl = draftPreviewUrlForSubdomain(result.subdomain);
           setDraftPreviewUrl(draftUrl);
@@ -640,7 +665,7 @@ export function ProjectBrowserPanel({
             if (!probed.ok) {
               handleProbeFailure(probed);
             } else {
-              setSandboxPreviewSrc(probed.previewSrc);
+              void applyPreviewSrc(probed.previewSrc);
             }
             setDraftPreviewUrl(
               draftPreviewUrlForSubdomain(restarted.subdomain),
@@ -686,7 +711,7 @@ export function ProjectBrowserPanel({
             if (!probed.ok) {
               handleProbeFailure(probed);
             } else {
-              setSandboxPreviewSrc(probed.previewSrc);
+              void applyPreviewSrc(probed.previewSrc);
             }
             setDraftPreviewUrl(draftPreviewUrlForSubdomain(resumed.subdomain));
             return;
@@ -755,7 +780,10 @@ export function ProjectBrowserPanel({
             if (!probed.ok) {
               handleProbeFailure(probed);
             } else {
-              setSandboxPreviewSrc(probed.previewSrc);
+              await applyPreviewSrc(probed.previewSrc);
+              // Edits landed: refresh the page the user is on, in place.
+              const { reloadDraftPreview } = await import("@/lib/build/preview/client-iframe");
+              reloadDraftPreview();
             }
           } else {
             setSandboxPreviewSrc(null);
@@ -766,10 +794,9 @@ export function ProjectBrowserPanel({
           const draftUrl = draftPreviewUrlForSubdomain(result.subdomain);
           setDraftPreviewUrl(draftUrl);
         } catch (err) {
+          console.info("[cander:preview] reload failed", err instanceof Error ? err.message : err);
           setSandboxEnvStatus("error");
-          setSandboxEnvMessage(
-            err instanceof Error ? err.message : "Failed to start sandbox",
-          );
+          setSandboxEnvMessage("The preview didn’t start. Try again.");
         }
       })();
     };
@@ -779,7 +806,7 @@ export function ProjectBrowserPanel({
       window.removeEventListener("cander:website-preview-reload", onReload);
       window.removeEventListener("cander:website-setup-ready", onReload);
     };
-  }, [standalone, projectId, ctx.workspaceId]);
+  }, [standalone, projectId, ctx.workspaceId, applyPreviewSrc, handleProbeFailure]);
 
   const session =
     hydrated && key
@@ -2463,8 +2490,12 @@ export function ProjectBrowserPanel({
                   );
                 }}
                 onRefresh={() => {
-                  refreshPreview();
-                  runBrowserNav("reload");
+                  void import("@/lib/build/preview/client-iframe").then((m) => {
+                    if (!m.reloadDraftPreview()) {
+                      refreshPreview();
+                      runBrowserNav("reload");
+                    }
+                  });
                 }}
               />
             ) : null}
@@ -2882,7 +2913,7 @@ export function ProjectBrowserPanel({
                     setSandboxEnvMessage(probed.message);
                     setSandboxPreviewSrc(null);
                   } else {
-                    setSandboxPreviewSrc(probed.previewSrc);
+                    void applyPreviewSrc(probed.previewSrc);
                   }
                 } else {
                   setSandboxPreviewSrc(null);
@@ -2899,12 +2930,36 @@ export function ProjectBrowserPanel({
             })();
           }}
           onSandboxReload={() => {
-            if (sandboxPreviewSrc) {
-              setSandboxPreviewSrc(
-                sandboxPreviewSrc.replace(/\?_r=\d+/, "") + `?_r=${Date.now()}`,
-              );
-            }
-            refreshPreview();
+            void (async () => {
+              // Cheapest action first: reload the page inside the iframe. If
+              // the preview is not healthy, escalate to a runtime repair.
+              const { reloadDraftPreview } = await import("@/lib/build/preview/client-iframe");
+              if (sandboxEnvStatus === "ready" && sandboxPreviewSrc && reloadDraftPreview()) {
+                return;
+              }
+              if (!projectId || !ctx.workspaceId) return;
+              setSandboxEnvStatus("starting");
+              setSandboxEnvMessage(null);
+              const sandbox = await import("@/lib/api/project-sandbox-client");
+              const result = await sandbox.ensureProjectSandboxClient({
+                projectId,
+                workspaceId: ctx.workspaceId,
+                mode: "repair",
+              });
+              if (!result) return;
+              setSandboxEnvStatus(result.status);
+              setSandboxEnvMessage(result.message ?? null);
+              if (result.status === "ready" && result.hasPreviewUpstream && result.previewPath) {
+                const { probeDraftPreviewPath } = await import("@/lib/build/preview/client-health");
+                const probed = await probeDraftPreviewPath(result.previewPath, { bustCache: true });
+                if (probed.ok) {
+                  await applyPreviewSrc(probed.previewSrc);
+                  reloadDraftPreview();
+                } else {
+                  handleProbeFailure(probed);
+                }
+              }
+            })();
           }}
           />
                 </div>

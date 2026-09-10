@@ -128,6 +128,35 @@ export async function ensureProjectSandboxClient(opts: {
   }
 }
 
+/** Signed draft-host session for the preview iframe (null when unavailable). */
+export async function createPreviewSessionClient(opts: {
+  projectId: string;
+  workspaceId: string;
+  next?: string;
+}): Promise<{ url: string; host: string } | null> {
+  if (!isSupabaseConfigured()) return null;
+  const token = await authToken();
+  if (!token) return null;
+  try {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(opts.projectId)}/preview-session`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ workspaceId: opts.workspaceId, next: opts.next ?? "/" }),
+      },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => null)) as { url?: string | null; host?: string | null } | null;
+    return data?.url && data.host ? { url: data.url, host: data.host } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Lightweight status poll — does not reserve sandbox_runtime usage. */
 export async function getProjectSandboxStatusClient(opts: {
   projectId: string;
