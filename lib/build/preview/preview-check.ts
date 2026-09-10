@@ -1,14 +1,41 @@
 /**
  * Server-side draft preview health check (Phase 3 preview_check).
- * Runs curl inside the project sandbox and assesses with assessPreviewHealth.
+ * Bounded polling with grace for transient 5xx during cold compile.
  */
 
 import { BUILD_APP_PORT } from "@/lib/build/sandbox/constants";
 import { runPrivilegedSandboxCommand } from "@/lib/build/sandbox/privileged";
 import {
   assessPreviewHealth,
+  sanitizePreviewDiagnostics,
   type PreviewHealthResult,
 } from "@/lib/build/preview/health";
+import { nextUnhealthyStreakState } from "@/lib/build/preview/unhealthy-streak";
+
+async function collectDiagnostics(
+  sessionId: string,
+  userId: string,
+  bodyText: string,
+): Promise<string | null> {
+  let install = "";
+  try {
+    const log = await runPrivilegedSandboxCommand({
+      sessionId,
+      userId,
+      cmd: "sh",
+      args: [
+        "-c",
+        `tail -n 40 /tmp/cander-npm-install.log 2>/dev/null; echo '---'; tail -n 40 /tmp/cander-dev-server.log 2>/dev/null || true`,
+      ],
+    });
+    install = log.stdout || "";
+  } catch {
+    /* ignore */
+  }
+  return sanitizePreviewDiagnostics(
+    [install, bodyText.slice(0, 800)].filter(Boolean).join("\n"),
+  );
+}
 
 export async function runSandboxPreviewCheck(opts: {
   sessionId: string;
@@ -16,14 +43,24 @@ export async function runSandboxPreviewCheck(opts: {
   /** Max poll attempts (default ~90s). */
   attempts?: number;
   intervalMs?: number;
+  /**
+   * How many consecutive unhealthy 5xx / next_error probes before fail.
+   * Transient compile 500s often clear within a few attempts.
+   */
+  consecutiveUnhealthyLimit?: number;
+  /** Attempts that tolerate 5xx without counting toward the fail limit. */
+  graceAttempts?: number;
 }): Promise<PreviewHealthResult & { attempts: number }> {
   const attempts = opts.attempts ?? 30;
   const intervalMs = opts.intervalMs ?? 3000;
+  const consecutiveUnhealthyLimit = opts.consecutiveUnhealthyLimit ?? 3;
+  const graceAttempts = opts.graceAttempts ?? 8;
   let last: PreviewHealthResult = {
     ok: false,
     status: null,
     reason: "Preview check did not run.",
   };
+  let consecutiveUnhealthy = 0;
 
   for (let i = 0; i < attempts; i++) {
     const probe = await runPrivilegedSandboxCommand({
@@ -45,25 +82,31 @@ export async function runSandboxPreviewCheck(opts: {
     const codeStr = (nl >= 0 ? out.slice(0, nl) : out).trim();
     const body = nl >= 0 ? out.slice(nl + 1) : "";
     const status = /^\d{3}$/.test(codeStr) ? Number(codeStr) : 0;
-    last = assessPreviewHealth({ status, bodyText: body });
+    const diagnostics = await collectDiagnostics(
+      opts.sessionId,
+      opts.userId,
+      body,
+    );
+    last = assessPreviewHealth({ status, bodyText: body, diagnostics });
     if (last.ok) {
       return { ...last, attempts: i + 1 };
     }
-    // Hard fail on Next runtime error / 5xx once the server is up.
-    if (
-      last.status &&
-      last.status >= 400 &&
-      last.reason &&
-      /Next\.js runtime|HTTP 5\d\d|HTTP 4\d\d/.test(last.reason)
-    ) {
-      // Give cold boots a few more tries on 000/connection only.
-      if (last.status >= 400) {
-        // Keep polling briefly for 404 during boot; fail fast on 5xx / next_error.
-        if (last.status >= 500 || /Next\.js runtime/i.test(last.reason)) {
-          return { ...last, attempts: i + 1 };
-        }
-      }
+
+    const hardUnhealthy =
+      (last.status != null && last.status >= 500) ||
+      /Next\.js runtime/i.test(last.reason || "");
+    const streak = nextUnhealthyStreakState({
+      attemptIndex: i,
+      hardUnhealthy,
+      consecutiveUnhealthy,
+      graceAttempts,
+      consecutiveUnhealthyLimit,
+    });
+    consecutiveUnhealthy = streak.consecutiveUnhealthy;
+    if (streak.shouldFail) {
+      return { ...last, attempts: i + 1 };
     }
+
     await new Promise((r) => setTimeout(r, intervalMs));
   }
 

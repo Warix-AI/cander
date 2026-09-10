@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchWebsiteSetupBrief,
   type WebsiteSetupBriefClient,
 } from "@/lib/api/website-setup-client";
+import { websiteSetupPreviewGate } from "@/lib/hooks/website-setup-preview-gate";
 
 /**
  * Poll website setup brief for site projects (preview gating + progress ring).
  * Preview unlocks only when status is ready AND draft tip is runnable (has Next).
- * Stops polling on terminal ready+runnable / failed; backoff while building.
+ * Failed keeps chrome + Retry (does not permanently block). Stops polling on
+ * terminal ready+runnable; continues lightly after failed so Retry can recover.
  */
 export function useWebsiteSetupBrief(opts: {
   projectId: string | null | undefined;
@@ -61,23 +63,24 @@ export function useWebsiteSetupBrief(opts: {
     let cancelled = false;
     let timer: number | null = null;
 
-    const terminal =
-      brief?.status === "failed" ||
-      (brief?.status === "ready" && brief.draftRunnable === true);
+    const terminalReady =
+      brief?.status === "ready" && brief.draftRunnable === true;
 
     const tick = async () => {
       if (cancelled) return;
       const next = await refresh();
       if (cancelled) return;
       const done =
-        next?.status === "failed" ||
-        (next?.status === "ready" && next.draftRunnable === true);
+        next?.status === "ready" && next.draftRunnable === true;
       if (done) {
         backoffRef.current = 1000;
         return;
       }
       if (next?.status === "building") {
         backoffRef.current = Math.min(10_000, Math.floor(backoffRef.current * 1.5));
+      } else if (next?.status === "failed") {
+        // Slow poll so Retry / finalize can update without spinning hard.
+        backoffRef.current = 8_000;
       } else {
         backoffRef.current = 2500;
       }
@@ -86,7 +89,7 @@ export function useWebsiteSetupBrief(opts: {
       }, backoffRef.current);
     };
 
-    if (!terminal) {
+    if (!terminalReady) {
       timer = window.setTimeout(() => {
         void tick();
       }, brief?.status === "building" ? 1000 : 2500);
@@ -99,9 +102,23 @@ export function useWebsiteSetupBrief(opts: {
     };
   }, [refresh, isSite, opts.projectId, brief?.status, brief?.draftRunnable]);
 
-  const setupBlocksPreview =
-    isSite &&
-    (!brief || brief.status !== "ready" || brief.draftRunnable !== true);
+  const gate = useMemo(
+    () =>
+      websiteSetupPreviewGate({
+        isSite,
+        status: brief?.status,
+        draftRunnable: brief?.draftRunnable,
+      }),
+    [isSite, brief?.status, brief?.draftRunnable],
+  );
 
-  return { brief, refresh, setupBlocksPreview, isSite };
+  return {
+    brief,
+    refresh,
+    setupBlocksPreview: gate.setupBlocksPreview,
+    showSetupOverlay: gate.showSetupOverlay,
+    setupFailed: gate.setupFailed,
+    isPreviewReady: gate.isPreviewReady,
+    isSite,
+  };
 }

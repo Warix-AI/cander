@@ -5,42 +5,83 @@
 
 import { BUILD_APP_PORT } from "@/lib/build/sandbox/constants";
 import { runPrivilegedSandboxCommand } from "@/lib/build/sandbox/privileged";
+import {
+  isHealthyPreviewStatus,
+  isHttpPortOpen,
+  sanitizePreviewDiagnostics,
+} from "@/lib/build/preview/health";
 
-async function portResponds(
+async function probePort(
   sessionId: string,
   userId: string,
-): Promise<boolean> {
+): Promise<{ status: number; open: boolean; healthy: boolean }> {
   const result = await runPrivilegedSandboxCommand({
     sessionId,
     userId,
     cmd: "sh",
     args: [
       "-c",
-      // Only treat real app responses as ready — connection failures print 000.
       `code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:${BUILD_APP_PORT}/ 2>/dev/null || echo 000); echo "$code"`,
     ],
   });
   const code = (result.stdout || "").trim().split(/\s+/).pop() || "";
-  // Next may return 200/404/500 while booting routes — any HTTP code means the port is open.
-  return /^[1-5]\d\d$/.test(code);
+  const status = /^\d{3}$/.test(code) ? Number(code) : 0;
+  return {
+    status,
+    open: isHttpPortOpen(status),
+    healthy: isHealthyPreviewStatus(status),
+  };
+}
+
+async function readInstallLog(
+  sessionId: string,
+  userId: string,
+): Promise<string | null> {
+  try {
+    const log = await runPrivilegedSandboxCommand({
+      sessionId,
+      userId,
+      cmd: "sh",
+      args: [
+        "-c",
+        `tail -n 60 /tmp/cander-npm-install.log 2>/dev/null || true`,
+      ],
+    });
+    return sanitizePreviewDiagnostics(log.stdout);
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Ensure `npm run dev` (or next) is listening on BUILD_APP_PORT.
+ * Ensure `npm run dev` (or next) is listening with a healthy HTTP response.
+ * Does not treat HTTP 500 as ready. Fails closed when npm install fails.
  */
 export async function ensureSandboxDevServer(opts: {
   sessionId: string;
   userId: string;
-}): Promise<{ started: boolean; ready: boolean; message?: string }> {
+}): Promise<{
+  started: boolean;
+  ready: boolean;
+  message?: string;
+  diagnostics?: string | null;
+  httpStatus?: number | null;
+}> {
   try {
-    if (await portResponds(opts.sessionId, opts.userId)) {
-      return { started: false, ready: true, message: "Dev server already up" };
+    const probe = await probePort(opts.sessionId, opts.userId);
+    if (probe.healthy) {
+      return {
+        started: false,
+        ready: true,
+        message: "Dev server already up",
+        httpStatus: probe.status,
+      };
     }
   } catch {
     /* continue to start */
   }
 
-  const probe = await runPrivilegedSandboxCommand({
+  const scriptProbe = await runPrivilegedSandboxCommand({
     sessionId: opts.sessionId,
     userId: opts.userId,
     cmd: "sh",
@@ -49,7 +90,7 @@ export async function ensureSandboxDevServer(opts: {
       `if [ -f package.json ]; then node -e "const p=require('./package.json'); console.log((p.scripts&&(p.scripts.dev||p.scripts.start))||'')"; else echo ''; fi`,
     ],
   });
-  const script = (probe.stdout || "").trim();
+  const script = (scriptProbe.stdout || "").trim();
   if (!script) {
     return {
       started: false,
@@ -59,7 +100,32 @@ export async function ensureSandboxDevServer(opts: {
     };
   }
 
-  // Prefer detached runCommand so the process outlives this request.
+  // Install must succeed — do not swallow failures with || true.
+  const install = await runPrivilegedSandboxCommand({
+    sessionId: opts.sessionId,
+    userId: opts.userId,
+    cmd: "sh",
+    args: [
+      "-c",
+      `npm install --no-fund --no-audit > /tmp/cander-npm-install.log 2>&1; echo "__CANDER_NPM_EXIT:$?"`,
+    ],
+  });
+  const installOut = install.stdout || "";
+  const exitMatch = installOut.match(/__CANDER_NPM_EXIT:(\d+)/);
+  const installExit = exitMatch ? Number(exitMatch[1]) : 1;
+  if (installExit !== 0) {
+    const diagnostics = await readInstallLog(opts.sessionId, opts.userId);
+    return {
+      started: false,
+      ready: false,
+      message: "npm install failed — draft preview cannot start.",
+      diagnostics,
+      httpStatus: null,
+    };
+  }
+
+  const startCmd = `(npm run 2>/dev/null | grep -q " dev" && exec npm run dev -- --hostname 0.0.0.0 --port ${BUILD_APP_PORT}); (npm run 2>/dev/null | grep -q " start" && exec npm run start -- --hostname 0.0.0.0 --port ${BUILD_APP_PORT}); exec npx --yes next dev --hostname 0.0.0.0 --port ${BUILD_APP_PORT}`;
+
   try {
     const { resolveSandboxForSession } = await import(
       "@/lib/computer/session-runtime"
@@ -71,18 +137,7 @@ export async function ensureSandboxDevServer(opts: {
     if (resolved) {
       await resolved.sandbox.runCommand({
         cmd: "sh",
-        args: [
-          "-c",
-          `cd "$(pwd)"
-npm install --no-fund --no-audit >/tmp/cander-npm-install.log 2>&1 || true
-if npm run 2>/dev/null | grep -q " dev"; then
-  exec npm run dev -- --hostname 0.0.0.0 --port ${BUILD_APP_PORT}
-fi
-if npm run 2>/dev/null | grep -q " start"; then
-  exec npm run start -- --hostname 0.0.0.0 --port ${BUILD_APP_PORT}
-fi
-exec npx --yes next dev --hostname 0.0.0.0 --port ${BUILD_APP_PORT}`,
-        ],
+        args: ["-c", `cd "$(pwd)"\n${startCmd}`],
         detached: true,
       });
     } else {
@@ -92,8 +147,7 @@ exec npx --yes next dev --hostname 0.0.0.0 --port ${BUILD_APP_PORT}`,
         cmd: "sh",
         args: [
           "-c",
-          `(npm install --no-fund --no-audit >/tmp/cander-npm-install.log 2>&1 || true); ` +
-            `(npm run dev -- --hostname 0.0.0.0 --port ${BUILD_APP_PORT} >/tmp/cander-dev-server.log 2>&1 &) ; true`,
+          `(${startCmd}) >/tmp/cander-dev-server.log 2>&1 &`,
         ],
       });
     }
@@ -106,8 +160,7 @@ exec npx --yes next dev --hostname 0.0.0.0 --port ${BUILD_APP_PORT}`,
         cmd: "sh",
         args: [
           "-c",
-          `(npm install --no-fund --no-audit >/tmp/cander-npm-install.log 2>&1 || true); ` +
-            `(npm run dev -- --hostname 0.0.0.0 --port ${BUILD_APP_PORT} >/tmp/cander-dev-server.log 2>&1 &) ; true`,
+          `(${startCmd}) >/tmp/cander-dev-server.log 2>&1 &`,
         ],
       });
     } catch (fallbackErr) {
@@ -115,12 +168,20 @@ exec npx --yes next dev --hostname 0.0.0.0 --port ${BUILD_APP_PORT}`,
     }
   }
 
-  // npm install + Next boot can take a few minutes on a cold sandbox.
+  // Wait for a healthy (2xx/3xx) response — not merely an open port with 500.
+  let lastStatus: number | null = null;
   for (let i = 0; i < 90; i++) {
     await new Promise((r) => setTimeout(r, 2000));
     try {
-      if (await portResponds(opts.sessionId, opts.userId)) {
-        return { started: true, ready: true, message: "Dev server ready" };
+      const probe = await probePort(opts.sessionId, opts.userId);
+      lastStatus = probe.status;
+      if (probe.healthy) {
+        return {
+          started: true,
+          ready: true,
+          message: "Dev server ready",
+          httpStatus: probe.status,
+        };
       }
     } catch {
       /* retry */
@@ -135,10 +196,10 @@ exec npx --yes next dev --hostname 0.0.0.0 --port ${BUILD_APP_PORT}`,
       cmd: "sh",
       args: [
         "-c",
-        `tail -n 40 /tmp/cander-dev-server.log 2>/dev/null || tail -n 40 /tmp/cander-npm-install.log 2>/dev/null || true`,
+        `tail -n 40 /tmp/cander-dev-server.log 2>/dev/null; echo '---'; tail -n 40 /tmp/cander-npm-install.log 2>/dev/null || true`,
       ],
     });
-    hint = (log.stdout || "").trim().slice(0, 400);
+    hint = sanitizePreviewDiagnostics(log.stdout) || "";
   } catch {
     /* ignore */
   }
@@ -147,7 +208,9 @@ exec npx --yes next dev --hostname 0.0.0.0 --port ${BUILD_APP_PORT}`,
     started: true,
     ready: false,
     message: hint
-      ? `Preview is still starting. ${hint}`
+      ? `Preview is still starting or unhealthy (last HTTP ${lastStatus ?? "n/a"}).`
       : "Preview is still starting — Retry in a moment if it stays blank.",
+    diagnostics: hint || null,
+    httpStatus: lastStatus,
   };
 }

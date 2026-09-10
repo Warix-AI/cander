@@ -53,7 +53,13 @@ export async function sandboxWriteFile(opts: {
   path: string;
   content: string;
   persist?: boolean;
-}): Promise<{ sessionId: string; path: string; persisted?: boolean; draftSha?: string }> {
+}): Promise<{
+  sessionId: string;
+  path: string;
+  persisted?: boolean;
+  draftSha?: string;
+  outcome?: "committed" | "noop" | "partial" | "db_sync_failed";
+}> {
   const { sessionId } = await ensureBuildSandboxSession(opts);
   const rel = safeRepoRelativePath(opts.path);
   const provider = getComputerProvider();
@@ -67,11 +73,19 @@ export async function sandboxWriteFile(opts: {
       workspaceId: opts.workspaceId,
       message: `Cander: update ${rel}`,
     });
+    if (result.outcome === "db_sync_failed") {
+      throw new Error(
+        result.error ||
+          "GitHub tip advanced but database draft_sha sync failed.",
+      );
+    }
     return {
       sessionId,
       path: rel,
-      persisted: !result.noop,
+      persisted:
+        result.outcome === "committed" || result.outcome === "partial",
       draftSha: result.draftSha,
+      outcome: result.outcome,
     };
   }
   return { sessionId, path: rel };

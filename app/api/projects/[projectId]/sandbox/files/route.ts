@@ -136,7 +136,11 @@ export async function POST(request: Request, ctx: RouteCtx) {
           body.message?.trim() ||
           "Cander: persist draft from sandbox",
       });
-      return NextResponse.json({ ok: true, sessionId, ...result });
+      const ok = result.outcome !== "db_sync_failed";
+      return NextResponse.json(
+        { ok, sessionId, ...result },
+        { status: ok ? 200 : 409 },
+      );
     }
 
     return NextResponse.json({ error: "Unknown action." }, { status: 400 });

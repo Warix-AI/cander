@@ -25,6 +25,10 @@ export type FinalizeBuildReadyResult = {
   sessionId: string | null;
   reason?: string;
   previewStatus?: number | null;
+  /** Sanitized install / Next logs when preview is unhealthy. */
+  diagnostics?: string | null;
+  /** True when an automatic recreate/heal pass ran this call. */
+  healAttempted?: boolean;
 };
 
 export async function finalizeBuildReady(opts: {
@@ -198,6 +202,7 @@ export async function finalizeBuildReady(opts: {
 
   if (!health.ok) {
     // One automatic heal: ensure core App Router files, recreate sandbox, re-check.
+    const healAttempted = true;
     console.info("[cander:build-ready] preview unhealthy; auto-healing once", {
       projectId: opts.projectId,
       reason: health.reason,
@@ -277,6 +282,7 @@ export async function finalizeBuildReady(opts: {
             draftSha: healedSha,
             sessionId: healedSessionId,
             previewStatus: health.status,
+            healAttempted,
           };
         }
       }
@@ -287,6 +293,8 @@ export async function finalizeBuildReady(opts: {
       workspaceId: opts.workspaceId,
       phase: "failed",
     });
+    const failReason = health.reason || "Preview health check failed.";
+    const diagnostics = health.diagnostics || null;
     const brief = await loadWebsiteSetupBrief(opts.projectId, opts.workspaceId);
     await saveWebsiteSetupBrief({
       projectId: opts.projectId,
@@ -295,8 +303,9 @@ export async function finalizeBuildReady(opts: {
         ...brief,
         status: "failed",
         validationIssues: [
-          health.reason || "Preview health check failed.",
-        ],
+          failReason,
+          ...(diagnostics ? [diagnostics] : []),
+        ].slice(0, 3),
         updatedAt: new Date().toISOString(),
       },
       allowServerReady: false,
@@ -306,8 +315,10 @@ export async function finalizeBuildReady(opts: {
       phase: "failed",
       draftSha,
       sessionId: sandbox.sessionId,
-      reason: health.reason || "Preview health check failed.",
+      reason: failReason,
       previewStatus: health.status,
+      diagnostics,
+      healAttempted,
     };
   }
 

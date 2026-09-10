@@ -352,11 +352,13 @@ export function ProjectBrowserPanel({
   );
   const [draftPreviewUrl, setDraftPreviewUrl] = useState<string | null>(null);
 
-  const { brief: websiteBrief, setupBlocksPreview } = useWebsiteSetupBrief({
-    projectId,
-    workspaceId: ctx.workspaceId,
-    kind: entity?.kind,
-  });
+  const { brief: websiteBrief, setupBlocksPreview, showSetupOverlay, refresh: refreshWebsiteBrief } =
+    useWebsiteSetupBrief({
+      projectId,
+      workspaceId: ctx.workspaceId,
+      kind: entity?.kind,
+      enabled: entity?.kind === "site" || browserSpaceId === "build",
+    });
 
   // Build drafts: ensure infra/sandbox and point the pinned preview at draft--
   // (never load `{projectId}.cander.app`, which embeds the Cander login shell).
@@ -375,7 +377,20 @@ export function ProjectBrowserPanel({
       setSandboxEnvStatus(null);
       setSandboxEnvMessage(null);
       setSandboxPreviewSrc(null);
-      setDraftPreviewUrl(null);
+      // Keep/resolve draft host for address bar while setup/building.
+      void (async () => {
+        try {
+          const sandbox = await import("@/lib/api/project-sandbox-client");
+          const status = await sandbox.getProjectSandboxStatusClient({
+            projectId,
+            workspaceId: ctx.workspaceId,
+          });
+          const draftUrl = draftPreviewUrlForSubdomain(status?.subdomain);
+          if (draftUrl) setDraftPreviewUrl(draftUrl);
+        } catch {
+          /* ignore */
+        }
+      })();
       return;
     }
     // Keep ensuring draft sandbox even after publish — preview stays on draft.
@@ -1237,7 +1252,7 @@ export function ProjectBrowserPanel({
           : (liveUrl ??
             active.url ??
             previewUrlForProject(projectId ?? "project", entity?.publishedUrl));
-  // Site/app drafts: hide draft-- / unpublished hosts in the chrome until publish.
+  // Site/app drafts: show draft-- host in chrome (published preferred when set).
   const isBuildSiteOrApp =
     !standalone &&
     (entity?.kind === "site" ||
@@ -1249,7 +1264,8 @@ export function ProjectBrowserPanel({
       : isBuildSiteOrApp
         ? chromeUrlForBuildProject({
             publishedUrl: entity?.publishedUrl,
-            candidateUrl: navigationUrl,
+            candidateUrl:
+              draftPreviewUrl || navigationUrl || sandboxPreviewSrc || "",
           })
         : navigationUrl;
   const isMarkdownDocTab =
@@ -2699,52 +2715,101 @@ export function ProjectBrowserPanel({
           sandboxPreviewSrc={sandboxPreviewSrc}
           draftPreviewUrl={draftPreviewUrl}
           websiteSetup={
-            setupBlocksPreview
+            showSetupOverlay
               ? {
                   status: websiteBrief?.status ?? "setup",
                   completedSteps: websiteBrief?.completedSteps ?? 0,
+                  detail:
+                    websiteBrief?.validationIssues?.[0] ||
+                    sandboxEnvMessage ||
+                    null,
                 }
               : null
           }
           onSandboxRetry={() => {
-            if (!projectId || !ctx.workspaceId || setupBlocksPreview) return;
+            if (!projectId || !ctx.workspaceId) return;
             setSandboxEnvStatus("starting");
-            void import("@/lib/api/project-sandbox-client").then(async (m) => {
-              const result = await m.ensureProjectSandboxClient({
-                projectId,
-                workspaceId: ctx.workspaceId,
-                forceRestart: true,
-              });
-              if (!result) {
-                setSandboxEnvStatus("unavailable");
-                setSandboxEnvMessage("Sign in required.");
-                return;
-              }
-              setSandboxEnvStatus(result.status);
-              setSandboxEnvMessage(result.message ?? result.error ?? null);
-              if (
-                result.status === "ready" &&
-                result.hasPreviewUpstream &&
-                result.previewPath
-              ) {
-                const { probeDraftPreviewPath } = await import(
-                  "@/lib/build/preview/client-health"
+            setSandboxEnvMessage(null);
+            void (async () => {
+              try {
+                const { requestBuildReadyClient } = await import(
+                  "@/lib/api/build-ready-client"
                 );
-                const probed = await probeDraftPreviewPath(result.previewPath);
-                if (!probed.ok) {
+                const finalized = await requestBuildReadyClient({
+                  projectId,
+                  workspaceId: ctx.workspaceId,
+                });
+                await refreshWebsiteBrief();
+                if (finalized?.ok) {
+                  window.dispatchEvent(
+                    new CustomEvent("cander:website-setup-ready", {
+                      detail: { projectId },
+                    }),
+                  );
+                } else if (finalized && finalized.ok === false) {
                   setSandboxEnvStatus("error");
-                  setSandboxEnvMessage(probed.message);
-                  setSandboxPreviewSrc(null);
+                  setSandboxEnvMessage(
+                    [
+                      finalized.reason ||
+                        finalized.error ||
+                        "Preview finalization failed.",
+                      finalized.diagnostics,
+                    ]
+                      .filter(Boolean)
+                      .join("\n"),
+                  );
+                }
+                const m = await import("@/lib/api/project-sandbox-client");
+                const result = await m.ensureProjectSandboxClient({
+                  projectId,
+                  workspaceId: ctx.workspaceId,
+                  forceRestart: true,
+                });
+                if (!result) {
+                  setSandboxEnvStatus("unavailable");
+                  setSandboxEnvMessage("Sign in required.");
+                  return;
+                }
+                setSandboxEnvStatus(result.status);
+                setSandboxEnvMessage(
+                  result.message ??
+                    result.error ??
+                    (finalized && !finalized.ok
+                      ? finalized.reason || finalized.error || null
+                      : null),
+                );
+                const draftUrl = draftPreviewUrlForSubdomain(result.subdomain);
+                if (draftUrl) setDraftPreviewUrl(draftUrl);
+                if (
+                  result.status === "ready" &&
+                  result.hasPreviewUpstream &&
+                  result.previewPath &&
+                  finalized?.ok
+                ) {
+                  const { probeDraftPreviewPath } = await import(
+                    "@/lib/build/preview/client-health"
+                  );
+                  const probed = await probeDraftPreviewPath(result.previewPath);
+                  if (!probed.ok) {
+                    setSandboxEnvStatus("error");
+                    setSandboxEnvMessage(probed.message);
+                    setSandboxPreviewSrc(null);
+                  } else {
+                    setSandboxPreviewSrc(probed.previewSrc);
+                  }
                 } else {
-                  setSandboxPreviewSrc(probed.previewSrc);
+                  setSandboxPreviewSrc(null);
+                  if (result.status === "ready" && !result.hasPreviewUpstream) {
+                    setSandboxEnvStatus("starting");
+                  }
                 }
-              } else {
-                setSandboxPreviewSrc(null);
-                if (result.status === "ready" && !result.hasPreviewUpstream) {
-                  setSandboxEnvStatus("starting");
-                }
+              } catch (err) {
+                setSandboxEnvStatus("error");
+                setSandboxEnvMessage(
+                  err instanceof Error ? err.message : "Retry failed",
+                );
               }
-            });
+            })();
           }}
           onSandboxReload={() => {
             if (sandboxPreviewSrc) {
@@ -3081,6 +3146,7 @@ function ProjectBrowserBody({
   websiteSetup?: {
     status: "setup" | "building" | "ready" | "failed";
     completedSteps: number;
+    detail?: string | null;
   } | null;
   onSandboxRetry?: () => void;
   onSandboxReload?: () => void;

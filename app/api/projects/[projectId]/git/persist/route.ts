@@ -74,7 +74,29 @@ export async function POST(request: Request, ctx: RouteCtx) {
           ? body.deletePaths
           : undefined,
       });
-      return NextResponse.json({ ok: true, ...result });
+      const outcome =
+        result.dbSyncOk === false
+          ? ("db_sync_failed" as const)
+          : result.noop
+            ? ("noop" as const)
+            : ("committed" as const);
+      const ok = outcome !== "db_sync_failed";
+      return NextResponse.json(
+        {
+          ok,
+          ...result,
+          outcome,
+          paths: (Array.isArray(body.files) ? body.files : []).map((f) => f.path),
+          deletedPaths: Array.isArray(body.deletePaths) ? body.deletePaths : [],
+          skippedPaths: [],
+          error:
+            outcome === "db_sync_failed"
+              ? result.dbSyncError ||
+                "GitHub tip advanced but database draft_sha sync failed."
+              : undefined,
+        },
+        { status: ok ? 200 : 409 },
+      );
     }
 
     const { sessionId } = await ensureBuildSandboxSession({
@@ -89,7 +111,11 @@ export async function POST(request: Request, ctx: RouteCtx) {
       workspaceId,
       message,
     });
-    return NextResponse.json({ ok: true, sessionId, ...result });
+    const ok = result.outcome !== "db_sync_failed";
+    return NextResponse.json(
+      { ok, sessionId, ...result },
+      { status: ok ? 200 : 409 },
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

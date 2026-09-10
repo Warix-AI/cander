@@ -599,8 +599,33 @@ export async function runEditWebsitePipeline(opts: {
   });
 
   if (!committed?.ok) {
+    const syncFail =
+      committed?.outcome === "db_sync_failed" ||
+      /database draft_sha sync/i.test(committed?.error || "");
     return {
-      content: `Edits were applied in the sandbox but failed to commit to the draft tip: ${committed?.error || "unknown error"}. Try again.`,
+      content: syncFail
+        ? [
+            `Draft tip advanced on GitHub${committed?.draftSha ? ` (${committed.draftSha.slice(0, 7)})` : ""}, but database sync failed: ${committed?.error || "unknown"}.`,
+            "Preview may show a stale tip until sync recovers — production was not published.",
+          ].join("\n")
+        : `Edits were applied in the sandbox but failed to commit to the draft tip: ${committed?.error || "unknown error"}. Try again.`,
+      runtime: "cloud",
+      offline: false,
+      condensationOccurred: false,
+      aiChatId: request.aiChatId ?? null,
+      toolResults,
+    };
+  }
+
+  if (
+    (committed.outcome === "noop" || committed.noop) &&
+    pendingWrites.size > 0
+  ) {
+    return {
+      content: [
+        "Sandbox edits did not produce a draft commit (persist returned noop) even though file writes were requested.",
+        committed.error || "Nothing landed on cander/draft — try the edit again.",
+      ].join("\n"),
       runtime: "cloud",
       offline: false,
       condensationOccurred: false,
@@ -623,7 +648,9 @@ export async function runEditWebsitePipeline(opts: {
   if (!sync.ok) {
     return {
       content: [
-        `Draft edit committed${committed.draftSha ? ` (${committed.draftSha.slice(0, 7)})` : ""}, but preview sync failed: ${sync.detail}`,
+        committed.outcome === "partial"
+          ? `Partial draft commit${committed.draftSha ? ` (${committed.draftSha.slice(0, 7)})` : ""} (some paths skipped), but preview sync failed: ${sync.detail}`
+          : `Draft edit committed${committed.draftSha ? ` (${committed.draftSha.slice(0, 7)})` : ""}, but preview sync failed: ${sync.detail}`,
         "Ask me to retry the preview boot — production was not touched.",
       ].join("\n"),
       runtime: "cloud",
@@ -638,10 +665,18 @@ export async function runEditWebsitePipeline(opts: {
   if (!finalized?.ok) {
     const reason =
       finalized?.reason || finalized?.error || "Preview check failed.";
+    const diag = finalized?.diagnostics
+      ? `\nDiagnostics: ${finalized.diagnostics}`
+      : "";
+    const healLine = finalized?.healAttempted
+      ? "An automatic preview heal was attempted and did not recover."
+      : "Preview was not marked ready.";
     return {
       content: [
-        `Draft edit saved${committed.draftSha ? ` at ${committed.draftSha.slice(0, 7)}` : ""}, but preview check failed: ${reason}`,
-        "I already attempted an automatic preview heal. Production was not published.",
+        `Draft edit saved${committed.draftSha ? ` at ${committed.draftSha.slice(0, 7)}` : ""}${
+          committed.outcome === "partial" ? " (partial)" : ""
+        }, but preview check failed: ${reason}${diag}`,
+        `${healLine} Production was not published.`,
       ].join("\n"),
       runtime: "cloud",
       offline: false,
@@ -652,13 +687,25 @@ export async function runEditWebsitePipeline(opts: {
   }
 
   const fileCount =
-    committed.paths?.length || pendingWrites.size || 1;
+    committed.paths?.length ||
+    committed.deletedPaths?.length ||
+    pendingWrites.size ||
+    1;
+
+  const saveNote =
+    committed.outcome === "partial"
+      ? `Partially updated the **draft** (${fileCount} path${fileCount === 1 ? "" : "s"}; some files skipped${
+          committed.draftSha ? ` · ${committed.draftSha.slice(0, 7)}` : ""
+        }).`
+      : committed.outcome === "noop" || committed.noop
+        ? "No new draft changes to save (working tree already matched the tip)."
+        : `Updated the **draft** (${fileCount} file${fileCount === 1 ? "" : "s"}${
+            committed.draftSha ? ` · ${committed.draftSha.slice(0, 7)}` : ""
+          }).`;
 
   return {
     content: [
-      `Updated the **draft** (${fileCount} file${fileCount === 1 ? "" : "s"}${
-        committed.draftSha ? ` · ${committed.draftSha.slice(0, 7)}` : ""
-      }).`,
+      saveNote,
       "Preview should refresh on the draft tip. Production was not changed — use Publish when you want to go live.",
     ].join(" "),
     runtime: "cloud",

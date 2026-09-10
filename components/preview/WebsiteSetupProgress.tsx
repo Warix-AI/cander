@@ -36,12 +36,17 @@ export function WebsiteSetupProgress({
   mode = "setup",
   className,
   label,
+  onRetry,
+  detail,
 }: {
   /** 0–8 filled segments during setup */
   completedSteps?: number;
   mode?: "setup" | "building" | "failed";
   className?: string;
   label?: string;
+  /** Failed: re-run /build/ready finalization */
+  onRetry?: () => void;
+  detail?: string | null;
 }) {
   const filled = Math.max(0, Math.min(SEGMENTS, Math.floor(completedSteps)));
   const spinning = mode === "building";
@@ -115,11 +120,25 @@ export function WebsiteSetupProgress({
         {spinning
           ? "Building your draft…"
           : mode === "failed"
-            ? "Fix issues in chat, then try again."
+            ? "Draft preview failed to start."
             : filled >= SEGMENTS
               ? "Confirm in chat to build."
               : "Answer the setup questions in chat."}
       </p>
+      {mode === "failed" && detail ? (
+        <p className="mt-2 max-w-sm text-center text-[12.5px] leading-relaxed text-neutral-400">
+          {detail}
+        </p>
+      ) : null}
+      {mode === "failed" && onRetry ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-4 inline-flex h-9 items-center rounded-full bg-foreground px-4 text-[13px] font-medium text-background hover:opacity-90"
+        >
+          Retry
+        </button>
+      ) : null}
       <span className="sr-only">{aria}</span>
     </div>
   );

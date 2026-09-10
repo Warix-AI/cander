@@ -1,6 +1,6 @@
 /**
  * Persist sandbox working tree changes to GitHub cander/draft (Octokit).
- * Server-only.
+ * Server-only. Explicit outcomes for noop / partial / delete / db sync.
  */
 
 import { getComputerProvider } from "@/lib/computer/providers/vercel-sandbox-computer-provider";
@@ -10,55 +10,22 @@ import {
   type CommitDraftResult,
 } from "@/lib/build/git/commit-draft";
 import { runPrivilegedSandboxCommand } from "@/lib/build/sandbox/privileged";
+import {
+  parsePorcelainChanges,
+  shouldSkipPersistPath,
+  type PorcelainChange,
+} from "@/lib/build/sandbox/porcelain";
 
-const SKIP_PREFIXES = [
-  "node_modules/",
-  ".next/",
-  "dist/",
-  "build/",
-  ".git/",
-  ".turbo/",
-  "coverage/",
-  ".cache/",
-  ".codex/",
-  ".config/",
-  ".global/",
-  ".local/",
-  ".npm/",
-  ".vercel/",
-];
+export type { PorcelainChange };
+export { parsePorcelainChanges };
 
-const SKIP_NAMES = new Set([
-  ".npmrc",
-  ".sudo_as_admin_successful",
-  ".DS_Store",
-  "package-lock.json",
-]);
-
-function shouldSkipPath(path: string): boolean {
-  const base = path.split("/").pop() || path;
-  if (SKIP_NAMES.has(base) || SKIP_NAMES.has(path)) return true;
-  if (path === "node_modules" || path === ".next" || path === ".codex") return true;
-  return SKIP_PREFIXES.some(
-    (p) => path === p.slice(0, -1) || path.startsWith(p) || path === p.replace(/\/$/, ""),
-  );
-}
-
-function parsePorcelain(stdout: string): string[] {
-  const paths: string[] = [];
-  for (const line of stdout.split("\n")) {
-    if (!line.trim()) continue;
-    // XY PATH or XY ORIG -> PATH
-    const rest = line.slice(3).trim();
-    const path = rest.includes(" -> ")
-      ? rest.split(" -> ").pop()!.trim()
-      : rest.replace(/^"+|"+$/g, "");
-    if (path && !shouldSkipPath(path)) {
-      paths.push(path);
-    }
-  }
-  return [...new Set(paths)];
-}
+export type PersistSandboxOutcome = CommitDraftResult & {
+  paths: string[];
+  deletedPaths: string[];
+  skippedPaths: string[];
+  outcome: "committed" | "noop" | "partial" | "db_sync_failed";
+  error?: string;
+};
 
 /**
  * Read dirty files from the sandbox and commit them to the draft branch.
@@ -69,7 +36,7 @@ export async function persistSandboxToDraft(opts: {
   projectId: string;
   workspaceId: string;
   message: string;
-}): Promise<CommitDraftResult & { paths: string[] }> {
+}): Promise<PersistSandboxOutcome> {
   const status = await runPrivilegedSandboxCommand({
     sessionId: opts.sessionId,
     userId: opts.userId,
@@ -77,7 +44,6 @@ export async function persistSandboxToDraft(opts: {
     args: [
       "-c",
       `set -euo pipefail
-# Prefer repo root even if flatten missed; never run porcelain from a non-git cwd.
 if [ ! -d .git ]; then
   git_dir=$(find . -maxdepth 3 -type d -name .git 2>/dev/null | head -1 || true)
   if [ -n "\${git_dir}" ]; then
@@ -88,10 +54,10 @@ git status --porcelain -uall --untracked-files=normal 2>/dev/null || true`,
     ],
   });
 
-  let paths = parsePorcelain(status.stdout).filter((p) => !shouldSkipPath(p));
+  let { writes: paths, deletes: deletePaths } = parsePorcelainChanges(
+    status.stdout || "",
+  );
 
-  // Expand directories (e.g. `?? app/`) into file paths — readFile on a dir hangs/fails.
-  const needsExpand = paths.some((p) => p.endsWith("/") || !p.includes("."));
   if (paths.length > 0) {
     const expand = await runPrivilegedSandboxCommand({
       sessionId: opts.sessionId,
@@ -104,11 +70,14 @@ if [ ! -d .git ]; then
   git_dir=$(find . -maxdepth 3 -type d -name .git 2>/dev/null | head -1 || true)
   if [ -n "$git_dir" ]; then cd "$(dirname "$git_dir")"; fi
 fi
-# List changed/untracked files only (not dirs), capped.
 git status --porcelain -uall | while IFS= read -r line; do
   [ -z "$line" ] && continue
+  xy=$(echo "$line" | cut -c1-2)
   rest=$(echo "$line" | cut -c4-)
   path=$(echo "$rest" | sed 's/ -> /\\n/' | tail -n1 | tr -d '"')
+  case "$xy" in
+    D*|?D|*D) continue ;;
+  esac
   if [ -d "$path" ]; then
     find "$path" -type f ! -path '*/node_modules/*' ! -path '*/.next/*' ! -path '*/.git/*' 2>/dev/null
   elif [ -f "$path" ]; then
@@ -121,11 +90,10 @@ done | head -n 100`,
       .split("\n")
       .map((l) => l.trim())
       .filter(Boolean)
-      .filter((p) => !shouldSkipPath(p));
+      .filter((p) => !shouldSkipPersistPath(p));
     if (expanded.length > 0) paths = [...new Set(expanded)];
   }
 
-  // Cap accidental huge trees.
   if (paths.length > 100) {
     paths = paths
       .filter(
@@ -137,24 +105,30 @@ done | head -n 100`,
       .slice(0, 100);
   }
 
-  // If git reports nothing but we may have written outside index, fall back to empty.
-  if (paths.length === 0) {
+  if (paths.length === 0 && deletePaths.length === 0) {
     const result = await commitFilesToDraftBranch({
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
       message: opts.message,
       files: [],
     });
-    return { ...result, paths: [] };
+    return {
+      ...result,
+      paths: [],
+      deletedPaths: [],
+      skippedPaths: [],
+      outcome: "noop",
+      error: "No dirty files in the sandbox working tree to commit.",
+    };
   }
 
   const provider = getComputerProvider();
   const files: { path: string; content: string }[] = [];
+  const skippedPaths: string[] = [];
 
   for (const path of paths) {
     try {
       const rel = safeRepoRelativePath(path);
-      // Try cwd-relative then /workspace/
       let content: string;
       try {
         content = await provider.readFile(opts.sessionId, opts.userId, rel);
@@ -168,7 +142,37 @@ done | head -n 100`,
       files.push({ path: rel, content });
     } catch (err) {
       console.warn("[cander] skip persist path", path, err);
+      skippedPaths.push(path);
     }
+  }
+
+  const safeDeletes = deletePaths
+    .map((p) => {
+      try {
+        return safeRepoRelativePath(p);
+      } catch {
+        skippedPaths.push(p);
+        return null;
+      }
+    })
+    .filter((p): p is string => Boolean(p));
+
+  if (files.length === 0 && safeDeletes.length === 0) {
+    return {
+      draftSha: "",
+      draftBranch: "cander/draft",
+      fullName: "",
+      filesCommitted: 0,
+      noop: true,
+      paths: [],
+      deletedPaths: [],
+      skippedPaths,
+      outcome: "noop",
+      error:
+        skippedPaths.length > 0
+          ? `Could not read changed files: ${skippedPaths.slice(0, 5).join(", ")}`
+          : "Nothing to commit.",
+    };
   }
 
   const committed = await commitFilesToDraftBranch({
@@ -176,9 +180,9 @@ done | head -n 100`,
     workspaceId: opts.workspaceId,
     message: opts.message,
     files,
+    deletePaths: safeDeletes,
   });
 
-  // Align sandbox index with remote tip (best-effort; no credentials left behind).
   try {
     await runPrivilegedSandboxCommand({
       sessionId: opts.sessionId,
@@ -193,5 +197,26 @@ done | head -n 100`,
     /* optional */
   }
 
-  return { ...committed, paths: files.map((f) => f.path) };
+  const partial = skippedPaths.length > 0;
+  const outcome =
+    committed.dbSyncOk === false
+      ? "db_sync_failed"
+      : partial
+        ? "partial"
+        : "committed";
+
+  return {
+    ...committed,
+    paths: files.map((f) => f.path),
+    deletedPaths: safeDeletes,
+    skippedPaths,
+    outcome,
+    error:
+      committed.dbSyncOk === false
+        ? committed.dbSyncError ||
+          "GitHub tip advanced but database draft_sha sync failed."
+        : partial
+          ? `Committed ${files.length} file(s); skipped ${skippedPaths.length}.`
+          : undefined,
+  };
 }

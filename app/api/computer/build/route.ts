@@ -242,9 +242,31 @@ export async function POST(request: Request) {
       actualUnits: 1,
     });
 
-    const resultSummary = persisted.noop
-      ? `Environment ready${written ? ` (${written} file writes)` : ""}${built ? "; build ok" : ""}. No new git changes to push.`
-      : `Draft saved (${persisted.filesCommitted} file${persisted.filesCommitted === 1 ? "" : "s"}) → ${persisted.draftBranch}@${persisted.draftSha.slice(0, 7)}.`;
+    const resultSummary =
+      persisted.outcome === "db_sync_failed"
+        ? `GitHub tip advanced${persisted.draftSha ? ` (${persisted.draftSha.slice(0, 7)})` : ""} but database draft sync failed.`
+        : persisted.outcome === "noop" || persisted.noop
+          ? `Environment ready${written ? ` (${written} file writes)` : ""}${built ? "; build ok" : ""}. No new git changes to push.`
+          : persisted.outcome === "partial"
+            ? `Partial draft save (${persisted.filesCommitted} file${persisted.filesCommitted === 1 ? "" : "s"}; some skipped) → ${persisted.draftBranch}@${persisted.draftSha.slice(0, 7)}.`
+            : `Draft saved (${persisted.filesCommitted} file${persisted.filesCommitted === 1 ? "" : "s"}) → ${persisted.draftBranch}@${persisted.draftSha.slice(0, 7)}.`;
+
+    if (persisted.outcome === "db_sync_failed") {
+      return NextResponse.json(
+        {
+          ok: false,
+          sessionId,
+          draftSha: persisted.draftSha || null,
+          filesCommitted: persisted.filesCommitted,
+          written,
+          built,
+          outcome: persisted.outcome,
+          error: persisted.error,
+          resultSummary,
+        },
+        { status: 409 },
+      );
+    }
 
     return NextResponse.json({
       ok: true,
@@ -253,6 +275,7 @@ export async function POST(request: Request) {
       filesCommitted: persisted.filesCommitted,
       written,
       built,
+      outcome: persisted.outcome,
       resultSummary,
     });
   } catch (err) {

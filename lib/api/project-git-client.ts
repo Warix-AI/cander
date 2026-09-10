@@ -270,7 +270,11 @@ export async function persistProjectSandboxDraftClient(opts: {
   ok: boolean;
   draftSha?: string;
   paths?: string[];
+  deletedPaths?: string[];
+  skippedPaths?: string[];
   noop?: boolean;
+  outcome?: "committed" | "noop" | "partial" | "db_sync_failed";
+  dbSyncOk?: boolean;
   error?: string;
 } | null> {
   if (!isSupabaseConfigured()) return null;
@@ -296,20 +300,39 @@ export async function persistProjectSandboxDraftClient(opts: {
       ok?: boolean;
       draftSha?: string;
       paths?: string[];
+      deletedPaths?: string[];
+      skippedPaths?: string[];
       noop?: boolean;
+      outcome?: "committed" | "noop" | "partial" | "db_sync_failed";
+      dbSyncOk?: boolean;
       error?: string;
     };
-    if (!res.ok || data.ok === false) {
+    if (!res.ok || data.ok === false || data.outcome === "db_sync_failed") {
       return {
         ok: false,
-        error: data.error || `sandbox persist failed (${res.status})`,
+        draftSha: data.draftSha,
+        paths: data.paths,
+        deletedPaths: data.deletedPaths,
+        skippedPaths: data.skippedPaths,
+        noop: data.noop,
+        outcome: data.outcome || "db_sync_failed",
+        dbSyncOk: false,
+        error:
+          data.error ||
+          (data.outcome === "db_sync_failed"
+            ? "GitHub tip advanced but database draft_sha sync failed."
+            : `sandbox persist failed (${res.status})`),
       };
     }
     return {
       ok: true,
       draftSha: data.draftSha,
       paths: data.paths,
+      deletedPaths: data.deletedPaths,
+      skippedPaths: data.skippedPaths,
       noop: data.noop,
+      outcome: data.outcome || (data.noop ? "noop" : "committed"),
+      dbSyncOk: data.dbSyncOk !== false,
     };
   } catch (err) {
     return {

@@ -482,17 +482,19 @@ export async function ensureProjectSandbox(opts: {
     const {
       sandboxMatchesProjectTip,
     } = await import("@/lib/build/build-phase");
-    if (
-      tipSha &&
-      sandboxSha &&
-      !sandboxMatchesProjectTip({
-        sandboxDraftSha: sandboxSha,
-        projectDraftSha: tipSha,
-      })
-    ) {
+    // Empty sandbox SHA cannot be treated as matching — recreate so deleted
+    // / renamed tip files are not omitted from a stale working tree.
+    const tipMismatch =
+      Boolean(tipSha) &&
+      (!sandboxSha ||
+        !sandboxMatchesProjectTip({
+          sandboxDraftSha: sandboxSha,
+          projectDraftSha: tipSha,
+        }));
+    if (tipMismatch) {
       console.info("[cander:sandbox] tip SHA mismatch; recreating", {
         projectId: opts.projectId,
-        sandboxSha: sandboxSha.slice(0, 12),
+        sandboxSha: (sandboxSha || "").slice(0, 12) || "(empty)",
         tipSha: tipSha.slice(0, 12),
       });
       try {

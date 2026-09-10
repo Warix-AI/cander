@@ -13,6 +13,8 @@ export type BuildReadyClientResult = {
   reason?: string;
   error?: string;
   previewStatus?: number | null;
+  diagnostics?: string | null;
+  healAttempted?: boolean;
 };
 
 async function authToken() {

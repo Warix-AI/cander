@@ -50,7 +50,8 @@ export function isDraftPreviewUrl(url: string | null | undefined): boolean {
 
 /**
  * Address-bar value for Build projects.
- * Draft/sandbox hosts stay hidden until the project is published.
+ * Prefer the published host when available; otherwise show the draft host
+ * (starting / failed / live) so the chrome matches preview status.
  */
 export function chromeUrlForBuildProject(opts: {
   publishedUrl?: string | null;
@@ -62,14 +63,6 @@ export function chromeUrlForBuildProject(opts: {
   }
   const candidate = opts.candidateUrl?.trim() || "";
   if (!candidate || candidate === "about:blank") return "";
-  if (isDraftPreviewUrl(candidate)) return "";
-  // Unpublished production-looking hosts also stay hidden.
-  try {
-    const host = new URL(candidate).hostname.toLowerCase();
-    if (host.endsWith(".cander.app") && !published) return "";
-  } catch {
-    /* ignore */
-  }
   return candidate;
 }
 

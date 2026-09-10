@@ -42,6 +42,7 @@ export function AppViewport({
   websiteSetup?: {
     status: "setup" | "building" | "ready" | "failed";
     completedSteps: number;
+    detail?: string | null;
   } | null;
 }) {
   const { viewport, previewKey, project } = useApp();
@@ -87,6 +88,26 @@ export function AppViewport({
             ? "Draft failed to start"
             : "Environment failed to start";
 
+  const draftBadgeLabel = showLive
+    ? draftHost
+      ? `Draft · ${draftHost}`
+      : "Draft preview"
+    : websiteSetup?.status === "failed" || envStatus === "error"
+      ? draftHost
+        ? `Failed · ${draftHost}`
+        : "Draft failed"
+      : envStatus === "starting" ||
+          websiteSetup?.status === "building" ||
+          websiteSetup?.status === "setup"
+        ? draftHost
+          ? `Starting · ${draftHost}`
+          : "Draft starting…"
+        : draftHost
+          ? `Draft · ${draftHost}`
+          : null;
+
+  const showDraftBadge = Boolean(draftBadgeLabel);
+
   return (
     <div
       className={cn(
@@ -115,6 +136,10 @@ export function AppViewport({
                   : websiteSetup.status === "failed"
                     ? "failed"
                     : "setup"
+              }
+              detail={websiteSetup.detail}
+              onRetry={
+                websiteSetup.status === "failed" ? onRetryEnv : undefined
               }
             />
           </div>
@@ -146,7 +171,9 @@ export function AppViewport({
                 {envMessage}
               </p>
             ) : null}
-            {(envStatus === "error" || envStatus === "unavailable") &&
+            {(envStatus === "error" ||
+              envStatus === "unavailable" ||
+              envStatus === "starting") &&
             onRetryEnv ? (
               <button
                 type="button"
@@ -184,12 +211,12 @@ export function AppViewport({
               Published · {liveHost}
             </span>
           ) : null}
-          {showLive ? (
+          {showDraftBadge ? (
             <>
               <span className="min-w-0 truncate rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium tracking-[-0.01em] text-white/90">
-                {draftHost ? `Draft · ${draftHost}` : "Draft preview"}
+                {draftBadgeLabel}
               </span>
-              {onReloadPreview ? (
+              {showLive && onReloadPreview ? (
                 <button
                   type="button"
                   onClick={onReloadPreview}

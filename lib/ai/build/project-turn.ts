@@ -1565,8 +1565,14 @@ async function runCreateWebsitePipeline(opts: {
       }
       return {
         content: [
-          `Draft was written, but preview check failed before ready: ${reason}`,
-          "I already attempted an automatic scaffold/preview heal. Try Build once more if preview is still blank.",
+          `Draft was written, but preview check failed before ready: ${reason}${
+            finalized?.diagnostics
+              ? `\nDiagnostics: ${finalized.diagnostics}`
+              : ""
+          }`,
+          finalized?.healAttempted
+            ? "An automatic scaffold/preview heal was attempted and did not recover. Use Retry on the draft preview, or ask me to rebuild."
+            : "Preview was not marked ready. Use Retry on the draft preview, or ask me to rebuild.",
         ].join("\n"),
         runtime: "cloud",
         offline: false,

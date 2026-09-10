@@ -65,7 +65,12 @@ export function BuildPanel() {
   }>({ branch: null, sha: null, fullName: null });
 
   const entityKind = entityProject?.kind ?? null;
-  const { brief: websiteBrief, setupBlocksPreview } = useWebsiteSetupBrief({
+  const {
+    brief: websiteBrief,
+    setupBlocksPreview,
+    showSetupOverlay,
+    refresh: refreshWebsiteBrief,
+  } = useWebsiteSetupBrief({
     projectId,
     workspaceId: ctx.workspaceId,
     kind: entityKind,
@@ -108,6 +113,48 @@ export function BuildPanel() {
         setPreviewSrc(null);
       }
     });
+  };
+
+  const retryFinalization = () => {
+    if (!projectId || !ctx.workspaceId) return;
+    setEnvStatus("starting");
+    setEnvMessage(null);
+    void (async () => {
+      try {
+        const { requestBuildReadyClient } = await import(
+          "@/lib/api/build-ready-client"
+        );
+        const finalized = await requestBuildReadyClient({
+          projectId,
+          workspaceId: ctx.workspaceId,
+        });
+        await refreshWebsiteBrief();
+        if (finalized?.ok) {
+          window.dispatchEvent(
+            new CustomEvent("cander:website-setup-ready", {
+              detail: { projectId },
+            }),
+          );
+          ensureSandbox(true);
+          return;
+        }
+        setEnvStatus("error");
+        setEnvMessage(
+          [
+            finalized?.reason ||
+              finalized?.error ||
+              "Preview finalization failed.",
+            finalized?.diagnostics,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        );
+        ensureSandbox(true);
+      } catch (err) {
+        setEnvStatus("error");
+        setEnvMessage(err instanceof Error ? err.message : "Retry failed");
+      }
+    })();
   };
 
   // Behind the existing Build open flow: ensure Warix repo + sandbox (idempotent).
@@ -310,17 +357,23 @@ export function BuildPanel() {
               }
               envStatus={envStatus}
               envMessage={envMessage}
-              onRetryEnv={() => ensureSandbox(true)}
+              onRetryEnv={
+                showSetupOverlay && websiteBrief?.status === "failed"
+                  ? retryFinalization
+                  : () => ensureSandbox(true)
+              }
               previewSrc={previewSrc}
               draftPreviewUrl={
                 previewUrl && previewUrl.includes("draft--") ? previewUrl : null
               }
               publishedUrl={publishedUrl}
               websiteSetup={
-                setupBlocksPreview
+                showSetupOverlay
                   ? {
                       status: websiteBrief?.status ?? "setup",
                       completedSteps: websiteBrief?.completedSteps ?? 0,
+                      detail:
+                        websiteBrief?.validationIssues?.[0] || envMessage || null,
                     }
                   : null
               }

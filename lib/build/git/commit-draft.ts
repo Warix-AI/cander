@@ -23,6 +23,9 @@ export type CommitDraftResult = {
   fullName: string;
   filesCommitted: number;
   noop: boolean;
+  /** False when GitHub advanced but projects.draft_sha / revision pointer sync failed. */
+  dbSyncOk?: boolean;
+  dbSyncError?: string;
 };
 
 export { safeRepoRelativePath };
@@ -227,15 +230,23 @@ export async function commitFilesToDraftBranch(opts: {
   });
 
   const draftSha = newCommit.sha;
-  const { syncProjectDraftTipToSha } = await import(
+  const { syncProjectDraftTipToSha, reconcileDraftTipPointer } = await import(
     "@/lib/build/git/revision-sync"
   );
-  await syncProjectDraftTipToSha({
+  let sync = await syncProjectDraftTipToSha({
     projectId: opts.projectId,
     workspaceId: opts.workspaceId,
     draftSha,
     draftBranch,
   });
+  if (!sync.ok) {
+    sync = await reconcileDraftTipPointer({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+      githubDraftSha: draftSha,
+      draftBranch,
+    });
+  }
 
   return {
     draftSha,
@@ -243,5 +254,7 @@ export async function commitFilesToDraftBranch(opts: {
     fullName,
     filesCommitted: files.length + safeDeletes.length,
     noop: false,
+    dbSyncOk: sync.ok,
+    dbSyncError: sync.ok ? undefined : sync.error,
   };
 }

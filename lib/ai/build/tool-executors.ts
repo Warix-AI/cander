@@ -321,9 +321,9 @@ export async function executeBuildTool(opts: {
       };
     }
 
-    if (name === "computer.files.write" || name === "computer.files.patch") {
+    if (name === "computer.files.write") {
       const path = String(args.path ?? "").trim();
-      const content = String(args.content ?? args.patch ?? "");
+      const content = String(args.content ?? "");
       if (!path) return { name, ok: false, output: "path required" };
       const result = await sandboxFilesApi({
         projectId,
@@ -345,6 +345,66 @@ export async function executeBuildTool(opts: {
       };
     }
 
+    if (name === "computer.files.patch") {
+      const path = String(args.path ?? "").trim();
+      const patchText = String(args.patch ?? args.content ?? "");
+      if (!path) return { name, ok: false, output: "path required" };
+      if (!patchText.trim()) {
+        return { name, ok: false, output: "patch content required" };
+      }
+      // Never write a unified diff as the whole file — apply against existing.
+      const looksLikeDiff =
+        /^diff --git /m.test(patchText) ||
+        /^--- /m.test(patchText) ||
+        /^\+\+\+ /m.test(patchText) ||
+        /^@@ /m.test(patchText);
+      let nextContent = patchText;
+      if (looksLikeDiff) {
+        const existing = await sandboxFilesApi({
+          projectId,
+          workspaceId,
+          body: { action: "read", path },
+        });
+        if (!existing.ok) {
+          return {
+            name,
+            ok: false,
+            output: `Cannot patch ${path}: ${existing.output}`,
+          };
+        }
+        const base = String(existing.data?.content ?? "");
+        const { applyUnifiedDiff } = await import(
+          "@/lib/build/sandbox/apply-unified-diff"
+        );
+        const applied = applyUnifiedDiff(base, patchText);
+        if (!applied.ok) {
+          return {
+            name,
+            ok: false,
+            output: `Patch failed for ${path}: ${applied.error}`,
+          };
+        }
+        nextContent = applied.content;
+      }
+      const result = await sandboxFilesApi({
+        projectId,
+        workspaceId,
+        body: {
+          action: "write",
+          path,
+          content: nextContent,
+          persist: args.persist !== false,
+        },
+      });
+      return {
+        name,
+        ok: result.ok,
+        output: result.ok
+          ? `Patched ${path}${result.data?.draftSha ? ` → draft ${String(result.data.draftSha).slice(0, 7)}` : ""}`
+          : result.output,
+        data: result.data,
+      };
+    }
     if (name === "computer.files.read") {
       const path = String(args.path ?? "").trim();
       if (!path) return { name, ok: false, output: "path required" };
@@ -385,12 +445,22 @@ export async function executeBuildTool(opts: {
         workspaceId,
         body: { action: "persist" },
       });
+      const outcome = String(result.data?.outcome || "");
+      const ok =
+        result.ok && outcome !== "db_sync_failed";
       return {
         name,
-        ok: result.ok,
-        output: result.ok
-          ? `Persisted draft${result.data?.draftSha ? ` ${String(result.data.draftSha).slice(0, 7)}` : ""}`
-          : result.output,
+        ok,
+        output: ok
+          ? outcome === "noop"
+            ? "Persist noop — no dirty draft files."
+            : outcome === "partial"
+              ? `Partial persist${result.data?.draftSha ? ` ${String(result.data.draftSha).slice(0, 7)}` : ""}`
+              : `Persisted draft${result.data?.draftSha ? ` ${String(result.data.draftSha).slice(0, 7)}` : ""}`
+          : result.output ||
+            (outcome === "db_sync_failed"
+              ? "GitHub tip advanced but database draft_sha sync failed."
+              : "Persist failed"),
         data: result.data,
       };
     }
