@@ -222,10 +222,11 @@ export async function finalizeBuildReady(opts: {
       workspaceId: opts.workspaceId,
       forceRestart: true,
     });
-    if (healedSandbox.status !== "error" && healedSandbox.sessionId) {
+    const healedSessionId = healedSandbox.sessionId;
+    if (healedSandbox.status !== "error" && healedSessionId) {
       sandbox = healedSandbox;
       health = await runSandboxPreviewCheck({
-        sessionId: sandbox.sessionId,
+        sessionId: healedSessionId,
         userId: opts.userId,
       });
       if (health.ok) {
@@ -274,7 +275,7 @@ export async function finalizeBuildReady(opts: {
             ok: true,
             phase: "ready",
             draftSha: healedSha,
-            sessionId: sandbox.sessionId,
+            sessionId: healedSessionId,
             previewStatus: health.status,
           };
         }
