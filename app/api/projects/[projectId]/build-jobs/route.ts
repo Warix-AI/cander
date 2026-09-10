@@ -6,7 +6,7 @@
  * route only orchestrates. Sites and apps share it.
  */
 
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import { assertProjectAccess } from "@/lib/security/project-access";
 import {
@@ -133,22 +133,29 @@ export async function POST(request: Request, ctx: RouteCtx) {
     );
   }
 
-  try {
-    const started = await startBuildJob(job);
-    await finalizeUsageReservation({
-      reservationId: usage.reservationId,
-      status: "confirmed",
-      actualUnits: 1,
-    });
-    return NextResponse.json({ ok: true, job: started });
-  } catch (err) {
-    await finalizeUsageReservation({
-      reservationId: usage.reservationId,
-      status: "failed",
-    });
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ ok: false, error: message, jobId: job.id }, { status: 500 });
-  }
+  // Starting a job (skeleton commit → GitHub, sandbox ensure, builder upload)
+  // can take a minute or more. Respond now so the browser never sits on an
+  // idle connection ("Failed to fetch"); do the start after the response.
+  // startBuildJob marks the job failed itself if anything throws.
+  const reservationId = usage.reservationId;
+  after(async () => {
+    try {
+      await startBuildJob(job);
+      await finalizeUsageReservation({
+        reservationId,
+        status: "confirmed",
+        actualUnits: 1,
+      });
+    } catch (err) {
+      console.warn(
+        "[cander:build-job] start failed",
+        job.id,
+        err instanceof Error ? err.message : err,
+      );
+      await finalizeUsageReservation({ reservationId, status: "failed" }).catch(() => {});
+    }
+  });
+  return NextResponse.json({ ok: true, job, starting: true });
 }
 
 export async function GET(request: Request, ctx: RouteCtx) {

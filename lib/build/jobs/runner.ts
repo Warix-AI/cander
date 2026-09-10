@@ -186,9 +186,19 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
   const projectKind: "site" | "app" =
     String(project?.kind ?? "").toLowerCase() === "app" ? "app" : "site";
 
-  await updateBuildJob(job.id, {
-    status: "running",
+  // Claim atomically: the create route starts jobs in `after()` while a
+  // finishing job may also try to start the next queued one.
+  const claimed = await transitionBuildJob({
+    jobId: job.id,
+    from: ["queued"],
+    to: "running",
     progressNote: "Preparing your workspace…",
+  });
+  if (!claimed) {
+    console.info(LOG, "start skipped; job already claimed", { jobId: job.id });
+    return (await getBuildJob(job.id)) ?? job;
+  }
+  await updateBuildJob(job.id, {
     facts: { startedAt: new Date().toISOString() },
   });
   // Edit jobs keep the preview visible (phase stays ready; HMR shows changes).

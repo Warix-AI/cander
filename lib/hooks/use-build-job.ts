@@ -106,9 +106,10 @@ export function useBuildJob(opts: {
       if (cancelled) return;
       const next = await refresh();
       if (cancelled) return;
-      if (next && ACTIVE.has(next.status)) {
-        timer = window.setTimeout(() => void tick(), 3000);
-      }
+      // Fast while a job is active; slow heartbeat otherwise so a start we
+      // never heard about (dropped request, other tab) is still picked up.
+      const delay = next && ACTIVE.has(next.status) ? 3000 : 30_000;
+      timer = window.setTimeout(() => void tick(), delay);
     };
     void tick();
 
@@ -121,11 +122,18 @@ export function useBuildJob(opts: {
       if (timer != null) window.clearTimeout(timer);
       setArmed((n) => n + 1);
     };
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (timer != null) window.clearTimeout(timer);
+      void tick();
+    };
     window.addEventListener("cander:build-job-started", onStarted);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
       window.removeEventListener("cander:build-job-started", onStarted);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [enabled, refresh, opts.projectId, armed]);
 
