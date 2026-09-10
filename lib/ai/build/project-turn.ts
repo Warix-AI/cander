@@ -238,8 +238,24 @@ async function writeScaffold(opts: {
     ]),
   ];
 
+  const { commitProjectDraftFilesClient } = await import(
+    "@/lib/api/project-git-client"
+  );
+
+  const attemptCommit = async (
+    files: ScaffoldFile[],
+    deletes: string[],
+    message: string,
+  ) =>
+    commitProjectDraftFilesClient({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+      files,
+      deletePaths: deletes,
+      message,
+    });
+
   // Git-first only — never treat sandbox writes as success for create/scaffold.
-  // Empty-repo chicken-and-egg: sandbox cannot be "ready" without package.json.
   opts.report({
     phase: "tool",
     label: "Building",
@@ -247,81 +263,120 @@ async function writeScaffold(opts: {
     toolName: "computer.files.persist",
     contentStreaming: true,
   });
-  try {
-    const { commitProjectDraftFilesClient } = await import(
-      "@/lib/api/project-git-client"
-    );
-    const committed = await commitProjectDraftFilesClient({
-      projectId: opts.projectId,
-      workspaceId: opts.workspaceId,
-      files: opts.files,
-      deletePaths,
-      message: `Cander: write ${opts.files.length} scaffold files`,
-    });
-    if (committed?.ok) {
-      for (const file of opts.files) {
+
+  const maxAttempts = 3;
+  let lastError = "Git draft persist failed.";
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const committed = await attemptCommit(
+        opts.files,
+        deletePaths,
+        `Cander: write ${opts.files.length} scaffold files`,
+      );
+      if (committed?.ok) {
+        for (const file of opts.files) {
+          results.push({
+            name: "computer.files.write",
+            ok: true,
+            output: `Wrote ${file.path} → draft ${committed.draftSha?.slice(0, 7) || ""}`,
+          });
+        }
+        for (const path of deletePaths) {
+          results.push({
+            name: "computer.files.write",
+            ok: true,
+            output: `Removed conflicting route ${path}`,
+          });
+        }
         results.push({
-          name: "computer.files.write",
+          name: "computer.files.persist",
           ok: true,
-          output: `Wrote ${file.path} → draft ${committed.draftSha?.slice(0, 7) || ""}`,
+          output: `Persisted ${committed.filesCommitted ?? opts.files.length} files`,
         });
-      }
-      for (const path of deletePaths) {
-        results.push({
-          name: "computer.files.write",
-          ok: true,
-          output: `Removed conflicting route ${path}`,
+        opts.report({
+          phase: "follow_up",
+          label: "Building",
+          detail: `Saved ${opts.files.length} files to GitHub draft…`,
+          toolName: "computer.files.persist",
+          toolOk: true,
+          contentStreaming: true,
         });
+        return results;
       }
-      results.push({
-        name: "computer.files.persist",
-        ok: true,
-        output: `Persisted ${committed.filesCommitted ?? opts.files.length} files`,
-      });
-      opts.report({
-        phase: "follow_up",
-        label: "Building",
-        detail: `Saved ${opts.files.length} files to GitHub draft…`,
-        toolName: "computer.files.persist",
-        toolOk: true,
-        contentStreaming: true,
-      });
-      return results;
+      lastError = committed?.error || lastError;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
     }
-    const errMsg = committed?.error || "Git draft persist failed.";
-    console.warn("[cander:build] git scaffold persist failed (no sandbox fallback)", errMsg);
-    results.push({
-      name: "computer.files.persist",
-      ok: false,
-      output: errMsg,
-    });
-    opts.report({
-      phase: "follow_up",
-      label: "Building",
-      detail: errMsg,
-      toolName: "computer.files.persist",
-      toolOk: false,
-      contentStreaming: true,
-    });
-    return results;
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    console.warn("[cander:build] git scaffold persist threw (no sandbox fallback)", err);
-    results.push({
-      name: "computer.files.persist",
-      ok: false,
-      output: errMsg,
-    });
-    opts.report({
-      phase: "follow_up",
-      label: "Building",
-      detail: errMsg,
-      toolName: "computer.files.persist",
-      toolOk: false,
-      contentStreaming: true,
-    });
-    return results;
+
+    // After a full-batch failure, try package.json first then the rest.
+    if (attempt === 1 && opts.files.length > 1) {
+      const pkg = opts.files.find((f) => f.path === "package.json");
+      const rest = opts.files.filter((f) => f.path !== "package.json");
+      if (pkg) {
+        opts.report({
+          phase: "tool",
+          label: "Building",
+          detail: "Retrying scaffold — package.json first…",
+          toolName: "computer.files.persist",
+          contentStreaming: true,
+        });
+        const pkgCommit = await attemptCommit(
+          [pkg],
+          [],
+          "Cander: ensure package.json on draft tip",
+        );
+        if (pkgCommit?.ok && rest.length) {
+          const restCommit = await attemptCommit(
+            rest,
+            deletePaths,
+            `Cander: write ${rest.length} scaffold files`,
+          );
+          if (restCommit?.ok) {
+            results.push({
+              name: "computer.files.persist",
+              ok: true,
+              output: `Persisted scaffold in two commits`,
+            });
+            opts.report({
+              phase: "follow_up",
+              label: "Building",
+              detail: `Saved ${opts.files.length} files to GitHub draft…`,
+              toolName: "computer.files.persist",
+              toolOk: true,
+              contentStreaming: true,
+            });
+            return results;
+          }
+          lastError = restCommit?.error || lastError;
+        } else if (!pkgCommit?.ok) {
+          lastError = pkgCommit?.error || lastError;
+        }
+      }
+    }
+
+    if (attempt < maxAttempts) {
+      await new Promise((r) => setTimeout(r, 400 * attempt));
+    }
   }
+
+  console.warn(
+    "[cander:build] git scaffold persist failed after retries (no sandbox fallback)",
+    lastError,
+  );
+  results.push({
+    name: "computer.files.persist",
+    ok: false,
+    output: lastError,
+  });
+  opts.report({
+    phase: "follow_up",
+    label: "Building",
+    detail: lastError,
+    toolName: "computer.files.persist",
+    toolOk: false,
+    contentStreaming: true,
+  });
+  return results;
 }
 
 async function runPlanFirstCreatePipeline(
@@ -1099,10 +1154,10 @@ async function runCreateWebsitePipeline(opts: {
     }
     return {
       content: [
-        "Draft files were written, but validation failed — preview stays blank until this is fixed:",
+        "Draft files were written, but validation failed — I need another compose pass:",
         ...validation.issues.map((i) => `- ${i}`),
         "",
-        "Tell me to repair the site and I’ll take another pass.",
+        "Send another build request and I’ll regenerate the failing files automatically.",
       ].join("\n"),
       runtime: "cloud",
       offline: false,
@@ -1214,32 +1269,73 @@ async function runCreateWebsitePipeline(opts: {
       (r) => r.name === "computer.files.persist" && r.ok,
     );
     if (!essentialsOk) {
-      if (brief) {
-        await saveWebsiteSetupBrief({
-          projectId,
-          workspaceId,
-          brief: {
-            ...brief,
-            status: "failed",
-            validationIssues: [
-              "Could not save the Next.js scaffold to the GitHub draft tip.",
-            ],
-            updatedAt: new Date().toISOString(),
-          },
-        });
+      // Last resort: commit the minimal runnable set alone, then continue if tip looks good.
+      report({
+        phase: "thinking",
+        label: "Building",
+        detail: "Scaffold write hiccup — ensuring a runnable draft tip…",
+      });
+      const { minimalRunnableScaffoldFiles, tipLooksRunnable } = await import(
+        "@/lib/ai/build/minimal-runnable-scaffold"
+      );
+      const minimal = minimalRunnableScaffoldFiles({
+        name: "cander-site",
+        title: String(
+          (brief?.answers as { business_goal?: string } | undefined)
+            ?.business_goal ||
+            "Site",
+        ).slice(0, 80),
+      });
+      const heal = await writeScaffold({
+        projectId,
+        workspaceId,
+        files: minimal,
+        report,
+      });
+      toolResults.push(...heal);
+      const healOk = heal.some(
+        (r) => r.name === "computer.files.persist" && r.ok,
+      );
+      const tip = healOk
+        ? await (
+            await import("@/lib/api/project-git-client")
+          ).inspectProjectDraftTipClient({ projectId, workspaceId })
+        : null;
+      if (!healOk && !(tip?.paths && tipLooksRunnable(tip.paths))) {
+        if (brief) {
+          await saveWebsiteSetupBrief({
+            projectId,
+            workspaceId,
+            brief: {
+              ...brief,
+              status: "failed",
+              validationIssues: [
+                "Could not save the Next.js scaffold to the GitHub draft tip.",
+              ],
+              updatedAt: new Date().toISOString(),
+            },
+          });
+        }
+        return {
+          content: [
+            "I couldn’t save the runnable Next.js scaffold to the draft repository after automatic retries.",
+            heal.find((r) => !r.ok)?.output ||
+              ensured.find((r) => !r.ok)?.output ||
+              "Git persist failed.",
+            "I’ll keep preview locked until the tip has package.json and app/page.tsx — try Build again in a moment.",
+          ].join("\n"),
+          runtime: "cloud",
+          offline: false,
+          condensationOccurred: false,
+          aiChatId: request.aiChatId ?? null,
+          toolResults,
+        };
       }
-      return {
-        content: [
-          "Could not write the runnable scaffold into the draft repository.",
-          "Preview stays locked until package.json lands on the draft tip.",
-          "Try again in a moment, or ask me to repair the draft.",
-        ].join("\n"),
-        runtime: "cloud",
-        offline: false,
-        condensationOccurred: false,
-        aiChatId: request.aiChatId ?? null,
-        toolResults,
-      };
+      {
+        const byPath = new Map(files.map((f) => [f.path, f]));
+        for (const f of minimal) byPath.set(f.path, f);
+        files = [...byPath.values()];
+      }
     }
   }
 
@@ -1333,7 +1429,7 @@ async function runCreateWebsitePipeline(opts: {
           "Draft failed to start — SEO metadata is inconsistent (robots/sitemap):",
           ...seoIssues.map((i) => `- ${i}`),
           "",
-          "Tell me to repair the site and I’ll fix robots/sitemap, then retry.",
+          "I already tried the deterministic SEO repair; send Build again and I’ll rewrite robots/sitemap.",
         ].join("\n"),
         runtime: "cloud",
         offline: false,
@@ -1391,7 +1487,7 @@ async function runCreateWebsitePipeline(opts: {
     return {
       content: [
         `Draft files were saved, but the preview environment failed to start: ${sandboxBoot.detail}`,
-        "Tell me to retry the preview boot — I won’t mark the site ready until it passes.",
+        "I won’t mark the site ready until preview boots — I’ll retry the sandbox on the next build turn.",
       ].join("\n"),
       runtime: "cloud",
       offline: false,
@@ -1436,7 +1532,7 @@ async function runCreateWebsitePipeline(opts: {
       return {
         content: [
           `Draft was written, but preview check failed before ready: ${reason}`,
-          "Tell me to repair the site and I’ll fix it, then re-check preview.",
+          "I already attempted an automatic scaffold/preview heal. Try Build once more if preview is still blank.",
         ].join("\n"),
         runtime: "cloud",
         offline: false,

@@ -40,7 +40,7 @@ export async function finalizeBuildReady(opts: {
     .eq("workspace_id", opts.workspaceId)
     .maybeSingle();
 
-  const draftSha = project?.draft_sha ? String(project.draft_sha) : null;
+  let draftSha = project?.draft_sha ? String(project.draft_sha) : null;
   if (!draftSha) {
     await setProjectBuildPhase({
       projectId: opts.projectId,
@@ -56,10 +56,28 @@ export async function finalizeBuildReady(opts: {
     };
   }
 
-  const runnable = await draftTipHasNextPackage({
+  let runnable = await draftTipHasNextPackage({
     projectId: opts.projectId,
     workspaceId: opts.workspaceId,
   });
+  if (!runnable) {
+    try {
+      const { ensureDraftSitePackageJson } = await import(
+        "@/lib/build/git/ensure-site-package"
+      );
+      const ensured = await ensureDraftSitePackageJson({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+      });
+      if (ensured.draftSha) draftSha = ensured.draftSha;
+    } catch (err) {
+      console.warn("[cander:build-ready] ensure runnable scaffold failed", err);
+    }
+    runnable = await draftTipHasNextPackage({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+    });
+  }
   if (!runnable) {
     await setProjectBuildPhase({
       projectId: opts.projectId,
@@ -173,12 +191,96 @@ export async function finalizeBuildReady(opts: {
     phase: "preview_check",
   });
 
-  const health = await runSandboxPreviewCheck({
+  let health = await runSandboxPreviewCheck({
     sessionId: sandbox.sessionId,
     userId: opts.userId,
   });
 
   if (!health.ok) {
+    // One automatic heal: ensure core App Router files, recreate sandbox, re-check.
+    console.info("[cander:build-ready] preview unhealthy; auto-healing once", {
+      projectId: opts.projectId,
+      reason: health.reason,
+      status: health.status,
+    });
+    try {
+      const { ensureDraftSitePackageJson } = await import(
+        "@/lib/build/git/ensure-site-package"
+      );
+      const ensured = await ensureDraftSitePackageJson({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+      });
+      if (ensured.draftSha) draftSha = ensured.draftSha;
+    } catch (err) {
+      console.warn("[cander:build-ready] heal ensure failed", err);
+    }
+
+    const healedSandbox = await ensureProjectSandbox({
+      userId: opts.userId,
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+      forceRestart: true,
+    });
+    if (healedSandbox.status !== "error" && healedSandbox.sessionId) {
+      sandbox = healedSandbox;
+      health = await runSandboxPreviewCheck({
+        sessionId: sandbox.sessionId,
+        userId: opts.userId,
+      });
+      if (health.ok) {
+        const { data: project2 } = await admin
+          .from("projects")
+          .select("draft_sha")
+          .eq("id", opts.projectId)
+          .eq("workspace_id", opts.workspaceId)
+          .maybeSingle();
+        const healedSha = project2?.draft_sha
+          ? String(project2.draft_sha)
+          : draftSha;
+        await setProjectBuildPhase({
+          projectId: opts.projectId,
+          workspaceId: opts.workspaceId,
+          phase: "preview_check",
+        });
+        const gate = canMarkBuildReady({
+          projectDraftSha: healedSha,
+          sandboxDraftSha: sandbox.draftSha,
+          previewCheckOk: true,
+          phaseBeforeReady: "preview_check",
+        });
+        if (gate.ok) {
+          await setProjectBuildPhase({
+            projectId: opts.projectId,
+            workspaceId: opts.workspaceId,
+            phase: "ready",
+          });
+          const brief = await loadWebsiteSetupBrief(
+            opts.projectId,
+            opts.workspaceId,
+          );
+          await saveWebsiteSetupBrief({
+            projectId: opts.projectId,
+            workspaceId: opts.workspaceId,
+            brief: {
+              ...brief,
+              status: "ready",
+              validationIssues: [],
+              updatedAt: new Date().toISOString(),
+            },
+            allowServerReady: true,
+          });
+          return {
+            ok: true,
+            phase: "ready",
+            draftSha: healedSha,
+            sessionId: sandbox.sessionId,
+            previewStatus: health.status,
+          };
+        }
+      }
+    }
+
     await setProjectBuildPhase({
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,

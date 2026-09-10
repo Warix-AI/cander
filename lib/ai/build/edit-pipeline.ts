@@ -190,14 +190,120 @@ export async function runEditWebsitePipeline(opts: {
   const tipPaths = tip?.paths ?? [];
 
   if (!tipSha) {
-    return {
-      content:
-        "This project doesn’t have a draft tip yet. Finish the first site build before asking for edits.",
-      runtime: "cloud",
-      offline: false,
-      condensationOccurred: false,
-      aiChatId: request.aiChatId ?? null,
-    };
+    report({
+      phase: "thinking",
+      label: "Building",
+      detail: "No draft tip yet — writing a runnable scaffold first…",
+    });
+    const { minimalRunnableScaffoldFiles } = await import(
+      "@/lib/ai/build/minimal-runnable-scaffold"
+    );
+    const { commitProjectDraftFilesClient } = await import(
+      "@/lib/api/project-git-client"
+    );
+    const files = minimalRunnableScaffoldFiles({
+      title:
+        String(
+          (websiteBrief?.answers as { business_goal?: string } | undefined)
+            ?.business_goal || "Site",
+        ).slice(0, 80),
+    });
+    const seeded = await commitProjectDraftFilesClient({
+      projectId,
+      workspaceId,
+      files,
+      message: "Cander: seed runnable draft scaffold",
+    });
+    if (!seeded?.ok) {
+      return {
+        content: [
+          "This project doesn’t have a draft tip yet, and I couldn’t seed one automatically.",
+          seeded?.error || "Git persist failed.",
+        ].join("\n"),
+        runtime: "cloud",
+        offline: false,
+        condensationOccurred: false,
+        aiChatId: request.aiChatId ?? null,
+      };
+    }
+  }
+
+  const tipAfterSeed = tipSha
+    ? tip
+    : await inspectProjectDraftTipClient({ projectId, workspaceId });
+  let tipPathsLive = tipAfterSeed?.paths ?? tipPaths;
+  let tipShaLive = tipAfterSeed?.draftSha ?? tipSha;
+
+  const { tipLooksRunnable, minimalRunnableScaffoldFiles } = await import(
+    "@/lib/ai/build/minimal-runnable-scaffold"
+  );
+  const repairIntent = /\b(repair|fix)\b/i.test(request.content);
+
+  if (tipShaLive && (!tipLooksRunnable(tipPathsLive) || repairIntent)) {
+    report({
+      phase: "thinking",
+      label: "Building",
+      detail: "Healing draft scaffold and preview…",
+    });
+    const { commitProjectDraftFilesClient } = await import(
+      "@/lib/api/project-git-client"
+    );
+    if (!tipLooksRunnable(tipPathsLive)) {
+      const files = minimalRunnableScaffoldFiles({
+        title:
+          String(
+            (websiteBrief?.answers as { business_goal?: string } | undefined)
+              ?.business_goal || "Site",
+          ).slice(0, 80),
+      });
+      const healed = await commitProjectDraftFilesClient({
+        projectId,
+        workspaceId,
+        files,
+        message: "Cander: heal runnable draft scaffold",
+      });
+      if (healed?.ok) {
+        toolResults.push({
+          name: "computer.files.persist",
+          ok: true,
+          output: `Healed scaffold → ${healed.draftSha?.slice(0, 7) || "draft"}`,
+        });
+        const refreshed = await inspectProjectDraftTipClient({
+          projectId,
+          workspaceId,
+        });
+        tipPathsLive = refreshed?.paths ?? tipPathsLive;
+        tipShaLive = refreshed?.draftSha ?? tipShaLive;
+      }
+    }
+
+    const sync = await ensureSandboxReady({
+      projectId,
+      workspaceId,
+      forceRestart: true,
+    });
+    if (sync.ok) {
+      const finalized = await requestBuildReadyClient({
+        projectId,
+        workspaceId,
+      });
+      if (finalized?.ok && repairIntent) {
+        return {
+          content: [
+            "Repaired the draft scaffold and re-checked preview.",
+            tipShaLive ? `Draft tip ${tipShaLive.slice(0, 7)}.` : "",
+            "Production was not changed.",
+          ]
+            .filter(Boolean)
+            .join(" "),
+          runtime: "cloud",
+          offline: false,
+          condensationOccurred: false,
+          aiChatId: request.aiChatId ?? null,
+          toolResults,
+        };
+      }
+    }
   }
 
   const structural = STRUCTURAL_EDIT_RE.test(request.content);
@@ -215,7 +321,7 @@ export async function runEditWebsitePipeline(opts: {
       workspaceId,
       implementationManifest: {
         version: 1,
-        files: tipPaths.slice(0, 80).map((path) => ({ path })),
+        files: tipPathsLive.slice(0, 80).map((path) => ({ path })),
         routes: (artifacts.buildPlan.json.sitemap ?? []).map((p) => ({
           path: "path" in p ? p.path : "/",
           pageId: "id" in p ? p.id : undefined,
@@ -535,7 +641,7 @@ export async function runEditWebsitePipeline(opts: {
     return {
       content: [
         `Draft edit saved${committed.draftSha ? ` at ${committed.draftSha.slice(0, 7)}` : ""}, but preview check failed: ${reason}`,
-        "Production was not published. Tell me to repair the draft.",
+        "I already attempted an automatic preview heal. Production was not published.",
       ].join("\n"),
       runtime: "cloud",
       offline: false,

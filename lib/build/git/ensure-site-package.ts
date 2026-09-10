@@ -1,6 +1,6 @@
 /**
  * Ensure the draft tip has a Vercel-detectable Next.js package.json plus
- * shadcn/21st support files (`lib/utils`, UI stubs, common deps).
+ * shadcn/21st support files and core App Router entry files so preview can boot.
  * Server-only.
  */
 
@@ -16,6 +16,7 @@ import {
   sanitizeTwentyFirstVendorSource,
   siteSupportScaffoldFiles,
 } from "@/lib/ai/build/site-support-files";
+import { minimalRunnableScaffoldFiles } from "@/lib/ai/build/minimal-runnable-scaffold";
 
 async function readRepoFile(
   octokit: NonNullable<Awaited<ReturnType<typeof getInstallationOctokit>>>,
@@ -83,6 +84,13 @@ export async function ensureDraftSitePackageJson(opts: {
 
   const ref = String(project.draft_branch || "cander/draft");
   const tip = project.draft_sha ? String(project.draft_sha) : ref;
+  const title = String(project.title || "Site");
+  const slug =
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 48) || "cander-site";
 
   const rawPkg = await readRepoFile(octokit, owner, repo, "package.json", tip);
   const utils = await readRepoFile(octokit, owner, repo, "lib/utils.ts", tip);
@@ -93,13 +101,31 @@ export async function ensureDraftSitePackageJson(opts: {
     "tsconfig.json",
     tip,
   );
+  const page =
+    (await readRepoFile(octokit, owner, repo, "app/page.tsx", tip)) ||
+    (await readRepoFile(octokit, owner, repo, "app/page.jsx", tip)) ||
+    (await readRepoFile(octokit, owner, repo, "app/page.js", tip));
+  const layout =
+    (await readRepoFile(octokit, owner, repo, "app/layout.tsx", tip)) ||
+    (await readRepoFile(octokit, owner, repo, "app/layout.jsx", tip)) ||
+    (await readRepoFile(octokit, owner, repo, "app/layout.js", tip));
+  const nextConfig =
+    (await readRepoFile(octokit, owner, repo, "next.config.mjs", tip)) ||
+    (await readRepoFile(octokit, owner, repo, "next.config.js", tip));
+  const globals = await readRepoFile(
+    octokit,
+    owner,
+    repo,
+    "app/globals.css",
+    tip,
+  );
 
   const needsPkg =
     !packageJsonHasNext(rawPkg) || packageMissingCommonDeps(rawPkg);
   const needsSupport = !utils?.trim() || !tsconfig?.trim();
+  const needsAppCore =
+    !page?.trim() || !layout?.trim() || !nextConfig?.trim() || !globals?.trim();
 
-  // Sanitize vendor files that import the `ai` SDK (common 21st FAQ paste).
-  // Do not inject @ts-nocheck — components must compile.
   const vendorRepairs: { path: string; content: string }[] = [];
   try {
     const { data: tree } = await octokit.request(
@@ -132,25 +158,23 @@ export async function ensureDraftSitePackageJson(opts: {
     console.warn("[cander] vendor sanitize skipped", err);
   }
 
-  // Always refresh tsconfig if it still excludes twenty-first (legacy suppression).
   let needsTsconfigFix = false;
   if (tsconfig?.includes("components/twenty-first")) {
     needsTsconfigFix = true;
   }
 
-  if (!needsPkg && !needsSupport && vendorRepairs.length === 0 && !needsTsconfigFix) {
+  if (
+    !needsPkg &&
+    !needsSupport &&
+    !needsAppCore &&
+    vendorRepairs.length === 0 &&
+    !needsTsconfigFix
+  ) {
     return {
       draftSha: project.draft_sha ? String(project.draft_sha) : "",
       repaired: false,
     };
   }
-
-  const slug =
-    String(project.title || "cander-site")
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 48) || "cander-site";
 
   const files: { path: string; content: string }[] = [];
   if (needsPkg) {
@@ -161,8 +185,9 @@ export async function ensureDraftSitePackageJson(opts: {
   }
   if (needsSupport || needsTsconfigFix) {
     for (const f of siteSupportScaffoldFiles()) {
-      // Don't overwrite existing utils/tsconfig if only one is missing.
-      if (f.path === "lib/utils.ts" && utils?.trim() && !needsTsconfigFix) continue;
+      if (f.path === "lib/utils.ts" && utils?.trim() && !needsTsconfigFix) {
+        continue;
+      }
       if (
         f.path === "tsconfig.json" &&
         tsconfig?.trim() &&
@@ -179,6 +204,17 @@ export async function ensureDraftSitePackageJson(opts: {
       files.push(f);
     }
   }
+  if (needsAppCore) {
+    const minimal = minimalRunnableScaffoldFiles({ name: slug, title });
+    for (const f of minimal) {
+      if (f.path === "package.json" && !needsPkg) continue;
+      if (f.path === "lib/utils.ts" || f.path === "tsconfig.json") continue;
+      if (f.path.startsWith("components/ui/")) continue;
+      const existing = await readRepoFile(octokit, owner, repo, f.path, tip);
+      if (existing?.trim()) continue;
+      files.push(f);
+    }
+  }
   files.push(...vendorRepairs);
 
   if (files.length === 0) {
@@ -191,7 +227,7 @@ export async function ensureDraftSitePackageJson(opts: {
   const committed = await commitFilesToDraftBranch({
     projectId: opts.projectId,
     workspaceId: opts.workspaceId,
-    message: "Cander: ensure Next.js package and UI support files for publish",
+    message: "Cander: ensure runnable Next.js draft scaffold",
     files,
   });
 

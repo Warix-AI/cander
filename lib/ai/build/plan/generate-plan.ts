@@ -57,7 +57,7 @@ export async function generateBuildPlan(
           request.content,
         ].join("\n"),
       },
-      opts,
+      { ...opts, suppressContentDelta: true },
     );
     const text = generated.content || "";
     const start = text.indexOf("{");

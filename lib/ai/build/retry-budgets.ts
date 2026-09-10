@@ -9,6 +9,8 @@ export const BUILD_RETRY_BUDGETS = {
   researchTopK: 5,
   /** Automated dependency/package repair commits. */
   dependencyRepair: 2,
+  /** Preview ready auto-heal (ensure scaffold + forceRestart + recheck). */
+  previewReadyHeal: 1,
   /** Primary Codex implementation passes. */
   codexImplementation: 1,
   /** Codex technical repair after validation fails. */
