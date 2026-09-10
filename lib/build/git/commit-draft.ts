@@ -123,6 +123,37 @@ export async function commitFilesToDraftBranch(opts: {
   );
   baseTreeSha = baseCommit.tree.sha;
 
+  // Only delete paths that exist on the tip. GitHub create-tree with sha:null
+  // on a missing path returns 422 GitRPC::BadObjectState (not a noop).
+  let existingTipPaths = new Set<string>();
+  try {
+    const { data: tipTree } = await octokit.request(
+      "GET /repos/{owner}/{repo}/git/trees/{tree_sha}",
+      {
+        owner,
+        repo,
+        tree_sha: baseTreeSha,
+        recursive: "true",
+      },
+    );
+    for (const node of tipTree.tree || []) {
+      if (node.type === "blob" && typeof node.path === "string") {
+        existingTipPaths.add(node.path);
+      }
+    }
+  } catch (err) {
+    console.warn("[cander:git] tip tree list failed; skipping deletes", err);
+    existingTipPaths = new Set();
+  }
+
+  const { filterDeletesToExistingPaths } = await import(
+    "@/lib/ai/build/routes/app-router-conflicts"
+  );
+  const safeDeletes = filterDeletesToExistingPaths(
+    deletePaths,
+    existingTipPaths,
+  );
+
   const treeItems: Array<{
     path: string;
     mode: "100644";
@@ -149,7 +180,7 @@ export async function commitFilesToDraftBranch(opts: {
   }
 
   // GitHub Git Data API: sha null deletes the path from the new tree.
-  for (const path of deletePaths) {
+  for (const path of safeDeletes) {
     treeItems.push({
       path,
       mode: "100644",
@@ -210,7 +241,7 @@ export async function commitFilesToDraftBranch(opts: {
     draftSha,
     draftBranch,
     fullName,
-    filesCommitted: files.length + deletePaths.length,
+    filesCommitted: files.length + safeDeletes.length,
     noop: false,
   };
 }

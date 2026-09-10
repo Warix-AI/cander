@@ -71,7 +71,8 @@ export function preferredAppRouterExt(segment: string): AppRouterExtension {
 
 /**
  * Paths that conflict with a preferred write (same route key, different extension).
- * Always includes sibling extensions even if not yet on tip — safe for git delete (noop if missing).
+ * Callers must only delete siblings that already exist on the tip — GitHub's
+ * create-tree API returns GitRPC::BadObjectState for sha:null on missing paths.
  */
 export function conflictingSiblingPaths(preferredPath: string): string[] {
   const ref = parseAppRouterFile(preferredPath);
@@ -81,7 +82,7 @@ export function conflictingSiblingPaths(preferredPath: string): string[] {
   );
 }
 
-/** Collect delete paths for every App Router file being written. */
+/** Collect candidate delete paths for every App Router file being written. */
 export function deletePathsForPreferredWrites(
   writes: Array<{ path: string }>,
 ): string[] {
@@ -97,6 +98,24 @@ export function deletePathsForPreferredWrites(
     }
   }
   return [...out].sort();
+}
+
+/**
+ * Keep only delete paths that exist on the tip. Required before GitHub create-tree
+ * with sha:null — deleting a missing path → GitRPC::BadObjectState.
+ */
+export function filterDeletesToExistingPaths(
+  deletePaths: string[],
+  existingPaths: Iterable<string>,
+): string[] {
+  const existing = new Set(
+    [...existingPaths].map((p) => p.replace(/^\.\//, "").replace(/\\/g, "/")),
+  );
+  return [
+    ...new Set(
+      deletePaths.map((p) => p.replace(/^\.\//, "").replace(/\\/g, "/")),
+    ),
+  ].filter((p) => existing.has(p));
 }
 
 export type DuplicateAppRouteIssue = {
