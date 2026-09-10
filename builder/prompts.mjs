@@ -54,15 +54,17 @@ export const WORKFLOW_CREATE_APP = `Workflow:
 8. finish(summary, routes). finish is verified automatically; if rejected, fix the listed issues and call finish again.
 Work autonomously — never ask the user questions. Prefer many small, correct files over one giant file.`;
 
-export const WORKFLOW_EDIT = `Workflow for a change request:
-1. list_tree and grep to find exactly the files involved. Read them before editing.
+export const WORKFLOW_EDIT = `Your job right now: apply ONE change the user asked for to their existing, already-built site. You are not rebuilding or redesigning it, not auditing SEO, not "improving" unrelated pages. Scope = the request (plus anything it directly breaks).
+
+Workflow for a change request:
+1. Use the route map in the task to go straight to the files involved (grep/read_file). Read them before editing.
 2. Make the smallest correct change with edit_file (write_file only for new files). Preserve the existing design language and structure unless asked otherwise.
 3. If a change affects shared components (header, footer, theme tokens), check every page that uses them.
 4. run_command("npx --no-install tsc --noEmit --skipLibCheck") and check_preview on affected routes. Fix errors.
 5. finish(summary) — summary is shown to the user verbatim, so write it as a friendly one- or two-sentence confirmation of what changed (no file paths unless useful).
 Never ask clarifying questions; make the most reasonable interpretation and mention any assumption in the summary.`;
 
-/** @typedef {{ projectKind?: "site"|"app", projectName: string, siteUrl?: string|null, brief: Record<string, unknown>|null, instruction?: string|null, plan?: string|null }} BuildCtx */
+/** @typedef {{ projectKind?: "site"|"app", projectName: string, siteUrl?: string|null, brief: Record<string, unknown>|null, instruction?: string|null, plan?: string|null, conversation?: string|null, routeMap?: string|null }} BuildCtx */
 
 /** @param {BuildCtx} ctx */
 export function createInstructions(ctx) {
@@ -131,9 +133,13 @@ export function editTask(ctx) {
   return [
     `Project: ${ctx.projectName || (ctx.projectKind === "app" ? "Untitled app" : "Untitled site")}`,
     ctx.siteUrl ? `SITE_URL (published at): ${ctx.siteUrl}` : "",
+    ctx.routeMap ? `Site map at the current draft (URL → file):\n${ctx.routeMap}` : "",
     ctx.brief && ctx.projectKind !== "app" ? `Original setup brief (for context on brand/tone):\n${formatBrief(ctx.brief)}` : "",
-    `The user asked for this change:\n"""\n${ctx.instruction}\n"""`,
-    "Apply it now, verify, and call finish with a friendly confirmation.",
+    ctx.conversation
+      ? `Recent conversation with the user (context only — earlier requests are already done unless the new request says otherwise):\n${ctx.conversation}`
+      : "",
+    `The user asked for this change NOW:\n"""\n${ctx.instruction}\n"""`,
+    "Apply exactly this, verify the affected routes, and call finish with a friendly confirmation of what changed.",
   ]
     .filter(Boolean)
     .join("\n\n");

@@ -36,6 +36,8 @@ export type BuildJobFacts = {
   /** Last event seq stored. */
   eventSeq: number;
   instruction?: string;
+  /** Recent chat turns (compact) so follow-up edits keep their meaning. */
+  conversation?: string | null;
   brief?: WebsiteSetupAnswers | null;
   models?: { planner: string; coder: string };
   transport?: BuildJobTransport;
@@ -139,6 +141,7 @@ export async function createBuildJob(opts: {
   title: string;
   goal: string;
   instruction?: string;
+  conversation?: string | null;
   brief?: WebsiteSetupAnswers | null;
   ackMessageId?: string | null;
 }): Promise<BuildJob> {
@@ -150,6 +153,7 @@ export async function createBuildJob(opts: {
     eventOffset: 0,
     eventSeq: 0,
     instruction: opts.instruction,
+    conversation: opts.conversation ?? null,
     brief: opts.brief ?? null,
     ackMessageId: opts.ackMessageId ?? null,
   };

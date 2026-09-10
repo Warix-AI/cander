@@ -156,6 +156,8 @@ async function main() {
     siteUrl: config.siteUrl || null,
     brief: config.brief || null,
     instruction: config.instruction || null,
+    conversation: config.conversation || null,
+    routeMap: config.routeMap || null,
     plan: plan?.markdown || null,
   };
 

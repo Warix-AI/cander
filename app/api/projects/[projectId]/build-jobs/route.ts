@@ -40,6 +40,7 @@ export async function POST(request: Request, ctx: RouteCtx) {
     workspaceId?: string;
     mode?: BuildJobMode;
     instruction?: string;
+    conversation?: string | null;
     threadId?: string | null;
     ackMessageId?: string | null;
   } = {};
@@ -117,6 +118,10 @@ export async function POST(request: Request, ctx: RouteCtx) {
         ? instruction || "Build the full website from the setup brief"
         : instruction,
     instruction: instruction || undefined,
+    conversation:
+      typeof body.conversation === "string" && body.conversation.trim()
+        ? body.conversation.trim().slice(0, 6000)
+        : null,
     brief: brief?.answers ?? null,
     ackMessageId: body.ackMessageId ?? null,
   });

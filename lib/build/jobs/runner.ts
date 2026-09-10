@@ -36,7 +36,7 @@ import { isTwentyFirstConfigured } from "@/lib/ai/build/twenty-first-mcp";
 import { BUILD_APP_PORT } from "@/lib/build/sandbox/constants";
 import { signBuildJobToken } from "@/lib/build/jobs/token";
 import { slugFromProjectName } from "@/lib/publish-domain";
-import { hasRootPage } from "@/lib/ai/build/routes/app-router-conflicts";
+import { appDirToUrlPath, hasRootPage } from "@/lib/ai/build/routes/app-router-conflicts";
 import {
   appendBuildJobEvents,
   findQueuedBuildJob,
@@ -135,7 +135,7 @@ async function ensureBootSkeleton(
   job: BuildJob,
   title: string,
   kind: "site" | "app",
-): Promise<void> {
+): Promise<{ paths: string[] }> {
   const tip = await inspectProjectDraftTip({
     projectId: job.projectId,
     workspaceId: job.workspaceId,
@@ -154,21 +154,42 @@ async function ensureBootSkeleton(
     rootPageOk;
   // Edit jobs work on an existing site: only touch the tip when it cannot
   // boot at all. Any commit here moves the tip and forces a sandbox rebuild.
-  if (job.facts.mode === "edit" && runnable) return;
+  if (job.facts.mode === "edit" && runnable) return { paths: tip.paths };
   // Only fill gaps — never clobber existing work (or a retried create).
   const missing = skeleton.filter((f) => {
     if (have.has(f.path)) return false;
     if (/^app\/page\.tsx$/.test(f.path) && rootPageOk) return false;
     return true;
   });
-  if (runnable && missing.length === 0) return;
-  if (missing.length === 0) return;
+  if (missing.length === 0) return { paths: tip.paths };
   await commitFilesToDraftBranch({
     projectId: job.projectId,
     workspaceId: job.workspaceId,
     message: "Cander: boot skeleton for website build",
     files: missing.map((f) => ({ path: f.path, content: f.content })),
   });
+  return { paths: [...tip.paths, ...missing.map((f) => f.path)] };
+}
+
+/**
+ * "URL → file" map of the App Router pages at the tip, so the builder knows
+ * the shape of the site before its first tool call (and never guesses which
+ * file is the home page when it lives in a route group).
+ */
+function routeMapFromPaths(paths: string[]): string {
+  const lines: string[] = [];
+  for (const p of paths) {
+    if (!/^app\/(.*\/)?page\.(tsx|jsx|ts|js|mdx)$/.test(p)) continue;
+    const dir = p.replace(/\/?page\.(tsx|jsx|ts|js|mdx)$/, "").replace(/^app\/?/, "");
+    lines.push(`${appDirToUrlPath(dir)} → ${p}`);
+  }
+  const layouts = paths.filter((p) => /^app\/(.*\/)?layout\.(tsx|jsx)$/.test(p));
+  const components = paths.filter((p) => /^components\//.test(p)).length;
+  const out: string[] = [];
+  if (lines.length) out.push(lines.sort().join("\n"));
+  if (layouts.length) out.push(`Layouts: ${layouts.join(", ")}`);
+  if (components) out.push(`${components} file(s) under components/`);
+  return out.join("\n");
 }
 
 async function readBuilderSources(): Promise<{ path: string; content: string }[]> {
@@ -239,7 +260,7 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
   ]);
 
   try {
-    await ensureBootSkeleton(job, projectName, projectKind);
+    const { paths: tipPaths } = await ensureBootSkeleton(job, projectName, projectKind);
 
     const sandbox = await ensureProjectSandbox({
       userId,
@@ -294,6 +315,8 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       siteUrl,
       brief: job.facts.brief ?? null,
       instruction: job.facts.instruction ?? null,
+      conversation: job.facts.conversation ?? null,
+      routeMap: job.facts.mode === "edit" ? routeMapFromPaths(tipPaths) : null,
       apiBase,
       transport,
       twentyFirstEnabled,

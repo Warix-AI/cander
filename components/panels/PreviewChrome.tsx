@@ -2,8 +2,6 @@
 
 import type { ReactNode } from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
   Ellipsis,
   ExternalLink,
   GitCompare,
@@ -121,29 +119,25 @@ export function PreviewChrome({
             <span className="truncate">{title}</span>
           </button>
 
-          <RailBtn label="Back">
-            <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
-          </RailBtn>
-          <RailBtn label="Forward">
-            <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
-          </RailBtn>
           <RailBtn label="Refresh" onClick={refreshPreview}>
             <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
           </RailBtn>
 
-          {DEVICES.map((device) => {
-            const Icon = device.icon;
+          {(() => {
+            // One button cycles desktop → tablet → mobile → desktop.
+            const index = DEVICES.findIndex((d) => d.id === viewport);
+            const current = DEVICES[index === -1 ? 0 : index];
+            const next = DEVICES[(Math.max(index, 0) + 1) % DEVICES.length];
+            const Icon = current.icon;
             return (
               <RailBtn
-                key={device.id}
-                label={device.label}
-                active={viewport === device.id}
-                onClick={() => setViewport(device.id)}
+                label={`${current.label} · click for ${next.label.toLowerCase()}`}
+                onClick={() => setViewport(next.id)}
               >
                 <Icon className="h-3.5 w-3.5" strokeWidth={1.6} />
               </RailBtn>
             );
-          })}
+          })()}
 
           <span className="ml-auto flex items-center gap-0.5">
             <RailBtn

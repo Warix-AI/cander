@@ -1321,7 +1321,7 @@ export function ProjectBrowserPanel({
   const address =
     active.kind === "studio-document" || active.kind === "agent-browser"
       ? navigationUrl
-      : isBuildSiteOrApp
+      : isBuildSiteOrApp && active.kind !== "web"
         ? chromeUrlForBuildProject({
             publishedUrl: entity?.publishedUrl,
             candidateUrl:
@@ -1413,9 +1413,14 @@ export function ProjectBrowserPanel({
   const isAgentSurfaceTab =
     repairedActive?.kind === "agent-builder" ||
     repairedActive?.kind === "agent-overview";
-  // Build site/app: no bottom address header — controls live on the tab row.
+  // Build site/app: the draft tab keeps its compact controls on the tab row;
+  // any other web tab (the published site, a reference page) behaves like a
+  // normal browser tab with the address bar, back/forward and reload.
+  const isBuildDraftTab =
+    isBuildSiteOrApp &&
+    (active?.kind === "build-preview" || active?.kind === "project-preview");
   const showBrowserNavChrome = isBuildSiteOrApp
-    ? false
+    ? active?.kind === "web"
     : isAgentSurfaceTab || isAgentProject
       ? active?.kind === "web" && !isAgentSurfaceTab
       : isMarkdownDocTab
@@ -2418,39 +2423,25 @@ export function ProjectBrowserPanel({
           >
             {isBuildSiteOrApp ? (
               <>
-                <RailBtn
-                  label="Back"
-                  disabled={!canBack}
-                  onClick={() => runBrowserNav("back")}
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
-                </RailBtn>
-                <RailBtn
-                  label="Forward"
-                  disabled={!canForward}
-                  onClick={() => runBrowserNav("forward")}
-                >
-                  <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.6} />
-                </RailBtn>
-                <RailBtn label="Reload" onClick={() => runBrowserNav("reload")}>
-                  <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
-                </RailBtn>
-                {(
-                  [
-                    { id: "desktop" as const, label: "Desktop", Icon: Monitor },
-                    { id: "tablet" as const, label: "Tablet", Icon: Tablet },
-                    { id: "mobile" as const, label: "Mobile", Icon: Smartphone },
-                  ] as const
-                ).map(({ id, label, Icon }) => (
-                  <RailBtn
-                    key={id}
-                    label={label}
-                    active={viewport === id}
-                    onClick={() => setViewport(id)}
-                  >
-                    <Icon className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  </RailBtn>
-                ))}
+                {isBuildDraftTab ? (
+                  <>
+                    <RailBtn label="Reload" onClick={() => runBrowserNav("reload")}>
+                      <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
+                    </RailBtn>
+                    {(() => {
+                      const ViewportIcon = VIEWPORT_CYCLE[viewport].Icon;
+                      const next = VIEWPORT_CYCLE[viewport].next;
+                      return (
+                        <RailBtn
+                          label={`${VIEWPORT_CYCLE[viewport].label} · click for ${VIEWPORT_CYCLE[next].label.toLowerCase()}`}
+                          onClick={() => setViewport(next)}
+                        >
+                          <ViewportIcon className="h-3.5 w-3.5" strokeWidth={1.6} />
+                        </RailBtn>
+                      );
+                    })()}
+                  </>
+                ) : null}
                 <DesktopProjectToolsMenu
                   selectMode={selectMode}
                   canRename={canRename}
@@ -5194,6 +5185,13 @@ function KindGlyph({ kind, className }: { kind?: ProjectKind; className?: string
   if (kind === "research") return <Workflow className={cls} strokeWidth={1.6} />;
   return <AppWindow className={cls} strokeWidth={1.6} />;
 }
+
+/** Single viewport toggle: each click steps desktop → tablet → mobile → desktop. */
+const VIEWPORT_CYCLE = {
+  desktop: { label: "Desktop", Icon: Monitor, next: "tablet" as const },
+  tablet: { label: "Tablet", Icon: Tablet, next: "mobile" as const },
+  mobile: { label: "Mobile", Icon: Smartphone, next: "desktop" as const },
+} as const;
 
 function RailBtn({
   label,

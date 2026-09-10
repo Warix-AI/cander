@@ -366,6 +366,35 @@ async function runBuildV2CreateTurn(
  * short acknowledgement; the finished job posts its own result message via
  * `cander:build-job-finished` (see useBuildJob + AppProvider).
  */
+/**
+ * Compact recent chat history for the builder. Follow-ups like "make it darker"
+ * or "same on the other pages" only make sense with the last few turns.
+ */
+export function formatConversationForBuilder(
+  messages: AiGenerateRequest["messages"] | undefined,
+  currentInstruction: string,
+  opts: { maxTurns?: number; maxCharsPerTurn?: number } = {},
+): string | null {
+  const maxTurns = opts.maxTurns ?? 8;
+  const maxChars = opts.maxCharsPerTurn ?? 400;
+  const turns = (messages ?? [])
+    .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
+    .map((m) => ({ role: m.role, content: m.content.trim() }));
+  // Drop the in-flight user turn if the caller included it.
+  if (turns.length && turns[turns.length - 1].role === "user" && turns[turns.length - 1].content === currentInstruction) {
+    turns.pop();
+  }
+  const recent = turns.slice(-maxTurns);
+  if (!recent.length) return null;
+  return recent
+    .map((m) => {
+      const text = m.content.replace(/\s+/g, " ");
+      const clipped = text.length > maxChars ? `${text.slice(0, maxChars - 1)}…` : text;
+      return `${m.role === "user" ? "User" : "Cander"}: ${clipped}`;
+    })
+    .join("\n");
+}
+
 async function runBuildV2EditTurn(
   request: AiGenerateRequest,
   opts: AgentTurnOptions | undefined,
@@ -384,6 +413,7 @@ async function runBuildV2EditTurn(
     workspaceId: ctx.workspaceId,
     mode: "edit",
     instruction,
+    conversation: formatConversationForBuilder(request.messages, instruction),
     threadId: request.aiChatId ?? null,
   });
   if (!started.ok) {

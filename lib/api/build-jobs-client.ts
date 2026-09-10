@@ -58,6 +58,8 @@ export async function startBuildJobClient(opts: {
   workspaceId: string;
   mode: "create" | "edit";
   instruction?: string;
+  /** Compact recent chat history (see formatConversationForBuilder). */
+  conversation?: string | null;
   threadId?: string | null;
   ackMessageId?: string | null;
 }): Promise<{ ok: boolean; job?: BuildJobClient; error?: string; status: number }> {
@@ -78,6 +80,7 @@ export async function startBuildJobClient(opts: {
           workspaceId: opts.workspaceId,
           mode: opts.mode,
           instruction: opts.instruction,
+          conversation: opts.conversation ?? null,
           threadId: opts.threadId ?? null,
           ackMessageId: opts.ackMessageId ?? null,
         }),
