@@ -110,27 +110,39 @@ function trimCmdOutput(text: string, max = 1200): string {
  * tip when the last job finished cleanly. Publishing the same SHA need not
  * compile it again.
  */
-async function jobAlreadyVerifiedSha(opts: {
+async function jobVerificationForSha(opts: {
   projectId: string;
   workspaceId: string;
   draftSha: string;
-}): Promise<boolean> {
+}): Promise<{ typecheck: boolean; build: boolean }> {
   try {
     const { findLatestBuildJob } = await import("@/lib/build/jobs/store");
     const job = await findLatestBuildJob({
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
     });
-    return Boolean(
+    const sha = opts.draftSha.toLowerCase();
+    const typecheck = Boolean(
       job &&
         job.status === "ready_for_review" &&
         job.facts.verifyOk === true &&
         job.facts.draftSha &&
-        job.facts.draftSha.toLowerCase() === opts.draftSha.toLowerCase(),
+        job.facts.draftSha.toLowerCase() === sha,
     );
+    const build = Boolean(typecheck && job?.facts.buildVerified?.sha?.toLowerCase() === sha);
+    return { typecheck, build };
   } catch {
-    return false;
+    return { typecheck: false, build: false };
   }
+}
+
+/**
+ * Production build is the only check that matches what Vercel runs; it is on
+ * by default and only skipped when the builder already ran it on this SHA.
+ * `CANDER_PUBLISH_PREFLIGHT_BUILD=0` disables it (emergency / tests).
+ */
+function productionBuildEnabled(): boolean {
+  return process.env.CANDER_PUBLISH_PREFLIGHT_BUILD?.trim() !== "0";
 }
 
 async function runCompilePreflight(opts: {
@@ -139,6 +151,8 @@ async function runCompilePreflight(opts: {
   workspaceId: string;
   draftSha: string;
   fullName: string;
+  /** Skip tsc because the builder already typechecked this exact SHA. */
+  skipTypecheck?: boolean;
 }): Promise<string[]> {
   const issues: string[] = [];
   // Reuse the warm draft sandbox. Restarting it here used to kill the user's
@@ -273,38 +287,40 @@ async function runCompilePreflight(opts: {
   };
 
   try {
-    const tsc = await runPrivilegedSandboxCommand({
-      sessionId,
-      userId,
-      cmd: "sh",
-      args: [
-        "-c",
-        `cd ${JSON.stringify(worktree)} && if [ -f tsconfig.json ]; then timeout ${TSC_TIMEOUT_SEC} npx --yes tsc --noEmit > /tmp/cander-preflight-tsc.log 2>&1; echo EXIT:$?; tail -n 60 /tmp/cander-preflight-tsc.log; else echo EXIT:0; echo 'no tsconfig — skip tsc'; fi`,
-      ],
-    });
-    const tscExit = /EXIT:(\d+)/.exec(tsc.stdout || "")?.[1];
-    if (tscExit && tscExit !== "0") {
-      return [
-        `Typecheck failed (tsc --noEmit, exit ${tscExit}): ${trimCmdOutput(tsc.stdout || tsc.stderr)}`,
-      ];
+    if (!opts.skipTypecheck) {
+      const tsc = await runPrivilegedSandboxCommand({
+        sessionId,
+        userId,
+        cmd: "sh",
+        args: [
+          "-c",
+          `cd ${JSON.stringify(worktree)} && if [ -f tsconfig.json ]; then timeout ${TSC_TIMEOUT_SEC} npx --yes tsc --noEmit > /tmp/cander-preflight-tsc.log 2>&1; echo EXIT:$?; tail -n 60 /tmp/cander-preflight-tsc.log; else echo EXIT:0; echo 'no tsconfig — skip tsc'; fi`,
+        ],
+      });
+      const tscExit = /EXIT:(\d+)/.exec(tsc.stdout || "")?.[1];
+      if (tscExit && tscExit !== "0") {
+        return [
+          `Typecheck failed (tsc --noEmit, exit ${tscExit}): ${trimCmdOutput(tsc.stdout || tsc.stderr)}`,
+        ];
+      }
     }
 
-    // A full `next build` doubles publish time and Vercel runs the exact same
-    // build (failures come back with the build log). Opt in when needed.
-    if (process.env.CANDER_PUBLISH_PREFLIGHT_BUILD === "1") {
+    // Production build: the same thing Vercel runs. Catching it here means a
+    // failed build never reaches Vercel and the error text is ours to act on.
+    if (productionBuildEnabled()) {
       const build = await runPrivilegedSandboxCommand({
         sessionId,
         userId,
         cmd: "sh",
         args: [
           "-c",
-          `cd ${JSON.stringify(worktree)} && timeout ${NEXT_BUILD_TIMEOUT_SEC} npm run build > /tmp/cander-preflight-build.log 2>&1; echo EXIT:$?; tail -n 80 /tmp/cander-preflight-build.log`,
+          `cd ${JSON.stringify(worktree)} && NEXT_TELEMETRY_DISABLED=1 CI=1 timeout ${NEXT_BUILD_TIMEOUT_SEC} npx --no-install next build > /tmp/cander-preflight-build.log 2>&1; echo EXIT:$?; grep -iE "error|failed|⨯|prerender|useSearchParams|not found|Type error" /tmp/cander-preflight-build.log | head -n 40; echo ---; tail -n 30 /tmp/cander-preflight-build.log`,
         ],
       });
       const buildExit = /EXIT:(\d+)/.exec(build.stdout || "")?.[1];
       if (buildExit && buildExit !== "0") {
         return [
-          `next build failed during publish preflight (exit ${buildExit}): ${trimCmdOutput(build.stdout || build.stderr)}`,
+          `next build failed during publish preflight (exit ${buildExit}): ${trimCmdOutput(build.stdout || build.stderr, 2500)}`,
         ];
       }
     }
@@ -473,16 +489,16 @@ export async function preflightPublishTip(opts: {
         compileOk: false,
       };
     }
-    if (
-      await jobAlreadyVerifiedSha({
-        projectId: opts.projectId,
-        workspaceId: opts.workspaceId,
-        draftSha,
-      })
-    ) {
-      console.info("[cander:publish] compile preflight skipped — job already verified tip", {
+    const verified = await jobVerificationForSha({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+      draftSha,
+    });
+    if (verified.build || (verified.typecheck && !productionBuildEnabled())) {
+      console.info("[cander:publish] compile preflight skipped — builder already verified this tip", {
         projectId: opts.projectId,
         draftSha: draftSha.slice(0, 12),
+        productionBuild: verified.build,
       });
       return { ok: true, draftSha, issues: [], paths, compileOk: true };
     }
@@ -492,6 +508,7 @@ export async function preflightPublishTip(opts: {
       workspaceId: opts.workspaceId,
       draftSha,
       fullName,
+      skipTypecheck: verified.typecheck,
     });
     if (compileIssues.length > 0) {
       return {

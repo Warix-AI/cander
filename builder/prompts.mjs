@@ -12,7 +12,17 @@ export const STACK_RULES = `Stack (already booted in this sandbox; the preview s
   • "PREVIEW UNAVAILABLE — INFRASTRUCTURE": the environment is the problem, not your pages. Never edit routes, layouts or app/opengraph-image.tsx in response. Keep building, run tsc, and call finish — Cander's server verifies every route afterwards.
   • Per-route "HTTP 500 / error:" lines are real page bugs — fix them.
 - Avoid editing next.config.* unless truly required (it restarts the preview server). Remote images: use plain <img> tags or download_image into public/ instead of configuring images.remotePatterns.
-- Do not create pages/ (Pages Router). Do not touch .git, node_modules, or .cander.`;
+- Do not create pages/ (Pages Router). Do not touch .git, node_modules, or .cander.
+
+Production build rules — the dev server is forgiving, Vercel's \`next build\` is not. Verification runs \`next build\` and rejects the draft if any of these are wrong:
+- Never export metadata/generateMetadata/viewport/dynamic/revalidate/runtime from a "use client" file. Pages and layouts stay server components; put interactive UI in a separate client component and import it.
+- useSearchParams()/usePathname-with-params must live in a small client component rendered inside <Suspense fallback={null}> from the page — otherwise the build fails with "useSearchParams() should be wrapped in a suspense boundary".
+- No Node modules (fs, path, child_process, crypto) and no non-NEXT_PUBLIC_ env vars in client components.
+- Never set \`export const runtime = "edge"\`, \`output: "export"\`, \`distDir\`, \`typescript.ignoreBuildErrors\` or \`eslint.ignoreDuringBuilds\`.
+- Nothing random or time-based (Math.random, Date.now, new Date()) in server-rendered markup — it causes prerender/hydration errors. Put it in a client component with useEffect, or use a constant.
+- Dynamic routes (app/[slug]/page.tsx) must read \`params\` (\`const { slug } = await params\`); prefer static pages for a marketing site.
+- Every import must resolve (case-sensitive paths — Vercel builds on Linux) and every component you reference must exist. Delete files you stop using.
+- Server actions need "use server" at the top of their file (or inside the function) and must be async.`;
 
 export const QUALITY_BAR = `Quality bar — this must look like a real, launch-ready website, not a template:
 - A real sitemap of pages (as many as the brief calls for; at least Home, plus About/Services/Contact style pages when relevant), each with distinct, specific copy written for THIS business. No lorem ipsum, no "Your headline here", no TODOs.
@@ -21,7 +31,7 @@ export const QUALITY_BAR = `Quality bar — this must look like a real, launch-r
 - Sections with visual rhythm: hero, social proof / stats, features or services, process, testimonials, FAQ, CTA band, contact form (server action or mailto fallback). Vary layouts — do not stack identical three-column grids.
 - Design system in app/globals.css: CSS variables for brand colors from the brief, typography scale, radius. Tailwind utilities everywhere else.
 - Accessible: semantic landmarks, one h1 per page, focus styles, alt text, sufficient contrast.
-- SEO: export metadata from app/layout.tsx with \`metadataBase: new URL(SITE_URL)\` (SITE_URL is given in the task — never invent a domain), title template, description, openGraph + twitter (with images), and per page \`alternates: { canonical: "<route>" }\` plus its own title/description. app/robots.ts and app/sitemap.ts must use SITE_URL and list every route. JSON-LD (Organization/LocalBusiness) in the root layout using SITE_URL.
+- SEO: export metadata from app/layout.tsx with \`metadataBase: new URL(SITE_URL)\` (SITE_URL is given in the task — never invent a domain), title template, description, openGraph + twitter (with images), and per page \`alternates: { canonical: "<route>" }\` plus its own title/description. app/robots.ts and app/sitemap.ts must use SITE_URL and list every route (robots returns \`sitemap: \`\${SITE_URL}/sitemap.xml\`\`). JSON-LD (Organization/LocalBusiness) in the root layout using SITE_URL, rendered with JSON.stringify. Every page gets a UNIQUE title (≤ 60 chars) and description (≤ 160 chars); <html lang="en">; every <img> has alt text.
 - Social image: create app/opengraph-image.tsx using \`ImageResponse\` from "next/og" (1200×630, brand colors, business name + tagline; export size/contentType/alt) and re-export it as app/twitter-image.tsx. Next serves it and wires og:image automatically — no external image hosting. If the spec gives a social title/description, use them for openGraph.title/description.
 - Favicon & app icon (required): if the spec's brand has a logo/favicon URL, download_image it into public/brand/ and create app/icon.png (512×512 or the original) and app/apple-icon.png from it; otherwise create app/icon.tsx and app/apple-icon.tsx with \`ImageResponse\` (brand mark or initials on the primary color, export size/contentType). Never leave the default Next favicon; the HTML must carry <link rel="icon"> and apple-touch-icon.
 - Brand logo: when a logo URL is provided, download it to public/brand/logo.<ext> and use it in the header/footer (with alt text) instead of a text-only wordmark.
@@ -77,7 +87,7 @@ Workflow for a change request:
 Never ask clarifying questions; make the most reasonable interpretation and mention any assumption in the summary.`;
 
 export const WORKFLOW_REPAIR = `The site was just built but did not pass verification. Your only job now: fix the listed problems so tsc is clean and every route renders. Do not redesign, add pages, or rewrite copy. Read the failing files, make minimal fixes, re-run tsc and check_preview, then call finish(summary, routes) with the same routes.
-The report only lists application problems (compile errors, routes that 500, missing metadata, placeholder copy). If check_preview ever says "PREVIEW UNAVAILABLE — INFRASTRUCTURE", that is not something you can fix: stop checking, make sure tsc is clean, and call finish.`;
+The report only lists application problems (compile errors, routes that 500, production build failures with the exact \`next build\` error, missing metadata, placeholder copy). A "Production build failed" item is the highest priority — that is exactly what would fail on Vercel; fix the named file/line, do not work around it with config flags. If check_preview ever says "PREVIEW UNAVAILABLE — INFRASTRUCTURE", that is not something you can fix: stop checking, make sure tsc is clean, and call finish.`;
 
 /** @typedef {{ projectKind?: "site"|"app", projectName: string, siteUrl?: string|null, brief: Record<string, unknown>|null, projectSpec?: Record<string, unknown>|null, instruction?: string|null, plan?: string|null, conversation?: string|null, routeMap?: string|null }} BuildCtx */
 

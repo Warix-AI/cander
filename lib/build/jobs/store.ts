@@ -62,6 +62,11 @@ export type BuildJobFacts = {
   unverified?: boolean;
   /** Builder run stats (llm calls, tokens, files touched). */
   stats?: Record<string, unknown>;
+  /**
+   * The in-sandbox acceptance ran a production `next build` on this exact tip
+   * and it passed. Publish preflight trusts it and skips its own rebuild.
+   */
+  buildVerified?: { sha: string; at: string };
   /** Set on Retry: continue the previous job in the same sandbox. */
   resume?: BuildJobResume | null;
   /** Chat thread + message the job should report back to (edit mode). */

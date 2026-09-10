@@ -56,8 +56,8 @@ const PLACEHOLDER_RE =
   /lorem ipsum|your (headline|company|business|tagline|text) here|\bTODO\b|\bTBD\b|\[insert[^\]]*\]|\[(company|business|name|city|phone|email|address)[^\]]*\]|placeholder text|coming soon…?$/i;
 
 /**
- * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], expectedRoutes?: string[], mode?: "create"|"edit", projectKind?: "site"|"app", siteUrl?: string|null, timeoutMs?: number, features?: string[], scopeRoutes?: string[]|null, functional?: boolean, deadlineMs?: number, writtenPaths?: string[]|null, preview?: import("./preview.mjs").PreviewSupervisor|null }} opts
- * @returns {Promise<{ ok: boolean, issues: string[], routes: string[], report: string, classification: "passed"|"app"|"preview_unavailable", preview?: import("./preview.mjs").EnsureResult|null }>}
+ * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], expectedRoutes?: string[], mode?: "create"|"edit", projectKind?: "site"|"app", siteUrl?: string|null, timeoutMs?: number, features?: string[], scopeRoutes?: string[]|null, functional?: boolean, deadlineMs?: number, writtenPaths?: string[]|null, preview?: import("./preview.mjs").PreviewSupervisor|null, productionBuild?: boolean }} opts
+ * @returns {Promise<{ ok: boolean, issues: string[], routes: string[], report: string, classification: "passed"|"app"|"preview_unavailable", preview?: import("./preview.mjs").EnsureResult|null, buildVerified: boolean }>}
  */
 export async function runAcceptance(opts) {
   const issues = [];
@@ -169,6 +169,8 @@ export async function runAcceptance(opts) {
       }
     }
   }
+
+  const tscFailed = issues.some((i) => /^TypeScript errors:|^tsc /.test(i));
 
   // 3. Every route renders
   opts.log.emit("verify", `Checking ${routes.length} route(s) on the dev server…`);
@@ -311,9 +313,42 @@ export async function runAcceptance(opts) {
     }
   }
 
+  // 5b. Stricter SEO bar (website create only): unique titles, alt text,
+  // valid JSON-LD, sitemap covers every page, html lang + viewport.
+  if (isCreate && !isApp) {
+    for (const issue of seoBarIssues(results)) issues.push(issue);
+    const sitemapIssue = await sitemapCoverageIssue(opts.devServerUrl, routes, siteOrigin);
+    if (sitemapIssue) issues.push(sitemapIssue);
+  }
+
   // 6. Source-level placeholder scan (catches non-rendered pages / components)
   const srcHits = scanSourcePlaceholders(repoDir);
   for (const hit of srcHits.slice(0, 5)) issues.push(`Placeholder in source: ${hit}`);
+
+  // 6b. Static rules for things Vercel's production build rejects but the dev
+  // server happily serves (Suspense around useSearchParams, metadata exported
+  // from client components, Node APIs in client code, next.config drift…).
+  for (const issue of vercelCompatIssues(repoDir, written).slice(0, 12)) issues.push(issue);
+
+  // 6c. Production build — the authoritative "will Vercel accept this" gate.
+  // Only worth paying for once the cheap checks pass (the agent fixes those
+  // first); skipped for style/content-only edits. Next 16 keeps dev output in
+  // .next/dev, so the running dev server is unaffected.
+  let buildVerified = false;
+  const wantBuild = opts.productionBuild !== false && codeTouched && !tscFailed;
+  if (wantBuild && issues.length === 0) {
+    opts.log.emit("verify", "Running a production build (what Vercel will run)…");
+    const build = await runProductionBuild(repoDir, opts.timeoutMs);
+    if (build.ok) {
+      buildVerified = true;
+      opts.log.emit("verify", `Production build passed${build.seconds ? ` (${build.seconds}s)` : ""}.`);
+    } else if (build.timedOut) {
+      // Not attributable to the code with confidence; publish preflight rebuilds.
+      opts.log.emit("log", "Production build timed out; publish will rebuild before deploying.");
+    } else {
+      issues.push(`Production build failed (next build) — Vercel would reject this deploy:\n${build.summary}`);
+    }
+  }
 
   // 7. Functional checks in a real browser (console/hydration, overflow at
   // 375/768/1280, mobile nav, links, forms, features). Only worth running once
@@ -354,11 +389,263 @@ export async function runAcceptance(opts) {
     report,
     classification: issues.length ? "app" : "passed",
     preview: previewHealth,
+    buildVerified,
   };
 }
 
 function uniq(arr) {
   return [...new Set(arr)];
+}
+
+// ── Production build gate ─────────────────────────────────────────────────────
+
+const BUILD_NOISE_RE =
+  /^(\s*$|\s+at |[│┌└├─▲○ƒ●◐]|\s*Creating an optimized|\s*Compiled|\s*Collecting|\s*Generating static|\s*Finalizing|\s*Linting|\s*Route \(|\s*First Load|\s*\+ First|\s*[\d.]+ ?k?B|\s*Skipping|npm (warn|notice)|>\s*|\s*Attention: Next\.js)/i;
+const BUILD_SIGNAL_RE =
+  /error|failed|⨯|✗|cannot|unable|not found|missing|unexpected|invalid|useSearchParams|Suspense|prerender|dynamic server usage|Export encountered|does not (exist|contain)|is not exported|Type error|TS\d{4}|ELIFECYCLE|out of memory|heap/i;
+
+/**
+ * `next build` in the repo. Returns a compact, agent-readable summary of why
+ * the build failed (error lines + the tail), never the whole log.
+ * @param {string} repoDir
+ * @param {number} [timeoutMs]
+ * @returns {Promise<{ ok: boolean, timedOut: boolean, summary: string, seconds: number }>}
+ */
+export async function runProductionBuild(repoDir, timeoutMs) {
+  const started = Date.now();
+  const res = await execShell(
+    "set -o pipefail; npx --no-install next build 2>&1 | tail -n 400",
+    { cwd: repoDir, timeoutMs: Math.min(Math.max(timeoutMs ?? 0, 420_000), 900_000) },
+  );
+  const seconds = Math.round((Date.now() - started) / 1000);
+  const out = `${res.stdout || ""}\n${res.stderr || ""}`;
+  const failed =
+    res.timedOut ||
+    res.exitCode !== 0 ||
+    /Failed to compile|Build error occurred|Error occurred prerendering|Export encountered (an )?error/i.test(out);
+  if (!failed) return { ok: true, timedOut: false, summary: "", seconds };
+  const lines = out.split("\n").map((l) => l.replace(/\u001b\[[0-9;]*m/g, "").trimEnd());
+  const signal = lines.filter((l) => BUILD_SIGNAL_RE.test(l) && !BUILD_NOISE_RE.test(l));
+  const tail = lines.filter((l) => l.trim() && !/^\s+at /.test(l)).slice(-14);
+  const picked = uniq([...signal.slice(0, 30), ...tail]).slice(0, 40);
+  return {
+    ok: false,
+    timedOut: Boolean(res.timedOut),
+    summary: truncate(picked.join("\n"), 3500) || `next build exited ${res.exitCode}`,
+    seconds,
+  };
+}
+
+// ── Vercel compatibility (static) ─────────────────────────────────────────────
+
+/**
+ * Source rules for failures that only show up in `next build` / on Vercel.
+ * Each message tells the agent exactly what to change.
+ * @param {string} repoDir
+ * @param {string[]|null} written repo-relative paths written this run (edit) or null (create = whole repo)
+ * @returns {string[]}
+ */
+export function vercelCompatIssues(repoDir, written) {
+  const issues = [];
+  const all = listSourceFiles(repoDir, ["app", "components", "lib", "middleware.ts", "proxy.ts"]);
+  const files = written && written.length ? all.filter((f) => written.includes(f)) : all;
+  const read = (rel) => {
+    try {
+      return readFileSync(join(repoDir, rel), "utf8");
+    } catch {
+      return "";
+    }
+  };
+  const isClient = (text) => /^\s*['"]use client['"]/m.test(text.slice(0, 400));
+
+  for (const rel of files) {
+    if (!/\.(tsx|jsx|ts|js)$/.test(rel)) continue;
+    const text = read(rel);
+    if (!text) continue;
+    const client = isClient(text);
+    const isPageOrLayout = /^app\/.*\/?(page|layout|template|default|error|not-found|loading)\.(tsx|jsx)$/.test(rel) || /^app\/(page|layout)\.(tsx|jsx)$/.test(rel);
+
+    if (client && /export\s+(const|async function|function)\s+(metadata|generateMetadata|viewport|generateViewport|generateStaticParams|revalidate|dynamic|runtime)\b/.test(text)) {
+      issues.push(`${rel} is a client component ("use client") but exports metadata/route segment config — move metadata to a server layout/page and keep interactive UI in a separate client component.`);
+    }
+    if (client && /from\s+['"](fs|node:fs|fs\/promises|path|node:path|child_process|os|crypto|node:crypto)['"]/.test(text)) {
+      issues.push(`${rel} imports Node-only modules inside a client component — move server logic to a server component, route handler or server action.`);
+    }
+    if (client && /process\.env\.(?!NEXT_PUBLIC_|NODE_ENV)[A-Z0-9_]+/.test(text)) {
+      issues.push(`${rel} reads a non-NEXT_PUBLIC_ env var in a client component — it will be undefined in the browser; read it on the server or rename to NEXT_PUBLIC_*.`);
+    }
+    if (/useSearchParams\s*\(/.test(text)) {
+      // The page file using this component must wrap it in <Suspense>; the
+      // component itself is fine. Flag pages that both use the hook and lack
+      // Suspense, and client components used by pages without Suspense.
+      if (isPageOrLayout && !/<Suspense[\s>]/.test(text)) {
+        issues.push(`${rel} calls useSearchParams() without a <Suspense> boundary — Vercel's build fails with "useSearchParams() should be wrapped in a suspense boundary". Move the hook into a small client component rendered inside <Suspense fallback={null}>.`);
+      } else if (!isPageOrLayout) {
+        const base = rel.replace(/\.(tsx|jsx|ts|js)$/, "");
+        const name = base.split("/").pop();
+        const importers = all.filter((f) => /^app\/.*page\.(tsx|jsx)$/.test(f)).filter((f) => new RegExp(`from\\s+['"][^'"]*${name}['"]`).test(read(f)));
+        for (const p of importers) {
+          if (!/<Suspense[\s>]/.test(read(p))) {
+            issues.push(`${p} renders ${name} (which calls useSearchParams) without <Suspense> — wrap it: <Suspense fallback={null}><${name} /></Suspense>.`);
+          }
+        }
+      }
+    }
+    if (/export\s+const\s+runtime\s*=\s*['"]edge['"]/.test(text)) {
+      issues.push(`${rel} sets runtime = "edge" — remove it (Node runtime); edge builds reject many packages and fail on Vercel.`);
+    }
+    // `new Date().getFullYear()` in a footer is fine (stable for a year).
+    const timeSensitive = text.split("\n").filter((l) => !/getFullYear\(\)/.test(l)).join("\n");
+    if (!client && isPageOrLayout && /\b(Math\.random|Date\.now|new Date)\s*\(/.test(timeSensitive) && !/export\s+const\s+dynamic\s*=/.test(text) && !/generateMetadata|headers\(\)|cookies\(\)|searchParams/.test(text)) {
+      issues.push(`${rel} uses Date/Math.random during server render — the prerendered HTML will not match the client (hydration mismatch). Compute it in a client component with useEffect or move it to a constant.`);
+    }
+    if (/from\s+['"]next\/image['"]/.test(text)) {
+      for (const m of text.matchAll(/<Image[^>]*\ssrc=\{?["'](https?:\/\/[^"']+)["']/g)) {
+        const host = safeHost(m[1]);
+        if (host && !nextConfigAllowsHost(repoDir, host)) {
+          issues.push(`${rel} renders next/image with a remote src (${host}) not listed in next.config images.remotePatterns — use a plain <img> tag or download_image into public/.`);
+          break;
+        }
+      }
+    }
+  }
+
+  // next.config drift: the template's config is known-good; agents that edit it
+  // (output: "export", experimental flags, distDir) break the Vercel build.
+  const cfg = ["next.config.ts", "next.config.mjs", "next.config.js"].map((f) => join(repoDir, f)).find((f) => existsSync(f));
+  if (cfg) {
+    const text = readFileSync(cfg, "utf8");
+    if (/output\s*:\s*['"]export['"]/.test(text)) issues.push(`${cfg.slice(repoDir.length + 1)} sets output: "export" — remove it; the site deploys as a normal Next.js app.`);
+    if (/distDir\s*:/.test(text)) issues.push(`${cfg.slice(repoDir.length + 1)} sets distDir — remove it.`);
+    if (/ignoreBuildErrors\s*:\s*true|ignoreDuringBuilds\s*:\s*true/.test(text)) issues.push(`${cfg.slice(repoDir.length + 1)} silences build errors (ignoreBuildErrors/ignoreDuringBuilds) — remove that and fix the underlying errors.`);
+  }
+
+  // Dynamic routes must have a page that can build without data.
+  const dyn = listDynamicRouteFiles(repoDir);
+  for (const rel of dyn) {
+    const text = read(rel);
+    if (/generateStaticParams/.test(text) && /output\s*:\s*['"]export['"]/.test(cfg ? readFileSync(cfg, "utf8") : "")) continue;
+    if (/await\s+params\b|params\.then|\bparams\b/.test(text)) continue;
+    issues.push(`${rel} is a dynamic route that never reads params — either use params (await params in Next 15+/16) or replace it with static pages.`);
+  }
+  return issues;
+}
+
+function safeHost(url) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+}
+
+function nextConfigAllowsHost(repoDir, host) {
+  const cfg = ["next.config.ts", "next.config.mjs", "next.config.js"].map((f) => join(repoDir, f)).find((f) => existsSync(f));
+  if (!cfg) return false;
+  const text = readFileSync(cfg, "utf8");
+  if (text.includes(host)) return true;
+  const wild = host.split(".").slice(-2).join(".");
+  return new RegExp(`\\*\\*?\\.${wild.replace(/\./g, "\\.")}`).test(text) || /hostname\s*:\s*['"]\*\*['"]/.test(text);
+}
+
+function listDynamicRouteFiles(repoDir) {
+  const out = [];
+  const walk = (dir, inDynamic) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name === "api" || e.name === "node_modules") continue;
+        walk(p, inDynamic || /^\[.*\]$/.test(e.name));
+      } else if (inDynamic && /^page\.(tsx|jsx)$/.test(e.name)) {
+        out.push(p.slice(repoDir.length + 1));
+      }
+    }
+  };
+  walk(join(repoDir, "app"), false);
+  return out;
+}
+
+// ── SEO bar ───────────────────────────────────────────────────────────────────
+
+/**
+ * @param {Array<{ ok: boolean, path: string, html?: string, title?: string }>} results
+ * @returns {string[]}
+ */
+export function seoBarIssues(results) {
+  const issues = [];
+  const titles = new Map();
+  for (const r of results) {
+    if (!r.ok || !r.html) continue;
+    const html = r.html;
+    const title = (r.title || html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || "").trim();
+    if (title) titles.set(title, [...(titles.get(title) || []), r.path]);
+    if (title && title.length > 70) issues.push(`${r.path} <title> is ${title.length} chars — keep it ≤ 60–70 (metadata.title).`);
+    const desc = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)?.[1] || "";
+    if (desc && desc.length > 170) issues.push(`${r.path} meta description is ${desc.length} chars — keep it ≤ 160.`);
+    if (r.path === "/") {
+      if (!/<html[^>]+\blang=["'][a-z]{2}/i.test(html)) issues.push('<html> has no lang attribute — set <html lang="en"> in app/layout.tsx.');
+      if (!/<meta[^>]+name=["']viewport["']/i.test(html)) issues.push("/ has no viewport meta — Next adds it automatically unless the layout overrides <head>; remove the custom <head>.");
+      for (const m of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+        try {
+          const parsed = JSON.parse(m[1]);
+          const nodes = Array.isArray(parsed) ? parsed : parsed["@graph"] || [parsed];
+          if (!nodes.some((n) => n && (n["@type"] || n["@context"]))) issues.push("JSON-LD on / has no @type — use Organization/LocalBusiness/WebSite schema.");
+        } catch {
+          issues.push("JSON-LD on / is not valid JSON — render it with JSON.stringify(schema) inside <script type=\"application/ld+json\">.");
+        }
+      }
+    }
+    const imgs = [...html.matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
+    const noAlt = imgs.filter((tag) => !/\salt=/i.test(tag));
+    if (noAlt.length) issues.push(`${r.path} has ${noAlt.length} <img> without alt text — every image needs a descriptive alt (or alt="" if decorative).`);
+    if (!/<meta[^>]+property=["']og:title["']/i.test(html)) issues.push(`${r.path} has no og:title — add metadata.openGraph (title, description, url, siteName, images).`);
+  }
+  for (const [title, paths] of titles) {
+    if (paths.length > 1) issues.push(`Pages ${paths.join(", ")} share the same <title> "${title}" — give each page a unique metadata.title.`);
+  }
+  return issues;
+}
+
+/**
+ * sitemap.xml must list every public page and robots must allow crawling.
+ * @returns {Promise<string|null>}
+ */
+export async function sitemapCoverageIssue(devServerUrl, routes, siteOrigin) {
+  try {
+    const res = await fetch(`${devServerUrl}/sitemap.xml`, { signal: AbortSignal.timeout(60_000) });
+    if (res.status !== 200) return `/sitemap.xml → HTTP ${res.status} — app/sitemap.ts must export a default function returning MetadataRoute.Sitemap.`;
+    const xml = await res.text();
+    const locs = [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1]);
+    const paths = new Set(
+      locs.map((u) => {
+        try {
+          return new URL(u).pathname.replace(/\/+$/, "") || "/";
+        } catch {
+          return u;
+        }
+      }),
+    );
+    const missing = routes.filter((r) => !/\[/.test(r) && !paths.has(r));
+    if (missing.length) return `sitemap.xml is missing ${missing.join(", ")} — list every page in app/sitemap.ts.`;
+    if (siteOrigin && locs.length && !locs.every((u) => u.startsWith(siteOrigin))) {
+      return `sitemap.xml URLs must start with ${siteOrigin} (use SITE_URL in app/sitemap.ts).`;
+    }
+    const robots = await fetch(`${devServerUrl}/robots.txt`, { signal: AbortSignal.timeout(30_000) });
+    if (robots.status === 200) {
+      const txt = await robots.text();
+      if (/disallow:\s*\/\s*$/im.test(txt)) return "robots.txt disallows the whole site — allow crawling (Disallow: /api/ at most) and reference the sitemap.";
+      if (!/sitemap:/i.test(txt)) return "robots.txt has no Sitemap: line — return { rules, sitemap: `${SITE_URL}/sitemap.xml` } from app/robots.ts.";
+    }
+    return null;
+  } catch {
+    return null; // network flake — not a page bug
+  }
 }
 
 /** Generated metadata images return binary; only status + content-type matter. */

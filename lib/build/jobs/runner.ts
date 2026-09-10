@@ -816,6 +816,7 @@ async function completeBuildJob(
   // sandbox. The code is not suspected — the server now owns preview recovery.
   const unverified = Boolean(finished.payload?.unverified);
   const stats = (finished.payload?.stats ?? null) as Record<string, unknown> | null;
+  const builderBuildPassed = finished.payload?.buildVerified === true && !partial && !unverified;
   if (unverified) {
     await updateBuildJob(job.id, {
       facts: {
@@ -969,6 +970,9 @@ async function completeBuildJob(
         unverified,
         summary,
         ...(stats ? { stats } : {}),
+        ...(builderBuildPassed && draftSha
+          ? { buildVerified: { sha: draftSha, at: new Date().toISOString() } }
+          : {}),
       },
     });
     console.info(LOG, "ready", { jobId: job.id, draftSha, unverified });

@@ -187,6 +187,7 @@ async function main() {
       // routes the agent reported).
       scopeRoutes: mode === "edit" ? routesFromWrittenPaths([...tools.writtenPaths], finish.routes) : null,
       functional: config.functionalChecks !== false,
+      productionBuild: config.productionBuild !== false,
       deadlineMs: budget.deadlineMs,
       writtenPaths: mode === "edit" ? [...tools.writtenPaths] : null,
     });
@@ -353,11 +354,15 @@ async function main() {
 
   if (result.finished) {
     const unverified = Boolean(result.unverified);
+    // True only when the last acceptance ran `next build` successfully on the
+    // tree being handed over — publish can then deploy without rebuilding.
+    const buildVerified = Boolean(!unverified && lastVerification?.ok && lastVerification?.buildVerified);
     log.emit("finished", result.summary || "Done", {
       summary: result.summary,
       routes: result.routes,
       files,
       stats,
+      buildVerified,
       ...(unverified
         ? {
             partial: true,
