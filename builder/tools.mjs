@@ -177,6 +177,22 @@ export class SandboxTools {
         },
       },
       {
+        name: "download_image",
+        description:
+          "Download an image (https URL, ≤8MB, png/jpg/webp/avif/svg/gif) into public/ so it ships with the site. Returns the public path to use in src. Prefer this over hot-linking for hero/section imagery.",
+        parameters: {
+          type: "object",
+          properties: {
+            url: { type: "string" },
+            path: {
+              type: "string",
+              description: "Destination under public/, e.g. public/images/hero.jpg",
+            },
+          },
+          required: ["url", "path"],
+        },
+      },
+      {
         name: "emit_progress",
         description:
           "Report a short, user-facing progress line (what you are doing now). Call this at each milestone.",
@@ -258,6 +274,8 @@ export class SandboxTools {
           return { output: await this.runCommand(a.command, a.timeout_sec) };
         case "check_preview":
           return { output: await this.checkPreview(a.paths) };
+        case "download_image":
+          return { output: await this.downloadImage(a.url, a.path) };
         case "emit_progress":
           this.log.emit("progress", String(a.message ?? "").slice(0, 200));
           return { output: "ok" };
@@ -475,6 +493,32 @@ export class SandboxTools {
       .join("\n");
   }
 
+  async downloadImage(url, path) {
+    const u = String(url ?? "").trim();
+    if (!/^https:\/\//i.test(u)) throw new Error("url must be https");
+    const { abs, rel } = this.safePath(path);
+    if (!rel.startsWith("public/")) throw new Error("path must be under public/");
+    if (!BINARY_RE.test(rel) && !/\.svg$/i.test(rel)) {
+      throw new Error("path must end with an image extension");
+    }
+    const res = await fetch(u, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(30_000),
+      headers: { Accept: "image/*", "User-Agent": "cander-builder/1.0" },
+    });
+    if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
+    const type = res.headers.get("content-type") || "";
+    if (!/^image\//i.test(type)) throw new Error(`not an image (content-type ${type || "unknown"})`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > 8 * 1024 * 1024) throw new Error("image larger than 8MB");
+    if (buf.length < 64) throw new Error("image is empty");
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, buf);
+    this.writtenPaths.add(rel);
+    this.log.emit("file", `Downloaded ${rel}`, { path: rel, bytes: buf.length, type });
+    return `Saved ${rel} (${Math.round(buf.length / 1024)} KB, ${type}). Use src="/${rel.slice("public/".length)}".`;
+  }
+
   async searchComponents(query, limit) {
     if (!this.twentyFirst) return "21st.dev is not configured for this job.";
     const hits = await this.twentyFirst.search(String(query ?? ""), limit);
@@ -516,7 +560,15 @@ export async function fetchPreview(url, timeoutMs = 45_000) {
     const title = (html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || "").trim();
     const error = detectNextError(html);
     const ok = res.status >= 200 && res.status < 400 && !error;
-    return { path, status: res.status, ok, title, error, bytes: html.length };
+    return {
+      path,
+      status: res.status,
+      ok,
+      title,
+      error,
+      bytes: html.length,
+      html: html.slice(0, 400_000),
+    };
   } catch (err) {
     return {
       path,
@@ -525,6 +577,7 @@ export async function fetchPreview(url, timeoutMs = 45_000) {
       title: "",
       error: `fetch failed: ${err?.message || String(err)}`,
       bytes: 0,
+      html: "",
     };
   }
 }

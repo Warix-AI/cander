@@ -19,6 +19,14 @@ import {
 export type { PorcelainChange };
 export { parsePorcelainChanges };
 
+const BINARY_PERSIST_RE =
+  /\.(png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|eot|mp4|webm|mp3|pdf|zip)$/i;
+
+/** Files that must be committed as base64 blobs (bytes, not text). */
+export function isBinaryPersistPath(path: string): boolean {
+  return BINARY_PERSIST_RE.test(path);
+}
+
 export type PersistSandboxOutcome = CommitDraftResult & {
   paths: string[];
   deletedPaths: string[];
@@ -123,12 +131,24 @@ done | head -n 100`,
   }
 
   const provider = getComputerProvider();
-  const files: { path: string; content: string }[] = [];
+  const files: { path: string; content: string; encoding?: "utf-8" | "base64" }[] = [];
   const skippedPaths: string[] = [];
 
   for (const path of paths) {
     try {
       const rel = safeRepoRelativePath(path);
+      if (isBinaryPersistPath(rel)) {
+        // Images / fonts: ship as base64 blobs so bytes survive the commit.
+        const b64 = await runPrivilegedSandboxCommand({
+          sessionId: opts.sessionId,
+          userId: opts.userId,
+          cmd: "sh",
+          args: ["-c", `base64 -w0 ${JSON.stringify(rel)} 2>/dev/null || base64 ${JSON.stringify(rel)} | tr -d '\\n'`],
+        });
+        if (b64.exitCode !== 0) throw new Error(b64.stderr || "base64 read failed");
+        files.push({ path: rel, content: b64.stdout.trim(), encoding: "base64" });
+        continue;
+      }
       let content: string;
       try {
         content = await provider.readFile(opts.sessionId, opts.userId, rel);

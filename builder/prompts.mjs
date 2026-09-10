@@ -5,7 +5,7 @@ export const STACK_RULES = `Stack (already booted in this sandbox; the dev serve
 - shadcn-style primitives live in components/ui/* with \`cn\` from lib/utils.ts. lucide-react, framer-motion, clsx, tailwind-merge, class-variance-authority, @radix-ui/react-slot are installed.
 - Server components by default. Add "use client" only to leaf components that need state/effects/handlers.
 - Never use \`next/font/google\` in a sandbox without network guarantees — load fonts via a <link> in app/layout.tsx or use system font stacks.
-- Images: use <img> with descriptive alt for remote images, or next/image only with width/height. Prefer Unsplash source URLs (https://images.unsplash.com/...) with realistic subjects; never leave gradient placeholder boxes where a photo belongs.
+- Images: for hero/section photography use download_image to save real photos (e.g. https://images.unsplash.com/photo-… with ?auto=format&fit=crop&w=1600&q=80) into public/images/ and reference them as src="/images/…" with descriptive alt. next/image needs width/height (or fill inside a sized relative parent); <img> is fine. Never leave gradient placeholder boxes where a photo belongs.
 - Keep package.json valid; run \`npm install <pkg>\` via run_command if you add a dependency, then re-check the preview.
 - Do not create pages/ (Pages Router). Do not touch .git, node_modules, or .cander.`;
 
@@ -21,8 +21,8 @@ export const QUALITY_BAR = `Quality bar — this must look like a real, launch-r
 
 export const WORKFLOW_CREATE = `Workflow:
 1. list_tree, read package.json, app/layout.tsx, app/globals.css to see the boot skeleton.
-2. emit_progress("Planning site structure") — decide pages, sections, brand tokens from the brief. Write the plan to .cander-plan.md? NO — keep planning in your head; do not commit plan files.
-3. Build shared pieces first: app/globals.css tokens, components/site/Header.tsx, Footer.tsx, MobileNav.tsx (client), Section primitives.
+2. If a build packet is provided, it is the plan — implement its sitemap, sections, design CSS and copy. Otherwise decide pages, sections, brand tokens from the brief yourself. Do not write plan files into the repo.
+3. Build shared pieces first: app/globals.css (paste the packet's CSS), components/site/Header.tsx, Footer.tsx, MobileNav.tsx (client), Section primitives.
 4. Write app/layout.tsx (metadata, fonts, JSON-LD, Header/Footer), then app/page.tsx, then every other page. emit_progress before each page.
 5. Optional: search_components / get_component for standout sections (hero, pricing, testimonials). Adapt into components/ — never paste code with unresolved imports; install deps you use.
 6. Write app/robots.ts, app/sitemap.ts, app/not-found.tsx.
@@ -58,7 +58,9 @@ export function createTask(ctx) {
   return [
     `Project: ${ctx.projectName || "Untitled site"}`,
     `Setup brief (from the user's 8-question onboarding):\n${brief}`,
-    ctx.plan ? `Site plan (follow it):\n${ctx.plan}` : "",
+    ctx.plan
+      ? `Build packet — follow it closely (sitemap, sections, design system CSS, final copy, component shortlist):\n\n${ctx.plan}`
+      : "",
     ctx.instruction ? `Additional instruction from the user:\n${ctx.instruction}` : "",
     "Build the entire website now. Do not stop until every page is written, typechecks, and renders on the dev server. Then call finish.",
   ]

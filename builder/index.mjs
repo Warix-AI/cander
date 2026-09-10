@@ -112,6 +112,7 @@ async function main() {
         brief: config.brief || null,
         instruction: config.instruction || null,
         twentyFirst,
+        webSearch: Boolean(config.webSearch),
         deadlineMs: budget.deadlineMs,
       });
     } catch (err) {
@@ -127,6 +128,8 @@ async function main() {
       devServerUrl,
       log,
       routes: finish.routes,
+      expectedRoutes: plan?.routes || [],
+      mode,
     });
     return result.ok
       ? { accept: true }

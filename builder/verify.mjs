@@ -39,16 +39,31 @@ export function discoverRoutes(repoDir) {
   return [...routes].sort();
 }
 
+const PLACEHOLDER_RE =
+  /lorem ipsum|your (headline|company|business|tagline|text) here|\bTODO\b|\bTBD\b|\[insert[^\]]*\]|\[(company|business|name|city|phone|email|address)[^\]]*\]|placeholder text|coming soon…?$/i;
+
 /**
- * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], timeoutMs?: number }} opts
+ * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, routes?: string[], expectedRoutes?: string[], mode?: "create"|"edit", timeoutMs?: number }} opts
  * @returns {Promise<{ ok: boolean, issues: string[], routes: string[], report: string }>}
  */
 export async function runAcceptance(opts) {
   const issues = [];
   const repoDir = opts.repoDir;
-  const routes = uniq([...(opts.routes || []), ...discoverRoutes(repoDir)]).filter(
-    (r) => r.startsWith("/"),
+  const discovered = discoverRoutes(repoDir);
+  const routes = uniq([...(opts.routes || []), ...discovered]).filter((r) =>
+    r.startsWith("/"),
   );
+  const isCreate = (opts.mode || "create") === "create";
+
+  // 0. Planned routes that were never built (create only)
+  if (isCreate && opts.expectedRoutes?.length) {
+    const missing = opts.expectedRoutes.filter(
+      (r) => r.startsWith("/") && !/\[/.test(r) && !discovered.includes(r),
+    );
+    if (missing.length) {
+      issues.push(`Planned pages not built yet: ${missing.join(", ")} — add app${missing[0] === "/" ? "" : missing[0]}/page.tsx etc.`);
+    }
+  }
 
   // 1. package.json sanity
   const pkgPath = join(repoDir, "package.json");
@@ -104,11 +119,49 @@ export async function runAcceptance(opts) {
     }
   }
 
-  // 4. Root essentials
-  const rootHtml = results.find((r) => r.path === "/");
-  if (rootHtml && rootHtml.ok && !rootHtml.title) {
-    issues.push("/ has no <title> — add metadata to app/layout.tsx or app/page.tsx.");
+  // 4. Per-page HTML quality: title, description, exactly one h1, no placeholders
+  for (const r of results) {
+    if (!r.ok || !r.html) continue;
+    const html = r.html;
+    if (!r.title) issues.push(`${r.path} has no <title> — export metadata.`);
+    if (!/<meta[^>]+name=["']description["'][^>]+content=["'][^"']{20,}/i.test(html)) {
+      issues.push(`${r.path} has no meta description (≥20 chars) — add metadata.description.`);
+    }
+    const h1s = (html.match(/<h1[\s>]/gi) || []).length;
+    if (isCreate && h1s !== 1) {
+      issues.push(`${r.path} has ${h1s} <h1> elements — exactly one is required.`);
+    }
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ");
+    const ph = text.match(PLACEHOLDER_RE);
+    if (ph) issues.push(`${r.path} contains placeholder copy: "${ph[0]}" — replace with real content.`);
+    if (isCreate && r.path === "/") {
+      if (!/<(header|nav)[\s>]/i.test(html)) issues.push("/ has no <header>/<nav> landmark.");
+      if (!/<footer[\s>]/i.test(html)) issues.push("/ has no <footer> landmark.");
+      if (/Drafting your website/.test(text)) {
+        issues.push("/ still shows the boot skeleton placeholder page.");
+      }
+    }
   }
+
+  // 5. SEO files (create only)
+  if (isCreate) {
+    if (!existsSync(join(repoDir, "app", "robots.ts")) && !existsSync(join(repoDir, "app", "robots.txt")))
+      issues.push("app/robots.ts is missing.");
+    if (!existsSync(join(repoDir, "app", "sitemap.ts")) && !existsSync(join(repoDir, "app", "sitemap.xml")))
+      issues.push("app/sitemap.ts is missing.");
+    if (!existsSync(join(repoDir, "app", "not-found.tsx"))) issues.push("app/not-found.tsx is missing.");
+    const root = results.find((r) => r.path === "/");
+    if (root?.ok && root.html && !/application\/ld\+json/i.test(root.html)) {
+      issues.push("/ has no JSON-LD (<script type=\"application/ld+json\">) — add Organization/LocalBusiness schema in app/layout.tsx.");
+    }
+  }
+
+  // 6. Source-level placeholder scan (catches non-rendered pages / components)
+  const srcHits = scanSourcePlaceholders(repoDir);
+  for (const hit of srcHits.slice(0, 5)) issues.push(`Placeholder in source: ${hit}`);
 
   const report = [
     `Routes: ${results.map((r) => `${r.path}=${r.status}`).join(" ")}`,
@@ -125,4 +178,42 @@ export async function runAcceptance(opts) {
 
 function uniq(arr) {
   return [...new Set(arr)];
+}
+
+function scanSourcePlaceholders(repoDir) {
+  const hits = [];
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (hits.length >= 20) return;
+      const p = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (["node_modules", ".next", ".git", ".cander", "public"].includes(e.name)) continue;
+        walk(p);
+      } else if (/\.(tsx|jsx|mdx|md)$/.test(e.name)) {
+        let text;
+        try {
+          text = readFileSync(p, "utf8");
+        } catch {
+          continue;
+        }
+        const lines = text.split("\n");
+        for (let i = 0; i < lines.length; i++) {
+          if (/lorem ipsum|\[insert[^\]]*\]|your (headline|company|business) here/i.test(lines[i])) {
+            hits.push(`${p.slice(repoDir.length + 1)}:${i + 1}`);
+            break;
+          }
+        }
+      }
+    }
+  };
+  for (const top of ["app", "components"]) {
+    if (existsSync(join(repoDir, top))) walk(join(repoDir, top));
+  }
+  return hits;
 }

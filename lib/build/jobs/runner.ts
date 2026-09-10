@@ -28,6 +28,7 @@ import {
   saveWebsiteSetupBrief,
 } from "@/lib/build/website-setup-brief-store";
 import {
+  isOpenAIWebSearchEnabled,
   resolveOpenAICodingModel,
   resolveOpenAIModel,
 } from "@/lib/ai/raw-openai/web-search";
@@ -247,6 +248,7 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       apiBase,
       transport,
       twentyFirstEnabled,
+      webSearch: isOpenAIWebSearchEnabled(),
       models,
       reasoning: process.env.CANDER_BUILDER_REASONING?.trim() || "medium",
       devServerUrl: `http://localhost:${BUILD_APP_PORT}`,

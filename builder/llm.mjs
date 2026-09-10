@@ -80,13 +80,14 @@ export class LlmClient {
 
   /**
    * Simple text completion (no tools). Used by planner / sub-agents.
-   * @param {{ model: string, instructions: string, input: string, reasoning?: string, maxOutputTokens?: number, jsonSchema?: {name: string, schema: Record<string, unknown>} }} opts
+   * @param {{ model: string, instructions: string, input: string, reasoning?: string, maxOutputTokens?: number, tools?: unknown[], jsonSchema?: {name: string, schema: Record<string, unknown>} }} opts
    */
   async text(opts) {
     const body = {
       model: opts.model,
       instructions: opts.instructions,
       input: opts.input,
+      ...(opts.tools?.length ? { tools: opts.tools, tool_choice: "auto" } : {}),
       ...(opts.reasoning ? { reasoning: { effort: opts.reasoning } } : {}),
       ...(opts.maxOutputTokens ? { max_output_tokens: opts.maxOutputTokens } : {}),
       ...(opts.jsonSchema
