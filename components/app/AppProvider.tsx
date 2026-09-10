@@ -633,6 +633,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [threadId, setThreadId] = useState<string | null>(null);
   const threadIdRef = useRef<string | null>(null);
   threadIdRef.current = threadId;
+  /** Edit-job ack bubbles we keep open until Done replaces them. */
+  const buildJobAckByJobIdRef = useRef(new Map<string, string>());
   const [spaceId, setSpaceId] = useState<NavDestinationId | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>("collapsed");
@@ -3265,6 +3267,50 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               return;
             }
             typewriterReveal(result.content, (partial, done) => {
+              const editJobStart = result.toolResults?.find(
+                (t) =>
+                  t.name === "build.job.start" &&
+                  t.ok &&
+                  t.data?.mode === "edit" &&
+                  typeof t.data.jobId === "string",
+              );
+              const editJobId =
+                typeof editJobStart?.data?.jobId === "string"
+                  ? editJobStart.data.jobId
+                  : null;
+              // Keep the "On it…" bubble open so progress sits under it and
+              // the final Done line replaces it instead of stacking below.
+              if (done && editJobId) {
+                buildJobAckByJobIdRef.current.set(editJobId, assistantId);
+                setThreads((current) =>
+                  current.map((item) => {
+                    const apply = (thread: Thread): Thread => ({
+                      ...thread,
+                      messages: thread.messages.map((message) =>
+                        message.id === assistantId
+                          ? {
+                              ...message,
+                              content: result.content,
+                              status: "pending" as const,
+                              activity: {
+                                phase: "updating" as const,
+                                startedAt: Date.now(),
+                                detail: "Working on your change…",
+                                kind: "work" as const,
+                              },
+                            }
+                          : message,
+                      ),
+                    });
+                    if (item.id === activeId) return apply(item);
+                    if (item.messages.some((m) => m.id === assistantId))
+                      return apply(item);
+                    return item;
+                  }),
+                );
+                finishLatency(result.pausedForUser ? "paused" : "ok");
+                return;
+              }
               patchAssistant(
                 partial,
                 done ? "complete" : "streaming",
@@ -3888,14 +3934,61 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           : `I couldn’t complete that change: ${detail.error || detail.summary || "unknown error"}. The previous version is still in the preview — want me to try a different approach?`;
       const marker = `build-job:${detail.jobId}`;
       const progressMarker = `${marker}:progress`;
+      const ackId = buildJobAckByJobIdRef.current.get(detail.jobId) ?? null;
+      buildJobAckByJobIdRef.current.delete(detail.jobId);
       setThreads((current) => {
         const candidates = current.filter((t) => t.projectId === detail.projectId);
         if (!candidates.length) return current;
         const target =
+          (ackId
+            ? candidates.find((t) => t.messages.some((m) => m.id === ackId))
+            : null) ??
           candidates.find((t) => t.messages.some((m) => m.id === progressMarker)) ??
+          candidates.find((t) => t.messages.some((m) => m.id === marker)) ??
           candidates.find((t) => t.id === threadId) ??
           [...candidates].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]!;
-        if (target.messages.some((m) => m.id === marker)) return current;
+        // Edit jobs: replace the "On it…" ack (and drop any legacy progress line).
+        if (ackId && target.messages.some((m) => m.id === ackId)) {
+          return current.map((t) =>
+            t.id !== target.id
+              ? t
+              : {
+                  ...t,
+                  updatedAt: new Date().toISOString(),
+                  snippet: content.slice(0, 80),
+                  messages: t.messages
+                    .filter((m) => m.id !== progressMarker && m.id !== marker)
+                    .map((m) =>
+                      m.id === ackId
+                        ? {
+                            ...m,
+                            content,
+                            status: "complete" as const,
+                            activity: null,
+                          }
+                        : m,
+                    ),
+                },
+          );
+        }
+        if (target.messages.some((m) => m.id === marker)) {
+          return current.map((t) =>
+            t.id !== target.id
+              ? t
+              : {
+                  ...t,
+                  updatedAt: new Date().toISOString(),
+                  snippet: content.slice(0, 80),
+                  messages: t.messages
+                    .filter((m) => m.id !== progressMarker)
+                    .map((m) =>
+                      m.id === marker
+                        ? { ...m, content, status: "complete" as const, activity: null }
+                        : m,
+                    ),
+                },
+          );
+        }
         return current.map((t) =>
           t.id !== target.id
             ? t
@@ -3904,7 +3997,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 updatedAt: new Date().toISOString(),
                 snippet: content.slice(0, 80),
                 messages: [
-                  // Replace the transient progress line with the result.
                   ...t.messages.filter((m) => m.id !== progressMarker),
                   { id: marker, role: "assistant" as const, content, at: nowTime() },
                 ],
@@ -3912,7 +4004,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
       });
     };
-    // Edit jobs: keep one live "working…" line in the chat while they run.
+    // Edit jobs: update the ack bubble's status line (directly under "On it…").
     const onProgress = (ev: Event) => {
       const detail = (ev as CustomEvent).detail as
         | { projectId?: string; jobId?: string; message?: string }
@@ -3920,14 +4012,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!detail?.projectId || !detail.jobId || !detail.message) return;
       const progressMarker = `build-job:${detail.jobId}:progress`;
       const resultMarker = `build-job:${detail.jobId}`;
+      const ackId = buildJobAckByJobIdRef.current.get(detail.jobId) ?? null;
       setThreads((current) => {
         const candidates = current.filter((t) => t.projectId === detail.projectId);
         if (!candidates.length) return current;
         const target =
+          (ackId
+            ? candidates.find((t) => t.messages.some((m) => m.id === ackId))
+            : null) ??
           candidates.find((t) => t.messages.some((m) => m.id === progressMarker)) ??
           candidates.find((t) => t.id === threadId) ??
           [...candidates].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]!;
-        if (target.messages.some((m) => m.id === resultMarker)) return current;
+        if (target.messages.some((m) => m.id === resultMarker && m.status === "complete"))
+          return current;
+        if (ackId && target.messages.some((m) => m.id === ackId)) {
+          const existing = target.messages.find((m) => m.id === ackId);
+          if (existing?.activity?.detail === detail.message) return current;
+          return current.map((t) =>
+            t.id !== target.id
+              ? t
+              : {
+                  ...t,
+                  messages: t.messages
+                    .filter((m) => m.id !== progressMarker)
+                    .map((m) =>
+                      m.id === ackId
+                        ? {
+                            ...m,
+                            status: "pending" as const,
+                            activity: {
+                              phase: "updating" as const,
+                              startedAt: existing?.activity?.startedAt ?? Date.now(),
+                              detail: detail.message,
+                              kind: "work" as const,
+                            },
+                          }
+                        : m,
+                    ),
+                },
+          );
+        }
         const existing = target.messages.find((m) => m.id === progressMarker);
         if (existing?.activity?.detail === detail.message) return current;
         const line = {
@@ -3994,9 +4118,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     role: "assistant" as const,
                     content: `Published. Live URL: ${url}${checklist}`,
                     at: nowTime(),
-                    blocks: [
-                      { type: "deploy" as const, url, status: "live" as const },
-                    ],
                   },
                 ],
               },

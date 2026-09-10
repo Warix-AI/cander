@@ -62,15 +62,7 @@ export function AssistantMessage({ message }: { message: Message }) {
     Boolean(activity?.phase || activity?.startedAt);
 
   return (
-    <div className="group/assistant w-full space-y-2">
-      {showActivityRow ? (
-        <ThinkingIndicator
-          active
-          phase={activity?.phase}
-          detail={activity?.detail}
-          label={activity?.label}
-        />
-      ) : null}
+    <div className="group/assistant w-full space-y-1">
       {hasReply ? (
         <div
           className={cn(
@@ -83,6 +75,14 @@ export function AssistantMessage({ message }: { message: Message }) {
             onLinkClick={(href) => openInAppBrowser(href)}
           />
         </div>
+      ) : null}
+      {showActivityRow ? (
+        <ThinkingIndicator
+          active
+          phase={activity?.phase}
+          detail={activity?.detail}
+          label={activity?.label}
+        />
       ) : null}
       {message.blocks
         ?.filter(

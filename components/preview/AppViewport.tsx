@@ -6,7 +6,6 @@ import { DefaultChatPreviewWash } from "@/components/spaces/BannerWash";
 import { WebsiteSetupProgress } from "@/components/preview/WebsiteSetupProgress";
 import { buildPreviews } from "@/lib/data";
 import type { BuildSandboxStatus } from "@/lib/build/sandbox/constants";
-import { displayHostFromUrl } from "@/lib/preview-url";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,9 +20,9 @@ export function AppViewport({
   envMessage,
   onRetryEnv,
   previewSrc,
-  draftPreviewUrl,
-  publishedUrl,
-  onReloadPreview,
+  draftPreviewUrl: _draftPreviewUrl,
+  publishedUrl: _publishedUrl,
+  onReloadPreview: _onReloadPreview,
   websiteSetup,
 }: {
   name: string;
@@ -71,12 +70,6 @@ export function AppViewport({
     !setupActive && envStatus === "ready" && Boolean(previewSrc);
   const emptyCopy =
     summary?.trim() || "Start generating your website in chat.";
-  const draftHost = draftPreviewUrl
-    ? displayHostFromUrl(draftPreviewUrl) || draftPreviewUrl
-    : null;
-  const liveHost = publishedUrl
-    ? displayHostFromUrl(publishedUrl) || publishedUrl
-    : null;
 
   const envLabel =
     envStatus === "starting" || (envStatus === "ready" && !previewSrc)
@@ -88,26 +81,6 @@ export function AppViewport({
           : envMessage?.startsWith("Draft failed")
             ? "Draft failed to start"
             : "Environment failed to start";
-
-  const draftBadgeLabel = showLive
-    ? draftHost
-      ? `Draft · ${draftHost}`
-      : "Draft preview"
-    : websiteSetup?.status === "failed" || envStatus === "error"
-      ? draftHost
-        ? `Failed · ${draftHost}`
-        : "Draft failed"
-      : envStatus === "starting" ||
-          websiteSetup?.status === "building" ||
-          websiteSetup?.status === "setup"
-        ? draftHost
-          ? `Starting · ${draftHost}`
-          : "Draft starting…"
-        : draftHost
-          ? `Draft · ${draftHost}`
-          : null;
-
-  const showDraftBadge = Boolean(draftBadgeLabel);
 
   return (
     <div
@@ -207,29 +180,6 @@ export function AppViewport({
           </>
         )}
 
-        <div className="absolute bottom-3 left-3 z-10 flex max-w-[min(100%-1.5rem,36rem)] flex-wrap items-center gap-2">
-          {liveHost ? (
-            <span className="min-w-0 truncate rounded-full bg-emerald-700/90 px-3 py-1 text-[11px] font-medium tracking-[-0.01em] text-white">
-              Published · {liveHost}
-            </span>
-          ) : null}
-          {showDraftBadge ? (
-            <>
-              <span className="min-w-0 truncate rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium tracking-[-0.01em] text-white/90">
-                {draftBadgeLabel}
-              </span>
-              {showLive && onReloadPreview ? (
-                <button
-                  type="button"
-                  onClick={onReloadPreview}
-                  className="shrink-0 rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium text-white/90 hover:bg-black/70"
-                >
-                  Reload
-                </button>
-              ) : null}
-            </>
-          ) : null}
-        </div>
       </div>
     </div>
   );

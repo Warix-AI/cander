@@ -124,6 +124,7 @@ import {
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
 import { useWebsiteSetupBrief } from "@/lib/hooks/use-website-setup-brief";
 import { useBuildJob } from "@/lib/hooks/use-build-job";
+import { usePublishStatus } from "@/lib/hooks/use-publish-status";
 import {
   deleteStudioProjectAsset,
   editStudioProjectImage,
@@ -429,6 +430,14 @@ export function ProjectBrowserPanel({
     workspaceId: ctx.workspaceId,
     enabled: entity?.kind === "site",
   });
+  const publishStatus = usePublishStatus({
+    projectId,
+    workspaceId: ctx.workspaceId,
+    enabled: entity?.kind === "site" || entity?.kind === "app" || browserSpaceId === "build",
+  });
+  const draftAheadOfLive = Boolean(
+    publishStatus?.published && publishStatus.aheadOfLive,
+  );
 
   // Build drafts: ensure infra/sandbox and point the pinned preview at draft--
   // (never load `{projectId}.cander.app`, which embeds the Cander login shell).
@@ -2421,51 +2430,31 @@ export function ProjectBrowserPanel({
             className="ml-auto flex shrink-0 items-center gap-1"
             onPointerLeave={clearBrowserChromeHovers}
           >
-            {isBuildSiteOrApp ? (
-              <>
-                {isBuildDraftTab ? (
-                  <>
-                    <RailBtn label="Reload" onClick={() => runBrowserNav("reload")}>
-                      <RotateCw className="h-3.5 w-3.5" strokeWidth={1.6} />
-                    </RailBtn>
-                    {(() => {
-                      const ViewportIcon = VIEWPORT_CYCLE[viewport].Icon;
-                      const next = VIEWPORT_CYCLE[viewport].next;
-                      return (
-                        <RailBtn
-                          label={`${VIEWPORT_CYCLE[viewport].label} · click for ${VIEWPORT_CYCLE[next].label.toLowerCase()}`}
-                          onClick={() => setViewport(next)}
-                        >
-                          <ViewportIcon className="h-3.5 w-3.5" strokeWidth={1.6} />
-                        </RailBtn>
-                      );
-                    })()}
-                  </>
-                ) : null}
-                <DesktopProjectToolsMenu
-                  selectMode={selectMode}
-                  canRename={canRename}
-                  onRename={() => {
-                    setRenameTarget("project");
-                    setDesktopRenameOpen(true);
-                  }}
-                  onPublish={() => openOverlay("publish")}
-                  onDomain={() => openOverlay("domains")}
-                  onOpenExternal={() =>
-                    addUrlTab(draftPreviewUrl || navigationUrl || address)
-                  }
-                  onOpenSystemBrowser={() => {
-                    void openUrlInSystemBrowser(
-                      draftPreviewUrl || active.url || address,
-                    );
-                  }}
-                  onSelectElement={() => setSelectMode(!selectMode)}
-                  onRefresh={() => {
-                    refreshPreview();
-                    runBrowserNav("reload");
-                  }}
-                />
-              </>
+            {isBuildDraftTab ? (
+              <DesktopProjectToolsMenu
+                canRename={canRename}
+                publishLabel={draftAheadOfLive ? "Republish" : "Publish"}
+                viewport={viewport}
+                onCycleViewport={() => setViewport(VIEWPORT_CYCLE[viewport].next)}
+                onRename={() => {
+                  setRenameTarget("project");
+                  setDesktopRenameOpen(true);
+                }}
+                onPublish={() => openOverlay("publish")}
+                onDomain={() => openOverlay("domains")}
+                onOpenExternal={() =>
+                  addUrlTab(draftPreviewUrl || navigationUrl || address)
+                }
+                onOpenSystemBrowser={() => {
+                  void openUrlInSystemBrowser(
+                    draftPreviewUrl || active.url || address,
+                  );
+                }}
+                onRefresh={() => {
+                  refreshPreview();
+                  runBrowserNav("reload");
+                }}
+              />
             ) : null}
             {panelMode === "collapsed" ? null : standalone ? (
               <BrowserChromeTooltip label="Close browser">
@@ -2658,10 +2647,26 @@ export function ProjectBrowserPanel({
                 }}
                 onClear={() => navigateAddressTo("about:blank")}
               />
+            ) : isBuildSiteOrApp ? (
+              <ResearchBrowserToolsMenu
+                address={address}
+                onShare={async () => {
+                  try {
+                    await navigator.clipboard.writeText(address);
+                  } catch {
+                    window.prompt("Copy page address", address);
+                  }
+                }}
+                onOpenExternal={() => addUrlTab(active.url || address)}
+                onOpenSystemBrowser={() => {
+                  void openUrlInSystemBrowser(active.url || address);
+                }}
+                onClear={() => navigateAddressTo("about:blank")}
+              />
             ) : (
               <DesktopProjectToolsMenu
-                selectMode={selectMode}
                 canRename={canRename}
+                publishLabel="Publish"
                 onRename={() => {
                   setRenameTarget("project");
                   setDesktopRenameOpen(true);
@@ -2672,7 +2677,6 @@ export function ProjectBrowserPanel({
                 onOpenSystemBrowser={() => {
                   void openUrlInSystemBrowser(active.url || address);
                 }}
-                onSelectElement={() => setSelectMode(!selectMode)}
                 onRefresh={() => {
                   refreshPreview();
                   runBrowserNav("reload");
@@ -3826,26 +3830,32 @@ function BrowserChromeDropdown(props: ComponentProps<typeof Dropdown>) {
 }
 
 function DesktopProjectToolsMenu({
-  selectMode,
   canRename,
+  publishLabel = "Publish",
+  viewport,
+  onCycleViewport,
   onRename,
   onPublish,
   onDomain,
   onOpenExternal,
   onOpenSystemBrowser,
-  onSelectElement,
   onRefresh,
 }: {
-  selectMode: boolean;
   canRename: boolean;
+  publishLabel?: "Publish" | "Republish";
+  viewport?: keyof typeof VIEWPORT_CYCLE;
+  onCycleViewport?: () => void;
   onRename: () => void;
   onPublish: () => void;
   onDomain: () => void;
   onOpenExternal: () => void;
   onOpenSystemBrowser: () => void;
-  onSelectElement: () => void;
   onRefresh: () => void;
 }) {
+  const ViewportIcon = viewport ? VIEWPORT_CYCLE[viewport].Icon : Monitor;
+  const viewportLabel = viewport
+    ? `${VIEWPORT_CYCLE[viewport].label} · next ${VIEWPORT_CYCLE[VIEWPORT_CYCLE[viewport].next].label.toLowerCase()}`
+    : "Desktop";
   return (
     <BrowserChromeDropdown
       align="end"
@@ -3877,7 +3887,7 @@ function DesktopProjectToolsMenu({
               close();
             }}
           >
-            Publish
+            {publishLabel}
           </DesktopMenuItem>
           <DesktopMenuItem
             icon={Globe}
@@ -3906,16 +3916,17 @@ function DesktopProjectToolsMenu({
           >
             Open in system browser
           </DesktopMenuItem>
-          <DesktopMenuItem
-            icon={MousePointer2}
-            active={selectMode}
-            onClick={() => {
-              onSelectElement();
-              close();
-            }}
-          >
-            Select element
-          </DesktopMenuItem>
+          {onCycleViewport ? (
+            <DesktopMenuItem
+              icon={ViewportIcon}
+              onClick={() => {
+                onCycleViewport();
+                close();
+              }}
+            >
+              {viewportLabel}
+            </DesktopMenuItem>
+          ) : null}
           <DesktopMenuItem
             icon={RotateCw}
             onClick={() => {
@@ -3923,7 +3934,7 @@ function DesktopProjectToolsMenu({
               close();
             }}
           >
-            Refresh
+            Reload
           </DesktopMenuItem>
         </>
       )}
